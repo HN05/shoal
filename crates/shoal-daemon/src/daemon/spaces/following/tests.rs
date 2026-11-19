@@ -1,13 +1,15 @@
 use std::fs;
 
-use super::{Client, FileRead, Stopped, read_from, send_file_gained};
+use shoal_protocol::transcripts::ReadTo;
+
+use super::{Client, Stopped, read_from, send_file_gained};
 
 /// Where a read of `path` from `offset`, where it was read to then, starts
 /// and the bytes it gains.
 fn read(path: &std::path::Path, offset: u64) -> (u64, Vec<u8>) {
     let gained = read_from(
         path,
-        FileRead {
+        ReadTo {
             offset,
             size: offset,
         },
@@ -32,7 +34,7 @@ fn a_file_that_shrank_is_read_again_from_its_start() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("session.jsonl");
     fs::write(&path, "new\n").unwrap();
-    let seen = FileRead {
+    let seen = ReadTo {
         offset: 13,
         size: 13,
     };
@@ -46,7 +48,7 @@ fn a_file_shorter_than_it_was_though_not_than_its_offset_is_read_again_from_its_
     let path = dir.path().join("session.jsonl");
     fs::write(&path, "rewritten\n").unwrap();
     // Read to 4 when it was 20 bytes long.
-    let seen = FileRead {
+    let seen = ReadTo {
         offset: 4,
         size: 20,
     };
@@ -127,7 +129,7 @@ async fn a_session_file_that_is_gone_waits_and_one_that_cannot_be_read_ends_the_
 
 /// The chunk a follow that read the empty file `emptied.jsonl` as `seen`
 /// says, if at all, sends of it.
-async fn chunk_of_empty_file(seen: Option<FileRead>) -> serde_json::Value {
+async fn chunk_of_empty_file(seen: Option<ReadTo>) -> serde_json::Value {
     let (root, manager) = crate::daemon::test_support::manager().await;
     let (mut client, theirs) = client(&manager);
     let emptied = root.path().join("emptied.jsonl");
@@ -158,7 +160,7 @@ async fn chunk_of_empty_file(seen: Option<FileRead>) -> serde_json::Value {
 
 #[tokio::test]
 async fn a_file_emptied_since_it_was_read_comes_again_as_an_empty_reset() {
-    let chunk = chunk_of_empty_file(Some(FileRead { offset: 5, size: 5 })).await;
+    let chunk = chunk_of_empty_file(Some(ReadTo { offset: 5, size: 5 })).await;
     assert_eq!(chunk["reset"], true, "{chunk}");
 }
 

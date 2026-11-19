@@ -18,7 +18,7 @@ use shoal_protocol::{
     protocol::{self, Body, ErrorCode, MAX_FRAME, Response},
     scope_tokens::ScopeToken,
     space_names::SpaceSelector,
-    transcripts::{self, Environments, FollowedSession, SessionBytes, Store},
+    transcripts::{self, Environments, FollowedSession, ReadTo, SessionBytes, Store},
 };
 use tokio::net::{
     UnixStream,
@@ -49,7 +49,7 @@ pub(crate) struct Following {
     store: &'static dyn Store,
     environments: Arc<Environments>,
     /// Where the client read each of its files to.
-    read: HashMap<PathBuf, FileRead>,
+    read: HashMap<PathBuf, ReadTo>,
 }
 
 impl Manager {
@@ -61,7 +61,7 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
         session: Option<AgentSessionId>,
-        from: BTreeMap<PathBuf, u64>,
+        from: BTreeMap<PathBuf, ReadTo>,
     ) -> Result<Following> {
         let space = self.space(selector).await?.id;
         let sessions = self.space_sessions(&SpaceSelector::id(&space)).await?;
@@ -96,17 +96,7 @@ impl Manager {
             },
             store,
             environments: Arc::new(Environments::new(&self.paths.home, &sessions.environments)),
-            read: (from.into_iter())
-                .map(|(file, offset)| {
-                    (
-                        file,
-                        FileRead {
-                            offset,
-                            size: offset,
-                        },
-                    )
-                })
-                .collect(),
+            read: from.into_iter().collect(),
         })
     }
 
@@ -289,13 +279,6 @@ async fn locate(following: &Following) -> Result<Option<transcripts::Found>> {
     .context("look for the session's files")?
 }
 
-/// How far a follow read a file, and how long the file was then.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-struct FileRead {
-    offset: u64,
-    size: u64,
-}
-
 /// Send what the session's file `file`, at `path`, gained since `read`
 /// says the follow read it to, keeping where it now ends, checking the
 /// follow's scope token before each read. A file that is gone, as one its
@@ -307,7 +290,7 @@ async fn send_file_gained(
     client: &mut Client<'_>,
     path: &Path,
     file: PathBuf,
-    read: &mut HashMap<PathBuf, FileRead>,
+    read: &mut HashMap<PathBuf, ReadTo>,
 ) -> Result<()> {
     loop {
         client.ensure_scoped().await?;
@@ -326,7 +309,7 @@ async fn send_file_gained(
         let end = gained.offset + gained.bytes.len() as u64;
         read.insert(
             file.clone(),
-            FileRead {
+            ReadTo {
                 offset: end,
                 size: gained.size,
             },
@@ -361,7 +344,7 @@ struct Gained {
 /// Up to [`CHUNK`] bytes of `path` from where `seen` says it was read to,
 /// or from 0 where it is now shorter than it was then, as a file its tool
 /// wrote again.
-fn read_from(path: &Path, seen: FileRead) -> std::io::Result<Gained> {
+fn read_from(path: &Path, seen: ReadTo) -> std::io::Result<Gained> {
     let mut file = std::fs::File::open(path)?;
     let size = file.metadata()?.len();
     let rewritten = size < seen.offset.max(seen.size);

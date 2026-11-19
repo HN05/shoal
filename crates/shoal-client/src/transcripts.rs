@@ -5,7 +5,7 @@
 //! [`space_transcripts`] finds their files. [`follow_session`] follows a
 //! session's files on whichever machine its space runs.
 use shoal_ids::agent_session_ids::AgentSessionId;
-use shoal_protocol::transcripts::{FollowedSession, SpaceSessions, Transcript, locate};
+use shoal_protocol::transcripts::{FollowedSession, ReadTo, SpaceSessions, Transcript, locate};
 
 use std::{
     collections::{BTreeMap, HashMap},
@@ -99,7 +99,7 @@ async fn open(
     daemon: &impl Daemon,
     space: &SpaceSelector,
     session: &Option<AgentSessionId>,
-    from: &BTreeMap<PathBuf, u64>,
+    from: &BTreeMap<PathBuf, ReadTo>,
 ) -> Result<(Responses<BufReader<UnixStream>>, FollowedSession)> {
     let method = WorkspaceMethod::FollowSession {
         space: space.clone(),
@@ -217,30 +217,30 @@ const RESUME_BYTES: usize = 32 << 10;
 /// the daemon sends again once it follows again.
 #[derive(Debug, Default)]
 struct Cursor {
-    offsets: BTreeMap<PathBuf, u64>,
+    read: BTreeMap<PathBuf, ReadTo>,
     /// The files a follow opened again left out of where it read to, which
     /// the daemon sends from their start, with where it read each to.
-    replaying: HashMap<PathBuf, u64>,
+    replaying: HashMap<PathBuf, ReadTo>,
 }
 
 impl Cursor {
     /// Where a follow opened again reads on from: the files read furthest,
     /// as many as [`RESUME_BYTES`] holds; the daemon sends the others from
     /// their start, which [`Self::take`] skips to where it read them to.
-    fn resume(&mut self) -> BTreeMap<PathBuf, u64> {
-        let mut read: Vec<_> = self.offsets.iter().collect();
-        read.sort_by_key(|(_, offset)| std::cmp::Reverse(**offset));
+    fn resume(&mut self) -> BTreeMap<PathBuf, ReadTo> {
+        let mut read: Vec<_> = self.read.iter().collect();
+        read.sort_by_key(|(_, read)| std::cmp::Reverse(read.offset));
         let mut from = BTreeMap::new();
         let mut spent = 0;
         self.replaying.clear();
-        for (file, &offset) in read {
-            // Its path as JSON, its offset and what separates them.
-            let cost = serde_json::to_string(file).map_or(usize::MAX, |path| path.len() + 24);
+        for (file, &read) in read {
+            // Its path as JSON, its offset and size and what separates them.
+            let cost = serde_json::to_string(file).map_or(usize::MAX, |path| path.len() + 64);
             if spent + cost <= RESUME_BYTES {
                 spent += cost;
-                from.insert(file.clone(), offset);
+                from.insert(file.clone(), read);
             } else {
-                self.replaying.insert(file.clone(), offset);
+                self.replaying.insert(file.clone(), read);
             }
         }
         from
@@ -249,7 +249,7 @@ impl Cursor {
     /// What of `bytes`, a `chunk` of `file`, the follow has not read, from
     /// its offset, keeping where it read `file` to; none once it read them
     /// all before. A file the daemon resets, or that comes again shorter
-    /// than it read it to, was written anew, so it comes whole.
+    /// than it was when it read it, was written anew, so it comes whole.
     fn take(&mut self, file: &Path, chunk: Chunk, bytes: Vec<u8>) -> Option<(u64, Vec<u8>)> {
         let Chunk {
             offset,
@@ -257,10 +257,12 @@ impl Cursor {
             reset,
         } = chunk;
         let end = offset + bytes.len() as u64;
-        if reset || self.replaying.get(file).is_some_and(|read| size < *read) {
+        let shorter = |seen: &ReadTo| size < seen.offset.max(seen.size);
+        if reset || self.replaying.get(file).is_some_and(shorter) {
             self.replaying.remove(file);
         }
-        let (offset, bytes) = match self.replaying.get(file).copied() {
+        let read = self.replaying.get(file).map(|seen| seen.offset);
+        let (offset, bytes) = match read {
             Some(read) if end <= read => {
                 if end == read {
                     self.replaying.remove(file);
@@ -274,7 +276,8 @@ impl Cursor {
             }
             None => (offset, bytes),
         };
-        self.offsets.insert(file.to_owned(), end);
+        let read = ReadTo { offset: end, size };
+        self.read.insert(file.to_owned(), read);
         Some((offset, bytes))
     }
 }

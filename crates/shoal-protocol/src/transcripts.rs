@@ -73,6 +73,14 @@ pub struct FollowedSession {
     pub space: shoal_ids::space_ids::SpaceId,
 }
 
+/// How far a client read a followed file, and how long the file was then,
+/// which tells a file its tool wrote anew, shorter, once it follows again.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReadTo {
+    pub offset: u64,
+    pub size: u64,
+}
+
 /// Bytes of a followed session's file, as its tool wrote them from
 /// `offset` on. A file that shrank, as one its tool wrote again, comes
 /// again from offset 0.

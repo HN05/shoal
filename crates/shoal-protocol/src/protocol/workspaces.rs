@@ -210,7 +210,7 @@ pub enum WorkspaceMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session: Option<shoal_ids::agent_session_ids::AgentSessionId>,
         #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-        from: std::collections::BTreeMap<std::path::PathBuf, u64>,
+        from: std::collections::BTreeMap<std::path::PathBuf, crate::transcripts::ReadTo>,
     },
     /// Write a copy of a workspace or chat, with copies of the spaces below
     /// it that `carrying` carries, for another Shoal to the new file

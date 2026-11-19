@@ -725,7 +725,9 @@ space's current one, on whichever machine of the hub the space runs: the
 session with the tool whose format its files are in, then the bytes of each of
 its files, everything so far and then what the tool appends, each with its
 path in the tool's session directory, its offset and the file's length, and
-a file the tool wrote anew, shorter, again from offset 0 marked as a reset,
+a file the tool wrote anew, shorter, again from offset 0 marked as a reset
+(Shoal tells a file written anew only by its getting shorter, never by its
+content),
 and the current session
 again whenever the space goes on in another, of whichever agent. Across a
 daemon restart, or while the space's machine or the hub restarts, which

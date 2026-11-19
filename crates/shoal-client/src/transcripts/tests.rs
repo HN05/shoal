@@ -36,7 +36,7 @@ fn read(files: usize) -> Cursor {
 fn following_again_after_many_files_fits_in_a_frame_and_keeps_the_furthest_read() {
     let mut cursor = read(2_000);
     let from = cursor.resume();
-    assert_eq!(from.get(&file(1_999)), Some(&2_000));
+    assert_eq!(from.get(&file(1_999)).map(|read| read.offset), Some(2_000));
     let method = WorkspaceMethod::FollowSession {
         space: SpaceSelector::id(&"space".into()),
         session: None,
@@ -116,5 +116,20 @@ fn a_file_the_daemon_resets_while_sending_it_again_comes_whole() {
     assert_eq!(
         cursor.take(&rewritten, reset, vec![2; 150]),
         Some((0, vec![2; 150]))
+    );
+}
+
+#[test]
+fn a_file_read_in_part_then_written_anew_shorter_comes_whole_however_far_it_was_read() {
+    let mut cursor = read(2_000);
+    // Read to 10 of 200 bytes, then left out.
+    let partial = file(4_000);
+    cursor.take(&partial, chunk(0, 200), vec![0; 10]);
+    let from = cursor.resume();
+    assert!(!from.contains_key(&partial));
+    // Written anew 150 bytes long, past where it was read to.
+    assert_eq!(
+        cursor.take(&partial, chunk(0, 150), vec![3; 150]),
+        Some((0, vec![3; 150]))
     );
 }
