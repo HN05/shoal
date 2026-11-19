@@ -5,7 +5,7 @@ use crate::forge::items::reference::ItemRef;
 use anyhow::{Context, Result};
 use shoal_refs::CommitId;
 
-use super::super::workspace::Manager;
+use super::super::manager::Manager;
 use crate::{
     daemon::links::{space::LinkSpace, wait::linked_items},
     forge::items::{item::unmarkable_reason, link::ItemKind},

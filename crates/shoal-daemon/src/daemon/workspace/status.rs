@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 
-use super::Manager;
+use super::super::manager::Manager;
 use crate::{
     daemon::store,
     forge::{

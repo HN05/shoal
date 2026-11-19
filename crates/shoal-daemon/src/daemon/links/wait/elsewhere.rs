@@ -10,7 +10,7 @@ use anyhow::Result;
 
 use super::activity::acknowledge_deliveries;
 use crate::{
-    daemon::{agent_messages::MAX_UNREAD_BYTES, hub::Event, log, workspace::Manager},
+    daemon::{agent_messages::MAX_UNREAD_BYTES, hub::Event, log, manager::Manager},
     forge::updates::Update,
     model::SpaceRef,
 };

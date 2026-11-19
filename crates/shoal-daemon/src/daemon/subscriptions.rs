@@ -14,8 +14,8 @@ use tokio::net::{UnixStream, unix::OwnedWriteHalf};
 use super::{
     answer::{self, OperationGuard},
     log,
+    manager::Manager,
     scope::Caller,
-    workspace::Manager,
 };
 use crate::protocol::{Body, ErrorCode, Response};
 use shoal_protocol::{log::LogTopic, subscriptions::records::Topic};

@@ -5,9 +5,10 @@ use crate::{
     daemon::{
         approvals::{DecisionStatus, Specification, Undecided},
         executions::{ExecutionKind, ExecutionRequest},
+        manager::Manager,
         scope,
         test_support::{commit, git, manager, repository},
-        workspace::{Manager, RecordChange},
+        workspace::RecordChange,
     },
     forge::items::action::MergeMethod,
     model::{MergeOptions, Unmerged, Workspace},

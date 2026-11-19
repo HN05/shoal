@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use anyhow::{Result, ensure};
 
 use crate::{
-    daemon::{events::StoppedProcess, leftovers::COMMAND_LIMIT, store, workspace::Manager},
+    daemon::{events::StoppedProcess, leftovers::COMMAND_LIMIT, manager::Manager, store},
     fsutil::off_runtime,
     model::Workspace,
     process::{

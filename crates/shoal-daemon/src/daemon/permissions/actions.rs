@@ -19,8 +19,8 @@ use crate::{
         approvals::{
             ActionSpecification, ApprovalRequest, Specification, Target, Undecided, request_action,
         },
+        manager::Manager,
         scope::Caller,
-        workspace::Manager,
     },
 };
 

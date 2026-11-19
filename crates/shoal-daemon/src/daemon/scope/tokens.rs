@@ -4,7 +4,7 @@
 //! execution's own token, which the executions table keeps for its
 //! wrapper's reattachment, acts for it only while the wrapper is connected.
 use super::Caller;
-use crate::daemon::workspace::Manager;
+use crate::daemon::manager::Manager;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::space_ids::SpaceId;

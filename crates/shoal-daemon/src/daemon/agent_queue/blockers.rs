@@ -19,8 +19,8 @@ use crate::{
     daemon::{
         blockers,
         links::pr::current_head,
+        manager::Manager,
         store::{self, WORKSPACE_COLUMNS},
-        workspace::Manager,
     },
     git,
     model::{Blocker, SpaceKind, Workspace},

@@ -13,7 +13,7 @@ use super::blockers;
 use super::store::{ENTRY_COLUMNS, copy_launch_waiting, entry};
 use crate::{
     config::permissions::PermissionsConfig,
-    daemon::{log, store, workspace::Manager},
+    daemon::{log, manager::Manager, store},
     model::QueueEntry,
     state::{QueueKind, QueueState, WorkspaceState},
 };

@@ -19,8 +19,9 @@ use super::{mark_published, section, stored};
 use crate::{
     daemon::{
         links::{space::LinkSpace, wait::linked_items},
-        log, store,
-        workspace::Manager,
+        log,
+        manager::Manager,
+        store,
     },
     forge::items::link::ItemKind,
     model::Relation,

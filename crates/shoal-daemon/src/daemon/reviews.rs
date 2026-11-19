@@ -11,7 +11,7 @@ use std::{
 use anyhow::{Context, Result, bail, ensure};
 use tokio::sync::watch;
 
-use super::{log, workspace::Manager};
+use super::{log, manager::Manager};
 use crate::{
     agent::Agent,
     config::Effective,

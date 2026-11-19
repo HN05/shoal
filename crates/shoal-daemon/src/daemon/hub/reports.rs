@@ -17,7 +17,7 @@ use shoal_protocol::hub::{
 use tokio::time::Instant;
 
 use super::session::Calls;
-use crate::daemon::{log, workspace::Manager};
+use crate::daemon::{log, manager::Manager};
 
 mod summaries;
 

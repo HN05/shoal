@@ -6,7 +6,7 @@ use anyhow::Result;
 
 use super::Updates;
 use crate::{
-    daemon::{log::log, workspace::Manager},
+    daemon::{log::log, manager::Manager},
     protocol::WakeEnd,
 };
 use shoal_protocol::space_names::SpaceSelector;

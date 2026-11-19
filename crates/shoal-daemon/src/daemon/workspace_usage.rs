@@ -12,7 +12,7 @@ use anyhow::{Context, Result};
 use tokio::time::Instant;
 
 use crate::{
-    daemon::{containers::ContainerUsage, log, workspace::Manager},
+    daemon::{containers::ContainerUsage, log, manager::Manager},
     model::WorkspaceUsage,
     process::{
         identity::{self, Identity},

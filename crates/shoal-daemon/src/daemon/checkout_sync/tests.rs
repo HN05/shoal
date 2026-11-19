@@ -9,9 +9,9 @@ use std::{
 use futures_util::FutureExt as _;
 
 use crate::daemon::{
+    manager::Manager,
     notifications::NotificationKind,
     test_support::{commit, git, manager, repository},
-    workspace::Manager,
 };
 
 /// A registered checkout whose `main` tracks `origin`, and a clone that

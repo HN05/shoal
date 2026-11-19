@@ -19,7 +19,7 @@ use super::{
     weight::Light,
 };
 use crate::{
-    daemon::{notifications::NotificationKind, workspace::Manager},
+    daemon::{manager::Manager, notifications::NotificationKind},
     model::HeldBy,
     state::{QueueKind, QueueState},
 };

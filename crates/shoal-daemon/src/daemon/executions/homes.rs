@@ -14,7 +14,7 @@ use std::{collections::BTreeMap, ffi::OsString, path::PathBuf};
 use super::{ExecutionKind, ExecutionKindExt, ProcessDirectories};
 use crate::{
     config::Effective,
-    daemon::{scope::tokens, store, workspace::Manager},
+    daemon::{manager::Manager, scope::tokens, store},
     fsutil::off_runtime,
     model::{Chat, ExecutionSpace, PortReservation, Repository, Space, Workspace},
 };

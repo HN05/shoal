@@ -20,7 +20,7 @@ use shoal_protocol::{
     space_names::SpaceName,
 };
 
-use crate::{daemon::workspace::Manager, time::UnixTime};
+use crate::{daemon::manager::Manager, time::UnixTime};
 
 /// The tree as a machine keeps it: its own ID at the hub, the machines,
 /// and every space with the machine it runs on and the space above it.

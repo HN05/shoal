@@ -6,9 +6,9 @@ use anyhow::Result;
 use super::super::{
     answer::Answer,
     contribution_holds,
+    manager::Manager,
     permissions::Action,
     scope::{Caller, Scoped},
-    workspace::Manager,
 };
 use crate::{
     config::permissions::PermissionKey,

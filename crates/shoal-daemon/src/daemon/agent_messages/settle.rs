@@ -7,7 +7,7 @@ use std::time::Duration;
 use anyhow::Result;
 
 use super::AgentMessage;
-use crate::{daemon::workspace::Manager, model::Space, time::UnixTime};
+use crate::{daemon::manager::Manager, model::Space, time::UnixTime};
 
 mod clock;
 pub(crate) use clock::SettleClock;

@@ -7,7 +7,7 @@ use super::candidacy::Baseline;
 use crate::daemon::runner::JobStop;
 use crate::daemon::space_processes::WorktreeTies;
 use crate::daemon::workspace::ownership::{CommonDir, verify_admin_dir_owner};
-use crate::daemon::{executions::StopRequest, workspace::Manager};
+use crate::daemon::{executions::StopRequest, manager::Manager};
 use crate::model::EventCause;
 use crate::{
     fsutil::off_runtime,

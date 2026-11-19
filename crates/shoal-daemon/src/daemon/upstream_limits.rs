@@ -10,7 +10,7 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{agent::Agent, executions::ServiceLimit};
 
-use super::workspace::Manager;
+use super::manager::Manager;
 pub(crate) use shoal_protocol::executions::UpstreamLimit;
 
 /// How long a limit whose upstream named no end stands after it was last

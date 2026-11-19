@@ -1,10 +1,12 @@
 //! Explicit repository deletion, retaining ownership and progress for retries.
-use super::workspace::{
-    Manager,
-    identity::has_directory_identity,
-    paths::{
-        contains_protected_directory, is_real_directory, matches_recorded_worktree_path,
-        real_directory_identity,
+use super::{
+    manager::Manager,
+    workspace::{
+        identity::has_directory_identity,
+        paths::{
+            contains_protected_directory, is_real_directory, matches_recorded_worktree_path,
+            real_directory_identity,
+        },
     },
 };
 use crate::{

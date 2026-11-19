@@ -8,8 +8,8 @@ mod stopping;
 
 use super::{
     gates::{GuardMode, ResourceGuard},
+    manager::Manager,
     places::ExecutionPlace,
-    workspace::Manager,
 };
 use crate::daemon::log;
 use crate::{

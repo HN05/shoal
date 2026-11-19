@@ -24,7 +24,7 @@ use super::{
     shown,
 };
 use crate::{
-    daemon::{log, notifications::NotificationKind, workspace::Manager},
+    daemon::{log, manager::Manager, notifications::NotificationKind},
     refusal::{Reason, Refusal as Refused},
 };
 

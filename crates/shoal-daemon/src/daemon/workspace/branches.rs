@@ -7,7 +7,7 @@ use std::path::Path;
 use anyhow::{Context, Result, ensure};
 use shoal_refs::{BranchName, CommitId};
 
-use super::Manager;
+use super::super::manager::Manager;
 use crate::{
     fsutil::off_runtime,
     git::{

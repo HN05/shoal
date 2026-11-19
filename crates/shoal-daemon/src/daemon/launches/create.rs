@@ -14,7 +14,7 @@ use super::{
 };
 use crate::{
     config::modes::ModeName,
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     launches,
     model::SpaceKind,
     protocol::operations::{StartedWorkspace, WorkspaceStart},

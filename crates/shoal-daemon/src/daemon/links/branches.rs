@@ -14,7 +14,7 @@ use shoal_refs::{BranchName, CommitId};
 use super::{place::Access, target::ForgeTarget};
 use crate::{
     branches::{BranchSpace, ListedBranch, SpaceWork},
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     forge::{
         ForgeRepo,
         branches::{ForgeBranch, OpenPull},

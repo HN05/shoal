@@ -6,8 +6,8 @@ use anyhow::Result;
 use super::super::{
     answer::Answer,
     chats::NewChat,
+    manager::Manager,
     scope::{Caller, Scoped},
-    workspace::Manager,
 };
 use crate::protocol::{Body, ChatMethod, ChatStart};
 use shoal_ids::queue_entry_ids::QueueEntryId;

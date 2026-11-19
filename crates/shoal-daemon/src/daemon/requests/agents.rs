@@ -6,8 +6,8 @@ use anyhow::{Result, bail, ensure};
 
 use super::super::{
     answer::Answer,
+    manager::Manager,
     scope::{Caller, Scoped},
-    workspace::Manager,
 };
 use crate::{
     protocol::{AgentMethod, Body, WokenTurn},

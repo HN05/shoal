@@ -15,10 +15,10 @@ use crate::{
         allocation::Allocation,
         approvals::{self, ApprovalRequest, ResourceSpecification, Specification, Target},
         gates::GuardMode,
+        manager::Manager,
         queue,
         scope::Caller,
         store,
-        workspace::Manager,
     },
     validate,
 };

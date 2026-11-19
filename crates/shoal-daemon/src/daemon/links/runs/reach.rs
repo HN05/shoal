@@ -5,7 +5,7 @@ use anyhow::{Context, Result, ensure};
 
 use super::place::RunPlace;
 use crate::{
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     git::{self, default_branch::DefaultBranchLookup},
 };
 use shoal_ids::repository_ids::RepositoryId;

@@ -8,7 +8,7 @@ use std::time::{Duration, SystemTime};
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::workspace::Manager;
+use super::manager::Manager;
 use crate::{
     agents::hook_reports,
     execution::recovery,

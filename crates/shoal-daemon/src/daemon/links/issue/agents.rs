@@ -8,7 +8,7 @@ use rusqlite::{Connection, params};
 use shoal_ids::space_ids::SpaceId;
 
 use crate::{
-    daemon::{links::space::LinkSpace, notifications::NotificationKind, workspace::Manager},
+    daemon::{links::space::LinkSpace, manager::Manager, notifications::NotificationKind},
     execution::recovery,
     forge::items::reference::ItemRef,
     model::{Assigner, Space},

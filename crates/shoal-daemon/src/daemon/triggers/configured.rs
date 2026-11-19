@@ -4,7 +4,7 @@ use anyhow::{Result, bail};
 use shoal_ids::repository_ids::RepositoryId;
 
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     protocol::ConfigTarget,
     triggers::{Trigger, Triggers},
 };

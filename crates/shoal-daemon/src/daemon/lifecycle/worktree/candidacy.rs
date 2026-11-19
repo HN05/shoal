@@ -1,6 +1,6 @@
 //! The worktree's part of cleanup candidacy: its commands and leases, its
 //! Git state and files, and the processes working in it.
-use crate::daemon::workspace::Manager;
+use crate::daemon::manager::Manager;
 use crate::{
     daemon::{
         cleanup::{Rule, Tree},

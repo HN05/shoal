@@ -7,7 +7,7 @@ use shoal_ids::space_ids::SpaceId;
 
 use super::{SimRequest, Simulator};
 use crate::{
-    daemon::{allocation::Allocation, approvals::DecisionStatus, workspace::Manager},
+    daemon::{allocation::Allocation, approvals::DecisionStatus, manager::Manager},
     model::Workspace,
     time::UnixTime,
 };

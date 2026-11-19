@@ -10,9 +10,9 @@ use shoal_ids::space_ids::SpaceId;
 use crate::{
     daemon::{
         log,
+        manager::Manager,
         notifications::{About, NotificationKind},
         operations::Entry,
-        workspace::Manager,
     },
     protocol::operations::{Ended, Failure},
 };

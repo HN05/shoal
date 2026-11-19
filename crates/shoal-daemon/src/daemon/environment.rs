@@ -7,7 +7,7 @@ use std::{ffi::OsStr, path::PathBuf};
 use anyhow::Result;
 
 use crate::{
-    daemon::{events::ShoalEventKind, log, notifications::NotificationKind, workspace::Manager},
+    daemon::{events::ShoalEventKind, log, manager::Manager, notifications::NotificationKind},
     sessions::HostName,
     tools::{Dependency, Tool},
 };

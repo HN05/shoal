@@ -1,7 +1,7 @@
 //! The variables a space gives the processes an external caller starts in
 //! it, without the scope token, which [`super::scopes`] issues on its own.
 use crate::{
-    daemon::{store, workspace::Manager},
+    daemon::{manager::Manager, store},
     env,
     model::{ByKind, Chat, Workspace},
 };

@@ -8,9 +8,7 @@ use shoal_refs::CommitId;
 
 use crate::{
     daemon::{
-        links::place::Access,
-        scope::Caller,
-        workspace::{Manager, conflicts::recorded},
+        links::place::Access, manager::Manager, scope::Caller, workspace::conflicts::recorded,
     },
     forge::{
         ForgeRepo,

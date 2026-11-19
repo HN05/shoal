@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     config::permissions::PermissionKey,
-    daemon::{events, permissions::Action, scope::Caller, workspace::Manager},
+    daemon::{events, manager::Manager, permissions::Action, scope::Caller},
     forge::{
         ci::approval::RunsApproved,
         items::{

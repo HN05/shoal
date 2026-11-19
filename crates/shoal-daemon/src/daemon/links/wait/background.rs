@@ -14,7 +14,7 @@ use super::{
 use crate::{
     daemon::{
         links::space::{LinkSpace, require_ready_space},
-        workspace::Manager,
+        manager::Manager,
     },
     forge::{
         items::{

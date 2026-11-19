@@ -6,7 +6,7 @@ use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use std::path::Path;
 
 use crate::{
-    daemon::{links::space::LinkSpace, workspace::Manager},
+    daemon::{links::space::LinkSpace, manager::Manager},
     forge::ForgeRepo,
     model::{Repository, Workspace},
     protocol::ItemContext,

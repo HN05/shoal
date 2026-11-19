@@ -5,7 +5,7 @@ use shoal_ids::repository_ids::RepositoryId;
 
 use crate::{
     caches::Layout,
-    daemon::{store, workspace::Manager},
+    daemon::{manager::Manager, store},
     model::Repository,
 };
 pub(crate) use shoal_protocol::cleanup::Emptying;

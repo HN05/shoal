@@ -34,7 +34,7 @@ use super::{
     accept::Over,
     transport::{self, Channel},
 };
-use crate::daemon::{log, notifications::NotificationKind, workspace::Manager};
+use crate::daemon::{log, manager::Manager, notifications::NotificationKind};
 
 /// How long a client may take to send a request's headers, and then the
 /// request that opens its link.

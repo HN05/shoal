@@ -7,7 +7,7 @@ use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use crate::{
-    daemon::{wake_timers, workspace::Manager},
+    daemon::{manager::Manager, wake_timers},
     state::{AgentState, Sleep},
     time::UnixTime,
 };

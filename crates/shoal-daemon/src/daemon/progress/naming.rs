@@ -5,7 +5,7 @@ use anyhow::{Context as _, Result, ensure};
 
 use super::{Change, blockers::Named};
 use crate::{
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     forge::{
         ForgeRepo,
         items::{

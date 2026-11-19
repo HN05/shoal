@@ -8,12 +8,13 @@ use tokio::net::UnixStream;
 use super::super::{
     answer::{Answer, OperationGuard},
     conversions::WorkspaceConversion,
+    manager::Manager,
     operations::{
         Entry,
         starts::{Child, Opening, Preparing},
     },
     scope::{Caller, Scoped},
-    workspace::{Manager, NewWorkspace},
+    workspace::NewWorkspace,
 };
 use crate::protocol::{Body, ErrorCode, OperationMethod, Response, operations::Started};
 use shoal_protocol::space_names::SpaceSelector;

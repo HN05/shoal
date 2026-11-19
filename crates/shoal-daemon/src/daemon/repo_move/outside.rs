@@ -9,7 +9,7 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::params;
 
 use super::Running;
-use crate::{daemon::workspace::Manager, fsutil, model::Execution, tmp_dirs};
+use crate::{daemon::manager::Manager, fsutil, model::Execution, tmp_dirs};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;
 

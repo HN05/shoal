@@ -5,8 +5,8 @@ use anyhow::Result;
 
 use super::super::{
     answer::Answer,
+    manager::Manager,
     scope::{Caller, Scoped},
-    workspace::Manager,
 };
 use crate::protocol::{self, Body, ReviewMethod, ReviewPiece};
 use shoal_protocol::space_names::SpaceSelector;

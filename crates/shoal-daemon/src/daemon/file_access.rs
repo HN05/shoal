@@ -21,7 +21,7 @@ use anyhow::Result;
 use futures_util::future::BoxFuture;
 use tokio::time::Instant;
 
-use super::{log, notifications::NotificationKind, workspace::Manager};
+use super::{log, manager::Manager, notifications::NotificationKind};
 use crate::protocol::{AccessStall, PRIVACY_PROMPT};
 
 /// A check still running after this long counts as stalled. Git answers a

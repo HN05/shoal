@@ -2,7 +2,7 @@
 //! with Git without replaying a ref mutation.
 mod intent;
 
-use super::Manager;
+use super::super::manager::Manager;
 use crate::refusal::{Reason, Refusal};
 use crate::{
     daemon::store,

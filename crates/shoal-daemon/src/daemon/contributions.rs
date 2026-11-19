@@ -5,7 +5,7 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, params};
 use shoal_ids::repository_ids::RepositoryId;
 
-use super::workspace::{Manager, paths::real_directory_identity};
+use super::{manager::Manager, workspace::paths::real_directory_identity};
 
 pub(crate) mod holds;
 use crate::{

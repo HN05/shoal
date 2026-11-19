@@ -13,7 +13,7 @@ use super::{
     state::{self, Started, Waiting},
 };
 use crate::{
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     model::QueueEntry,
     state::QueueState,
     time::UnixTime,

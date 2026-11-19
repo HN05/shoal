@@ -21,7 +21,7 @@ use super::{
     merge_runs::{MergeTarget, follow_reported_merge},
 };
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     forge::{items::reference::ItemRef, updates::UpdateKind},
     time::UnixTime,
 };

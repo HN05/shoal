@@ -12,7 +12,7 @@ use shoal_protocol::hub::{
     numbering::Numbering,
 };
 
-use crate::daemon::{notifications::NotificationKind, workspace::Manager};
+use crate::daemon::{manager::Manager, notifications::NotificationKind};
 
 mod numbers;
 mod records;

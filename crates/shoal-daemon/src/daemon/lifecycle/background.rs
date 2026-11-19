@@ -10,9 +10,9 @@ use super::Removal;
 use crate::{
     daemon::{
         agent_messages, log,
+        manager::Manager,
         notifications::{About, NotificationKind},
         scope::Caller,
-        workspace::Manager,
     },
     model::Space,
     removal::{InspectionPolicy, UnsavedWork},

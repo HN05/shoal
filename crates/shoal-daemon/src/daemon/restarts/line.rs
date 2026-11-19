@@ -6,7 +6,7 @@ use std::{collections::VecDeque, sync::Arc};
 use shoal_ids::space_ids::SpaceId;
 use tokio::{sync::Notify, time::Instant};
 
-use crate::daemon::{capacity::STAGGER, workspace::Manager};
+use crate::daemon::{capacity::STAGGER, manager::Manager};
 
 /// The spaces whose recorded restarts wait in the line.
 #[derive(Default)]

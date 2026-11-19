@@ -7,7 +7,7 @@ use shoal_protocol::space_names::SpaceSelector;
 
 use super::{Preparing, home::Recorded};
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     model::{QueueAdmission, Space},
 };
 

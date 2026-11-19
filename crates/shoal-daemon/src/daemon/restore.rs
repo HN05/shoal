@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use anyhow::{Context, Result, bail};
 
-use super::workspace::Manager;
+use super::manager::Manager;
 use crate::daemon::scope::Caller;
 use crate::{
     model::{OpenedWorkspace, RemovedSpace, RestoredChat, RestoredSpace, RestoredWorkspace},

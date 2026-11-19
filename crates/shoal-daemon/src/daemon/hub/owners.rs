@@ -9,7 +9,7 @@ use shoal_protocol::hub::{
 };
 
 use super::membership;
-use crate::daemon::{log, workspace::Manager};
+use crate::daemon::{log, manager::Manager};
 
 impl Manager {
     /// Refuse to open the space `id` again while the hub lists it on

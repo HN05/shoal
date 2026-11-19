@@ -14,7 +14,7 @@ use tokio::task::{Id, JoinError, JoinSet};
 use crate::daemon::{
     approvals::{ApprovalRequest, DecisionStatus, GateStep},
     log,
-    workspace::Manager,
+    manager::Manager,
 };
 use shoal_ids::space_ids::SpaceId;
 

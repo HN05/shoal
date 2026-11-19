@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
-use super::{log, notifications::NotificationKind, workspace::Manager};
+use super::{log, manager::Manager, notifications::NotificationKind};
 
 #[cfg(target_os = "linux")]
 mod logind;

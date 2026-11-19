@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use super::run::remove_run;
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     shoal_dirs::{Contents, ShoalDir},
 };
 use shoal_ids::repository_ids::RepositoryId;

@@ -14,7 +14,7 @@ use std::{
 use anyhow::{Context, Result};
 use rusqlite::Connection;
 
-use super::workspace::Manager;
+use super::manager::Manager;
 use crate::{
     daemon::workspace_files::HomeKey,
     model::{RemovedSpace, Repository, Space},

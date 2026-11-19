@@ -14,7 +14,7 @@ use rusqlite::params;
 use shoal_refs::CommitId;
 
 use crate::{
-    daemon::{log, notifications::NotificationKind, store::json_column, workspace::Manager},
+    daemon::{log, manager::Manager, notifications::NotificationKind, store::json_column},
     forge::{ForgeRepo, ci::runner::JobRun, items::reference::ItemRef, numbers::PullNumber},
     model::QueuedJob,
     state::{QueueKind, QueueState},

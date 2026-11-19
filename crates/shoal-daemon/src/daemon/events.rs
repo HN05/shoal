@@ -7,7 +7,7 @@ use serde::Deserialize;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
-use super::{log, workspace::Manager};
+use super::{log, manager::Manager};
 use crate::time::UnixTime;
 pub(crate) use shoal_protocol::events::{
     AgentEvent, AlertEvent, ApprovalEvent, EventCursor, EventDetails, EventItem, EventKind,

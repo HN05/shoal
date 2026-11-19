@@ -5,7 +5,7 @@ use shoal_ids::execution_ids::ExecutionId;
 
 use crate::{
     agent::Agent,
-    daemon::{agents::RestartWaits, workspace::Manager},
+    daemon::{agents::RestartWaits, manager::Manager},
     model::{RestartOutcome, RestartWait, RunningAgent, Space},
     sessions::Origin,
 };

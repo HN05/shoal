@@ -13,7 +13,7 @@ use std::time::Duration;
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, params};
 
-use super::workspace::Manager;
+use super::manager::Manager;
 use crate::{protocol::SubagentChange, time::UnixTime};
 
 /// How long a subagent counts after its start and the last request of its

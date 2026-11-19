@@ -4,8 +4,8 @@ use crate::daemon::approvals::ApprovalRequestExt;
 use crate::{
     daemon::{
         approvals::{ApprovalRequest, SecretSpecification, Specification, Target},
+        manager::Manager,
         test_support::{ProcessGroup, agent_process, manager, repository},
-        workspace::Manager,
         workspace_files::Attacher,
     },
     model::{Chat, SpaceKind, Workspace},

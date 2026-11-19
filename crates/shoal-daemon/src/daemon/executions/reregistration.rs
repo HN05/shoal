@@ -9,8 +9,8 @@ use shoal_protocol::scope_tokens::ScopeToken;
 
 use super::super::{
     executions::homes::{Home, Provisions},
+    manager::Manager,
     places::ExecutionPlace,
-    workspace::Manager,
 };
 use crate::model::ExecutionPlan;
 

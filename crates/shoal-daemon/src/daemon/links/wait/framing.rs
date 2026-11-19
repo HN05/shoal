@@ -7,7 +7,7 @@ use super::{
     cursor::{all_pending, save_pending},
 };
 use crate::{
-    daemon::{agent_messages::AgentMessage, workspace::Manager},
+    daemon::{agent_messages::AgentMessage, manager::Manager},
     forge::updates::Update,
 };
 use shoal_ids::space_ids::SpaceId;

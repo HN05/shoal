@@ -18,7 +18,7 @@ use tokio::sync::OwnedRwLockReadGuard;
 
 use super::{queue::Held, session::Calls, streams::Outgoing};
 use crate::{
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     refusal::{Reason, Refusal},
     time::UnixTime,
 };

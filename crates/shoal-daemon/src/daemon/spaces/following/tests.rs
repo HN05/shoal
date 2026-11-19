@@ -81,7 +81,7 @@ fn a_whole_chunk_of_a_file_with_the_longest_path_fits_in_a_frame() {
 }
 
 /// A follow's client on one end of a new connection, and the other end.
-fn client(manager: &crate::daemon::workspace::Manager) -> (Client<'_>, tokio::net::UnixStream) {
+fn client(manager: &crate::daemon::manager::Manager) -> (Client<'_>, tokio::net::UnixStream) {
     let (ours, theirs) = tokio::net::UnixStream::pair().unwrap();
     let (_, writer) = ours.into_split();
     let client = Client {

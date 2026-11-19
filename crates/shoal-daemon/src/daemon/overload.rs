@@ -4,8 +4,8 @@ use std::{sync::Arc, time::Duration};
 use tokio::time::Instant;
 
 use super::{
+    manager::Manager,
     warnings::{self, Signal, Warnings},
-    workspace::Manager,
 };
 use crate::daemon::log;
 

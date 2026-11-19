@@ -8,9 +8,9 @@ use shoal_refs::CommitId;
 use super::{place::Access, pr::current_head, target::ForgeTarget};
 use crate::{
     daemon::{
+        manager::Manager,
         reviews::gate::{Gate, Unreviewed},
         scope::Caller,
-        workspace::Manager,
     },
     forge::{
         PullRequest,

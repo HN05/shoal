@@ -8,8 +8,8 @@ use crate::{
             place::{Access, Place},
             space::LinkSpace,
         },
+        manager::Manager,
         scope::Caller,
-        workspace::Manager,
     },
     forge::{
         ForgeRepo,

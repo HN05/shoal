@@ -10,7 +10,7 @@ use anyhow::Result;
 use shoal_ids::member_ids::MemberId;
 use shoal_protocol::hub::{HubRole, Overview};
 
-use super::workspace::Manager;
+use super::manager::Manager;
 
 pub(crate) use forwarding::{Elsewhere, Unanswered};
 pub(crate) use streams::Incoming;

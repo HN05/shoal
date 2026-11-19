@@ -14,7 +14,7 @@ use super::{
     store::{Awaits, ENTRY_COLUMNS, Launch, LaunchRequest, entry, insert_launch},
 };
 use crate::{
-    daemon::{notifications::NotificationKind, workspace::Manager},
+    daemon::{manager::Manager, notifications::NotificationKind},
     model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, SpaceKind, Workspace},
     state::{QueueKind, QueueState},
 };

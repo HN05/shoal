@@ -10,7 +10,7 @@ use ring::{
 use rusqlite::OptionalExtension as _;
 use shoal_protocol::hub::{Nonce, PublicKey, Signature};
 
-use crate::daemon::workspace::Manager;
+use crate::daemon::manager::Manager;
 
 /// A key pair as PKCS#8, which the store keeps; its `Debug` leaves the key
 /// out.

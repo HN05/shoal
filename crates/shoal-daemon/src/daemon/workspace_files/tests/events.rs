@@ -1,7 +1,7 @@
 use super::{Attacher, FileSource, chat, workspace};
 use crate::removal::{InspectionPolicy, UnsavedWork};
 use crate::{
-    daemon::{test_support::manager, workspace::Manager},
+    daemon::{manager::Manager, test_support::manager},
     model::SpaceKind,
 };
 use shoal_ids::space_ids::SpaceId;

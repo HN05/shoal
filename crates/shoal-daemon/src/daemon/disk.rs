@@ -21,10 +21,10 @@ use super::{
     agent_queue::OneShotStop,
     agents::Protection,
     caches::Emptying,
+    manager::Manager,
     notifications::NotificationKind,
     spaces::removal_notices::Cleanup,
     warnings::{self, Signal, Warnings},
-    workspace::Manager,
 };
 use crate::daemon::log;
 use crate::{

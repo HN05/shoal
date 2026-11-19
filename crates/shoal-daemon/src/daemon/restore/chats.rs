@@ -2,7 +2,7 @@
 //! its restore records it again under its ID, stopped.
 use anyhow::{Context, Result, bail, ensure};
 
-use crate::daemon::workspace::Manager;
+use crate::daemon::manager::Manager;
 use crate::model::{Chat, ChatPart, KeptChat, RemovedSpace, Workdir};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;

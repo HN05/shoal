@@ -43,7 +43,7 @@ fn issue_forge(comments: Arc<AtomicUsize>) -> Server {
 /// A workspace of a repository on `forge` and the URL of its issue 3.
 struct Served {
     _root: tempfile::TempDir,
-    manager: Arc<crate::daemon::workspace::Manager>,
+    manager: Arc<crate::daemon::manager::Manager>,
     workspace: shoal_ids::space_ids::SpaceId,
     issue: ItemRef,
 }
@@ -314,7 +314,7 @@ async fn a_poll_that_reads_after_a_restart_records_after_it() {
 /// Record a poll of `issue` that started at `observed_at` on the cursor of
 /// the space `id`, returning the updates its watch reports.
 async fn poll(
-    manager: &crate::daemon::workspace::Manager,
+    manager: &crate::daemon::manager::Manager,
     id: &shoal_ids::space_ids::SpaceId,
     issue: &ItemRef,
     observed_at: UnixTime,
@@ -329,7 +329,7 @@ async fn poll(
 
 /// Put the workspace `id` in `state`.
 async fn set_state(
-    manager: &crate::daemon::workspace::Manager,
+    manager: &crate::daemon::manager::Manager,
     id: &shoal_ids::space_ids::SpaceId,
     state: &'static str,
 ) {
@@ -349,7 +349,7 @@ async fn set_state(
 
 /// Restart the watches of the space `id` as an agent's new session does,
 /// without a stop.
-async fn restart(manager: &crate::daemon::workspace::Manager, id: &shoal_ids::space_ids::SpaceId) {
+async fn restart(manager: &crate::daemon::manager::Manager, id: &shoal_ids::space_ids::SpaceId) {
     let (_stop, stopped) = tokio::sync::watch::channel(false);
     manager.restart_watches(id, stopped).await.unwrap();
 }

@@ -3,7 +3,7 @@
 //! there. Chats in its worktree are not its agents and never count.
 use anyhow::{Result, bail};
 
-use crate::{daemon::workspace::Manager, execution::recovery, model::Space};
+use crate::{daemon::manager::Manager, execution::recovery, model::Space};
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {

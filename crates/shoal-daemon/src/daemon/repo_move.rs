@@ -2,10 +2,10 @@
 //! before anything moves, so an interrupted move finishes or rolls back.
 use super::{
     gates::GuardMode,
+    manager::Manager,
     registry,
     spotlight::{self, Layout},
     workspace::{
-        Manager,
         identity::{directory_identity, has_directory_identity},
         paths::{is_real_directory, real_directory_identity},
     },

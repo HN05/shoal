@@ -16,8 +16,8 @@ use crate::{
     daemon::{
         events::{self, EventKind},
         links::space::LinkSpace,
+        manager::Manager,
         store,
-        workspace::Manager,
     },
     forge::{
         ForgeRepo,

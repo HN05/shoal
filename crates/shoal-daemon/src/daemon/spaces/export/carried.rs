@@ -4,7 +4,7 @@ use crate::model::EventCause;
 use anyhow::{Context, Result};
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     model::{RemovedSpace, Repository, Space},
     transfer::{CarriedSpace, CarriedSpaceExt, Carrying, Manifest, ManifestExt, Placed},
 };

@@ -6,7 +6,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
 
-use crate::daemon::workspace::Manager;
+use crate::daemon::manager::Manager;
 use crate::refusal::{Reason, Refusal};
 use crate::{
     git,

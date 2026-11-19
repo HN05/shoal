@@ -19,9 +19,10 @@ use super::{
     events::{AgentEvent, EventKind},
     execution_recovery,
     executions::{Completing, ExecutionKind, ReattachedExecution, StopRequest},
+    manager::Manager,
     places::ExecutionPlace,
     scope::Caller,
-    workspace::{Manager, RecordChange},
+    workspace::RecordChange,
 };
 use crate::{
     execution::TrackedAgent,

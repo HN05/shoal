@@ -3,7 +3,7 @@ use anyhow::{Result, ensure};
 use shoal_ids::space_ids::SpaceId;
 
 use crate::{
-    daemon::{links::wait::linked_items, store, workspace::Manager},
+    daemon::{links::wait::linked_items, manager::Manager, store},
     forge::{
         ForgeRepo,
         items::{link::LinkKind, reference::ItemInput},

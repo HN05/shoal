@@ -12,7 +12,7 @@ use shoal_refs::{BranchName, CommitId};
 
 use super::tracking_ref;
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     forge::items::action::MergeMethod,
     git::{
         self,

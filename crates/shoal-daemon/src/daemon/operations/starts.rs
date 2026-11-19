@@ -32,7 +32,7 @@ use shoal_protocol::{
 use shoal_schedule::priority::Priority;
 
 use crate::{
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     forge::items::reference::ItemInput,
     model::{QueueEntry, Space},
     protocol::operations::{LaunchRequest, StartedWorkspace},

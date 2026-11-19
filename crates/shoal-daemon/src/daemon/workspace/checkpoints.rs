@@ -9,7 +9,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_refs::BranchName;
 
-use super::Manager;
+use super::super::manager::Manager;
 use crate::{
     daemon::{log, scope::Caller, workspace_files::HomeKey},
     git,

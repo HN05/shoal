@@ -3,12 +3,12 @@ use std::{sync::Arc, time::Duration};
 use super::{Child, Opening, Preparing};
 use crate::{
     config::permissions::PermissionsConfig,
-    daemon::notifications::NotificationKind,
-    daemon::scope::Caller,
     daemon::{
+        manager::Manager,
+        notifications::NotificationKind,
         operations::fake,
+        scope::Caller,
         test_support::{commit, git, global_config, manager, repository, repository_with},
-        workspace::Manager,
     },
     forge::numbers::PullNumber,
     model::{Repository, Workspace},

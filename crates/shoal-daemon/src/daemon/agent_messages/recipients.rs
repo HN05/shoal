@@ -6,7 +6,7 @@ use anyhow::Result;
 
 use crate::{
     daemon::{
-        workspace::Manager,
+        manager::Manager,
         workspace_files::{Attacher, NewFile},
     },
     model::{Space, SpaceKind},

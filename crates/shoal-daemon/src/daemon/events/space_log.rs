@@ -8,7 +8,7 @@ use super::{EventCursor, EventKind, decode, log_entry};
 use crate::time::UnixTime;
 use crate::{
     config::permissions::PermissionKey,
-    daemon::{permissions::Action, scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, permissions::Action, scope::Caller},
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{

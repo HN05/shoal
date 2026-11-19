@@ -15,9 +15,9 @@ use tokio::{
 use super::{MAX_BODY, MAX_DELIVERIES, accept};
 use crate::{
     daemon::{
+        manager::Manager,
         test_support::{chat_launches, configure},
         triggers::tests::{outcomes, runs, with_triggers},
-        workspace::Manager,
     },
     model::Repository,
 };

@@ -5,9 +5,9 @@ use anyhow::Result;
 
 use super::super::{
     answer::Answer,
+    manager::Manager,
     queued_starts,
     scope::{Caller, Scoped},
-    workspace::Manager,
 };
 use crate::protocol::{Body, QueueMethod};
 use crate::state::QueueKind;

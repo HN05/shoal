@@ -7,9 +7,10 @@ use std::{fs, path::PathBuf, sync::Arc};
 use crate::{
     daemon::{
         executions::ExecutionKind,
+        manager::Manager,
         scope,
         test_support::{commit, git, install_test_script, manager, repository},
-        workspace::{Manager, NewWorktreeOptions},
+        workspace::NewWorktreeOptions,
     },
     paths::Paths,
     protocol::{DaemonMethod, ExecutionMethod, Operation, RemovalMethod, WorkspaceMethod},

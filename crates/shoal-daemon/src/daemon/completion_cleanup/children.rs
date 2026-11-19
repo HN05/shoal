@@ -4,7 +4,7 @@ use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;
 
-use super::super::workspace::Manager;
+use super::super::manager::Manager;
 use crate::model::Space;
 
 /// A space above another whose completion with cleanup stands.

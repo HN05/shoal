@@ -7,7 +7,7 @@ use shoal_ids::space_ids::SpaceId;
 
 use super::Caller;
 use crate::{
-    daemon::{store, workspace::Manager},
+    daemon::{manager::Manager, store},
     model::Space,
 };
 

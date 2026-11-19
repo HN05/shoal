@@ -15,8 +15,8 @@ use crate::{
         item_numbers::ItemNumber,
         links::space::require_ready_space,
         log,
+        manager::Manager,
         scope::Caller,
-        workspace::Manager,
     },
 };
 use shoal_protocol::space_names::SpaceSelector;

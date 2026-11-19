@@ -4,7 +4,7 @@ use rusqlite::OptionalExtension;
 use shoal_ids::space_ids::SpaceId;
 use std::time::Duration;
 
-use crate::{daemon::workspace::Manager, time::UnixTime};
+use crate::{daemon::manager::Manager, time::UnixTime};
 
 impl Manager {
     /// When the space's grace period ends, starting it now when none runs,

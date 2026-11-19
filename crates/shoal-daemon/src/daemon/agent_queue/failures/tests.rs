@@ -1,7 +1,7 @@
 use super::super::tests::{add, create, launch_in, limit_globally, register};
 use crate::{
     daemon::{
-        chats::NewChat, notifications::NotificationKind, test_support::manager, workspace::Manager,
+        chats::NewChat, manager::Manager, notifications::NotificationKind, test_support::manager,
     },
     model::{ChatQueueRequest, QueueEntry, Repository},
     removal::{InspectionPolicy, UnsavedWork},

@@ -7,8 +7,8 @@ use super::super::{
     answer::Answer,
     execution_connection,
     executions::ExecutionKind,
+    manager::Manager,
     scope::{Caller, Scoped},
-    workspace::Manager,
 };
 use crate::protocol::{Body, ExecutionMethod};
 use shoal_protocol::space_names::SpaceSelector;

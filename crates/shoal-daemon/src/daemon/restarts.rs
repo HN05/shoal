@@ -14,8 +14,8 @@ use crate::{
     config::permissions::PermissionChange,
     daemon::{
         agents::{Requested, restarted},
+        manager::Manager,
         scope::Caller,
-        workspace::Manager,
     },
     model::{AgentRestart, RestartOutcome, RestartWait, Space},
     sessions::Origin,

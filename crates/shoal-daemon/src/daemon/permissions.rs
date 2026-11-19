@@ -12,7 +12,7 @@ use crate::{
         Config,
         permissions::{self, PermissionChange, Permissions, PermissionsConfig, SpaceMode},
     },
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     model::{Space, SpaceKind, Workspace},
 };
 use shoal_ids::space_ids::SpaceId;

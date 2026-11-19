@@ -10,9 +10,10 @@ use rusqlite::{Connection, OptionalExtension, params};
 use shoal_refs::{BranchName, CommitId};
 
 use super::super::{
+    manager::Manager,
     restore::RestoredFiles,
     workspace::{
-        Manager, NewWorkspace,
+        NewWorkspace,
         creation::{Configured, PendingWorktree},
     },
 };

@@ -10,7 +10,7 @@ use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_protocol::space_names::SpaceSelector;
 
-use super::Manager;
+use super::super::manager::Manager;
 use crate::{
     daemon::{events::EventKind, store},
     git,

@@ -9,7 +9,7 @@ use shoal_ids::repository_ids::RepositoryId;
 
 use super::ends::ClaimedJob;
 use crate::{
-    daemon::{capacity::JobCost, workspace::Manager},
+    daemon::{capacity::JobCost, manager::Manager},
     model::QueuedJob,
 };
 

@@ -14,9 +14,9 @@ use crate::{
     config::modes::ModeName,
     daemon::{
         links::issue::OpenIssue,
+        manager::Manager,
         operations::starts::{Preparing, Recorded},
         scope::Caller,
-        workspace::Manager,
     },
     model::{Chat, OpenedWorkspace},
     protocol::{CreationOptions, operations::StartedWorkspace},

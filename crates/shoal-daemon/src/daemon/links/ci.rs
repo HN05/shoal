@@ -7,8 +7,8 @@ use crate::{
     daemon::{
         events,
         links::place::{Access, Place},
+        manager::Manager,
         scope::Caller,
-        workspace::Manager,
     },
     forge::{
         ci::{CiActed, CiAction},

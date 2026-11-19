@@ -7,7 +7,7 @@ use shoal_refs::{BranchName, CommitId};
 
 use super::{clean_checkout, local_commit, records::RecordedMerge};
 use crate::{
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     forge::items::action::MergeMethod,
     git::{
         self,

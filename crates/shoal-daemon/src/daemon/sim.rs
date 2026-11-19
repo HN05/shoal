@@ -21,7 +21,7 @@ use simctl::Inventory;
 
 use crate::refusal::{Reason, Refusal};
 use crate::{
-    daemon::{allocation::Allocation, approvals, queue, scope::Caller, workspace::Manager},
+    daemon::{allocation::Allocation, approvals, manager::Manager, queue, scope::Caller},
     model::Workspace,
     state::WorkspaceState,
     time::UnixTime,

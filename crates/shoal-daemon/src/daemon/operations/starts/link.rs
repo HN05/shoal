@@ -10,9 +10,9 @@ use crate::{
     daemon::{
         links::issue::{AssignerOf, OpenIssue},
         log,
+        manager::Manager,
         notifications::NotificationKind,
         scope::Caller,
-        workspace::Manager,
     },
     forge::items::reference::ItemRef,
     model::{Assigner, Space},

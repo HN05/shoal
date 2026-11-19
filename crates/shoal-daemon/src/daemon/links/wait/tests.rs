@@ -20,10 +20,12 @@ use super::{
 use crate::time::UnixTime;
 use crate::{
     daemon::{
-        links::issue::test_support::{AGENT_TOKEN, Fixture, run_agent},
-        links::pr::RegistrationKind,
+        links::{
+            issue::test_support::{AGENT_TOKEN, Fixture, run_agent},
+            pr::RegistrationKind,
+        },
+        manager::Manager,
         test_support::{manager, repository},
-        workspace::Manager,
         workspace_files::Attacher,
     },
     forge::{

@@ -5,8 +5,8 @@ use anyhow::{Result, bail, ensure};
 
 use super::super::{
     answer::Answer,
+    manager::Manager,
     scope::{Caller, Scoped},
-    workspace::Manager,
 };
 use crate::protocol::{Body, FileMethod};
 use shoal_protocol::space_names::SpaceSelector;

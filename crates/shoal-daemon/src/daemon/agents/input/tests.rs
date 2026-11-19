@@ -3,8 +3,8 @@ use std::time::Duration;
 use super::*;
 use crate::daemon::{
     executions::ExecutionKind,
+    manager::Manager,
     test_support::{manager, repository},
-    workspace::Manager,
 };
 use crate::model::Workspace;
 

@@ -8,9 +8,10 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 
 use super::super::{
+    manager::Manager,
     restore::RestoredFiles,
     workspace::{
-        Manager, NewWorkspace,
+        NewWorkspace,
         creation::{Configured, PendingWorktree},
     },
 };

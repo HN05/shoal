@@ -4,9 +4,9 @@ use crate::paths::StateFiles;
 use crate::{
     daemon::{
         executions::ExecutionKind,
+        manager::Manager,
         scope::{self, Caller},
         test_support::{manager, names, repository},
-        workspace::Manager,
         workspace_files::Attacher,
     },
     protocol::AgentMethod,

@@ -9,10 +9,10 @@ use super::super::{
     answer::{self, Answer, OperationGuard},
     daemon_exit::Ending,
     exit_wait::{self, Quiet},
+    manager::Manager,
     permissions::Action,
     scope::{self, Caller, Scoped},
     shutdown_stop::StoppedSpaces,
-    workspace::Manager,
 };
 use crate::{
     config::permissions::PermissionKey,

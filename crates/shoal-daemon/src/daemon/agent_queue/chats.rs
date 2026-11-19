@@ -8,7 +8,7 @@ use super::{
     store::{self, Launch, insert_launch},
 };
 use crate::{
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     model::{ChatQueueRequest, QueueAdmission},
     state::{QueueKind, QueueState},
 };

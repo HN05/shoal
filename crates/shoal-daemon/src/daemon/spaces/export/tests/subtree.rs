@@ -3,8 +3,8 @@ use std::{collections::BTreeMap, fs};
 use super::transfer::{exporter, importer};
 use crate::{
     daemon::{
+        manager::Manager,
         test_support::{self, commit},
-        workspace::Manager,
     },
     model::{Repository, RestoredSpace, Workspace},
     removal::{InspectionPolicy, UnsavedWork},

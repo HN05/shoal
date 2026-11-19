@@ -5,8 +5,8 @@ use shoal_ids::space_ids::SpaceId;
 use super::{ApprovalRequest, DecisionStatus, store::give_back, text::RequestText};
 use crate::daemon::{
     log,
+    manager::Manager,
     notifications::{About, NotificationKind},
-    workspace::Manager,
 };
 
 impl Manager {

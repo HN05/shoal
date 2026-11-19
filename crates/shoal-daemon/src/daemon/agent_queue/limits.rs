@@ -15,7 +15,7 @@ use crate::{
     config::{RunLimit, overload::Overload},
     daemon::{
         capacity::{self, Activity, Agents, Unfit},
-        workspace::Manager,
+        manager::Manager,
     },
     model::HeldBy,
     protocol::ConfigTarget,

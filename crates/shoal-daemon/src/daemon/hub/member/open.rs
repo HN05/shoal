@@ -21,7 +21,7 @@ use crate::daemon::{
         shown,
         transport::Channel,
     },
-    workspace::Manager,
+    manager::Manager,
 };
 
 /// How long the hub has to answer each step of opening a link.

@@ -9,7 +9,7 @@ use std::{
 
 use super::{Definition, RepositoryView, ResourceLease};
 use crate::{
-    daemon::{store, workspace::Manager},
+    daemon::{manager::Manager, store},
     model::Repository,
     repository,
 };

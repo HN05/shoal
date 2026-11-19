@@ -5,7 +5,7 @@ use anyhow::{Context, Result, ensure};
 use std::collections::BTreeMap;
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     model::{Checkpoint, RemovedSpace, Space, Workspace},
     removal::UnsavedWork,
 };

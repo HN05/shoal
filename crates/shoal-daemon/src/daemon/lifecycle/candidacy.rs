@@ -2,8 +2,8 @@
 //! snapshot of a candidate, which its worktree's stage completes where it
 //! has one.
 use super::super::{
+    manager::Manager,
     space_removal::{AgentState, SpaceAgent},
-    workspace::Manager,
 };
 use super::Retention;
 use crate::{

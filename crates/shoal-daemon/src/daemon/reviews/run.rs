@@ -20,8 +20,9 @@ use crate::{
     config::{Effective, templates},
     daemon::{
         agent_queue::{self, OneShotAdmission, Serving},
-        log, oneshot,
-        workspace::Manager,
+        log,
+        manager::Manager,
+        oneshot,
     },
     model::{Repository, Workspace},
     reviews::{FailureReason, Review, ReviewId, ReviewState, ReviewTarget},

@@ -2,8 +2,8 @@
 use crate::{
     config::permissions::Opening,
     daemon::{
-        chats::NewChat, links::proposals::store_issue_proposal, test_support::manager,
-        workspace::Manager,
+        chats::NewChat, links::proposals::store_issue_proposal, manager::Manager,
+        test_support::manager,
     },
     forge::items::create::NewIssue,
     model::{Chat, Repository},

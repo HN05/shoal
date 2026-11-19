@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     config::permissions::{Opening, Pushes},
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     forge::items::{
         create::PullOptions, item::Opened, link::ItemKind, reference::ItemInput, revert::MergedPull,
     },

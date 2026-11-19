@@ -18,7 +18,7 @@ use crate::{
             membership::{self, Joined},
             numbering,
         },
-        workspace::Manager,
+        manager::Manager,
     },
     refusal::{Reason, Refusal},
     time::UnixTime,

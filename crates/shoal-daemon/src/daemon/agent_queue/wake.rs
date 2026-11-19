@@ -13,7 +13,7 @@ use rusqlite::Connection;
 
 use super::limits::{Wake, Work};
 use crate::{
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     execution::recovery,
     state::{QueueKind, QueueState},
 };

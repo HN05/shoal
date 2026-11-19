@@ -5,8 +5,8 @@ use anyhow::Result;
 
 use super::super::{
     answer::Answer,
+    manager::Manager,
     scope::{Caller, Scoped},
-    workspace::Manager,
 };
 use super::items::{change_context_space, own_context, read_context_space};
 use crate::protocol::{Body, BranchMethod};

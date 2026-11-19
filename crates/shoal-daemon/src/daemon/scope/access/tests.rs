@@ -2,9 +2,9 @@ use rusqlite::params;
 use serde_json::json;
 
 use crate::daemon::{
+    manager::Manager,
     scope::Caller,
     test_support::{chat, manager, repository, workspace_below},
-    workspace::Manager,
 };
 use crate::model::{Blocker, QueueRequest, Repository, Workspace};
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};

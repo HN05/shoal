@@ -17,7 +17,7 @@ use super::{
     agent_queue::Grant,
     agents::{Pause, Protection},
     executions::StopRequest,
-    workspace::Manager,
+    manager::Manager,
 };
 use crate::daemon::log;
 use crate::{

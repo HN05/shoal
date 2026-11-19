@@ -1,6 +1,6 @@
 use super::super::tests::{add, launch_in, limit_globally, preparing, register, started};
 use crate::{
-    daemon::{test_support::manager, workspace::Manager},
+    daemon::{manager::Manager, test_support::manager},
     model::{QueueEntry, QueueRequest, Repository},
     protocol::operations::QueuedLaunch,
     state::QueueState,

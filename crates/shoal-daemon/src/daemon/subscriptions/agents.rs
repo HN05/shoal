@@ -8,8 +8,8 @@ use anyhow::Result;
 
 use crate::{
     daemon::{
+        manager::Manager,
         store::{self, AgentExecution},
-        workspace::Manager,
     },
     execution::recovery,
     model::{QueueEntry, Space},

@@ -12,7 +12,7 @@ use anyhow::{Result, ensure};
 use tokio::sync::OwnedMutexGuard;
 
 use crate::{
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     model::{Chat, HandedBack, Repository, Workspace},
     state::WorkspaceState,
 };

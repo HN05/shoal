@@ -12,8 +12,8 @@ use crate::{
         forge_hosts::ForgeHosts,
         gates::PrGuard,
         links::space::{LinkSpace, require_ready_space},
+        manager::Manager,
         spaces::removal_notices::Cleanup,
-        workspace::Manager,
     },
     forge::{
         ForgeRepo,

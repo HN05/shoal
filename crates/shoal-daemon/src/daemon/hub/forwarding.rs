@@ -20,7 +20,7 @@ use shoal_protocol::{
 
 use super::streams::Incoming;
 use crate::{
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     refusal::{Reason, Refusal},
 };
 

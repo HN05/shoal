@@ -26,7 +26,7 @@ use super::{
     shown,
     transport::Channel,
 };
-use crate::daemon::{log, notifications::NotificationKind, workspace::Manager};
+use crate::daemon::{log, manager::Manager, notifications::NotificationKind};
 
 /// How long a member has to send its proof.
 const PROOF_TIMEOUT: Duration = Duration::from_secs(30);

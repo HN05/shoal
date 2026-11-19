@@ -6,7 +6,7 @@ use rusqlite::Connection;
 use shoal_ids::space_ids::SpaceId;
 
 use crate::{
-    daemon::{links::space::LinkSpace, store, workspace::Manager},
+    daemon::{links::space::LinkSpace, manager::Manager, store},
     forge::items::{item::ItemState, link::ItemKind, reference::ItemRef},
     model::{MergePath, Relation},
 };

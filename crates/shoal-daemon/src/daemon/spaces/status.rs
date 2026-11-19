@@ -9,8 +9,8 @@ use anyhow::Result;
 use crate::{
     config::permissions::Permissions,
     daemon::{
-        approvals, forge_hosts::ForgeHosts, links::pr, questions, store, turn_retry,
-        workspace::Manager, workspace_files,
+        approvals, forge_hosts::ForgeHosts, links::pr, manager::Manager, questions, store,
+        turn_retry, workspace_files,
     },
     forge::{ForgeRepo, items::reference::ItemRef, review::status::PrStatus},
     model::{Attention, Completion, IssueStatus, Space, SpaceDetail, SpaceStatus},

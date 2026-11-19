@@ -13,7 +13,7 @@ use std::{
 use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::workspace::Manager;
+use super::manager::Manager;
 use crate::{
     daemon::notifications::NotificationKind,
     model::{RefPart, Repository, Space, SpaceKind, SpaceRef, Workspace},

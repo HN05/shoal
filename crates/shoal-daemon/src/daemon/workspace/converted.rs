@@ -3,7 +3,10 @@
 //! on a branch takes, with the chat's record turned into the workspace's.
 use anyhow::{Result, bail};
 
-use super::{Manager, NewWorkspace, branches::OpenTarget, creation::WorkspaceSource};
+use super::super::{
+    manager::Manager,
+    workspace::{NewWorkspace, branches::OpenTarget, creation::WorkspaceSource},
+};
 use crate::git::existing_branch::BranchExt;
 use crate::{
     config::modes::ModeName,

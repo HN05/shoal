@@ -11,8 +11,8 @@ use crate::{
             place::{Access, Place},
             target::ForgeTarget,
         },
+        manager::Manager,
         scope::Caller,
-        workspace::Manager,
     },
     forge::{
         ForgeRepo,

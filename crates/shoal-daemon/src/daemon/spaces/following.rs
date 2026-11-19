@@ -28,7 +28,7 @@ use tokio::net::{
 use crate::{
     daemon::{
         answer::{self, OperationGuard},
-        workspace::Manager,
+        manager::Manager,
     },
     refusal::{Reason, Refusal},
 };

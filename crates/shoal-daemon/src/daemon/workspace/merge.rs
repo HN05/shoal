@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail, ensure};
 use shoal_refs::{BranchName, CommitId};
 
-use super::{Manager, branches::UpstreamPolicy};
+use super::super::{manager::Manager, workspace::branches::UpstreamPolicy};
 use crate::{
     daemon::{reviews::gate::Gate, scope::Caller},
     forge::items::action::MergeMethod,

@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use crate::{
     config::permissions::PermissionKey,
-    daemon::{links::place::Access, permissions::Action, scope::Caller, workspace::Manager},
+    daemon::{links::place::Access, manager::Manager, permissions::Action, scope::Caller},
     forge::{
         ForgeRepo,
         download::Download,

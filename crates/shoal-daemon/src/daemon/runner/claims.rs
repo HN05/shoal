@@ -24,9 +24,8 @@ use super::{Registration, runner_labels};
 use crate::{
     config::Runner,
     daemon::{
-        allocation::Allocation,
-        notifications::NotificationKind,
-        workspace::{Manager, commits::RecordedJobWorkspace},
+        allocation::Allocation, manager::Manager, notifications::NotificationKind,
+        workspace::commits::RecordedJobWorkspace,
     },
     forge::ForgeRepo,
     model::{QueueEntry, QueuedJob, Workspace},

@@ -7,8 +7,8 @@ use shoal_ids::space_ids::SpaceId;
 
 use crate::daemon::{
     log,
+    manager::Manager,
     notifications::{About, NotificationKind},
-    workspace::Manager,
 };
 use crate::model::Workspace;
 

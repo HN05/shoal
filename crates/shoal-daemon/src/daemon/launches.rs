@@ -9,7 +9,7 @@ use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
     config::Effective,
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     launches::{self, LaunchReads},
     model::{Repository, Workspace},
     protocol::ConfigTarget,

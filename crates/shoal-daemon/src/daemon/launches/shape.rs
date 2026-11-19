@@ -8,7 +8,7 @@ use shoal_protocol::launches::Launch;
 use super::ManagerReads;
 use crate::{
     config::modes::ModeName,
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     launches,
     model::SpaceKind,
 };

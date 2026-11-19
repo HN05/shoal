@@ -20,7 +20,7 @@ use rusqlite::{Connection, params};
 
 use super::Start;
 use crate::{
-    daemon::{agents, workspace::Manager},
+    daemon::{agents, manager::Manager},
     execution::recovery,
     model::{Asleep, QueueEntry, Space},
     paths::Paths,

@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::{
     config::forges::Whose,
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
 };
 use shoal_forge::backends::SignIn;
 use shoal_protocol::agents::GitCredential;

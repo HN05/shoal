@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::{
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     forge::{
         capability::Capabilities, conventions::labels::Label,
         items::reaction::allowed::AllowedReactions,

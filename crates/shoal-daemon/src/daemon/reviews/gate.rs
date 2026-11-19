@@ -11,7 +11,7 @@ use anyhow::{Result, bail};
 use super::store;
 use crate::{
     config::{Effective, repo::Requester},
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     model::Workspace,
     reviews::{Review, ReviewId, ReviewState, ReviewTarget},
 };

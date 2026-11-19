@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::{Context, Result};
 
-use super::Manager;
+use super::super::manager::Manager;
 use crate::{
     config::Effective,
     daemon::log,

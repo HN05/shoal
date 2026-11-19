@@ -10,7 +10,7 @@ use rusqlite::{Connection, OptionalExtension};
 
 use crate::{
     agent::Agent,
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     execution::recovery::{self, LastSession},
     paths::Paths,
     state::ExecutionState,

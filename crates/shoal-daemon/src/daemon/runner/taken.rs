@@ -9,7 +9,7 @@ use rusqlite::params;
 
 use super::ends::ClaimedJob;
 use crate::{
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     forge::{
         ForgeRepo,
         ci::runner::{JobRun, WaitingJob},

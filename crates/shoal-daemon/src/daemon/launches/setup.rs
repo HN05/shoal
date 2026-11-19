@@ -7,7 +7,7 @@ use shoal_protocol::launches::{Launch, Setup};
 use super::ManagerReads;
 use crate::{
     config::permissions::PermissionKey,
-    daemon::{permissions::Action, scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, permissions::Action, scope::Caller},
     launches,
 };
 

@@ -8,8 +8,8 @@ use crate::{
     daemon::{
         agents::{Requested, RestartWaits},
         executions::ExecutionKind,
+        manager::Manager,
         test_support::{manager, repository},
-        workspace::Manager,
     },
     execution::recovery,
     model::{RunningAgent, Workspace},

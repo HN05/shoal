@@ -6,7 +6,7 @@ use std::path::Path;
 
 use anyhow::{Result, bail, ensure};
 
-use super::super::workspace::Manager;
+use super::super::manager::Manager;
 use super::super::workspace::commits::NewRecord;
 use crate::{
     git,

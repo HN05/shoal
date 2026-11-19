@@ -5,9 +5,9 @@ use anyhow::Result;
 
 use super::super::{
     answer::Answer,
+    manager::Manager,
     scope::{Caller, Scoped},
     stopped_work::PermissionTargets,
-    workspace::Manager,
 };
 use crate::protocol::{AssignmentMethod, Body};
 use shoal_protocol::space_names::SpaceSelector;

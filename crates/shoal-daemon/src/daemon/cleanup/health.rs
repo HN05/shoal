@@ -10,8 +10,8 @@ use super::failures::SweepFailures;
 use crate::{
     daemon::{
         log,
+        manager::Manager,
         notifications::{About, NotificationKind},
-        workspace::Manager,
     },
     time::UnixTime,
 };

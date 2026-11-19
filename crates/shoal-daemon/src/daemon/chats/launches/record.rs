@@ -4,7 +4,7 @@
 use anyhow::{Context as _, Result};
 
 use crate::{
-    daemon::{chats::NewChat, links::issue::AssignerOf, scope::Caller, workspace::Manager},
+    daemon::{chats::NewChat, links::issue::AssignerOf, manager::Manager, scope::Caller},
     forge::items::reference::ItemInput,
     model::{Assigner, Chat, Relation, SpaceLinks},
     protocol::ChatStart,

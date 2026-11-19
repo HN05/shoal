@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use rusqlite::{OptionalExtension, params};
 
-use crate::daemon::workspace::Manager;
+use crate::daemon::manager::Manager;
 use crate::{daemon::notifications::NotificationKind, forge::ForgeRepo, model::Repository};
 use shoal_forge::{
     RepoRequests,

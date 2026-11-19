@@ -1,5 +1,5 @@
 //! Explicitly transfer a linked worktree into Shoal's normal lifecycle.
-use super::Manager;
+use super::super::manager::Manager;
 use super::creation::{existing_base, recorded_base};
 use crate::daemon::log;
 use crate::{

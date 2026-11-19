@@ -12,7 +12,7 @@ use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use anyhow::Result;
 
-use super::{notifications::NotificationKind, store, workspace::Manager};
+use super::{manager::Manager, notifications::NotificationKind, store};
 use crate::daemon::log;
 use crate::{
     execution::recovery::{Record, Stage, record_path},

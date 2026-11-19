@@ -7,8 +7,8 @@ use crate::{
     config::modes::ModeName,
     daemon::{
         conversions::Converting,
+        manager::Manager,
         test_support::{ProcessGroup, manager, repository},
-        workspace::Manager,
     },
     execution::recovery::{LastSession, LastSessionExt},
     model::Workspace,

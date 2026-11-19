@@ -21,7 +21,7 @@ use tokio::{
 
 use self::health::Health;
 use crate::{
-    daemon::{log, notifications::NotificationKind, workspace::Manager},
+    daemon::{log, manager::Manager, notifications::NotificationKind},
     model::{CheckoutSync, SyncedRepository},
     time::UnixTime,
 };

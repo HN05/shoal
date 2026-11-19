@@ -5,7 +5,7 @@ use rusqlite::params;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 
-use super::super::workspace::{Manager, NewWorkspace};
+use super::super::{manager::Manager, workspace::NewWorkspace};
 use crate::{
     daemon::{
         scope::Caller,

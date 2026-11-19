@@ -14,7 +14,7 @@ use crate::{
     daemon::{
         approvals::{ApprovalRequest, Specification, governing},
         log,
-        workspace::Manager,
+        manager::Manager,
     },
     forge::items::link::{ItemKind, Selection},
     model::{Repository, Space},

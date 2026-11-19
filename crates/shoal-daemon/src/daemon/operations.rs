@@ -18,7 +18,7 @@ use anyhow::{Result, ensure};
 use tokio::sync::watch;
 use uuid::Uuid;
 
-use super::{scope::Caller, workspace::Manager};
+use super::{manager::Manager, scope::Caller};
 use crate::protocol::operations::{
     Ended, Failure, OperationEvent, OperationKind, OperationSpec, Order, Progress, Report, Step,
     Stream,

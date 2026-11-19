@@ -4,7 +4,7 @@ use anyhow::Result;
 use rusqlite::{Transaction, params};
 
 use super::{EventCursor, EventKind, decode, log_entry};
-use crate::daemon::workspace::Manager;
+use crate::daemon::manager::Manager;
 use crate::time::UnixTime;
 use shoal_protocol::log::{LogEntry, LogFilter};
 

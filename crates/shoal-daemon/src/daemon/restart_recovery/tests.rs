@@ -3,7 +3,7 @@
 use crate::daemon::test_support::overload::{
     blocked, executions, fixture, record, restart, store_reaches,
 };
-use crate::daemon::{store, workspace::Manager};
+use crate::daemon::{manager::Manager, store};
 use crate::execution::recovery::LastSessionExt;
 use crate::process::identity::IdentityExt;
 use crate::{

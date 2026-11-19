@@ -7,7 +7,7 @@ use anyhow::{Result, ensure};
 use tokio::time::Instant;
 
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     git::RemoteHead,
 };
 

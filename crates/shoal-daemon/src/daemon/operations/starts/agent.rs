@@ -12,7 +12,7 @@ use super::{StartIssue, home::Home};
 use crate::{
     agents::{check_queued_launch, resolve_launch},
     config::{Effective, modes::ModeName},
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     forge::items::reference::ItemInput,
     model::{Blocker, Space, SpaceKind, Workspace},
     protocol::operations::{LaunchIssue, LaunchRequest, QueuedLaunch},

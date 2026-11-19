@@ -2,7 +2,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use shoal_refs::CommitId;
 
-use super::super::{Manager, copies::Source};
+use crate::daemon::{manager::Manager, workspace::copies::Source};
 use crate::{
     daemon::scope::Caller,
     forge::{PullRequest, items::reference::ItemInput, numbers::PullNumber},

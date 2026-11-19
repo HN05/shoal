@@ -5,8 +5,8 @@ use super::transfer::{exporter, import, importer, packaged_workspace};
 use crate::refusal::Reason;
 use crate::{
     daemon::{
+        manager::Manager,
         test_support::{self, commit},
-        workspace::Manager,
     },
     execution::recovery,
     model::Workspace,

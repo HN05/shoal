@@ -6,7 +6,7 @@ use rusqlite::{OptionalExtension, Transaction, params};
 use shoal_ids::repository_ids::RepositoryId;
 
 use crate::{
-    daemon::{spaces::Removing, store, workspace::Manager},
+    daemon::{manager::Manager, spaces::Removing, store},
     model::Space,
 };
 use shoal_ids::space_ids::SpaceId;

@@ -4,10 +4,7 @@
 use anyhow::Result;
 
 use crate::{
-    daemon::{
-        log,
-        workspace::{Manager, VerifiedWorktree},
-    },
+    daemon::{log, manager::Manager, workspace::VerifiedWorktree},
     model::Workspace,
     state::WorkspaceState,
 };

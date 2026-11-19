@@ -4,7 +4,7 @@ use anyhow::Result;
 use rusqlite::{Transaction, params};
 use shoal_ids::space_ids::SpaceId;
 
-use crate::{daemon::workspace::Manager, model::RenamedSpace};
+use crate::{daemon::manager::Manager, model::RenamedSpace};
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 impl Manager {

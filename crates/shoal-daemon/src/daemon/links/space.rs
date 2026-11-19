@@ -12,7 +12,7 @@ use rusqlite::Connection;
 
 use crate::{
     config::Effective,
-    daemon::{store, workspace::Manager},
+    daemon::{manager::Manager, store},
     forge::ForgeRepo,
     model::{Repository, Space, Workspace},
     protocol::ItemContext,

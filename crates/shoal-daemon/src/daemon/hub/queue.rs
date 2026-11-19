@@ -17,7 +17,7 @@ use shoal_protocol::protocol::{Body, Response};
 
 use super::session::{Calls, Unanswered, Unsent};
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     time::UnixTime,
 };
 

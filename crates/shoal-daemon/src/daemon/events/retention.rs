@@ -10,7 +10,7 @@ use anyhow::Result;
 use rusqlite::{Connection, Transaction};
 
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     time::UnixTime,
 };
 use shoal_ids::space_ids::SpaceId;

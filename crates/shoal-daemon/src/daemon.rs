@@ -57,6 +57,7 @@ mod lifecycle;
 pub mod links;
 pub(crate) mod log;
 pub(crate) mod lost_reports;
+pub mod manager;
 pub mod notifications;
 pub(crate) mod oneshot;
 pub(crate) mod operations;
@@ -148,10 +149,10 @@ use answer::OperationGuard;
 use daemon_exit::Ending;
 use events::{ShoalEventDetails, ShoalEventKind};
 pub(crate) use log::log;
+use manager::Manager;
 use notifications::NotificationKind;
 use ownership::Ownership;
 use scope::Caller;
-use workspace::Manager;
 
 use crate::{
     paths::Paths,

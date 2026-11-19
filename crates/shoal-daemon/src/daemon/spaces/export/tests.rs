@@ -2,8 +2,8 @@ use std::{fs, os::unix::process::CommandExt, path::Path, sync::Arc};
 
 use crate::{
     daemon::{
+        manager::Manager,
         test_support::{manager, repository, unmarked},
-        workspace::Manager,
     },
     model::RemovedSpace,
     process::identity,

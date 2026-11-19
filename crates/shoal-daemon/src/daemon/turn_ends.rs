@@ -8,7 +8,7 @@ use std::{sync::Arc, time::Duration};
 use anyhow::Result;
 
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     model::RunningAgent,
     state::AgentState,
 };

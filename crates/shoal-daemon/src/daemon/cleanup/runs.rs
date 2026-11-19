@@ -4,7 +4,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::daemon::{
     events::{ShoalEventDetails, ShoalEventKind},
-    workspace::Manager,
+    manager::Manager,
 };
 use shoal_protocol::space_names::SpaceName;
 

@@ -9,7 +9,7 @@ use std::{sync::Arc, time::Duration};
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
-use super::{agent_messages, log, workspace::Manager};
+use super::{agent_messages, log, manager::Manager};
 use crate::time::UnixTime;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::sleep::WakeTimer;

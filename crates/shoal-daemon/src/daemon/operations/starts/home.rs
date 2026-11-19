@@ -11,8 +11,9 @@ use crate::{
     config::{Effective, modes::ModeName},
     daemon::{
         chats::NewChat,
+        manager::Manager,
         scope::Caller,
-        workspace::{CopyPlace, Manager, NewWorkspace},
+        workspace::{CopyPlace, NewWorkspace},
     },
     model::{ChatHome, OpenedWorkspace, Space, SpaceKind, Workspace},
     protocol::{

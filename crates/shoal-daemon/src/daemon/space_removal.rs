@@ -13,7 +13,8 @@ use super::{
     executions::{StopPolicy, StopRequest},
     gates::GuardMode,
     lifecycle::{Removal, Underway},
-    workspace::{Manager, reservation::RemovalRules},
+    manager::Manager,
+    workspace::reservation::RemovalRules,
 };
 use crate::{
     daemon::{

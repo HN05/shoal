@@ -15,7 +15,7 @@ use super::{
     space::{Placed, PlacedHome, Placement},
 };
 use crate::{
-    daemon::{operations::starts::StartIssue, scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, operations::starts::StartIssue, scope::Caller},
     forge::items::reference::ItemInput,
     launches as fits,
     model::{Blocker, Repository, SpaceKind, Workspace},

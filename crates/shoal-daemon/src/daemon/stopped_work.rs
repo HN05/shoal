@@ -6,7 +6,7 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 pub use shoal_protocol::executions::Forgotten;
 
-use super::workspace::Manager;
+use super::manager::Manager;
 use crate::daemon::scope::Caller;
 use crate::execution::recovery::{self, Saved, SavedExt as _};
 use crate::model::Space;

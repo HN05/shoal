@@ -8,7 +8,7 @@ use shoal_protocol::config::repo::Lifetime;
 
 use super::{
     gates::{GuardMode, ResourceGuard},
-    workspace::Manager,
+    manager::Manager,
 };
 use crate::{
     config::permissions::PermissionKey,

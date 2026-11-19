@@ -1,7 +1,7 @@
 //! The scope tokens a space issues on request, which act for it until
 //! revoked or the space is removed, for processes Shoal does not track,
 //! such as a shell given its environment or a chat a scoped process runs.
-use crate::daemon::{scope::tokens, workspace::Manager};
+use crate::daemon::{manager::Manager, scope::tokens};
 use anyhow::{Result, ensure};
 use shoal_protocol::{scope_tokens::ScopeToken, space_names::SpaceSelector};
 

@@ -8,7 +8,7 @@ use std::{
 use anyhow::Result;
 
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     git,
     model::UntrackedWorktree,
     shoal_dirs::{Contents, ShoalDir},

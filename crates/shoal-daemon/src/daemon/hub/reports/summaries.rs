@@ -17,7 +17,7 @@ use shoal_protocol::{
     questions::Question,
 };
 
-use crate::daemon::workspace::Manager;
+use crate::daemon::manager::Manager;
 
 /// How long a repository's origin stays as reports read it before they
 /// read it again, so a changed origin reaches the hub without a Git read

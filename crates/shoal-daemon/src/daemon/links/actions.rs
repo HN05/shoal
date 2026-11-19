@@ -15,7 +15,7 @@ use super::{
 };
 use crate::{
     config::{permissions::Opening, resolve::Effective},
-    daemon::{events, reviews::gate::Gate, scope::Caller, workspace::Manager},
+    daemon::{events, manager::Manager, reviews::gate::Gate, scope::Caller},
     forge::{
         ForgeRepo,
         items::{

@@ -1,6 +1,6 @@
 //! Fast-forward a workspace to its branch's pushed head, as a PR review does
 //! before reviewing it, or to what a refresh brings it up to date with.
-use super::Manager;
+use super::super::manager::Manager;
 use crate::{git, model::Workspace, state::WorkspaceState};
 use anyhow::{Context, Result, ensure};
 use shoal_protocol::space_names::SpaceSelector;

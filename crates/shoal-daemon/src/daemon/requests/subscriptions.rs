@@ -6,9 +6,9 @@ use anyhow::Result;
 
 use super::super::{
     answer::Answer,
+    manager::Manager,
     scope::{Caller, Scoped},
     subscriptions,
-    workspace::Manager,
 };
 use crate::protocol::SubscriptionMethod;
 use shoal_protocol::space_names::SpaceSelector;

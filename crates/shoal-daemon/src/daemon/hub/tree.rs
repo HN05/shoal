@@ -16,7 +16,7 @@ use shoal_protocol::{
     space_names::SpaceName,
 };
 
-use crate::daemon::{log, scope::Caller, workspace::Manager};
+use crate::daemon::{log, manager::Manager, scope::Caller};
 
 impl Manager {
     /// The spaces above the space `id` from the first one this machine

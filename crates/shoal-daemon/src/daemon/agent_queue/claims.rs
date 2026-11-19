@@ -5,7 +5,7 @@ use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, params};
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     model::QueueEntry,
     state::{QueueKind, QueueState},
 };

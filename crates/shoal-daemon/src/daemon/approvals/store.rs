@@ -12,8 +12,8 @@ use crate::{
         events::{self, EventKind},
         item_numbers::{self, ItemKind, ItemNumber},
         links::space::require_ready_space,
+        manager::Manager,
         notifications::{self, NotificationKind},
-        workspace::Manager,
     },
     model::Space,
 };

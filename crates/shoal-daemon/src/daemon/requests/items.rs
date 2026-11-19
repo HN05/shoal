@@ -5,9 +5,9 @@ use anyhow::{Context as _, Result, bail};
 
 use super::super::{
     answer::Answer,
+    manager::Manager,
     permissions,
     scope::{Caller, Scoped},
-    workspace::Manager,
 };
 use crate::{
     config::permissions::PermissionKey,

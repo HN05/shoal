@@ -1,4 +1,4 @@
-use super::super::workspace::Manager;
+use super::super::manager::Manager;
 use super::worktree::removal_options;
 use super::*;
 use crate::model::EventCause;

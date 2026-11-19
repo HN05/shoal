@@ -12,7 +12,7 @@ use tokio::{net::UnixStream, sync::OwnedRwLockWriteGuard};
 use super::{
     answer,
     gates::{ExitQuiescence, HeldBack},
-    workspace::Manager,
+    manager::Manager,
 };
 use crate::protocol::{self, Body, Exit, ExitWhen, Response, Work};
 

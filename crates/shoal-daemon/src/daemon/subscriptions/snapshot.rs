@@ -10,9 +10,9 @@ use crate::{
     daemon::{
         agent_messages::AgentMessage,
         approvals::DecisionStatus,
+        manager::Manager,
         notifications::{Notification, NotificationKind},
         scope::Caller,
-        workspace::Manager,
     },
     model::{Relation, Space},
 };

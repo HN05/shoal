@@ -6,7 +6,7 @@ use shoal_ids::space_ids::SpaceId;
 
 use super::ends::ClaimedJob;
 use crate::{
-    daemon::{spaces::worktrees_mut, workspace::Manager},
+    daemon::{manager::Manager, spaces::worktrees_mut},
     model::{QueueEntry, QueuedJob, Space, Workspace},
     state::{QueueKind, QueueState},
 };

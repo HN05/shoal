@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, Value, value};
 
-use super::super::workspace::Manager;
+use super::super::manager::Manager;
 use crate::{
     fsutil::atomic::{self, Permissions, ReplaceOptions},
     reviews::{FindingId, Outcome, Review},

@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use super::{place::Place, space::LinkSpace, target::ForgeTarget};
 use crate::{
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     forge::{
         ForgeRepo,
         items::{

@@ -6,7 +6,7 @@ use anyhow::Result;
 
 use super::{delivery::receiving, poll::POLL_INTERVAL};
 use crate::{
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     model::{AgentStatus, Space},
     time::UnixTime,
 };

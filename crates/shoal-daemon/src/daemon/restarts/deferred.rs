@@ -14,8 +14,8 @@ use crate::{
     daemon::{
         agents::{Requested, restarted},
         log,
+        manager::Manager,
         notifications::{About, NotificationKind},
-        workspace::Manager,
     },
     model::{RestartOutcome, RunningAgent},
     sessions::Origin,

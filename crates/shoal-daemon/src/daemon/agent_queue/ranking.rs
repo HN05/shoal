@@ -9,7 +9,7 @@ use rusqlite::Transaction;
 
 use super::state::WaitingOneShot;
 use crate::config::{Effective, machine::Schedule};
-use crate::daemon::{approvals::Target, workspace::Manager};
+use crate::daemon::{approvals::Target, manager::Manager};
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::time::UnixTime;
 use shoal_schedule::{

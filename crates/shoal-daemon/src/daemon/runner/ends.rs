@@ -20,7 +20,7 @@ use rusqlite::params;
 
 use crate::{
     daemon::{
-        capacity::Activity, notifications::NotificationKind, scope::Caller, workspace::Manager,
+        capacity::Activity, manager::Manager, notifications::NotificationKind, scope::Caller,
     },
     forge::ci::CiAction,
     model::QueuedJob,

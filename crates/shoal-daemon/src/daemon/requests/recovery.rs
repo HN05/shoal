@@ -5,8 +5,8 @@ use anyhow::Result;
 
 use super::super::{
     answer::Answer,
+    manager::Manager,
     scope::{Caller, Scoped},
-    workspace::Manager,
 };
 use crate::execution::recovery::Saved;
 use crate::protocol::{self, Body, RecoveryMethod, SavedPiece};

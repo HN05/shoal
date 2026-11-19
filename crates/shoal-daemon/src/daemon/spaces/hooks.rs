@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::{
     config::{Effective, hooks::HookCommand},
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     hooks::{self, Hook, HookKind},
     model::Space,
 };

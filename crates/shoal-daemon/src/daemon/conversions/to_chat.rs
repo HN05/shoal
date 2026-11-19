@@ -7,7 +7,7 @@ use shoal_protocol::model::ByKind;
 use super::record::ConvertedChat;
 use crate::{
     config::modes::ModeName,
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     model::{CheckpointCause, HoldPlacer, Workspace},
     removal::InspectionPolicy,
     state::WorkspaceState,

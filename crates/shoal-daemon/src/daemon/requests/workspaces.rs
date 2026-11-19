@@ -6,9 +6,10 @@ use tokio::net::UnixStream;
 
 use super::super::{
     answer::{Answer, OperationGuard},
+    manager::Manager,
     permissions::Action,
     scope::{Caller, Scoped, denied},
-    workspace::{self, Manager},
+    workspace,
 };
 use crate::config::permissions::PermissionKey;
 use crate::protocol::{

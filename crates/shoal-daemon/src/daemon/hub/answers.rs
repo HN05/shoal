@@ -16,7 +16,7 @@ use tokio::sync::OwnedRwLockReadGuard;
 
 use super::{directory, members, session::Calls};
 use crate::{
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     refusal::{Reason, Refusal},
 };
 

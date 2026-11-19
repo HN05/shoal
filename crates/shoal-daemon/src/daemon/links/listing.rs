@@ -4,7 +4,7 @@
 use anyhow::Result;
 
 use crate::{
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     forge::items::{item::Item, link::ItemKind, list::Search},
     protocol::RepoTarget,
 };

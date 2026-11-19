@@ -6,7 +6,7 @@ use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     forge::items::{
         link::{LinkKind, Selection},
         reference::ItemInput,

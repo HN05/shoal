@@ -14,11 +14,11 @@ use crate::{
     config::permissions::{PermissionChange, PermissionsConfig},
     daemon::{
         capacity::Activity,
+        manager::Manager,
         notifications::NotificationKind,
         queued_starts::fake::STARTED,
         stopped_work::PermissionTargets,
         test_support::{global_config, manager, repository},
-        workspace::Manager,
         workspace_files::Attacher,
     },
     model::{QueueAdmission, QueueEntry, QueueRequest, Repository, Workspace},

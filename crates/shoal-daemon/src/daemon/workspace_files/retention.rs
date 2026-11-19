@@ -8,7 +8,7 @@ use anyhow::{Result, ensure};
 
 use super::{FilesHome, HomeKey, Space, records};
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     model::Repository,
     time::UnixTime,
 };

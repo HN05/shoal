@@ -7,8 +7,8 @@ use anyhow::Result;
 use super::super::{
     answer::Answer,
     cleanup,
+    manager::Manager,
     scope::{Caller, Scoped},
-    workspace::Manager,
 };
 use crate::{
     model::StoppedSpace,

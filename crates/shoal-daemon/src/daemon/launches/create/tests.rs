@@ -1,5 +1,5 @@
+use crate::daemon::manager::Manager;
 use crate::daemon::test_support::{global_config, manager, repository};
-use crate::daemon::workspace::Manager;
 use shoal_protocol::launches::{Launch, StartTarget};
 use shoal_protocol::space_names::SpaceSelector;
 

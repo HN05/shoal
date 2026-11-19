@@ -11,7 +11,7 @@ use tokio::{
     task::{JoinHandle, JoinSet},
 };
 
-use super::{Server, connections::Capacity, workspace::Manager};
+use super::{Server, connections::Capacity, manager::Manager};
 use crate::{
     daemon::test_support::{git, manager, repository},
     model::{Repository, Workspace},

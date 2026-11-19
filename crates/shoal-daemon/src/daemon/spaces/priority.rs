@@ -3,7 +3,7 @@
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::super::{scope::Caller, workspace::Manager};
+use super::super::{manager::Manager, scope::Caller};
 use crate::model::QueueRequest;
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{priority::Prioritized, space_names::SpaceSelector};

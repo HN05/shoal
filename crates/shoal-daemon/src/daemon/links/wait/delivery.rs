@@ -10,7 +10,7 @@ use super::{
     wake_log::WakeWaitLog,
 };
 use crate::{
-    daemon::{agent_messages::AgentMessage, workspace::Manager},
+    daemon::{agent_messages::AgentMessage, manager::Manager},
     forge::{
         items::link::{LinkKind, Selection},
         updates::Update,

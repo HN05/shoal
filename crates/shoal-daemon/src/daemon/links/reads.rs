@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use super::place::Access;
 use crate::{
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     forge::ForgeRepo,
     protocol::{ItemContext, RepoTarget},
 };

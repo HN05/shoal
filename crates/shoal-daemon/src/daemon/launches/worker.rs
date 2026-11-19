@@ -7,8 +7,8 @@ use shoal_protocol::space_names::SpaceSelector;
 use super::shape::Shape;
 use crate::{
     daemon::{
+        manager::Manager,
         scope::{Caller, ScopeRefusal},
-        workspace::Manager,
     },
     forge::items::reference::ItemInput,
     model::{Blocker, Workspace},

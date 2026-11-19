@@ -9,7 +9,7 @@ use shoal_protocol::launches::{IssueChoice, Launch, StartTarget};
 
 use super::ManagerReads;
 use crate::{
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     forge::items::reference::{ItemInput, ItemRef},
     launches::workspace,
     model::Repository,

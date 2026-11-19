@@ -6,7 +6,7 @@ use shoal_protocol::launches::{Launch, SpaceChoice};
 use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     protocol::CopySource,
     start_plan::CopyCreation,
 };

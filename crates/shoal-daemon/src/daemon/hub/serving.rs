@@ -22,7 +22,7 @@ use shoal_protocol::{
 use tokio::io::{AsyncBufReadExt as _, AsyncReadExt as _, BufReader};
 
 use super::streams::Outgoing;
-use crate::daemon::{scope::Caller, workspace::Manager};
+use crate::daemon::{manager::Manager, scope::Caller};
 
 /// The most bytes of a streamed answer read at once.
 const READ_BYTES: usize = 64 << 10;

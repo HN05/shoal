@@ -1,10 +1,10 @@
 use crate::removal::{InspectionPolicy, UnsavedWork};
 use crate::{
     daemon::{
+        manager::Manager,
         notifications::NotificationKind,
         test_support::{manager, repository},
         tree::Source,
-        workspace::Manager,
         workspace_files::Attacher,
     },
     model::{Chat, Workspace},

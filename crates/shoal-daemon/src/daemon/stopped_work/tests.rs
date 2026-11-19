@@ -58,7 +58,7 @@ async fn a_permission_change_changes_no_agent_when_one_is_refused() {
             execution,
         });
     }
-    let stopped = |manager: &crate::daemon::workspace::Manager, space| {
+    let stopped = |manager: &crate::daemon::manager::Manager, space| {
         LastSession::all(&manager.paths, space).unwrap()[0].narrowing
     };
     let change = PermissionChange::assigned("merge=direct").unwrap();

@@ -27,7 +27,7 @@ async fn cancel_failed(fixture: &Fixture) -> bool {
 }
 
 /// Admit the queued jobs and claim each.
-async fn claim_admitted(manager: &crate::daemon::workspace::Manager) {
+async fn claim_admitted(manager: &crate::daemon::manager::Manager) {
     manager.dispatch_queue().await.unwrap();
     for entry in manager.admitted_jobs().await.unwrap() {
         manager.claim_job(&entry).await;

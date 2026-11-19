@@ -1,6 +1,6 @@
 //! Stopping executions: the stop policy and requests, and the operations
 //! that stop a workspace's executions, connected or disconnected.
-use super::super::workspace::Manager;
+use super::super::manager::Manager;
 use super::Connections;
 use crate::daemon::log;
 use crate::daemon::operations::starts::preparation_waits;

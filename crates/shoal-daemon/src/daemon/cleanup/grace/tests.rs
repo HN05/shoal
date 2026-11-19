@@ -3,8 +3,8 @@ use std::{fs, sync::Arc};
 
 use crate::{
     daemon::{
+        manager::Manager,
         test_support::{manager, repository},
-        workspace::Manager,
         workspace_files::Attacher,
     },
     model::Workspace,

@@ -7,8 +7,8 @@ use shoal_protocol::space_names::SpaceSelector;
 
 use super::super::{
     answer::Answer,
+    manager::Manager,
     scope::{Caller, Scoped},
-    workspace::Manager,
 };
 use crate::protocol::{Body, TriggerMethod};
 

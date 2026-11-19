@@ -21,7 +21,7 @@ use shoal_protocol::{
 };
 
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     time::UnixTime,
 };
 

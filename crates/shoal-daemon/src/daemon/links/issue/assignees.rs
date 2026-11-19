@@ -8,8 +8,8 @@ use shoal_ids::space_ids::SpaceId;
 
 use crate::{
     daemon::{
-        links::wait::record_shoal_change, notifications::NotificationKind, scope::Caller,
-        workspace::Manager,
+        links::wait::record_shoal_change, manager::Manager, notifications::NotificationKind,
+        scope::Caller,
     },
     forge::{ForgeRepo, items::reference::ItemRef},
     model::{Assigner, IssueAssignee},

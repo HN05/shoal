@@ -11,7 +11,7 @@ use super::{Plan, stored, write};
 use crate::{
     daemon::{
         blockers::{Lookup, Lookups, Target},
-        workspace::Manager,
+        manager::Manager,
     },
     state::BlockerKind,
     time::UnixTime,

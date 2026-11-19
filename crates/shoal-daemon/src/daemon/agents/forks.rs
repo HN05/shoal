@@ -2,7 +2,7 @@
 //! reported last, which its hooks keep for `shoal restore`.
 use anyhow::{Context as _, Result, bail};
 
-use super::super::workspace::Manager;
+use super::super::manager::Manager;
 use crate::{
     execution::recovery,
     model::{AgentSession, Space},

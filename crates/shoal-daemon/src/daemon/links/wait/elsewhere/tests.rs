@@ -8,8 +8,8 @@ use super::super::{
 use super::{super::tests::register_watch, EVENT_LIMIT};
 use crate::{
     daemon::{
+        manager::Manager,
         test_support::{configure, manager, repository},
-        workspace::Manager,
     },
     forge::updates::{Update, UpdateKind},
     model::Workspace,

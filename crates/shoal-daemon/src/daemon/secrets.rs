@@ -7,8 +7,8 @@ use crate::{
     daemon::{
         allocation::Allocation,
         approvals::{ApprovalRequest, ReasonRequired, SecretSpecification, Specification, Target},
+        manager::Manager,
         scope::Caller,
-        workspace::Manager,
     },
     model::Workspace,
     secrets::{Secret, specification},

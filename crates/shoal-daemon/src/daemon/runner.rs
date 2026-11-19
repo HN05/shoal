@@ -34,7 +34,7 @@ use std::{
 
 use tokio::{sync::Notify, time::Instant};
 
-use crate::daemon::{log, workspace::Manager};
+use crate::daemon::{log, manager::Manager};
 use shoal_ids::queue_entry_ids::QueueEntryId;
 
 /// How often the runners are checked against the repositories' settings,

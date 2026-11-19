@@ -9,7 +9,7 @@ use shoal_ids::space_ids::SpaceId;
 use crate::{
     daemon::{
         events::{self, EventDetails},
-        workspace::Manager,
+        manager::Manager,
     },
     model::{Chat, Space, SpaceKind, Workspace},
     refusal::{Reason, Refusal},

@@ -17,11 +17,12 @@ use crate::{
     config::modes::ModeName,
     daemon::{
         links::issue::OpenIssue,
+        manager::Manager,
         operations::starts::{
             Home, NewSpace, Opening, Preparing, SpaceStart, StartIssue, StartedSpace,
         },
         scope::{Caller, ScopeRefusal},
-        workspace::{Manager, NewWorkspace},
+        workspace::NewWorkspace,
     },
     forge::items::reference::ItemInput,
     model::{Blocker, SpaceKind},

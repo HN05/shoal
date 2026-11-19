@@ -4,7 +4,7 @@ use anyhow::{Result, ensure};
 use shoal_protocol::launches::Launch;
 
 use super::target::Target;
-use crate::daemon::workspace::Manager;
+use crate::daemon::manager::Manager;
 
 impl Manager {
     /// Whether `launch` starts an agent on `target`: the one it names, else

@@ -19,8 +19,8 @@ use crate::{
     daemon::{
         agent_messages,
         item_numbers::{self, ItemKind, ItemNumber},
+        manager::Manager,
         notifications::{self, About, NotificationKind},
-        workspace::Manager,
         workspace_files::{self, Attacher, FileSource, NewFile, SentFile, sent_files},
     },
     model::Space,

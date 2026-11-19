@@ -11,7 +11,7 @@ use anyhow::Result;
 use rusqlite::{Connection, params};
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     forge::{
         ForgeRepo,
         ci::runner::{JobRun, Trigger, WaitingJob},

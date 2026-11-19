@@ -11,7 +11,7 @@ use std::{
 use anyhow::Result;
 
 use crate::{
-    daemon::{space_processes::WorktreeTies, workspace::Manager},
+    daemon::{manager::Manager, space_processes::WorktreeTies},
     fsutil::off_runtime,
     process::{
         described,

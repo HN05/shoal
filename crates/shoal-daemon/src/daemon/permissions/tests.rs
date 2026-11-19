@@ -2,8 +2,8 @@
 use crate::{
     config::permissions::{Opening, OtherRepositories, PermissionSource, Pushes},
     daemon::{
+        manager::Manager,
         test_support::{chat, manager, repository, workspace_below as workspace},
-        workspace::Manager,
     },
     model::Repository,
 };

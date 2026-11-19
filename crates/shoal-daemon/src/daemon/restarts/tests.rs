@@ -8,9 +8,9 @@ use crate::{
     config::permissions::PermissionChange,
     daemon::{
         executions::ExecutionKind,
+        manager::Manager,
         scope::Caller,
         test_support::{manager, repository},
-        workspace::Manager,
     },
     model::{AgentRestart, RestartOutcome, RestartWait, Workspace},
     state::AgentState,

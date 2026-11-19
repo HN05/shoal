@@ -11,7 +11,7 @@ use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 use super::store::{Awaits, Launch, LaunchRequest, entry, insert_launch};
 use crate::{
-    daemon::{notifications::NotificationKind, store::json_column, workspace::Manager},
+    daemon::{manager::Manager, notifications::NotificationKind, store::json_column},
     model::{QueueEntry, SpaceKind},
     state::{QueueKind, QueueState},
     time::UnixTime,

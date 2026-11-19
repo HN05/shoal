@@ -1,8 +1,10 @@
 //! Verify the recorded Git worktree before execution, recovery, or removal.
-use super::{
-    Manager,
-    identity::{clear_owner, mark_owner, marked_owner, verify_owner},
-    paths::matches_recorded_worktree_path,
+use super::super::{
+    manager::Manager,
+    workspace::{
+        identity::{clear_owner, mark_owner, marked_owner, verify_owner},
+        paths::matches_recorded_worktree_path,
+    },
 };
 use crate::refusal::{Reason, Refusal};
 use crate::{fsutil::off_runtime, git, model::Workspace, state::WorkspaceState};

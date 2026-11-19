@@ -11,7 +11,7 @@ use super::ReadBranches;
 use crate::{
     branches::{DeletedBranch, ListedBranch, SpaceWork},
     config::permissions::PermissionKey,
-    daemon::{links::place::Access, permissions::Action, scope::Caller, workspace::Manager},
+    daemon::{links::place::Access, manager::Manager, permissions::Action, scope::Caller},
     protocol::RepoTarget,
 };
 use shoal_forge::branches::BranchRequests;

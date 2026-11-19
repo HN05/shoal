@@ -10,7 +10,7 @@ use shoal_ids::space_ids::SpaceId;
 use tokio::process::Command;
 
 use super::{compose, records};
-use crate::daemon::workspace::Manager;
+use crate::daemon::manager::Manager;
 use shoal_protocol::containers::{ContainerProject, ContainerRuntime};
 
 /// The label Compose gives each container of a project, holding its name.

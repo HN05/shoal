@@ -13,7 +13,7 @@ use shoal_refs::BranchName;
 
 use super::{Registration, runner_labels};
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     forge::{
         ForgeRepo,
         ci::runner::{JobRun, Trigger},

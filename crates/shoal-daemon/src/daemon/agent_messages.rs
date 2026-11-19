@@ -12,8 +12,8 @@ use rusqlite::Transaction;
 
 use crate::{
     daemon::{
+        manager::Manager,
         notifications::NotificationKind,
-        workspace::Manager,
         workspace_files::{self, Attacher, NewFile, layout::Copy},
     },
     model::Space,

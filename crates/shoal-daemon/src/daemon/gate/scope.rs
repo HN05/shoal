@@ -3,7 +3,7 @@
 //! change nothing. It ends with the run.
 use std::{collections::BTreeMap, ffi::OsString};
 
-use crate::daemon::{operations::Operations, scope::Caller, workspace::Manager};
+use crate::daemon::{manager::Manager, operations::Operations, scope::Caller};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::scope_tokens::ScopeToken;
 

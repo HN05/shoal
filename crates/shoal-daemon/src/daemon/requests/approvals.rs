@@ -7,9 +7,9 @@ use super::super::{
     answer::Answer,
     approvals::ApprovalRequest,
     item_numbers::ItemNumber,
+    manager::Manager,
     permissions::Action,
     scope::{Caller, Scoped, denied, inspect_owner},
-    workspace::Manager,
 };
 use crate::protocol::{ApprovalMethod, Body};
 use shoal_protocol::links::BranchPush;

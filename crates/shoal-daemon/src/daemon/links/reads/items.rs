@@ -11,8 +11,8 @@ use crate::{
             space::LinkSpace,
             target::ForgeTarget,
         },
+        manager::Manager,
         scope::Caller,
-        workspace::Manager,
     },
     forge::{
         ForgeRepo, PullRequest,

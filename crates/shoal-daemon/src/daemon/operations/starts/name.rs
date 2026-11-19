@@ -7,7 +7,7 @@ use shoal_protocol::space_names::SpaceName;
 use super::{Preparing, StartIssue, home::Home};
 use crate::{
     config::modes::ModeName,
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     protocol::operations::WorkspaceStart,
 };
 

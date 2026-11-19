@@ -9,10 +9,10 @@ use shoal_protocol::triggers::{Fired, RunOrigin, RunOutcome, TriggerRun};
 use crate::{
     daemon::{
         approvals::Undecided,
+        manager::Manager,
         scope::Caller,
         test_support::{chat, chat_launches, configure, manager, repository},
         triggers::firing::Firing,
-        workspace::Manager,
     },
     model::{ChatQueueRequest, Repository},
     paths::Paths,

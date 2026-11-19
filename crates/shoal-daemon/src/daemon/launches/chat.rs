@@ -12,7 +12,7 @@ use super::{
 };
 use crate::{
     config::modes::ModeName,
-    daemon::{operations::starts::Home, scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, operations::starts::Home, scope::Caller},
     forge::items::{link::ItemKind, reference::ItemInput},
     launches,
 };

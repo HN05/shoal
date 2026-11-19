@@ -10,7 +10,7 @@ use shoal_ids::space_ids::SpaceId;
 
 use crate::{
     config::Effective,
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     model::{RemovedSpace, Repository, Space},
     removal::{InspectionPolicy, RemovalResult, UnsavedWork},
     transfer::{Carrying, ExportedSpace, Manifest, SessionSource},

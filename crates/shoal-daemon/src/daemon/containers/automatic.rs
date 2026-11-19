@@ -7,7 +7,7 @@ use anyhow::{Result, anyhow};
 use super::{ContainerAcquisition, Starter};
 use crate::{
     config::repo::ContainerStart,
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     model::Workspace,
     state::WorkspaceState,
 };

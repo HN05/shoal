@@ -18,8 +18,8 @@ use crate::{
             issue::{Assigner, AssignerOf},
             proposals::{OpenOutcome, Proposer},
         },
+        manager::Manager,
         scope::Caller,
-        workspace::Manager,
     },
     forge::{
         ForgeRepo,

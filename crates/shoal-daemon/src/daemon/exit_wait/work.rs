@@ -2,7 +2,7 @@
 //! client that asked for the exit.
 use anyhow::Result;
 
-use crate::daemon::workspace::Manager;
+use crate::daemon::manager::Manager;
 use crate::protocol::{Work, WorkPlace};
 use crate::state::WorkspaceState;
 use shoal_ids::space_ids::SpaceId;

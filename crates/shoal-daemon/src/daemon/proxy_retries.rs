@@ -7,7 +7,7 @@ use anyhow::Result;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
 
-use super::workspace::Manager;
+use super::manager::Manager;
 pub(crate) use shoal_protocol::executions::ProxyRetry;
 
 impl Manager {

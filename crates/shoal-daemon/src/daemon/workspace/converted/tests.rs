@@ -3,8 +3,8 @@ use crate::{
     daemon::{
         conversions::{Converting, Pending},
         events::{EventItem, EventKind},
+        manager::Manager,
         test_support::{chat, manager, repository},
-        workspace::Manager,
     },
     model::Repository,
 };

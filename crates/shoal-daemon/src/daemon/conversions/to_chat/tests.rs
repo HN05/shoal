@@ -2,8 +2,8 @@ use crate::execution::recovery::LastSessionExt;
 use crate::{
     daemon::{
         conversions::record::ConvertedChat,
+        manager::Manager,
         test_support::{git, manager, repository},
-        workspace::Manager,
     },
     model::{HoldPlacer, Repository},
 };

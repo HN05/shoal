@@ -16,10 +16,10 @@ use crate::{
     daemon::{
         allocation::Allocation,
         approvals::{self, ApprovalRequest, PortSpecification, Specification, Target},
+        manager::Manager,
         notifications::NotificationKind,
         scope::Caller,
         store,
-        workspace::Manager,
     },
     env,
     model::{PortCatalog, PortOverview, PortReservation, PortSuggestion},

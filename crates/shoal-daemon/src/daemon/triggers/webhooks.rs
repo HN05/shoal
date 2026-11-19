@@ -19,7 +19,7 @@ use tokio::{
     sync::Semaphore,
 };
 
-use crate::daemon::{log, notifications::NotificationKind, workspace::Manager};
+use crate::daemon::{log, manager::Manager, notifications::NotificationKind};
 
 mod delivery;
 

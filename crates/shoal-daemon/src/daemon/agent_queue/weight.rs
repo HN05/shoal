@@ -8,7 +8,7 @@ use rusqlite::Connection;
 
 use crate::{
     config::modes::{ModeName, Weight},
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     execution::recovery::{self, RecordExt},
 };
 use shoal_ids::{execution_ids::ExecutionId, repository_ids::RepositoryId, space_ids::SpaceId};

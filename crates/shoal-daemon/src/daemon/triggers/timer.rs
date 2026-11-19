@@ -8,7 +8,7 @@ use shoal_protocol::triggers::{RunOrigin, RunOutcome, TriggerRun};
 
 use super::{Configured, firing::Firing, state};
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     time::UnixTime,
     triggers::{Source, timer::Timer},
 };

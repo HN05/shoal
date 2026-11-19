@@ -5,7 +5,7 @@
 use anyhow::{Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 
-use super::super::workspace::Manager;
+use super::super::manager::Manager;
 use crate::model::{AgentStatus, RunningAgent};
 use shoal_protocol::space_names::SpaceSelector;
 

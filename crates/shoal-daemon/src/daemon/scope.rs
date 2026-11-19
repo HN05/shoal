@@ -3,7 +3,7 @@
 //! the OS user.
 use crate::config::permissions::PermissionKey;
 use crate::{
-    daemon::{executions::ExecutionKind, workspace::Manager},
+    daemon::{executions::ExecutionKind, manager::Manager},
     protocol::{ItemMethod, Operation},
 };
 use anyhow::{Result, ensure};

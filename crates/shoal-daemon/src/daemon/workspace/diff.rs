@@ -2,7 +2,7 @@
 use anyhow::{Context, Result, ensure};
 use shoal_refs::CommitId;
 
-use super::Manager;
+use super::super::manager::Manager;
 use crate::{git, model::DiffBase};
 use shoal_protocol::space_names::SpaceSelector;
 

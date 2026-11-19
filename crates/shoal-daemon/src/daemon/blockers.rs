@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::Result;
 
 use crate::{
-    daemon::{log, progress::Cleared, workspace::Manager},
+    daemon::{log, manager::Manager, progress::Cleared},
     state::BlockerKind,
 };
 use shoal_ids::space_ids::SpaceId;

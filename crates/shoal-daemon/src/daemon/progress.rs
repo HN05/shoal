@@ -8,7 +8,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 use shoal_ids::space_ids::SpaceId;
 
-use super::{notifications::NotificationKind, workspace::Manager};
+use super::{manager::Manager, notifications::NotificationKind};
 use crate::model::Space;
 use crate::time::UnixTime;
 use shoal_protocol::progress;

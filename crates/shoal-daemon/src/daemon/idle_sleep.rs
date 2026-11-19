@@ -6,7 +6,7 @@ use std::{sync::Arc, time::Duration};
 use super::{
     cleanup::{LoggedFailures, SweepFailures},
     log,
-    workspace::Manager,
+    manager::Manager,
 };
 use crate::time::UnixTime;
 

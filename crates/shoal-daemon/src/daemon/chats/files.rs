@@ -5,7 +5,7 @@ use anyhow::{Context as _, Result};
 use std::collections::HashSet;
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     fsutil::off_runtime,
     model::Chat,
     paths::{Paths, SESSION_LOG},

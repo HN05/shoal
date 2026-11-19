@@ -2,9 +2,9 @@ use super::WorkspaceConversion;
 use crate::{
     config::modes::ModeName,
     daemon::{
+        manager::Manager,
         scope::Caller,
         test_support::{chat, manager, repository},
-        workspace::Manager,
     },
     model::Repository,
     protocol::OperationMethod,

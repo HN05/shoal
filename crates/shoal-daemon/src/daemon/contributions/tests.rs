@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use crate::{
     daemon::{
+        manager::Manager,
         notifications::NotificationKind,
         test_support::{commit, git, manager, repository},
-        workspace::Manager,
     },
     model::Repository,
     removal::{InspectionPolicy, UnsavedWork},

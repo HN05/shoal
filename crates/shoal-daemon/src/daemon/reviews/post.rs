@@ -9,10 +9,11 @@ use shoal_refs::CommitId;
 
 use super::store;
 use crate::{
-    daemon::{log, workspace::Manager},
-    forge::{
-        items::review::{LineComment, NewReview, ReviewVerdict, Side},
-        items::{action::Action, link::ItemKind},
+    daemon::{log, manager::Manager},
+    forge::items::{
+        action::Action,
+        link::ItemKind,
+        review::{LineComment, NewReview, ReviewVerdict, Side},
     },
     model::Workspace,
     protocol::ItemContext,

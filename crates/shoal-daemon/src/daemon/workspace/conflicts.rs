@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 
-use super::Manager;
+use super::super::manager::Manager;
 use crate::{
     git::{
         self,

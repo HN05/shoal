@@ -10,7 +10,7 @@ use crate::{
             pr::{Registration, RegistrationKind},
             space::LinkSpace,
         },
-        workspace::Manager,
+        manager::Manager,
     },
     forge::items::{
         link::{ItemKind, LinkKind, Selection},

@@ -6,8 +6,8 @@ use anyhow::Result;
 use crate::{
     daemon::{
         log,
+        manager::Manager,
         notifications::{About, NotificationKind},
-        workspace::Manager,
     },
     model::{Space, SpaceKind, SpaceRef, Workspace},
 };

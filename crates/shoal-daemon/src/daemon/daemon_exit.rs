@@ -7,8 +7,8 @@
 //! reaches it.
 use super::{
     executions::{Save, StopRequest},
+    manager::Manager,
     shutdown_stop::{Shutdown, StoppedSpaces},
-    workspace::Manager,
 };
 use crate::daemon::{log, runner::JobStop};
 use crate::protocol::{Exit, QueuedLaunches};

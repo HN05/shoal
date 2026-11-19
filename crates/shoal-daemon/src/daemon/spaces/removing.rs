@@ -12,7 +12,7 @@ use std::{
 use anyhow::{Result, ensure};
 use rusqlite::Connection;
 
-use crate::{daemon::workspace::Manager, model::Space, state::WorkspaceState};
+use crate::{daemon::manager::Manager, model::Space, state::WorkspaceState};
 
 impl Manager {
     /// Whether `space` is being removed: a removal holds it, or its

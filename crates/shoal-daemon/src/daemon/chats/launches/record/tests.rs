@@ -1,9 +1,9 @@
 use crate::{
     daemon::{
         chats::NewChat,
+        manager::Manager,
         notifications::{Notification, NotificationKind},
         test_support::{git, global_config, manager, repository},
-        workspace::Manager,
     },
     model::{LinkedItem, Repository, SpaceLinks},
     protocol::ChatStart,

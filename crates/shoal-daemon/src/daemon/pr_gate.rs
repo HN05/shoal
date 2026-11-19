@@ -3,7 +3,7 @@
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 
-use super::{gates::PrGuard, workspace::Manager};
+use super::{gates::PrGuard, manager::Manager};
 use crate::model::{Space, Workspace};
 use shoal_protocol::space_names::SpaceSelector;
 

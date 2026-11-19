@@ -12,7 +12,7 @@ use shoal_protocol::hub::{
 };
 
 use super::membership;
-use crate::daemon::{scope::Caller, workspace::Manager};
+use crate::daemon::{manager::Manager, scope::Caller};
 
 impl Manager {
     /// The other machines' spaces `caller` sees; none on a machine that is

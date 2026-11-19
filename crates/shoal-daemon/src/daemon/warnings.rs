@@ -4,7 +4,7 @@ use shoal_ids::space_ids::SpaceId;
 use std::{collections::HashMap, time::Duration};
 use tokio::time::Instant;
 
-use super::{agent_messages::Delivery, workspace::Manager};
+use super::{agent_messages::Delivery, manager::Manager};
 use crate::{config::overload::Overload, daemon::log, shoal_dirs::Contents};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

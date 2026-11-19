@@ -15,7 +15,7 @@ use super::{
     start::PollStart,
 };
 use crate::{
-    daemon::{links::space::LinkSpace, notifications::NotificationKind, workspace::Manager},
+    daemon::{links::space::LinkSpace, manager::Manager, notifications::NotificationKind},
     forge::{
         items::link::{LinkKind, Selection},
         updates::Update,

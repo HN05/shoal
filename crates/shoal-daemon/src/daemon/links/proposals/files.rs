@@ -16,7 +16,7 @@ use crate::{
         approvals::{ApprovalRequest, DecisionStatus},
         file_copies::keep_copies,
         log::log,
-        workspace::Manager,
+        manager::Manager,
     },
     forge::items::attach::Attachment,
     model::Repository,

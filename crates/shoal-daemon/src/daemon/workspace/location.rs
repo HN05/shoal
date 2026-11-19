@@ -1,7 +1,7 @@
 //! Validate explicit worktree locations before claiming ownership.
-use super::{
-    Manager,
-    paths::{canonical_with_missing_tail, contains_protected_directory},
+use super::super::{
+    manager::Manager,
+    workspace::paths::{canonical_with_missing_tail, contains_protected_directory},
 };
 use crate::{
     daemon::store,

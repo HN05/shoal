@@ -4,7 +4,7 @@ use shoal_ids::repository_ids::RepositoryId;
 use std::{fs, path::Path, sync::Arc};
 
 pub(crate) use crate::test_support::*;
-use crate::{daemon::workspace::Manager, paths::Paths};
+use crate::{daemon::manager::Manager, paths::Paths};
 use shoal_ids::space_ids::SpaceId;
 
 // The overload tests in `shoal-workers` read the rest of it.

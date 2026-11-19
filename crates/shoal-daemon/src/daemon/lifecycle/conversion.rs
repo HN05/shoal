@@ -1,7 +1,7 @@
 //! The removal of a workspace's worktree when the workspace becomes a chat:
 //! it takes the path every removal takes, and commits the chat in place of
 //! the workspace's record instead of deleting it.
-use super::super::workspace::Manager;
+use super::super::manager::Manager;
 use super::Removal;
 use crate::{
     daemon::{approvals::ApprovalRequest, conversions::record::ConvertedChat},

@@ -11,8 +11,8 @@ use shoal_ids::space_ids::SpaceId;
 
 use super::{
     agent_state,
+    manager::Manager,
     tree::{self, TrackedAgents},
-    workspace::Manager,
 };
 use crate::{
     daemon::{spaces::worktrees_mut, store},

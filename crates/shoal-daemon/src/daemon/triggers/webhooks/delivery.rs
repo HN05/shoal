@@ -10,7 +10,7 @@ use tokio::sync::OwnedSemaphorePermit;
 
 use super::super::{Configured, firing::Firing};
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     protocol::ConfigTarget,
     secrets::Secret,
     time::UnixTime,

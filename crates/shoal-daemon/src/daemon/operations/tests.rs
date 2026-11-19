@@ -4,8 +4,8 @@ use std::time::Duration;
 use super::{Entry, RETAIN, fake};
 use crate::{
     daemon::{
+        manager::Manager,
         test_support::{manager, repository},
-        workspace::Manager,
     },
     model::{Repository, Workspace},
     protocol::operations::{

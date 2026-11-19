@@ -8,7 +8,7 @@ use rusqlite::{OptionalExtension, params};
 
 use crate::{
     config::forges::{self, Forges},
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     forge::{ForgeRepo, backends::ForgeKind, items::reference::ItemRef},
 };
 use shoal_forge::{

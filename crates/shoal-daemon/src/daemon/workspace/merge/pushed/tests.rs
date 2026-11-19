@@ -3,8 +3,8 @@ use std::{fs, path::PathBuf, sync::Arc};
 use super::*;
 use crate::{
     daemon::{
+        manager::Manager,
         test_support::{commit, configure, git, manager, repository},
-        workspace::Manager,
     },
     forge::items::action::MergeMethod,
     model::{MergeOptions, Workspace},

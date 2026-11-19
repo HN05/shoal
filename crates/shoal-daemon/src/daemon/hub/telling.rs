@@ -21,7 +21,7 @@ use shoal_protocol::{
 
 use super::{membership, session::Calls};
 use crate::{
-    daemon::{agent_messages::About, log, tree::Receiver, workspace::Manager},
+    daemon::{agent_messages::About, log, manager::Manager, tree::Receiver},
     time::UnixTime,
 };
 

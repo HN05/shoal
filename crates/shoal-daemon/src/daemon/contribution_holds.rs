@@ -10,7 +10,7 @@ use tokio::net::UnixStream;
 use super::{
     answer::{self, OperationGuard},
     contributions::holds::ContributionHold,
-    workspace::Manager,
+    manager::Manager,
 };
 use crate::protocol::{self, Body, Response};
 

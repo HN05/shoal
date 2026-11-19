@@ -5,7 +5,7 @@ use anyhow::{Result, ensure};
 use rusqlite::OptionalExtension;
 use shoal_ids::space_ids::SpaceId;
 
-use super::workspace::Manager;
+use super::manager::Manager;
 use crate::{
     daemon::spaces::removal_notices::Cleanup,
     model::{Space, Workspace},

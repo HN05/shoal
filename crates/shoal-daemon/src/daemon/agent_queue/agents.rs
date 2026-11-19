@@ -6,7 +6,7 @@ use anyhow::{Context as _, Result};
 use super::store::Awaits;
 use crate::{
     agents::resolve_launch,
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     forge::items::reference::ItemInput,
     model::{Blocker, QueueAdmission, QueueEntry, Space, Workspace},
     protocol::operations::{LaunchIssue, LaunchRequest, QueuedLaunch},

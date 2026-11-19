@@ -22,8 +22,9 @@ use crate::{
     daemon::{
         capacity::{self, MemoryState},
         log::log,
+        manager::Manager,
         notifications::NotificationKind,
-        workspace::{Manager, identity},
+        workspace::identity,
     },
     fsutil::{
         off_runtime,

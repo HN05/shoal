@@ -1,6 +1,6 @@
 //! Shared outcomes of daemon-owned resource allocation.
 use crate::{
-    daemon::{approvals::ApprovalRequest, notifications::NotificationKind, workspace::Manager},
+    daemon::{approvals::ApprovalRequest, manager::Manager, notifications::NotificationKind},
     protocol::Body,
 };
 use shoal_ids::space_ids::SpaceId;

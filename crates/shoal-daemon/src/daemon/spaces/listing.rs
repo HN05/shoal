@@ -4,11 +4,7 @@ use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 
 use crate::{
-    daemon::{
-        chats,
-        scope::Caller,
-        workspace::{self, Manager},
-    },
+    daemon::{chats, manager::Manager, scope::Caller, workspace},
     model::{Space, SpacePart, Worktree},
 };
 

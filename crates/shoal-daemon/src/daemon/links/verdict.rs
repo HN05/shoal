@@ -8,10 +8,10 @@ use shoal_refs::CommitId;
 
 use crate::{
     config::permissions::PermissionKey,
-    daemon::{links::place::Access, permissions, scope::Caller, workspace::Manager},
-    forge::{
-        items::reference::ItemInput,
-        items::review::{LineComment, NewReview, ReviewVerdict},
+    daemon::{links::place::Access, manager::Manager, permissions, scope::Caller},
+    forge::items::{
+        reference::ItemInput,
+        review::{LineComment, NewReview, ReviewVerdict},
     },
     protocol::RepoTarget,
 };

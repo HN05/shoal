@@ -14,7 +14,7 @@ use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
-    daemon::{events, scope::Caller, spaces, store, workspace::Manager},
+    daemon::{events, manager::Manager, scope::Caller, spaces, store},
     fsutil::off_runtime,
     model::{
         Chat, ChatPart, RefPart, Repository, SpaceKind, SpaceLinks, SpaceRef, Workdir, Workspace,

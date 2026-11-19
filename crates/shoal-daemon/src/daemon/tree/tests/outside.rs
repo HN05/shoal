@@ -5,8 +5,8 @@ use crate::removal::{InspectionPolicy, UnsavedWork};
 use crate::{
     daemon::{
         chats::NewChat,
+        manager::Manager,
         test_support::{ProcessGroup, agent_process, manager, repository},
-        workspace::Manager,
         workspace_files::Attacher,
     },
     model::{Chat, Repository, Workspace},

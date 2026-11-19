@@ -9,7 +9,7 @@ use std::{
 
 use tokio::sync::Notify;
 
-use crate::daemon::workspace::Manager;
+use crate::daemon::manager::Manager;
 
 /// The spaces whose issues wait for the agent account to be settled.
 #[derive(Default)]

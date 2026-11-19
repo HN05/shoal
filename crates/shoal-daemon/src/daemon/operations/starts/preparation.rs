@@ -11,7 +11,7 @@ use shoal_protocol::{launches::Started, space_names::SpaceSelector};
 
 use super::{Preparing, home::Recorded, waiting::PreparationStart};
 use crate::{
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     model::{QueueAdmission, Space, Workspace},
     protocol::operations::{OperationSpec, Preparation},
     state::WorkspaceState,

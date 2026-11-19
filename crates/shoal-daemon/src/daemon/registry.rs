@@ -1,5 +1,5 @@
 //! Repository registration and lookup; independent of worktree lifecycle.
-use super::{spotlight, workspace::Manager};
+use super::{manager::Manager, spotlight};
 use crate::{
     daemon::store,
     git,

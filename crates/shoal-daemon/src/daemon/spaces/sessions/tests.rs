@@ -7,8 +7,8 @@ use anyhow::{Context as _, Result};
 use crate::{
     daemon::{
         executions::ExecutionKind,
+        manager::Manager,
         test_support::{manager, repository},
-        workspace::Manager,
     },
     execution::recovery::{self, LastSession},
     model::Workspace,

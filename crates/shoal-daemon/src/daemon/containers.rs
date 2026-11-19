@@ -20,9 +20,9 @@ pub(crate) use stats::ContainerUsage;
 use super::{
     allocation::Allocation,
     log,
+    manager::Manager,
     ports::{self, PortRequest},
     scope::Caller,
-    workspace::Manager,
 };
 use crate::{
     daemon::approvals::ApprovalRequest,

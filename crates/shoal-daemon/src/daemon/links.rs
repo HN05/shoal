@@ -41,9 +41,9 @@ use crate::{
     daemon::{
         events::{self, EventKind},
         links::{pr::Action, space::LinkSpace},
+        manager::Manager,
         review,
         scope::Caller,
-        workspace::Manager,
     },
     forge::items::{
         link::{ItemKind, LinkKind},

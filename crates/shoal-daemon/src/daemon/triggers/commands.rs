@@ -11,7 +11,7 @@ use shoal_protocol::triggers::{Fired, RunOrigin, TriggerAction, TriggerStatus, W
 use super::{Configured, firing::Firing, state};
 use crate::{
     config::permissions::PermissionKey,
-    daemon::{permissions::Action, scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, permissions::Action, scope::Caller},
     protocol::ItemContext,
     time::UnixTime,
 };

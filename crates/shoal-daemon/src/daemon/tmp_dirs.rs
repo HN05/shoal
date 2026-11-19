@@ -8,7 +8,7 @@ use anyhow::{Result, ensure};
 use rusqlite::Connection;
 
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     model::{Repository, Space},
     tmp_dirs::Layout,
 };

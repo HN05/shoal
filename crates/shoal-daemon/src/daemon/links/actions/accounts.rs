@@ -10,7 +10,7 @@ use crate::{
         Config,
         forges::{Forges, Whose},
     },
-    daemon::{links::place::Place, workspace::Manager},
+    daemon::{links::place::Place, manager::Manager},
     forge::ForgeRepo,
     model::{Repository, Workspace},
 };

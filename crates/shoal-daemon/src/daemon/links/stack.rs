@@ -11,7 +11,7 @@ use super::{
     wait,
 };
 use crate::{
-    daemon::workspace::{Manager, record_base_changed},
+    daemon::{manager::Manager, workspace::record_base_changed},
     forge::{
         PullRequest,
         items::link::ItemKind,

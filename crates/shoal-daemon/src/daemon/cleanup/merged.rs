@@ -18,7 +18,7 @@ use tokio::time::Instant;
 
 use super::{Rule, Snapshot, Tree, change_time};
 use crate::{
-    daemon::{lifecycle::not_ready, spaces::removal_notices::Cleanup, workspace::Manager},
+    daemon::{lifecycle::not_ready, manager::Manager, spaces::removal_notices::Cleanup},
     model::Space,
     process::DirectoryUsers,
     time::UnixTime,

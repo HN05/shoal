@@ -10,7 +10,7 @@ use super::{
     Grant,
     store::{WaitingRestore, record_waiting_restore},
 };
-use crate::{daemon::workspace::Manager, state::QueueState};
+use crate::{daemon::manager::Manager, state::QueueState};
 use shoal_protocol::time::UnixTime;
 
 impl Manager {

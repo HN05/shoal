@@ -2,7 +2,7 @@
 //! directory at its path is that leftover, which a removal deletes without
 //! Git, the identity of the directory a removal began deleting that proves a
 //! leftover whose `.git` link went too, and the files left there.
-use super::{Manager, identity::directory_identity};
+use super::super::{manager::Manager, workspace::identity::directory_identity};
 use crate::{
     fsutil::off_runtime,
     git::worktree::{Leftover, left::LeftFiles},

@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use super::{Lookup, Lookups, Target};
 use crate::{
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     forge::items::{link::LinkKind, reference::ItemRef},
     state::BlockerKind,
 };

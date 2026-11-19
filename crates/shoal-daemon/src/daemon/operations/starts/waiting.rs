@@ -14,10 +14,7 @@ use shoal_refs::BranchName;
 
 use crate::{
     daemon::{
-        agent_queue::Readiness,
-        log,
-        scope::Caller,
-        workspace::{Manager, build_pending_in},
+        agent_queue::Readiness, log, manager::Manager, scope::Caller, workspace::build_pending_in,
     },
     model::{PreparationWait, Workspace},
     protocol::operations::{Failure, OperationSpec, Preparation},

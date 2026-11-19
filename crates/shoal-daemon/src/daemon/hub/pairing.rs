@@ -12,7 +12,7 @@ use shoal_protocol::hub::{
 use tokio::time::Instant;
 
 use super::identity::random;
-use crate::{daemon::workspace::Manager, time::UnixTime};
+use crate::{daemon::manager::Manager, time::UnixTime};
 
 /// How long a code admits a join.
 pub(super) const LIFETIME: Duration = Duration::from_secs(10 * 60);

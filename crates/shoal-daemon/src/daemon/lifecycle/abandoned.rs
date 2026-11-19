@@ -13,8 +13,8 @@ use crate::{
     daemon::{
         events::{self, EventKind},
         log,
+        manager::Manager,
         store::Store,
-        workspace::Manager,
     },
     state::WorkspaceState,
 };

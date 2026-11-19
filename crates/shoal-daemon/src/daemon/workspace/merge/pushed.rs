@@ -6,7 +6,7 @@ use super::{RecordChange, tracking_ref};
 use shoal_refs::CommitId;
 
 use crate::{
-    daemon::{links::wait::PushedMerge, log, workspace::Manager},
+    daemon::{links::wait::PushedMerge, log, manager::Manager},
     git,
     model::MergePlan,
 };

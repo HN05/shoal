@@ -17,7 +17,7 @@ use super::{
     agent_turns::Turn,
     capacity::Activity,
     gates::GuardMode,
-    workspace::Manager,
+    manager::Manager,
 };
 pub(crate) use crate::model::Protection;
 

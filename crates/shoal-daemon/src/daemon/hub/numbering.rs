@@ -14,7 +14,7 @@ use shoal_protocol::{
 };
 
 use crate::daemon::{
-    agent_messages::Delivery, approvals, log, notifications::NotificationKind, workspace::Manager,
+    agent_messages::Delivery, approvals, log, manager::Manager, notifications::NotificationKind,
 };
 
 /// A space here that took the number the hub gave it.

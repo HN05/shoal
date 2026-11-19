@@ -2,7 +2,7 @@ use rusqlite::params;
 
 use super::super::tests::{add, admitted, create, launch_in, limit_globally, preparing, register};
 use crate::{
-    daemon::{test_support::manager, workspace::Manager},
+    daemon::{manager::Manager, test_support::manager},
     model::{QueueEntry, QueueRequest, Repository, Workspace},
     protocol::operations::{OperationSpec, Preparation, QueuedLaunch},
     start_plan::QueuedStart,

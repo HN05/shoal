@@ -9,7 +9,7 @@ use shoal_ids::space_ids::SpaceId;
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::daemon::workspace::Manager;
+use crate::daemon::manager::Manager;
 use crate::{
     git,
     model::{

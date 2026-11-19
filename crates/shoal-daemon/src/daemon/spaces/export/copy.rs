@@ -7,7 +7,7 @@ use anyhow::Result;
 
 use super::Prepared;
 use crate::{
-    daemon::workspace::Manager,
+    daemon::manager::Manager,
     execution::recovery::{self, Copied, Record, StoppedAgent},
     model::{Execution, RemovedSpace, Space},
     time::UnixTime,

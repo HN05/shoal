@@ -7,9 +7,9 @@ use super::{Attacher, FileSource};
 use crate::{
     daemon::{
         executions::ExecutionKind,
+        manager::Manager,
         scope::Caller,
         test_support::{manager, repository},
-        workspace::Manager,
     },
     execution::recovery,
     model::Workspace,

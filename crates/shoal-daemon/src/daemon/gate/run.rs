@@ -25,8 +25,9 @@ use crate::{
     daemon::{
         agent_queue::{self, OneShotAdmission, Serving},
         approvals::ApprovalRequest,
-        log, oneshot,
-        workspace::Manager,
+        log,
+        manager::Manager,
+        oneshot,
     },
     reviews::{FailureReason, output},
     shoal_dirs::{Contents, ShoalDir},

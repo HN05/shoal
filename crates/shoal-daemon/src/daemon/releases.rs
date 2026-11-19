@@ -5,7 +5,7 @@ use std::time::SystemTime;
 use anyhow::Result;
 
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{log, manager::Manager},
     fsutil::off_runtime,
     releases::Releases,
 };

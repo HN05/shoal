@@ -6,9 +6,9 @@ use anyhow::Result;
 use super::super::{
     answer::Answer,
     item_numbers::ItemNumber,
+    manager::Manager,
     questions::Question,
     scope::{Caller, Scoped, inspect_owner},
-    workspace::Manager,
 };
 use crate::protocol::{Body, QuestionMethod};
 use shoal_protocol::space_names::SpaceSelector;

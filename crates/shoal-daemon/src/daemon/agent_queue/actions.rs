@@ -15,7 +15,7 @@ use super::{
     store::{ENTRY_COLUMNS, entry as queue_entry},
 };
 use crate::{
-    daemon::{executions::StopRequest, scope::Caller, workspace::Manager},
+    daemon::{executions::StopRequest, manager::Manager, scope::Caller},
     model::{QueueEntry, QueuedJob},
     state::{QueueKind, QueueState},
 };

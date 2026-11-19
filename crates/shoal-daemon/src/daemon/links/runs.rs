@@ -12,8 +12,8 @@ use anyhow::{Context, Result, bail, ensure};
 use crate::{
     daemon::{
         links::place::{Access, Place},
+        manager::Manager,
         scope::Caller,
-        workspace::Manager,
     },
     forge::{
         ForgeRepo,

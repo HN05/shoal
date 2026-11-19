@@ -8,8 +8,8 @@ use shoal_protocol::space_names::SpaceSelector;
 use crate::{
     daemon::{
         links::issue::{AssignerOf, IssueAssignee},
+        manager::Manager,
         scope::Caller,
-        workspace::Manager,
     },
     forge::items::reference::ItemRef,
     model::{Assigner, LinkedItem, Relation, SpaceLinks},

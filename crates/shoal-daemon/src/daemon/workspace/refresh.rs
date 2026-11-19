@@ -7,7 +7,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use shoal_protocol::model::ByKind;
 
-use super::{Manager, copies::Source};
+use super::super::{manager::Manager, workspace::copies::Source};
 use crate::{
     daemon::{log, scope::Caller},
     git,

@@ -1,5 +1,5 @@
+use crate::daemon::manager::Manager;
 use crate::daemon::test_support::{global_config, manager, repository};
-use crate::daemon::workspace::Manager;
 use shoal_protocol::launches::{IssueChoice, Launch, LaunchSource, StartTarget};
 
 /// A registered repository whose remote is a forge's, which Shoal never

@@ -9,8 +9,8 @@ use super::Caller;
 use crate::{
     config::permissions::PermissionKey,
     daemon::{
-        approvals::ApprovalRequest, item_numbers::ItemNumber, permissions::Action,
-        questions::Question, workspace::Manager,
+        approvals::ApprovalRequest, item_numbers::ItemNumber, manager::Manager,
+        permissions::Action, questions::Question,
     },
     model::{ChatQueueRequest, QueueEntry, Repository, RunningAgent, Space, SpaceTarget},
     protocol::operations::WorkspaceStart,

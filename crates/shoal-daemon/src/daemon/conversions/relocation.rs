@@ -18,8 +18,8 @@ use crate::{
     config::modes::ModeName,
     daemon::{
         log,
+        manager::Manager,
         notifications::{About, NotificationKind},
-        workspace::Manager,
     },
     execution::recovery::{self, LastSession, LastSessionExt},
     sessions::Origin,

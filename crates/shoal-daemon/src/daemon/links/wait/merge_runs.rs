@@ -17,7 +17,7 @@ use super::{
     items::{linked_items, observed_item, opened_open_prs},
 };
 use crate::{
-    daemon::{events, links::space::LinkSpace, log, workspace::Manager},
+    daemon::{events, links::space::LinkSpace, log, manager::Manager},
     forge::{
         ForgeRepo,
         capability::Capability,

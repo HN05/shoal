@@ -6,7 +6,7 @@ use anyhow::{Result, bail, ensure};
 
 use super::place::{Access, Place};
 use crate::{
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{manager::Manager, scope::Caller},
     forge::{
         ForgeRepo,
         items::{

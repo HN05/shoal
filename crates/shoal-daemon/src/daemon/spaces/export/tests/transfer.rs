@@ -6,8 +6,8 @@ use std::{fs, path::Path, sync::Arc};
 
 use crate::{
     daemon::{
+        manager::Manager,
         test_support::{commit, git, manager, repository},
-        workspace::Manager,
     },
     execution::recovery::{self, Copied, Record},
     model::{RemovedSpace, Repository},

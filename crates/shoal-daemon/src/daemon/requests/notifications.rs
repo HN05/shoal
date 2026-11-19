@@ -6,9 +6,9 @@ use tokio::net::UnixStream;
 
 use super::super::{
     answer::{Answer, OperationGuard},
+    manager::Manager,
     permissions::Action,
     scope::{Caller, Scoped},
-    workspace::Manager,
 };
 use crate::{
     config::permissions::PermissionKey,

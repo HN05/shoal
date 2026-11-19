@@ -10,7 +10,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use super::{
     executions::{Save, StopPolicy, StopRequest},
-    workspace::Manager,
+    manager::Manager,
 };
 use crate::{
     demos::{Launch, Progress, Running},

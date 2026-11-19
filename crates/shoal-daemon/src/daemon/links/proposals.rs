@@ -19,7 +19,7 @@ use crate::{
             },
         },
         links::{LinkSpace, issue::Assigner},
-        workspace::Manager,
+        manager::Manager,
     },
     forge::{
         ForgeRepo,

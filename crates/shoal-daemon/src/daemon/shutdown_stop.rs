@@ -7,7 +7,7 @@ use std::collections::HashSet;
 use anyhow::Result;
 use futures_util::future::join_all;
 
-use super::{executions::StopRequest, workspace::Manager};
+use super::{executions::StopRequest, manager::Manager};
 use crate::daemon::runner::JobStop;
 use crate::{
     daemon::{

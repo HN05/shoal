@@ -4,8 +4,8 @@ use super::super::{Opening, Preparing};
 use crate::protocol::QueuedLaunches;
 use crate::{
     daemon::{
+        manager::Manager,
         test_support::{commit, git, global_config, manager, repository},
-        workspace::Manager,
         workspace_files::Attacher,
     },
     model::{Blocker, PreparationWait, Repository, Workspace},

@@ -12,7 +12,7 @@ use tokio::{net::UnixListener, task::JoinSet, time::timeout};
 
 use super::{install_test_script, manager, repository};
 use crate::daemon::{
-    Server, connections, notifications::NotificationKind, serve, store, workspace::Manager,
+    Server, connections, manager::Manager, notifications::NotificationKind, serve, store,
 };
 use crate::execution::recovery::{Record, RecordExt as _, record_path};
 use crate::model::Execution;
