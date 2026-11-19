@@ -13,7 +13,7 @@ use tokio::{
     },
 };
 
-use super::{Streamed, body_frame};
+use super::{Relayed, body_frame};
 use crate::{
     daemon::{
         answer,
@@ -25,11 +25,11 @@ use crate::{
 /// The most bytes of the caller's read at once.
 const READ_BYTES: usize = 64 << 10;
 
-impl Streamed<'_> {
+impl Relayed<'_> {
     /// Relay `stream`, the caller's connection, to and from the other
     /// machine's daemon: its answer comes on `incoming`, then the
     /// connection's bytes, and the caller's go on `outgoing`.
-    pub(super) async fn relay_duplex(
+    pub(in crate::daemon) async fn relay_duplex(
         &self,
         stream: UnixStream,
         mut incoming: Incoming,
@@ -78,7 +78,7 @@ impl Streamed<'_> {
         let mut checks = tokio::time::interval(super::SCOPE_CHECK);
         loop {
             checks.tick().await;
-            if let Ok(false) = self.server.manager.still_scoped(self.scope).await {
+            if let Ok(false) = self.manager.still_scoped(self.scope).await {
                 return;
             }
         }
