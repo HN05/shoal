@@ -28,11 +28,12 @@ mod target;
 
 impl Manager {
     /// Where the new workspace `launch` starts in `shape` goes for
-    /// `caller`, or what it starts instead.
+    /// `caller`, or what it starts instead, with an agent planned there
+    /// unless it `creates` the workspace alone.
     pub(super) async fn workspace_placement(
         &self,
         launch: &Launch,
-        shape: &Shape,
+        (shape, creates): (&Shape, bool),
         caller: Option<&Caller>,
     ) -> Result<Placed> {
         let reads = ManagerReads::new(self, caller);
@@ -46,7 +47,7 @@ impl Manager {
             return Ok(Placed::Worker(on_branch(launch, workspace, &creation)?));
         }
         let mut blockers = (self.named_blockers(&target.repo.id, &launch.blockers, caller)).await?;
-        let agent = self.planned_agent(launch, &target).await?;
+        let agent = !creates && self.planned_agent(launch, &target).await?;
         let issue = match &target.issue {
             Some(issue) => {
                 let read = self.launch_issue(issue, (&target.repo.id, false), caller);

@@ -75,7 +75,10 @@ impl Manager {
     ) -> Result<Launched> {
         let placed = match shape.kind {
             SpaceKind::Chat => Placed::New(self.chat_placement(&launch, &shape, caller).await?),
-            SpaceKind::Workspace => self.workspace_placement(&launch, &shape, caller).await?,
+            SpaceKind::Workspace => {
+                self.workspace_placement(&launch, (&shape, false), caller)
+                    .await?
+            }
         };
         let placement = match placed {
             Placed::New(placement) => placement,

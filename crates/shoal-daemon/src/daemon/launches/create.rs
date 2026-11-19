@@ -37,15 +37,16 @@ impl Manager {
             mode: ModeName::DEFAULT,
             repository: true,
         };
-        let mut placement = match self.workspace_placement(&launch, &shape, caller).await? {
+        let placement = match self
+            .workspace_placement(&launch, (&shape, true), caller)
+            .await?
+        {
             Placed::New(placement) => placement,
             Placed::Worker(worker) => self.reopened_placement(&worker).await?,
             Placed::Chat(..) => bail!(
                 "a workspace starts on a branch; name it with --branch, an issue, a PR or branch link, or a copy"
             ),
         };
-        // Without an agent, nothing waits for the issue's blockers.
-        placement.blockers.clear();
         let follows = Follows {
             agent: None,
             unfollowed: false,
