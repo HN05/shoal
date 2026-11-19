@@ -472,6 +472,22 @@ async fn a_demo_whose_viewer_is_off_is_refused_one() {
 }
 
 #[test]
+fn a_failure_shows_a_bounded_tail_of_what_the_viewer_printed() {
+    let temp = tempfile::tempdir().unwrap();
+    let log = temp.path().join("viewer.log");
+    let huge = "x".repeat(1 << 20);
+    std::fs::write(&log, format!("first\n{huge}\nlast\n")).unwrap();
+    let shown = printed(&log);
+    assert!(
+        shown.len() <= ERROR_BYTES as usize + 2,
+        "{} bytes",
+        shown.len()
+    );
+    assert!(shown.ends_with("last"), "{}", &shown[shown.len() - 10..]);
+    assert!(!shown.contains("first"));
+}
+
+#[test]
 fn a_missing_serve_sim_names_its_install_command() {
     let missing = || std::io::Error::from(std::io::ErrorKind::NotFound);
     let serve_sim = not_started("serve-sim", missing()).to_string();

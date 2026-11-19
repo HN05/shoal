@@ -41,8 +41,10 @@ use crate::{
 const START_POLL: Duration = Duration::from_millis(100);
 /// A hang guard for a viewer that never takes a connection.
 const START_LIMIT: Duration = Duration::from_secs(60);
-/// How many of a viewer's last lines of errors its failure shows.
+/// How many of a viewer's last lines of errors its failure shows, and how
+/// many bytes those may take at most.
 const ERROR_LINES: usize = 10;
+const ERROR_BYTES: u64 = 4096;
 /// The default viewer's program, and what installs it.
 const SERVE_SIM: (&str, &str) = ("serve-sim", "npm install -g serve-sim");
 
@@ -504,15 +506,26 @@ fn create_log(log: &Path) -> Result<std::fs::File> {
 }
 
 /// The last [`ERROR_LINES`] lines of the viewer's errors at `log`, after a
-/// colon.
+/// colon, from at most its last [`ERROR_BYTES`].
 fn printed(log: &Path) -> String {
-    let errors = std::fs::read_to_string(log).unwrap_or_default();
+    let errors = tail(log).unwrap_or_default();
     let lines: Vec<_> = errors.lines().collect();
     let last = &lines[lines.len().saturating_sub(ERROR_LINES)..];
     if last.is_empty() {
         return String::new();
     }
     format!(": {}", last.join("\n"))
+}
+
+/// The last [`ERROR_BYTES`] of `log`.
+fn tail(log: &Path) -> Result<String> {
+    use std::io::{Read as _, Seek as _, SeekFrom};
+    let mut file = std::fs::File::open(log)?;
+    let length = file.metadata()?.len();
+    file.seek(SeekFrom::Start(length.saturating_sub(ERROR_BYTES)))?;
+    let mut bytes = Vec::new();
+    file.take(ERROR_BYTES).read_to_end(&mut bytes)?;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 /// Why the viewer `program` did not start, naming how to install a missing
