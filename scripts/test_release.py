@@ -215,7 +215,7 @@ class ReleaseTests(unittest.TestCase):
     @staticmethod
     def statuses(**states):
         contexts = {"rust": release.REQUIRED_CHECKS[0], "musl": release.REQUIRED_CHECKS[1],
-                    "gate": "ci / gate (push)"}
+                    "crates": release.REQUIRED_CHECKS[2], "gate": "ci / gate (push)"}
         return {"statuses": [{"context": contexts[name], "status": state}
                              for name, state in states.items()] or None}
 
@@ -223,7 +223,8 @@ class ReleaseTests(unittest.TestCase):
         with patch.dict(release.os.environ, {"RELEASE_REPOSITORY": "HN05/shoal"}), \
                 patch.object(release, "tested_commit", return_value="m" * 40), \
                 patch.object(release, "forge",
-                             return_value=self.statuses(rust="success", musl="success")) as forge, \
+                             return_value=self.statuses(rust="success", musl="success",
+                                                        crates="success")) as forge, \
                 patch.object(release, "check_only_versions_changed") as versions_only, \
                 patch.object(release, "run") as run:
             self.assertEqual(release.validate("r" * 40), "m" * 40)
@@ -236,7 +237,8 @@ class ReleaseTests(unittest.TestCase):
         with patch.object(release, "forge", side_effect=[
                     self.statuses(),
                     self.statuses(rust="pending", gate="success"),
-                    self.statuses(rust="success", musl="success", gate="success")]) as forge, \
+                    self.statuses(rust="success", musl="success", crates="success",
+                                  gate="success")]) as forge, \
                 patch.object(release.time, "sleep") as sleep:
             release.await_passed_ci("m" * 40)
         self.assertEqual(forge.call_count, 3)

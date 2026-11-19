@@ -499,21 +499,24 @@ count a test's daemons and commands, but not processes that outlive it, and
 ## CI
 
 `.forgejo/workflows/ci.yml` runs on pull requests and pushes to `main`. Its
-`rust` job (a required check) runs `cargo fmt --check`, clippy,
+required checks are its `rust` job, which runs `cargo fmt --check`, clippy,
 `cargo nextest run` with the `ci` profile, `cargo test --doc` and the Python
-release-script tests, and its `musl` job (the other required check) checks the build for the
+release-script tests, its `musl` job, which checks the build for the
 host's musl target with cargo-zigbuild and runs the identity module's tests
-there when a PR changes them, the dependencies or the workflow. A PR's jobs
+there when a PR changes them, the dependencies or the workflow, and its
+`crates` job, which checks that each crate builds alone. A PR's jobs
 build, lint and test only when it changes a package or a file every package's
 build reads, and run the tests of the packages `scripts/affected_packages.py`
 names, those it changes and the packages that depend on them. The release
 workflow's PR and version commit skip the checks:
-`scripts/release.py` releases only on a `main` commit whose `rust` and `musl`
-checks passed, and runs only formatting and Clippy on the version change. A draft PR runs no checks; taking it out of draft
+`scripts/release.py` releases only on a `main` commit whose required checks
+passed, and runs only formatting and Clippy on the version change. A draft PR runs no checks; taking it out of draft
 (removing the `WIP:` title prefix, as `shoal ready` does) starts one run.
 Its `rust` job and `flaky.yml`'s job, which build, run with `runs-on: shoal` on
-Shoal runners; the jobs that only query the forge stay on Docker, as does the
-`musl` job, which needs the CI image's Zig and musl targets. A Shoal runner
+Shoal runners; a job that gains nothing from the seed build below, such as one
+that only queries the forge or builds with feature sets the seed lacks, runs
+on Docker, as does the `musl` job, which needs the CI image's Zig and musl
+targets. A Shoal runner
 is any Linux or macOS machine whose Shoal has `runner.enabled` for this
 repository, with Rust at `rust-version`, which the jobs check, with clippy, rustfmt and
 cargo-nextest, which the jobs also check, and the tools the tests spawn installed on
@@ -538,8 +541,8 @@ Containerfile's `ARG RUST`, and the `image:` tag in every workflow, and the
 Shoal runners' machines install the same Rust. The Docker jobs' cargo
 builds share the runner-mounted `/ci-target` through
 `.forgejo/scripts/lock-target-dir.sh`, as the Containerfile describes; the
-`musl` job keeps its slot's build warm, touching its checkout instead of
-cleaning.
+`musl` and `crates` jobs keep their slots' builds warm, touching their
+checkouts instead of cleaning.
 `.forgejo/workflows/deps.yml` runs weekly (and on `shoal ci run deps.yml
 --branch main`) and rewrites one evergreen `tracking` issue, found by the marker comment
 in its body, with `cargo audit` and `cargo outdated` findings. It is never a

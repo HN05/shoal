@@ -61,7 +61,8 @@ def bump(manifest, lock, requested, occupied):
 
 # The commit statuses of main's required checks, named as ci.yml's jobs post them.
 REQUIRED_CHECKS = ("ci / rust (fmt, clippy, test, scripts) (push)",
-                   "ci / musl (check, identity test) (push)")
+                   "ci / musl (check, identity test) (push)",
+                   "ci / crates (each crate alone) (push)")
 # Release version commits start with this subject, and ci.yml runs no checks on them.
 VERSION_COMMIT = "chore: prepare release v"
 CI_POLL_SECONDS = 30

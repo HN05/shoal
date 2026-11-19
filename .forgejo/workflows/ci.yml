@@ -1,6 +1,6 @@
 # PR and main checks; the rust job, which runs on Shoal runners, and the musl
-# job, on Docker, are intended as the required checks on the `main` protection
-# rule.
+# and crates jobs, on Docker, are intended as the required checks on the
+# `main` protection rule.
 #
 # A PR builds, lints and tests only when it changes a package or a file every
 # package's build reads, and runs only the tests of the packages it can affect:
@@ -9,9 +9,9 @@
 # which still reports a status for the required checks.
 # Pushes to main and dispatches always run everything, except that a release
 # PR (`release/v*`) and its version commit on main run no checks: release.py
-# accepts that tree only once the rust and musl statuses below passed on the
-# main commit it builds on, and names those statuses; keep them in step with
-# the job names.
+# accepts that tree only once the rust, musl and crates statuses below passed
+# on the main commit it builds on, and names those statuses; keep them in step
+# with the job names.
 #
 # A draft PR (Forgejo's draft state is a `WIP:` or `[WIP]` title prefix) runs
 # no checks, and pushing to it starts none. Taking it out of draft is a title
@@ -22,7 +22,7 @@
 # the case right after the PR leaves draft. Edits queue apart from other runs,
 # so they never cancel one.
 #
-# The rust and musl jobs take their names from matrices that wait on the
+# The rust, musl and crates jobs take their names from matrices that wait on the
 # gate's output. Forgejo posts no commit status for such a job until the gate
 # has finished, and none when the gate is skipped, so drafts and other edits
 # never post to the required checks. A skipped status there would count as
@@ -36,10 +36,10 @@
 # workspace starts from the seed build of main that .shoal.toml's `cargo`
 # preset makes, so a job rebuilds only what its commit changed. Build settings
 # that change Cargo's fingerprints, such as a profile's debuginfo, would
-# rebuild everything instead. The undraft and gate jobs only
-# query the forge and gain nothing from a seeded workspace, so they stay on
-# Docker, as does the musl job, which needs the CI image's Zig and musl
-# targets.
+# rebuild everything instead. The undraft and gate jobs only query the forge,
+# and the crates job builds each crate with feature sets the seed lacks, so
+# they gain nothing from a seeded workspace and stay on Docker, as does the
+# musl job, which needs the CI image's Zig and musl targets.
 
 name: ci
 
@@ -114,10 +114,11 @@ jobs:
     container:
       image: git.henriknordvik.com/hn05/ci-shoal:1.100
     outputs:
-      # Name the rust and musl jobs through their matrices (see the top of
-      # the file).
+      # Name the rust, musl and crates jobs through their matrices (see the
+      # top of the file).
       checks: fmt, clippy, test, scripts
       musl_checks: check, identity test
+      crates_checks: each crate alone
     steps:
       - name: Admit the checks
         run: echo "running the checks"
@@ -179,23 +180,6 @@ jobs:
         if: steps.affected.outputs.packages != ''
         run: |
           CARGO_BUILD_WARNINGS=deny cargo clippy --locked --all-targets
-
-      - name: cargo check of each affected crate alone
-        if: steps.affected.outputs.packages != ''
-        # A workspace build unifies features; each crate must also build alone.
-        env:
-          PACKAGES: ${{ steps.affected.outputs.packages }}
-        run: |
-          set -eu
-          if [ "$PACKAGES" = all ]; then
-            for manifest in crates/*/Cargo.toml; do
-              cargo check --locked --manifest-path "$manifest"
-            done
-          else
-            for package in $PACKAGES; do
-              cargo check --locked -p "$package"
-            done
-          fi
 
       # Nextest runs the tests of every binary in one pool; doc tests are
       # libtest's alone. .config/nextest.toml has the ci profile.
@@ -299,4 +283,74 @@ jobs:
             cargo-zigbuild test --locked --target "$musl_target" -p shoal-daemon --lib daemon::workspace::identity
           else
             echo "the PR leaves the identity module and the dependencies alone: skipping the musl test"
+          fi
+
+  # A workspace build unifies the dependencies' features over every package;
+  # each crate must also build alone. Each crate's own feature set misses the
+  # seed's builds of the dependencies, so this job gains nothing from a Shoal
+  # runner and runs on Docker beside the rust job, where its /ci-target slot
+  # keeps those builds warm.
+  crates:
+    # Named `crates (each crate alone)` by its matrix, which waits on the gate
+    # (see the top of the file). A skipped gate skips this job without a
+    # status.
+    name: crates
+    needs: gate
+    if: "!cancelled()"
+    strategy:
+      matrix:
+        checks: ["${{ needs.gate.outputs.crates_checks }}"]
+    runs-on: docker
+    container:
+      image: git.henriknordvik.com/hn05/ci-shoal:1.100
+    env:
+      # Empty outside PRs.
+      PR_BASE: ${{ github.event.pull_request.base.sha }}
+      # The musl job's settings, so the host builds both keep in a slot, such
+      # as proc macros, serve both.
+      CARGO_TARGET_DIR: /ci-target
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      # The checkout is shallow; the affected packages read the PR's base,
+      # which it fetches too.
+      - name: Checkout
+        env:
+          SHA: ${{ github.sha }}
+          TOKEN: ${{ github.token }}
+        run: |
+          git init -q .
+          git remote add origin "${{ github.server_url }}/${{ github.repository }}.git"
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')"
+          git -c http.extraheader="$auth" fetch -q --depth 1 origin "$SHA"
+          git checkout -q FETCH_HEAD
+          .forgejo/scripts/fetch-pr-base.sh
+
+      # One step, because the /ci-target slot lasts as long as the step's
+      # shell; the tracked files are touched as in the musl job. Every crate
+      # outside PRs and for a PR whose base the checkout lacks, else each
+      # crate the PR can affect.
+      - name: cargo check of each crate alone (holding a /ci-target slot)
+        shell: bash
+        run: |
+          set -euo pipefail
+          packages=all
+          if [ -n "$PR_BASE" ]; then
+            packages=$(python3 scripts/affected_packages.py "$PR_BASE")
+            if [ -z "$packages" ]; then
+              echo "the PR changes no package: skipping the checks"
+              exit 0
+            fi
+          fi
+          . .forgejo/scripts/lock-target-dir.sh
+          git ls-files -z | xargs -0 touch -h --
+          if [ "$packages" = all ]; then
+            for manifest in crates/*/Cargo.toml; do
+              cargo check --locked --manifest-path "$manifest"
+            done
+          else
+            for package in $packages; do
+              cargo check --locked -p "$package"
+            done
           fi
