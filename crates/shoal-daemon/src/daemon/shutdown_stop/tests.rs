@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use tokio::{io::BufReader, net::UnixStream};
 
-use crate::daemon::{executions::ExecutionKind, workspace::shutdown_stop::*};
+use crate::daemon::{executions::ExecutionKind, shutdown_stop::*};
 use crate::{
     daemon::{
         execution_connection::{ExecutionContext, execute},

@@ -24,6 +24,7 @@ mod connections;
 pub(crate) mod containers;
 mod contribution_holds;
 pub(crate) mod conversions;
+mod daemon_exit;
 pub(crate) mod demos;
 pub(crate) mod disk;
 pub(crate) mod engagement;
@@ -80,6 +81,7 @@ pub mod secrets;
 pub(crate) mod seed;
 mod sessions;
 mod shutdown_lock;
+mod shutdown_stop;
 mod signals;
 pub(crate) mod sim;
 pub(crate) mod space_processes;
@@ -128,12 +130,13 @@ use tokio::{
 };
 
 use answer::OperationGuard;
+use daemon_exit::Ending;
 use events::{ShoalEventDetails, ShoalEventKind};
 pub(crate) use log::log;
 use notifications::NotificationKind;
 use ownership::Ownership;
 use scope::Caller;
-use workspace::{Ending, Manager};
+use workspace::Manager;
 
 use crate::{
     paths::Paths,

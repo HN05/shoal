@@ -73,7 +73,7 @@ async fn an_exit_request_is_served_at_every_protocol_version_except_to_scopes() 
 /// names none where some work stopped outside the spaces it stopped.
 #[tokio::test]
 async fn an_exit_answers_again_with_the_spaces_of_the_work_it_stopped() {
-    use crate::daemon::{test_support, workspace::StoppedSpaces};
+    use crate::daemon::{shutdown_stop::StoppedSpaces, test_support};
     let (_root, manager) = test_support::manager().await;
     let (exit, mut requested) = tokio::sync::mpsc::channel(1);
     let server = Server {

@@ -12,10 +12,11 @@ use serde_json::{Value, json};
 
 use crate::{
     daemon::{
+        daemon_exit::Ending,
         executions::{ExecutionKind, StartedExecution},
         notifications::NotificationKind,
         test_support::{configure, git, manager, repository},
-        workspace::{Ending, Manager, lifecycle::STOPPED_REMOVAL, runner::JobStop},
+        workspace::{Manager, lifecycle::STOPPED_REMOVAL, runner::JobStop},
     },
     forge::backends::ForgeKind,
     model::{QueueEntry, Workspace},

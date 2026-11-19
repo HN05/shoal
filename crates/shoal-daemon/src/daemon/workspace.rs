@@ -15,7 +15,6 @@ mod converted;
 mod coordinated;
 mod copies;
 mod creation;
-mod daemon_exit;
 mod diff;
 mod disowned;
 mod fast_forward;
@@ -38,7 +37,6 @@ mod reservation;
 mod restore;
 pub(crate) mod review;
 pub(crate) mod runner;
-mod shutdown_stop;
 mod space_removal;
 pub(crate) mod spotlight;
 mod stack;
@@ -53,12 +51,10 @@ pub(crate) use contributions::holds::{
 };
 pub(crate) use copies::CopyPlace;
 pub(crate) use creation::{NewWorkspace, build_pending_in};
-pub(crate) use daemon_exit::Ending;
 pub(crate) use holds::place_approved as place_approved_hold;
 pub(crate) use lifecycle::not_ready;
 pub(crate) use merge::RecordChange;
 pub(crate) use ownership::VerifiedWorktree;
-pub(crate) use shutdown_stop::StoppedSpaces;
 pub(crate) use stack::record_base_changed;
 
 pub(crate) use tree::{

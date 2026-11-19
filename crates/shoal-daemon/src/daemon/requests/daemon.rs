@@ -7,10 +7,12 @@ use tokio::net::UnixStream;
 use super::super::{
     Server,
     answer::{self, Answer, OperationGuard},
+    daemon_exit::Ending,
     exit_wait::{self, Quiet},
     permissions::Action,
     scope::{self, Caller, Scoped},
-    workspace::{Ending, Manager, StoppedSpaces},
+    shutdown_stop::StoppedSpaces,
+    workspace::Manager,
 };
 use crate::{
     config::permissions::PermissionKey,

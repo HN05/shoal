@@ -5,12 +5,10 @@
 //! may come from a shutdown, but leaves CI jobs running, as a restart does:
 //! a job's wrapper has the daemon cancel its run when a shutdown's signal
 //! reaches it.
-use super::super::{
+use super::{
     executions::{Save, StopRequest},
-    workspace::{
-        Manager,
-        shutdown_stop::{Shutdown, StoppedSpaces},
-    },
+    shutdown_stop::{Shutdown, StoppedSpaces},
+    workspace::Manager,
 };
 use crate::daemon::{log, workspace::runner::JobStop};
 use crate::protocol::{Exit, QueuedLaunches};
