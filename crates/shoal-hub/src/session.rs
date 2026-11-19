@@ -49,6 +49,12 @@ impl Calls {
 
     /// The other side's reply to `call`, failing as [`Reply::Failed`] does.
     pub async fn call(&self, call: Call) -> Result<Reply> {
+        self.call_within(call, CALL_TIMEOUT).await
+    }
+
+    /// The other side's reply to `call` within `limit`, failing as
+    /// [`Reply::Failed`] does.
+    pub async fn call_within(&self, call: Call, limit: Duration) -> Result<Reply> {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let (replied, reply) = oneshot::channel();
         match self.pending.lock().unwrap().as_mut() {
@@ -60,7 +66,7 @@ impl Calls {
             sent.map_err(|error| Unsent(format!("{error:#}")))?;
             Ok::<_, Unsent>(reply.await)
         };
-        let reply = match tokio::time::timeout(CALL_TIMEOUT, sent_and_replied).await {
+        let reply = match tokio::time::timeout(limit, sent_and_replied).await {
             Ok(Ok(reply)) => Ok(reply),
             Ok(Err(unsent)) => {
                 self.forget(id);
@@ -77,7 +83,7 @@ impl Calls {
             }
             Err(_) => {
                 self.forget(id);
-                let waited = CALL_TIMEOUT.as_secs();
+                let waited = limit.as_secs();
                 Err(Unanswered(format!("{peer} did not answer within {waited}s")).into())
             }
         }

@@ -2,6 +2,8 @@
 //! downloaded, from any of its machines; its daemon then restarts on it
 //! once idle, and the machines that follow its version install it as the
 //! hub refuses theirs. Homebrew updates its own installations.
+use std::time::Duration;
+
 use anyhow::Result;
 use shoal_core::update::{self, HOMEBREW_UPGRADE, Installed, RELEASES, Target};
 use shoal_protocol::hub::{HubUpdate, link::Call, link::Reply};
@@ -14,6 +16,10 @@ use crate::{
     refusal::{Reason, Refusal},
 };
 
+/// How long a machine waits for the hub's update, which downloads and
+/// unpacks a release.
+const UPDATE_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+
 impl Hub {
     /// Install the latest release on the hub, on the hub itself or through
     /// this machine's link.
@@ -21,7 +27,8 @@ impl Hub {
         if self.is_hub(daemon) {
             return self.update_own_installation().await;
         }
-        match self.through_hub(Call::Update).await? {
+        let calls = self.hub_calls().await?;
+        match calls.call_within(Call::Update, UPDATE_TIMEOUT).await? {
             Reply::Updated(updated) => Ok(updated),
             reply => Err(unexpected(reply)),
         }
