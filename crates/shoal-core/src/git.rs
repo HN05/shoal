@@ -2,6 +2,7 @@
 pub mod branch;
 pub use branch::check_branch_name;
 pub mod bundle;
+pub mod clone_base;
 pub(crate) mod config;
 pub mod conflicts;
 pub mod copy;
