@@ -972,10 +972,18 @@ preset = "web"                         # "server", "web" or "simulator"
 cmd = ["npm", "run", "dev"]
 scheme = "https"                       # Optional: the URL's scheme; http by default
 ports = ["web"]                        # Optional: named ports reserved before it starts
+
+[demos.app]
+preset = "simulator"
+cmd = ["scripts/run-app.sh"]
+viewer = ["serve-sim", "--port", "{port}", "{udid}"]  # Optional: the default; false turns it off
 ```
 
 Names follow port names, except the `shoal demo` subcommands. `preset` says how
-the demo reaches you, and `ports` and `open` replace its parts. See
+the demo reaches you, and `ports` and `open` replace its parts. A simulator
+demo's `viewer` shows its device on another machine, started when someone opens
+it there, with the device's UDID as `{udid}` and the port it serves on as
+`{port}`. See
 [demos](../../../../../../docs/reference.md#demos).
 
 ### Ports

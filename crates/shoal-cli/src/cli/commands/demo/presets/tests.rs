@@ -8,6 +8,7 @@ fn launch(preset: Preset, variable: &str, value: &str) -> Launch {
         preset: Some(preset),
         open: None,
         scheme: None,
+        viewer: None,
         environment: BTreeMap::from([(variable.to_owned(), value.to_owned())]),
         origin: crate::sessions::Origin::created(
             crate::sessions::HostName::Zmx,
@@ -78,6 +79,7 @@ fn web_demos_reserve_a_port_named_after_them_unless_ports_are_configured() {
             preset,
             open: None,
             scheme: None,
+            viewer: None,
             ports,
         },
         command: Vec::new(),

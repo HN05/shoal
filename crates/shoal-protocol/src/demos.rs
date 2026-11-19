@@ -15,6 +15,10 @@ use shoal_states::states;
 pub const PORT: &str = "PORT";
 /// The variable a simulator demo's device reaches its command as.
 pub const SIM_UDID: &str = "SHOAL_SIM_UDID";
+/// What shows a simulator demo's device unless its `viewer` says otherwise:
+/// serve-sim's preview, which streams the device over HTTP and takes input
+/// over a WebSocket on the one port.
+pub const DEFAULT_VIEWER: &[&str] = &["serve-sim", "--port", "{port}", "{udid}"];
 
 states!(
     /// How a demo reaches the user, beyond attaching to its session.
@@ -75,6 +79,18 @@ pub struct Demo {
     /// A web demo's URL scheme; `http` when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scheme: Option<Scheme>,
+    /// What shows a simulator demo's device on another machine.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub viewer: Option<ViewerSetting>,
+}
+
+/// A simulator demo's `viewer`: a command, with `{udid}` and `{port}`
+/// filled in, or whether [`DEFAULT_VIEWER`] runs.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum ViewerSetting {
+    Enabled(bool),
+    Command(Vec<String>),
 }
 
 /// What a demo's wrapper records with its execution: everything opening,
@@ -90,6 +106,10 @@ pub struct Launch {
     pub open: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scheme: Option<Scheme>,
+    /// The command that shows a simulator demo's device, before `{udid}`
+    /// and `{port}` are filled in; none when its viewer is off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub viewer: Option<Vec<String>>,
     /// Variables the preset gives the command, such as `PORT`; opening the
     /// demo receives them too.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -198,7 +218,11 @@ impl Demo {
         for port in self.ports.iter().flatten() {
             crate::validate::lowercase_name("port", port)?;
         }
-        self.validate_scheme()
+        if let Some(ViewerSetting::Command(viewer)) = &self.viewer {
+            argv("viewer", viewer)?;
+        }
+        self.validate_scheme()?;
+        self.validate_viewer()
     }
 
     /// A scheme belongs to a web demo's URL.
@@ -208,6 +232,31 @@ impl Demo {
             "scheme applies only to the web preset"
         );
         Ok(())
+    }
+
+    /// A viewer belongs to a simulator demo's device.
+    pub fn validate_viewer(&self) -> Result<()> {
+        ensure!(
+            self.viewer.is_none() || self.preset == Some(Preset::Simulator),
+            "viewer applies only to the simulator preset"
+        );
+        Ok(())
+    }
+
+    /// The command that shows the demo's device, before `{udid}` and
+    /// `{port}` are filled in: none but for a simulator demo whose viewer is
+    /// on.
+    pub fn viewer_command(&self) -> Option<Vec<String>> {
+        if self.preset != Some(Preset::Simulator) {
+            return None;
+        }
+        match &self.viewer {
+            None | Some(ViewerSetting::Enabled(true)) => {
+                Some(DEFAULT_VIEWER.iter().map(|arg| (*arg).to_owned()).collect())
+            }
+            Some(ViewerSetting::Enabled(false)) => None,
+            Some(ViewerSetting::Command(command)) => Some(command.clone()),
+        }
     }
 }
 

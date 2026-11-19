@@ -10,6 +10,7 @@ fn launch(preset: Preset, variable: &str, value: &str) -> Launch {
         preset: Some(preset),
         open: None,
         scheme: None,
+        viewer: None,
         environment: BTreeMap::from([(variable.to_owned(), value.to_owned())]),
         origin: Origin::created(HostName::Zmx, "first-app".into()),
     }

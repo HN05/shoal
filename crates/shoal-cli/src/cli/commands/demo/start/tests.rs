@@ -6,6 +6,7 @@ fn demo(cmd: &[&str]) -> Demo {
         preset: None,
         open: None,
         scheme: None,
+        viewer: None,
         ports: None,
     }
 }

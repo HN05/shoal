@@ -86,6 +86,7 @@ pub(super) async fn start(
     .await?;
     let chosen = choose(&settings.demos, name, command)?.with(overrides);
     chosen.demo.validate_scheme()?;
+    chosen.demo.validate_viewer()?;
     replace(ctx, &workspace, &chosen.name).await?;
     let provided = match presets::provide(ctx, &workspace, &chosen, queue).await? {
         Ok(provided) => provided,
@@ -150,6 +151,7 @@ fn choose(
             preset: None,
             open: None,
             scheme: None,
+            viewer: None,
             ports: None,
         });
         return Ok(Chosen {
@@ -225,6 +227,7 @@ async fn place(
         preset: chosen.demo.preset,
         open: chosen.demo.open.clone(),
         scheme: chosen.demo.scheme,
+        viewer: chosen.demo.viewer_command(),
         environment: provided.environment.clone(),
         origin: place.clone(),
     };
