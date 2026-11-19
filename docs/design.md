@@ -18,7 +18,7 @@ Caller-specific integration stays outside the daemon core: Superlogical owns
 terminals. Shoal runs a workspace's service containers beside it through the
 runtime's `compose`, a project per workspace, never parsing the Compose file;
 the agent and its tools stay on the host. Shoal does not provision tools, manage
-browsers or store conversations, and schedules work only on its own machine:
+browsers or store conversations, and schedules each machine's work there:
 its agent queue, which also admits registered repositories' CI jobs, and
 triggers, config that starts agents when an event source fires, such as a
 timer or a webhook request to the daemon's own listener, which serves nothing
@@ -28,8 +28,9 @@ since its repository's maintainers are not the user who runs it; each source is 
 firings carry a JSON input document, which filters, templates and keys read
 without knowing the source, and every firing launches through the operation
 `shoal start` uses, as the user, so the queue, `max_heavy_agents` and cleanup apply.
-Which machine a space starts on or moves to is placement, an app's to build on
-`shoal move` and the protocol. `shoal start` and `shoal open`
+A space starts on the caller's machine, or on the joined machine `shoal start
+--machine` names, whose daemon starts it through the same launch; picking a
+machine for a start that names none is placement, a proposal. `shoal start` and `shoal open`
 are thin launchers around the generic execution path; CLI launcher argument arrays are configurable defaults; session and desktop
 adapters retain their tool-specific setup. Shoal does not switch the user's or
 daemon's login. `[secrets]` names
@@ -219,8 +220,14 @@ prefix to a local address, such as an app's own server, a device-paired
 client that is never part of Shoal, once a paired member signed the request
 with a fresh time and an unused nonce. A request that needs
 the space's files or processes stays on its machine and is refused
-elsewhere, naming it. The space tree may span machines, as when a space
-moves without its parent: what a space passes up reaches the nearest space
+elsewhere, naming it. `shoal start --machine` forwards its launch through
+the hub to the machine it names, whose daemon starts it as its own caller's,
+so the space's queue, admission, cleanup and leases are that machine's; the
+launch carries its parent by ID, its repository by its origin's URL, which
+that machine registers as a URL clone where it has none, and its base as a
+branch or commit of that origin, and a base only the caller's machine has
+is refused, naming the push, until bundles carry it. The space tree may span
+machines, as when a space moves without its parent or starts elsewhere: what a space passes up reaches the nearest space
 above with an agent wherever it runs, through the first space above that
 runs elsewhere, whose machine goes on from there; the item activity of a
 space without an agent goes as messages its machine's background poll

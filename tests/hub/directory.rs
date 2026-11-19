@@ -79,10 +79,9 @@ fn copied(machine: &Base) -> tempfile::TempDir {
     copy
 }
 
-/// Give `machine`'s repository an origin that `other` registers a clone
-/// of, which a move matches, and an `ssh` that runs its commands in
-/// `other`'s home and state, as on another machine.
-pub(super) fn reach(machine: &Base, other: &Base) {
+/// Give `machine`'s repository an origin with its `main`, and return the
+/// origin's URL.
+pub(super) fn give_origin(machine: &Base) -> String {
     let root = machine.root.path();
     git(root, &["init", "-q", "--bare", "-b", "main", "origin.git"]);
     let origin = format!(
@@ -92,6 +91,15 @@ pub(super) fn reach(machine: &Base, other: &Base) {
     git(&machine.repo, &["remote", "add", "origin", &origin]);
     git(&machine.repo, &["push", "-q", "-u", "origin", "HEAD:main"]);
     git(&machine.repo, &["remote", "set-head", "origin", "main"]);
+    origin
+}
+
+/// Give `machine`'s repository an origin that `other` registers a clone
+/// of, which a move matches, and an `ssh` that runs its commands in
+/// `other`'s home and state, as on another machine.
+pub(super) fn reach(machine: &Base, other: &Base) {
+    let root = machine.root.path();
+    let origin = give_origin(machine);
     let there = other.root.path();
     git(there, &["clone", "-q", &origin, "clone"]);
     other.ok(&["repo", "add", there.join("clone").to_str().unwrap()]);

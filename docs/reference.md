@@ -935,8 +935,22 @@ twice. Any other command for an
 offline machine's space, following a session included, fails at once, naming
 the machine and when the hub last saw it.
 
-The tree of spaces may span machines: a space that moves to another machine
-without the space above it stays below it there, once what the hub lists of
+`shoal start --machine <name or ID>` starts a space on another joined machine
+of the hub, a workspace or a chat, below the space `--parent` names, else
+below the caller's own, else at the top level. Your machine's daemon
+forwards the start through the hub, and that machine's daemon starts it as
+its own `shoal start` does, so the space's queue, limits, cleanup, ports and
+leases are that machine's, and its queue starts the agent in the background
+there with that machine's agent tools. That machine finds the repository by
+its origin, cloning it as `shoal repo add <url>` does where it has none. A
+`--base` goes as the origin's branch of that name, or as a commit one of the
+origin's branches holds; a base with commits only your machine has is
+refused, naming the `git push` that lets the other machine fetch it.
+`--here`, `--focus`, `--wait`, `--in`, `--copy` and `--fork`, which need your
+machine's terminal, files or sessions, do not combine with `--machine`.
+
+The tree of spaces may span machines: a space that moves to another machine,
+or that `shoal start --machine` starts there, without the space above it stays below it there, once what the hub lists of
 that space takes it as a parent here would, and its permissions stay no wider
 than that space's, as its machine last reported them. Removing a space
 removes the spaces below it on other machines first, through their own

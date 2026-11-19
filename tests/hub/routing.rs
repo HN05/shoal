@@ -86,14 +86,14 @@ fn tree_below_hub_config(extra: &str) -> Tree {
 
 /// Wait until `machine` lists the space `id` of the machine `of` as past
 /// its preparation, as a parent the hub lists must be to take a child.
-fn ready_at(machine: &Base, id: &str, of: &str) {
+pub(super) fn ready_at(machine: &Base, id: &str, of: &str) {
     wait_for("the space ready at the hub", || {
         (listed(machine, id, of)["status"] != "preparing").then_some(())
     });
 }
 
 /// The scope token of a process of `machine`'s space `id`.
-fn scope_of(machine: &Base, id: &str) -> String {
+pub(super) fn scope_of(machine: &Base, id: &str) -> String {
     let token = request(machine, json!({"issue_scope": {"space": id}}));
     token["data"]
         .as_str()

@@ -226,6 +226,15 @@ pub struct StartArgs {
     /// space this runs in, else none.
     #[arg(long, value_name = "SPACE")]
     pub parent: Option<SpaceSelector>,
+    /// The joined machine the new space starts on, by its name or the ID
+    /// shoal hub ls shows, where that machine's queue starts its agent in
+    /// the background; defaults to this machine.
+    #[arg(
+        long,
+        value_name = "MACHINE",
+        conflicts_with_all = ["here", "focus", "wait", "in_workspace", "fork", "copy", "checkpoint"]
+    )]
+    pub machine: Option<String>,
     /// Run in this terminal instead of a new tab or detached session.
     #[arg(short = 'H', long)]
     pub here: bool,
@@ -342,7 +351,7 @@ impl StartArgs {
             env: None,
             setup_env: None,
             unplaceable: None,
-            machine: None,
+            machine: self.machine.clone(),
             forwarded: None,
         }
     }

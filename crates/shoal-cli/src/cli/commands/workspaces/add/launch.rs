@@ -90,7 +90,8 @@ pub(in crate::cli::commands) async fn launch_workspace(
     // A number beside a branch or issue of the start's own names a
     // repository, which the pickers then start in.
     launch.target = crate::launches::decided_target(&launch)?;
-    let leaves = start::leaves_caller(ctx, options.here);
+    // Another machine starts its agent there.
+    let leaves = start::leaves_caller(ctx, options.here) || launch.machine.is_some();
     // A start that runs in this caller settles what it starts on here, and
     // a terminal then picks what it leaves out.
     let resolved = match !leaves || ctx.interactive() {

@@ -25,9 +25,10 @@ impl Attach {
     /// agent that runs its own way does without a terminal; on a terminal a
     /// focused start runs in a focused place, as a shell or an agent that
     /// runs its own way takes a place beside it, or here where no host
-    /// opens places. `None` leaves the agent's start to the daemon. An
-    /// `issue_linked` workspace's own issue prompts the agent where the
-    /// launch names nothing to start on.
+    /// opens places. `None` leaves the agent's start to the daemon, as
+    /// another machine's daemon starts one there. An `issue_linked`
+    /// workspace's own issue prompts the agent where the launch names
+    /// nothing to start on.
     pub(in crate::cli::commands) fn of(
         ctx: &Context,
         (launch, issue_linked): (&Launch, bool),
@@ -35,6 +36,9 @@ impl Attach {
         settings: &Effective,
         options: &AddOptions,
     ) -> Option<Self> {
+        if launch.machine.is_some() {
+            return None;
+        }
         let own_way = !crate::env::is_scoped()
             && agent.is_some_and(|agent| agents::runs_its_own_way(agent, settings));
         if leaves_caller(ctx, options.here) {
