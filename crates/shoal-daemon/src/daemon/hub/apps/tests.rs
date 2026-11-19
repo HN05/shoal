@@ -5,7 +5,7 @@ use shoal_ids::member_ids::MemberId;
 use shoal_protocol::{
     apps::store::{AppScope, Write},
     hub::{Member, MemberKind},
-    protocol::{AppMethod, Response},
+    protocol::{AppMethod, Body, ErrorCode, RemoteError, Response},
 };
 
 use crate::{
@@ -81,4 +81,21 @@ async fn each_device_s_own_entries_on_the_hub_are_its_own_and_shared_ones_everyo
         let second = second.into_iter().next().unwrap().body.into_result();
         assert_eq!(second.is_err(), scope == AppScope::Shared, "{second:?}");
     }
+}
+
+#[tokio::test]
+async fn a_write_without_its_bytes_is_only_checked() {
+    let (_root, manager) = test_support::manager().await;
+    let phone = device("phone");
+    let checked = answered(&manager, &phone, write(AppScope::Shared), None).await;
+    let checked = checked.into_iter().next().unwrap().body.into_result();
+    assert!(matches!(checked, Ok(Body::Ok)), "{checked:?}");
+    answered(&manager, &phone, write(AppScope::Shared), Some(b"{}")).await;
+    // The entry exists now, so a write that names no revision is refused
+    // before its bytes come.
+    let refused = answered(&manager, &phone, write(AppScope::Shared), None).await;
+    let refused = refused.into_iter().next().unwrap().body.into_result();
+    let refused = refused.unwrap_err();
+    let code = (refused.downcast_ref::<RemoteError>()).map(|remote| remote.code.clone());
+    assert_eq!(code, Some(ErrorCode::StaleRevision));
 }

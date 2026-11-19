@@ -1,11 +1,10 @@
 //! Writing an entry on the daemon's socket, where a request fits in one
 //! frame and an entry need not: the daemon takes the write's bytes as the
 //! frames the client sends after it, and answers with the entry at its new
-//! revision. An entry this daemon keeps is checked before its bytes come;
-//! a shared one of a machine that joined a hub goes to the hub with them,
-//! which answers.
+//! revision. The write is checked before its bytes come, by the hub for a
+//! shared entry of a machine that joined one, which then takes the bytes
+//! and answers.
 use anyhow::{Context as _, Result, ensure};
-use shoal_core::config::machine::AppStore;
 use shoal_protocol::{
     apps::{
         AppName,
@@ -102,23 +101,26 @@ impl Manager {
             scope,
             ..
         } = writing;
+        let method = AppMethod::WriteAppEntry {
+            app,
+            scope: AppScope::Shared,
+            write,
+            size,
+        };
         let sent = async {
-            ensure!(
-                size <= AppStore::most_entry_bytes(),
-                "an entry holds at most {} bytes",
-                AppStore::most_entry_bytes()
-            );
+            // The hub checks the write before its bytes come, and again as
+            // it takes them.
+            if let Some(refusal) = self.refused_at_hub(method.clone()).await? {
+                return Ok(Err(refusal));
+            }
             let bytes = ask_bytes(writer, reader, request_id, size).await?;
-            let method = AppMethod::WriteAppEntry {
-                app,
-                scope: AppScope::Shared,
-                write,
-                size,
-            };
-            self.app_request_at_hub(method, Some(&bytes)).await
+            (self.app_request_at_hub(method, Some(&bytes)).await).map(Ok)
         };
         let incoming = match sent.await {
-            Ok(incoming) => incoming,
+            Ok(Ok(incoming)) => incoming,
+            Ok(Err(refusal)) => {
+                return answer::write_frames(writer, Response::new(request_id, refusal)).await;
+            }
             Err(error) => {
                 let body = answer::failure(&error);
                 return answer::write_frames(writer, Response::new(request_id, body)).await;
@@ -128,6 +130,7 @@ impl Manager {
             manager: self,
             request_id,
             scope: scope.as_ref(),
+            held: true,
         };
         relayed.relay(reader, writer, incoming).await
     }

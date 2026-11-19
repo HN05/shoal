@@ -323,8 +323,9 @@ pub enum Call {
     /// being the calling member's, by writing the frames its socket would
     /// answer with on the stream `stream` the caller opened. A write
     /// carries its bytes in `data`, in unpadded base64url, and is answered
-    /// on the stream with the entry alone. Answered with
-    /// [`Reply::Streaming`].
+    /// on the stream with the entry alone; one without them is only
+    /// checked, answered with `ok` once the hub would take it. Answered
+    /// with [`Reply::Streaming`].
     App {
         method: crate::protocol::AppMethod,
         #[serde(default, skip_serializing_if = "Option::is_none")]

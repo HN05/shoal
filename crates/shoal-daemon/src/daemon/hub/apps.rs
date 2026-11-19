@@ -7,7 +7,7 @@
 //! joined stay in its store, out of reach while it is a member.
 use std::sync::Arc;
 
-use anyhow::{Context as _, Result, anyhow};
+use anyhow::{Context as _, Result};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use shoal_protocol::{
     apps::store::{AppScope, EntryPiece},
@@ -60,15 +60,39 @@ impl Manager {
         (opened.await).map_err(|error| Refusal::wrap(Reason::MachineUnreachable, error))
     }
 
+    /// The hub's refusal of the write of a shared entry `method` names,
+    /// before its bytes go; none once the hub would take it.
+    pub(crate) async fn refused_at_hub(&self, method: AppMethod) -> Result<Option<Body>> {
+        let mut incoming = self.app_request_at_hub(method, None).await?;
+        let mut answer = Vec::new();
+        let read = async {
+            while let Some(bytes) = incoming.next().await? {
+                answer.extend(bytes);
+            }
+            let frame = answer
+                .split(|byte| *byte == b'\n')
+                .next()
+                .unwrap_or_default();
+            anyhow::Ok(serde_json::from_slice::<Response>(frame)?)
+        };
+        let response =
+            (read.await).map_err(|error| Refusal::wrap(Reason::MachineUnreachable, error))?;
+        Ok(match response.body {
+            Body::Ok => None,
+            body => Some(body),
+        })
+    }
+
     /// Answer `method`, a request of the shared entries from a caller with
     /// the scope token `scope`, on `stream` with the hub's answer as it
-    /// comes.
+    /// comes; `held` while the caller holds an operation until it ends.
     pub(crate) async fn relay_from_hub(
         &self,
         stream: UnixStream,
         request_id: u64,
         scope: Option<ScopeToken>,
         method: AppMethod,
+        held: bool,
     ) -> Result<()> {
         let (mut reader, mut writer) = stream.into_split();
         let incoming = match self.app_request_at_hub(method, None).await {
@@ -82,6 +106,7 @@ impl Manager {
             manager: self,
             request_id,
             scope: scope.as_ref(),
+            held,
         };
         relayed.relay(&mut reader, &mut writer, incoming).await
     }
@@ -123,11 +148,17 @@ impl Manager {
                 app,
                 prefix,
             };
-            let mut link = Link { out };
+            let mut link = Link { manager: self, out };
             let watched = self.watch_kept_entries(watched, &mut link).await;
             let error = watched.err().map(|error| format!("{error:#}"));
             return link.out.end(error).await;
         }
+        // Held until the answer is written, so an update never exits
+        // between a change and the answer that reports it.
+        let Some(_operation) = self.gates.operation_unless_exiting().await else {
+            let error = "the hub's daemon is restarting; try again once it is back";
+            return out.end(Some(error.into())).await;
+        };
         let bodies = match self.answer_kept(holder, method, bytes).await {
             Ok(bodies) => bodies,
             Err(error) => vec![answer::failure(&error)],
@@ -156,12 +187,18 @@ impl Manager {
                 let listed = self.list_kept_entries(holder, app, prefix).await?;
                 vec![Body::AppEntries(listed), Body::Ok]
             }
-            AppMethod::WriteAppEntry { app, write, .. } => {
-                let bytes = bytes.ok_or_else(|| anyhow!("a write carries its bytes"))?;
-                vec![Body::AppEntry(
+            // Without its bytes, a write is checked before they come.
+            AppMethod::WriteAppEntry {
+                app, write, size, ..
+            } => match bytes {
+                Some(bytes) => vec![Body::AppEntry(
                     self.write_kept_entry(holder, app, write, bytes).await?,
-                )]
-            }
+                )],
+                None => {
+                    self.check_kept_write(holder, app, write, size).await?;
+                    vec![Body::Ok]
+                }
+            },
             AppMethod::DeleteAppEntry {
                 app, key, replaces, ..
             } => {
@@ -194,12 +231,18 @@ fn frames(body: Body) -> Result<Vec<u8>> {
 }
 
 /// A watch a member asked for, answered on a stream of its link.
-struct Link {
+struct Link<'a> {
+    manager: &'a Manager,
     out: Outgoing,
 }
 
-impl Watcher for Link {
+impl Watcher for Link<'_> {
     async fn send(&mut self, body: Body) -> Result<bool> {
+        // A restarting daemon ends the watch instead, which its watcher
+        // starts again.
+        let Some(_operation) = self.manager.gates.try_operation() else {
+            return Ok(false);
+        };
         // Its reader stopped reading it, or the link closed.
         Ok(self.out.write(&frames(body)?).await.is_ok())
     }

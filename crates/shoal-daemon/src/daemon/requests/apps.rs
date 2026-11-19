@@ -31,9 +31,14 @@ pub(super) async fn handle(
     if keeper == Keeper::Hub && !matches!(method, AppMethod::WriteAppEntry { .. }) {
         let (manager, scope) = (manager.clone(), scope.cloned());
         return Ok(Answer::connection(move |stream, id, startup| async move {
-            // Each write takes an operation of its own.
-            drop(startup);
-            manager.relay_from_hub(stream, id, scope, method).await
+            // A watch goes on, and each of its writes takes an operation of
+            // its own; anything else holds its operation until answered.
+            let operation =
+                (!matches!(method, AppMethod::WatchAppEntries { .. })).then_some(startup);
+            let held = operation.is_some();
+            manager
+                .relay_from_hub(stream, id, scope, method, held)
+                .await
         }));
     }
     let holder = match &keeper {
@@ -71,9 +76,13 @@ pub(super) async fn handle(
                 size,
                 scope: scope.cloned(),
             };
-            return Ok(Answer::connection(move |stream, id, _guard| async move {
-                manager.answer_write(stream, id, writing).await
-            }));
+            return Ok(Answer::connection(
+                move |stream, id, operation| async move {
+                    // Held until the entry is written and answered.
+                    let _operation = operation;
+                    manager.answer_write(stream, id, writing).await
+                },
+            ));
         }
         AppMethod::WatchAppEntries { app, prefix, .. } => {
             let manager = manager.clone();

@@ -23,6 +23,9 @@ pub(super) struct Relayed<'a> {
     pub request_id: u64,
     /// The scope token it came with.
     pub scope: Option<&'a ScopeToken>,
+    /// Whether its caller holds an operation until it ends, as an answer
+    /// that reports a change does, so it takes none of its own.
+    pub held: bool,
 }
 
 impl Relayed<'_> {
@@ -85,8 +88,12 @@ impl Relayed<'_> {
         writer: &mut (impl AsyncWrite + Unpin),
         frames: Vec<serde_json::Value>,
     ) -> Result<bool> {
-        let Some(_operation) = self.manager.gates.try_operation() else {
-            return Ok(false);
+        let _operation = match self.held {
+            true => None,
+            false => match self.manager.gates.try_operation() {
+                Some(operation) => Some(operation),
+                None => return Ok(false),
+            },
         };
         for mut frame in frames {
             frame["id"] = self.request_id.into();

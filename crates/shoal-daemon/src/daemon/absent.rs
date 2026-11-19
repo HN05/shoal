@@ -111,6 +111,7 @@ pub(super) async fn answer(
                 manager: &server.manager,
                 request_id,
                 scope,
+                held: false,
             };
             let (mut reader, mut writer) = stream.into_split();
             relayed.relay(&mut reader, &mut writer, incoming).await
@@ -121,6 +122,7 @@ pub(super) async fn answer(
                 manager: &server.manager,
                 request_id,
                 scope,
+                held: false,
             };
             relayed.relay_duplex(stream, incoming, outgoing).await
         }
