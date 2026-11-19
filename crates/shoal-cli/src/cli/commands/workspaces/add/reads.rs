@@ -1,5 +1,7 @@
 //! What settling a start's workspace reads, asked of the daemon.
 use anyhow::Result;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
     cli::context::Context,
@@ -8,6 +10,7 @@ use crate::{
     launches::LaunchReads,
     model::{Repository, Workspace},
     protocol::ConfigTarget,
+    refusal::{Reason, Refusal},
 };
 
 /// The daemon's state as this process reads it.
@@ -22,6 +25,14 @@ impl LaunchReads for DaemonReads<'_> {
         crate::client::spaces::list(&self.0.paths)
             .await
             .map(shoal_protocol::model::Spaces::into_workspaces)
+    }
+
+    async fn space_repository(&self, selector: &SpaceSelector) -> Result<Option<RepositoryId>> {
+        let spaces = crate::client::spaces::list(&self.0.paths).await?;
+        let space = spaces
+            .find(selector)
+            .ok_or_else(|| Refusal::new(Reason::NotFound, format!("unknown space: {selector}")))?;
+        Ok(space.repository_id)
     }
 
     /// The global config's settings read here, at launch, else the

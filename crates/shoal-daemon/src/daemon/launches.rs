@@ -4,6 +4,7 @@
 //! refuses what does not fit them, and starts its agent where they say,
 //! under the caller's scope and permissions.
 use anyhow::{Context as _, Result};
+use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::launches::{Launch, LaunchSource, Launched, SpaceChoice};
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -46,6 +47,10 @@ impl LaunchReads for ManagerReads<'_> {
         Ok((spaces.into_iter())
             .filter_map(|space| space.into_workspace().ok())
             .collect())
+    }
+
+    async fn space_repository(&self, space: &SpaceSelector) -> Result<Option<RepositoryId>> {
+        Ok(self.manager.space(space).await?.repository_id)
     }
 
     async fn settings(&self, target: ConfigTarget) -> Result<Effective> {

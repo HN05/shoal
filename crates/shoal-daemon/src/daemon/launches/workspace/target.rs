@@ -4,7 +4,6 @@
 //! on, an issue, or a PR's or a branch link's branch, which fills the
 //! creation.
 use anyhow::{Context as _, Result, ensure};
-use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::launches::{IssueChoice, Launch, StartTarget};
 
 use super::ManagerReads;
@@ -100,7 +99,7 @@ impl Manager {
                     Some(_) => "pass --repo <repository> or a forge URL",
                     None => "pass <repository>",
                 };
-                match self.parent_repository(launch).await? {
+                match crate::launches::shape::parent_repository(reads, launch).await? {
                     Some(repository) => self.repository(repository).await?,
                     None => self.current_repository(launch, &repos, reads, hint).await?,
                 }
@@ -133,14 +132,6 @@ impl Manager {
                 let hint = "pass --repo <repository> or a forge URL";
                 self.current_repository(launch, &repos, reads, hint).await
             }
-        }
-    }
-
-    /// The repository of the space `launch` names to go below, if any.
-    async fn parent_repository(&self, launch: &Launch) -> Result<Option<RepositoryId>> {
-        match &launch.parent {
-            Some(parent) => Ok(self.space(parent).await?.repository_id),
-            None => Ok(None),
         }
     }
 

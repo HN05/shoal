@@ -83,7 +83,8 @@ impl Manager {
 
     /// The registered repository of the chat `launch` starts, which
     /// `named` names, else the repository of the `issue` URL it starts on,
-    /// else that of the checkout or worktree the start was made in.
+    /// else that of the space it goes below, which a child shares, else
+    /// that of the checkout or worktree the start was made in.
     async fn launch_chat_repository(
         &self,
         launch: &Launch,
@@ -113,6 +114,9 @@ impl Manager {
             None => "pass <repository>",
         };
         let reads = super::ManagerReads::new(self, caller);
+        if let Some(parent) = launches::shape::parent_repository(&reads, launch).await? {
+            return Ok(parent);
+        }
         (launches::shape::directory_repository(&reads, launch, &repos).await?)
             .with_context(|| format!("no current registered repository; {hint}"))
     }

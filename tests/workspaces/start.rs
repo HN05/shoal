@@ -2631,6 +2631,36 @@ fn start_puts_a_chat_below_the_parent_it_names() {
     assert!(rows.is_empty(), "the agent picker opened: {rows}");
 }
 
+/// On a terminal in another repository's checkout, a start below a space
+/// takes the parent's repository in every step that reads one: the mode
+/// lookup of a mode only that repository defines.
+#[test]
+fn start_on_a_terminal_takes_its_parents_repository_from_another_checkout() {
+    let fixture = Fixture::new();
+    install_recording_agent(&fixture, "claude");
+    let saved = fixture.root.path().join("saved.toml");
+    fs::write(&saved, "[modes.triage]\ninstructions = 'Triage.'\n").unwrap();
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
+    let parent = fixture.add("parent");
+    let number = parent["number"].to_string();
+    let other = repository_with(fixture.root.path(), "other", &[("tracked", "other\n")]);
+    fixture.ok(&["repo", "add", other.to_str().unwrap()]);
+    let start = |args: &[&str], mode: &str| {
+        let below = ["start", "--wait", "--parent", &number, "--agent", "claude"];
+        let args = [&below[..], args, &["--here"]].concat();
+        let (output, _) = fixture.pick_in(&other, &args, mode, "\n");
+        assert!(output.status.success(), "{args:?}: {}", printed(&output));
+    };
+    start(&["--mode", "triage", "--branch", "triaged"], "none");
+    let spaces = fixture.ok(&["list"]);
+    let mut below: Vec<_> = (spaces.as_array().unwrap().iter())
+        .filter(|space| space["parent"]["id"] == parent["id"])
+        .map(|space| space["mode"].as_str().unwrap())
+        .collect();
+    below.sort_unstable();
+    assert_eq!(below, ["triage"], "{spaces}");
+}
+
 /// Without --mode, a start on a terminal whose arguments fit either kind of
 /// space offers every mode, the default first, and starts in the kind of
 /// space the picked one names; one that names its repository offers only

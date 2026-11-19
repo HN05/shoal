@@ -184,8 +184,7 @@ fn workspace_flags(args: &StartArgs) -> Vec<&'static str> {
 /// once the agent and model, and any repository or issue it names with its
 /// parent, are checked: the [`issue_mode`] of an issue it names, else one
 /// picked among the modes in a repository when it names one, else among
-/// them all, by the current repository's settings or else the global
-/// config's.
+/// them all, by the [`mode_settings`].
 async fn picked_mode(ctx: &Context, args: &mut StartArgs) -> Result<modes::ModeName> {
     let selector = picking_repository(ctx, args).await?;
     let settings = match (&selector, &args.in_workspace) {
@@ -282,8 +281,9 @@ async fn mode_settings(ctx: &Context, args: &StartArgs) -> Result<Effective> {
     launches::shape::launch_settings(&DaemonReads(ctx), &located(args)?).await
 }
 
-/// The registered repository `args` name, or the one their item URL or the
-/// current checkout or workspace belongs to, without asking.
+/// The registered repository `args` name, or the one their item URL, the
+/// space they go below or the current checkout or workspace belongs to,
+/// without asking.
 async fn mode_repository(ctx: &Context, args: &StartArgs) -> Result<Option<Repository>> {
     launches::shape::launch_repository(&DaemonReads(ctx), &located(args)?).await
 }

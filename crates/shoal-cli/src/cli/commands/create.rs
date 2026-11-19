@@ -13,18 +13,19 @@ use crate::client::{
 use crate::{
     cli::{
         args::create::CreateArgs,
+        commands::workspaces::DaemonReads,
         context::Context,
         output::{Palette, Style},
         shell, terminal,
         ui::{self, Fallback},
     },
     client::connection::CommandPaths,
+    launches::LaunchReads,
     model::{SpaceRef, Workspace},
     protocol::{
         CommitStart, CreationOptions,
         operations::{Prepared, QueuedLaunch, StartedWorkspace},
     },
-    refusal::{Reason, Refusal},
     state::WorkspaceState,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -203,7 +204,7 @@ async fn commit_repository(
     copied: Option<RepositoryId>,
 ) -> Result<crate::repository::Selector> {
     let own = match parent {
-        Some(parent) => space_repository(ctx, parent).await?,
+        Some(parent) => DaemonReads(ctx).space_repository(parent).await?,
         None => None,
     };
     let repository = match own.or(copied) {
@@ -211,16 +212,6 @@ async fn commit_repository(
         None => current_repository(ctx).await?,
     };
     Ok(repository.into())
-}
-
-/// The repository of the space `selector` names; none for a chat without
-/// one.
-async fn space_repository(ctx: &Context, selector: &SpaceSelector) -> Result<Option<RepositoryId>> {
-    let spaces = crate::client::spaces::list(&ctx.paths).await?;
-    let space = spaces
-        .find(selector)
-        .ok_or_else(|| Refusal::new(Reason::NotFound, format!("unknown space: {selector}")))?;
-    Ok(space.repository_id)
 }
 
 /// The registered repository of the current directory.

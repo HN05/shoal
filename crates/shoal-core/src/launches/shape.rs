@@ -97,8 +97,9 @@ pub async fn launch_settings(reads: &impl LaunchReads, launch: &Launch) -> Resul
 }
 
 /// The registered repository `launch` names, else the one an issue or item
-/// URL it names belongs to, else that of the checkout or worktree the start
-/// was made in.
+/// URL it names belongs to, else that of the space it goes below, which a
+/// child shares, else that of the checkout or worktree the start was made
+/// in.
 pub async fn launch_repository(
     reads: &impl LaunchReads,
     launch: &Launch,
@@ -117,8 +118,23 @@ pub async fn launch_repository(
             return Ok(Some(repo.clone()));
         }
     }
-    let id = directory_repository(reads, launch, &repos).await?;
+    let id = match parent_repository(reads, launch).await? {
+        Some(id) => Some(id),
+        None => directory_repository(reads, launch, &repos).await?,
+    };
     Ok(id.and_then(|id| repos.into_iter().find(|repo| repo.id == id)))
+}
+
+/// The repository of the space `launch` names to go below, which a child
+/// shares; none without a parent or for a chat without a repository.
+pub async fn parent_repository(
+    reads: &impl LaunchReads,
+    launch: &Launch,
+) -> Result<Option<RepositoryId>> {
+    match &launch.parent {
+        Some(parent) => reads.space_repository(parent).await,
+        None => Ok(None),
+    }
 }
 
 /// The ID of the repository among `repos` of the checkout or worktree the
