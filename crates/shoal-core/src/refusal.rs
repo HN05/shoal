@@ -31,6 +31,8 @@ pub struct Refusal {
     /// The space the request named that this machine has none of, which
     /// another joined machine may have.
     absent: Option<SpaceSelector>,
+    /// The typed error the refusal reports, which callers tell apart.
+    cause: Option<Box<dyn std::error::Error + Send + Sync>>,
 }
 
 impl Refusal {
@@ -39,6 +41,17 @@ impl Refusal {
             reason,
             message: message.to_string(),
             absent: None,
+            cause: None,
+        }
+    }
+
+    /// `cause` refused for `reason`, showing its message; [`Self::cause`]
+    /// finds it again.
+    pub fn because(reason: Reason, cause: impl std::error::Error + Send + Sync + 'static) -> Self {
+        let refusal = Self::new(reason, &cause);
+        Self {
+            cause: Some(Box::new(cause)),
+            ..refusal
         }
     }
 
@@ -58,6 +71,15 @@ impl Refusal {
             .chain()
             .find_map(|cause| cause.downcast_ref::<Self>())?;
         refusal.absent.as_ref()
+    }
+
+    /// The cause of type `T` that the first refusal in `error`'s chain
+    /// reports, if it reports one.
+    pub fn cause<T: std::error::Error + 'static>(error: &anyhow::Error) -> Option<&T> {
+        let refusal = error
+            .chain()
+            .find_map(|cause| cause.downcast_ref::<Self>())?;
+        refusal.cause.as_ref()?.downcast_ref()
     }
 
     /// `error` refused for `reason`, keeping its message.
@@ -100,14 +122,10 @@ impl Reason {
 
     /// The reason of the first refusal in `error`'s chain.
     pub fn of(error: &anyhow::Error) -> Option<Self> {
-        error.chain().find_map(|cause| {
-            if let Some(refusal) = cause.downcast_ref::<Refusal>() {
-                return Some(refusal.reason);
-            }
-            cause
-                .downcast_ref::<crate::repository::NotRegistered>()
-                .map(|_| Self::NotFound)
-        })
+        error
+            .chain()
+            .find_map(|cause| cause.downcast_ref::<Refusal>())
+            .map(|refusal| refusal.reason)
     }
 }
 

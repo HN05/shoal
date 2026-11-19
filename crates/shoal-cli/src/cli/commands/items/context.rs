@@ -242,7 +242,7 @@ pub(in crate::cli::commands) async fn named_repository(
 async fn registered(ctx: &Context, repo: &str) -> Result<Option<Repository>> {
     match named_repository(ctx, repo).await {
         Ok(repo) => Ok(Some(repo)),
-        Err(error) if error.is::<NotRegistered>() => Ok(None),
+        Err(error) if NotRegistered::refused(&error) => Ok(None),
         Err(error) => Err(error),
     }
 }

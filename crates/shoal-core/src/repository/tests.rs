@@ -251,8 +251,9 @@ async fn an_item_url_is_refused_as_no_repository_and_names_its_repository() {
         async move { select(repositories, value).await.unwrap_err() }
     };
     let item = |error: anyhow::Error| {
-        let refused = error.downcast::<NotRegistered>().unwrap();
-        refused.item.map(|item| (item.repository, item.registered))
+        let refused = Refusal::cause::<NotRegistered>(&error).unwrap();
+        let item = refused.item.as_ref()?;
+        Some((item.repository.clone(), item.registered.clone()))
     };
     assert_eq!(
         item(refusal("https://example.test/team/shoal/issues/1211").await),

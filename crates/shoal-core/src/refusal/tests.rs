@@ -30,3 +30,14 @@ fn a_refusal_of_an_absent_space_names_it_through_context() {
     let other: anyhow::Error = Refusal::new(Reason::NotFound, "no repository").into();
     assert_eq!(Refusal::absent_space(&other), None);
 }
+
+#[test]
+fn a_refusal_because_of_an_error_shows_it_and_finds_it_through_context() {
+    let cause = std::io::Error::other("no such repository");
+    let error: anyhow::Error = Refusal::because(Reason::NotFound, cause).into();
+    let error = Err::<(), _>(error).context("add x").unwrap_err();
+    assert_eq!(format!("{error:#}"), "add x: no such repository");
+    assert_eq!(Reason::of(&error), Some(Reason::NotFound));
+    assert!(Refusal::cause::<std::io::Error>(&error).is_some());
+    assert!(Refusal::cause::<std::fmt::Error>(&error).is_none());
+}

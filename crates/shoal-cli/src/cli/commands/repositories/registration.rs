@@ -71,7 +71,7 @@ pub(in crate::cli::commands) async fn offer_unregistered(
     }
     let repos = crate::client::repositories::list(&ctx.paths).await?;
     match repository::select(&repos, selector).await {
-        Err(error) if error.is::<repository::NotRegistered>() => {
+        Err(error) if repository::NotRegistered::refused(&error) => {
             match offer_registration(ctx, selector.source()?).await? {
                 Some(repo) => Ok(Some(repo)),
                 None => Err(error),

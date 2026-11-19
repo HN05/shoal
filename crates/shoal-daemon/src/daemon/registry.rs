@@ -103,7 +103,7 @@ impl Manager {
                 existing.source.clone()
             }
             Ok(_) => source.source()?.to_owned(),
-            Err(error) if error.is::<repository::NotRegistered>() => source.source()?.to_owned(),
+            Err(error) if repository::NotRegistered::refused(&error) => source.source()?.to_owned(),
             Err(error) => return Err(error),
         };
         if let Some(path) = &clone_path {

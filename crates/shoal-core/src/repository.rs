@@ -169,12 +169,12 @@ pub async fn select_with<'a>(
     {
         return Ok(repo);
     }
-    Err(NotRegistered {
+    let unregistered = NotRegistered {
         value: value.to_owned(),
         path: canonical,
         item: ItemOf::find(repositories, value, origins).await?,
-    }
-    .into())
+    };
+    Err(Refusal::because(Reason::NotFound, unregistered).into())
 }
 
 /// No registered repository matches the selector.
@@ -183,6 +183,13 @@ pub struct NotRegistered {
     value: String,
     path: Option<std::path::PathBuf>,
     item: Option<ItemOf>,
+}
+
+impl NotRegistered {
+    /// Whether `error` refused a selector no registered repository matches.
+    pub fn refused(error: &anyhow::Error) -> bool {
+        Refusal::cause::<Self>(error).is_some()
+    }
 }
 
 impl std::fmt::Display for NotRegistered {
