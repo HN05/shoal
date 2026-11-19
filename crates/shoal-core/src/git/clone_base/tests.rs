@@ -69,6 +69,21 @@ async fn a_clone_of_the_origin_fetches_an_unpushed_commit_from_its_bundle() {
     let fetched = rev(&clone, &format!("refs/shoal/carried/{commit}"));
     assert_eq!(fetched, commit.as_str());
     // The repository that bundled it keeps no ref of it.
-    let refs = git(&repo, &["for-each-ref", "refs/shoal/carried"]);
+    let refs = git(&repo, &["for-each-ref", "refs/shoal"]);
     assert!(refs.trim().is_empty(), "{refs}");
+}
+
+#[tokio::test]
+async fn bundles_of_one_commit_at_once_each_keep_their_own_ref() {
+    let temp = tempfile::tempdir().unwrap();
+    let repo = pushed_and_not(temp.path());
+    let commit = carried_commit(&repo, "unpushed").await.unwrap();
+    let (first, second) = (temp.path().join("first"), temp.path().join("second"));
+    let carried = (&commit, "pushed");
+    let (first, second) = tokio::join!(
+        bundle_carried(&repo, &first, carried),
+        bundle_carried(&repo, &second, carried),
+    );
+    first.unwrap();
+    second.unwrap();
 }
