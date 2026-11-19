@@ -42,3 +42,22 @@ pub(crate) async fn apply_worktree_settings(
     }
     Ok(())
 }
+
+/// Whether Git takes paths in `worktree` to be the same whatever their
+/// case, as on a case-insensitive filesystem, where it sets
+/// `core.ignorecase`.
+pub(crate) async fn ignores_case(worktree: &Path) -> Result<bool> {
+    let value = super::run_isolated(
+        worktree,
+        &[
+            "config",
+            "--type=bool",
+            "--default",
+            "false",
+            "--get",
+            "core.ignorecase",
+        ],
+    )
+    .await?;
+    Ok(value.trim() == "true")
+}

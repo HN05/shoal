@@ -263,6 +263,28 @@ pub async fn ignored_collisions(
     head: &str,
     snapshot: &str,
 ) -> Result<Vec<String>> {
+    let mut paths = std::collections::BTreeSet::new();
+    for commit in [head, snapshot] {
+        let tree = run_isolated(
+            worktree,
+            &["ls-tree", "-r", "-z", "--name-only", commit, "--"],
+        )
+        .await?;
+        paths.extend(
+            tree.split('\0')
+                .filter(|path| !path.is_empty())
+                .map(str::to_owned),
+        );
+    }
+    ignored_among(worktree, paths).await
+}
+
+/// The `paths` that collide with an ignored file or directory in the
+/// worktree: the same path, or one inside the other.
+pub(crate) async fn ignored_among(
+    worktree: &Path,
+    paths: impl IntoIterator<Item = String>,
+) -> Result<Vec<String>> {
     let ignored = run_isolated(
         worktree,
         &[
@@ -280,36 +302,28 @@ pub async fn ignored_collisions(
         .filter(|path| !path.is_empty())
         .map(|path| path.trim_end_matches('/'))
         .collect();
-    if ignored.is_empty() {
-        return Ok(Vec::new());
-    }
-    let mut paths = std::collections::BTreeSet::new();
-    for commit in [head, snapshot] {
-        let tree = run_isolated(
-            worktree,
-            &["ls-tree", "-r", "-z", "--name-only", commit, "--"],
-        )
-        .await?;
-        paths.extend(
-            tree.split('\0')
-                .filter(|path| !path.is_empty())
-                .map(str::to_owned),
-        );
-    }
-    let contains = |outer: &str, inner: &str| {
+    let ignores_case = super::config::ignores_case(worktree).await?;
+    Ok(paths
+        .into_iter()
+        .filter(|path| (ignored.iter()).any(|ignored| collides(ignored, path, ignores_case)))
+        .collect())
+}
+
+/// Whether the paths `first` and `second` are the same, or one lies inside
+/// the other, so a file at one replaces what is at the other; whatever
+/// their case where the worktree `ignores_case`.
+pub(crate) fn collides(first: &str, second: &str, ignores_case: bool) -> bool {
+    let (first, second) = match ignores_case {
+        true => (first.to_lowercase(), second.to_lowercase()),
+        false => (first.to_owned(), second.to_owned()),
+    };
+    let inside = |outer: &str, inner: &str| {
         inner == outer
             || inner
                 .strip_prefix(outer)
                 .is_some_and(|rest| rest.starts_with('/'))
     };
-    Ok(paths
-        .into_iter()
-        .filter(|path| {
-            ignored
-                .iter()
-                .any(|ignored| contains(ignored, path) || contains(path, ignored))
-        })
-        .collect())
+    inside(&first, &second) || inside(&second, &first)
 }
 
 /// Point `reference` at `commit`, keeping it reachable.
