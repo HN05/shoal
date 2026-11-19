@@ -851,23 +851,36 @@ async fn restart_keeps_restores_in_order_without_starting_one_twice() {
             ("later".into(), Launch, Queued),
         ]
     );
-    // The second wrapper never reattaches; its restore expires and leaves
-    // the recovery record to `shoal restore`.
-    let past = crate::time::UnixTime::now() - START_GRACE - Duration::from_secs(1);
+    // The second wrapper never reattaches. Once its execution ends, its
+    // agent holds no slot, which the launch takes, and the daemon takes
+    // over its restore, which waits for healthy readings and a free slot.
+    let gone = agents[1].0.clone();
     restarted
         .store
         .run(move |db| {
-            db.execute(
-                "UPDATE agent_queue SET seen_at=?1 WHERE kind='restore'",
-                [past],
-            )?;
+            db.execute("DELETE FROM executions WHERE id=?1", [gone])?;
             Ok(())
         })
         .await
         .unwrap();
     restarted.dispatch_queue().await.unwrap();
-    assert_eq!(queue(&restarted).await, [("later".into(), Launch, Queued)]);
-    assert!(crate::execution::recovery::pending(&restarted.paths, &second.id).unwrap());
+    assert!(started(&launch.id));
+    publish_recovery(&restarted);
+    restarted.dispatch_queue().await.unwrap();
+    assert_eq!(
+        queue(&restarted).await[1..],
+        [
+            ("later".into(), Launch, Starting),
+            ("second".into(), Restore, Queued),
+        ]
+    );
+    assert!(
+        restarted
+            .queued_stopped_restores()
+            .await
+            .unwrap()
+            .contains(&agents[1].0)
+    );
 }
 
 #[tokio::test]

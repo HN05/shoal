@@ -1,7 +1,8 @@
 //! Restores of stopped agents and last sessions that the daemon starts, as
-//! it starts launches in existing workspaces: `shoal restore` queues them, and
-//! so does a signal that ended an agent's session, through a request beside
-//! its record. Each is admitted like a launch and leaves the queue once its
+//! it starts launches in existing workspaces: `shoal restore` queues them, so
+//! does a signal that ended an agent's session, through a request beside its
+//! record, and the daemon takes over one whose waiting wrapper is gone. Each
+//! waits as its agent's record says and leaves the queue once its
 //! agent registers, or while waiting once what it restores is gone, as after
 //! `shoal restore --now` or `--forget`. A restart's restore starts at once, in
 //! the slot its agent kept.
@@ -227,6 +228,59 @@ fn waiting_restores(db: &Connection) -> Result<Vec<(QueueEntryId, SpaceId, Execu
             Ok((row.get(0)?, row.get(1)?, row.get(2)?))
         })?
         .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Each restore whose waiting wrapper is gone, since its execution has
+/// ended and no wrapper can reattach to it: its space and execution.
+fn orphaned_restores(db: &Connection) -> Result<Vec<(SpaceId, ExecutionId)>> {
+    Ok(db
+        .prepare(
+            "SELECT space_id,execution_id FROM agent_queue q
+             WHERE kind=?1 AND env IS NULL AND space_id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM executions e WHERE e.id=q.execution_id)",
+        )?
+        .query_map([QueueKind::Restore], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Take over the restore of `execution`, whose waiting wrapper is gone, from
+/// the agent's `record`, or forget it once the record is gone.
+fn take_over(
+    db: &Connection,
+    execution: &ExecutionId,
+    record: Option<&recovery::Record>,
+) -> Result<()> {
+    let Some(record) = record else {
+        db.execute("DELETE FROM agent_queue WHERE execution_id=?1", [execution])?;
+        return Ok(());
+    };
+    let env = crate::terminal::detached_start_environment(record.origin.as_ref());
+    adopt(db, execution, &env, &asleep(record))
+}
+
+/// Hand the restore of `execution`, whose waiting wrapper is gone, back to
+/// its place in the queue for the daemon to start with `env`, saying why its
+/// agent is asleep while Shoal restores it on its own.
+fn adopt(
+    db: &Connection,
+    execution: &ExecutionId,
+    env: &BTreeMap<String, String>,
+    asleep: &Asleep,
+) -> Result<()> {
+    db.execute(
+        "UPDATE agent_queue SET env=?2,state=?3,
+            stop_reason=CASE WHEN automatic THEN ?4 END,
+            wakes_when=CASE WHEN automatic THEN ?5 END
+         WHERE execution_id=?1 AND env IS NULL",
+        params![
+            execution,
+            serde_json::to_string(env)?,
+            QueueState::Queued,
+            asleep.reason,
+            asleep.wakes_when,
+        ],
+    )?;
+    Ok(())
 }
 
 /// A waiting restore the daemon starts that Shoal queued on its own.
@@ -525,6 +579,26 @@ impl Manager {
             }
         }
         recovery::forget_restore_request(&self.paths, &space.id, execution)
+    }
+
+    /// Hand the restores whose waiting wrapper is gone to the daemon, which
+    /// starts each agent in a new place, where its record says it ran, as it
+    /// does a requested restore. A wrapper is gone once its execution has
+    /// ended, so none reattaches; a restore whose record is gone, as once its
+    /// agent restored, is forgotten, and one whose record cannot be read
+    /// waits.
+    pub(super) async fn adopt_orphaned_restores(&self) -> Result<()> {
+        let orphaned = self.store.run(|db| orphaned_restores(db)).await?;
+        for (space, execution) in orphaned {
+            let path = recovery::record_path(&self.paths, &space, &execution);
+            let Ok(record) = recovery::Record::load(&path) else {
+                continue;
+            };
+            (self.store)
+                .run(move |db| take_over(db, &execution, record.as_ref()))
+                .await?;
+        }
+        Ok(())
     }
 
     /// Leave the waiting restores the daemon starts of agents load or disk

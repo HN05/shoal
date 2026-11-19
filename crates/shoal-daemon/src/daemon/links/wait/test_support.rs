@@ -1,4 +1,5 @@
-//! A forge that serves nothing and the items the tests link on it.
+//! A forge that serves nothing, the items the tests link on it, and the
+//! activity the tests record on them as a background poll would.
 use rusqlite::params;
 use serde_json::json;
 use shoal_forge::updates::Snapshot;
@@ -44,6 +45,18 @@ pub(crate) async fn register_watch(manager: &Manager, id: &SpaceId, url: &str) {
             )?;
             Ok(())
         })
+        .await
+        .unwrap();
+}
+
+/// Have the space `id` watch a PR on which a comment then arrives, as a
+/// background poll finds it.
+pub(crate) async fn comment_on_watched_pr(manager: &Manager, id: &SpaceId) {
+    let pr = item_url("pulls/1");
+    register_watch(manager, id, &pr).await;
+    let observed = vec![(pr, snapshot("Please rebase"))];
+    manager
+        .queue_background_updates(id, observed, manager.poll_start())
         .await
         .unwrap();
 }

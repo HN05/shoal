@@ -246,13 +246,10 @@ async fn serve(
         Err(error) => Err(error),
     };
     // A restore ends when its wrapper finishes. One that lost its connection
-    // reattaches, so it keeps its place for the start grace period, as a
-    // detached one does for the next daemon.
-    if execution.agent.is_some() {
-        match &result {
-            Ok(_) => manager.remove_restore(&execution.id).await,
-            Err(_) => manager.keep_restore_place(&execution.id).await,
-        }
+    // keeps its place: its wrapper reattaches, or once its execution ends
+    // the daemon starts its agent elsewhere.
+    if execution.agent.is_some() && result.is_ok() {
+        manager.remove_restore(&execution.id).await;
     }
     let operation = match unattachable {
         Some(operation) => operation,

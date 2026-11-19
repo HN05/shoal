@@ -295,8 +295,7 @@ async fn a_wake_after_an_idle_stop_leaves_its_update_for_the_restore() {
     assert!(*execution.stop.borrow());
     // An update restores it, not recovery.
     let path = crate::execution::recovery::record_path(&manager.paths, &workspace.id, &id);
-    let record = crate::execution::recovery::Record::load(&path);
-    assert!(!record.unwrap().unwrap().for_load);
+    assert!(!Record::load(&path).unwrap().unwrap().for_load);
     let woken = manager
         .start_woken_turn(&SpaceSelector::id(&workspace.id), Some(id))
         .await
@@ -803,4 +802,86 @@ async fn an_agent_the_user_is_away_from_sleeps_to_make_room_for_queued_work() {
     );
     assert!(!*ranked_higher.stop.borrow(), "a higher priority keeps it");
     assert!(!*with_user.stop.borrow(), "the user is engaged with it");
+}
+
+/// The agent of a new workspace `name`, put to sleep as idle while the user
+/// is away, its restore queued as its wrapper queues it, with disk space
+/// left out of the restore's wait.
+async fn asleep_while_away(
+    manager: &Manager,
+    repository_id: &RepositoryId,
+    name: &str,
+) -> (Workspace, StartedExecution) {
+    manager.publish_config(crate::daemon::test_support::global_config(
+        "[machine.overload.disk]\nenabled = false",
+    ));
+    let (workspace, execution) = agent(manager, repository_id, name, IDLE).await;
+    manager.stop_idle_agents(later()).await.unwrap();
+    assert!(*execution.stop.borrow());
+    manager
+        .queue_agent_restore(&execution.plan.id)
+        .await
+        .unwrap();
+    (workspace, execution)
+}
+
+/// A comment on the PR of an agent asleep while the user is away restores
+/// it, handed to its waiting wrapper over the wrapper's link.
+#[tokio::test]
+async fn a_pr_comment_restores_an_agent_asleep_while_away_through_its_wrapper() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (workspace, execution) = asleep_while_away(&manager, &repo.id, "away").await;
+    let link = manager.agent_queue.link_restore(&execution.plan.id);
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(manager.agent_queue.restore_grant(&execution.plan.id), None);
+
+    crate::daemon::links::wait::test_support::comment_on_watched_pr(&manager, &workspace.id).await;
+    manager.dispatch_queue().await.unwrap();
+
+    let admitted = manager.await_restore_admission(&link);
+    let grant = tokio::time::timeout(Duration::from_secs(60), admitted).await;
+    assert_eq!(
+        grant.expect("the restore was admitted").unwrap(),
+        crate::daemon::agent_queue::Grant::Update
+    );
+}
+
+/// Once the wrapper of an agent asleep while the user is away is gone, a
+/// comment on its PR has the daemon restore it in a new place.
+#[tokio::test]
+async fn a_pr_comment_restores_an_agent_asleep_while_away_whose_wrapper_is_gone() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (workspace, execution) = asleep_while_away(&manager, &repo.id, "away").await;
+    // Its wrapper went without restoring it, and its execution ended.
+    let ended = execution.plan.id.clone();
+    (manager.store)
+        .run(move |db| {
+            db.execute("DELETE FROM executions WHERE id=?1", [ended])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let state = |entries: Vec<crate::model::QueueEntry>| {
+        let [entry] = entries.try_into().unwrap();
+        (entry.state, entry.waits_for_update)
+    };
+    manager.dispatch_queue().await.unwrap();
+    let queued = state(manager.queue_entries().await.unwrap());
+    assert_eq!(queued, (crate::state::QueueState::Queued, true));
+
+    crate::daemon::links::wait::test_support::comment_on_watched_pr(&manager, &workspace.id).await;
+    manager.dispatch_queue().await.unwrap();
+
+    let started = state(manager.queue_entries().await.unwrap());
+    assert_eq!(started.0, crate::state::QueueState::Starting);
 }

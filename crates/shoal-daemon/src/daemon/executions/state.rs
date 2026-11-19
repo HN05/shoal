@@ -96,12 +96,6 @@ impl Executions {
         self.connections().await.is_connected(id)
     }
 
-    /// Every execution with a connection, including one whose wrapper is
-    /// going.
-    pub(crate) async fn connection_ids(&self) -> HashSet<ExecutionId> {
-        self.connections.lock().await.keys().cloned().collect()
-    }
-
     pub(crate) async fn has_connections(&self) -> bool {
         !self.connections.lock().await.is_empty()
     }
