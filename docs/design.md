@@ -564,17 +564,22 @@ it once the agent starts with the place that execution registered, so the run
 can name where the agent runs now. `--in-place` restarts through the same wrapper,
 which keeps the agent in its terminal: the daemon resumes the agent once its
 processes are proven stopped, outside the agent queue. A chat's agent
-restarts through the same path. A restart outlives the requests that asked for it; a request for an
-agent already restarting joins that restart and is answered as the first one
-is. Each `shoal restart` run names itself in its requests, and the daemon
-lists each pending restart with the run that asked for it and each agent with
-the run that last restarted it, so a run that finds restarts in progress
-continues under their run's name and leaves out what that run restarted. A
-run leaves out an agent protection stopped, which waits for its restore and is
-no running agent, and the daemon refuses its restart naming that stop;
-`shoal queue start` restores it before the condition its restore waits for holds. An
-agent between its wrappers is listed as the execution it ran as, and one a new
-wrapper runs with the executions it ran as, which requests may still name. The
+restarts through the same path. The daemon owns restarts: a request names a space, whose agent the daemon
+picks, and answers once the daemon restarted it, recorded the restart for
+later or skipped it, naming why, such as a protection stop that `shoal queue
+start` ends at once. A restart that waits for the agent's turn to end, or for
+its place in the machine's line of sequential restarts, is a store record of
+its space, how it restarts, its permission change and who asked, which the
+turn ends watcher that conversions use acts on, so it outlives the request and
+the daemon, and a failure with no request left to answer reaches the
+coordinator that asked or the user. A newer request supersedes the earlier one
+as if that ran to its end first: permission changes merge key by key, the
+newer winning, while when and how come from the newer; a restart under way
+takes the newer request until its wrapper settles how and with what
+permissions it starts the agent, and after that the newer one is recorded and
+runs once the agent does. An agent between its wrappers is listed as the
+execution it ran as, and one a new wrapper runs with the executions it ran
+as. The
 restore command resolves the agent again, so an updated agent
 binary runs. A wrapper whose binary an upgrade replaced execs the installed one
 when the daemon resumes its agent in place, keeping its process, terminal and daemon
@@ -585,10 +590,9 @@ started from, since the daemon holds back its own update until the agent
 starts; the installed release bounds the commands it runs to prepare the agent. The installed release registers the execution again on that
 connection, which records its place and returns a new plan, then restores the
 agent, so new wrapper code reaches running sessions without stopping them.
-The CLI restarts the selected agents together by default; `--sequential` spreads the load of
-starting them, restarting one at a time, idle ones first, starting the next
-once the daemon registers the restarted agent and at least the admission
-stagger after the previous start.
+The daemon restarts agents together by default; `--sequential` spreads the
+load of starting them through its line, starting the next once the restarted
+agent runs and at least the admission stagger after the previous start.
 Agents without a restore command and executions whose wrapper is gone are left
 to `shoal stop` and `shoal restore`; a restart that cannot start the agent leaves
 its record for `shoal restore`, naming the space whose process asked for it,

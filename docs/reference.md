@@ -418,22 +418,30 @@ wrapper whose Shoal binary an upgrade replaced continues from the installed one
 in the same process, and wrappers of 0.13.0 and earlier keep their binary until
 the agent is stopped and resumed. Either way the restore command finds the
 agent through `PATH` again, so an updated agent binary runs. `--all` selects every workspace and chat, and
-`--agent <name>` only agents of that name. Agents restart
-together; `--sequential` restarts one at a time, idle ones first, each once the
+`--agent <name>` only agents of that name. The command asks the daemon to
+restart the agent of each selected space, which has at most one, and the
+daemon restarts them together; `--sequential` has it restart them in one line
+per machine with its other sequential restarts, one at a time, each once the
 previous one runs again and at least 10 seconds after it started. With
-`--wait`, each restarts only once its own turn ends, where a permission prompt or
-an agent without turn reports counts as working. Interrupting the run leaves
-its restarts to the daemon and names them; a run that selects an agent already
-restarting continues the run that asked for it: it reports on that restart,
-even with `--wait`, and skips the agents that run restarted already. A
+`--wait`, the daemon keeps each restart until that agent's turn ends, where a
+permission prompt or an agent without turn reports counts as working, through
+daemon restarts, and the command returns at once, reporting the agent as
+pending. `shoal status` and `shoal list` show a kept restart, which goes once
+it happens, its agent stops or exits first, its space goes, or `shoal restart
+--cancel [space...]`, with restart's selection, drops it with the permissions
+it would give; one that fails later reaches the coordinator whose process asked
+for it, or else the user as a notification. Interrupting the command leaves
+its restarts to the daemon. A newer restart of a space supersedes the earlier
+one: their `--permission` changes merge, the newer winning on a key both set,
+and when and how come from the newer; it joins an earlier restart that has not
+started the agent yet, and otherwise restarts the agent again once it runs. A
 restarted agent keeps its heavy slot, and commands keep running. Agents without
 a command to resume their session and executions whose wrapper is gone are
 skipped, for `shoal stop` and `shoal restore`. `--permission KEY=VALUE`,
 repeatable, restarts each agent with that [permission](#mode-permissions)
 given, as [`shoal start`](#mode-permissions) gives it, `KEY=mode` dropping
 one given before, while the keys it leaves out keep theirs. A value the
-caller does not hold is refused before any agent stops, and so is
-`--permission` for an agent another run is restarting. With `--in-place` the
+caller does not hold is refused before any agent stops. With `--in-place` the
 wrapper restarts the agent under them, as a new one would; one of a release
 before that leaves the agent stopped for a restore in a new wrapper. An agent protection stopped waits
 for its restore and is left out; a named space whose only agent waits is
@@ -442,8 +450,7 @@ again, as when no terminal host can open its new place, stays stopped for
 `shoal restore`, with the permissions `--permission` gave it, and the exit
 status is 1. One whose stopped
 processes do not exit is reported as pending with their PIDs and the command that
-ends them, which also sets the exit status to 1, and restarts once they exit
-unless `shoal stop` cancels it.
+ends them, and restarts once they exit unless `shoal stop` cancels it.
 
 `shoal restore [space...]` queues the restore of each agent a saved recovery
 record or last session keeps after its wrapper exits, or only the `--execution <id>` one, and
