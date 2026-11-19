@@ -158,6 +158,26 @@ impl Directory {
     pub fn machine(&self, id: &MemberId) -> Option<&Member> {
         self.machines.iter().find(|machine| &machine.id == id)
     }
+
+    /// The machine `named` names, by its ID or a name only one machine has,
+    /// whatever devices are named; else why none is.
+    pub fn named_machine(&self, named: &str) -> Result<&Member, String> {
+        let machines =
+            || (self.machines.iter()).filter(|member| member.kind == super::MemberKind::Machine);
+        if let Some(machine) = machines().find(|machine| machine.id.as_str() == named) {
+            return Ok(machine);
+        }
+        let mut found = machines().filter(|machine| machine.name == named);
+        match (found.next(), found.next()) {
+            (Some(machine), None) => Ok(machine),
+            (Some(_), Some(_)) => Err(format!(
+                "several machines are named {named}; name one by the ID shoal hub ls shows"
+            )),
+            (None, _) => Err(format!(
+                "the hub has no machine {named}; shoal hub ls lists them"
+            )),
+        }
+    }
 }
 
 /// What a machine's callers see of the hub's directory: the spaces of the

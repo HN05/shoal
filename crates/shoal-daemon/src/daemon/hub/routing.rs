@@ -245,16 +245,10 @@ async fn relay_stream(
 /// The refusal of a request for an offline machine's space, naming the
 /// machine and when the hub last saw it.
 pub(super) fn offline(machine: &Member) -> Refusal {
-    let seen = match machine.last_seen {
-        Some(seen) => format!("last seen {}", seen.local_ago(UnixTime::now())),
-        None => "never connected".into(),
-    };
+    let offline = machine.offline(UnixTime::now());
     Refusal::new(
         Reason::NotReady,
-        format!(
-            "machine {} is offline ({seen}); run this once it is back",
-            machine.name
-        ),
+        format!("{offline}; run this once it is back"),
     )
 }
 

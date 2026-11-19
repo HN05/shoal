@@ -242,6 +242,17 @@ pub struct Member {
     pub agents: Vec<crate::agent::Agent>,
 }
 
+impl Member {
+    /// That it is offline, with when the hub last saw it, as of `now`.
+    pub fn offline(&self, now: UnixTime) -> String {
+        let seen = match self.last_seen {
+            Some(seen) => format!("last seen {}", seen.local_ago(now)),
+            None => "never connected".into(),
+        };
+        format!("machine {} is offline ({seen})", self.name)
+    }
+}
+
 /// The hub's listener: where it listens, which Shoal never encrypts, and the
 /// URL it advertises.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

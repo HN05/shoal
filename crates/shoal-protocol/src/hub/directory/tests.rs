@@ -87,3 +87,50 @@ fn a_space_whose_questions_fill_more_than_a_frame_arrives_whole() {
     assert_eq!(view.directory.spaces.len(), 1);
     assert_eq!(view.directory.spaces[0].space.questions.len(), 6);
 }
+
+fn member(id: &str, name: &str, kind: super::super::MemberKind) -> Member {
+    Member {
+        id: id.into(),
+        kind,
+        name: name.into(),
+        version: None,
+        joined_at: UnixTime::from_seconds(0),
+        last_seen: None,
+        connected: true,
+        hub: false,
+        availability: None,
+        agents: Vec::new(),
+    }
+}
+
+fn directory(members: Vec<Member>) -> Directory {
+    Directory {
+        machines: members,
+        ..Directory::default()
+    }
+}
+
+#[test]
+fn a_machine_is_named_by_its_id_or_a_name_only_it_has() {
+    let machine = |id, name| member(id, name, super::super::MemberKind::Machine);
+    let directory = directory(vec![
+        machine("m1", "laptop"),
+        machine("m2", "desk"),
+        machine("m3", "desk"),
+    ]);
+    assert_eq!(directory.named_machine("m3").unwrap().id.as_str(), "m3");
+    assert_eq!(directory.named_machine("laptop").unwrap().id.as_str(), "m1");
+    assert!(directory.named_machine("desk").is_err());
+    assert!(directory.named_machine("server").is_err());
+}
+
+#[test]
+fn a_device_s_name_never_names_a_machine() {
+    use super::super::MemberKind::{Device, Machine};
+    let directory = directory(vec![
+        member("m1", "desk", Machine),
+        member("d1", "desk", Device),
+    ]);
+    assert_eq!(directory.named_machine("desk").unwrap().id.as_str(), "m1");
+    assert!(directory.named_machine("d1").is_err());
+}
