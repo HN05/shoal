@@ -18,11 +18,6 @@ pub(crate) mod tokens;
 use reach::outside_scope;
 pub use shoal_daemon_base::callers::{Caller, ScopedExecution};
 
-/// A new scope token, which no other caller holds.
-pub(crate) fn new_token() -> ScopeToken {
-    ScopeToken::from(uuid::Uuid::new_v4().to_string())
-}
-
 /// Resolve `token`, which may stand for a caller another machine vouches
 /// for, and confine `method` to the spaces the caller's scope reaches: its own space, a workspace or a chat, and the spaces below it,
 /// or every space for a chat without a repository; a chat in a workspace's

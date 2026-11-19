@@ -12,6 +12,11 @@ use serde::{Deserialize, Serialize};
 pub struct ScopeToken(String);
 
 impl ScopeToken {
+    /// A new token no one has guessed.
+    pub fn generate() -> Self {
+        Self(uuid::Uuid::new_v4().to_string())
+    }
+
     /// The token's text, for the places that send it.
     pub fn expose(&self) -> &str {
         &self.0

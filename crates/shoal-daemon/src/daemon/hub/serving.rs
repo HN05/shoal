@@ -57,7 +57,7 @@ impl Vouches {
 
     /// A new token standing for `caller` until the returned hold drops.
     fn hold(&self, caller: Vouched) -> Held<'_> {
-        let token = crate::daemon::scope::new_token();
+        let token = ScopeToken::generate();
         self.lock().insert(token.clone(), caller);
         Held {
             vouches: self,

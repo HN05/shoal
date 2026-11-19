@@ -56,7 +56,7 @@ fn space(db: &Connection, token: &ScopeToken) -> Result<Option<SpaceId>> {
 
 /// Issue a new token that acts for the space `id` until revoked.
 pub(crate) fn issue(db: &Connection, id: &SpaceId) -> Result<ScopeToken> {
-    let token = super::new_token();
+    let token = ScopeToken::generate();
     insert(db, id, &token, false)?;
     Ok(token)
 }
@@ -64,7 +64,7 @@ pub(crate) fn issue(db: &Connection, id: &SpaceId) -> Result<ScopeToken> {
 /// Issue the token the agent of the chat `id` carries, which lasts as long
 /// as the chat.
 pub(crate) fn issue_agent(db: &Connection, id: &SpaceId) -> Result<ScopeToken> {
-    let token = super::new_token();
+    let token = ScopeToken::generate();
     record_agent(db, id, &token)?;
     Ok(token)
 }

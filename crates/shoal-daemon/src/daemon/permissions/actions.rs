@@ -348,7 +348,7 @@ pub(crate) struct Grants(Mutex<HashMap<ScopeToken, (Caller, Instant)>>);
 impl Grants {
     /// A new token for `caller`, granted `key`.
     fn issue(&self, caller: &Caller, key: PermissionKey) -> ScopeToken {
-        let token = crate::daemon::scope::new_token();
+        let token = ScopeToken::generate();
         let granted = Caller {
             granted: Some(key),
             ..caller.clone()

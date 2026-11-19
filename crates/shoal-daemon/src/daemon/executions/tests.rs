@@ -501,7 +501,7 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
             ..request.clone()
         },
         Reattach {
-            scope_token: crate::daemon::scope::new_token(),
+            scope_token: ScopeToken::generate(),
             ..request.clone()
         },
         Reattach {

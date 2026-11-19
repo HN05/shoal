@@ -194,7 +194,7 @@ impl Home {
     /// chat's agent the chat's own, which lasts as long as the chat.
     pub(super) fn scope_token(&self, tx: &Transaction<'_>) -> Result<ScopeToken> {
         match self {
-            Self::Workspace { .. } => Ok(crate::daemon::scope::new_token()),
+            Self::Workspace { .. } => Ok(ScopeToken::generate()),
             Self::Chat { chat, .. } => tokens::agent_token(tx, &chat.id)?.context("no such chat"),
         }
     }
