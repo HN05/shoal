@@ -5,7 +5,7 @@ use super::super::{
     activity::queue_update,
     tests::{CHILD_PR, GRANDCHILD_PR},
 };
-use super::{super::tests::register_watch, EVENT_LIMIT};
+use super::{super::test_support::register_watch, EVENT_LIMIT};
 use crate::{
     daemon::{
         manager::Manager,

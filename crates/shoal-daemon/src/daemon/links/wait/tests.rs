@@ -14,16 +14,14 @@ use super::{
     framing::{Batch, Cut, frame_cut},
     items::polled_items,
     poll::{wait_for_updates, watch_deadline},
+    test_support::{item_url, register_watch, snapshot},
     wake::{UNWATCHED_WAKE_DELAY, WakePhase},
     *,
 };
 use crate::time::UnixTime;
 use crate::{
     daemon::{
-        links::{
-            issue::test_support::{AGENT_TOKEN, Fixture, run_agent},
-            pr::RegistrationKind,
-        },
+        links::issue::test_support::{AGENT_TOKEN, Fixture, run_agent},
         manager::Manager,
         test_support::{manager, repository},
         workspace_files::Attacher,
@@ -100,19 +98,6 @@ impl Manager {
     }
 }
 
-/// A forge that serves nothing, which every item the tests link belongs
-/// to, so a lookup of one fails at once.
-static FORGE: LazyLock<shoal_forge::test_support::Server> = LazyLock::new(|| {
-    let server = shoal_forge::test_support::Server::start(|_| (404, Vec::new(), Vec::new()));
-    crate::forge::hosts::learn(&server.host, crate::forge::backends::ForgeKind::Forgejo);
-    server
-});
-
-/// The URL of the item at `path` in the repository on [`FORGE`].
-fn item_url(path: &str) -> String {
-    format!("http://{}/team/repo/{path}", FORGE.host)
-}
-
 static PR: LazyLock<String> = LazyLock::new(|| item_url("pulls/1"));
 static WORKER_PR: LazyLock<String> = LazyLock::new(|| item_url("pulls/2"));
 pub(super) static CHILD_PR: LazyLock<String> = LazyLock::new(|| item_url("pulls/3"));
@@ -182,32 +167,6 @@ async fn agent_messages_end_a_watch_before_item_activity() {
         .unwrap();
     let messages = waiting.await.unwrap().unwrap();
     assert_eq!(messages[0].message, "Stop the dev server");
-}
-
-fn snapshot(message: &str) -> Snapshot {
-    serde_json::from_value(json!({"comments": {"one": {"fingerprint": message}}, "checks": {}, "conflict": null, "state": "open", "errors": {}})).unwrap()
-}
-
-pub(super) async fn register_watch(manager: &Manager, id: &SpaceId, url: &str) {
-    let id = id.clone();
-    let registration = super::super::pr::Registration {
-        kind: RegistrationKind::Watch {
-            urls: vec![url.parse().unwrap()],
-            merged_head: None,
-        },
-        error: None,
-    };
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "INSERT OR REPLACE INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
-                params![id, serde_json::to_string(&registration)?],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
 }
 
 #[tokio::test]

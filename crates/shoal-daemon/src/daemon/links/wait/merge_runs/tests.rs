@@ -10,7 +10,7 @@ use crate::{
         links::wait::{
             branch_report::BranchReport,
             start::{Start, StartRead},
-            tests::register_watch,
+            test_support::register_watch,
         },
         test_support::{configure, manager, repository},
         workspace_files::Attacher,
