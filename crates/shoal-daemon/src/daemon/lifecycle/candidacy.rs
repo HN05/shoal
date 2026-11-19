@@ -132,7 +132,8 @@ impl Manager {
 
     /// The signals of `space` as a merged cleanup candidate, or `None` when
     /// it is not one: what Shoal records about it leaves it to merged
-    /// cleanup, which assignment state does not keep, and its worktree, whose
+    /// cleanup, which assignment state does not keep, no space is below it,
+    /// since its removal would take their work too, and its worktree, whose
     /// processes are read from `users`, is merged into the default branch
     /// and unused.
     async fn merged_signals(
@@ -147,6 +148,9 @@ impl Manager {
         else {
             return Ok(None);
         };
+        if self.has_spaces_below(&space.id).await? {
+            return Ok(None);
+        }
         let head = match space.to_workspace() {
             Some(workspace) => match self.merged_worktree(workspace, cancelled, users).await? {
                 Some(head) => Some(head),

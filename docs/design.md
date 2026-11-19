@@ -1209,7 +1209,9 @@ and theirs in turn, each update naming its space, through the same cursors,
 deliveries and acknowledgements as its own; a child's own agent, which reports its turn state or which Shoal tracks
 there, as it tracks custom and Happy agents that report none, takes over its
 subtree, and so does one whose restore is queued, since it receives what
-arrived once it starts. A child never keeps its parent and never outlives it:
+arrived once it starts. A child keeps its parent only from merged cleanup,
+which would otherwise take a child's open work because the parent's own
+branch merged, and never outlives it:
 the parent is cleaned up by its own rules, and every removal of it, manual or
 unattended, first removes the spaces below it, deepest first, through the
 shared removal path, with a checkpoint and kept branch for each workspace but a
@@ -3975,7 +3977,7 @@ too: resuming would need the pre-restart snapshot to prove nothing changed. User
 instead of its assignment: a merged branch, unsaved files only as leftovers the
 removal's checkpoint keeps (the branch has commits of its own), no Git operation under
 way, no open question, nothing running, no leases, permits, directory users,
-stacked workspaces or holds, and no recorded activity, file change or per-worktree Git
+stacked workspaces, holds or spaces below it, and no recorded activity, file change or per-worktree Git
 change for the idle period. Idle time is persisted, so restarts do not reset it;
 it decides only from a default branch fetched in the last ten minutes, by the
 background sync or by a sync it runs itself, so a failed fetch keeps the workspace. A link, a watch or a recorded `done` does not keep the

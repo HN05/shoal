@@ -3122,8 +3122,8 @@ any agent Shoal tracks there or one whose restore waits in the
 [agent queue](#agent-queue), receives its own activity
 and its subtree's instead.
 
-A child never keeps its parent: the parent's idle, merged, completion and PR
-cleanup follow its own state. Every removal of a parent, `shoal rm`, cleanup or
+A child keeps its parent only from [merged cleanup](#merged-workspaces): the
+parent's idle, completion and PR cleanup follow its own state. Every removal of a parent, `shoal rm`, cleanup or
 the cleanup of its deleted directory, first removes the spaces below it,
 deepest first, whatever their work, holds or questions: each workspace stops its
 agents, and unless it is disposable keeps a checkpoint of its HEAD and unsaved
@@ -5956,7 +5956,7 @@ none of the conditions on a worktree: a chat goes once its agent stopped, with
 the spaces below it, unless a restore waits to run it, a hold, an open
 question, or for idle cleanup a session Shoal saved, as saved agents keep a
 workspace, a completion, a linked issue or a watched PR keeps it. Merged cleanup removes one whose agent has been stopped for its
-`idle_minutes`, and cleanup after `shoal done` removes a done chat, stopping its
+`idle_minutes` and that has no space below it, and cleanup after `shoal done` removes a done chat, stopping its
 agent.
 
 #### Grace period
@@ -5982,8 +5982,9 @@ minutes; until a fetch succeeds, the repository's workspaces are kept. Uncommitt
 [removal's checkpoint](#checkpoints-and-restore); they keep the workspace when the checkpoint cannot keep
 them all or the branch has no commits of its own. A merge, rebase or other
 Git operation under way, open [questions](#questions), running/unknown commands,
-a running chat in it, directory users, leases, permits, holds and
-workspaces stacked on it keep it too; PR cleanup moves stacked workspaces once the base's PR merges. Shoal records the
+a running chat in it, directory users, leases, permits, holds,
+workspaces stacked on it and any space below it, here or on another machine,
+keep it too; PR cleanup moves stacked workspaces once the base's PR merges. Shoal records the
 time of each command start and exit, lease and hold change, and takes the newest
 change time of the worktree's files, including ignored ones, and of its HEAD,
 index and reflog; the period runs from the latest of those and survives restarts.

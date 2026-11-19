@@ -262,7 +262,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   10), resolved per workspace on each sweep. `[cleanup.merged]` (default false,
   240 idle minutes, persisted across restarts) removes merged, unused workspaces
   whatever their assignment state, archiving unsaved files left over on a branch
-  with commits; only holds, open questions and pending PR proposals and push requests keep them. Automatic removal is only for idle,
+  with commits; only holds, open questions, pending PR proposals and push
+  requests and a space below them keep them. Automatic removal is only for idle,
   clean worktrees with all commits pushed, merged into the default branch (including
   squash and rebase merges) or with their changes on the branch the workspace builds
   on, or deleted worktrees. Unattended removals except for disk
@@ -276,8 +277,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   contain HEAD, or the default branch have its changes, before a completed workspace is removed. Cleanup stops tracked
   agents, verifies clean merged HEAD, and uses that path. Withdrawing completion
   preserves associations and watches but never defers cleanup; only holds,
-  open questions and queued agent launches keep a workspace. Children never keep
-  their parent: every removal of a space first removes the spaces below it
+  open questions and queued agent launches keep a workspace. Children keep
+  their parent only from merged cleanup: every removal of a space first removes the spaces below it
   through the same path, whatever keeps them, and a child that cannot go retains
   the parent. A standing completion with cleanup also removes the workspaces and chats below
   that nothing of their own keeps, whatever their work.

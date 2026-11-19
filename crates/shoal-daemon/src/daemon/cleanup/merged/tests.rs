@@ -165,6 +165,35 @@ async fn merged_cleanup_is_off_by_default() {
 }
 
 #[tokio::test]
+async fn a_space_below_keeps_a_merged_workspace_until_it_goes() {
+    let f = Fixture::new().await;
+    let child = (f.manager)
+        .create_workspace_below(
+            f.workspace.repository().clone().into(),
+            "child".into(),
+            None,
+            Default::default(),
+            Some(f.workspace.id.clone()),
+        )
+        .await
+        .unwrap();
+    fs::write(child.path.join("three"), "three\n").unwrap();
+    commit(&child.path, "three");
+    f.squash_merge();
+    assert!(f.kept_after(5).await);
+    assert!(child.path.exists(), "the child's unmerged work stays");
+    (f.manager)
+        .remove_selected(
+            &SpaceSelector::id(&child.id),
+            crate::removal::UnsavedWork::default(),
+            crate::removal::InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    assert!(!f.kept_after(5).await);
+}
+
+#[tokio::test]
 async fn a_saved_command_keeps_idle_and_unmerged_workspaces_only() {
     saved_work_keeps_idle_and_unmerged_workspaces_only(
         "saved.command.json",

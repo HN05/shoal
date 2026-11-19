@@ -279,7 +279,7 @@ instead of the PR delivery guidance below.
   and PR cleanup. Holds, open questions, pending PR proposals and push requests, and queued
   agent launches block every unattended removal of a space of either kind, rechecked after the removal reserves the space; a child needs a ready
   parent, checked when the child is recorded; `done` closes the workspace's open
-  questions for good. Children never keep their parent: every removal kind first
+  questions for good. Children keep their parent only from merged cleanup: every removal kind first
   removes the subtree, deepest first, through the shared path whatever keeps it,
   and a child that fails retains the parent. A standing completion with cleanup
   removes the workspaces and chats below it that nothing of their own keeps,
@@ -479,8 +479,8 @@ instead of the PR delivery guidance below.
   Tracked agent exits wake cleanup after the exit hook, retaining its usual checks.
   Merged cleanup ignores links, watches, completion and saved stopped work,
   dropping queued restores and keeping agents in removal's record for restore,
-  but never holds, open questions, running/unknown commands, leases, directory users or a Git
-  operation under way; its idle period is persisted so restarts cannot shorten
+  but never holds, open questions, running/unknown commands, leases, directory users, a Git
+  operation under way or a space below it; its idle period is persisted so restarts cannot shorten
   or reset it, and removal rechecks its snapshot through the shared path.
   Every unattended removal except for disk space waits `[cleanup] grace_minutes`,
   started only once removal's initial checks pass and ended by any sweep pass that

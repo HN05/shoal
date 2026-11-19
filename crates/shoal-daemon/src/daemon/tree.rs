@@ -160,6 +160,14 @@ impl Manager {
         self.store.run(move |db| children(db, &id)).await
     }
 
+    /// Whether a space is below the space `id`, here or on another machine.
+    pub(crate) async fn has_spaces_below(&self, id: &SpaceId) -> Result<bool> {
+        if !self.children(id).await?.is_empty() {
+            return Ok(true);
+        }
+        Ok(!self.descendants_elsewhere(id).await?.is_empty())
+    }
+
     /// Queue `message` about the workspace named `name` for its coordinator,
     /// with Shoal's copies `attachments` of the files it sent: the nearest
     /// space above it with an agent, which receives what arrived once a

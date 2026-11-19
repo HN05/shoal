@@ -1324,7 +1324,7 @@ async fn automatic_cleanup_leaves_a_chat_restored_since_its_snapshot_running() {
 #[tokio::test]
 async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
-    let (chat, _) = chat_with_workspace(&temp, &manager).await;
+    let (chat, opened) = chat_with_workspace(&temp, &manager).await;
     manager
         .mark_space_done(
             &SpaceSelector::id(&chat.id),
@@ -1345,9 +1345,19 @@ async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup()
     };
     assert_eq!(idle().await, CleanupReason::Recovering);
     // Once its agent exited instead, its completion still keeps it from
-    // idle cleanup, which merged cleanup disregards.
+    // idle cleanup, which merged cleanup disregards, but not the workspace
+    // below it.
     std::fs::remove_file(saved).unwrap();
     assert_eq!(idle().await, CleanupReason::Completed { integrated: false });
+    assert!(manager.merged_snapshot(&chat.id).await.unwrap().is_none());
+    manager
+        .remove_selected(
+            &SpaceSelector::id(&opened.id),
+            crate::removal::UnsavedWork::default(),
+            crate::removal::InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
     assert!(manager.merged_snapshot(&chat.id).await.unwrap().is_some());
 }
 
