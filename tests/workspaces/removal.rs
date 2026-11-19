@@ -501,6 +501,13 @@ fn absorb_merges_a_done_workspace_into_another_and_removes_it() {
         fs::read_to_string(taker_path.join("notes")).unwrap(),
         "unsaved\n"
     );
+    // The absorber's log shows what it took over.
+    let log = fixture.run(&["log", &taker_id, "--json"]);
+    let printed = String::from_utf8_lossy(&log.stdout);
+    assert!(
+        log.status.success() && printed.contains("\"absorbed_space\""),
+        "{printed}"
+    );
     wait_removed(&fixture, "worker");
 }
 

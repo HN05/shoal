@@ -6153,11 +6153,12 @@ details, under a heading for each date:
   them, and their closing, merging and reopening on the forge;
 - the questions it asked and their answers, the approvals it requested and
   their decisions, and the alerts it sent;
-- the spaces created and removed below it;
+- the spaces created and removed below it, its parent changes, and an absorb,
+  into which space and by what merge, or what it took over;
 - a CI job Shoal ended after its run finished, with the processes it stopped.
 
-`--all` adds every other event of the space, dimmed: setup results, branch,
-base and parent changes, its agent's turn states and progress changes, other
+`--all` adds every other event of the space, dimmed: setup results, branch
+and base changes, its agent's turn states and progress changes, other
 forge activity such as comments and checks, demos, simulator leases and
 attached files. With `--json` each line is the entry as
 [`shoal internal events`](#space-events) prints it.
