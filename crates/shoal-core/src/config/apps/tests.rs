@@ -67,6 +67,19 @@ fn each_value_of_an_app_table_reports_the_layer_it_comes_from() {
 }
 
 #[test]
+fn a_table_over_a_value_hides_what_every_layer_below_has_there() {
+    let global = Config::from_toml("[apps.quay.colors]\ntodo = 'grey'\n").unwrap();
+    let layers = ConfigLayers {
+        worktree_file: repo::parse("[apps.quay]\ncolors = 'none'\n").unwrap(),
+        local_config: repo::parse("[apps.quay.colors]\ndone = 'blue'\n").unwrap(),
+        ..Default::default()
+    };
+    let settings = global.resolve(&layers).unwrap();
+    let expected: toml::Table = toml::from_str("[colors]\ndone = 'blue'\n").unwrap();
+    assert_eq!(settings.apps["quay"], expected);
+}
+
+#[test]
 fn an_app_entry_that_is_not_a_table_is_refused() {
     assert!(repo::parse("[apps]\nquay = 1\n").is_err());
 }
