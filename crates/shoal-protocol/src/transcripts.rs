@@ -63,12 +63,14 @@ pub struct Transcript {
 }
 
 /// The session a client follows, before its files' bytes: the session,
-/// and the tool whose format they are in.
+/// the tool whose format they are in, and the space's ID, which follows
+/// it again where its number may name another space by then.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FollowedSession {
     #[serde(flatten)]
     pub session: ReportedSession,
     pub integration: IntegrationKind,
+    pub space: shoal_ids::space_ids::SpaceId,
 }
 
 /// Bytes of a followed session's file, as its tool wrote them from

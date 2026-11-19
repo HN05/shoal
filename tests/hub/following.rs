@@ -29,17 +29,21 @@ struct Session {
     transcript: PathBuf,
 }
 
-/// The hub and a laptop joined to it, with [`Session`] there that the hub
-/// lists.
-fn laptop_session(hub: &Base) -> Session {
-    let laptop = Base::start(
+/// A laptop whose `claude` agent reports its session as Claude Code's
+/// hooks do.
+fn start_laptop() -> Base {
+    Base::start(
         home(),
         "[agents.claude]\ncommand = ['sh', './agent.sh']\n",
         "app",
         &[],
-    );
-    let laptop_id = join(&laptop, hub, "laptop");
-    let space = workspace(&laptop, "followed");
+    )
+}
+
+/// A new workspace on `laptop` whose agent reported the session
+/// `followed`, by ID, with the path of its transcript.
+fn session_on(laptop: &Base) -> (String, PathBuf) {
+    let space = workspace(laptop, "followed");
     let path = PathBuf::from(
         laptop.ok(&["status", &space])["workspace"]["path"]
             .as_str()
@@ -66,6 +70,15 @@ fn laptop_session(hub: &Base) -> Session {
         .join(".claude/projects/-app/followed.jsonl");
     fs::create_dir_all(transcript.parent().unwrap()).unwrap();
     fs::write(&transcript, first_turn()).unwrap();
+    (space, transcript)
+}
+
+/// The hub and a laptop joined to it, with [`Session`] there that the hub
+/// lists.
+fn laptop_session(hub: &Base) -> Session {
+    let laptop = start_laptop();
+    let laptop_id = join(&laptop, hub, "laptop");
+    let (space, transcript) = session_on(&laptop);
     listed(hub, &space, &laptop_id);
     Session {
         laptop,
@@ -171,11 +184,15 @@ struct Reading {
 
 /// Follow `session` from `follower` until it read the transcript so far.
 fn reading(session: &Session, follower: Connector) -> Reading {
+    reading_space(selected(session), follower)
+}
+
+/// Follow the space `space` from `follower` until it read the transcript
+/// so far.
+fn reading_space(space: SpaceSelector, follower: Connector) -> Reading {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let follow = runtime.block_on(async {
-        let mut follow = follow_session(follower, selected(session), None)
-            .await
-            .unwrap();
+        let mut follow = follow_session(follower, space, None).await.unwrap();
         followed_session(&mut follow).await;
         bytes_until(&mut follow, &mut Vec::new(), &first_turn()).await;
         follow
@@ -218,6 +235,35 @@ fn followed_from_the_desk() -> (Base, Session, Base, Reading) {
     listed(&desk, &session.space, &session.laptop_id);
     let reading = reading(&session, app(&desk));
     (hub, session, desk, reading)
+}
+
+#[test]
+fn a_follow_by_number_goes_on_in_its_space_after_joining_renumbered_it() {
+    let hub = machine(true, "app");
+    workspace(&hub, "takes-the-number");
+    let mut laptop = start_laptop();
+    let (space, transcript) = session_on(&laptop);
+    let number = |laptop: &Base| {
+        let spaces = laptop.ok(&["list"]);
+        let listed = (spaces.as_array().unwrap().iter()).find(|listed| listed["id"] == space);
+        listed.unwrap()["number"].as_u64().unwrap().to_string()
+    };
+    let first = number(&laptop);
+    let by_number = SpaceSelector::parse(&first).unwrap();
+    let reading = reading_space(by_number, app(&laptop));
+    let laptop_id = join(&laptop, &hub, "laptop");
+    wait_for("the renumbered space", || {
+        (number(&laptop) != first).then_some(())
+    });
+    // Followed again, the number names the hub's space now.
+    laptop.restart();
+    let session = Session {
+        laptop,
+        laptop_id,
+        space,
+        transcript,
+    };
+    reading.goes_on(&session);
 }
 
 #[test]

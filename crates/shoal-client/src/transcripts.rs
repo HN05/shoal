@@ -80,7 +80,8 @@ pub async fn follow_session<D: Daemon>(
     let (responses, followed) = open(&daemon, &space, &session, &BTreeMap::new()).await?;
     Ok(SessionFollow {
         daemon,
-        space,
+        // Its number may name another space by the time it follows again.
+        space: SpaceSelector::id(&followed.space),
         named: session,
         responses: Some(responses),
         session: followed.clone(),

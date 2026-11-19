@@ -87,11 +87,12 @@ impl Manager {
             return Err(Refusal::new(Reason::NotFound, message).into());
         };
         Ok(Following {
-            space,
+            space: space.clone(),
             named,
             session: FollowedSession {
                 session: reported,
                 integration,
+                space,
             },
             store,
             environments: Arc::new(Environments::new(&self.paths.home, &sessions.environments)),
