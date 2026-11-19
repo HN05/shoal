@@ -252,6 +252,11 @@ pub(in crate::cli::commands) async fn pick_start_source(
     let mut creation = Creation::default();
     let picked = pick_add_source(ctx, &resolved.target, &mut creation).await?;
     picked_source(launch, creation, picked);
+    // A new branch the picker chose still needs its name.
+    if begins_as_chat(launch) {
+        let check = async |name: String| shoal_core::git::check_branch_name(&name).map(|()| name);
+        launch.branch = Some(crate::cli::ui::input_until(ctx, "Branch name", None, check).await?);
+    }
     Ok(())
 }
 

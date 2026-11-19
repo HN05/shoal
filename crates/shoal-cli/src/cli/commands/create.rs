@@ -12,7 +12,7 @@ use crate::client::{
 };
 use crate::{
     cli::{
-        args::create::{CopyArgs, CreateArgs},
+        args::create::CreateArgs,
         context::Context,
         output::{Palette, Style},
         shell, terminal,
@@ -35,11 +35,13 @@ use shoal_protocol::space_names::SpaceSelector;
 pub(super) async fn run(ctx: &Context, args: CreateArgs) -> Result<i32> {
     let parent = parent_space(ctx, args.parent.clone()).await?;
     if args.no_branch {
-        let options = args.creation.clone().into();
-        return at_commit(ctx, parent, args.base.clone(), args.copy.clone(), options).await;
+        return at_commit(ctx, parent, &args).await;
     }
     let mut launch = args.launch(parent);
     launch.directory = ui::current_directory()?;
+    launch.path = (launch.path.take())
+        .map(|path| super::repositories::absolute(ctx, path))
+        .transpose()?;
     super::workspaces::pick_start_source(ctx, &mut launch).await?;
     let env = crate::env::without_secrets();
     let preparing = preparation::create(&ctx.paths, launch, env).await?;
@@ -63,23 +65,28 @@ async fn parent_space(
     }
 }
 
-/// Create a workspace without a branch at `base`, or at the default branch,
-/// or a copy of the workspace `copy` names: a child of `parent`, or without
-/// one a top-level workspace in the current repository, or the copied
-/// one's.
-async fn at_commit(
-    ctx: &Context,
-    parent: Option<SpaceSelector>,
-    base: Option<String>,
-    copy: CopyArgs,
-    options: CreationOptions,
-) -> Result<i32> {
-    let copy = super::copies::source(ctx, copy).await?;
+/// Create the workspace without a branch `args` describe, at their base,
+/// or at the default branch, or a copy of the workspace they copy: a child
+/// of `parent`, or without one a top-level workspace in the repository
+/// they name, else the copied one's or the current one.
+async fn at_commit(ctx: &Context, parent: Option<SpaceSelector>, args: &CreateArgs) -> Result<i32> {
+    let copy = super::copies::source(ctx, args.copy.clone()).await?;
     let copied = copy.as_ref().map(|copy| copy.repository.clone());
-    let repository = commit_repository(ctx, parent.as_ref(), copied).await?;
+    let named = (args.repository_override.clone())
+        .map(crate::repository::named)
+        .transpose()?;
+    let repository = match named {
+        Some(named) => named,
+        None => commit_repository(ctx, parent.as_ref(), copied).await?,
+    };
     let start = match copy {
         Some(copy) => CommitStart::Copy(copy.source),
-        None => CommitStart::Revision(base),
+        None => CommitStart::Revision(args.base.clone()),
+    };
+    let options = CreationOptions {
+        name: args.name.clone(),
+        priority: args.priority,
+        ..args.creation.clone().into()
     };
     let created =
         crate::client::workspaces::create_at_commit(&ctx.paths, repository, parent, start, options)

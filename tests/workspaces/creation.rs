@@ -2647,27 +2647,45 @@ fn a_workspace_at_a_commit_runs_its_own_agent_whose_commits_keep_it() {
 }
 
 /// From the user's terminal outside a space, `shoal create` makes a
-/// top-level workspace without an agent: on a branch it names, or on an
-/// issue URL, which it links and names the workspace after.
+/// top-level workspace without an agent, which needs no `agent.default`:
+/// on a branch it names, at a path relative to the caller's directory, on
+/// an issue URL, which it links and names the workspace after, or at a
+/// commit in the repository `--repo` names, with the name given.
 #[test]
 fn create_outside_a_space_makes_top_level_workspaces_without_an_agent() {
-    let fixture = Fixture::with_config(Some(
-        "[agent]\ndefault = 'claude'\n[machine.overload.disk]\nenabled = false\n",
-    ));
+    let fixture = Fixture::with_config(Some("[machine.overload.disk]\nenabled = false\n"));
     fixture.add_github_origin();
     fixture.script_github(&github_issue(12, "Clarify retries", "Retry twice."));
     let repo = fixture.repo.to_str().unwrap();
     let url = "https://github.com/team/project/issues/12";
+    let elsewhere = fixture.root.path().join("elsewhere");
+    fs::create_dir_all(&elsewhere).unwrap();
 
-    let on_branch = fixture.ok(&["create", repo, "--branch", "scratch"]);
+    let at_path = ["create", repo, "--branch", "scratch", "--path", "../placed"];
+    let on_branch = fixture.ok_from(fixture.command().current_dir(&elsewhere), &at_path);
     let on_issue = fixture.ok(&["create", url, "--repo", repo]);
+    let at_commit = fixture.ok_from(
+        fixture.command().current_dir(&elsewhere),
+        &[
+            "create",
+            "--no-branch",
+            "--repo",
+            repo,
+            "--name",
+            "Read only",
+        ],
+    );
 
-    for created in [&on_branch, &on_issue] {
+    for created in [&on_branch, &on_issue, &at_commit] {
         assert_eq!(created["parent"], Value::Null, "{created}");
         assert_eq!(created["running"], false, "{created}");
     }
     assert_eq!(on_branch["branch"], "scratch");
+    let placed = fixture.root.path().join("placed");
+    assert_eq!(on_branch["path"], placed.to_str().unwrap());
     assert_eq!(on_issue["name"], "Clarify retries");
     assert_eq!(on_issue["links"]["issues"][0]["url"], url);
+    assert_eq!(at_commit["name"], "Read only");
+    assert_eq!(at_commit["repository_id"], on_branch["repository_id"]);
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
 }
