@@ -51,24 +51,22 @@ impl Streamed<'_> {
     }
 
     /// Write the answer `incoming` brings first to `writer`, under the
-    /// caller's request's ID, and return the bytes that came after it;
-    /// none once it broke off, which the caller hears instead.
+    /// caller's request's ID and a daemon operation, and return the bytes
+    /// that came after it; none once it broke off, which the caller hears
+    /// instead, or while a restart holds operations off, which closes the
+    /// connection unanswered for the caller to ask again.
     async fn answer(
         &self,
         incoming: &mut Incoming,
         writer: &mut OwnedWriteHalf,
     ) -> Result<Option<Vec<u8>>> {
         match answer_frame(incoming).await {
-            Ok((mut frame, after)) => {
-                frame["id"] = self.request_id.into();
-                shoal_protocol::protocol::write(writer, &frame).await?;
-                Ok(Some(after))
-            }
+            Ok((frame, after)) => Ok(self.write(writer, vec![frame]).await?.then_some(after)),
             Err(error) => {
                 let error = error.context("the other machine's answer broke off");
                 let error = Refusal::wrap(Reason::MachineUnreachable, error);
                 let failure = body_frame(self.request_id, answer::failure(&error))?;
-                shoal_protocol::protocol::write(writer, &failure).await?;
+                self.write(writer, vec![failure]).await?;
                 Ok(None)
             }
         }
