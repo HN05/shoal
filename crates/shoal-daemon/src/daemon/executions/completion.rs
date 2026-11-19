@@ -77,20 +77,22 @@ impl Manager {
     }
 
     pub(super) async fn delete_execution_record(&self, id: &ExecutionId) -> Result<Option<String>> {
-        let id = id.to_owned();
+        let ended = id.to_owned();
         let hosts: Vec<_> = self.session_hosts.iter().map(|host| host.name()).collect();
         let (demo, agent_space) = self
             .store
             .write(move |tx| {
-                let demo = super::super::sessions::pending::record_demo(tx, &id, &hosts)?;
-                let agent_space = record_agent_end(tx, &id)?;
-                record_execution_end(tx, &id, true)?;
+                let demo = super::super::sessions::pending::record_demo(tx, &ended, &hosts)?;
+                let agent_space = record_agent_end(tx, &ended)?;
+                record_execution_end(tx, &ended, true)?;
                 Ok((demo, agent_space))
             })
             .await?;
         if let Some(space) = &agent_space {
             self.agent_settles.request(space);
         }
+        // A demo's viewer goes with it.
+        self.viewers.end(id);
         Ok(demo)
     }
 }

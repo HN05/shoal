@@ -94,6 +94,8 @@ pub struct Manager {
     pub(crate) apps: crate::daemon::apps::Apps,
     /// The commits other machines carried here for launches on their way.
     pub(crate) carried_holds: crate::daemon::carried_commits::CarriedHolds,
+    /// The viewers of simulator demos someone opened.
+    pub(crate) viewers: super::demos::viewers::Viewers,
 }
 
 impl Manager {
@@ -180,6 +182,7 @@ impl Manager {
             hub,
             apps: Default::default(),
             carried_holds: Default::default(),
+            viewers: Default::default(),
         }))
     }
 

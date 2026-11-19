@@ -590,10 +590,13 @@ impl Manager {
     /// Stop the execution's verified survivors and report what keeps its
     /// processes from being proven stopped, if anything does.
     async fn stop_agent_survivors(&self, record: &crate::model::Execution) -> Option<String> {
-        let processes = match self.inspect_processes(record).await {
+        let mut processes = match self.inspect_processes(record).await {
             Ok(processes) => processes,
             Err(error) => return Some(format!("process inspection failed: {error:#}")),
         };
+        if let Some(viewer) = self.viewers.group(&record.id) {
+            processes.spare_group(viewer);
+        }
         if let Some(issue) = processes.completion_issue() {
             // A survivor can fork while stopping, so only a later scan proves the stop.
             return Some(match processes.stop_owned().await {

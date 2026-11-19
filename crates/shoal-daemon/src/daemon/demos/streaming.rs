@@ -1,7 +1,8 @@
 //! Streams to running demos: after its answer, a client's connection
 //! carries the bytes of one TCP connection the daemon opens to a `server`
-//! or `web` demo's port on loopback, both ways and unread, so WebSockets and
-//! the like work as they do on the demo's own machine.
+//! or `web` demo's port, or a `simulator` demo's viewer's, on loopback, both
+//! ways and unread, so WebSockets and the like work as they do on the demo's
+//! own machine.
 use std::{sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result};
@@ -34,13 +35,18 @@ impl Manager {
     pub(crate) async fn open_demo(&self, selector: &SpaceSelector, name: &str) -> Result<OpenDemo> {
         crate::demos::validate_name(name)?;
         let running = self.demos(Some(selector)).await?;
-        let Some(demo) = running.into_iter().find(|demo| demo.launch.name == name) else {
+        let Some(mut demo) = running.into_iter().find(|demo| demo.launch.name == name) else {
             let message = format!("space {selector} has no running demo {name}");
             return Err(Refusal::new(Reason::NotFound, message).into());
         };
         let port = match demo.kind {
             Kind::Server | Kind::Web => demo.launch.port(),
-            Kind::Terminal | Kind::Simulator => None,
+            Kind::Simulator => {
+                let port = self.open_viewer(&demo).await?;
+                demo.viewer = demo.launch.viewer(Some(port));
+                Some(port)
+            }
+            Kind::Terminal => None,
         };
         let Some(port) = port else {
             let message = format!(
@@ -96,7 +102,7 @@ impl Manager {
 }
 
 /// A connection to `port` on loopback: IPv4's, else IPv6's.
-async fn connect(port: u16) -> Result<TcpStream> {
+pub(super) async fn connect(port: u16) -> Result<TcpStream> {
     match TcpStream::connect(("127.0.0.1", port)).await {
         Ok(connection) => Ok(connection),
         Err(v4) => TcpStream::connect(("::1", port))

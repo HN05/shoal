@@ -78,6 +78,15 @@ impl Processes {
         })
     }
 
+    /// Leave out the processes of process group `group`, such as a demo's
+    /// viewer, which outlives the demo's runs.
+    pub fn spare_group(&mut self, group: u32) {
+        let outside = |identity: &process::Identity| process::group_of(identity) != Some(group);
+        self.owned.retain(outside);
+        self.group_candidates.retain(outside);
+        self.unreadable.retain(outside);
+    }
+
     /// A marker can establish ownership even when the original group leader died.
     pub fn unverified(&self) -> Vec<process::Identity> {
         self.group_candidates

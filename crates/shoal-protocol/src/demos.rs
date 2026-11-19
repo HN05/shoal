@@ -132,8 +132,22 @@ pub struct Running {
     /// Where a browser opens a web demo.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    /// What shows a simulator demo's device, unless its viewer is off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub viewer: Option<Viewer>,
     #[serde(flatten)]
     pub launch: Launch,
+}
+
+/// A simulator demo's viewer as listings show it.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Viewer {
+    /// The program it runs, such as `serve-sim`, which says what protocol
+    /// a client speaks to it.
+    pub tool: String,
+    /// Where it serves on the demo's machine, while it runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
 }
 
 impl Launch {
@@ -171,6 +185,26 @@ impl Launch {
     /// its address.
     pub fn location(&self) -> Option<String> {
         self.url().or_else(|| self.address())
+    }
+
+    /// The demo's viewer, which serves at `port` while it runs.
+    pub fn viewer(&self, port: Option<u16>) -> Option<Viewer> {
+        let program = self.viewer.as_ref()?.first()?;
+        let tool = std::path::Path::new(program).file_name().map_or_else(
+            || program.clone(),
+            |name| name.to_string_lossy().into_owned(),
+        );
+        let url = port.map(|port| format!("http://localhost:{port}"));
+        Some(Viewer { tool, url })
+    }
+
+    /// The viewer's command for the device and `port`: `{udid}` and
+    /// `{port}` filled in wherever they appear.
+    pub fn viewer_command(&self, port: u16) -> Option<Vec<String>> {
+        let udid = self.environment.get(SIM_UDID).map_or("", String::as_str);
+        let port = port.to_string();
+        let fill = |arg: &String| arg.replace("{udid}", udid).replace("{port}", &port);
+        Some(self.viewer.as_ref()?.iter().map(fill).collect())
     }
 }
 

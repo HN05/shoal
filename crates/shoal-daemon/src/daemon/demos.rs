@@ -2,6 +2,7 @@
 //! ends with its execution: when it stops, its workspace is removed or its
 //! wrapper finishes.
 mod streaming;
+pub(crate) mod viewers;
 
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
@@ -35,7 +36,15 @@ impl Manager {
             }
             None => None,
         };
-        self.store.run(move |db| list(db, workspace.as_ref())).await
+        let mut demos = self
+            .store
+            .run(move |db| list(db, workspace.as_ref()))
+            .await?;
+        for demo in &mut demos {
+            let port = self.viewers.port(&demo.execution_id);
+            demo.viewer = demo.launch.viewer(port);
+        }
+        Ok(demos)
     }
 
     /// How far the start of `launch` in `selector`'s workspace got.
@@ -235,6 +244,7 @@ fn list(db: &Connection, workspace: Option<&SpaceId>) -> Result<Vec<Running>> {
             has_run,
             kind: launch.kind(),
             url: launch.url(),
+            viewer: None,
             launch,
         })
     })

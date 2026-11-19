@@ -2132,10 +2132,21 @@ reads HTTP, so WebSockets and hot reload work. A UI listens on a local port
 and points its web view there, while the listing keeps the demo's own URL.
 `shoal demo` on a serving demo another machine runs does the same from the
 command line, on the demo's own port number when it is free, until Ctrl-C;
-an agent may run it in the foreground for a demo in its scope. Proposals, not
-yet implemented: a terminal demo's stream carries the bytes of a PTY attached
-to its host's session one way and keys and resizes the other, and a
-`simulator` demo's the port of a viewer of its device, as `web`. An agent on
+an agent may run it in the foreground for a demo in its scope. A `simulator`
+demo's stream carries the port of a viewer of its device, as `web`. The
+viewer is an external tool, serve-sim unless the demo's `viewer` names another
+command: Shoal starts it and relays its bytes, never parsing its protocol, so
+only the UI that speaks it changes with it. The daemon starts it on the
+demo's first open from elsewhere, bound to loopback on a port reserved under
+the demo's name, with the demo's execution's marker, so stopping, removal and
+recovery stop it with the demo's other processes; it outlives the command's
+runs, and a demo nobody opens runs none. serve-sim's HTTP mode suits the
+hub's TCP streams, where WebRTC needs UDP. A missing viewer leaves the demo
+running and fails the open, naming its install command; Shoal installs
+nothing. Agents drive the device with serve-sim's or AXe's own commands, which
+Shoal does not wrap. Proposal, not yet implemented: a terminal demo's stream
+carries the bytes of a PTY attached to its host's session one way and keys and
+resizes the other. An agent on
 another machine building and running on this one stays out: it needs leases
 across machines.
 The journal records a demo's start at its command's first run, when a start

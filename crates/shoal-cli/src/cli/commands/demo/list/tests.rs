@@ -42,6 +42,7 @@ fn listings_show_running_demos_then_the_configured_ones_not_running() {
             has_run: true,
             kind: shoal_protocol::demos::Kind::Terminal,
             url: None,
+            viewer: None,
             launch,
         }],
     };
