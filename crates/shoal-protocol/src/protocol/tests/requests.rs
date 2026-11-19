@@ -169,6 +169,7 @@ const REQUESTS: &[&str] = &[
     r#""pair_hub""#,
     r#"{"join_hub":{"via":{"command":["ssh","desk","shoal","daemon","connect"]},"name":"laptop"}}"#,
     r#""leave_hub""#,
+    r#""update_hub""#,
     r#""hub_members""#,
     r#"{"revoke_hub_member":{"member":"laptop"}}"#,
     r#""hub_directory""#,
