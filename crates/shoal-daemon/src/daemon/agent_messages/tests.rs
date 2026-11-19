@@ -843,6 +843,34 @@ fn scoped(id: SpaceId) -> crate::daemon::scope::Caller {
     }
 }
 
+/// Queue alerts for `workspace` with the text `text` gives each and the
+/// files `files` until the space refuses one, then check that what its
+/// agent receives still fits one frame.
+async fn fill_one_delivery(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+    text: impl Fn(usize) -> String,
+    files: Vec<crate::daemon::workspace_files::NewFile>,
+) {
+    let to = SpaceSelector::id(&workspace.id);
+    let mut sent = 0;
+    while (manager.send_space_message(None, &to, text(sent), files.clone()))
+        .await
+        .is_ok()
+    {
+        sent += 1;
+    }
+    assert!(sent > 0);
+    let unread = manager.unread_messages(&workspace.id).await.unwrap().alerts;
+    assert_eq!(unread.len(), sent);
+    let delivered = serde_json::to_vec(&unread).unwrap();
+    assert!(
+        delivered.len() < crate::protocol::MAX_FRAME,
+        "{sent} alerts take {} bytes",
+        delivered.len()
+    );
+}
+
 #[tokio::test]
 async fn unread_alerts_with_long_titled_files_still_fit_one_delivery() {
     let (temp, manager) = manager().await;
@@ -858,21 +886,13 @@ async fn unread_alerts_with_long_titled_files_still_fit_one_delivery() {
             }
         })
         .collect();
-    let to = SpaceSelector::id(&workspace.id);
-    let mut sent = 0;
-    while (manager.send_space_message(None, &to, format!("logs {sent}"), files.clone()))
-        .await
-        .is_ok()
-    {
-        sent += 1;
-    }
-    assert!(sent > 0);
-    let unread = manager.unread_messages(&workspace.id).await.unwrap().alerts;
-    assert_eq!(unread.len(), sent);
-    let delivered = serde_json::to_vec(&unread).unwrap();
-    assert!(
-        delivered.len() < crate::protocol::MAX_FRAME,
-        "{sent} alerts take {} bytes",
-        delivered.len()
-    );
+    fill_one_delivery(&manager, &workspace, |n| format!("logs {n}"), files).await;
+}
+
+#[tokio::test]
+async fn unread_alerts_that_json_escapes_still_fit_one_delivery() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager, &"🦀".repeat(40)).await;
+    let text = |n| format!("{n}{}", "\t".repeat(500));
+    fill_one_delivery(&manager, &workspace, text, Vec::new()).await;
 }

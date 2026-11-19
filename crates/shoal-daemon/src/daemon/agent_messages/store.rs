@@ -1,7 +1,7 @@
 //! The alerts for a space's agent: queueing one, listing the unread ones as
 //! the agent reads them, marking delivered ones read, and what becomes of
 //! them when their space goes.
-use anyhow::{Result, ensure};
+use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use super::{Delivery, MAX_UNREAD, MAX_UNREAD_BYTES, Queued, Unread};
@@ -13,12 +13,6 @@ use crate::{
     state::WorkspaceState,
 };
 use shoal_ids::space_ids::SpaceId;
-
-/// The bytes of the names and titles of the files an alert `a` holds,
-/// which its agent receives with their paths, as [`COLUMNS`] reads them.
-const FILE_BYTES: &str = "SELECT COALESCE(SUM(LENGTH(CAST(
-        COALESCE(f.name,'') || COALESCE(f.title,'') AS BLOB))),0)
-    FROM json_each(a.attachments) j JOIN space_files f ON f.path=j.value";
 
 /// Queue `alert` for the agent of the space `space_id` in the caller's
 /// transaction, `for_user` when the user receives it should the space go
@@ -72,35 +66,27 @@ pub(super) fn insert(
         tx.execute("UPDATE alerts SET wakes=1 WHERE id=?1", [id])?;
         return Ok(Queued { id, new: true });
     }
-    let (unread, bytes): (i64, i64) = tx.query_row(
-        &format!(
-            "SELECT COUNT(*),
-                COALESCE(SUM(LENGTH(CAST(COALESCE(a.space,'') || a.message || a.attachments AS BLOB))
-                    + ({FILE_BYTES})),0)
-            FROM alerts a WHERE a.recipient_id=?1 AND a.read=0"
-        ),
+    let unread: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM alerts WHERE recipient_id=?1 AND read=0",
         [space_id],
-        |row| Ok((row.get(0)?, row.get(1)?)),
+        |row| row.get(0),
     )?;
     ensure!(
         unread < MAX_UNREAD,
         "the space already has {MAX_UNREAD} unread alerts"
     );
-    let files: i64 = tx.query_row(
-        &FILE_BYTES.replace("a.attachments", "?1"),
-        [&attachments],
-        |row| row.get(0),
-    )?;
-    let size = about.name.as_deref().map_or(0, str::len)
-        + alert.message.len()
-        + attachments.len()
-        + usize::try_from(files)?;
-    ensure!(
-        usize::try_from(bytes)? + size <= MAX_UNREAD_BYTES,
-        "the space's unread alerts would exceed {MAX_UNREAD_BYTES} bytes"
-    );
     let id = alerts::insert(tx, Some(space_id), alert, wakes, for_user)?;
+    if delivered_bytes(tx, space_id)? > MAX_UNREAD_BYTES {
+        tx.execute("DELETE FROM alerts WHERE id=?1", [id])?;
+        bail!("the space's unread alerts would exceed {MAX_UNREAD_BYTES} bytes");
+    }
     Ok(Queued { id, new: true })
+}
+
+/// The bytes the unread alerts of the space `space_id` take as its agent
+/// receives them.
+fn delivered_bytes(db: &Connection, space_id: &SpaceId) -> Result<usize> {
+    Ok(serde_json::to_vec(&unread(db, space_id)?.alerts)?.len())
 }
 
 /// The unread alerts of the space `space_id`, oldest first, as its agent

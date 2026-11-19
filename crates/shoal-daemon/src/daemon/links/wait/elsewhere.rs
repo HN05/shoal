@@ -19,7 +19,7 @@ use shoal_protocol::validate::shorten;
 
 /// The bytes one event of a space's activity may take: a share of what a
 /// coordinator's unread messages may, so that it fits beside others.
-const EVENT_LIMIT: usize = MAX_UNREAD_BYTES / 4;
+const EVENT_LIMIT: usize = MAX_UNREAD_BYTES / 6;
 
 impl Manager {
     /// Pass up the updates queued for this machine's spaces whose activity

@@ -6569,7 +6569,8 @@ alerts.
 
 Identical unread alerts collapse into one: conflicts, cleanup failures and
 messages until read, while every agent exit is listed. A space holds at most
-50 unread alerts of 25,600 bytes in total, and none while it is being removed.
+50 unread alerts, which take at most 40 KiB as its agent receives them, with
+their files' names and titles, and none while it is being removed.
 Scoped commands read the user's alerts, clear them and follow them only as
 their space's [`notifications` permission](#permitted-actions) allows.
 Removing a space gives the user the unread alerts its agent received in the
