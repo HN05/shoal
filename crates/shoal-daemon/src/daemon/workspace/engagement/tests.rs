@@ -209,3 +209,24 @@ async fn a_space_without_reply_times_takes_the_users_capped_average() {
     assert_eq!(reply(&id, 600).await, Some(Duration::from_secs(60)));
     assert_eq!(reply(&id, 40).await, Some(Duration::from_secs(35)));
 }
+
+#[tokio::test]
+async fn a_message_the_user_sends_every_agent_counts_for_each_it_reached() {
+    use shoal_protocol::agent_messages::{Reached, Recipient};
+    let (root, manager) = manager().await;
+    let (id, _) = workspace(&manager, root.path()).await;
+    let mut reached = Reached::default();
+    reached.on_start.workspaces.push(Recipient {
+        number: 1.into(),
+        id: id.clone(),
+        name: "agent".into(),
+    });
+    let coordinator = Caller::of_space("parent".into());
+    manager
+        .record_users_message(Some(&coordinator), &reached)
+        .await;
+    assert_eq!(engagement(&manager, &id).await.interacted_at, None);
+
+    manager.record_users_message(None, &reached).await;
+    assert!(engagement(&manager, &id).await.interacted_at.is_some());
+}

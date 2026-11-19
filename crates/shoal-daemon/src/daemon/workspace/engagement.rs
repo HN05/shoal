@@ -229,6 +229,23 @@ impl Manager {
         }
     }
 
+    /// Record that the user interacted with the agent of each space their
+    /// message `reached`, when `caller` is the user.
+    pub(crate) async fn record_users_message(
+        &self,
+        caller: Option<&Caller>,
+        reached: &shoal_protocol::agent_messages::Reached,
+    ) {
+        let spaces = [&reached.now, &reached.on_start].into_iter();
+        let recipients: Vec<SpaceSelector> = spaces
+            .flat_map(|spaces| spaces.workspaces.iter().chain(&spaces.chats))
+            .map(|recipient| SpaceSelector::id(&recipient.id))
+            .collect();
+        for recipient in &recipients {
+            self.record_user_interaction(caller, recipient).await;
+        }
+    }
+
     /// Record that the user interacted with the agent of the space
     /// `selector` names now. A failure only logs, since the request it comes
     /// with goes on.

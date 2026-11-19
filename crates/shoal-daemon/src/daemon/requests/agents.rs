@@ -208,18 +208,19 @@ pub(super) async fn handle(
             let attacher = manager.attacher(caller).await;
             let below = manager.reach_root(caller).await?;
             let below = below.as_ref();
-            Body::Reached(
-                manager
-                    .send_all_message(
-                        repository.as_ref(),
-                        message,
-                        attachments,
-                        &attacher,
-                        below,
-                        caller.map(|caller| &caller.space_id),
-                    )
-                    .await?,
-            )
+            let reached = manager
+                .send_all_message(
+                    repository.as_ref(),
+                    message,
+                    attachments,
+                    &attacher,
+                    below,
+                    caller.map(|caller| &caller.space_id),
+                )
+                .await?;
+            // A message the user sends agents is a prompt they submit to each.
+            manager.record_users_message(caller, &reached).await;
+            Body::Reached(reached)
         }
         AgentMethod::AgentMessages { space } => {
             Body::AgentMessages(manager.agent_messages(&space).await?)
