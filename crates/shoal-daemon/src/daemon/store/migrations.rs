@@ -5,7 +5,7 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::Connection;
 
 use super::{
-    chat_names, consumed_upgrades, place_owners, place_servers, queue_plans, record_shapes,
+    chat_names, consumed_upgrades, frozen, place_owners, place_servers, queue_plans, record_shapes,
 };
 
 /// Schema version written by this build; older databases are migrated on open.
@@ -175,7 +175,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (
         20,
         include_str!("simulator_owner.sql"),
-        Some(validate_simulator_records),
+        Some(frozen::validate_simulator_records),
     ),
     (
         21,
@@ -1298,12 +1298,6 @@ fn apply(
         );
     }
     tx.commit()?;
-    Ok(())
-}
-
-fn validate_simulator_records(db: &Connection) -> Result<()> {
-    crate::daemon::sim::records::list(db, None)
-        .context("validate simulator records before indexing ownership")?;
     Ok(())
 }
 

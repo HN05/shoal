@@ -1,11 +1,10 @@
 //! Key the records of places Shoal created by the server that holds each,
 //! which the host names in the record's data: Herdr numbers each session's
 //! panes from the start.
-use crate::sessions::OriginExt;
 use anyhow::Result;
 use rusqlite::{Connection, params};
 
-use crate::sessions::Origin;
+use super::frozen::Place;
 
 pub(super) fn key_by_server(db: &Connection) -> Result<()> {
     db.execute_batch(
@@ -30,7 +29,7 @@ pub(super) fn key_by_server(db: &Connection) -> Result<()> {
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     for (host, place, workspace, origin) in records {
-        let server = serde_json::from_str::<Origin>(&origin)?.server();
+        let server = serde_json::from_str::<Place>(&origin)?.server();
         db.execute(
             "INSERT INTO owned_places_by_server(host,server,place,workspace_id,origin)
              VALUES (?1,?2,?3,?4,?5)",

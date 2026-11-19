@@ -68,7 +68,7 @@ const ASSIGNED_LINK_EVENTS: &str = "
             AND json_type(record,'$.link.relation') IS NULL;";
 
 fn default_mode() -> Value {
-    json!(shoal_protocol::config::modes::ModeName::DEFAULT)
+    json!(super::frozen::DEFAULT_MODE)
 }
 
 /// Removal records list their assigned issues and PRs as items, where
@@ -236,7 +236,7 @@ fn birth_identities_of(db: &Connection, select: &str, update: &str) -> Result<()
         .collect::<rusqlite::Result<Vec<_>>>()?;
     for (id, git_dir, identity) in recorded {
         let path = std::path::Path::new(&git_dir);
-        if let Some(birth) = crate::daemon::workspace::identity::birth_identity(path, &identity) {
+        if let Some(birth) = super::frozen::birth_identity(path, &identity) {
             db.execute(update, params![id, birth])?;
         }
     }

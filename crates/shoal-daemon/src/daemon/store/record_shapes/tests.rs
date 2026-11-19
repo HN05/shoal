@@ -194,7 +194,7 @@ fn a_git_directory_recorded_by_device_and_inode_takes_its_identity_now() -> Resu
         [],
         |row| row.get(0),
     )?;
-    let now = crate::daemon::workspace::identity::directory_identity(directory.path())?;
+    let now = super::super::frozen::directory_identity(directory.path())?;
     assert_eq!(identity, now);
     Ok(())
 }

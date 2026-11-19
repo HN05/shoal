@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use rusqlite::{Connection, params};
 
-use crate::daemon::item_numbers::{self, ItemNumber};
+use super::frozen::{ItemNumber, free_item};
 
 /// Give every question and request its space's number. Each keeps its own
 /// number, which was unique within its kind, so a wait running across the
@@ -71,7 +71,7 @@ fn separate_kinds(db: &Connection) -> Result<()> {
     for (key, space) in colliding {
         db.execute(
             "UPDATE access_requests SET number=?2 WHERE id=?1",
-            params![key, item_numbers::free(db, space)?],
+            params![key, free_item(db, space)?],
         )?;
     }
     Ok(())

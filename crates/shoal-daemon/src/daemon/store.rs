@@ -25,6 +25,7 @@ mod chat_names;
 mod consumed_upgrades;
 #[cfg(test)]
 mod event_tests;
+mod frozen;
 mod item_numbers;
 mod migrations;
 mod place_owners;

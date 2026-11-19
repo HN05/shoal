@@ -4,16 +4,15 @@
 //! chat is gone, which nothing would close, is forgotten, as is one several
 //! chats name, such as a stopped chat's and the chat that started there
 //! after it, since giving it to the wrong one would close another's.
-use crate::sessions::OriginExt;
 use anyhow::Result;
 use rusqlite::{Connection, params};
 
-use crate::sessions::Origin;
+use super::frozen::Place;
 
 pub(super) fn own_by_space(db: &Connection) -> Result<()> {
     // A migration from an earlier version applies again to records that
     // name their space already.
-    let owned_by_space = crate::daemon::store::exists(
+    let owned_by_space = super::exists(
         db,
         "SELECT 1 FROM pragma_table_info('owned_places') WHERE name='space_id'",
         [],
@@ -45,7 +44,7 @@ pub(super) fn own_by_space(db: &Connection) -> Result<()> {
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     for (host, server, place, workspace, origin) in records {
-        let recorded = serde_json::from_str::<Origin>(&origin)?;
+        let recorded = serde_json::from_str::<Place>(&origin)?;
         let owner = workspace.or_else(|| only_chat_at(&chats, &recorded));
         let Some(owner) = owner else {
             continue;
@@ -64,7 +63,7 @@ pub(super) fn own_by_space(db: &Connection) -> Result<()> {
 }
 
 /// Each chat with the place it runs in.
-fn chat_places(db: &Connection) -> Result<Vec<(String, Origin)>> {
+fn chat_places(db: &Connection) -> Result<Vec<(String, Place)>> {
     let rows = db
         .prepare("SELECT id,origin FROM chats WHERE origin IS NOT NULL ORDER BY rowid")?
         .query_map([], |row| {
@@ -78,14 +77,14 @@ fn chat_places(db: &Connection) -> Result<Vec<(String, Origin)>> {
 }
 
 /// The one chat of `chats` recorded at `place`, unless several are.
-fn only_chat_at(chats: &[(String, Origin)], place: &Origin) -> Option<String> {
+fn only_chat_at(chats: &[(String, Place)], place: &Place) -> Option<String> {
     let mut there = chats.iter().filter(|(_, at)| same_place(at, place));
     let (chat, _) = there.next()?;
     there.next().is_none().then(|| chat.clone())
 }
 
 /// Whether `a` and `b` name one instance of a place on one server.
-fn same_place(a: &Origin, b: &Origin) -> bool {
+fn same_place(a: &Place, b: &Place) -> bool {
     a.host == b.host
         && a.place.is_some()
         && a.place == b.place

@@ -9,7 +9,7 @@
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension as _, params};
 
-use shoal_protocol::space_names::SpaceName;
+use super::frozen::space_name;
 
 pub(super) fn names_from_titles(db: &Connection) -> Result<()> {
     let chat_renamed = drop_rename_triggers(db)?;
@@ -80,12 +80,12 @@ END;";
 
 /// The name a workspace takes from the first of `labels` that is not
 /// empty.
-fn name_from(labels: [Option<String>; 3]) -> Option<SpaceName> {
+fn name_from(labels: [Option<String>; 3]) -> Option<String> {
     let label = labels
         .into_iter()
         .flatten()
         .find(|label| !label.trim().is_empty())?;
-    Some(SpaceName::derive(&label, "workspace"))
+    Some(space_name(&label, "workspace"))
 }
 
 fn rename_workspaces(db: &Connection, titled: bool) -> Result<()> {
@@ -177,7 +177,7 @@ fn cut_chat_names(db: &Connection) -> Result<()> {
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     for (id, name) in chats {
-        let cut = SpaceName::derive(&name, "chat");
+        let cut = space_name(&name, "chat");
         if cut != name {
             db.execute(
                 "INSERT OR REPLACE INTO chat_legacy_names(chat_id,name) VALUES (?1,?2)",
