@@ -22,6 +22,13 @@ pub struct Login {
     pub email: Option<String>,
 }
 
+/// A login Git sends over HTTPS: the username the forge takes with a
+/// token, and the token as the password.
+pub struct GitLogin {
+    pub username: &'static str,
+    pub password: String,
+}
+
 /// What a request without a login for a host says: which token is
 /// missing and where to set it.
 pub type Missing = Box<dyn Fn(&str) -> String + Send + Sync>;
@@ -123,13 +130,18 @@ impl Account {
     /// host, saying which token is missing: an agent's changes never go out
     /// with the user's login it reads with.
     pub(crate) fn require_login(&self, repo: &ForgeRepo) -> Result<()> {
-        if self.has_login(repo) {
-            return Ok(());
-        }
-        match &self.missing {
-            Some(missing) => bail!("{}", missing(&repo.host)),
-            None => bail!("no token for {}", repo.host),
-        }
+        self.own_signer(repo).map(drop)
+    }
+
+    /// What Git signs in to `repo`'s host with over HTTPS as this account,
+    /// which needs a login of its own there, as [`Self::require_login`]
+    /// does.
+    pub async fn git_login(&self, repo: &ForgeRepo) -> Result<GitLogin> {
+        let token = self.own_signer(repo)?.token().await?;
+        Ok(GitLogin {
+            username: repo.kind().git_username(),
+            password: token.to_owned(),
+        })
     }
 
     /// Whether the account has a login of its own for `repo`'s host.
@@ -141,6 +153,18 @@ impl Account {
     /// its own nor the user's.
     pub(crate) fn reads_anonymously(&self, repo: &ForgeRepo) -> bool {
         self.signer(&repo.host).is_none()
+    }
+
+    /// The account's own login for `repo`'s host, or the refusal of a
+    /// change without one.
+    fn own_signer(&self, repo: &ForgeRepo) -> Result<&Signer> {
+        if let Some(signer) = self.logins.get(&repo.host) {
+            return Ok(signer);
+        }
+        match &self.missing {
+            Some(missing) => bail!("{}", missing(&repo.host)),
+            None => bail!("no token for {}", repo.host),
+        }
     }
 
     /// The login for `host`: the account's own, else the user's.

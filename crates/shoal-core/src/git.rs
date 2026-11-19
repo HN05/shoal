@@ -28,6 +28,7 @@ pub(crate) mod refs;
 mod remotes;
 pub(crate) use remotes::{RemoteUrls, remote_urls, upstream};
 pub use remotes::{configured_remote_url, push_remote, remote_names, remote_push_urls, remote_url};
+pub mod remote_deletion;
 pub mod repo;
 pub mod revert;
 pub(crate) mod scratch;

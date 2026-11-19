@@ -180,6 +180,11 @@ impl ForgeRepo {
         format!("{}://{}/{}", self.web_scheme, self.host, self.path)
     }
 
+    /// The URL Git reaches the repository at over HTTP.
+    pub fn git_url(&self) -> String {
+        format!("{}.git", self.repository_url())
+    }
+
     pub fn issue(&self, input: &str) -> Result<(IssueNumber, String)> {
         let (number, url) = self.kind.issue_route().resolve(self, input)?;
         Ok((IssueNumber::new(number), url))
