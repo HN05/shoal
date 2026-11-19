@@ -173,3 +173,22 @@ async fn the_first_sweep_releases_the_refs_a_restart_left_unheld() {
     assert!(carried(&repo).await.is_empty());
     manager.store.shutdown().await;
 }
+
+#[tokio::test]
+async fn a_sweep_retries_a_release_that_failed() {
+    let (root, manager) = manager().await;
+    let (repo, commit) = carried_here(&manager, root.path()).await;
+    // Git refuses to delete a ref another process holds locked.
+    let lock = repo
+        .path
+        .join(format!(".git/refs/shoal/carried/{commit}.lock"));
+    std::fs::write(&lock, "").unwrap();
+    manager.release_unclaimed_carried().await.unwrap();
+    assert_eq!(carried(&repo).await, std::slice::from_ref(&commit));
+    std::fs::remove_file(&lock).unwrap();
+
+    manager.release_unclaimed_carried().await.unwrap();
+
+    assert!(carried(&repo).await.is_empty());
+    manager.store.shutdown().await;
+}

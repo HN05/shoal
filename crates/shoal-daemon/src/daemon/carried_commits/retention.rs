@@ -5,7 +5,8 @@
 //! nothing does, as when its workspace has its branch, its launch failed
 //! or its space is gone, the ref goes, and Git may collect what only it
 //! kept. The cleanup sweep reclaims the refs of launches that never came,
-//! once their holds lapse, and those a restart left without holds.
+//! once their holds lapse, those a restart left without holds and those a
+//! failed release left.
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
@@ -30,6 +31,9 @@ pub(crate) struct CarriedHolds {
     /// Whether a sweep released every repository's carried refs since the
     /// daemon started.
     swept: AtomicBool,
+    /// The repositories whose last release failed, which the next sweep
+    /// releases again.
+    failed: std::sync::Mutex<Vec<RepositoryId>>,
 }
 
 /// A carried commit that a launch is to start from, in the repository the
@@ -83,6 +87,19 @@ impl CarriedHolds {
             .collect()
     }
 
+    /// Have the next sweep release `repository` again.
+    fn retry(&self, repository: &RepositoryId) {
+        let mut failed = self.failed.lock().unwrap();
+        if !failed.contains(repository) {
+            failed.push(repository.clone());
+        }
+    }
+
+    /// The repositories whose last release failed.
+    fn take_failed(&self) -> Vec<RepositoryId> {
+        std::mem::take(&mut *self.failed.lock().unwrap())
+    }
+
     /// Give up the holds whose launches never came, returning their
     /// repositories.
     fn give_up_lapsed(&self) -> Vec<RepositoryId> {
@@ -132,16 +149,22 @@ impl Manager {
         }
     }
 
-    /// Release the carried refs of the repositories whose holds lapsed, and
-    /// on the first pass since the daemon started those of every
-    /// repository, which a restart left without the holds that kept them.
+    /// Release the carried refs of the repositories whose holds lapsed or
+    /// whose last release failed, and on the first pass since the daemon
+    /// started those of every repository, which a restart left without the
+    /// holds that kept them.
     pub(crate) async fn release_unclaimed_carried(&self) -> Result<()> {
-        let repositories = match self.carried_holds.swept.swap(true, Ordering::Relaxed) {
+        let mut repositories = match self.carried_holds.swept.swap(true, Ordering::Relaxed) {
             true => self.carried_holds.give_up_lapsed(),
             false => (self.repositories().await?.into_iter())
                 .map(|repository| repository.id)
                 .collect(),
         };
+        for failed in self.carried_holds.take_failed() {
+            if !repositories.contains(&failed) {
+                repositories.push(failed);
+            }
+        }
         for repository in repositories {
             self.release_carried(&repository).await;
         }
@@ -149,10 +172,11 @@ impl Manager {
     }
 
     /// Delete the carried refs of `repository` that nothing needs any
-    /// longer; a failure is logged and leaves them to the next release.
+    /// longer; a failure is logged and leaves them to the next sweep.
     pub(crate) async fn release_carried(&self, repository: &RepositoryId) {
         if let Err(error) = self.release_unneeded(repository).await {
             crate::daemon::log!("carried commits of repository {repository} kept: {error:#}");
+            self.carried_holds.retry(repository);
         }
     }
 
