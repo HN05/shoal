@@ -655,7 +655,7 @@ async fn a_copy_of_a_renamed_workspace_at_a_commit_branches_from_its_commit() {
         .manager
         .create_commit_workspace(
             (f.source.repository()).into(),
-            None,
+            (None, None),
             crate::protocol::CommitStart::Revision(None),
             Default::default(),
         )

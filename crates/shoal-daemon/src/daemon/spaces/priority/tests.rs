@@ -231,3 +231,33 @@ async fn a_reopened_workspace_keeps_its_priority_unless_one_is_asked_for() {
     let stored = manager.store.read(move |tx| current(tx, &id)).await;
     assert_eq!(stored.unwrap(), Priority::URGENT);
 }
+
+/// A workspace at a commit records the priority its creation asks for.
+#[tokio::test]
+async fn a_workspace_at_a_commit_records_the_priority_it_is_given() {
+    use shoal_protocol::protocol::{CommitStart, CreationOptions};
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let options = CreationOptions {
+        priority: Some(Priority::URGENT),
+        ..Default::default()
+    };
+
+    let workspace = manager
+        .create_commit_workspace(
+            (&repo.id).into(),
+            (None, None),
+            CommitStart::Revision(None),
+            options,
+        )
+        .await
+        .unwrap();
+
+    let id = workspace.id.clone();
+    let stored = manager.store.read(move |tx| current(tx, &id)).await;
+    assert_eq!(stored.unwrap(), Priority::URGENT);
+}

@@ -264,7 +264,7 @@ async fn a_workspace_made_for_a_branch_moves_to_its_tip_and_one_at_a_tag_stays()
     let at = async |revision: &str| {
         let start = CommitStart::Revision(Some(revision.into()));
         (f.manager)
-            .create_commit_workspace((&f.repo.id).into(), None, start, Default::default())
+            .create_commit_workspace((&f.repo.id).into(), (None, None), start, Default::default())
             .await
             .unwrap()
     };

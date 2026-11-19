@@ -1397,7 +1397,7 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
     let workspace = manager
         .create_commit_workspace(
             (&repo.id).into(),
-            None,
+            (None, None),
             crate::protocol::CommitStart::Revision(None),
             Default::default(),
         )

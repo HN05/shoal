@@ -24,7 +24,12 @@ async fn create(
     start: CommitStart,
 ) -> anyhow::Result<Workspace> {
     manager
-        .create_commit_workspace(repo.into(), parent.cloned(), start, Default::default())
+        .create_commit_workspace(
+            repo.into(),
+            (parent.cloned(), None),
+            start,
+            Default::default(),
+        )
         .await
 }
 
@@ -485,7 +490,7 @@ async fn a_workspace_at_a_commit_goes_below_the_chat_or_workspace_it_names() {
     let create = |parent: Option<SpaceId>| {
         manager.create_commit_workspace(
             (&repo.id).into(),
-            parent,
+            (parent, None),
             CommitStart::Revision(None),
             Default::default(),
         )
@@ -835,7 +840,7 @@ async fn a_chat_opens_no_workspace_at_a_commit_in_another_repository() {
     manager
         .create_commit_workspace(
             (&other.id).into(),
-            Some(chat.id.clone()),
+            (Some(chat.id.clone()), None),
             CommitStart::Revision(None),
             Default::default(),
         )

@@ -639,7 +639,7 @@ async fn a_chat_being_removed_takes_no_new_space() {
     manager
         .create_commit_workspace(
             repo.id.clone().into(),
-            Some(chat.id.clone()),
+            (Some(chat.id.clone()), None),
             crate::protocol::CommitStart::Revision(None),
             Default::default(),
         )

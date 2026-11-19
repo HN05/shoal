@@ -62,22 +62,37 @@ pub(super) struct NewRecord {
 }
 
 impl Manager {
-    /// Create a workspace at the commit `start` names in `repository`: a
-    /// child of the space `parent`, by ID, or without one a top-level
-    /// workspace of the user's. It runs setup like any
-    /// workspace unless the caller skips it.
+    /// Create a workspace at the commit `start` names in `repository` for
+    /// `caller`: a child of the space `parent`, by ID, or without one a
+    /// top-level workspace of the user's, with the priority its options
+    /// ask for, at most the caller's own. It runs setup like any workspace
+    /// unless the caller skips it.
     pub async fn create_commit_workspace(
         &self,
         repository: crate::repository::Selector,
-        parent: Option<SpaceId>,
+        (parent, caller): (Option<SpaceId>, Option<&Caller>),
         start: CommitStart,
         options: CreationOptions,
     ) -> Result<Workspace> {
+        let priority = self.given_priority(caller, options.priority).await?;
         let new = NewWorkspace {
             options,
             parent,
             ..Default::default()
         };
+        let workspace = self.create_at_commit_start(repository, start, new).await?;
+        self.give_priority(&workspace.id, priority).await?;
+        Ok(workspace)
+    }
+
+    /// Create the workspace `new` describes at the commit `start` names in
+    /// `repository`.
+    async fn create_at_commit_start(
+        &self,
+        repository: crate::repository::Selector,
+        start: CommitStart,
+        new: NewWorkspace<'_>,
+    ) -> Result<Workspace> {
         if let CommitStart::Copy(source) = start {
             return (self.create_copy(repository, &source, super::CopyPlace::Commit, new)).await;
         }
