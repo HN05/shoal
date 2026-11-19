@@ -10,7 +10,6 @@ mod agent_turns;
 pub(crate) mod agents;
 mod branch_rename;
 mod branches;
-pub(crate) mod busy_cpu;
 pub(crate) mod capacity;
 mod checkpoints;
 mod commits;
@@ -141,7 +140,7 @@ pub struct Manager {
     pub executions: executions::Executions,
     pub overload_recovery: overload_recovery::OverloadRecovery,
     /// The busy CPU the overload monitor reads for job admission.
-    pub(crate) busy_cpu: busy_cpu::BusyCpu,
+    pub(crate) busy_cpu: super::busy_cpu::BusyCpu,
     pub agent_queue: agent_queue::AgentQueue,
     /// The contributions a running `shoal contribute` keeps from cleanup.
     pub(crate) contribution_holds: contributions::holds::ContributionHolds,
