@@ -242,6 +242,9 @@ pub(in crate::cli::commands) async fn pick_start_source(
     ctx: &Context,
     launch: &mut Launch,
 ) -> Result<()> {
+    // A number beside a branch or issue of the start's own names a
+    // repository, which the pickers then start in.
+    launch.target = crate::launches::decided_target(launch)?;
     if !ctx.interactive() {
         anyhow::ensure!(
             !begins_as_chat(launch),
