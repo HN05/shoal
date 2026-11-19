@@ -565,6 +565,12 @@ impl Manager {
         }
         let preparation = match self.space(selector).await?.by_kind() {
             ByKind::Workspace(workspace) => {
+                // An operation that passes, such as a reclamation, may leave
+                // the worktree unverifiable until it ends; registration
+                // checks again in its transaction.
+                if kind != ExecutionKind::Setup {
+                    self.await_reservation_end(&workspace.id).await?;
+                }
                 let preparation = self
                     .prepare_execution_kind(&workspace, kind, caller, merge)
                     .await?;

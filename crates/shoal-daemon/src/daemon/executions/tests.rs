@@ -768,15 +768,15 @@ async fn a_command_waits_only_for_a_state_that_passes() {
     }
 }
 
-/// Start a command in `workspace` while an update holds it, then end the
-/// update in `after`, returning the command's start.
-async fn command_started_during_update(
+/// A command's start in `workspace`, begun while `held` holds it, once the
+/// start waits for that to end or has given up.
+async fn command_started_during(
     manager: &Arc<Manager>,
     workspace: &Workspace,
-    after: WorkspaceState,
-) -> Result<StartedExecution> {
+    held: WorkspaceState,
+) -> tokio::task::JoinHandle<Result<StartedExecution>> {
     manager
-        .reserve_lifecycle(&workspace.id, WorkspaceState::Updating)
+        .reserve_lifecycle(&workspace.id, held)
         .await
         .unwrap();
     let watchers = manager.store.change_watchers();
@@ -787,13 +787,23 @@ async fn command_started_during_update(
             (manager.begin_execution(id.as_str(), None, ExecutionKind::Command, None)).await
         })
     };
-    // End the update only once the start waits for it, or has given up.
     bounded(async {
         while manager.store.change_watchers() == watchers && !start.is_finished() {
             tokio::task::yield_now().await;
         }
     })
     .await;
+    start
+}
+
+/// Start a command in `workspace` while an update holds it, then end the
+/// update in `after`, returning the command's start.
+async fn command_started_during_update(
+    manager: &Arc<Manager>,
+    workspace: &Workspace,
+    after: WorkspaceState,
+) -> Result<StartedExecution> {
+    let start = command_started_during(manager, workspace, WorkspaceState::Updating).await;
     manager.set_state(&workspace.id, after, None).await.unwrap();
     bounded(start).await.unwrap()
 }
@@ -819,4 +829,20 @@ async fn a_command_started_during_an_update_that_fails_is_refused() {
         Some(crate::refusal::Reason::NotReady),
         "{refused:#}"
     );
+}
+
+#[tokio::test]
+async fn a_command_started_while_a_repair_has_its_worktree_away_runs_once_it_ends() {
+    let (root, manager, workspace) = fixture("exit 0").await;
+    // A reclamation holds the workspace while its worktree does not verify.
+    let away = root.path().join("away");
+    fs::rename(&workspace.path, &away).unwrap();
+    let start = command_started_during(&manager, &workspace, WorkspaceState::Reconciling).await;
+    fs::rename(&away, &workspace.path).unwrap();
+    manager
+        .set_state(&workspace.id, WorkspaceState::Ready, None)
+        .await
+        .unwrap();
+    let started = bounded(start).await.unwrap().unwrap();
+    assert_eq!(started.space.id, workspace.id);
 }
