@@ -516,6 +516,39 @@ async fn a_viewer_an_earlier_daemon_left_starting_that_never_serves_is_replaced(
 }
 
 #[tokio::test]
+async fn an_open_after_a_recorded_viewer_exited_stops_what_it_left() {
+    let (temp, manager) = manager().await;
+    let (_, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
+    let port = manager.reserve_viewer_port(&demo, None).await.unwrap();
+    let (pid_file, gate) = (temp.path().join("helper.pid"), temp.path().join("exit"));
+    // A viewer an earlier daemon recorded as serving, whose leader exited
+    // and left a helper of its group.
+    let script = format!("{}; {}; exit 0", helper(&pid_file), await_file(&gate));
+    let mut earlier = ProcessGroup::spawn(
+        std::process::Command::new("sh")
+            .args(["-c", &script])
+            .env(env::EXECUTION_ID, &demo.execution_id),
+    );
+    let process = crate::process::identity::capture(earlier.id())
+        .unwrap()
+        .unwrap();
+    let helper = Helper::read(&pid_file).await;
+    let serving = Viewer {
+        port,
+        process: process.clone(),
+        serving: true,
+    };
+    (manager.record_viewer(&demo.execution_id, &serving))
+        .await
+        .unwrap();
+    std::fs::write(&gate, "").unwrap();
+    let _ = earlier.wait();
+    assert_eq!(manager.open_viewer(&demo, None).await.unwrap(), port);
+    helper.assert_stopped().await;
+    assert_ne!(viewer_process(&manager, &demo).await, process);
+}
+
+#[tokio::test]
 async fn a_viewer_port_another_process_listens_on_starts_no_viewer() {
     let (temp, manager) = manager().await;
     let (_, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;

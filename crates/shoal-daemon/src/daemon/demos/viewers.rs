@@ -102,11 +102,7 @@ impl Manager {
         }
         let start = lock(&self.viewers.starts, &demo.execution_id);
         let _starting = start.lock().await;
-        if let Some(viewer) = self.running_viewer(&demo.execution_id).await? {
-            let port = viewer.port;
-            if !viewer.serving {
-                self.await_recorded_viewer(demo, viewer).await?;
-            }
+        if let Some(port) = self.reuse_recorded_viewer(demo).await? {
             return Ok(port);
         }
         // Reserved first, so the environment exports it.
@@ -184,9 +180,32 @@ impl Manager {
 
     /// The viewer of the demo `execution` runs, while its process runs.
     pub(crate) async fn running_viewer(&self, execution: &ExecutionId) -> Result<Option<Viewer>> {
-        let execution = execution.clone();
-        let viewer = self.store.read(move |db| recorded(db, &execution)).await?;
+        let viewer = self.recorded_viewer(execution).await?;
         Ok(viewer.filter(|viewer| runs(&viewer.process)))
+    }
+
+    async fn recorded_viewer(&self, execution: &ExecutionId) -> Result<Option<Viewer>> {
+        let execution = execution.clone();
+        self.store.read(move |db| recorded(db, &execution)).await
+    }
+
+    /// The port of the viewer recorded for `demo` while it runs, once it
+    /// serves. One whose leader exited has what survives of its group
+    /// stopped and its record forgotten, so the open starts another.
+    async fn reuse_recorded_viewer(&self, demo: &Running) -> Result<Option<u16>> {
+        let Some(viewer) = self.recorded_viewer(&demo.execution_id).await? else {
+            return Ok(None);
+        };
+        if !runs(&viewer.process) {
+            stop_recorded(&demo.execution_id, &viewer.process).await;
+            self.forget_viewer(&demo.execution_id).await;
+            return Ok(None);
+        }
+        let port = viewer.port;
+        if !viewer.serving {
+            self.await_recorded_viewer(demo, viewer).await?;
+        }
+        Ok(Some(port))
     }
 
     /// Where `demo`'s viewer runs: the demo's verified worktree, with the
