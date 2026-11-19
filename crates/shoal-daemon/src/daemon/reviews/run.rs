@@ -22,7 +22,6 @@ use crate::{
         agent_queue::{self, OneShotAdmission, Serving},
         log,
         manager::Manager,
-        oneshot,
     },
     model::{Repository, Workspace},
     reviews::{FailureReason, Review, ReviewId, ReviewState, ReviewTarget},
@@ -31,6 +30,7 @@ use crate::{
 use shoal_forge::review::view::ViewRequests;
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
+use shoal_reviews::oneshot;
 
 /// Start every queued review, now and whenever one is queued; each then
 /// waits in the agent queue for admission.

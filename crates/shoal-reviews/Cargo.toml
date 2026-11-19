@@ -1,0 +1,25 @@
+[package]
+name = "shoal-reviews"
+version.workspace = true
+description = "The local reviews Shoal's daemon runs, and the gate agent"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+# What the daemon's tests use to reach a run's failed cleanup.
+test-support = []
+
+[dependencies]
+anyhow.workspace = true
+libc.workspace = true
+shoal-core.workspace = true
+shoal-daemon-base.workspace = true
+shoal-protocol.workspace = true
+tokio = { workspace = true, features = ["process", "sync", "time"] }
+
+[dev-dependencies]
+shoal-core = { workspace = true, features = ["test-support"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "test-util"] }

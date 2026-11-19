@@ -74,7 +74,7 @@ pub struct Manager {
     pub(crate) gate: crate::daemon::gate::Gatekeeper,
     pub(crate) runners: crate::daemon::runner::Runners,
     /// One-shot agent runs whose processes may still be running.
-    pub(crate) oneshot_runs: crate::daemon::oneshot::Runs,
+    pub(crate) oneshot_runs: shoal_reviews::oneshot::Runs,
     /// The retry each proxied execution's proxy waits to make.
     pub(super) proxy_retries:
         std::sync::Mutex<std::collections::HashMap<ExecutionId, super::proxy_retries::ProxyRetry>>,

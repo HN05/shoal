@@ -40,6 +40,7 @@ shoal-ids = { workspace = true, features = ["rusqlite"] }
 shoal-leases.workspace = true
 shoal-protocol = { workspace = true, features = ["rusqlite"] }
 shoal-refs = { workspace = true, features = ["rusqlite"] }
+shoal-reviews.workspace = true
 shoal-schedule = { workspace = true, features = ["rusqlite"] }
 shoal-store.workspace = true
 shoal-subprocess.workspace = true
@@ -63,5 +64,6 @@ shoal-daemon-base = { workspace = true, features = ["test-support"] }
 shoal-forge = { workspace = true, features = ["test-support"] }
 shoal-ids = { workspace = true, features = ["test-support"] }
 shoal-protocol = { workspace = true, features = ["test-support"] }
+shoal-reviews = { workspace = true, features = ["test-support"] }
 shoal-store = { workspace = true, features = ["test-support"] }
 tokio = { workspace = true, features = ["test-util"] }

@@ -59,7 +59,6 @@ pub mod links;
 mod logs;
 pub(crate) mod lost_reports;
 pub mod manager;
-pub(crate) mod oneshot;
 pub(crate) mod operations;
 mod overload;
 mod overload_recovery;

@@ -1,5 +1,5 @@
 use super::*;
-use crate::daemon::test_support::until_tests_end;
+use crate::test_support::until_tests_end;
 
 fn command(argv: &[&str]) -> AgentCommand {
     AgentCommand {
@@ -133,7 +133,7 @@ async fn a_descendant_that_left_the_group_is_stopped_with_the_run() {
     let mut escaping = command(&[
         std::env::current_exe().unwrap().to_str().unwrap(),
         "--exact",
-        "daemon::oneshot::tests::escape_the_group",
+        "oneshot::tests::escape_the_group",
         "--ignored",
     ]);
     escaping
@@ -160,11 +160,7 @@ async fn stopping_every_unfinished_run_stops_what_an_aborted_one_left() {
     let pid_file = root.path().join("escaped");
     // What a run aborted with the daemon left in another process group.
     let status = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([
-            "--exact",
-            "daemon::oneshot::tests::escape_the_group",
-            "--ignored",
-        ])
+        .args(["--exact", "oneshot::tests::escape_the_group", "--ignored"])
         .env(crate::env::ONESHOT_RUN, root.path())
         .env(ESCAPE_OWNER, std::process::id().to_string())
         .env(ESCAPE_PID_FILE, &pid_file)
@@ -227,11 +223,7 @@ fn escape_the_group() {
     }
     use std::os::unix::process::CommandExt as _;
     let child = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([
-            "--exact",
-            "daemon::oneshot::tests::escape_the_group",
-            "--ignored",
-        ])
+        .args(["--exact", "oneshot::tests::escape_the_group", "--ignored"])
         .env(ESCAPED, "1")
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())

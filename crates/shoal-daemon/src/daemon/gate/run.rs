@@ -27,12 +27,12 @@ use crate::{
         approvals::ApprovalRequest,
         log,
         manager::Manager,
-        oneshot,
     },
     reviews::{FailureReason, output},
     shoal_dirs::{Contents, ShoalDir},
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_reviews::oneshot;
 
 /// A run still running after this long is stopped; a decision that long
 /// has stopped making progress.

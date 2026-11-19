@@ -14,10 +14,15 @@ use std::{
 use anyhow::{Context, Result};
 use tokio::{process::Command, sync::watch};
 
-use crate::{agent::ModelChoice, config::Effective};
+use crate::{
+    agent::{Agent, ModelChoice},
+    ai,
+    config::Effective,
+    env, log, process,
+};
 
 /// An agent's command for one run.
-pub(crate) struct AgentCommand {
+pub struct AgentCommand {
     pub argv: Vec<OsString>,
     /// Variables added to the daemon's own, without its Shoal variables.
     pub environment: BTreeMap<String, OsString>,
@@ -28,9 +33,9 @@ pub(crate) struct AgentCommand {
 /// arguments of one of its templates: its launcher's words before `{args}`,
 /// the arguments that select the model and effort, then `args`, with its
 /// launch environment over `configured`.
-pub(crate) fn agent_command(
+pub fn agent_command(
     settings: &Effective,
-    agent: &crate::agent::Agent,
+    agent: &Agent,
     model: &ModelChoice,
     args: Vec<OsString>,
     configured: &BTreeMap<String, OsString>,
@@ -53,7 +58,7 @@ pub(crate) fn agent_command(
     let mut environment = configured.clone();
     launch.layer(&mut environment, home);
     Ok(AgentCommand {
-        argv: crate::ai::oneshot_command(launcher, selection.into_iter().chain(args).collect()),
+        argv: ai::oneshot_command(launcher, selection.into_iter().chain(args).collect()),
         environment,
         remove: launch.remove,
     })
@@ -62,24 +67,24 @@ pub(crate) fn agent_command(
 /// The run directories of one-shot runs whose processes may still be running:
 /// from a run's start until what it left is proven stopped.
 #[derive(Default)]
-pub(crate) struct Runs {
+pub struct Runs {
     unfinished: std::sync::Mutex<HashSet<PathBuf>>,
     /// Makes the process inventory fail, so tests reach what a failed
     /// cleanup leaves.
-    #[cfg(test)]
-    pub(crate) fail_inventory: std::sync::atomic::AtomicBool,
+    #[cfg(any(test, feature = "test-support"))]
+    pub fail_inventory: std::sync::atomic::AtomicBool,
 }
 
 impl Runs {
     /// Stop what every run that has not ended cleanly left, as the daemon
     /// stops after aborting them; a run whose processes are proven stopped
     /// is forgotten.
-    pub(crate) async fn stop_all(&self) {
+    pub async fn stop_all(&self) {
         let unfinished: Vec<PathBuf> = self.unfinished.lock().unwrap().iter().cloned().collect();
         for files in unfinished {
             match self.stop_leftovers(&files).await {
                 Ok(()) => self.end(&files),
-                Err(error) => crate::daemon::log!(
+                Err(error) => log!(
                     "stopping what the run in {} left: {error:#}",
                     files.display()
                 ),
@@ -89,7 +94,7 @@ impl Runs {
 
     /// Track the run in `files` until what it left is proven stopped, as
     /// when it starts or when a restarted daemon could not stop it.
-    pub(crate) fn track(&self, files: &Path) {
+    pub fn track(&self, files: &Path) {
         self.unfinished.lock().unwrap().insert(files.to_owned());
     }
 
@@ -102,8 +107,8 @@ impl Runs {
     /// identity, scanning again after each round of stops until none is
     /// left. Anyone else's process, such as a shell in the run's
     /// directory, is left alone.
-    pub(crate) async fn stop_leftovers(&self, files: &Path) -> Result<()> {
-        #[cfg(test)]
+    pub async fn stop_leftovers(&self, files: &Path) -> Result<()> {
+        #[cfg(any(test, feature = "test-support"))]
         anyhow::ensure!(
             !self
                 .fail_inventory
@@ -117,7 +122,7 @@ impl Runs {
 /// A run whose processes in other process groups could not be proven
 /// stopped, so its tracking must outlive it.
 #[derive(Debug)]
-pub(crate) struct LeftRunning;
+pub struct LeftRunning;
 
 impl std::fmt::Display for LeftRunning {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -126,7 +131,7 @@ impl std::fmt::Display for LeftRunning {
 }
 
 /// One run of a command.
-pub(crate) struct Run<'a> {
+pub struct Run<'a> {
     /// Where the run is tracked until what it left is stopped.
     pub runs: &'a Runs,
     pub command: &'a AgentCommand,
@@ -140,7 +145,7 @@ pub(crate) struct Run<'a> {
 
 /// How a run ended.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Ended {
+pub enum Ended {
     Exited { success: bool },
     TimedOut,
     Cancelled,
@@ -151,7 +156,7 @@ pub(crate) enum Ended {
 /// started in other groups, which still carries its marker. An error means
 /// it could not be started or waited for, or, as [`LeftRunning`], that what
 /// it left could not be stopped, so the run stays tracked.
-pub(crate) async fn run(run: &Run<'_>, cancel: &mut watch::Receiver<bool>) -> Result<Ended> {
+pub async fn run(run: &Run<'_>, cancel: &mut watch::Receiver<bool>) -> Result<Ended> {
     run.runs.track(run.files);
     let ended = run_group(run, cancel).await;
     run.runs
@@ -191,12 +196,12 @@ async fn run_group(run: &Run<'_>, cancel: &mut watch::Receiver<bool>) -> Result<
 }
 
 /// Where a run in `files` writes its standard output.
-pub(crate) fn stdout(files: &Path) -> PathBuf {
+pub fn stdout(files: &Path) -> PathBuf {
     files.join("stdout")
 }
 
 /// Where a run in `files` writes its standard error.
-pub(crate) fn stderr(files: &Path) -> PathBuf {
+pub fn stderr(files: &Path) -> PathBuf {
     files.join("stderr")
 }
 
@@ -208,16 +213,16 @@ const STOP_ROUNDS: usize = 5;
 async fn stop_marked(files: &Path) -> Result<()> {
     let run = files.to_string_lossy().into_owned();
     for _ in 0..STOP_ROUNDS {
-        let left = crate::process::identity::scan_oneshot_runs([run.clone()].into()).await?;
+        let left = process::identity::scan_oneshot_runs([run.clone()].into()).await?;
         if left.is_empty() {
             return Ok(());
         }
-        crate::daemon::log!(
+        log!(
             "stopping {} agent processes the run in {} left",
             left.len(),
             files.display()
         );
-        crate::process::identity::stop_verified(&left).await?;
+        process::identity::stop_verified(&left).await?;
     }
     anyhow::bail!(
         "processes of the run in {} kept appearing while it was stopped",
@@ -266,21 +271,21 @@ fn command(run: &Run) -> Result<Command> {
     let mut command = Command::new(program);
     command.args(args);
     for (name, _) in std::env::vars_os() {
-        if name.to_string_lossy().starts_with(crate::env::PREFIX) {
+        if name.to_string_lossy().starts_with(env::PREFIX) {
             command.env_remove(name);
         }
     }
-    for name in crate::env::inherited_secret_exports() {
+    for name in env::inherited_secret_exports() {
         command.env_remove(name);
     }
-    if let Some(path) = crate::env::path_without_secret_tools() {
+    if let Some(path) = env::path_without_secret_tools() {
         command.env("PATH", path);
     }
-    crate::env::apply_configured(&mut command, &run.command.environment);
+    env::apply_configured(&mut command, &run.command.environment);
     for name in &run.command.remove {
         command.env_remove(name);
     }
-    command.env(crate::env::ONESHOT_RUN, run.files);
+    command.env(env::ONESHOT_RUN, run.files);
     command
         .current_dir(run.directory)
         .stdin(Stdio::null())
@@ -293,7 +298,7 @@ fn command(run: &Run) -> Result<Command> {
 
 /// The file's bytes, unless it is missing, as from a command that wrote
 /// none, or larger than `limit`.
-pub(crate) fn read_bounded(path: &Path, limit: u64) -> std::io::Result<Option<Vec<u8>>> {
+pub fn read_bounded(path: &Path, limit: u64) -> std::io::Result<Option<Vec<u8>>> {
     match fs::metadata(path) {
         Ok(metadata) if metadata.len() > limit => Ok(None),
         Ok(_) => fs::read(path).map(Some),
@@ -303,7 +308,7 @@ pub(crate) fn read_bounded(path: &Path, limit: u64) -> std::io::Result<Option<Ve
 }
 
 /// The first `limit` bytes of the file.
-pub(crate) fn read_head(path: &Path, limit: u64) -> std::io::Result<Vec<u8>> {
+pub fn read_head(path: &Path, limit: u64) -> std::io::Result<Vec<u8>> {
     use std::io::Read;
     let mut head = Vec::new();
     fs::File::open(path)?.take(limit).read_to_end(&mut head)?;
@@ -311,7 +316,7 @@ pub(crate) fn read_head(path: &Path, limit: u64) -> std::io::Result<Vec<u8>> {
 }
 
 /// The last `limit` bytes of the file.
-pub(crate) fn read_tail(path: &Path, limit: u64) -> std::io::Result<Vec<u8>> {
+pub fn read_tail(path: &Path, limit: u64) -> std::io::Result<Vec<u8>> {
     use std::io::{Read, Seek, SeekFrom};
     let mut file = fs::File::open(path)?;
     let length = file.metadata()?.len();
