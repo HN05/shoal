@@ -196,14 +196,17 @@ impl Manager {
             && self.vouched_space(&caller.space_id).is_some()
     }
 
-    /// The ID and name of the space `selector` names: one here, or the
-    /// space another machine vouches for while its process's forwarded
-    /// request runs here, by its ID.
-    pub(crate) async fn acting_space(&self, selector: &SpaceSelector) -> Result<(SpaceId, String)> {
-        if let Some(id) = selector.given_id()
-            && self.vouched_space(id).is_some()
+    /// The ID and name of the space `selector` names: one here, or
+    /// `caller`'s own where another machine vouches for it, by its ID.
+    pub(crate) async fn acting_space(
+        &self,
+        caller: Option<&Caller>,
+        selector: &SpaceSelector,
+    ) -> Result<(SpaceId, String)> {
+        if let Some(caller) = caller
+            && self.names_vouched_own(caller, selector)
         {
-            return Ok((id.clone(), id.to_string()));
+            return Ok((caller.space_id.clone(), caller.space_id.to_string()));
         }
         let space = self.space(selector).await?;
         Ok((space.id, space.name.to_string()))

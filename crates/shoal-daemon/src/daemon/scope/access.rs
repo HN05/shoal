@@ -399,7 +399,7 @@ impl Manager {
             .await?;
         self.ensure_reaches(caller, &self.space(target).await?)
             .await?;
-        let giver = Some(&caller.space_id);
+        let giver = Some(caller);
         (self.ensure_agent_held(giver, target, &mode, given)).await?;
         Ok(target)
     }
@@ -424,7 +424,7 @@ impl Manager {
             }
             None => None,
         };
-        let giver = Some(&caller.space_id);
+        let giver = Some(caller);
         (self.ensure_caller_holds(giver, &request.narrowing, repository.as_ref())).await?;
         if request.mode == crate::config::modes::ModeName::SETUP {
             self.authorize_config_setup(caller).await?;

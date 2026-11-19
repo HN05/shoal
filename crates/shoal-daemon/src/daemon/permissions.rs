@@ -22,12 +22,12 @@ use shoal_protocol::{
 };
 
 impl Manager {
-    /// The permissions `caller` acts under in the registered repository
-    /// `repository`: its own space's, whichever space it acts on.
+    /// The permissions `caller` acts under for an action in the registered
+    /// repository `repository`: its own space's, whichever space it acts on.
     pub(crate) async fn caller_permissions(
         &self,
         caller: &Caller,
-        repository: &RepositoryId,
+        repository: Option<&RepositoryId>,
     ) -> Result<Permissions> {
         self.caller_permissions_from(&self.config(), caller, repository)
             .await
@@ -39,14 +39,14 @@ impl Manager {
         &self,
         config: &Config,
         caller: &Caller,
-        repository: &RepositoryId,
+        repository: Option<&RepositoryId>,
     ) -> Result<Permissions> {
         if let Some(vouched) = self.vouched_space(&caller.space_id) {
-            return self.vouched_permissions(vouched, Some(repository)).await;
+            return self.vouched_permissions(vouched, repository).await;
         }
         let space = self.space_by_id(&caller.space_id).await?;
         let agent = recorded_agent(&space);
-        (self.permissions_below_parent(config, &space, agent, Some(repository))).await
+        (self.permissions_below_parent(config, &space, agent, repository)).await
     }
 
     /// The effective permissions of the space `id` for an action in the
@@ -137,25 +137,25 @@ impl Manager {
     /// process gives only what its own space holds, the user any.
     pub(crate) async fn ensure_caller_holds(
         &self,
-        caller: Option<&SpaceId>,
+        caller: Option<&Caller>,
         given: &PermissionsConfig,
         repository: Option<&RepositoryId>,
     ) -> Result<()> {
         match caller {
             Some(caller) if !given.is_empty() => {
-                given.ensure_held(&self.space_permissions(caller, repository).await?)
+                given.ensure_held(&self.caller_permissions(caller, repository).await?)
             }
             _ => Ok(()),
         }
     }
 
     /// Refuse `change` to the permissions of `space`'s agent where the
-    /// scoped process of the space `giver` does not hold a value it sets,
-    /// or the value a key it drops falls back to: the space's without what
-    /// its agent was given.
+    /// scoped process `giver` does not hold a value it sets, or the value a
+    /// key it drops falls back to: the space's without what its agent was
+    /// given.
     pub(crate) async fn ensure_change_held(
         &self,
-        giver: Option<&SpaceId>,
+        giver: Option<&Caller>,
         space: &Space,
         change: &PermissionChange,
         repository: Option<&RepositoryId>,
@@ -163,7 +163,7 @@ impl Manager {
         let Some(giver) = giver else {
             return Ok(());
         };
-        let held = self.space_permissions(giver, repository).await?;
+        let held = self.caller_permissions(giver, repository).await?;
         let mode = recorded_agent(space).map(|(mode, _)| (mode, PermissionsConfig::default()));
         let fallback =
             (self.permissions_below_parent(&self.config(), space, mode, repository)).await?;
@@ -171,13 +171,13 @@ impl Manager {
     }
 
     /// Refuse an agent in `mode` of the space `space` names that the scoped
-    /// process of the space `giver` queues or registers with `given`, which
-    /// replaces what the space recorded, where it changes that as
+    /// process `giver` queues or registers with `given`, which replaces what
+    /// the space recorded, where it changes that as
     /// [`Self::ensure_change_held`] refuses a change, with the fallback of
     /// each key it drops in that agent's mode.
     pub(crate) async fn ensure_agent_held(
         &self,
-        giver: Option<&SpaceId>,
+        giver: Option<&Caller>,
         space: &SpaceSelector,
         mode: &crate::config::modes::ModeName,
         given: &PermissionsConfig,

@@ -220,12 +220,12 @@ impl Manager {
         match caller {
             Some(caller) if self.decides_as_user(caller, &request).await? => {
                 let needed = needed(&request, approve, &details);
-                (self.ensure_permitted(&caller.space_id, &request, &needed)).await?;
+                (self.ensure_permitted(caller, &request, &needed)).await?;
                 self.decide_approval(number, approve, shown, details, None)
                     .await
             }
             Some(caller) => {
-                self.decide_routed_approval(&caller.space_id, number, approve, shown, details)
+                self.decide_routed_approval(caller, number, approve, shown, details)
                     .await
             }
             None => {
@@ -250,7 +250,7 @@ impl Manager {
             return Ok(false);
         }
         let repository = self.request_repository(request).await?;
-        let permissions = (self.space_permissions(&caller.space_id, repository.as_ref())).await?;
+        let permissions = (self.caller_permissions(caller, repository.as_ref())).await?;
         Ok(permissions.acting(PermissionKey::Decide) == crate::config::permissions::Acting::Direct)
     }
 
@@ -287,15 +287,16 @@ impl Manager {
         Ok(decision.request)
     }
 
-    /// Record the decision of the coordinating agent of `coordinator` on a
-    /// request routed to it, rechecking with the decision that the request is
-    /// still its to decide. It approves what a permission governs where its
-    /// own permission is `direct`, with a proposal's edits, and anything else
-    /// only while it holds a grant for it; otherwise it denies the request,
-    /// with a reason or as a duplicate, or passes it up.
+    /// Record the decision of `coordinator`, the coordinating agent's
+    /// process, on a request routed to its space, rechecking with the
+    /// decision that the request is still its to decide. It approves what a
+    /// permission governs where its own permission is `direct`, with a
+    /// proposal's edits, and anything else only while it holds a grant for
+    /// it; otherwise it denies the request, with a reason or as a duplicate,
+    /// or passes it up.
     pub async fn decide_routed_approval(
         &self,
-        coordinator: &SpaceId,
+        coordinator: &Caller,
         number: ItemNumber,
         approve: bool,
         shown: Option<ApprovalRequest>,
@@ -314,7 +315,7 @@ impl Manager {
         }
         if request.target.is_proposal() {
             return self
-                .decide_proposal(request, approve, details, None, Some(coordinator))
+                .decide_proposal(request, approve, details, None, Some(&coordinator.space_id))
                 .await;
         }
         ensure!(
@@ -322,7 +323,7 @@ impl Manager {
             "only issue and PR proposals take a title, body, reason or duplicate"
         );
         let decision = self
-            .record_routed_decision(coordinator, &request, approve)
+            .record_routed_decision(&coordinator.space_id, &request, approve)
             .await?;
         if decision.new {
             self.tell_requester(&decision.request).await;
@@ -335,7 +336,7 @@ impl Manager {
     /// of the request's action.
     async fn ensure_permitted(
         &self,
-        coordinator: &SpaceId,
+        coordinator: &Caller,
         request: &ApprovalRequest,
         keys: &[PermissionKey],
     ) -> Result<()> {
@@ -344,7 +345,7 @@ impl Manager {
         }
         let repository = self.request_repository(request).await?;
         let permissions = self
-            .space_permissions(coordinator, repository.as_ref())
+            .caller_permissions(coordinator, repository.as_ref())
             .await?;
         if let Some(withheld) = permissions.withheld(keys) {
             let id = request.number;
@@ -376,18 +377,12 @@ impl Manager {
     /// finding changes that proposal.
     async fn ensure_reaches_proposal(
         &self,
-        coordinator: &SpaceId,
+        coordinator: &Caller,
         number: ItemNumber,
     ) -> Result<()> {
         let original = self.show_approval(number).await?;
-        let caller = Caller {
-            space_id: coordinator.clone(),
-            execution: None,
-            granted: None,
-            read_only: false,
-        };
         ensure!(
-            self.reaches(&caller, &original.space_id).await?,
+            self.reaches(coordinator, &original.space_id).await?,
             "approval request {number} is not this space's or below it; deny the duplicate with --reason or pass it up"
         );
         Ok(())
@@ -484,15 +479,16 @@ impl Manager {
     }
 
     /// Pass the request the space `space` decides on to the space above it,
-    /// or to the user. With `shown`, a later request reusing its number is
-    /// refused.
+    /// or to the user, for `caller`. With `shown`, a later request reusing
+    /// its number is refused.
     pub async fn escalate_approval(
         &self,
+        caller: Option<&Caller>,
         space: &SpaceSelector,
         number: ItemNumber,
         shown: Option<ApprovalRequest>,
     ) -> Result<ApprovalRequest> {
-        let (decider, name) = self.acting_space(space).await?;
+        let (decider, name) = self.acting_space(caller, space).await?;
         let request = self.show_approval(number).await?;
         crate::refusal::ensure_unchanged(
             shown.is_none_or(|shown| request.is_same(&shown)),

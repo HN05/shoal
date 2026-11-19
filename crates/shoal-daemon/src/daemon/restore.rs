@@ -210,8 +210,7 @@ impl Manager {
             )));
         }
         let repository = removed.repository_id.as_ref();
-        let held =
-            (self.ensure_caller_holds(Some(&caller.space_id), &kept.narrowing, repository)).await;
+        let held = (self.ensure_caller_holds(Some(caller), &kept.narrowing, repository)).await;
         Ok(held.err().map(|error| {
             format!("{name} was given permissions this space does not hold: {error:#}")
         }))

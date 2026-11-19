@@ -3,6 +3,7 @@ use crate::{
     config::permissions::{Opening, OtherRepositories, PermissionSource, Pushes},
     daemon::{
         manager::Manager,
+        scope::Caller,
         test_support::{chat, manager, repository, workspace_below as workspace},
     },
     model::Repository,
@@ -215,7 +216,8 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
         let assignments: Vec<String> = assignments.iter().map(|a| (*a).to_owned()).collect();
         crate::config::permissions::PermissionsConfig::assigned(&assignments).unwrap()
     };
-    let (giver, child) = (Some(&worker.id), SpaceSelector::id(&child.id));
+    let worker = Caller::of_space(worker.id.clone());
+    let (giver, child) = (Some(&worker), SpaceSelector::id(&child.id));
 
     // What the space recorded comes back, with what the giver holds.
     let recorded = assigned(&["merge=direct", "push=propose"]);
@@ -273,6 +275,7 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
     let check = |giver: Option<SpaceId>, change| {
         let (manager, space, repository) = (manager.clone(), space.clone(), repo.id.clone());
         async move {
+            let giver = giver.map(Caller::of_space);
             let held =
                 manager.ensure_change_held(giver.as_ref(), &space, &change, Some(&repository));
             held.await
@@ -294,7 +297,8 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
     give(&manager, &talk.id, &["push=propose"]).await;
     let talk = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
     let none = crate::config::permissions::PermissionsConfig::default();
-    let (giver, child) = (Some(&top.id), SpaceSelector::id(&space.id));
+    let top = Caller::of_space(top.id.clone());
+    let (giver, child) = (Some(&top), SpaceSelector::id(&space.id));
     let registered = manager.ensure_agent_held(giver, &child, &WORKER, &none);
     assert!(registered.await.is_err());
     assert!(

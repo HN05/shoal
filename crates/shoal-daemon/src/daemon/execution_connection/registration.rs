@@ -90,7 +90,7 @@ pub(super) async fn register(
         return Err(Box::new(Body::error(exiting.code(), &exiting)));
     }
     let tracks_agent = kind == ExecutionKind::Command && agent.is_some();
-    let giver = caller.as_ref().map(|caller| &caller.space_id);
+    let giver = caller.as_ref();
     if let Some(agent) = &agent {
         (manager.ensure_agent_held(giver, &space, &agent.mode, &agent.narrowing))
             .await

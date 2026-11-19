@@ -137,7 +137,7 @@ impl Manager {
         };
         if let Some(caller) = caller {
             // No registered repository's config applies, so the global one does.
-            let permissions = self.space_permissions(&caller.space_id, None).await?;
+            let permissions = self.caller_permissions(caller, None).await?;
             anyhow::ensure!(
                 destination.opening(&permissions)? == Opening::Direct,
                 "agents propose issues only in registered repositories from a chat without a \
@@ -190,7 +190,7 @@ impl Manager {
         );
         let opening = match caller {
             Some(caller) => {
-                let permissions = self.caller_permissions(caller, space.repository_id());
+                let permissions = self.caller_permissions(caller, Some(space.repository_id()));
                 destination.opening(&permissions.await?)?
             }
             None => Opening::Direct,

@@ -229,7 +229,7 @@ pub(super) async fn handle(
                 Some(repository) => Some(manager.repository(repository).await?.id),
                 None => None,
             };
-            let held = manager.space_permissions(&caller.space_id, repository.as_ref());
+            let held = manager.caller_permissions(caller, repository.as_ref());
             Body::Permissions(held.await?)
         }
         WorkspaceMethod::IssueScope { space } => {

@@ -107,14 +107,14 @@ impl Manager {
     }
 
     /// Make `change` to the permissions each of the stopped agents and
-    /// waiting launches `targets` names was given, once none of them is refused, for
-    /// the scoped process of the space `giver`, which gives only what it
+    /// waiting launches `targets` names was given, once none of them is
+    /// refused, for the scoped process `giver`, which gives only what it
     /// holds, or for the user.
     pub async fn change_stopped_permissions(
         &self,
         targets: PermissionTargets<'_>,
         change: &crate::config::permissions::PermissionChange,
-        giver: Option<&SpaceId>,
+        giver: Option<&Caller>,
     ) -> Result<()> {
         let mut changed = Vec::new();
         for agent in targets.agents {
@@ -143,7 +143,7 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
         change: &crate::config::permissions::PermissionChange,
-        giver: Option<&SpaceId>,
+        giver: Option<&Caller>,
     ) -> Result<crate::model::QueueEntry> {
         let space = self.space(selector).await?;
         let repository = space.repository_id.clone();
@@ -168,7 +168,7 @@ impl Manager {
         &self,
         agent: &SavedAgent,
         change: &crate::config::permissions::PermissionChange,
-        giver: Option<&SpaceId>,
+        giver: Option<&Caller>,
     ) -> Result<Saved> {
         let (space, execution) = (self.space(&agent.workspace).await?, &agent.execution);
         let repository = space.repository_id.as_ref().cloned();

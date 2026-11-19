@@ -143,7 +143,7 @@ impl Manager {
         let (Some(caller), Some(agent)) = (caller, &preparing.agent) else {
             return Ok(());
         };
-        let (giver, given) = (Some(&caller.space_id), &agent.narrowing);
+        let (giver, given) = (Some(caller), &agent.narrowing);
         (self.ensure_caller_holds(giver, given, repository)).await?;
         if !agent.now {
             return Ok(());
@@ -166,7 +166,7 @@ impl Manager {
         else {
             return Ok(());
         };
-        let (giver, space) = (Some(&caller.space_id), SpaceSelector::id(&space.id));
+        let (giver, space) = (Some(caller), SpaceSelector::id(&space.id));
         (self.ensure_agent_held(giver, &space, &mode, &agent.narrowing)).await
     }
 }

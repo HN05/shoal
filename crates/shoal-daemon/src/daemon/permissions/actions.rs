@@ -216,7 +216,7 @@ impl Manager {
         key: PermissionKey,
         repository: Option<&RepositoryId>,
     ) -> Result<()> {
-        let permissions = self.space_permissions(&caller.space_id, repository).await?;
+        let permissions = self.caller_permissions(caller, repository).await?;
         match permissions.acting(key) {
             Acting::Deny => Err(denied(key.as_str(), &permissions, key)),
             Acting::Propose | Acting::Direct => Ok(()),
@@ -232,7 +232,7 @@ impl Manager {
         key: PermissionKey,
         repository: Option<&RepositoryId>,
     ) -> Result<()> {
-        let permissions = self.space_permissions(&caller.space_id, repository).await?;
+        let permissions = self.caller_permissions(caller, repository).await?;
         match permissions.acting(key) {
             Acting::Direct => Ok(()),
             Acting::Propose | Acting::Deny => Err(denied(key.as_str(), &permissions, key)),
@@ -260,7 +260,7 @@ impl Manager {
             return Ok(Taken::AtOnce);
         };
         let permissions = self
-            .space_permissions(&caller.space_id, action.repository.as_ref())
+            .caller_permissions(caller, action.repository.as_ref())
             .await?;
         match permissions.acting(action.key) {
             Acting::Direct => Ok(Taken::AtOnce),
