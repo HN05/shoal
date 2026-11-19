@@ -251,26 +251,19 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
-      # The checkout is shallow, so it fetches the PR's base commit too for
-      # the identity test's path filter, and deepens both histories until
-      # they meet for the affected packages. A base it cannot fetch runs
-      # everything.
+      # The checkout is shallow; the identity test's path filter and the
+      # affected packages read the PR's base, which it fetches too.
       - name: Checkout
+        env:
+          SHA: ${{ github.sha }}
+          TOKEN: ${{ github.token }}
         run: |
           git init -q .
           git remote add origin "${{ github.server_url }}/${{ github.repository }}.git"
-          auth="AUTHORIZATION: basic $(printf 'x-access-token:${{ github.token }}' | base64 | tr -d '\n')"
-          git -c http.extraheader="$auth" fetch -q --depth 1 origin "${{ github.sha }}"
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')"
+          git -c http.extraheader="$auth" fetch -q --depth 1 origin "$SHA"
           git checkout -q FETCH_HEAD
-          if [ -n "$PR_BASE" ]; then
-            git -c http.extraheader="$auth" fetch -q --depth 1 origin "$PR_BASE" ||
-              echo "could not fetch the PR's base $PR_BASE"
-            for depth in 50 500; do
-              git merge-base "$PR_BASE" HEAD > /dev/null 2>&1 && break
-              git -c http.extraheader="$auth" fetch -q --depth "$depth" origin "${{ github.sha }}" "$PR_BASE" ||
-                break
-            done
-          fi
+          .forgejo/scripts/fetch-pr-base.sh
 
       # One step, because the /ci-target slot lasts as long as the step's
       # shell. The slot keeps its build, unlike cross-build.yml's, so the
