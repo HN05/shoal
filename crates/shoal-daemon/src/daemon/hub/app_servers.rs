@@ -30,15 +30,32 @@ use crate::daemon::{log, manager::Manager};
 pub(super) type Body = BoxBody<Bytes, hyper::Error>;
 
 /// The nonces of the requests the hub forwarded lately, which no later
-/// request may use again while its time is within the skew.
-#[derive(Default)]
-pub(super) struct Nonces(Mutex<HashMap<Nonce, Instant>>);
+/// request may use again while its time is within the skew. The daemon
+/// keeps them only while it runs, so it takes no request signed before it
+/// started, whose nonce a daemon before it may have taken.
+pub(super) struct Nonces {
+    seen: Mutex<HashMap<Nonce, Instant>>,
+    since: crate::time::UnixTime,
+}
+
+impl Default for Nonces {
+    fn default() -> Self {
+        Self {
+            seen: Default::default(),
+            since: crate::time::UnixTime::now(),
+        }
+    }
+}
 
 impl Nonces {
-    /// Take `nonce`, unless an earlier request took it.
-    fn take(&self, nonce: Nonce) -> bool {
+    /// Take the nonce of a request signed at `time`, unless an earlier
+    /// request, or one before this daemon started, may have taken it.
+    fn take(&self, nonce: Nonce, time: u64) -> bool {
+        if time < self.since.seconds().unsigned_abs() {
+            return false;
+        }
         let now = Instant::now();
-        let mut seen = self.0.lock().unwrap();
+        let mut seen = self.seen.lock().unwrap();
         seen.retain(|_, at| now.duration_since(*at) < 2 * app_servers::SKEW);
         seen.insert(nonce, now).is_none()
     }
@@ -119,8 +136,8 @@ impl Manager {
             "its signature does not check"
         );
         ensure!(
-            self.hub.nonces.take(claim.nonce),
-            "its nonce was used before"
+            self.hub.nonces.take(claim.nonce, claim.time),
+            "its nonce was used before, or it was signed before this daemon started"
         );
         Ok(())
     }

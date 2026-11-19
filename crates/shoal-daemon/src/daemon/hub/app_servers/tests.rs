@@ -81,9 +81,15 @@ async fn respond(manager: &Arc<Manager>, request: String) -> String {
     response
 }
 
-/// A request for `target` that `member` signed with `key`, with `nonce`.
+/// A request for `target` that `member` signed with `key` now, with
+/// `nonce`.
 fn signed(member: &MemberId, key: &Identity, target: &str, nonce: &str) -> String {
     let time = UnixTime::now().seconds() as u64;
+    signed_at(member, key, target, nonce, time)
+}
+
+/// [`signed`] at `time`.
+fn signed_at(member: &MemberId, key: &Identity, target: &str, nonce: &str, time: u64) -> String {
     let nonce = nonce.parse().unwrap();
     let signed = app_servers::signed(member, time, &nonce, "GET", target);
     let signature = key.sign(&signed);
@@ -139,7 +145,11 @@ async fn a_request_no_paired_member_signed_never_reaches_the_server() {
             MemberId::generate()
         ),
     );
-    for request in [unsigned, unknown, forged, moved, doubled] {
+    // Signed within the skew but before this daemon started, so a daemon
+    // before it may have taken its nonce.
+    let earlier = UnixTime::now().seconds() as u64 - 60;
+    let before = signed_at(&member, &device, "/quay/", &nonce().to_string(), earlier);
+    for request in [unsigned, unknown, forged, moved, doubled, before] {
         let response = respond(&manager, request.clone()).await;
         assert!(
             response.starts_with("HTTP/1.1 401"),
