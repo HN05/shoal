@@ -474,8 +474,12 @@ async fn a_demo_whose_viewer_is_off_is_refused_one() {
 #[tokio::test]
 async fn stopping_a_viewer_that_exited_unreaped_takes_what_it_started_along() {
     let temp = tempfile::tempdir().unwrap();
-    let pid_file = temp.path().join("helper.pid");
-    let script = format!("sleep 30 & echo $! > {}; exit 0", pid_file.display());
+    let (pid_file, gate) = (temp.path().join("helper.pid"), temp.path().join("exit"));
+    let script = format!(
+        "sleep 30 & echo $! > {}; while [ ! -e {} ]; do sleep 0.05; done; exit 0",
+        pid_file.display(),
+        gate.display()
+    );
     let mut child = Command::new("sh")
         .args(["-c", &script])
         .process_group(0)
@@ -484,7 +488,9 @@ async fn stopping_a_viewer_that_exited_unreaped_takes_what_it_started_along() {
     let leader = crate::process::identity::capture(child.id().unwrap())
         .unwrap()
         .unwrap();
-    // The leader exits, leaving its helper, and stays unreaped.
+    // The leader exits once its identity is known, leaving its helper,
+    // and stays unreaped.
+    std::fs::write(&gate, "").unwrap();
     while !process::unreaped(&leader).unwrap() {
         tokio::time::sleep(START_POLL).await;
     }
