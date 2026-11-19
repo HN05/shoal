@@ -3789,20 +3789,25 @@ fn a_start_without_an_agent_queues_the_default_with_its_mode_and_task() {
     let workspace = fixture.add("owned");
     let id = workspace["id"].as_str().unwrap();
 
-    for args in [
-        &["start", repo, "--mode", "plan", "--", "Plan it"][..],
-        &["start", "--in", id, "--mode", "worker", "--", "Fix it"],
+    for (args, mode) in [
+        (
+            &["start", repo, "--mode", "plan", "--", "Plan it"][..],
+            "plan",
+        ),
+        (
+            &["start", "--in", id, "--mode", "worker", "--", "Fix it"],
+            "worker",
+        ),
     ] {
-        let output = fixture.run(args);
+        let output = fixture.run(&[&["--json"][..], args].concat());
         assert!(output.status.success(), "{args:?}: {}", printed(&output));
+        // It reports the agent's queue entry as queued, whether or not the
+        // queue has started it since: last after its workspace, or inside
+        // a chat's launch.
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let reported: Value = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
+        let entry = reported.get("entry").unwrap_or(&reported);
+        assert_eq!(entry["agent"], "waiter", "{entry}");
+        assert_eq!(entry["mode"], mode, "{entry}");
     }
-
-    let entries = fixture.ok(&["queue"]);
-    let mut queued: Vec<_> = (entries.as_array().unwrap().iter())
-        .map(|entry| (entry["agent"].clone(), entry["mode"].clone()))
-        .collect();
-    queued.sort_by_key(|(_, mode)| mode.to_string());
-    let expected =
-        [("waiter", "plan"), ("waiter", "worker")].map(|(agent, mode)| (agent.into(), mode.into()));
-    assert_eq!(queued, expected, "{entries}");
 }
