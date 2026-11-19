@@ -44,6 +44,37 @@ pub(crate) async fn merged_tree(repo: &Path, ours: &str, theirs: &str) -> Result
     )
 }
 
+/// A trial merge's outcome: the tree it makes, or the paths and messages of
+/// its conflicts.
+pub(crate) enum Merged {
+    Tree(String),
+    Conflicts(String),
+}
+
+/// Merge `theirs` into `ours`, as [`Merged`] tells it.
+pub(crate) async fn merge(repo: &Path, ours: &str, theirs: &str) -> Result<Merged> {
+    Ok(
+        match write_tree(repo, &["--name-only", ours, theirs]).await? {
+            Merge::Clean(stdout) => Merged::Tree(stdout.lines().next().unwrap_or_default().into()),
+            Merge::Conflicted(stdout) => Merged::Conflicts(conflict_report(&stdout)),
+        },
+    )
+}
+
+/// The paths and messages of a conflicted `git merge-tree --name-only`,
+/// without the tree ID it starts with.
+fn conflict_report(stdout: &[u8]) -> String {
+    let report = String::from_utf8_lossy(stdout);
+    let report = report.split_once('\n').map_or("", |(_, rest)| rest);
+    report.trim().to_owned()
+}
+
+/// The tree of `commit`.
+pub(crate) async fn tree_of(repo: &Path, commit: &str) -> Result<String> {
+    let tree = super::revision(repo, &format!("{commit}^{{tree}}"), super::run_isolated).await?;
+    Ok(tree.trim().to_owned())
+}
+
 /// Whether `stdout`'s first line or `-z` field is an object ID.
 fn starts_with_tree_id(stdout: &[u8]) -> bool {
     let first = stdout.split(|&byte| matches!(byte, b'\n' | b'\0')).next();

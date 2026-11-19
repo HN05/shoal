@@ -9,7 +9,7 @@ use shoal_refs::CommitId;
 
 use crate::git::{
     self,
-    merge_tree::{self, Merge},
+    merge_tree::{self, Merged},
     run_isolated as git_run, scratch,
 };
 
@@ -33,13 +33,11 @@ pub(crate) async fn squash(
     source: &CommitId,
     message: Option<&str>,
 ) -> Result<Applied> {
-    let args = ["--name-only", previous.as_str(), source.as_str()];
-    let tree = match merge_tree::write_tree(repo, &args).await? {
-        Merge::Clean(stdout) => stdout.lines().next().unwrap_or_default().to_owned(),
-        Merge::Conflicted(stdout) => return Ok(Applied::Conflicts(conflict_report(&stdout))),
+    let tree = match merge_tree::merge(repo, previous.as_str(), source.as_str()).await? {
+        Merged::Tree(tree) => tree,
+        Merged::Conflicts(report) => return Ok(Applied::Conflicts(report)),
     };
-    let unchanged = git_run(repo, &["rev-parse", &format!("{previous}^{{tree}}")]).await?;
-    if tree == unchanged.trim() {
+    if tree == merge_tree::tree_of(repo, previous.as_str()).await? {
         return Ok(Applied::Unchanged);
     }
     let message = match message {
@@ -154,14 +152,6 @@ fn rebase_command(worktree: &Path, onto: &str) -> tokio::process::Command {
     // Nothing may wait on an editor.
     command.env("GIT_EDITOR", "true");
     command
-}
-
-/// The paths and messages of a conflicted `git merge-tree --name-only`,
-/// without the tree ID it starts with.
-fn conflict_report(stdout: &[u8]) -> String {
-    let report = String::from_utf8_lossy(stdout);
-    let report = report.split_once('\n').map_or("", |(_, rest)| rest);
-    report.trim().to_owned()
 }
 
 /// The wrapper runs this only after stopping the merge process group: a
