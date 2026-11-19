@@ -24,7 +24,7 @@ use crate::{
     clippy::large_enum_variant,
     reason = "read once by the registration that made it"
 )]
-pub(super) enum Home {
+pub(crate) enum Home {
     Workspace {
         workspace: Workspace,
         repository: Repository,
@@ -52,7 +52,7 @@ impl Manager {
     /// The space `id` as a place to run an execution: a workspace whose
     /// worktree is there and verified to be its own, or a chat whose home
     /// is there. Running there counts as the space's activity.
-    pub(super) async fn execution_home(&self, id: &SpaceId) -> Result<Home> {
+    pub(crate) async fn execution_home(&self, id: &SpaceId) -> Result<Home> {
         let space = self.space_by_id(id).await?;
         let home = match space.by_kind() {
             ByKind::Workspace(workspace) => {
@@ -136,7 +136,7 @@ impl Home {
     }
 
     /// The space as the execution's connection keeps it.
-    pub(super) fn into_space(self) -> Space {
+    pub(crate) fn into_space(self) -> Space {
         match self {
             Self::Workspace { workspace, .. } => Space::from(workspace),
             Self::Chat { chat, .. } => Space::from(chat),

@@ -9,7 +9,7 @@ use super::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 246;
+pub(super) const SCHEMA_VERSION: i64 = 247;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -530,6 +530,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (244, UNPLANNED_CREATIONS, None),
     (245, "", Some(pending_plans)),
     (246, record_shapes::KEPT_BASES, None),
+    (247, include_str!("demo_viewers.sql"), None),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their

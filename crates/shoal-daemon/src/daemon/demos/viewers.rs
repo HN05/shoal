@@ -1,17 +1,20 @@
 //! Viewers of simulator demos: a tool, serve-sim unless the demo names
 //! another, that streams the demo's device and takes its input on a port,
 //! which a demo stream then carries as it carries a web demo's. The first
-//! open starts it, marked as the demo's execution, so stopping, removal and
-//! recovery stop it with the demo's other processes; it outlives the demo's
-//! runs and ends with the demo.
+//! open starts it in the demo's verified worktree, marked as the demo's
+//! execution, so stopping, removal and recovery stop it with the demo's
+//! other processes. The daemon records its process with the demo, by which
+//! it spares the viewer between the demo's runs, across its own restarts too.
 use std::{
     collections::{HashMap, VecDeque},
+    path::Path,
     process::Stdio,
     sync::{Arc, Mutex},
     time::Duration,
 };
 
 use anyhow::{Context as _, Result, bail};
+use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_leases::{allocation::Allocation, ports::Acquisition};
 use shoal_protocol::{demos::Running, space_names::SpaceSelector};
@@ -28,6 +31,7 @@ use crate::{
     daemon::manager::Manager,
     env,
     model::PortRequest,
+    process::identity::{self as process, Identity},
     refusal::{Reason, Refusal},
 };
 
@@ -40,76 +44,36 @@ const ERROR_LINES: usize = 10;
 /// The default viewer's program, and what installs it.
 const SERVE_SIM: (&str, &str) = ("serve-sim", "npm install -g serve-sim");
 
-/// The viewers of running demos, by the execution that runs each demo.
+/// The starts of demos' viewers, by the execution that runs each demo, so
+/// two opens of one demo start one viewer.
 #[derive(Default)]
 pub(crate) struct Viewers {
-    demos: Mutex<HashMap<ExecutionId, Slot>>,
+    starts: Mutex<HashMap<ExecutionId, Arc<AsyncMutex<()>>>>,
 }
 
-/// A demo's viewer, locked while it starts.
-type Slot = Arc<AsyncMutex<Option<Viewer>>>;
-
-/// A viewer serving on `port`: the process this daemon started, or none
-/// for one an earlier daemon started.
-struct Viewer {
-    port: u16,
-    process: Option<Process>,
-}
-
-/// A viewer process, the leader of its own process group, whose group is
-/// killed when it is dropped.
-struct Process {
-    child: Child,
-    group: u32,
-    errors: Arc<Mutex<VecDeque<String>>>,
+/// A viewer the daemon started: the port it serves on, and its process,
+/// which leads a process group of its own.
+pub(crate) struct Viewer {
+    pub(crate) port: u16,
+    pub(crate) process: Identity,
 }
 
 impl Viewers {
-    fn slot(&self, execution: &ExecutionId) -> Slot {
-        let mut demos = self.demos.lock().unwrap_or_else(|error| error.into_inner());
-        demos.entry(execution.clone()).or_default().clone()
+    fn start_lock(&self, execution: &ExecutionId) -> Arc<AsyncMutex<()>> {
+        let mut starts = self
+            .starts
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        starts.entry(execution.clone()).or_default().clone()
     }
 
-    /// The port the viewer of the demo `execution` runs serves on, while
-    /// it runs; none while it starts.
-    pub(crate) fn port(&self, execution: &ExecutionId) -> Option<u16> {
-        let slot = self.existing(execution)?;
-        let mut viewer = slot.try_lock().ok()?;
-        let viewer = viewer.as_mut()?;
-        viewer.runs().then_some(viewer.port)
-    }
-
-    /// The process group of the viewer this daemon started for the demo
-    /// `execution` runs, which outlives the demo's runs.
-    pub(crate) fn group(&self, execution: &ExecutionId) -> Option<u32> {
-        let slot = self.existing(execution)?;
-        let viewer = slot.try_lock().ok()?;
-        Some(viewer.as_ref()?.process.as_ref()?.group)
-    }
-
-    /// Forget the viewer of the demo `execution` ran, stopping it.
+    /// Forget the demo `execution` ran, whose viewer record went with it.
     pub(crate) fn end(&self, execution: &ExecutionId) {
-        let mut demos = self.demos.lock().unwrap_or_else(|error| error.into_inner());
-        demos.remove(execution);
-    }
-
-    fn existing(&self, execution: &ExecutionId) -> Option<Slot> {
-        let demos = self.demos.lock().unwrap_or_else(|error| error.into_inner());
-        demos.get(execution).cloned()
-    }
-}
-
-impl Viewer {
-    /// Its port while the process this daemon started runs.
-    fn serving(&mut self) -> Option<u16> {
-        let process = self.process.as_mut()?;
-        matches!(process.child.try_wait(), Ok(None)).then_some(self.port)
-    }
-
-    /// Whether it runs, as far as this daemon knows: one an earlier daemon
-    /// started is taken to until a connection to it fails.
-    fn runs(&mut self) -> bool {
-        self.process.is_none() || self.serving().is_some()
+        let mut starts = self
+            .starts
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        starts.remove(execution);
     }
 }
 
@@ -123,23 +87,39 @@ impl Manager {
                 format!("demo {name} has its viewer turned off; open it on its own machine");
             return Err(Refusal::new(Reason::NotReady, message).into());
         }
-        let slot = self.viewers.slot(&demo.execution_id);
-        let mut viewer = slot.lock().await;
-        if let Some(port) = viewer.as_mut().and_then(Viewer::serving) {
-            return Ok(port);
+        let start = self.viewers.start_lock(&demo.execution_id);
+        let _starting = start.lock().await;
+        if let Some(viewer) = self.running_viewer(&demo.execution_id).await? {
+            return Ok(viewer.port);
         }
-        let port = self.viewer_port(demo).await?;
-        // A viewer an earlier daemon started still serves there.
-        let process = match connect(port).await {
-            Ok(_) => None,
-            Err(_) => Some(self.start_viewer(demo, port).await?),
-        };
-        *viewer = Some(Viewer { port, process });
+        let directory = self.viewer_directory(demo).await?;
+        let port = self.reserve_viewer_port(demo).await?;
+        let process = start_viewer(demo, port, &directory).await?;
+        let viewer = Viewer { port, process };
+        if let Err(error) = self.record_viewer(&demo.execution_id, &viewer).await {
+            // The demo ended meanwhile, so nothing would stop its viewer.
+            let _ = process::stop_verified(std::slice::from_ref(&viewer.process)).await;
+            return Err(error);
+        }
         Ok(port)
     }
 
+    /// The viewer of the demo `execution` runs, while its process runs.
+    pub(crate) async fn running_viewer(&self, execution: &ExecutionId) -> Result<Option<Viewer>> {
+        let execution = execution.clone();
+        let viewer = self.store.read(move |db| recorded(db, &execution)).await?;
+        Ok(viewer.filter(|viewer| runs(&viewer.process)))
+    }
+
+    /// The worktree of `demo`'s workspace, once verified to be the
+    /// recorded one.
+    async fn viewer_directory(&self, demo: &Running) -> Result<std::path::PathBuf> {
+        let home = self.execution_home(&demo.workspace_id).await?;
+        self.space_directory(&home.into_space()).await
+    }
+
     /// The port reserved for `demo`'s viewer, under the demo's name.
-    async fn viewer_port(&self, demo: &Running) -> Result<u16> {
+    async fn reserve_viewer_port(&self, demo: &Running) -> Result<u16> {
         let name = &demo.launch.name;
         let request = PortRequest {
             port: None,
@@ -160,94 +140,147 @@ impl Manager {
         }
     }
 
-    /// Start `demo`'s viewer on `port` in its workspace and wait until the
-    /// port takes a connection.
-    async fn start_viewer(&self, demo: &Running, port: u16) -> Result<Process> {
-        let space = self.space(&SpaceSelector::id(&demo.workspace_id)).await?;
-        let directory = self.space_directory(&space).await?;
-        let command = (demo.launch)
-            .filled_viewer_command(port)
-            .context("the demo has no viewer")?;
-        let mut process = Process::spawn(&command, &directory, demo)?;
-        process.await_port(&command[0], port).await?;
-        Ok(process)
+    async fn record_viewer(&self, execution: &ExecutionId, viewer: &Viewer) -> Result<()> {
+        let execution = execution.clone();
+        let (port, process) = (viewer.port, serde_json::to_string(&viewer.process)?);
+        self.store
+            .write(move |tx| {
+                tx.execute(
+                    "INSERT OR REPLACE INTO demo_viewers(execution_id,port,process)
+                     VALUES (?1,?2,?3)",
+                    params![execution, port, process],
+                )?;
+                Ok(())
+            })
+            .await
     }
 }
 
-impl Process {
-    /// Start `command` in `directory` as `demo`'s viewer, in a process group
-    /// of its own, marked as the demo's execution, keeping its errors.
-    fn spawn(command: &[String], directory: &std::path::Path, demo: &Running) -> Result<Self> {
-        let (program, args) = command.split_first().context("the viewer has no program")?;
-        let child = Command::new(program)
-            .args(args)
-            .current_dir(directory)
-            .envs(&demo.launch.environment)
-            .env_remove(env::SCOPE_TOKEN)
-            .env(env::EXECUTION_ID, &demo.execution_id)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .process_group(0)
-            .kill_on_drop(true)
-            .spawn()
-            .map_err(|error| not_started(program, error))?;
-        let mut process = Self {
-            group: child.id().context("the viewer has no PID")?,
-            errors: Default::default(),
-            child,
-        };
-        if let Some(stderr) = process.child.stderr.take() {
-            tokio::spawn(keep_errors(stderr, process.errors.clone()));
-        }
-        Ok(process)
-    }
+/// The viewer recorded for the demo `execution` runs.
+fn recorded(db: &Connection, execution: &ExecutionId) -> Result<Option<Viewer>> {
+    let row: Option<(u16, String)> = db
+        .query_row(
+            "SELECT port,process FROM demo_viewers WHERE execution_id=?1",
+            [execution],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    row.map(|(port, process)| {
+        let process = serde_json::from_str(&process).context("invalid viewer record")?;
+        Ok(Viewer { port, process })
+    })
+    .transpose()
+}
 
-    /// Wait until `port` takes a connection, failing once the viewer
-    /// `program` exits or [`START_LIMIT`] passes.
-    async fn await_port(&mut self, program: &str, port: u16) -> Result<()> {
-        let deadline = Instant::now() + START_LIMIT;
-        loop {
-            if connect(port).await.is_ok() {
-                return Ok(());
-            }
-            if let Some(status) = self.child.try_wait()? {
-                let message = format!("viewer {program} exited with {status}{}", self.errors());
-                return Err(Refusal::new(Reason::NotReady, message).into());
-            }
-            if Instant::now() >= deadline {
-                let message = format!(
-                    "viewer {program} took no connection on port {port} within {}s{}",
-                    START_LIMIT.as_secs(),
-                    self.errors()
-                );
-                return Err(Refusal::new(Reason::NotReady, message).into());
-            }
-            tokio::time::sleep(START_POLL).await;
-        }
-    }
+/// Whether `process` runs: alive under its recorded identity and not
+/// exited awaiting its parent.
+fn runs(process: &Identity) -> bool {
+    process::alive(process).unwrap_or(false) && !process::unreaped(process).unwrap_or(true)
+}
 
-    /// The last lines of errors it printed, after a colon.
-    fn errors(&self) -> String {
-        let errors = self
-            .errors
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        if errors.is_empty() {
-            return String::new();
+/// Start `demo`'s viewer on `port` in `directory` and wait until the port
+/// takes a connection; a viewer that does not is stopped.
+async fn start_viewer(demo: &Running, port: u16, directory: &Path) -> Result<Identity> {
+    let command = (demo.launch)
+        .filled_viewer_command(port)
+        .context("the demo has no viewer")?;
+    let (mut child, errors) = spawn(&command, directory, demo)?;
+    let program = &command[0];
+    let started = async {
+        await_port(&mut child, program, port, &errors).await?;
+        let pid = child.id().context("the viewer exited")?;
+        process::capture(pid)?.context("the viewer exited")
+    };
+    match started.await {
+        Ok(identity) => {
+            // Its exit is reaped here; a daemon that goes leaves it running.
+            tokio::spawn(async move { child.wait().await });
+            Ok(identity)
         }
-        let lines: Vec<_> = errors.iter().map(String::as_str).collect();
-        format!(": {}", lines.join("\n"))
+        Err(error) => {
+            stop(&mut child).await;
+            Err(error)
+        }
     }
 }
 
-impl Drop for Process {
-    fn drop(&mut self) {
-        // SAFETY: the group of the viewer this daemon started, which leads it.
+/// Start `command` in `directory` as `demo`'s viewer, leading a process
+/// group of its own and marked as the demo's execution, with the errors it
+/// prints.
+fn spawn(
+    command: &[String],
+    directory: &Path,
+    demo: &Running,
+) -> Result<(Child, Arc<Mutex<VecDeque<String>>>)> {
+    let (program, args) = command.split_first().context("the viewer has no program")?;
+    let mut child = Command::new(program)
+        .args(args)
+        .current_dir(directory)
+        .envs(&demo.launch.environment)
+        .env_remove(env::SCOPE_TOKEN)
+        .env(env::EXECUTION_ID, &demo.execution_id)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .process_group(0)
+        .spawn()
+        .map_err(|error| not_started(program, error))?;
+    let errors = Arc::new(Mutex::new(VecDeque::new()));
+    if let Some(stderr) = child.stderr.take() {
+        tokio::spawn(keep_errors(stderr, errors.clone()));
+    }
+    Ok((child, errors))
+}
+
+/// Wait until `port` takes a connection, failing once the viewer
+/// `program`, which printed `errors`, exits or [`START_LIMIT`] passes.
+async fn await_port(
+    child: &mut Child,
+    program: &str,
+    port: u16,
+    errors: &Mutex<VecDeque<String>>,
+) -> Result<()> {
+    let deadline = Instant::now() + START_LIMIT;
+    loop {
+        if connect(port).await.is_ok() {
+            return Ok(());
+        }
+        if let Some(status) = child.try_wait()? {
+            let message = format!("viewer {program} exited with {status}{}", printed(errors));
+            return Err(Refusal::new(Reason::NotReady, message).into());
+        }
+        if Instant::now() >= deadline {
+            let message = format!(
+                "viewer {program} took no connection on port {port} within {}s{}",
+                START_LIMIT.as_secs(),
+                printed(errors)
+            );
+            return Err(Refusal::new(Reason::NotReady, message).into());
+        }
+        tokio::time::sleep(START_POLL).await;
+    }
+}
+
+/// Stop the process group `child` leads. Only while it is unreaped does
+/// its PID still name that group.
+async fn stop(child: &mut Child) {
+    if let (Ok(None), Some(pid)) = (child.try_wait(), child.id()) {
+        // SAFETY: the group of the unreaped child this daemon started.
         unsafe {
-            libc::kill(-(self.group as i32), libc::SIGKILL);
+            libc::kill(-(pid as i32), libc::SIGKILL);
         }
     }
+    let _ = child.wait().await;
+}
+
+/// The last lines of `errors`, after a colon.
+fn printed(errors: &Mutex<VecDeque<String>>) -> String {
+    let errors = errors.lock().unwrap_or_else(|error| error.into_inner());
+    if errors.is_empty() {
+        return String::new();
+    }
+    let lines: Vec<_> = errors.iter().map(String::as_str).collect();
+    format!(": {}", lines.join("\n"))
 }
 
 /// Why the viewer `program` did not start, naming how to install a missing

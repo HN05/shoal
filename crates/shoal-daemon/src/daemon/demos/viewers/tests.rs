@@ -7,7 +7,7 @@ use tokio::io::AsyncReadExt as _;
 use super::*;
 use crate::daemon::{
     executions::ExecutionKind,
-    test_support::{manager, repository},
+    test_support::{ProcessGroup, manager, repository},
 };
 
 /// A viewer that writes the device it was given to each connection on the
@@ -21,8 +21,12 @@ while True:
     connection.close()
 "#;
 
+const ECHO_VIEWER: &[&str] = &["python3", "-c", ECHO_DEVICE, "{port}", "{udid}"];
+
 /// A workspace running the simulator demo `app` on device `UDID-1` with
-/// `viewer`, and the demo as listings show it.
+/// `viewer`, from this process as its wrapper, and the demo as listings
+/// show it. The demo's port is one the system gave out, so tests running
+/// at once do not reach each other's viewers.
 async fn running(
     manager: &Manager,
     root: &std::path::Path,
@@ -47,18 +51,38 @@ async fn running(
         environment: BTreeMap::from([(SIM_UDID.to_owned(), "UDID-1".to_owned())]),
         origin: crate::sessions::Origin::created(crate::sessions::HostName::Zmx, "app".into()),
     };
+    let wrapper = crate::process::identity::capture(std::process::id()).unwrap();
     manager
         .begin_execution_running(
             workspace.id.as_str(),
-            None,
+            wrapper,
             ExecutionKind::Command,
             None,
             Some(launch),
         )
         .await
         .unwrap();
+    reserve_free_port(manager, &workspace.id).await;
     let demo = listed(manager, &workspace.id).await;
     (workspace.id, demo)
+}
+
+/// Reserve the demo's port at one nothing listens on.
+async fn reserve_free_port(manager: &Manager, workspace: &SpaceId) {
+    let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = free.local_addr().unwrap().port();
+    drop(free);
+    let request = PortRequest {
+        port: Some(port),
+        env_var: None,
+        reason: None,
+        on_conflict: None,
+    };
+    let workspace = SpaceSelector::id(workspace);
+    (manager.leases)
+        .acquire_port(manager, &workspace, "app".into(), request, None)
+        .await
+        .unwrap();
 }
 
 async fn listed(manager: &Manager, workspace: &SpaceId) -> Running {
@@ -74,39 +98,89 @@ async fn read(port: u16) -> String {
     received
 }
 
+/// Record a run of the demo `execution` runs that has exited.
+async fn exited_run(manager: &Manager, execution: &ExecutionId) {
+    let child = ProcessGroup::spawn(std::process::Command::new("sleep").arg("30"));
+    let identity = crate::process::identity::capture(child.id())
+        .unwrap()
+        .unwrap();
+    child.kill();
+    manager
+        .record_execution_child(execution.clone(), Some(identity.clone()), identity.pid)
+        .await
+        .unwrap();
+}
+
+/// The process of the viewer recorded for `demo`.
+async fn viewer_process(manager: &Manager, demo: &Running) -> Identity {
+    let viewer = manager.running_viewer(&demo.execution_id).await.unwrap();
+    viewer.expect("the viewer runs").process
+}
+
 #[tokio::test]
 async fn the_first_open_starts_the_viewer_on_the_demo_s_device_and_later_ones_reuse_it() {
     let (temp, manager) = manager().await;
-    let viewer = ["python3", "-c", ECHO_DEVICE, "{port}", "{udid}"];
-    let (workspace, demo) = running(&manager, temp.path(), Some(&viewer)).await;
+    let (workspace, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
     let unopened = demo.viewer.clone().expect("a simulator demo has a viewer");
     assert_eq!((unopened.tool.as_str(), unopened.url), ("python3", None));
     let port = manager.open_viewer(&demo).await.unwrap();
     assert_eq!(read(port).await, "UDID-1");
     let opened = listed(&manager, &workspace).await.viewer.unwrap();
     assert_eq!(opened.url, Some(format!("http://localhost:{port}")));
-    let group = manager.viewers.group(&demo.execution_id);
+    let process = viewer_process(&manager, &demo).await;
     assert_eq!(manager.open_viewer(&demo).await.unwrap(), port);
-    assert_eq!(manager.viewers.group(&demo.execution_id), group);
+    assert_eq!(viewer_process(&manager, &demo).await, process);
 }
 
 #[tokio::test]
 async fn the_viewer_outlives_the_demo_s_runs_and_ends_with_the_demo() {
     let (temp, manager) = manager().await;
-    let viewer = ["python3", "-c", ECHO_DEVICE, "{port}", "{udid}"];
-    let (workspace, demo) = running(&manager, temp.path(), Some(&viewer)).await;
+    let (workspace, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
     let port = manager.open_viewer(&demo).await.unwrap();
     // Between runs the daemon stops what the exited run left, which the
     // viewer, marked as the demo's execution, is not.
+    exited_run(&manager, &demo.execution_id).await;
     manager
         .release_exited_child(&demo.execution_id, &workspace)
         .await
         .unwrap();
     assert_eq!(read(port).await, "UDID-1");
-    let group = manager.viewers.group(&demo.execution_id).unwrap();
-    manager.viewers.end(&demo.execution_id);
-    crate::process::identity::group_exited(group).await.unwrap();
-    assert!(manager.viewers.port(&demo.execution_id).is_none());
+    // The demo's end stops it with the rest of its processes.
+    let process = viewer_process(&manager, &demo).await;
+    manager.stop_exited_processes(&demo.execution_id).await;
+    let stopped = async {
+        while !matches!(manager.running_viewer(&demo.execution_id).await, Ok(None)) {
+            tokio::time::sleep(START_POLL).await;
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(60), stopped)
+        .await
+        .unwrap_or_else(|_| panic!("viewer {} still runs", process.pid));
+}
+
+#[tokio::test]
+async fn a_viewer_an_earlier_daemon_started_is_the_demo_s_until_it_exits() {
+    let (temp, manager) = manager().await;
+    let (_, demo) = running(&manager, temp.path(), Some(&["false"])).await;
+    let port = manager.reserve_viewer_port(&demo).await.unwrap();
+    let earlier = ProcessGroup::spawn(std::process::Command::new("python3").args([
+        "-c",
+        ECHO_DEVICE,
+        &port.to_string(),
+        "UDID-1",
+    ]));
+    let process = crate::process::identity::capture(earlier.id())
+        .unwrap()
+        .unwrap();
+    let viewer = Viewer { port, process };
+    (manager.record_viewer(&demo.execution_id, &viewer))
+        .await
+        .unwrap();
+    // Its command would fail, so the open reuses the recorded viewer.
+    assert_eq!(manager.open_viewer(&demo).await.unwrap(), port);
+    earlier.kill();
+    let refused = manager.open_viewer(&demo).await.err().unwrap();
+    assert_eq!(Reason::of(&refused), Some(Reason::NotReady));
 }
 
 #[tokio::test]

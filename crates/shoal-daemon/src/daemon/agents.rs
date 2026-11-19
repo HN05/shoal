@@ -594,8 +594,8 @@ impl Manager {
             Ok(processes) => processes,
             Err(error) => return Some(format!("process inspection failed: {error:#}")),
         };
-        if let Some(viewer) = self.viewers.group(&record.id) {
-            processes.spare_group(viewer);
+        if let Ok(Some(viewer)) = self.running_viewer(&record.id).await {
+            processes.spare_group(viewer.process.pid);
         }
         if let Some(issue) = processes.completion_issue() {
             // A survivor can fork while stopping, so only a later scan proves the stop.

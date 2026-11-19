@@ -41,8 +41,8 @@ impl Manager {
             .run(move |db| list(db, workspace.as_ref()))
             .await?;
         for demo in &mut demos {
-            let port = self.viewers.port(&demo.execution_id);
-            demo.viewer = demo.launch.viewer(port);
+            let viewer = self.running_viewer(&demo.execution_id).await?;
+            demo.viewer = demo.launch.viewer(viewer.map(|viewer| viewer.port));
         }
         Ok(demos)
     }

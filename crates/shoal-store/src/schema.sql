@@ -112,6 +112,12 @@ CREATE TABLE demos (
     UNIQUE(workspace_id,name)
 );
 
+CREATE TABLE demo_viewers (
+    execution_id TEXT PRIMARY KEY REFERENCES demos(execution_id) ON DELETE CASCADE,
+    port INTEGER NOT NULL,
+    process TEXT NOT NULL
+);
+
 CREATE TABLE session_cleanup (
     id TEXT PRIMARY KEY,
     host TEXT NOT NULL,
