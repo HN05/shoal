@@ -81,3 +81,34 @@ fn a_simulator_demo_runs_the_default_viewer_unless_its_own_or_none() {
     };
     assert_eq!(web.viewer_command(), None);
 }
+
+#[test]
+fn a_listed_simulator_demo_keeps_its_viewer_and_its_command_apart() {
+    let launch = Launch {
+        id: "launch".into(),
+        name: "app".into(),
+        preset: Some(Preset::Simulator),
+        open: None,
+        scheme: None,
+        viewer_command: Some(vec!["serve-sim".into(), "{udid}".into()]),
+        environment: BTreeMap::from([(SIM_UDID.to_owned(), "UDID-1".to_owned())]),
+        origin: crate::sessions::Origin::created(crate::sessions::HostName::Zmx, "app".into()),
+    };
+    let running = Running {
+        workspace_id: "workspace".into(),
+        workspace: "tried".into(),
+        execution_id: "execution".into(),
+        started_at: crate::time::UnixTime::from_seconds(0),
+        has_run: true,
+        kind: Kind::Simulator,
+        url: None,
+        viewer: launch.viewer(Some(49400)),
+        launch,
+    };
+    let json = serde_json::to_string(&running).unwrap();
+    let read: Running = serde_json::from_str(&json).unwrap();
+    assert_eq!(read, running);
+    let viewer = read.viewer.unwrap();
+    assert_eq!(viewer.tool, "serve-sim");
+    assert_eq!(viewer.url.as_deref(), Some("http://localhost:49400"));
+}

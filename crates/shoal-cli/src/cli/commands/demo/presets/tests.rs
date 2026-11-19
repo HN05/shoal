@@ -8,7 +8,7 @@ fn launch(preset: Preset, variable: &str, value: &str) -> Launch {
         preset: Some(preset),
         open: None,
         scheme: None,
-        viewer: None,
+        viewer_command: None,
         environment: BTreeMap::from([(variable.to_owned(), value.to_owned())]),
         origin: crate::sessions::Origin::created(
             crate::sessions::HostName::Zmx,
@@ -65,7 +65,7 @@ fn server_demos_print_their_address_without_a_scheme() {
 fn simulator_demos_print_their_viewer_s_url_over_ssh_and_how_to_forward_it() {
     let ssh = Some("10.0.0.2 52000 10.0.0.1 22");
     let app = Launch {
-        viewer: Some(vec!["serve-sim".into(), "{udid}".into()]),
+        viewer_command: Some(vec!["serve-sim".into(), "{udid}".into()]),
         ..launch(Preset::Simulator, SIM_UDID, "UDID-1")
     };
     let over_ssh = instructions(Preset::Simulator, &app, ssh, Some(49400)).unwrap();

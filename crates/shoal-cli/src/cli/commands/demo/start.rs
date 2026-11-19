@@ -227,7 +227,7 @@ async fn place(
         preset: chosen.demo.preset,
         open: chosen.demo.open.clone(),
         scheme: chosen.demo.scheme,
-        viewer: chosen.demo.viewer_command(),
+        viewer_command: chosen.demo.viewer_command(),
         environment: provided.environment.clone(),
         origin: place.clone(),
     };

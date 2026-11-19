@@ -118,7 +118,7 @@ impl Manager {
     /// on the demo's first open; refused for a demo whose viewer is off.
     pub(crate) async fn open_viewer(&self, demo: &Running) -> Result<u16> {
         let name = &demo.launch.name;
-        if demo.launch.viewer.is_none() {
+        if demo.launch.viewer_command.is_none() {
             let message =
                 format!("demo {name} has its viewer turned off; open it on its own machine");
             return Err(Refusal::new(Reason::NotReady, message).into());
@@ -166,7 +166,7 @@ impl Manager {
         let space = self.space(&SpaceSelector::id(&demo.workspace_id)).await?;
         let directory = self.space_directory(&space).await?;
         let command = (demo.launch)
-            .viewer_command(port)
+            .filled_viewer_command(port)
             .context("the demo has no viewer")?;
         let mut process = Process::spawn(&command, &directory, demo)?;
         process.await_port(&command[0], port).await?;

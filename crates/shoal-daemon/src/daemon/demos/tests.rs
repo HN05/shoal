@@ -23,7 +23,7 @@ fn launch(name: &str) -> Launch {
         preset: None,
         open: None,
         scheme: None,
-        viewer: None,
+        viewer_command: None,
         environment: BTreeMap::new(),
         origin: crate::sessions::Origin::created(
             crate::sessions::HostName::Zmx,

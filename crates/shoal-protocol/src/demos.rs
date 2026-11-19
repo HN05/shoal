@@ -109,7 +109,7 @@ pub struct Launch {
     /// The command that shows a simulator demo's device, before `{udid}`
     /// and `{port}` are filled in; none when its viewer is off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub viewer: Option<Vec<String>>,
+    pub viewer_command: Option<Vec<String>>,
     /// Variables the preset gives the command, such as `PORT`; opening the
     /// demo receives them too.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -192,7 +192,7 @@ impl Launch {
 
     /// The demo's viewer, which serves at `port` while it runs.
     pub fn viewer(&self, port: Option<u16>) -> Option<Viewer> {
-        let program = self.viewer.as_ref()?.first()?;
+        let program = self.viewer_command.as_ref()?.first()?;
         let tool = std::path::Path::new(program).file_name().map_or_else(
             || program.clone(),
             |name| name.to_string_lossy().into_owned(),
@@ -203,11 +203,11 @@ impl Launch {
 
     /// The viewer's command for the device and `port`: `{udid}` and
     /// `{port}` filled in wherever they appear.
-    pub fn viewer_command(&self, port: u16) -> Option<Vec<String>> {
+    pub fn filled_viewer_command(&self, port: u16) -> Option<Vec<String>> {
         let udid = self.environment.get(SIM_UDID).map_or("", String::as_str);
         let port = port.to_string();
         let fill = |arg: &String| arg.replace("{udid}", udid).replace("{port}", &port);
-        Some(self.viewer.as_ref()?.iter().map(fill).collect())
+        Some(self.viewer_command.as_ref()?.iter().map(fill).collect())
     }
 }
 

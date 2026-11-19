@@ -21,7 +21,7 @@ fn listings_show_running_demos_then_the_configured_ones_not_running() {
         preset: Some(Preset::Web),
         open: None,
         scheme: None,
-        viewer: None,
+        viewer_command: None,
         environment: BTreeMap::new(),
         origin: crate::sessions::Origin::created(
             crate::sessions::HostName::Zmx,

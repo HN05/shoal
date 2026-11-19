@@ -313,7 +313,7 @@ impl Fixture {
             preset: Some(Preset::Simulator),
             open: None,
             scheme: None,
-            viewer: None,
+            viewer_command: None,
             environment: [(SIM_UDID.to_owned(), udid.to_owned())].into(),
             origin: Origin::created(HostName::Zmx, name.into()),
         };

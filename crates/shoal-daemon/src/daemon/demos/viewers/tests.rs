@@ -43,7 +43,7 @@ async fn running(
         preset: Some(Preset::Simulator),
         open: None,
         scheme: None,
-        viewer: viewer.map(|viewer| viewer.iter().map(|arg| (*arg).to_owned()).collect()),
+        viewer_command: viewer.map(|viewer| viewer.iter().map(|arg| (*arg).to_owned()).collect()),
         environment: BTreeMap::from([(SIM_UDID.to_owned(), "UDID-1".to_owned())]),
         origin: crate::sessions::Origin::created(crate::sessions::HostName::Zmx, "app".into()),
     };

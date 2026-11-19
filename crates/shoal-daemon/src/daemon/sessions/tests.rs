@@ -256,7 +256,7 @@ async fn demos_close_their_session_after_completion_or_verified_forgetting() -> 
                 preset: None,
                 open: None,
                 scheme: None,
-                viewer: None,
+                viewer_command: None,
                 environment: Default::default(),
                 origin: crate::sessions::Origin::created(host_name.parse()?, name.into()),
             };
@@ -314,7 +314,7 @@ async fn finishing_an_old_demo_does_not_close_a_replacement_in_the_same_workspac
         preset: None,
         open: None,
         scheme: None,
-        viewer: None,
+        viewer_command: None,
         environment: Default::default(),
         origin: crate::sessions::Origin::created(crate::sessions::HostName::Zmx, "reused".into()),
     };
@@ -349,7 +349,7 @@ async fn failed_demo_closes_survive_restart_and_retry_without_removing_the_works
             preset: None,
             open: None,
             scheme: None,
-            viewer: None,
+            viewer_command: None,
             environment: Default::default(),
             origin: crate::sessions::Origin::created(crate::sessions::HostName::Zmx, "bad".into()),
         };
@@ -434,7 +434,7 @@ async fn failed_execution_deletion_does_not_commit_a_pending_close() -> Result<(
         preset: None,
         open: None,
         scheme: None,
-        viewer: None,
+        viewer_command: None,
         environment: Default::default(),
         origin: crate::sessions::Origin::created(crate::sessions::HostName::Zmx, "session".into()),
     };

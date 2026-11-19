@@ -41,7 +41,7 @@ async fn running(
         preset,
         open: None,
         scheme: None,
-        viewer: None,
+        viewer_command: None,
         environment: BTreeMap::from([(PORT.to_owned(), port.to_string())]),
         origin: crate::sessions::Origin::created(crate::sessions::HostName::Zmx, "site".into()),
     };

@@ -174,7 +174,7 @@ async fn lease_simulator(
 pub(super) async fn open(paths: &CommandPaths, preset: Preset, demo: &Running) -> Result<()> {
     let ssh = std::env::var("SSH_CONNECTION").ok();
     let viewer = match preset {
-        Preset::Simulator if ssh.is_some() && demo.launch.viewer.is_some() => {
+        Preset::Simulator if ssh.is_some() && demo.launch.viewer_command.is_some() => {
             Some(start_viewer(paths, demo).await?.1)
         }
         _ => None,
