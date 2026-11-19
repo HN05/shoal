@@ -1,12 +1,14 @@
 use super::*;
-use crate::daemon::test_support::manager;
 use shoal_protocol::approvals::GateVerdict;
 
 #[tokio::test]
 async fn sessions_replace_each_other_and_denials_leave_failures_out() {
-    let (_root, manager) = manager().await;
-    manager
-        .store
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("state.sqlite3");
+    let store = shoal_store::test_support::unsynced_store(path)
+        .await
+        .unwrap();
+    store
         .write(|tx| {
             let space = SpaceId::from("space");
             let session = |id: &str| Session {

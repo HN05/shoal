@@ -5,7 +5,7 @@ use serde_json::Value;
 
 /// The JSON schema of the gate's result. Every field is required, as Codex's
 /// strict schemas ask; `rule` is empty unless the verdict escalates.
-pub(crate) const SCHEMA: &str = r#"{
+pub const SCHEMA: &str = r#"{
   "type": "object",
   "additionalProperties": false,
   "required": ["verdict", "reason", "rule"],
@@ -18,7 +18,7 @@ pub(crate) const SCHEMA: &str = r#"{
 
 /// The gate's decision on a request.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Verdict {
+pub enum Verdict {
     Allow {
         reason: String,
     },
@@ -33,7 +33,7 @@ pub(crate) enum Verdict {
 }
 
 impl Verdict {
-    pub(crate) fn reason(&self) -> &str {
+    pub fn reason(&self) -> &str {
         match self {
             Self::Allow { reason } | Self::Deny { reason } | Self::Escalate { reason, .. } => {
                 reason
@@ -44,7 +44,7 @@ impl Verdict {
 
 /// Why a result is no verdict.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Invalid {
+pub enum Invalid {
     /// It does not match the schema, or a denial or escalation gives no
     /// reason.
     Malformed,
@@ -62,7 +62,7 @@ struct Output {
 
 /// The verdict in `value`, an escalation of which must quote one of
 /// `escalate` exactly.
-pub(crate) fn read(value: Value, escalate: &[String]) -> Result<Verdict, Invalid> {
+pub fn read(value: Value, escalate: &[String]) -> Result<Verdict, Invalid> {
     let output: Output = serde_json::from_value(value).map_err(|_| Invalid::Malformed)?;
     let reason = output.reason.trim().to_owned();
     let verdict = match output.verdict.as_str() {

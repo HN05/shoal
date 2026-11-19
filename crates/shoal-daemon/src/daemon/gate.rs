@@ -17,16 +17,13 @@ use crate::daemon::{
     manager::Manager,
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_reviews::gate::{prompt, store, subject, verdict};
 
 mod context;
 mod leftovers;
 mod outcome;
-mod prompt;
 mod run;
 mod scope;
-mod store;
-mod subject;
-mod verdict;
 
 /// The denials of one action after which it is refused without asking the
 /// gate again, until the action changes.

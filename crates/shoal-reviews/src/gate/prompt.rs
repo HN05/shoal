@@ -16,7 +16,7 @@ const BODY_LIMIT: usize = 4000;
 const LOG_LIMIT: usize = 16_000;
 
 /// The space a request comes from, as the gate's opening describes it.
-pub(crate) struct Space<'a> {
+pub struct Space<'a> {
     /// The number its `shoal` commands select it by.
     pub number: SpaceNumber,
     pub name: &'a str,
@@ -28,7 +28,7 @@ pub(crate) struct Space<'a> {
 }
 
 /// The request, as the gate is asked to decide it.
-pub(crate) struct Request<'a> {
+pub struct Request<'a> {
     /// Its number and what approving it does.
     pub title: &'a str,
     pub target: &'a str,
@@ -48,7 +48,7 @@ pub(crate) struct Request<'a> {
 
 /// The opening of a session: the built-in instructions, the user's rules
 /// and the space.
-pub(crate) fn opening(rules: &GateRules, space: &Space) -> String {
+pub fn opening(rules: &GateRules, space: &Space) -> String {
     let mut text = INSTRUCTIONS.trim_end().to_owned();
     text.push_str("\n\n## The repository's rules\n\n");
     match rules.instructions.is_empty() {
@@ -88,7 +88,7 @@ pub(crate) fn opening(rules: &GateRules, space: &Space) -> String {
 }
 
 /// The request to decide, after the opening or in a resumed session.
-pub(crate) fn request(request: &Request) -> String {
+pub fn request(request: &Request) -> String {
     let mut text = format!(
         "## Request {}\n\nTarget: {}\nThe agent's reason: {}\n\n```json\n{}\n```\n",
         request.title,
@@ -124,7 +124,7 @@ pub(crate) fn request(request: &Request) -> String {
 }
 
 /// What a gate whose escalation quoted `quoted`, no listed case, is told.
-pub(crate) fn misquoted(quoted: &str) -> String {
+pub fn misquoted(quoted: &str) -> String {
     format!(
         "Your escalation quoted {quoted:?}, which is not one of the cases listed for passing a \
          request to the user. Quote one of them word for word, or allow or deny the request."
@@ -133,11 +133,7 @@ pub(crate) fn misquoted(quoted: &str) -> String {
 
 /// An issue or PR as the opening lists it: its number, title, state and
 /// labels, its CI and review state for a PR, and its description.
-pub(crate) fn item(
-    relation: &str,
-    details: &crate::forge::review::view::Details,
-    url: &str,
-) -> String {
+pub fn item(relation: &str, details: &crate::forge::review::view::Details, url: &str) -> String {
     let mut text = format!(
         "#{} {} ({relation}, {}): {url}\nLabels: {}\n",
         details.number,

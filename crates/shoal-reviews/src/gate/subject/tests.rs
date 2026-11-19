@@ -1,8 +1,7 @@
 use super::*;
-use crate::daemon::approvals::{
-    ApprovalRequestExt, PushSpecification, Target, proposals::IssueSpecification,
-};
 use crate::forge::items::create::NewIssue;
+use shoal_daemon_base::approval_requests::ApprovalRequestExt;
+use shoal_protocol::approvals::{IssueSpecification, PushSpecification, Target};
 use shoal_protocol::config::repo::Lifetime;
 
 fn push(destination: &str, commit: &str) -> ApprovalRequest {

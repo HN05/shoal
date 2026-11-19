@@ -10,7 +10,7 @@ use shoal_protocol::{approvals::GateVerdict, time::UnixTime};
 
 /// A subject's saved session.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Session {
+pub struct Session {
     pub agent: Agent,
     /// The rules its opening gave it, as JSON.
     pub rules: String,
@@ -20,7 +20,7 @@ pub(crate) struct Session {
 }
 
 /// The session of `space` for `subject`.
-pub(crate) fn session(db: &Connection, space: &SpaceId, subject: &str) -> Result<Option<Session>> {
+pub fn session(db: &Connection, space: &SpaceId, subject: &str) -> Result<Option<Session>> {
     Ok(db
         .query_row(
             "SELECT agent,rules,session,seen FROM gate_sessions WHERE space_id=?1 AND subject=?2",
@@ -38,7 +38,7 @@ pub(crate) fn session(db: &Connection, space: &SpaceId, subject: &str) -> Result
 }
 
 /// Keep `session` as the one of `space` for `subject`, in place of any other.
-pub(crate) fn save_session(
+pub fn save_session(
     db: &Connection,
     space: &SpaceId,
     subject: &str,
@@ -64,7 +64,7 @@ pub(crate) fn save_session(
 }
 
 /// Record the gate's verdict on `action` of `space`.
-pub(crate) fn record_verdict(
+pub fn record_verdict(
     db: &Connection,
     space: &SpaceId,
     action: &str,
@@ -82,7 +82,7 @@ pub(crate) fn record_verdict(
 
 /// How many times the gate denied `action` of `space`, failures aside, with
 /// the reason of the latest denial.
-pub(crate) fn denials(db: &Connection, space: &SpaceId, action: &str) -> Result<(u32, String)> {
+pub fn denials(db: &Connection, space: &SpaceId, action: &str) -> Result<(u32, String)> {
     Ok(db.query_row(
         "SELECT COUNT(*),COALESCE((SELECT reason FROM gate_verdicts
              WHERE space_id=?1 AND action=?2 AND verdict='deny' ORDER BY id DESC LIMIT 1),'')

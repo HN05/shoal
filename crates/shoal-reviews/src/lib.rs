@@ -28,6 +28,7 @@ pub mod daemon;
 mod delivery;
 pub mod false_positives;
 mod findings;
+pub mod gate;
 pub mod history;
 pub mod oneshot;
 mod post;

@@ -2,11 +2,11 @@
 //! continues, and the action its denials count against.
 use shoal_refs::BranchName;
 
-use crate::daemon::approvals::{ApprovalRequest, Specification};
+use shoal_protocol::approvals::{ApprovalRequest, Specification};
 
 /// What one of a space's gate sessions covers.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Subject {
+pub enum Subject {
     /// The space's change: pushes of its own branch, its PR, its merge and
     /// unmerge.
     Change,
@@ -19,7 +19,7 @@ pub(crate) enum Subject {
 
 impl Subject {
     /// The subject of `request` from a space on `branch`.
-    pub(crate) fn of(request: &ApprovalRequest, branch: Option<&BranchName>) -> Self {
+    pub fn of(request: &ApprovalRequest, branch: Option<&BranchName>) -> Self {
         match &request.specification {
             Specification::Issue(issue) => Self::Issues(issue.repository.clone()),
             Specification::Push(push)
@@ -32,7 +32,7 @@ impl Subject {
     }
 
     /// How the store names it.
-    pub(crate) fn key(&self) -> String {
+    pub fn key(&self) -> String {
         match self {
             Self::Change => "change".to_owned(),
             Self::Issues(None) => "issues".to_owned(),
@@ -43,7 +43,7 @@ impl Subject {
 
     /// Whether the session follows commits, so a resumed one is given those
     /// since its last verdict.
-    pub(crate) fn follows_commits(&self) -> bool {
+    pub fn follows_commits(&self) -> bool {
         !matches!(self, Self::Issues(_))
     }
 }
@@ -52,7 +52,7 @@ impl Subject {
 /// target bound to the same commit or ref, a PR proposal with the same
 /// title, description and labels at the same commit, and an issue proposal
 /// by its repository and title.
-pub(crate) fn action(request: &ApprovalRequest) -> String {
+pub fn action(request: &ApprovalRequest) -> String {
     let bound = match &request.specification {
         Specification::Issue(issue) => serde_json::json!([issue.repository, issue.issue.title]),
         Specification::Pull(pull) => serde_json::json!([
