@@ -2,9 +2,12 @@
 //! its daemon finds that machine in the hub's directory and forwards the
 //! request there through the hub, vouching for its caller, the user or a
 //! space's process, whose scope the owning machine checks, and reads the
-//! answer of one that goes on, as a follow's, from a stream as it comes. A
+//! answer of one that goes on, as a follow's, from a stream as it comes,
+//! writing on it too what the caller sends the other way, as to a demo. A
 //! request that needs the space's files or processes is refused, naming the
 //! machine.
+use std::sync::Arc;
+
 use anyhow::{Result, anyhow};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
@@ -18,7 +21,10 @@ use shoal_protocol::{
     space_names::SpaceSelector,
 };
 
-use super::streams::Incoming;
+use super::{
+    session::Calls,
+    streams::{Incoming, Outgoing},
+};
 use crate::{
     daemon::{manager::Manager, scope::Caller},
     refusal::{Reason, Refusal},
@@ -40,6 +46,9 @@ pub(crate) enum Elsewhere {
     Queued(shoal_protocol::hub::routing::Queued),
     /// The frames its daemon writes come on this stream.
     Streamed(Incoming),
+    /// Its daemon's answer comes on this duplex stream, followed by the
+    /// bytes its connection carries, and the caller's go on its writer.
+    Duplex(Incoming, Outgoing),
 }
 
 impl Manager {
@@ -58,7 +67,12 @@ impl Manager {
             Err(error) if Reason::of(&error).is_some() => return Some(Err(error)),
             // A follow its client opens again, as after the hub restarted,
             // waits for the hub to answer.
-            Err(error) if request.forwarding == Forwarding::Streamed => {
+            Err(error)
+                if matches!(
+                    request.forwarding,
+                    Forwarding::Streamed | Forwarding::Duplex
+                ) =>
+            {
                 return Some(Err(Refusal::wrap(Reason::MachineUnreachable, error)));
             }
             Err(error) => {
@@ -141,12 +155,12 @@ impl Manager {
             method,
             summary: format!("{name} for space {space}"),
         };
-        if request.forwarding == Forwarding::Streamed {
+        if let Forwarding::Streamed | Forwarding::Duplex = request.forwarding {
             // Refusals of the request itself come on the stream, so what
             // fails here is reaching the machine.
-            let incoming = (self.stream_forwarded(machine, forwarded).await)
-                .map_err(|error| Refusal::wrap(Reason::MachineUnreachable, error))?;
-            return Ok(Elsewhere::Streamed(incoming));
+            let duplex = request.forwarding == Forwarding::Duplex;
+            return (self.stream_forwarded(machine, forwarded, duplex).await)
+                .map_err(|error| Refusal::wrap(Reason::MachineUnreachable, error));
         }
         match self.send_forwarded(machine, forwarded, delivery).await? {
             Reply::Answered(answered) => Ok(Elsewhere::Answered(answered.frames)),
@@ -175,24 +189,48 @@ impl Manager {
         self.through_hub(call).await
     }
 
-    /// The stream `machine` answers `request` on, through the hub: from the
-    /// hub, the link to that machine; else, this machine's link to the hub,
-    /// which passes it on. Either fails at once while that machine is
-    /// offline.
-    async fn stream_forwarded(&self, machine: &Member, request: Forwarded) -> Result<Incoming> {
+    /// The stream `machine` answers `request` on, through the hub, which
+    /// also carries what the caller writes when `duplex`.
+    async fn stream_forwarded(
+        &self,
+        machine: &Member,
+        request: Forwarded,
+        duplex: bool,
+    ) -> Result<Elsewhere> {
+        let (calls, call) = self.stream_route(machine, request).await?;
+        Ok(match duplex {
+            true => {
+                let (incoming, outgoing) = calls.duplex(call).await?;
+                Elsewhere::Duplex(incoming, outgoing)
+            }
+            false => Elsewhere::Streamed(calls.stream(call).await?),
+        })
+    }
+
+    /// The link a stream that answers `request` goes on, with the call
+    /// that asks `machine` for it on the stream's number: from the hub, the
+    /// link to that machine; else, this machine's link to the hub, which
+    /// passes it on. Either fails at once while that machine is offline.
+    async fn stream_route(
+        &self,
+        machine: &Member,
+        request: Forwarded,
+    ) -> Result<(Arc<Calls>, StreamCall)> {
         if !self.is_hub() {
-            let call = |stream| Call::Stream {
-                machine: machine.id.clone(),
+            let machine = machine.id.clone();
+            let call = move |stream| Call::Stream {
+                machine,
                 request,
                 stream,
             };
-            return self.hub_calls().await?.stream(call).await;
+            return Ok((self.hub_calls().await?, Box::new(call)));
         }
         let machine = self.hub_machine(&machine.id).await?;
         let Some(calls) = self.hub.links.calls(&machine.id) else {
             return Err(super::routing::offline(&machine).into());
         };
-        (calls.stream(|stream| Call::ServeStream { request, stream })).await
+        let call = |stream| Call::ServeStream { request, stream };
+        Ok((calls, Box::new(call)))
     }
 
     /// What this machine vouches for `caller`: the user, or a space's
@@ -218,6 +256,9 @@ impl Manager {
         }))
     }
 }
+
+/// The call that asks for a stream, on its number.
+type StreamCall = Box<dyn FnOnce(u64) -> Call + Send>;
 
 /// The request `method` as it goes to the machine of `listed`: without
 /// what belongs to this machine, such as an environment, which that

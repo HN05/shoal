@@ -106,7 +106,7 @@ fn second_turn(session: &Session) -> &'static [u8] {
 }
 
 /// `machine`'s daemon as an app reaches it, as the user.
-fn app(machine: &Base) -> Connector {
+pub(super) fn app(machine: &Base) -> Connector {
     let state = machine.root.path().join("state");
     Connector {
         paths: shoal_protocol::paths::Paths {

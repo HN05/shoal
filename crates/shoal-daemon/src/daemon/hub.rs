@@ -13,7 +13,7 @@ use shoal_protocol::hub::{HubRole, Overview};
 use super::manager::Manager;
 
 pub(crate) use forwarding::{Elsewhere, Unanswered};
-pub(crate) use streams::Incoming;
+pub(crate) use streams::{Incoming, Outgoing};
 pub(crate) use telling::Event;
 
 mod accept;

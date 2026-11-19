@@ -743,7 +743,14 @@ where it read each file to; one under a scope token ends once the token is
 revoked.
 Shoal copies the bytes unread, so
 the app parses each tool's format itself and sends input through the requests
-the protocol has. Following an agent, though not following it again on
+the protocol has.
+`demos::open_stream` opens a stream to a running [demo](#demos) of a space on
+whichever machine of the hub it runs, by the space and the demo's name: it
+returns the demo, then its connection carries the demo's bytes both ways until
+either side closes it, those of one TCP connection to a `server` or `web`
+demo's port, which an app serves from a local port its web view points at.
+A demo of another kind, or outside a scoped caller's scope, is refused.
+Following an agent, though not following it again on
 its own, and messaging it are your [interaction](#sleep) with it, so an agent you watch and talk to from an app
 stays awake as one in your terminal does.
 Without a scope token the caller is the user; with one, it is

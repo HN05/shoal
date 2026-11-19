@@ -2,8 +2,11 @@
 //! of: the machine the hub lists that space on answers it instead, or the
 //! hub holds it for that machine, and only a space no machine has keeps the
 //! refusal; the answer of one that goes on, as a follow's, comes as that
-//! machine writes it. A request another machine forwarded here is never
-//! forwarded again.
+//! machine writes it, and a duplex one's connection, as a demo stream's,
+//! then carries bytes both ways. A request another machine forwarded here
+//! is never forwarded again.
+mod duplex;
+
 use anyhow::Result;
 use shoal_protocol::{
     protocol::{self, Body, ErrorCode, Forwarding, Operation, Response},
@@ -110,6 +113,15 @@ pub(super) async fn answer(
                 scope,
             };
             streamed.relay(stream, incoming).await
+        }
+        Some(Ok(Elsewhere::Duplex(incoming, outgoing))) => {
+            drop(operation);
+            let streamed = Streamed {
+                server,
+                request_id,
+                scope,
+            };
+            streamed.relay_duplex(stream, incoming, outgoing).await
         }
     }
 }

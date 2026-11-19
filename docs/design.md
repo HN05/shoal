@@ -1986,13 +1986,34 @@ through the terminal hosts, since a demo is something the user opens and reads
 and the agent reads and types into; a start no host takes fails rather than
 run a demo without a terminal. Shoal knows how a demo reaches
 the user only through presets, which reserve ports or lease a simulator and say
-how to open it; the repository's `open` command replaces that, so tools such
-as browsers and screen sharing stay outside Shoal. A serving demo prints
-where it listens in its own place before each run, so a terminal host that
-forwards a `localhost` link from another device, such as a Rex app, opens it
-there; Shoal opens no tunnel and calls no host to forward. Starting, reading and stopping
+how to open it; the repository's `open` command replaces that on the demo's own
+machine. A serving demo prints where it listens in its own place before each
+run, so a terminal host that forwards a `localhost` link from another device,
+such as a Rex app, opens it there, and opening it from a plain SSH session
+names the `ssh -L` forward. Starting, reading and stopping
 a demo are own-workspace actions without approval: the agent can already run
 the command, and a demo only keeps it running and tells the user.
+Shoal carries a demo's bytes to a device or another joined machine, rendering
+nothing and parsing no demo's protocol. One request opens a stream to a demo:
+it names a space and a demo, never a raw port or device, so a client reaches
+only what a demo exposes, and the hub routes it to the space's machine as any
+other request, failing at once while that machine is offline, naming it and
+when the hub last saw it. The user and devices open any demo and an agent the
+demos in its scope, without approval, as they read and type into one. The
+demo's kind decides what the stream carries. A `server` or `web` demo's stream
+is one TCP connection, which the owning machine opens to the demo's reserved
+port on loopback, `127.0.0.1` else `::1`, and relays both ways under the
+stream's flow control, each direction with credit of its own; Shoal never
+reads HTTP, so WebSockets and hot reload work. A UI listens on a local port
+and points its web view there, while the listing keeps the demo's own URL.
+`shoal demo` on a serving demo another machine runs does the same from the
+command line, on the demo's own port number when it is free, until Ctrl-C;
+an agent may run it in the foreground for a demo in its scope. Proposals, not
+yet implemented: a terminal demo's stream carries the bytes of a PTY attached
+to its host's session one way and keys and resizes the other, and a
+`simulator` demo's the port of a viewer of its device, as `web`. An agent on
+another machine building and running on this one stays out: it needs leases
+across machines.
 The journal records a demo's start at its command's first run, when a start
 reports it, and its stop when its record goes with the execution, so clients
 showing demos follow them without polling; restarts between runs are not
