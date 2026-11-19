@@ -32,10 +32,11 @@ async fn reading_the_branches_of_a_repository_removed_meanwhile_says_so() {
         contribution: false,
     };
     let error = branches(&repo, "racing").await.unwrap_err();
-    let error = format!("{error:#}");
+    let reason = crate::refusal::Reason::of(&error);
+    assert_eq!(reason, Some(crate::refusal::Reason::NotFound), "{error:#}");
     assert!(
-        error.contains("removed") && error.contains("repo-id"),
-        "{error}"
+        format!("{error:#}").contains("(repo-id) was removed"),
+        "{error:#}"
     );
 }
 
