@@ -206,7 +206,58 @@ async fn a_restart_waiting_for_the_turn_is_recorded_until_the_turn_ends() {
     let mut stop = execution.stop.clone();
     stop.wait_for(|stopping| *stopping).await.unwrap();
     assert!(manager.settle_restart(&execution.plan.id).await);
-    assert!(recorded(&manager).await.is_empty());
+    // It stays recorded until it ends, for a daemon that takes over
+    // meanwhile, and the watcher does not act on it again.
+    assert_eq!(recorded(&manager).await.len(), 1);
+    manager.restart_finished_turns().await.unwrap();
+    run_again(&manager, &execution.plan.id).await;
+    while !recorded(&manager).await.is_empty() {
+        tokio::task::yield_now().await;
+    }
+    assert!(!manager.restarting(&execution.plan.id).await);
+}
+
+#[tokio::test]
+async fn a_restart_the_line_took_waits_for_the_turn_a_newer_request_waits_for() {
+    let (root, manager) = manager().await;
+    let (workspace, execution) = working(root.path(), &manager).await;
+    let space = SpaceSelector::id(&workspace.id);
+    let sequential = AgentRestart {
+        sequential: true,
+        ..Default::default()
+    };
+    // The agent idles, so the sequential restart joins the line at once.
+    (manager.set_agent_state(&space, AgentState::Idle, None, None))
+        .await
+        .unwrap();
+    let in_line = tokio::spawn({
+        let (manager, space) = (manager.clone(), space.clone());
+        async move { manager.restart_space(None, &space, sequential).await }
+    });
+    while recorded(&manager).await.is_empty() {
+        tokio::task::yield_now().await;
+    }
+    (manager.set_agent_state(&space, AgentState::Working, None, None))
+        .await
+        .unwrap();
+    (manager.restart_space(None, &space, waiting()))
+        .await
+        .unwrap();
+    // The line takes the space it held, but the turn goes on.
+    assert!(!manager.act_on_restart(&workspace.id).await);
+    assert!(!*execution.stop.borrow());
+    assert!(recorded(&manager).await[0].restart.wait);
+    let waits = in_line.await.unwrap().unwrap();
+    assert!(
+        matches!(
+            waits,
+            RestartOutcome::Waits {
+                waits: RestartWait::Turn,
+                ..
+            }
+        ),
+        "{waits:?}"
+    );
 }
 
 #[tokio::test]

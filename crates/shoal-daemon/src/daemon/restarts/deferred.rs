@@ -63,6 +63,9 @@ impl Manager {
     /// Where the agent of `recorded` stands among `agents`.
     async fn standing(&self, recorded: &Recorded, agents: &[RunningAgent]) -> Result<Standing> {
         let id = &recorded.space_id;
+        if self.restarts.acting(id) {
+            return Ok(Standing::Waits);
+        }
         let theirs: Vec<&RunningAgent> = (agents.iter())
             .filter(|agent| agent.space_id == *id)
             .collect();
@@ -89,8 +92,9 @@ impl Manager {
 
     /// Restart the agent of the space `id` as the restart recorded for it
     /// says, answering the requests that wait for it, or telling who asked
-    /// when it fails and none is left to answer. Whether the agent runs
-    /// again.
+    /// when it fails and none is left to answer. The restart stays recorded
+    /// until it ends, so a daemon that exits meanwhile leaves it to the next.
+    /// Whether the agent runs again.
     pub(super) async fn act_on_restart(&self, id: &SpaceId) -> bool {
         let (recorded, waiting, begun) = match self.begin_recorded_restart(id).await {
             Ok(Some(begun)) => begun,
@@ -106,6 +110,7 @@ impl Manager {
             }
             Begun::Ended(outcome) => outcome,
         };
+        self.end_recorded_restart(&recorded).await;
         let ran = matches!(outcome, Ok(RestartOutcome::Restarted { .. }));
         if !answer_all(waiting, &outcome)
             && let Err(error) = &outcome
@@ -115,15 +120,20 @@ impl Manager {
         ran
     }
 
-    /// Begin the restart recorded for the space `id`, taking it with the
-    /// requests that wait for it, holding the decisions so no request
-    /// decides on the space meanwhile; none once nothing is recorded, or
-    /// while the agent is still to run after the restart under way.
+    /// Begin the restart recorded for the space `id`, with the requests that
+    /// wait for it, holding the decisions so no request decides on the space
+    /// meanwhile; none once nothing is recorded, while the daemon carries it
+    /// out already, while the turn it waits for goes on, as a newer request
+    /// may record after the line took the space, or while the agent is
+    /// still to run after the restart under way.
     async fn begin_recorded_restart(
         &self,
         id: &SpaceId,
     ) -> Result<Option<(Recorded, Vec<Waiter>, Begun)>> {
         let mut waiters = self.restarts.decisions.lock().await;
+        if self.restarts.acting(id) {
+            return Ok(None);
+        }
         let space = id.to_owned();
         let found = self.store.read(move |tx| super::record::find(tx, &space));
         let Some(recorded) = found.await? else {
@@ -132,6 +142,9 @@ impl Manager {
         let space = self.space(&SpaceSelector::id(id)).await?;
         let begun = match self.restartable_agent(&space).await? {
             Err(skipped) => Begun::Ended(Ok(skipped)),
+            Ok(_) if recorded.restart.wait && !self.agent_turn_ended(id).await? => {
+                return Ok(None);
+            }
             Ok((agent, execution)) => {
                 let restart = recorded.restart.clone();
                 match self
@@ -144,9 +157,28 @@ impl Manager {
                 }
             }
         };
-        self.forget_restart(id).await?;
+        self.restarts.set_acting(id, true);
         let waiting = waiters.remove(id).unwrap_or_default();
         Ok(Some((recorded, waiting, begun)))
+    }
+
+    /// Forget `recorded`, which ended, unless a newer request replaced it,
+    /// and let the daemon act on the space's restarts again.
+    async fn end_recorded_restart(&self, recorded: &Recorded) {
+        let _decisions = self.restarts.decisions.lock().await;
+        let kept = recorded.clone();
+        let forgotten = self
+            .store
+            .write(move |tx| super::record::take_same(tx, &kept));
+        if let Err(error) = forgotten.await {
+            log!(
+                "ended restart of {} not forgotten: {error:#}",
+                recorded.space_id
+            );
+        }
+        self.restarts.set_acting(&recorded.space_id, false);
+        // A newer restart recorded meanwhile waits for the watcher.
+        self.signals.agent_changed();
     }
 
     /// Tell the coordinator whose process asked for `recorded`, or else the

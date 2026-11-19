@@ -37,6 +37,19 @@ pub(super) fn take(db: &Connection, id: &SpaceId) -> Result<Option<Recorded>> {
     Ok(recorded)
 }
 
+/// Forget `recorded` unless a newer restart replaced it.
+pub(super) fn take_same(db: &Connection, recorded: &Recorded) -> Result<()> {
+    db.execute(
+        "DELETE FROM agent_restarts WHERE space_id=?1 AND restart=?2 AND asked_by IS ?3",
+        params![
+            recorded.space_id,
+            serde_json::to_string(&recorded.restart)?,
+            recorded.asked_by,
+        ],
+    )?;
+    Ok(())
+}
+
 /// How the agent of the space `id` restarts once the daemon acts on the
 /// restart it recorded, if it did.
 pub(crate) fn current(db: &Connection, id: &SpaceId) -> Result<Option<AgentRestart>> {

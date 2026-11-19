@@ -36,6 +36,28 @@ pub(crate) struct Restarts {
     /// with the requests that wait for the restart recorded for each space.
     decisions: tokio::sync::Mutex<HashMap<SpaceId, Vec<Waiter>>>,
     line: line::Line,
+    /// The spaces whose recorded restart the daemon carries out now, which
+    /// stays recorded until it ends, so a daemon that exits meanwhile leaves
+    /// it to the next.
+    acting: std::sync::Mutex<std::collections::HashSet<SpaceId>>,
+}
+
+impl Restarts {
+    /// Whether the daemon carries out the restart recorded for the space
+    /// `id` now.
+    fn acting(&self, id: &SpaceId) -> bool {
+        (self.acting.lock().unwrap_or_else(|e| e.into_inner())).contains(id)
+    }
+
+    /// Mark the restart recorded for the space `id` as carried out now, or
+    /// as no longer when `acting` is false.
+    fn set_acting(&self, id: &SpaceId, acting: bool) {
+        let mut spaces = self.acting.lock().unwrap_or_else(|e| e.into_inner());
+        match acting {
+            true => spaces.insert(id.clone()),
+            false => spaces.remove(id),
+        };
+    }
 }
 
 /// A request that waits for a recorded restart, answered with what the
