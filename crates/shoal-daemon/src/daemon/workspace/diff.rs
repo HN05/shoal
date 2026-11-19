@@ -1,4 +1,7 @@
-//! Fork-point resolution for `shoal diff`.
+//! Fork-point resolution for `shoal diff`, and the diff it streams to a
+//! caller on another machine.
+mod streaming;
+
 use anyhow::{Context, Result, bail, ensure};
 
 use super::super::manager::Manager;

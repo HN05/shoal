@@ -64,6 +64,7 @@ const REQUESTS: &[&str] = &[
     r#"{"copy_space":{"space":"fix","checkpoint":3,"file":"/work/fix.shoal","carrying":"subtree"}}"#,
     r#"{"diff_base":{"workspace":"fix"}}"#,
     r#"{"conflicts":{"workspace":"fix","target":null}}"#,
+    r#"{"diff":{"workspace":"fix","display":{"color":true,"columns":120}}}"#,
     r#"{"preview_merge":{"workspace":"fix","push":true,"method":"squash","message":"Fix"}}"#,
     r#"{"create_pending_worktree":{"workspace":"fix"}}"#,
     r#"{"workspace_hook":{"workspace":"fix","kind":"post_setup"}}"#,

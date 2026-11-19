@@ -15,6 +15,7 @@ pub mod config;
 pub mod connection;
 pub mod containers;
 pub mod demos;
+pub mod diffs;
 pub mod env;
 pub mod events;
 pub mod executions;

@@ -231,6 +231,15 @@ pub enum WorkspaceMethod {
         workspace: SpaceSelector,
         target: Option<String>,
     },
+    /// The workspace's changes since its branch's fork point, as `git diff`
+    /// writes them in its worktree, shown as `display` says: answered with
+    /// [`super::Body::Diff`] frames as Git writes, the last with its exit
+    /// code. It counts as no use of the workspace.
+    Diff {
+        workspace: SpaceSelector,
+        #[serde(default)]
+        display: crate::diffs::DiffDisplay,
+    },
     /// What merging the workspace into the default branch by `method`,
     /// with a squash's `message`, does, after the checks the merge makes
     /// before it changes anything; with `push`, the merge pushes the default
@@ -367,7 +376,9 @@ pub struct PullHead {
 impl WorkspaceMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
-            Self::WatchSpaceEvents { .. } | Self::FollowSession { .. } => Lifetime::Open,
+            Self::WatchSpaceEvents { .. } | Self::FollowSession { .. } | Self::Diff { .. } => {
+                Lifetime::Open
+            }
             _ => Lifetime::Reply,
         }
     }

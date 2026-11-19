@@ -14,6 +14,7 @@ pub mod ci;
 pub mod connection;
 pub mod conversions;
 pub mod demos;
+pub mod diffs;
 pub mod events;
 pub mod executions;
 pub mod files;

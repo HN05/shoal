@@ -304,6 +304,7 @@ response_bodies! {
     ExportedSpace(crate::transfer::ExportedSpace),
     DiffBase(DiffBase),
     Conflicts(ConflictCheck),
+    Diff(crate::diffs::DiffOutput),
     MergeWarning(Option<crate::model::MergeWarning>),
     MergePreview(crate::model::MergePreview),
     MergePath(crate::model::MergePath),

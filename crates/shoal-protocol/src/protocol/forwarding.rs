@@ -100,7 +100,10 @@ impl Operation {
     pub fn forwarding(&self) -> Forwarding {
         if self.waits_for_machine() {
             Forwarding::Queued
-        } else if matches!(self, Self::Workspace(WorkspaceMethod::FollowSession { .. })) {
+        } else if matches!(
+            self,
+            Self::Workspace(WorkspaceMethod::FollowSession { .. } | WorkspaceMethod::Diff { .. })
+        ) {
             Forwarding::Streamed
         } else if matches!(
             self,

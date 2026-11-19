@@ -290,6 +290,13 @@ pub(super) async fn handle(
         WorkspaceMethod::Conflicts { workspace, target } => {
             Body::Conflicts(manager.check_conflicts(&workspace, target).await?)
         }
+        WorkspaceMethod::Diff { workspace, display } => {
+            let diff = manager.start_diff(&workspace, display).await?;
+            let manager = manager.clone();
+            return Ok(Answer::connection(move |stream, request_id, guard| {
+                manager.stream_diff(stream, request_id, diff, guard)
+            }));
+        }
         WorkspaceMethod::PreviewMerge {
             workspace,
             push,
@@ -435,6 +442,7 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::RefreshWorkspace { workspace }
             | WorkspaceMethod::DiffBase { workspace }
             | WorkspaceMethod::Conflicts { workspace, .. }
+            | WorkspaceMethod::Diff { workspace, .. }
             | WorkspaceMethod::PreviewMerge { workspace, .. }
             | WorkspaceMethod::WorkspaceHook { workspace, .. }
             | WorkspaceMethod::CreatePendingWorktree { workspace }

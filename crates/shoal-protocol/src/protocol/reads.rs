@@ -115,6 +115,7 @@ impl Operation {
                         | WorkspaceMethod::FollowSession { .. }
                         | WorkspaceMethod::DiffBase { .. }
                         | WorkspaceMethod::Conflicts { .. }
+                        | WorkspaceMethod::Diff { .. }
                         | WorkspaceMethod::LayeredConfig { .. }
                 )
         )
