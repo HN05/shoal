@@ -5,8 +5,9 @@
 use shoal_protocol::demos::{Progress, Running};
 
 use anyhow::Result;
+use tokio::{io::BufReader, net::UnixStream};
 
-use crate::connection::{Daemon, request};
+use crate::connection::{Daemon, open_buffered, request};
 use shoal_protocol::protocol::DemoMethod;
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -34,4 +35,29 @@ pub async fn stop(
     name: Option<String>,
 ) -> Result<()> {
     request(daemon, DemoMethod::StopDemos { workspace, name }).await
+}
+
+/// A stream to a running demo: the demo it opened to, and the connection
+/// that carries the demo's bytes both ways from then on, as a TCP
+/// connection to a `server` or `web` demo's port does.
+pub struct DemoStream {
+    pub demo: Running,
+    pub connection: BufReader<UnixStream>,
+}
+
+/// Open a stream to `workspace`'s running demo `name`, on whichever
+/// machine it runs. Fails at once when the daemon refuses, as for a demo
+/// outside the caller's scope, one Shoal does not stream, or one on a
+/// machine that is offline.
+pub async fn open_stream(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+    name: String,
+) -> Result<DemoStream> {
+    let method = DemoMethod::OpenDemoStream { workspace, name };
+    let (connection, body) = open_buffered(daemon, method).await?;
+    Ok(DemoStream {
+        demo: *Box::<Running>::try_from(body)?,
+        connection,
+    })
 }

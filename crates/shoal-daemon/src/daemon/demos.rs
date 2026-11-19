@@ -1,6 +1,8 @@
 //! Demos the daemon records with the executions that run them, so a demo
 //! ends with its execution: when it stops, its workspace is removed or its
 //! wrapper finishes.
+mod streaming;
+
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use std::collections::HashSet;

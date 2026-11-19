@@ -161,13 +161,13 @@ impl Operation {
             Self::Question(method) => method.lifetime(),
             Self::Review(method) => method.lifetime(),
             Self::Subscription(method) => method.lifetime(),
+            Self::Demo(method) => method.lifetime(),
             Self::Daemon(_)
             | Self::Chat(_)
             | Self::Removal(_)
             | Self::Recovery(_)
             | Self::Assignment(_)
             | Self::Hold(_)
-            | Self::Demo(_)
             | Self::File(_)
             | Self::Ci(_)
             | Self::Branch(_)
