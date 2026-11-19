@@ -306,6 +306,7 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
         space: SpaceSelector::id(&child.id),
         unsaved: Default::default(),
         keep_user_holds: false,
+        above: None,
     };
     scope::authorize(&manager, Some(&"parent".into()), &mut remove)
         .await

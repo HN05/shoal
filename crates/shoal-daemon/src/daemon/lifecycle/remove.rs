@@ -190,6 +190,25 @@ impl Manager {
         Ok(disposable)
     }
 
+    /// Remove the space `selector` names as the child of a removal of
+    /// `cause` of the space above it on another machine, as a removal here
+    /// takes a child: leaving the user's holds when `refuse_holds`, and
+    /// taking only the spaces below it that `confirmed` names, when it
+    /// names them.
+    pub(crate) async fn remove_as_child(
+        &self,
+        selector: &SpaceSelector,
+        (cause, refuse_holds): (EventCause, bool),
+        confirmed: Option<&[SpaceId]>,
+    ) -> Result<RemovalResult> {
+        let removal = Removal::Parent {
+            cause,
+            refuse_holds,
+            confirmed,
+        };
+        self.remove_requested(selector, removal).await
+    }
+
     async fn remove_requested(
         &self,
         selector: &SpaceSelector,

@@ -104,12 +104,17 @@ pub(super) async fn handle(
             space,
             unsaved,
             keep_user_holds,
+            above,
         } => {
             let inspection = InspectionPolicy::GitOnly;
             let releases = !keep_user_holds && releases_holds(manager, caller, &space).await?;
-            Body::RemovalResult(match releases {
-                true => manager.remove_selected(&space, unsaved, inspection).await?,
-                false => manager.remove_unheld(&space, unsaved, inspection).await?,
+            Body::RemovalResult(match (above, releases) {
+                (Some(cause), _) => {
+                    let confirmed = unsaved.children();
+                    (manager.remove_as_child(&space, (cause, !releases), confirmed)).await?
+                }
+                (None, true) => manager.remove_selected(&space, unsaved, inspection).await?,
+                (None, false) => manager.remove_unheld(&space, unsaved, inspection).await?,
             })
         }
         RemovalMethod::StartRemoval { space, unsaved } => {

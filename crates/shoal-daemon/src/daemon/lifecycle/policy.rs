@@ -134,10 +134,12 @@ pub(crate) struct BelowElsewhere<'a> {
     /// The IDs of the only spaces below it the removal takes, when the
     /// caller confirmed those it saw.
     pub confirmed: Option<&'a [SpaceId]>,
-    /// Have the hub hold a child's removal while its machine is offline, as
-    /// for a removal someone asked for; an unattended one tries again on
-    /// its next round instead, so its rounds pile up no removals.
-    pub queues: bool,
+    /// The cause of the removal this one is part of, which the removal of
+    /// each child there takes, and which has the hub hold a child's
+    /// removal while its machine is offline for a removal someone asked
+    /// for; an unattended one tries again on its next round instead, so its
+    /// rounds pile up no removals.
+    pub cause: EventCause,
 }
 
 impl<'a> Removal<'a> {
@@ -147,7 +149,7 @@ impl<'a> Removal<'a> {
         (!self.converts()).then(|| BelowElsewhere {
             refuse_holds: self.refuses_holds(),
             confirmed: self.confirmed_children(),
-            queues: self.root_cause() == EventCause::Manual,
+            cause: self.root_cause(),
         })
     }
 

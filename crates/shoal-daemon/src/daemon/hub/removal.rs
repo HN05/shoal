@@ -15,7 +15,7 @@ use shoal_protocol::{
         link::Reply,
         routing::{Delivery, Forwarded, Vouched},
     },
-    model::{RefPart, SpaceKind, SpaceRef},
+    model::{EventCause, RefPart, SpaceKind, SpaceRef},
     protocol::{Body, Operation, RemovalMethod, Response},
     removal::UnsavedWork,
     space_names::{SpaceName, SpaceSelector},
@@ -118,15 +118,16 @@ impl Manager {
             space: SpaceSelector::id(id),
             unsaved,
             keep_user_holds: below.refuse_holds,
+            above: Some(below.cause),
         });
         let request = Forwarded {
             caller: Vouched::User,
             method: serde_json::to_value(method)?,
             summary: format!("the removal of space {id} with the space above it"),
         };
-        let delivery = match below.queues {
-            true => Delivery::Queued,
-            false => Delivery::Now,
+        let delivery = match below.cause {
+            EventCause::Manual => Delivery::Queued,
+            _ => Delivery::Now,
         };
         let frames = match self.send_forwarded(machine, request, delivery).await? {
             Reply::Answered(answered) => answered.frames,

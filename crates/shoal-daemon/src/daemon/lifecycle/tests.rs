@@ -1894,3 +1894,27 @@ async fn removal_retains_a_failed_checkouts_directory_linked_to_another_reposito
     .unwrap();
     retains_unproven(&manager, &workspace).await;
 }
+
+/// The spaces below on other machines go with the cause of the removal
+/// they are part of, which an unattended removal's child keeps across
+/// machines, so only a removal someone asked for holds theirs for an
+/// offline machine.
+#[test]
+fn removals_below_elsewhere_keep_the_cause_of_the_removal_they_are_part_of() {
+    let cause = |removal: Removal<'_>| removal.below_elsewhere().unwrap().cause;
+    let idle_child = Removal::Parent {
+        cause: EventCause::Idle,
+        refuse_holds: false,
+        confirmed: None,
+    };
+    assert_eq!(cause(idle_child), EventCause::Idle);
+    assert_eq!(cause(idle_child.of_child()), EventCause::Idle);
+    let asked = Removal::Manual {
+        unsaved: &UnsavedWork::All,
+        inspection: InspectionPolicy::GitOnly,
+        release_holds: true,
+        taking: None,
+        for_repository: false,
+    };
+    assert_eq!(cause(asked.of_child()), EventCause::Manual);
+}

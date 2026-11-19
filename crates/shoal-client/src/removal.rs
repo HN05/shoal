@@ -38,6 +38,7 @@ pub async fn remove(
         space,
         unsaved,
         keep_user_holds: false,
+        above: None,
     };
     request(daemon, method).await
 }

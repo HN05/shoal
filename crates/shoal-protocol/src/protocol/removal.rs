@@ -78,6 +78,11 @@ pub enum RemovalMethod {
         /// above it on another machine came from a space's process.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         keep_user_holds: bool,
+        /// The cause of the removal of the space above it on another
+        /// machine, which takes it as that removal's child, as a removal
+        /// takes a child here; none for a removal asked of it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        above: Option<crate::model::EventCause>,
     },
     /// Remove `space` as `RemoveSpace` does, answering once removal has
     /// reserved it and passed the checks it makes before changing anything,

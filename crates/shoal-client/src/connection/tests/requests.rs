@@ -117,6 +117,7 @@ async fn removal_refuses_unsaved_work_unless_the_app_confirms_it() {
         space: SpaceSelector::id(&workspace.id),
         unsaved,
         keep_user_holds: false,
+        above: None,
     };
     assert_eq!(
         code(connection::request::<RemovalResult>(&app, remove(UnsavedWork::default())).await),
