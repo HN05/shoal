@@ -222,12 +222,14 @@ fn cells(alert: &Alert, now: crate::time::UnixTime) -> [ui::Cell; 5] {
     ]
 }
 
-/// Who sent the alert, or for Shoal's the space it is about.
+/// Who sent the alert, or for Shoal's the space it is about; a space of
+/// another machine by its ID.
 fn sender(alert: &Alert) -> String {
-    match (alert.sender, alert.space_label()) {
-        (Sender::User, _) => "user".to_owned(),
-        (_, Some(space)) => space,
-        (_, None) => "shoal".to_owned(),
+    match (alert.sender, alert.space_label(), &alert.space_id) {
+        (Sender::User, ..) => "user".to_owned(),
+        (_, Some(space), _) => space,
+        (Sender::Space, None, Some(id)) => id.to_string(),
+        (_, None, _) => "shoal".to_owned(),
     }
 }
 

@@ -145,13 +145,20 @@ impl Manager {
     }
 
     /// Who an alert from `caller` comes from: its space, which it names,
-    /// else the user.
+    /// else the user. A caller another machine vouches for names its space
+    /// by its ID alone, since this machine does not keep that space.
     pub(crate) async fn sender(&self, caller: Option<&Caller>) -> Result<(Sender, About)> {
         let Some(caller) = caller else {
             return Ok((Sender::User, About::default()));
         };
-        let space = self.space(&SpaceSelector::id(&caller.space_id)).await?;
-        Ok((Sender::Space, About::space(&space.name, &space.id)))
+        let about = match self.find_space(&caller.space_id).await? {
+            Some(space) => About::space(&space.name, &space.id),
+            None => About {
+                id: Some(caller.space_id.clone()),
+                ..About::default()
+            },
+        };
+        Ok((Sender::Space, about))
     }
 
     /// Delete the unread alert `id` that `caller`, or the user without one,
