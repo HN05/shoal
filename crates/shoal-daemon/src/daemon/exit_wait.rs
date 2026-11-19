@@ -11,7 +11,8 @@ use tokio::{net::UnixStream, sync::OwnedRwLockWriteGuard};
 
 use super::{
     answer,
-    workspace::{ExitQuiescence, HeldBack, Manager},
+    gates::{ExitQuiescence, HeldBack},
+    workspace::Manager,
 };
 use crate::protocol::{self, Body, Exit, ExitWhen, Response, Work};
 

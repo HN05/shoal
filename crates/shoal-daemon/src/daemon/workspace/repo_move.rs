@@ -1,11 +1,14 @@
 //! Moving repository directories into a new `root_dir`. Intent is recorded
 //! before anything moves, so an interrupted move finishes or rolls back.
-use super::{
-    GuardMode, Manager,
-    identity::{directory_identity, has_directory_identity},
-    paths::{is_real_directory, real_directory_identity},
-    registry,
-    spotlight::{self, Layout},
+use super::super::{
+    gates::GuardMode,
+    workspace::{
+        Manager,
+        identity::{directory_identity, has_directory_identity},
+        paths::{is_real_directory, real_directory_identity},
+        registry,
+        spotlight::{self, Layout},
+    },
 };
 use crate::{
     daemon::{log, store},
@@ -322,7 +325,7 @@ impl Manager {
     async fn exclude_resource_hooks(
         &self,
         workspaces: &[Workspace],
-    ) -> Result<Vec<super::ResourceGuard>> {
+    ) -> Result<Vec<super::super::gates::ResourceGuard>> {
         let mut guards = Vec::with_capacity(workspaces.len());
         for workspace in workspaces {
             guards.push(

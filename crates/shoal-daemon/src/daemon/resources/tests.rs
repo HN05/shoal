@@ -276,7 +276,7 @@ async fn queued_requests_take_freed_capacity_in_arrival_order() {
     };
     let hook = manager
         .gates
-        .resource_guard(&workspace, crate::daemon::workspace::GuardMode::Exclusive)
+        .resource_guard(&workspace, crate::daemon::gates::GuardMode::Exclusive)
         .unwrap();
     assert!(acquire("held", true).await.is_err());
     let request = ResourceRequest {

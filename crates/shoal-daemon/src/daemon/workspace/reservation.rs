@@ -2,7 +2,7 @@
 //! state that excludes every other lifecycle operation, and recording the
 //! state it leaves it in.
 
-use super::{GuardMode, Manager};
+use super::super::{gates::GuardMode, workspace::Manager};
 use crate::{daemon::store, state::WorkspaceState};
 use anyhow::{Result, bail};
 use rusqlite::{OptionalExtension, params};

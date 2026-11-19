@@ -921,7 +921,7 @@ async fn a_chat_s_log_shows_a_removal_that_failed() {
 
 #[tokio::test]
 async fn a_chats_removal_waits_for_its_running_hook() {
-    use crate::daemon::workspace::{GuardMode, ResourcesBusy};
+    use crate::daemon::gates::{GuardMode, ResourcesBusy};
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager

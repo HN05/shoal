@@ -23,7 +23,6 @@ mod diff;
 mod disowned;
 pub(crate) mod executions;
 mod fast_forward;
-mod gates;
 pub(crate) mod holds;
 pub(in crate::daemon) mod identity;
 mod imported_sessions;
@@ -35,7 +34,6 @@ mod merge;
 mod ownership;
 pub(crate) mod paths;
 pub(crate) mod places;
-mod pr_gate;
 mod refresh;
 mod registry;
 mod repo_configuration;
@@ -68,9 +66,6 @@ pub(crate) use creation::{NewWorkspace, build_pending_in};
 pub(crate) use daemon_exit::Ending;
 pub(crate) use executions::{Completing, ExecutionRequest, ReattachedExecution, StartedExecution};
 pub use executions::{ExecutionKind, StopRequest, UnprovenStop};
-pub(crate) use gates::{
-    ExitQuiescence, Exiting, GuardMode, HeldBack, PrGuard, ResourceGuard, ResourcesBusy,
-};
 pub(crate) use holds::place_approved as place_approved_hold;
 pub(crate) use lifecycle::not_ready;
 pub(crate) use merge::RecordChange;
@@ -108,7 +103,7 @@ pub struct Manager {
     /// Held while the owner of a recorded place is read and its place
     /// closed, or its ownership moves to another workspace.
     pub(crate) place_ownership: tokio::sync::Mutex<()>,
-    pub gates: gates::Gates,
+    pub gates: super::gates::Gates,
     pub(crate) waits: crate::daemon::links::wait::ActiveWaits,
     /// The reads of items for watches, and those watches started from.
     pub(crate) watch_starts: crate::daemon::links::wait::WatchStarts,

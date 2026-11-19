@@ -6,7 +6,10 @@ mod homes;
 mod reregistration;
 mod stopping;
 
-use super::{GuardMode, Manager, ResourceGuard, places::ExecutionPlace};
+use super::super::{
+    gates::{GuardMode, ResourceGuard},
+    workspace::{Manager, places::ExecutionPlace},
+};
 use crate::daemon::log;
 use crate::{
     config::repo::Cache,

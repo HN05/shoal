@@ -15,8 +15,9 @@ use tokio::sync::{OwnedRwLockReadGuard, watch};
 use super::super::{
     agent_turns::Turn,
     capacity::Activity,
+    gates::GuardMode,
     workspace::{
-        GuardMode, Manager,
+        Manager,
         agent_queue::{Grant, OneShotStop},
     },
 };

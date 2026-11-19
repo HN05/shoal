@@ -9,7 +9,7 @@ use std::path::Path;
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, params};
 
-use super::{GuardMode, Manager};
+use super::super::{gates::GuardMode, workspace::Manager};
 use crate::{
     config::Effective,
     daemon::{

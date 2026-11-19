@@ -425,7 +425,7 @@ async fn a_release_a_busy_resource_operation_holds_off_waits_for_the_next_pass()
     let (execution_id, caller) = fixture.agent().await;
     fixture.acquire("agent", Some(&caller)).await;
     let manager = &fixture.manager;
-    let hook = crate::daemon::workspace::GuardMode::Exclusive;
+    let hook = crate::daemon::gates::GuardMode::Exclusive;
     let hook = manager.gates.resource_guard(&fixture.workspace.id, hook);
     let hook = hook.unwrap();
 

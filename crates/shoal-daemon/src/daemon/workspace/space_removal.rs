@@ -9,11 +9,14 @@ use rusqlite::params;
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use std::borrow::Cow;
 
-use super::{
-    GuardMode, Manager, StopRequest,
-    executions::StopPolicy,
-    lifecycle::{Removal, Underway},
-    reservation::RemovalRules,
+use super::super::{
+    gates::GuardMode,
+    workspace::{
+        Manager, StopRequest,
+        executions::StopPolicy,
+        lifecycle::{Removal, Underway},
+        reservation::RemovalRules,
+    },
 };
 use crate::{
     daemon::{

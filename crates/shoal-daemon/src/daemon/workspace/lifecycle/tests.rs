@@ -238,7 +238,7 @@ async fn lifecycle_check_refuses_what_reserving_would_and_reserves_nothing() {
     let (_root, manager, workspace) = fixture().await;
     let hook = manager
         .gates
-        .resource_guard(&workspace.id, super::super::GuardMode::Exclusive)
+        .resource_guard(&workspace.id, crate::daemon::gates::GuardMode::Exclusive)
         .unwrap();
 
     assert!(manager.check_lifecycle(&workspace.id).await.is_err());

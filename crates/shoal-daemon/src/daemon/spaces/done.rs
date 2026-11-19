@@ -8,11 +8,12 @@ use std::path::{Path, PathBuf};
 use crate::{
     config::Effective,
     daemon::{
+        gates::{GuardMode, ResourceGuard},
         item_numbers::ItemNumber,
         links::{pr::current_head, space::require_ready_space},
         notifications::NotificationKind,
         progress, questions, turn_retry, wake_timers,
-        workspace::{GuardMode, Manager, ResourceGuard},
+        workspace::Manager,
         workspace_files::Attacher,
     },
     hooks::{Hook, HookKind},

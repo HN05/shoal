@@ -2517,7 +2517,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
     // which excludes placing it, refuses the decision.
     let hook = manager
         .gates
-        .resource_guard(&child.id, crate::daemon::workspace::GuardMode::Exclusive)
+        .resource_guard(&child.id, crate::daemon::gates::GuardMode::Exclusive)
         .unwrap();
     manager
         .decide_routed_approval(&parent.id, requested.number, true, None, Default::default())
@@ -2552,7 +2552,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
     // resource hook.
     let hook = manager
         .gates
-        .resource_guard(&child.id, crate::daemon::workspace::GuardMode::Exclusive)
+        .resource_guard(&child.id, crate::daemon::gates::GuardMode::Exclusive)
         .unwrap();
     assert!(
         manager

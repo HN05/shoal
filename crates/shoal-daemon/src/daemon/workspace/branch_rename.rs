@@ -31,9 +31,9 @@ impl Manager {
         let _resources = self.gates.resource_guard(
             &workspace.id,
             if caller_execution.is_some() {
-                super::GuardMode::Shared
+                super::super::gates::GuardMode::Shared
             } else {
-                super::GuardMode::Exclusive
+                super::super::gates::GuardMode::Exclusive
             },
         )?;
         let workspace = self

@@ -258,7 +258,7 @@ async fn an_exit_that_waits_keeps_an_approved_push_pending() {
     let error = approve().await.unwrap_err();
     assert!(
         error
-            .downcast_ref::<crate::daemon::workspace::Exiting>()
+            .downcast_ref::<crate::daemon::gates::Exiting>()
             .is_some()
     );
     let kept = manager

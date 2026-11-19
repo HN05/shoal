@@ -10,9 +10,10 @@ use crate::{
     daemon::{
         events::{self, EventKind},
         forge_hosts::ForgeHosts,
+        gates::PrGuard,
         links::space::{LinkSpace, require_ready_space},
         spaces::removal_notices::Cleanup,
-        workspace::{Manager, PrGuard},
+        workspace::Manager,
     },
     forge::{
         ForgeRepo,

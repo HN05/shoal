@@ -10,11 +10,7 @@ use shoal_ids::space_ids::SpaceId;
 
 #[cfg(test)]
 use super::allocation::Allocation;
-use super::{
-    containers, log, resources,
-    scope::Caller,
-    workspace::{Manager, ResourcesBusy},
-};
+use super::{containers, gates::ResourcesBusy, log, resources, scope::Caller, workspace::Manager};
 use crate::refusal::Reason;
 use crate::{model::Workspace, state::WorkspaceState};
 use shoal_protocol::{

@@ -16,7 +16,7 @@ use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
 };
 
-use super::{log, workspace::Exiting};
+use super::{gates::Exiting, log};
 use crate::protocol::{self, Body, Method, Request, Response, timing};
 use running::Running;
 

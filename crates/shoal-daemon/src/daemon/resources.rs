@@ -14,10 +14,11 @@ use crate::{
     daemon::{
         allocation::Allocation,
         approvals::{self, ApprovalRequest, ResourceSpecification, Specification, Target},
+        gates::GuardMode,
         queue,
         scope::Caller,
         store,
-        workspace::{GuardMode, Manager},
+        workspace::Manager,
     },
     validate,
 };
