@@ -21,6 +21,14 @@ fn ref_name_patterns_match_within_and_across_path_components() {
         ("refs/heads/v?", "refs/heads/v/", false),
         ("refs/heads/*", "refs/heads/topic", true),
         ("refs/heads/*", "refs/tags/topic", false),
+        ("refs/heads/release/**/*", "refs/heads/release/v1", true),
+        ("refs/heads/release/**/*", "refs/heads/release/1/2/v1", true),
+        ("refs/heads/v[0-9]", "refs/heads/v7", true),
+        ("refs/heads/v[0-9]", "refs/heads/vx", false),
+        ("refs/heads/v[!0-9]", "refs/heads/vx", true),
+        ("refs/heads/v[!0-9]", "refs/heads/v/", false),
+        ("refs/heads/[ab]-fix", "refs/heads/b-fix", true),
+        ("refs/heads/[ab", "refs/heads/[ab", true),
     ] {
         assert_eq!(
             fnmatch(pattern.as_bytes(), reference.as_bytes()),

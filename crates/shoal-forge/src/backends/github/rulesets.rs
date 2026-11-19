@@ -98,11 +98,16 @@ fn deleting_ref_names(ruleset: &Value) -> Option<RefNames> {
     })
 }
 
-/// Whether `pattern` matches `text` as GitHub matches ref names: `*` and
-/// `?` within one path component, `**` across them.
+/// Whether `pattern` matches `text` as GitHub matches ref names: `*`, `?`
+/// and `[...]` within one path component, `**` across them, and `**/` also
+/// across none.
 fn fnmatch(pattern: &[u8], text: &[u8]) -> bool {
     match pattern {
         [] => text.is_empty(),
+        [b'*', b'*', b'/', rest @ ..] => {
+            fnmatch(rest, text)
+                || (0..text.len()).any(|at| text[at] == b'/' && fnmatch(rest, &text[at + 1..]))
+        }
         [b'*', b'*', rest @ ..] => (0..=text.len()).any(|at| fnmatch(rest, &text[at..])),
         [b'*', rest @ ..] => {
             let run = text.iter().take_while(|&&byte| byte != b'/').count();
@@ -111,8 +116,45 @@ fn fnmatch(pattern: &[u8], text: &[u8]) -> bool {
         [b'?', rest @ ..] => {
             text.first().is_some_and(|&byte| byte != b'/') && fnmatch(rest, &text[1..])
         }
+        [b'[', class @ ..] => match (class_matches(class, text.first().copied()), text) {
+            (Some((true, rest)), [_, after @ ..]) => fnmatch(rest, after),
+            (Some(_), _) => false,
+            // An unclosed bracket is a literal one.
+            (None, _) => text.first() == Some(&b'[') && fnmatch(class, &text[1..]),
+        },
         [literal, rest @ ..] => text.first() == Some(literal) && fnmatch(rest, &text[1..]),
     }
+}
+
+/// Whether the character class that `class` opens, after its `[`, holds
+/// `byte`, with the pattern after its `]`; none when it never closes. `!`
+/// or `^` first negates it, and `a-z` is a range; no class holds `/`.
+fn class_matches(class: &[u8], byte: Option<u8>) -> Option<(bool, &[u8])> {
+    let (negated, mut at) = match class.first() {
+        Some(b'!' | b'^') => (true, 1),
+        _ => (false, 0),
+    };
+    let mut held = false;
+    let mut first = true;
+    while at < class.len() {
+        match &class[at..] {
+            [b']', ..] if !first => {
+                let matches = byte.is_some_and(|byte| byte != b'/' && held != negated);
+                return Some((matches, &class[at + 1..]));
+            }
+            [low, b'-', high, ..] if *high != b']' => {
+                held |= byte.is_some_and(|byte| (*low..=*high).contains(&byte));
+                at += 3;
+            }
+            [single, ..] => {
+                held |= byte == Some(*single);
+                at += 1;
+            }
+            [] => break,
+        }
+        first = false;
+    }
+    None
 }
 
 #[cfg(test)]
