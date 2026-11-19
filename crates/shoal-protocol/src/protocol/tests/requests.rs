@@ -16,6 +16,7 @@ const REQUESTS: &[&str] = &[
     r#"{"register_repository":{"source":"app","name":null,"path":null}}"#,
     r#"{"register_contribution":{"source":"https://forge.example/team/app","name":"app"}}"#,
     r#"{"hold_contribution":{"repository":"r1"}}"#,
+    r#"{"receive_commits":{"origin":"https://forge.example/team/app","commit":"0123456789abcdef0123456789abcdef01234567","branch":"main"}}"#,
     r#"{"rename_repository":{"repository":{"value":".","path":"/work/app"},"name":"web"}}"#,
     r#"{"local_config_path":{"repository":"app"}}"#,
     r#"{"edit_local_config":{"repository":"app","changes":[{"key":"setup.command","value":null}]}}"#,
