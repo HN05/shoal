@@ -343,7 +343,8 @@ child workspace already marked done, which goes once the revert merges.
 `pr_review` [permission](#permitted-actions), as the host's `review_token`,
 which must be set and must not be the account that opened the PR. `merge` of
 a PR, its `--auto` and `--cancel-auto`, and `pr delete-branch` follow the space's
-`merge` permission, a merge bound to the PR's head commit, and `ci approve`
+`merge` permission, a merge bound to the PR's head commit, its method and a
+squash's message, and `ci approve`
 its `ci_approve` [permission](#permitted-actions).
 
 `shoal forge capabilities` lists what the forge supports, such as resolving

@@ -324,7 +324,9 @@ async fn a_merge_binds_the_head_the_pr_has_unless_it_names_one() {
     crate::forge::hosts::learn(host, crate::forge::backends::ForgeKind::Forgejo);
     crate::daemon::test_support::configure(
         &manager,
-        &format!("[machine.forges.\"{host}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n"),
+        &format!(
+            "[merge]\nmethod = \"squash\"\n[machine.forges.\"{host}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n"
+        ),
     )
     .await;
     let origin = format!("http://{host}/team/repo");
@@ -347,12 +349,45 @@ async fn a_merge_binds_the_head_the_pr_has_unless_it_names_one() {
 
     let mut read = merge(None);
     let subject = manager.bind_merge(&context, Some("1".parse().unwrap()), &mut read, &caller);
-    assert!(subject.await.unwrap().ends_with(&format!(" at {head}")));
+    assert!(
+        subject
+            .await
+            .unwrap()
+            .ends_with(&format!(" at {head} by merge"))
+    );
     assert_eq!(read.merge_head(), Some(&head));
     // A merge that names its head, as an approval bound it, keeps it.
     let named = CommitId::from("b".repeat(40));
     let mut kept = merge(Some(named.clone()));
     let subject = manager.bind_merge(&context, Some("1".parse().unwrap()), &mut kept, &caller);
-    assert!(subject.await.unwrap().ends_with(&format!(" at {named}")));
+    assert!(
+        subject
+            .await
+            .unwrap()
+            .ends_with(&format!(" at {named} by merge"))
+    );
     assert_eq!(kept.merge_head(), Some(&named));
+
+    // A merge without a method binds the configured one, and a squash its
+    // message, so a retry by another method or message needs another
+    // decision.
+    let mut squash = Action::Merge {
+        method: None,
+        message: Some("Fix login\n\nWhy".into()),
+        delete_branch: false,
+        head: Some(named.clone()),
+    };
+    let subject = manager.bind_merge(&context, Some("1".parse().unwrap()), &mut squash, &caller);
+    let subject = subject.await.unwrap();
+    assert!(
+        subject.ends_with(&format!(" at {named} by squash as \"Fix login\"")),
+        "{subject}"
+    );
+    let Action::Merge { method, .. } = squash else {
+        panic!("not a merge");
+    };
+    assert_eq!(
+        method,
+        Some(crate::forge::items::action::MergeMethod::Squash)
+    );
 }

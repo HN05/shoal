@@ -106,8 +106,10 @@ impl Manager {
 
     /// Bind a merge in `action` of the PR `input` names, or of `target`'s
     /// linked PR, for a scoped `caller`, to the commit the PR's head has now, unless it names one,
-    /// and return what it does as an approval of it binds it: a later
-    /// commit needs another decision, and the forge refuses to merge one.
+    /// and to the `[merge] method` it merges by, unless it names one, and
+    /// return what it does as an approval of it binds it: a later commit,
+    /// another method or another message needs another decision, and the
+    /// forge refuses to merge another commit.
     pub(crate) async fn bind_merge(
         &self,
         target: &RepoTarget,
@@ -115,15 +117,22 @@ impl Manager {
         action: &mut Action,
         caller: &Caller,
     ) -> Result<String> {
-        let pull = self.context_pull(target, input, Access::Change, Some(caller));
-        let (forge, url) = pull.await?;
+        let (target, url) = self
+            .target_item(target, input, ItemKind::Pr, Access::Change, Some(caller))
+            .await?;
+        self.configure_merge(target.own_place(), action).await?;
         if action.merges() && action.merge_head().is_none() {
+            let forge = target.into_forge()?;
             let pull = forge.pull_request(&self.agent_account(), &url).await?;
             let head = pull.head_commit.context("the forge names no PR head")?;
             action.bind_merge_head(head);
         }
         let at = (action.merge_head()).map_or_else(String::new, |head| format!(" at {head}"));
-        Ok(format!("{} {url}{at}", action.name()))
+        Ok(format!(
+            "{} {url}{at}{}",
+            action.name(),
+            merge_terms(action)
+        ))
     }
 
     /// The forge and the PR `input` names in the `target` repository, or
@@ -156,6 +165,27 @@ impl Manager {
             })
             .await
     }
+}
+
+/// The method and squash message `action` merges by, as an approval of it
+/// names them: ` by squash as "Fix login"`; nothing for the forge's
+/// default.
+fn merge_terms(action: &Action) -> String {
+    let (Action::Merge {
+        method, message, ..
+    }
+    | Action::AutoMerge {
+        method, message, ..
+    }) = action
+    else {
+        return String::new();
+    };
+    let mut terms = method.map_or_else(String::new, |method| format!(" by {method}"));
+    if let Some(message) = message {
+        let subject = crate::model::message_subject(message);
+        terms.push_str(&format!(" as \"{subject}\""));
+    }
+    terms
 }
 
 /// Whether the workspace `id` links the PR `url`.

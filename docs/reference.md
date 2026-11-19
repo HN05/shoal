@@ -4869,8 +4869,9 @@ refused when its warning changed while the question was open, including a
 warning that appeared where none was. A scoped process merges, sets or
 withdraws an automatic merge and deletes a PR's branch as the agent account,
 as its space's [`merge` permission](#mode-permissions) allows: the request binds the PR
-at its head commit, which the merge names to the forge, so with `"propose"` a
-later commit needs another approval. A merge that its [review gate](#local-reviews)
+at its head commit, which the merge names to the forge, and the method, `-X` or
+`[merge] method`, and a squash's message, so with `"propose"` a later commit,
+another method or another message needs another approval. A merge that its [review gate](#local-reviews)
 refuses goes no further.
 `delete-branch` deletes the branch of a merged or closed PR on the forge, such
 as one merged on the forge's website, never a local branch, with your own

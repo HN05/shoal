@@ -280,13 +280,12 @@ async fn a_merge_naming_no_method_takes_the_configured_one() {
         delete_branch: false,
         head: None,
     };
-    let method = async |place: Option<&Place>, action| match manager
-        .configured_merge(place, action)
-        .await
-        .unwrap()
-    {
-        Action::Merge { method, .. } => method,
-        other => panic!("not a merge: {other:?}"),
+    let method = async |place: Option<&Place>, mut action| {
+        manager.configure_merge(place, &mut action).await.unwrap();
+        match action {
+            Action::Merge { method, .. } => method,
+            other => panic!("not a merge: {other:?}"),
+        }
     };
     let checkout = Place::Checkout(repo);
     assert_eq!(

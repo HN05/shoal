@@ -58,7 +58,9 @@ impl Manager {
         action.validate(kind)?;
         let (target, item) =
             (self.target_item(target, input, kind, Access::Change, caller)).await?;
-        let action = self.configured_merge(target.own_place(), action).await?;
+        let mut action = action;
+        self.configure_merge(target.own_place(), &mut action)
+            .await?;
         let forge = target.forge()?;
         match target.own_place() {
             Some(Place::Space(space)) => {
@@ -71,12 +73,16 @@ impl Manager {
         }
     }
 
-    /// `action`, merging by the `[merge] method` of `place`, the place it
-    /// acts in as its own repository, or of the global config elsewhere,
-    /// when it is a merge that names no method.
-    async fn configured_merge(&self, place: Option<&Place>, mut action: Action) -> Result<Action> {
+    /// Have `action`, when it is a merge that names no method, merge by the
+    /// `[merge] method` of `place`, the place it acts in as its own
+    /// repository, or of the global config elsewhere.
+    pub(super) async fn configure_merge(
+        &self,
+        place: Option<&Place>,
+        action: &mut Action,
+    ) -> Result<()> {
         if !action.merges() {
-            return Ok(action);
+            return Ok(());
         }
         let settings = match place {
             Some(Place::Space(space)) => self.acting_settings(space).await?,
@@ -86,7 +92,7 @@ impl Manager {
         if let Some(method) = settings.merge.method {
             action.default_merge_method(method);
         }
-        Ok(action)
+        Ok(())
     }
 
     /// Apply `action` to `item` of the workspace's or chat's repository,
