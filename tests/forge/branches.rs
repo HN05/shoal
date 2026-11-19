@@ -368,6 +368,12 @@ fn an_agent_deletes_branches_as_its_push_permission_allows() {
     assert_eq!(again.status.code(), Some(2), "{}", printed(&again));
     assert_eq!(branches.deleted(), Vec::<String>::new());
     branches.respond(&[], &[]);
+    // A login of the user's own in the home's netrc goes unused.
+    std::fs::write(
+        branches.fixture.root.path().join(".netrc"),
+        "machine 127.0.0.1 login netrc password usernetrc\n",
+    )
+    .unwrap();
     let deleted = branches.delete_as("topic", &["squashed", "rebased"]);
     assert!(deleted.status.success(), "{}", printed(&deleted));
     let agent = |branch: &str| (branch.to_owned(), "token:agenttoken".to_owned());

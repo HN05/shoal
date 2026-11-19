@@ -4,7 +4,8 @@
 //! branch that moved since, such as by a push that landed after the check.
 //!
 //! The push runs from an empty repository made for it, without the user's
-//! Git configuration, which could send it elsewhere or as someone else. Its
+//! Git configuration or `.netrc`, which could send it elsewhere or as
+//! someone else. Its
 //! login reaches Git only on standard input, held by Git's in-memory
 //! credential cache, which answers only for the repository's host, so the
 //! token never enters a file, the environment or argv.
@@ -128,7 +129,8 @@ impl Scratch {
 
     /// Git in the repository with only the credential cache to sign in
     /// with, for the URL's host alone, following no redirect elsewhere and
-    /// asking no one for a login.
+    /// asking no one for a login. Its home is the scratch directory, which
+    /// keeps out the user's `.netrc`, whose login libcurl would send first.
     fn git(&self) -> Command {
         let socket = self.socket();
         let socket = crate::shell::quote(&[socket.to_string_lossy()]);
@@ -140,6 +142,7 @@ impl Scratch {
         command
             .env("GIT_CONFIG_GLOBAL", "/dev/null")
             .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("HOME", self.directory.path())
             .env_remove("GIT_ASKPASS")
             .env_remove("SSH_ASKPASS")
             .args(["-c", "credential.helper=", "-c", &helper])
