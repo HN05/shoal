@@ -2759,8 +2759,7 @@ merges, as the agent account, and `pr_review` its
 verdicts, as the host's `review_token`, a login of its own, since agents open
 their PRs as the agent account and forges take no verdict from a PR's
 author; the user's own act as the user's login.
-Deleting the branch of a merged or closed PR refuses a branch that no longer
-points to the PR's head, since its other commits are in no PR. A PR merge, now
+A PR merge, now
 or automatic, names the head commit a scoped request's approval bound, else the
 one Shoal read before merging, so the forge refuses a head pushed since instead
 of merging a commit nobody approved; Bitbucket takes none. A forge checks that
