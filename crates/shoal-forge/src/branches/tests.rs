@@ -180,3 +180,48 @@ fn each_forge_deletes_a_branch_at_its_encoded_name() {
         );
     }
 }
+
+#[tokio::test]
+async fn a_github_ruleset_on_a_later_page_protects_the_branches_it_names() {
+    let other: Vec<_> = (1..=100)
+        .map(|id| json!({"id": id, "target": "tag", "enforcement": "active"}))
+        .collect();
+    let server = forge(vec![
+        (
+            "graphql",
+            json!({"data": {"repository": {"refs": {
+            "pageInfo": {"hasNextPage": false, "endCursor": null},
+            "nodes": [
+                {"name": "main", "target": {"oid": "a1", "committedDate": "t1"},
+                    "branchProtectionRule": null},
+                {"name": "release/1", "target": {"oid": "b2", "committedDate": "t2"},
+                    "branchProtectionRule": null},
+                {"name": "topic", "target": {"oid": "c3", "committedDate": "t3"},
+                    "branchProtectionRule": null},
+            ]}}}}),
+        ),
+        (
+            "rulesets?includes_parents=true&per_page=100&page=1",
+            json!(other),
+        ),
+        (
+            "rulesets?includes_parents=true&per_page=100&page=2",
+            json!([{"id": 101, "target": "branch", "enforcement": "active"}]),
+        ),
+        (
+            "rulesets/101?",
+            json!({"rules": [{"type": "deletion"}], "conditions": {"ref_name": {
+                "include": ["~DEFAULT_BRANCH", "refs/heads/release/**/*"], "exclude": []}}}),
+        ),
+        ("repos/team/project", json!({"default_branch": "main"})),
+    ]);
+    let repo = repo_on(&server, ForgeKind::GitHub, "team/project");
+    let branches = repo.branches(&agent_on(&server, "agent")).await.unwrap();
+    let protected: Vec<_> = (branches.iter())
+        .map(|branch| (branch.name.as_str(), branch.protected))
+        .collect();
+    assert_eq!(
+        protected,
+        [("main", true), ("release/1", true), ("topic", false)]
+    );
+}

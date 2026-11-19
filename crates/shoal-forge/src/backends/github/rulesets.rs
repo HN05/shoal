@@ -31,13 +31,11 @@ impl DeletionRules {
     /// The rules of `repo`'s rulesets and its owner's; none where the
     /// server has no rulesets.
     pub(super) async fn read(repo: &ForgeRepo, account: &Account) -> Result<Self> {
-        let list = "rulesets?includes_parents=true&per_page=100";
-        let list = Request::get(repo.repo_endpoint(list));
-        let Ok(listed) = repo.read_refusable(account, &list, &[404]).await? else {
+        let Some(listed) = listed_rulesets(repo, account).await? else {
             return Ok(Self::default());
         };
         let mut conditions = Vec::new();
-        let active = (listed.as_array().into_iter().flatten())
+        let active = (listed.iter())
             .filter(|ruleset| ruleset["target"] == "branch" && ruleset["enforcement"] == "active");
         for ruleset in active {
             let id = (ruleset["id"].as_u64()).context("GitHub listed a ruleset without its ID")?;
@@ -77,6 +75,28 @@ impl DeletionRules {
             pattern => fnmatch(pattern.as_bytes(), reference.as_bytes()),
         }
     }
+}
+
+/// How many rulesets a page lists.
+const PAGE: usize = 100;
+
+/// Every ruleset of `repo` and its owner, page by page; none where the
+/// server has no rulesets.
+async fn listed_rulesets(repo: &ForgeRepo, account: &Account) -> Result<Option<Vec<Value>>> {
+    let mut listed = Vec::new();
+    for page in 1.. {
+        let path = format!("rulesets?includes_parents=true&per_page={PAGE}&page={page}");
+        let read = Request::get(repo.repo_endpoint(&path));
+        let Ok(response) = repo.read_refusable(account, &read, &[404]).await? else {
+            return Ok(None);
+        };
+        let rulesets = (response.as_array()).context("GitHub did not list rulesets")?;
+        listed.extend(rulesets.iter().cloned());
+        if rulesets.len() < PAGE {
+            break;
+        }
+    }
+    Ok(Some(listed))
 }
 
 /// The ref name condition of `ruleset` when one of its rules forbids
