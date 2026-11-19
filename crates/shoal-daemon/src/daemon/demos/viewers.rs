@@ -14,7 +14,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result, anyhow, bail};
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_leases::{allocation::Allocation, ports::Acquisition};
@@ -365,7 +365,16 @@ impl Starting {
             .spawn()
             .map_err(|error| not_started(program, error))?;
         let pid = child.id().context("the viewer exited at once")?;
-        let process = process::capture(pid)?.context("the viewer exited at once")?;
+        let process = match process::capture(pid) {
+            Ok(Some(process)) => process,
+            captured => {
+                abandon(child);
+                let error = captured
+                    .err()
+                    .unwrap_or_else(|| anyhow!("it exited at once"));
+                return Err(error.context(format!("viewer {program} did not start")));
+            }
+        };
         Ok(Self {
             child,
             process,
@@ -443,6 +452,18 @@ async fn await_port(
         }
         tokio::time::sleep(START_POLL).await;
     }
+}
+
+/// Kill the process group of `child`, which this daemon never waited for,
+/// so its PID still names that group, and reap it meanwhile.
+fn abandon(mut child: Child) {
+    if let Some(pid) = child.id() {
+        // SAFETY: the group of the unreaped child this daemon started.
+        unsafe {
+            libc::kill(-(pid as i32), libc::SIGKILL);
+        }
+    }
+    tokio::spawn(async move { child.wait().await });
 }
 
 /// Stop the process group `child` leads. Only while it is unreaped does
