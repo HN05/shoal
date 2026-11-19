@@ -2,6 +2,7 @@
 //! an issue, PR or CI run by its URL, and an issue by its number in the
 //! blocked space's repository.
 use anyhow::{Context as _, Result, ensure};
+use shoal_protocol::progress::Blocker;
 
 use super::{Change, blockers::Named};
 use crate::{
@@ -13,7 +14,7 @@ use crate::{
             reference::{ItemInput, ItemRef},
         },
     },
-    model::{Blocker, Space},
+    model::Space,
     state::BlockerKind,
 };
 use shoal_protocol::{

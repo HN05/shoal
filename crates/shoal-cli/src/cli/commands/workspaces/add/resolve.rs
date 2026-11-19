@@ -4,6 +4,7 @@
 //! refuse, the workspace whose branch it names, and the issue or PR it
 //! starts on, read so that a lookup's failure ends the start first.
 use anyhow::Result;
+use shoal_protocol::progress::Blocker;
 
 use super::{
     agent::AddSettings,
@@ -14,7 +15,7 @@ use super::{
 use crate::{
     cli::{client, commands::issues, context::Context},
     forge::{PullRequest, items::issue::IssueDetails},
-    model::{Blocker, Repository, Workspace},
+    model::{Repository, Workspace},
     protocol::CopySource,
     start_plan::{CopyCreation, Creation},
 };

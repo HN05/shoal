@@ -374,7 +374,9 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
     };
     let (workspace, execution) = agent(&manager, &repo.id, "blocked", working).await;
     let selector = SpaceSelector::id(&workspace.id);
-    let blocker = crate::model::Blocker::Pr("https://github.com/team/app/pull/8".parse().unwrap());
+    let blocker = shoal_protocol::progress::Blocker::Pr(
+        "https://github.com/team/app/pull/8".parse().unwrap(),
+    );
     let change = ProgressChange::AddBlocker {
         blocker: blocker.clone(),
         step: None,
@@ -563,7 +565,9 @@ async fn a_blocked_chats_idle_agent_stops_until_its_space_clears() {
     use shoal_protocol::progress::ProgressChange;
     let (root, manager) = manager().await;
     let (chat, execution) = idle_chat(&manager, root.path(), "chat").await;
-    let blocker = crate::model::Blocker::Pr("https://github.com/team/app/pull/8".parse().unwrap());
+    let blocker = shoal_protocol::progress::Blocker::Pr(
+        "https://github.com/team/app/pull/8".parse().unwrap(),
+    );
     let change = ProgressChange::AddBlocker {
         blocker,
         step: None,

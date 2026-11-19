@@ -92,7 +92,7 @@ pub enum WorkspaceMethod {
     /// could not wait for, without queuing anything.
     CheckBlockers {
         repository: crate::repository::Selector,
-        blockers: Vec<crate::model::Blocker>,
+        blockers: Vec<crate::progress::Blocker>,
     },
     AdoptWorkspace {
         repository: crate::repository::Selector,

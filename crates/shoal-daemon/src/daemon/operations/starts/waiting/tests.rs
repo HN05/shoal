@@ -1,3 +1,4 @@
+use shoal_protocol::progress::Blocker;
 use std::sync::Arc;
 
 use super::super::{Opening, Preparing};
@@ -8,7 +9,7 @@ use crate::{
         test_support::{commit, git, global_config, manager, repository},
         workspace_files::Attacher,
     },
-    model::{Blocker, PreparationWait, Repository, Workspace},
+    model::{PreparationWait, Repository, Workspace},
     protocol::operations::{LaunchRequest, StartedWorkspace, WorkspaceStart},
     removal::{InspectionPolicy, UnsavedWork},
     state::{QueueState, WorkspaceState},

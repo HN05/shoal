@@ -2,6 +2,7 @@
 //! recording: the agent resolved under the settings where the space goes,
 //! working on the start's issue, and refused before anything is recorded
 //! where the caller may not give it what it asks for.
+use shoal_protocol::progress::Blocker;
 use std::collections::BTreeMap;
 
 use anyhow::Result;
@@ -14,7 +15,7 @@ use crate::{
     config::{Effective, modes::ModeName},
     daemon::{manager::Manager, scope::Caller},
     forge::items::reference::ItemInput,
-    model::{Blocker, Space, SpaceKind, Workspace},
+    model::{Space, SpaceKind, Workspace},
     protocol::operations::{LaunchIssue, LaunchRequest, QueuedLaunch},
 };
 

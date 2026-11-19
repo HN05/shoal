@@ -1,4 +1,4 @@
-//! The agent launch queue and what blocks its entries.
+//! The agent launch queue.
 use crate::space_names::{SpaceName, SpaceSelector};
 use crate::state::{QueueKind, QueueState};
 use serde::{Deserialize, Serialize};
@@ -7,10 +7,7 @@ use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_schedule::{priority::Priority, rank::QueueRank};
 
-use crate::forge::items::{
-    link::LinkKind,
-    reference::{ItemInput, ItemRef},
-};
+use crate::progress::Blocker;
 
 /// An agent launch or restore waiting for, or starting in, a `max_heavy_agents`
 /// slot, or a CI job waiting for the runner.
@@ -155,75 +152,6 @@ pub struct StoppedSpace {
     pub cancelled_run: Option<String>,
 }
 
-/// What blocks work until it clears. A URL of another kind than the
-/// variant's is refused as the blocker is read.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", try_from = "BlockerFields")]
-pub enum Blocker {
-    /// A space, or for a launch a queued launch of the same repository, by
-    /// name or ID.
-    Space(String),
-    /// An issue, by URL, or by number in the space's repository.
-    Issue(ItemInput),
-    /// A PR, by URL.
-    Pr(ItemRef),
-    /// A CI run, by URL.
-    CiRun(ItemRef),
-}
-
-/// How a [`Blocker`] reads, before its URL's kind is checked.
-#[derive(Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum BlockerFields {
-    Space(String),
-    Issue(ItemInput),
-    Pr(ItemRef),
-    CiRun(ItemRef),
-}
-
-impl TryFrom<BlockerFields> for Blocker {
-    type Error = anyhow::Error;
-
-    fn try_from(fields: BlockerFields) -> anyhow::Result<Self> {
-        let (blocker, url) = match fields {
-            BlockerFields::Space(space) => return Ok(Self::Space(space)),
-            BlockerFields::Issue(ItemInput::Url(url)) => (
-                Self::Issue(ItemInput::Url(url.clone())),
-                Some((url, LinkKind::Issue)),
-            ),
-            BlockerFields::Issue(number) => (Self::Issue(number), None),
-            BlockerFields::Pr(url) => (Self::Pr(url.clone()), Some((url, LinkKind::Pr))),
-            BlockerFields::CiRun(url) => (Self::CiRun(url.clone()), Some((url, LinkKind::Ci))),
-        };
-        if let Some((url, kind)) = url {
-            url.of_kind(kind)?;
-        }
-        Ok(blocker)
-    }
-}
-
-impl std::str::FromStr for Blocker {
-    type Err = anyhow::Error;
-
-    /// The blocker `input` names: an issue by number or URL, a PR or CI run
-    /// by URL, and otherwise a space by its ID. Unlike every other space
-    /// argument, a bare number here is an issue, never a space's number.
-    fn from_str(input: &str) -> anyhow::Result<Self> {
-        use anyhow::Context as _;
-        if crate::forge::IssueInput::parse(input) == crate::forge::IssueInput::Invalid {
-            return Ok(Self::Space(input.to_owned()));
-        }
-        let item = input
-            .parse::<ItemInput>()
-            .context("a blocker is an issue, PR, CI run or space")?;
-        Ok(match item {
-            ItemInput::Url(url) if url.kind() == LinkKind::Pr => Self::Pr(url),
-            ItemInput::Url(url) if url.kind() == LinkKind::Ci => Self::CiRun(url),
-            issue => Self::Issue(issue),
-        })
-    }
-}
-
 /// An agent launch in a recorded space, a workspace or a chat, to admit or
 /// queue. The plan is JSON in the format of the binary's
 /// `start_plan::QueuedStart`, which the `queue-start` worker reads back.
@@ -322,6 +250,3 @@ pub struct QueuedPlan {
     pub entry: QueueEntry,
     pub plan: String,
 }
-
-#[cfg(test)]
-mod tests;

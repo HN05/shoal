@@ -8,6 +8,7 @@
 //! others.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
+use shoal_protocol::progress::Blocker;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::{BranchName, CommitId};
 use std::collections::{HashMap, HashSet};
@@ -23,7 +24,7 @@ use crate::{
         store::{self, WORKSPACE_COLUMNS},
     },
     git,
-    model::{Blocker, SpaceKind, Workspace},
+    model::{SpaceKind, Workspace},
     state::{BlockerKind, QueueKind, QueueState},
 };
 

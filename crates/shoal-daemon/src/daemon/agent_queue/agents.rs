@@ -2,13 +2,14 @@
 //! and `shoal start` queue one in a ready workspace, or the agent of a new
 //! space with its record, to start once its preparation, if any, lets it.
 use anyhow::{Context as _, Result};
+use shoal_protocol::progress::Blocker;
 
 use super::store::Awaits;
 use crate::{
     agents::resolve_launch,
     daemon::manager::Manager,
     forge::items::reference::ItemInput,
-    model::{Blocker, QueueAdmission, QueueEntry, Space, Workspace},
+    model::{QueueAdmission, QueueEntry, Space, Workspace},
     protocol::operations::{LaunchIssue, LaunchRequest, QueuedLaunch},
     start_plan::queued_agent_request,
 };

@@ -5,6 +5,7 @@
 //! without a branch or issue a chat whose agent makes it a workspace once
 //! it knows the work.
 use shoal_protocol::launches::{Launch, SpaceChoice};
+use shoal_protocol::progress::Blocker;
 use shoal_protocol::space_names::SpaceSelector;
 
 use anyhow::Result;
@@ -18,7 +19,7 @@ use crate::{
     daemon::{manager::Manager, operations::starts::StartIssue, scope::Caller},
     forge::items::reference::ItemInput,
     launches as fits,
-    model::{Blocker, Repository, SpaceKind, Workspace},
+    model::{Repository, SpaceKind, Workspace},
     start_plan::Creation,
 };
 

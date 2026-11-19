@@ -3,6 +3,7 @@
 //! state the daemon reads in their worktrees; and the spaces, workspaces and
 //! chats together.
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::progress::Blocker;
 use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::Result;
@@ -13,9 +14,8 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     config::hooks::HookKind,
     model::{
-        Blocker, ConflictCheck, DiffBase, Inspection, MergeOptions, MergePreview, OwnedPlace,
-        Refreshed, RenamedSpace, Space, SpacePlaces, SpaceStatus, SpaceTarget, UntrackedWorktree,
-        Workspace,
+        ConflictCheck, DiffBase, Inspection, MergeOptions, MergePreview, OwnedPlace, Refreshed,
+        RenamedSpace, Space, SpacePlaces, SpaceStatus, SpaceTarget, UntrackedWorktree, Workspace,
     },
     protocol::{CommitStart, ConfigTarget, CreationOptions, RepositoryLayers, WorkspaceMethod},
     repository::Selector,

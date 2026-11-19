@@ -7,6 +7,6 @@ use crate::space_names::SpaceSelector;
 pub struct WorkerStart {
     pub workspace: SpaceSelector,
     pub launch: crate::protocol::operations::LaunchRequest,
-    pub blockers: Vec<crate::model::Blocker>,
+    pub blockers: Vec<crate::progress::Blocker>,
     pub pr: Option<crate::forge::items::reference::ItemInput>,
 }

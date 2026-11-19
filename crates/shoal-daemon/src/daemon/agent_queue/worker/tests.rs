@@ -88,7 +88,9 @@ async fn an_agent_without_a_launch_waits_out_one_queued_in_its_workspace() {
     // A launch waits there for another space's work.
     let admission = manager
         .queue_add(QueueRequest {
-            blockers: vec![crate::model::Blocker::Space(blocker.id.to_string())],
+            blockers: vec![shoal_protocol::progress::Blocker::Space(
+                blocker.id.to_string(),
+            )],
             ..launch_in(&workspace, false)
         })
         .await

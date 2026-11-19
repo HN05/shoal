@@ -2,6 +2,7 @@
 //! started as a new workspace's is, with no space created.
 use anyhow::{Context as _, Result};
 use shoal_protocol::launches::{Launch, LaunchSource, SpaceChoice};
+use shoal_protocol::progress::Blocker;
 use shoal_protocol::protocol::{Launched, Started};
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -12,7 +13,7 @@ use crate::{
         scope::{Caller, ScopeRefusal},
     },
     forge::items::reference::ItemInput,
-    model::{Blocker, Workspace},
+    model::Workspace,
     protocol::operations::LaunchRequest,
 };
 

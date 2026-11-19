@@ -24,7 +24,7 @@ pub enum QueueMethod {
         workspace: SpaceSelector,
         launch: Box<super::operations::LaunchRequest>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        blockers: Vec<crate::model::Blocker>,
+        blockers: Vec<crate::progress::Blocker>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pr: Option<crate::forge::items::reference::ItemInput>,
     },

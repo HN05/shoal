@@ -272,7 +272,7 @@ async fn a_queued_launch_puts_the_agent_account_on_until_cancelled() {
     let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);
     fixture.link(workspace).await;
     // The launch waits for another workspace to finish.
-    let blocker = crate::model::Blocker::Space(fixture.workspaces[1].id.to_string());
+    let blocker = shoal_protocol::progress::Blocker::Space(fixture.workspaces[1].id.to_string());
     let request = crate::model::QueueRequest {
         blockers: vec![blocker],
         ..crate::daemon::agent_queue::tests::launch_in(workspace, false)

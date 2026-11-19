@@ -232,7 +232,7 @@ response_bodies! {
     Reactions(crate::forge::items::reaction::allowed::AllowedReactions),
     Thread(crate::forge::review::thread::Thread),
     LinkKind(crate::forge::items::link::LinkKind),
-    Blockers(Vec<crate::model::Blocker>),
+    Blockers(Vec<crate::progress::Blocker>),
     PullRequest(crate::forge::PullRequest),
     ViewPieces(Vec<ViewPiece>),
     Opened(crate::links::OpenOutcome),

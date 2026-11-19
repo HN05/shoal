@@ -1,3 +1,4 @@
+use shoal_protocol::progress::Blocker;
 use std::collections::HashSet;
 
 use rusqlite::params;
@@ -11,7 +12,7 @@ use crate::{
         },
         test_support::{global_config, manager},
     },
-    model::{Blocker, QueueRequest},
+    model::QueueRequest,
     state::QueueState,
 };
 use shoal_protocol::{resources::Scope, space_names::SpaceSelector};

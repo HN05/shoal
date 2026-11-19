@@ -7,9 +7,10 @@ use crate::{
         },
         test_support::manager,
     },
-    model::{Blocker, QueueRequest},
+    model::QueueRequest,
     protocol::QueuedLaunches,
 };
+use shoal_protocol::progress::Blocker;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The waiting entries' names in queue order.

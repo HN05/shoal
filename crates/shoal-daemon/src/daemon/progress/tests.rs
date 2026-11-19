@@ -243,7 +243,7 @@ async fn scoped_callers_set_only_their_own_progress_read_below_and_unblock_below
     assert!(allowed(&mut read(&child)).await);
     assert!(!allowed(&mut read(&other)).await);
     // A coordinator removes what blocks a space below, and only removes.
-    let blocker = crate::model::Blocker::Issue("7".parse().unwrap());
+    let blocker = shoal_protocol::progress::Blocker::Issue("7".parse().unwrap());
     let unblock = |space: &Workspace| AgentMethod::SetProgress {
         space: SpaceSelector::id(&space.id),
         change: ProgressChange::RemoveBlocker {
@@ -371,7 +371,8 @@ async fn blocker_events(manager: &Manager) -> Vec<(EventKind, String)> {
 
 #[tokio::test]
 async fn blockers_name_spaces_and_forge_items_and_are_journaled() {
-    use crate::{model::Blocker, state::BlockerKind};
+    use crate::state::BlockerKind;
+    use shoal_protocol::progress::Blocker;
     use shoal_protocol::progress::RecordedBlocker;
     let (temp, manager) = manager().await;
     let [blocked, api] = workspaces(&manager, &temp, ["blocked", "api"]).await;
@@ -433,8 +434,9 @@ async fn blockers_name_spaces_and_forge_items_and_are_journaled() {
 
 #[tokio::test]
 async fn completion_removes_the_spaces_blockers() {
-    use crate::{daemon::workspace_files::Attacher, model::Blocker};
+    use crate::daemon::workspace_files::Attacher;
     use shoal_protocol::assignments::Done;
+    use shoal_protocol::progress::Blocker;
     let (temp, manager) = manager().await;
     let [blocked] = workspaces(&manager, &temp, ["blocked"]).await;
     let selector = SpaceSelector::id(&blocked.id);
@@ -459,7 +461,8 @@ async fn completion_removes_the_spaces_blockers() {
 
 #[tokio::test]
 async fn becoming_blocked_notifies_once_until_the_space_clears() {
-    use crate::{daemon::notifications::NotificationKind, model::Blocker};
+    use crate::daemon::notifications::NotificationKind;
+    use shoal_protocol::progress::Blocker;
     let (temp, manager) = manager().await;
     let [blocked] = workspaces(&manager, &temp, ["blocked"]).await;
     let selector = SpaceSelector::id(&blocked.id);

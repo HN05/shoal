@@ -3,6 +3,7 @@
 //! process or a chat's agent, the user's own logins otherwise.
 use crate::forge::items::reference::ItemInput;
 use anyhow::{Context, Result};
+use shoal_protocol::progress::Blocker;
 
 use crate::{
     connection::{Daemon, joined, pages, request},
@@ -26,7 +27,7 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
-    model::{Blocker, MergeWarning, Selected},
+    model::{MergeWarning, Selected},
     protocol::{DownloadPiece, ItemContext, ItemMethod, RepoTarget},
 };
 

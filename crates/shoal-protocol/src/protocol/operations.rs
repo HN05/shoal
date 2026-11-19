@@ -75,7 +75,7 @@ pub enum OperationMethod {
         /// worktree on the branch of the done blocker that holds the
         /// others' work.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        blockers: Vec<crate::model::Blocker>,
+        blockers: Vec<crate::progress::Blocker>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         env: Option<BTreeMap<String, String>>,
         /// The starting queue entry whose launch opens the workspace. One a

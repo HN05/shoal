@@ -2,6 +2,7 @@
 //! preparation, the setup and what follows it that the daemon runs in an
 //! operation: its progress as it comes, then the prepared workspace or how
 //! preparing it failed, with the workspace as the failure left it.
+use shoal_protocol::progress::Blocker;
 use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::{Context as _, Result};
@@ -13,7 +14,7 @@ use crate::{
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_protocol::{
-    model::{Blocker, QueueEntry, Workspace},
+    model::{QueueEntry, Workspace},
     protocol::{
         CopySource, CreationOptions, OperationMethod,
         operations::{

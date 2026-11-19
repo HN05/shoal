@@ -104,7 +104,7 @@ pub(super) struct LaunchRequest {
     pub plan: String,
     pub env: std::collections::BTreeMap<String, String>,
     pub now: bool,
-    pub blockers: Vec<crate::model::Blocker>,
+    pub blockers: Vec<shoal_protocol::progress::Blocker>,
     pub priority: Option<shoal_schedule::priority::Priority>,
     pub source: Option<LaunchSource>,
 }

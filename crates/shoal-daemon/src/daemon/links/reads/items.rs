@@ -2,6 +2,7 @@
 //! kind a bare number is, an issue's details and blockers, and a PR's head,
 //! reviewers and review threads.
 use anyhow::{Context, Result};
+use shoal_protocol::progress::Blocker;
 
 use crate::{
     daemon::{
@@ -25,7 +26,7 @@ use crate::{
         numbers::CommentId,
         review::{reviewers::Reviewer, thread::Thread},
     },
-    model::{Blocker, Selected, SelectedItem},
+    model::{Selected, SelectedItem},
     protocol::{ItemContext, RepoTarget},
 };
 use shoal_forge::{

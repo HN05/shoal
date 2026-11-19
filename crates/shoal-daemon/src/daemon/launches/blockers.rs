@@ -3,6 +3,7 @@
 //! the agent works on.
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::progress::Blocker;
 use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
@@ -11,7 +12,6 @@ use crate::{
         link::{LinkKind, Selection},
         reference::ItemInput,
     },
-    model::Blocker,
     protocol::ItemContext,
 };
 

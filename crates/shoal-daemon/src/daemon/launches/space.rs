@@ -5,6 +5,7 @@
 //! launch names a branch an existing workspace has, it starts that
 //! workspace's own agent, and where it names no branch or issue it begins
 //! as a chat.
+use shoal_protocol::progress::Blocker;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -26,7 +27,7 @@ use crate::{
         workspace::NewWorkspace,
     },
     forge::items::reference::ItemInput,
-    model::{Blocker, SpaceKind},
+    model::SpaceKind,
     protocol::operations::LaunchRequest,
 };
 
