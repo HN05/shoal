@@ -109,3 +109,69 @@ fn open_writer(path: &Path) -> std::io::Result<fs::File> {
         .custom_flags(libc::O_NONBLOCK)
         .open(path)
 }
+
+/// A workspace on branch `name` of a new repository whose creation, as a
+/// restart cut it short, left the worktree Git created without recording or
+/// marking its admin directory: failed, with its pending worktree.
+async fn cut_short(name: &str) -> Result<(tempfile::TempDir, std::sync::Arc<Manager>, Workspace)> {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_string_lossy().into_owned().into(), None, None)
+        .await?;
+    let workspace = manager
+        .create_workspace(&repo.id, name.into(), None, None, None)
+        .await?;
+    fs::remove_file(git::git_dir(&workspace.path).await?.join(OWNER_MARKER))?;
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE workspaces SET state=?2,git_dir=NULL WHERE id=?1",
+                rusqlite::params![id, WorkspaceState::Failed],
+            )?;
+            db.execute(
+                r#"INSERT INTO pending_worktrees(workspace_id,plan) VALUES (?1,'{"source":{"kind":"new"}}')"#,
+                [&id],
+            )?;
+            Ok(())
+        })
+        .await?;
+    let workspace = manager.workspace_by_id(&workspace.id).await?;
+    Ok((temp, manager, workspace))
+}
+
+#[tokio::test]
+async fn a_retried_creation_records_the_admin_directory_a_cut_short_one_left() -> Result<()> {
+    let (_temp, manager, workspace) = cut_short("topic").await?;
+    assert!(workspace.unborn());
+    // A worktree whose creation is pending was never ready to be moved.
+    assert_eq!(manager.missing_worktree(&workspace).await?, None);
+    let selector = SpaceSelector::id(&workspace.id);
+    let created = manager.create_pending_worktree(&selector).await?;
+    assert_eq!(created.state, WorkspaceState::Ready);
+    let admin_dir = git::git_dir(&created.path).await?;
+    assert_eq!(created.git_dir.as_deref(), Some(admin_dir.as_path()));
+    assert_eq!(
+        marked_owner(&admin_dir)?.as_deref(),
+        Some(created.id.as_str())
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn removal_takes_the_worktree_a_cut_short_creation_left() -> Result<()> {
+    use crate::removal::{InspectionPolicy, UnsavedWork};
+    let (_temp, manager, workspace) = cut_short("topic").await?;
+    manager
+        .remove_selected(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+        )
+        .await?;
+    assert!(!workspace.path.exists());
+    assert!(manager.find_workspace(&workspace.id).await?.is_none());
+    Ok(())
+}

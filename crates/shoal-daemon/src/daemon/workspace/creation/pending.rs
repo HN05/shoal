@@ -4,6 +4,7 @@
 
 use super::{Configured, WorkspaceSource, stack};
 use crate::daemon::restore::RestoredFiles;
+use crate::daemon::workspace::ownership::CommonDir;
 use crate::model::EventCause;
 use crate::{
     config::modes::ModeName,
@@ -203,10 +204,11 @@ impl Manager {
             mode,
         } = self.claim_pending_worktree(workspace).await?;
         let git_profile = git_profile.as_deref();
-        let creation = match self.creation(workspace, source).await {
-            Ok(creation) => creation,
+        let (workspace, creation) = match self.prepared_creation(repo, workspace, source).await {
+            Ok(prepared) => prepared,
             Err(error) => return self.record_creation(workspace, Err(error)).await,
         };
+        let workspace = &workspace;
         let result = match creation {
             Creation::Copy(copied) => {
                 return (self.create_pending_copy(repo, workspace, &copied, git_profile, git))
@@ -246,6 +248,21 @@ impl Manager {
             }
             (configured, _) => configured,
         }
+    }
+
+    /// The `workspace` of `repo` with the admin directory of the worktree an
+    /// earlier try left recorded, and how its worktree is created from
+    /// `source`.
+    async fn prepared_creation(
+        &self,
+        repo: &Repository,
+        workspace: &Workspace,
+        source: PendingSource,
+    ) -> Result<(Workspace, Creation)> {
+        let common_dir = CommonDir::of(&repo.path);
+        let workspace = self.recover_git_dir(workspace, &common_dir).await?;
+        let creation = self.creation(&workspace, source).await?;
+        Ok((workspace, creation))
     }
 
     /// How the worktree of `workspace` that `source` describes is created,

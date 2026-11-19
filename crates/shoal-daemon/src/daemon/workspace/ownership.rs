@@ -197,20 +197,20 @@ impl Manager {
     }
 
     /// Verify the worktree a removal deletes as [`Self::verify_worktree`]
-    /// does, except what is left of one Git disowned, or the one a checkout
-    /// that failed or a restart cut short left. What a workspace that
-    /// recorded no admin directory holds at its path otherwise is the user's
-    /// to delete. `common_dir` is the repository's shared Git directory.
+    /// does, except what is left of one Git disowned, once the admin
+    /// directory of one a creation cut short left is recorded. What a
+    /// workspace that recorded no admin directory holds at its path
+    /// otherwise is the user's to delete. `common_dir` is the repository's
+    /// shared Git directory.
     pub(crate) async fn verify_removed_worktree(
         &self,
         workspace: &Workspace,
         common_dir: &CommonDir,
     ) -> Result<()> {
-        if self.disowned(workspace, common_dir.checkout()).await?
-            || self.left_by_unfinished_add(workspace, common_dir).await?
-        {
+        if self.disowned(workspace, common_dir.checkout()).await? {
             return Ok(());
         }
+        let workspace = &self.recover_git_dir(workspace, common_dir).await?;
         let verified = (self.verify_worktree_against(workspace, common_dir).await).map(drop);
         if workspace.git_dir.is_some() {
             return verified;
@@ -241,24 +241,50 @@ impl Manager {
         }
     }
 
-    /// Whether the worktree at the path of the disposable `workspace`, which
-    /// recorded no admin directory, is what a `worktree add` for it that a
-    /// restart cut short left: a linked worktree of its repository whose
-    /// admin directory no workspace marked. Nothing was at the path of a
-    /// disposable workspace, which adopts nothing, when Shoal recorded it.
-    async fn left_by_unfinished_add(
+    /// Record the admin directory of the worktree Git created for the
+    /// pending `workspace` that its creation, failed or cut short, did not
+    /// record: the one among those of the repository, whose shared Git
+    /// directory is `common_dir`, that records the workspace's path, once
+    /// it is marked as the workspace's, which refuses one another workspace
+    /// claims. A creation never marks it before recording it, so one marked
+    /// for any other workspace is not its, nor one whose HEAD is not on the
+    /// workspace's branch, or detached for a workspace at a commit, as a
+    /// worktree someone else added at its path may be. Returns the workspace
+    /// as it then stands; one that still has none has no worktree it can
+    /// prove its own.
+    pub(crate) async fn recover_git_dir(
         &self,
         workspace: &Workspace,
         common_dir: &CommonDir,
-    ) -> Result<bool> {
-        if !workspace.disposable || workspace.git_dir.is_some() {
+    ) -> Result<Workspace> {
+        if !workspace.unborn() {
+            return Ok(workspace.clone());
+        }
+        let common_dir = common_dir.path().await?;
+        let Some(git_dir) = git::worktree::admin_dir_at(common_dir, &workspace.path).await? else {
+            return Ok(workspace.clone());
+        };
+        if !self.created_for(workspace, &git_dir).await? {
+            return Ok(workspace.clone());
+        }
+        self.release_stale_owner(&git_dir, &workspace.id).await?;
+        self.record_git_dir(workspace, git_dir).await?;
+        self.workspace_by_id(&workspace.id).await
+    }
+
+    /// Whether the admin directory `git_dir`, which records the path of the
+    /// pending `workspace`, is the one its creation made: marked for no
+    /// other workspace, with its HEAD where the creation put it.
+    async fn created_for(&self, workspace: &Workspace, git_dir: &Path) -> Result<bool> {
+        let marked = {
+            let git_dir = git_dir.to_owned();
+            off_runtime::run(move || marked_owner(&git_dir)).await?
+        };
+        if marked.is_some_and(|owner| owner != workspace.id.as_str()) {
             return Ok(false);
         }
-        // One Git cannot read proves nothing about whose directory it is.
-        let Ok(git_dir) = self.linked_git_dir(workspace, common_dir).await else {
-            return Ok(false);
-        };
-        off_runtime::run(move || Ok(marked_owner(&git_dir)?.is_none())).await
+        let branch = git::worktree::admin_dir_branch(git_dir).await?;
+        Ok(branch.as_ref() == workspace.branch())
     }
 
     /// The admin directory of the worktree of `workspace` once it verifies
@@ -428,27 +454,14 @@ impl Manager {
     /// Missing worktrees may have been moved outside Shoal, not deleted. Consult
     /// their recorded admin directory before allowing ownership cleanup; only a
     /// link to another existing path needs proof that the directory is ours.
+    /// A worktree whose creation is pending was never ready to be moved.
     pub(crate) async fn missing_worktree(&self, workspace: &Workspace) -> Result<Option<PathBuf>> {
-        let repo = self.repository(workspace.repository()).await?;
-        if let Some(directory) = workspace.git_dir.clone() {
-            let workspace = workspace.clone();
-            return off_runtime::run(move || moved_worktree(&workspace, &directory)).await;
-        }
-        // A creation cut short after Git created the worktree, before the
-        // admin directory was recorded, leaves nothing to prove a move; a
-        // branch match at another existing path is enough to block
-        // forgetting the workspace. One without a branch has nothing to match.
-        let Some(branch) = workspace.branch().cloned() else {
-            return Ok(None);
+        let directory = match &workspace.git_dir {
+            Some(directory) if !workspace.pending_worktree => directory.clone(),
+            _ => return Ok(None),
         };
-        let trees = git::worktrees(&repo.path, git::run).await?;
-        off_runtime::run(move || {
-            Ok(trees
-                .into_iter()
-                .find(|tree| tree.is_branch(&branch) && tree.path.is_dir())
-                .map(|tree| tree.path))
-        })
-        .await
+        let workspace = workspace.clone();
+        off_runtime::run(move || moved_worktree(&workspace, &directory)).await
     }
 }
 

@@ -342,6 +342,42 @@ pub(crate) async fn own_admin_dir(path: &Path) -> Result<Option<PathBuf>> {
     Ok(registered_at(&admin_dir, path).await?.then_some(admin_dir))
 }
 
+/// The admin directory, among those of the repository whose shared Git
+/// directory is `common_dir`, that records the directory at `path` as its
+/// worktree; `None` when none does, as when Git never created one there.
+/// It reads Git's record, not the worktree's `.git` link, which a `worktree
+/// add` cut short may not have written yet.
+pub async fn admin_dir_at(common_dir: &Path, path: &Path) -> Result<Option<PathBuf>> {
+    let worktrees = common_dir.join("worktrees");
+    let entries = off_runtime::run(move || match std::fs::read_dir(&worktrees) {
+        Ok(entries) => (entries.map(|entry| Ok(entry?.path())))
+            .collect::<Result<Vec<_>>>()
+            .with_context(|| format!("read {}", worktrees.display())),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(error) => Err(error).with_context(|| format!("read {}", worktrees.display())),
+    })
+    .await?;
+    for admin_dir in entries {
+        if registered_at(&admin_dir, path).await? {
+            return Ok(Some(admin_dir));
+        }
+    }
+    Ok(None)
+}
+
+/// The branch the worktree whose admin directory is `admin_dir` has
+/// checked out, as its `HEAD` names it; `None` at a detached HEAD.
+pub async fn admin_dir_branch(admin_dir: &Path) -> Result<Option<BranchName>> {
+    let head = admin_dir.join("HEAD");
+    let text = off_runtime::run(move || {
+        std::fs::read_to_string(&head).with_context(|| format!("read {}", head.display()))
+    })
+    .await?;
+    Ok((text.trim_end().strip_prefix("ref: "))
+        .and_then(super::strip_local)
+        .map(BranchName::from))
+}
+
 /// Whether the admin directory `admin_dir` records the directory at `path`
 /// as its worktree in its `gitdir` file, relative to it when
 /// `worktree.useRelativePaths` is set.

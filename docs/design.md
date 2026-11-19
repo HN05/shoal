@@ -1085,8 +1085,9 @@ Git admin directory is proven by a marker naming the workspace, written there on
 creation, adoption and verified repair: Git keeps it across moves and drops it
 when the worktree is re-created, so device renumbering, restores and copies keep
 ownership while replacement does not. A byte-for-byte copy of the admin directory
-is therefore accepted as the same worktree. The marker is the only proof: an
-unmarked admin directory requires explicit reclaim. Moved or replaced
+is therefore accepted as the same worktree. The marker is the only proof of a
+worktree whose creation finished: an unmarked admin directory requires explicit
+reclaim. Moved or replaced
 directories are never adopted silently.
 Existing-branch selection creates a worktree without suffixing; remote heads are
 discovered live and become local tracking branches. Local selection preserves

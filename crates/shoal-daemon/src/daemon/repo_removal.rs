@@ -414,7 +414,9 @@ impl Manager {
         };
         ensure!(idle, "workspace {} is busy", workspace.name);
         if off_runtime::exists(&workspace.path).await? {
-            self.verify_worktree(workspace).await?;
+            let common_dir = self.common_dir(workspace).await?;
+            let workspace = self.recover_git_dir(workspace, &common_dir).await?;
+            self.verify_worktree(&workspace).await?;
         } else if !workspace.unborn() {
             ensure!(
                 workspace.state == WorkspaceState::Failed,
