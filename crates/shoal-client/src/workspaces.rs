@@ -3,7 +3,6 @@
 //! state the daemon reads in their worktrees; and the spaces, workspaces and
 //! chats together.
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::progress::Blocker;
 use shoal_protocol::status::{Inspection, SpaceStatus};
 use std::{collections::BTreeMap, path::PathBuf};
 
@@ -34,62 +33,6 @@ pub async fn present_space(
     selector: &SpaceSelector,
 ) -> Result<Option<Space>> {
     Ok(crate::spaces::list(daemon).await?.find(selector))
-}
-
-/// A workspace whose creation [`check_creation`] checks: on the new branch
-/// `branch` or the existing one `existing`, or named by default.
-pub struct PlannedWorkspace {
-    pub repository: Selector,
-    pub branch: Option<String>,
-    pub existing: Option<String>,
-    pub base: Option<String>,
-    pub git_profile: Option<String>,
-    pub path: Option<PathBuf>,
-    /// The chat the workspace is created in.
-    pub parent: Option<SpaceSelector>,
-    pub options: CreationOptions,
-}
-
-/// Refuse what creating `planned` would refuse, before anything is asked or
-/// queued.
-pub async fn check_creation(daemon: &impl Daemon, planned: PlannedWorkspace) -> Result<()> {
-    let PlannedWorkspace {
-        repository,
-        branch,
-        existing,
-        base,
-        git_profile,
-        path,
-        parent,
-        options,
-    } = planned;
-    let method = WorkspaceMethod::CheckCreation {
-        repository,
-        branch,
-        existing,
-        base,
-        git_profile,
-        path,
-        options,
-        parent,
-    };
-    request(daemon, method).await
-}
-
-/// Refuse `blockers` that a launch in `repository` cannot wait for.
-pub async fn check_blockers(
-    daemon: &impl Daemon,
-    repository: Selector,
-    blockers: Vec<Blocker>,
-) -> Result<()> {
-    request(
-        daemon,
-        WorkspaceMethod::CheckBlockers {
-            repository,
-            blockers,
-        },
-    )
-    .await
 }
 
 /// Create a workspace of `repository` at a commit `start` names, in the chat

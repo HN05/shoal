@@ -71,29 +71,6 @@ pub enum WorkspaceMethod {
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
     },
-    /// Refuse what `CreateWorkspace` or `OpenBranch` would refuse in this
-    /// request, without creating anything.
-    CheckCreation {
-        repository: crate::repository::Selector,
-        /// The new branch; `existing` names a branch to open instead.
-        branch: Option<String>,
-        existing: Option<String>,
-        base: Option<String>,
-        git_profile: Option<String>,
-        path: Option<std::path::PathBuf>,
-        #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
-        options: CreationOptions,
-        /// The space the workspace would be below, which must be in the
-        /// repository.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        parent: Option<SpaceSelector>,
-    },
-    /// Refuse the `blockers` that a queued launch in `repository`
-    /// could not wait for, without queuing anything.
-    CheckBlockers {
-        repository: crate::repository::Selector,
-        blockers: Vec<crate::progress::Blocker>,
-    },
     AdoptWorkspace {
         repository: crate::repository::Selector,
         path: std::path::PathBuf,

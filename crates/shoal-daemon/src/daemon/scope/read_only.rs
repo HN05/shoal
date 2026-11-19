@@ -5,7 +5,7 @@
 use super::Scoped;
 use crate::protocol::{
     AgentMethod, ExecutionMethod, ItemMethod, LaunchMethod, NotificationMethod, Operation,
-    RemovalMethod, WorkspaceMethod,
+    RemovalMethod,
 };
 
 /// Whether a read-only scope may send `operation`.
@@ -25,9 +25,6 @@ fn takes_more_than_it_reads(operation: &Operation) -> bool {
             | Operation::Execution(ExecutionMethod::CheckMerge | ExecutionMethod::CheckUnmerge)
             | Operation::Removal(
                 RemovalMethod::CheckRemoval { .. } | RemovalMethod::CheckStop { .. }
-            )
-            | Operation::Workspace(
-                WorkspaceMethod::CheckCreation { .. } | WorkspaceMethod::CheckBlockers { .. }
             )
     )
 }

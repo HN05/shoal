@@ -138,40 +138,6 @@ pub(super) async fn handle(
             base,
             options,
         } => Body::Workspace(manager.create_child(&parent, name, base, options).await?),
-        WorkspaceMethod::CheckCreation {
-            repository,
-            branch,
-            existing,
-            base,
-            git_profile,
-            path,
-            options,
-            parent,
-        } => {
-            let parent = manager.space_id(parent.as_ref()).await?;
-            (manager.ensure_parent_repository(&repository, parent.as_ref())).await?;
-            manager
-                .check_creation(
-                    &repository,
-                    branch.as_deref(),
-                    existing.as_deref(),
-                    workspace::NewWorktreeOptions {
-                        git_profile: git_profile.as_deref(),
-                        path: path.as_deref(),
-                        base: base.as_deref(),
-                        disposable: options.disposable,
-                    },
-                )
-                .await?;
-            Body::Ok
-        }
-        WorkspaceMethod::CheckBlockers {
-            repository,
-            blockers,
-        } => {
-            manager.check_blockers(&repository, blockers).await?;
-            Body::Ok
-        }
         WorkspaceMethod::AdoptWorkspace {
             repository,
             path,
@@ -404,12 +370,6 @@ impl Scoped for WorkspaceMethod {
                 *parent = Some(SpaceSelector::id(&caller.space_id));
                 None
             }
-            // A start it checks goes where the start would: below its own
-            // space unless it names one below it.
-            WorkspaceMethod::CheckCreation { parent, .. } => {
-                manager.parent_below(caller, parent).await?;
-                None
-            }
             // The workspace may be removed already, so its ID is checked as
             // given instead of resolved.
             WorkspaceMethod::CloseOwnedPlace { workspace, .. } => {
@@ -424,8 +384,7 @@ impl Scoped for WorkspaceMethod {
                 manager.narrow_to_log(caller, space).await?;
                 None
             }
-            WorkspaceMethod::CheckBlockers { .. }
-            | WorkspaceMethod::LayeredConfig {
+            WorkspaceMethod::LayeredConfig {
                 target: ConfigTarget::Global,
             } => None,
             WorkspaceMethod::ListSpaces | WorkspaceMethod::FindSpaces { .. } => None,

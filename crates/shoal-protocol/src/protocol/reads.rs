@@ -103,9 +103,7 @@ impl Operation {
                         | SimulatorMethod::SimHistory { .. }
                 )
                 | Self::Workspace(
-                    WorkspaceMethod::CheckCreation { .. }
-                        | WorkspaceMethod::CheckBlockers { .. }
-                        | WorkspaceMethod::ListSpaces
+                    WorkspaceMethod::ListSpaces
                         | WorkspaceMethod::UntrackedWorktrees
                         | WorkspaceMethod::FindSpaces { .. }
                         | WorkspaceMethod::InspectWorkspace { .. }
