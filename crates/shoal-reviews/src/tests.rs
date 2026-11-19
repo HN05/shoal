@@ -289,11 +289,13 @@ async fn a_review_whose_admission_is_taken_back_is_queued_again() {
     fixture.until(queued.id, ReviewState::Queued).await;
     let review = fixture.shown(queued.id).await.unwrap();
     assert_eq!((review.head, review.started_at), (None, None));
-    // It asks for admission again once load recovers, and a restarted
-    // daemon keeps it waiting for that.
+    // A restarted daemon keeps it waiting for healthy readings too.
     let id = queued.id;
     let waits = (fixture.reviews.store).run(move |db| store::waits_for_recovery(db, id));
     assert!(waits.await.unwrap());
+    // Once load recovers, it runs again.
+    fixture.daemon.recovered.send_replace(true);
+    fixture.until(queued.id, ReviewState::Running).await;
     let mut ended = fixture.reviews.ends();
     let cancelled = (fixture.reviews)
         .cancel(&*fixture.daemon, None, Some(queued.id), None)

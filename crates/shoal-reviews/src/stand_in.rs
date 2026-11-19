@@ -1,7 +1,8 @@
 //! A stand-in for the rest of the daemon, which the tests of reviews build
 //! the service over: one workspace, a worktree of a real repository on its
 //! own branch, recorded in a temporary store, under a global config a test
-//! gives, whose one-shot runs the agent queue admits at once.
+//! gives, whose one-shot runs the agent queue admits at once, except a run
+//! protection stopped, which waits until a test says load recovered.
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -18,6 +19,7 @@ use shoal_protocol::repository::Selector;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_refs::CommitId;
 use shoal_store::Store;
+use tokio::sync::watch;
 
 use crate::{
     Reviews,
@@ -67,6 +69,7 @@ impl Fixture {
             repository: repository.clone(),
             workspace: workspace.clone(),
             stops: Mutex::default(),
+            recovered: watch::channel(false).0,
             held: Mutex::default(),
             messages: Mutex::default(),
             notices: Mutex::default(),
@@ -168,6 +171,8 @@ pub(crate) struct StandIn {
     workspace: Workspace,
     /// What takes back each admission a run holds, as protection does.
     pub(crate) stops: Mutex<Vec<Box<dyn FnOnce() + Send + Sync>>>,
+    /// Whether load recovered, which admits the runs protection stopped.
+    pub(crate) recovered: watch::Sender<bool>,
     /// The repositories of the admissions kept until a restart.
     pub(crate) held: Mutex<Vec<RepositoryId>>,
     /// The messages queued for the workspace's agents.
@@ -281,17 +286,19 @@ impl Settings for StandIn {
     }
 }
 
-/// Every run is admitted at once.
+/// A run is admitted at once, or one protection stopped once load
+/// recovered.
 impl Agents for StandIn {
     fn admit<'a>(
         &'a self,
         _repository: &'a RepositoryId,
         _space: &'a SpaceId,
-        _after_stop: bool,
+        after_stop: bool,
         stop: Box<dyn FnOnce() + Send + Sync>,
     ) -> BoxFuture<'a, Result<Box<dyn Admission + 'a>>> {
         self.stops.lock().unwrap().push(stop);
-        Box::pin(async { Ok(Box::new(Admitted) as Box<dyn Admission>) })
+        let waits = after_stop.then(|| self.recovered.subscribe());
+        Box::pin(async { Ok(Box::new(Admitted(waits)) as Box<dyn Admission>) })
     }
 
     fn hold_admission(&self, repository: &RepositoryId) {
@@ -314,12 +321,16 @@ impl Agents for StandIn {
     }
 }
 
-/// An admission granted at once.
-struct Admitted;
+/// An admission granted at once, or once load recovered.
+struct Admitted(Option<watch::Receiver<bool>>);
 
 impl Admission for Admitted {
     fn admitted(&mut self) -> BoxFuture<'_, ()> {
-        Box::pin(async {})
+        Box::pin(async {
+            if let Some(recovered) = &mut self.0 {
+                let _ = recovered.wait_for(|recovered| *recovered).await;
+            }
+        })
     }
 
     fn keep(self: Box<Self>) {}
