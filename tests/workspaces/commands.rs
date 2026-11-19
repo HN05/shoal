@@ -8,8 +8,7 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
         "[commands]\ncheck = ['sh', '-c', 'cat; printf \"%s\\n\" \"$SHOAL_WORKSPACE\" \"$@\"; test -n \"$SHOAL_SCOPE_TOKEN\" || exit 99; exit 7', 'check', 'literal $HOME']\n",
     ));
     let workspace = fixture.ok(&[
-        "start",
-        "--wait",
+        "create",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "custom",

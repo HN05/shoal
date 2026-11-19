@@ -18,8 +18,8 @@ use crate::{
 impl Manager {
     /// Queue the worker `launch`, which `source` made, starts in `shape` in
     /// the workspace it names, on the workspace's issue unless it names a
-    /// task, once what blocks it is done. A launch that names no agent
-    /// starts none, as a start without a terminal to pick one does.
+    /// task, once what blocks it is done: the agent it names, else
+    /// `agent.default`, refused without either.
     pub(super) async fn launch_worker(
         &self,
         launch: Launch,
@@ -33,9 +33,6 @@ impl Manager {
             .context("the launch names no workspace")?;
         let workspace = self.workspace(&selector).await?;
         let request = worker_request(launch, shape, source);
-        if request.launch.agent.is_none() {
-            return Ok(queued(workspace, None));
-        }
         if let Some(caller) = caller {
             let allowed = self
                 .ensure_worker_allowed(caller, &mut selector, &request)
@@ -46,7 +43,7 @@ impl Manager {
         let entry = self
             .queue_agent(&selector, request.launch, blockers, None)
             .await?;
-        Ok(queued(workspace, Some(entry)))
+        Ok(queued(workspace, entry))
     }
 
     /// Refuse the scoped `caller` a worker it may not start in the
@@ -90,11 +87,11 @@ impl Manager {
 }
 
 /// The launch of the worker of `workspace`, which waits as its queue
-/// `entry`, if it starts one.
-fn queued(workspace: Workspace, entry: Option<crate::model::QueueEntry>) -> Launched {
+/// `entry`.
+fn queued(workspace: Workspace, entry: crate::model::QueueEntry) -> Launched {
     Launched {
         space: Box::new(workspace.into()),
-        entry: entry.map(Box::new),
+        entry: Some(Box::new(entry)),
         warnings: Vec::new(),
         start: Started::Worker,
     }

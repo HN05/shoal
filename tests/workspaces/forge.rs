@@ -83,7 +83,7 @@ fn a_prs_start_refuses_a_head_workspace_that_cannot_reopen_before_prompting() {
     fixture.script_github(&github_pr(7, "topic"));
     let repo = fixture.repo.to_str().unwrap();
     commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
-    let failed = fixture.run(&["start", "--wait", repo, "--branch", "topic"]);
+    let failed = fixture.run(&["create", repo, "--branch", "topic"]);
     assert!(!failed.status.success(), "{}", printed(&failed));
     let link = "https://github.com/team/project/pull/7";
     let args = ["start", link, "--mode", "worker"];
@@ -431,8 +431,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
         .command()
         .args([
             "--json",
-            "start",
-            "--wait",
+            "create",
             "https://forge.example/team/project/pulls/7",
         ])
         .env("PATH", &path)
@@ -444,8 +443,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     assert_eq!(added["branch"], "stack/top");
     assert_eq!(added["links"]["prs"], serde_json::json!([pr]));
     let branch = fixture.ok(&[
-        "start",
-        "--wait",
+        "create",
         "https://forge.example/team/project/src/branch/stack%2Ftop",
     ]);
     assert_eq!(branch["id"], added["id"]);
@@ -2098,9 +2096,7 @@ fn restack_on_merge(github: bool, lower_prs: &[(u64, &str, &str)], upper_base: &
     ));
     let lower = fixture.add("lower");
     let repo = fixture.repo.to_str().unwrap().to_owned();
-    fixture.ok(&[
-        "start", "--wait", &repo, "--branch", "upper", "--base", "lower",
-    ]);
+    fixture.ok(&["create", &repo, "--branch", "upper", "--base", "lower"]);
     let origin = if github {
         "git@github.com:team/project.git"
     } else {
@@ -2244,9 +2240,7 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     let mut fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     let lower = fixture.add("lower");
     let repo = fixture.repo.to_str().unwrap().to_owned();
-    fixture.ok(&[
-        "start", "--wait", &repo, "--branch", "upper", "--base", "lower",
-    ]);
+    fixture.ok(&["create", &repo, "--branch", "upper", "--base", "lower"]);
     fixture.add_github_origin();
     let root = fixture.root.path().to_owned();
     // Fail the requests whose URL contains the pattern in ~/fail, with
@@ -2426,7 +2420,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
 
     // Adding the PR reuses its workspace, where an agent of its own starts
     // at the PR's head.
-    let output = run(&["--json", "start", "--wait", url]);
+    let output = run(&["--json", "create", url]);
     assert!(output.status.success(), "{}", printed(&output));
     let added: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(added["id"], workspace["id"]);
@@ -2446,14 +2440,14 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     let (output, transcript) = fixture.interactive_command(
         fixture
             .command()
-            .args(["start", "--wait", url])
+            .args(["create", url])
             .current_dir(&fixture.repo)
             .env("PATH", &path),
         "",
     );
     assert!(output.status.success(), "{} {transcript}", printed(&output));
     assert!(!transcript.contains("Workspace>"), "{transcript}");
-    let output = run(&["start", "--wait", url, "--git-profile", "work"]);
+    let output = run(&["create", url, "--git-profile", "work"]);
     assert!(!output.status.success());
 
     // A moved head moves the workspace with it.
@@ -2493,7 +2487,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     install_test_script(&hook, "#!/bin/sh\necho ran >> \"$HOME/post-setup-ran\"\n");
     fs::write(&local, format!("hooks.post_setup = '{}'\n", hook.display())).unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &local);
-    let output = run(&["start", "--wait", url]);
+    let output = run(&["create", url]);
     assert!(output.status.success(), "{}", printed(&output));
     let output = run(&["review", "run", url, "--agent", "reviewer", "--no-post"]);
     assert!(output.status.success(), "{}", printed(&output));

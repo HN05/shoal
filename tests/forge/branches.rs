@@ -391,9 +391,7 @@ fn an_agent_deletes_an_active_spaces_branch_only_within_its_scope() {
     commit(&child, "e");
     branches.heads.insert("child", head(&child));
     for name in ["other", "finished"] {
-        branches
-            .fixture
-            .ok(&["start", "--wait", &repo, "--branch", name]);
+        branches.fixture.ok(&["create", &repo, "--branch", name]);
         let path =
             branches.fixture.ok(&["status", &branches.fixture.id(name)])["workspace"]["path"]
                 .as_str()

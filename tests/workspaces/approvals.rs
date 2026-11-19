@@ -1278,8 +1278,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
     // A process with the exported environment opens workspaces only below
     // its own.
     let below = scoped(&[
-        "start",
-        "--wait",
+        "create",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "below",
@@ -1370,8 +1369,7 @@ fn exported_tokens_expire_on_revocation_and_successful_removal() {
     assert!(!removed.status.success());
     // The branch had no commits, so removal deleted it too.
     fixture.ok(&[
-        "start",
-        "--wait",
+        "create",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "external",

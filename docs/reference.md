@@ -946,8 +946,7 @@ Numbers use `--repo`, the current registered checkout or workspace, then an
 interactive repository picker. An existing association
 reopens its workspace; otherwise the derived local branch reopens as an existing
 `--branch` opens. Lookup and ownership failures create nothing. The command starts
-`-a`/`--agent`, else the configured `agent.default`, else an interactive agent picker.
-Choosing “No agent” creates the workspace without a launch. The issue prompt
+its agent as [Agents](#agents) says. The issue prompt
 names the issue's number, title and URL, includes its description when it has
 one, and points to `shoal view` for comments and later edits; options after
 `--` go to the agent. Codex uses CLI mode for issue prompts.
@@ -1423,9 +1422,12 @@ finding, so they work from a chat as from anywhere else.
 
 ### Agents
 
-Interactive `shoal start` selects an agent using `--agent` or an agent picker;
-choosing “No agent” continues without a launch. Non-interactive additions launch
-only when an agent is named. `start --agent <name>` starts the agent after
+Every `shoal start` starts an agent: the one `-a`/`--agent` names, else
+`agent.default`, else one picked on a terminal, whose picker offers only
+agents; with `agent.default` set, no picker opens. A start that can do none of
+these is refused before anything is created; `shoal create` makes a workspace
+without an agent. `--model` and `--effort` apply to whichever agent starts.
+`start --agent <name>` starts the agent after
 worktree creation, setup, and
 the post-setup hook succeed; arguments after `--` go to the agent. Shoal refuses
 an agent whose executable is not on PATH before creating anything, and leaves
@@ -1449,7 +1451,7 @@ start reports its record and the agent's queue entry as a new workspace's
 does. Arguments after `--` go to the agent as for any start; without them it
 starts on the workspace's issue, followed by the mode's instructions, and
 without an issue waits for you. It sees the branch's commits and continues from
-them; without an agent chosen, the start only reopens the workspace. The flags that start, queue and
+them. The flags that start, queue and
 place an agent apply as to any start, while one that names what a new space
 starts as or on, such as `--parent`, `--name`, a repository or `--issue`, is
 refused; the issue's names `shoal link issue <number> assigned --space
@@ -1501,7 +1503,7 @@ other launch runs here and attaches its agent's session. `terminal.focus`
 overrides the choice, as it does for tabs, and `--here` keeps the launch
 in this terminal. A detached session ends with its agent, whatever its exit
 status; one whose start fails opens your login shell (`$SHELL -l`) there to show
-why, and one without an agent opens the workspace shell there, as a tab does.
+why, and a workspace `shoal create` opens there gets its shell, as a tab does.
 When `done` keeps the workspace, a session Shoal starts for `shoal start`, an
 attached agent or a background `shoal restore` ends after the agent's final turn,
 unless `[terminal] close_when_done = false` keeps it open.
@@ -1581,9 +1583,9 @@ workspace or chat closes it immediately, regardless of `terminal.close_when_done
 startup and `shoal cleanup` close those whose workspace or chat is gone. Shoal closes
 only the pane it opened the tab with, so a pane you split off keeps the tab
 open, and a tab you opened stays open. A background tab `shoal restore` opens
-closes the same way; a pane it reuses keeps its tab's behavior. `start`
-without an agent (or choosing “No agent”) opens an interactive shell in the ready
-workspace and leaves the tab open until that workspace is completed or removed.
+closes the same way; a pane it reuses keeps its tab's behavior. `shoal create`
+opens an interactive shell in the ready workspace and leaves the tab open until
+that workspace is completed or removed.
 
 With `[terminal] default_host = "herdr"`, launches from a terminal no host serves
 open their tabs in the `workspace_name` workspace of the Herdr server the
@@ -1763,8 +1765,7 @@ that launch. The tool receives the values through `model_args` and
 gets `--model` and `--effort`, with `CLAUDE_CODE_EFFORT_LEVEL` set to the same
 effort, since the variable otherwise overrides the flag; Codex gets `-m` and `-c
 model_reasoning_effort="<effort>"`. A launch with a value its tool has no
-template for is refused with the template to configure, and `--model` or
-`--effort` without an agent is refused. A Happy session's agent, such as
+template for is refused with the template to configure. A Happy session's agent, such as
 `happy-claude`, takes them through the tool it starts, whose `model` and
 `effort` fill in what nothing else sets. A restored, resumed or moved agent runs
 with the values it started with, which its execution in `shoal status --json`
@@ -2347,8 +2348,8 @@ slot. The start returns reporting both (`--json` emits the workspace record,
 then the entry), unless its agent runs in the caller: `--here` runs it in this
 terminal, a focused start from a terminal opens its place beside the terminal
 at once, and the user's agent Happy runs runs in the caller's process, while a
-start without an agent opens the workspace's shell where a focused one would
-open its agent. Such a start holds the agent's entry and shows the
+`shoal create` opens the workspace's shell where a focused start would open
+its agent. Such a start holds the agent's entry and shows the
 preparation, then starts the agent at once where `--now` or a focused start
 asked for that, otherwise when a slot is free, and otherwise leaves it to the
 queue; `--json` then emits the workspace record, or the entry when the agent

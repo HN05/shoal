@@ -493,8 +493,7 @@ fn git_profiles_layer_and_isolate_worktree_settings_before_setup() {
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     git(&fixture.repo, &["branch", "existing"]);
     let existing = fixture.ok(&[
-        "start",
-        "--wait",
+        "create",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "existing",
@@ -515,8 +514,7 @@ fn git_profiles_layer_and_isolate_worktree_settings_before_setup() {
         ],
     );
     fixture.ok(&[
-        "start",
-        "--wait",
+        "create",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "existing",
@@ -552,8 +550,7 @@ fn git_profiles_leave_unselected_repositories_alone_and_retain_failed_workspaces
     );
     commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
     let output = fixture.run(&[
-        "start",
-        "--wait",
+        "create",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "unknown",
@@ -574,8 +571,7 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
     git(&fixture.repo, &["branch", "existing-profile"]);
     for name in ["new-profile", "existing-profile"] {
         let args = [
-            "start",
-            "--wait",
+            "create",
             fixture.repo.to_str().unwrap(),
             "--branch",
             name,
@@ -589,8 +585,7 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
             "manual@example.invalid"
         );
         let output = fixture.run(&[
-            "start",
-            "--wait",
+            "create",
             fixture.repo.to_str().unwrap(),
             "--branch",
             name,
@@ -605,8 +600,7 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
     }
     let before = fixture.ok(&["list"]);
     let output = fixture.run(&[
-        "start",
-        "--wait",
+        "create",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "bad-profile",

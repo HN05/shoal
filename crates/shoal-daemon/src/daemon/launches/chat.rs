@@ -19,7 +19,7 @@ use crate::{
 
 impl Manager {
     /// Where the new chat `launch` starts in `shape` goes for `caller`,
-    /// with the issue it starts on: a chat always starts its agent.
+    /// with the issue it starts on.
     pub(super) async fn chat_placement(
         &self,
         launch: &Launch,
@@ -56,7 +56,6 @@ impl Manager {
         Ok(Placement {
             home: PlacedHome::Chat(home),
             issue,
-            agent: true,
             blockers: Vec::new(),
         })
     }

@@ -47,6 +47,9 @@ pub(crate) struct SpaceStart<'a> {
     pub new: NewSpace,
     pub issue: Option<StartIssue>,
     pub preparing: Preparing<LaunchRequest>,
+    /// Why the caller's terminal could place no agent in the background,
+    /// which refuses a start once its agent resolves.
+    pub unplaceable: Option<String>,
 }
 
 /// What a start names a new space, below which space it goes, and the
@@ -108,10 +111,14 @@ impl Manager {
             mut new,
             issue,
             preparing,
+            unplaceable,
         } = start;
         let repository = self.home_repository(&home).await?;
         let place = (repository.as_ref(), new.parent.as_ref());
         let mut preparing = self.resolve_start_agent(&home, place, preparing).await?;
+        if let (Some(_), Some(refusal)) = (&preparing.agent, unplaceable) {
+            bail!("{refusal}");
+        }
         preparing.work_on(issue.as_ref());
         let named = new.name.take();
         new.name = (self.start_name(&home, named, issue.as_ref(), &preparing)).await?;
@@ -197,6 +204,7 @@ impl Manager {
             new,
             issue,
             preparing,
+            unplaceable: None,
         };
         self.start_space(start, caller).await?.into_workspace()
     }
@@ -224,6 +232,7 @@ impl Manager {
             new,
             issue,
             preparing,
+            unplaceable: None,
         };
         self.start_space(start, caller).await?.into_workspace()
     }

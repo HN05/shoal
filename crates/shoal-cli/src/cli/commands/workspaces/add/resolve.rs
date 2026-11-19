@@ -7,7 +7,6 @@ use anyhow::{Context as _, Result};
 
 use super::{
     agent::AddSettings,
-    launch::issue_default,
     plan::check_add_creation,
     reads::DaemonReads,
     target::{AddTarget, resolve_add_target},
@@ -160,7 +159,7 @@ fn named_issue(launch: &Launch) -> Result<Option<crate::forge::items::reference:
             .map(|target| target.decided(false))
             .transpose()?
         {
-            Some(StartTarget::Issue(issue)) if issue_default(launch) => Some(issue),
+            Some(StartTarget::Issue(issue)) => Some(issue),
             _ => None,
         },
     )

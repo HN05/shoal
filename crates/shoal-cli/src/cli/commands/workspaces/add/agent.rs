@@ -44,24 +44,6 @@ impl<'a> AddSettings<'a> {
     }
 }
 
-pub(super) enum AgentChoice {
-    Chosen(Option<Agent>),
-    /// No agent was named; a start on a terminal picks one.
-    PickerIfInteractive,
-}
-
-/// The agent named, checked before anything is created, else the picker's.
-pub(super) async fn choose_add_agent(
-    settings: &AddSettings<'_>,
-    agent: Option<Agent>,
-) -> Result<AgentChoice> {
-    let Some(agent) = agent else {
-        return Ok(AgentChoice::PickerIfInteractive);
-    };
-    crate::agents::ensure_available(&agent, settings.get().await?)?;
-    Ok(AgentChoice::Chosen(Some(agent)))
-}
-
 /// Refuse `model` for `agent` when its launch cannot pass it on.
 fn check_model(
     settings: &crate::config::Effective,
@@ -72,27 +54,19 @@ fn check_model(
     crate::agents::check_model(settings, agent, &resolved)
 }
 
-/// The agent an addition starts, refusing a `model` it cannot run with
-/// before anything is created.
+/// The agent a start runs, as [`agents::start_agent`] chooses it from the
+/// one `named`, refusing a `model` it cannot run with before anything is
+/// created; one it leaves to the daemon takes the model there.
 pub(super) async fn resolve_add_agent(
     ctx: &Context,
     settings: &AddSettings<'_>,
-    agent: AgentChoice,
+    named: Option<Agent>,
     model: ModelChoice,
 ) -> Result<ResolvedAddAgent> {
-    let agent = match agent {
-        AgentChoice::Chosen(agent) => agent,
-        AgentChoice::PickerIfInteractive if ctx.interactive() => {
-            agents::pick_default_agent(ctx, settings.get().await?)?
-        }
-        AgentChoice::PickerIfInteractive => None,
-    };
-    match &agent {
-        Some(agent) => check_model(settings.get().await?, agent, &model)?,
-        None => anyhow::ensure!(
-            model.is_empty(),
-            "--model and --effort need an agent; name one with --agent"
-        ),
+    let settings = settings.get().await?;
+    let agent = agents::start_agent(ctx, settings, named)?;
+    if let Some(agent) = &agent {
+        check_model(settings, agent, &model)?;
     }
     Ok(ResolvedAddAgent { agent, model })
 }

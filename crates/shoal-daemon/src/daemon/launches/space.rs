@@ -30,12 +30,10 @@ use crate::{
 };
 
 /// Where a launch's new space goes, with what only that place decides: the
-/// issue it starts on, read, whether the launch starts an agent there, the
-/// PR it links and what holds its agent.
+/// issue it starts on, read, and what holds its agent.
 pub(super) struct Placement {
     pub home: PlacedHome,
     pub issue: Option<StartIssue>,
-    pub agent: bool,
     pub blockers: Vec<Blocker>,
 }
 
@@ -90,8 +88,7 @@ impl Manager {
                 return Box::pin(self.launch_space(chat, shape, source, caller)).await;
             }
         };
-        ensure_placeable(&launch, placement.agent)?;
-        let agent = (placement.agent).then(|| agent_request(&launch, &shape.mode, source));
+        let agent = Some(agent_request(&launch, &shape.mode, source));
         let follows = Follows {
             agent,
             unfollowed: true,
@@ -160,6 +157,7 @@ impl Manager {
             new,
             issue,
             preparing,
+            unplaceable: launch.unplaceable,
         })
     }
 
@@ -277,15 +275,6 @@ pub(super) fn agent_request(
 /// Whether `error` is the forge's refusal of a closed issue.
 fn closed(error: &anyhow::Error) -> bool {
     (error.chain()).any(|cause| cause.is::<shoal_forge::items::issue::ClosedIssue>())
-}
-
-/// Refuse `launch` when it starts an agent and its caller's terminal could
-/// place no agent in the background, as the launch says why.
-fn ensure_placeable(launch: &Launch, agent: bool) -> Result<()> {
-    match (agent, &launch.unplaceable) {
-        (true, Some(refusal)) => anyhow::bail!("{refusal}"),
-        _ => Ok(()),
-    }
 }
 
 #[cfg(test)]

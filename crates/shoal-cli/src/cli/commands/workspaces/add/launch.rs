@@ -163,57 +163,26 @@ async fn starts_as_chat(ctx: &Context, launch: &Launch) -> Result<StartsAsChat> 
     })
 }
 
-/// The agent `launch` starts under `settings`: the one it names, else for a
-/// start on a positional issue `agent.default`.
+/// The agent `launch` starts under `settings`: the one it names, else
+/// `agent.default`.
 fn starting_agent(launch: &Launch, settings: &Effective) -> Option<crate::agent::Agent> {
-    match (&launch.agent, issue_default(launch)) {
-        (Some(agent), _) => Some(agent.clone()),
-        (None, true) => settings.agent.default.clone(),
-        (None, false) => None,
-    }
+    (launch.agent.clone()).or_else(|| settings.agent.default.clone())
 }
 
 /// Pick on a terminal what the `resolved` start `launch` leaves to a
 /// picker: what it starts from and its agent. A start that begins as a chat
 /// picks its agent there.
 async fn pick_missing(ctx: &Context, launch: &mut Launch, resolved: &Resolved<'_>) -> Result<()> {
-    let mut picked_issue = false;
     if names_nothing(launch) {
         let mut creation = Creation::default();
         let picked = pick_add_source(ctx, &resolved.target, &mut creation).await?;
-        picked_issue = picked.is_some();
         picked_source(launch, creation, picked);
     }
     if begins_as_chat(launch) {
         return Ok(());
     }
-    let settings = &resolved.settings;
-    // A picked issue takes `agent.default`, as a positional one does.
-    if launch.agent.is_none() && picked_issue {
-        launch.agent = settings.get().await?.agent.default.clone();
-    }
-    if launch.agent.is_none() && !(issue_default(launch) && has_default(settings).await?) {
-        launch.agent = agents::pick_default_agent(ctx, settings.get().await?)?;
-        if launch.agent.is_none() {
-            without_agent(launch)?;
-        }
-    }
-    Ok(())
-}
-
-/// `launch` starting no agent, as the picker chose: a positional issue,
-/// whose start would take `agent.default`, names the issue as `--issue`
-/// does instead, which starts none.
-fn without_agent(launch: &mut Launch) -> Result<()> {
-    if !issue_default(launch) {
-        return Ok(());
-    }
-    if let Some(StartTarget::Issue(issue)) = (launch.target.take())
-        .map(|target| target.decided(false))
-        .transpose()?
-    {
-        launch.issue = Some(IssueChoice::Named(issue));
-    }
+    let settings = resolved.settings.get().await?;
+    launch.agent = agents::start_agent(ctx, settings, launch.agent.take())?;
     Ok(())
 }
 
@@ -333,20 +302,6 @@ fn switched_branch(selector: &str) -> String {
     crate::git::strip_local(selector)
         .unwrap_or(selector)
         .to_owned()
-}
-
-/// Whether the agent of `launch` defaults to `agent.default`, as a start on
-/// a positional issue's does.
-pub(super) fn issue_default(launch: &Launch) -> bool {
-    matches!(
-        launch.target,
-        Some(StartTarget::Issue(_) | StartTarget::Number(_))
-    )
-}
-
-/// Whether `settings` name a default agent.
-async fn has_default(settings: &AddSettings<'_>) -> Result<bool> {
-    Ok(settings.get().await?.agent.default.is_some())
 }
 
 /// Send `launch`, which `agent` runs if it names one, and report what the

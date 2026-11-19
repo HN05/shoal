@@ -127,7 +127,7 @@ fn focused_starts_attach_the_terminal_to_their_herdr_tab() {
     fixture.add("agent");
     let repo = fixture.repo.to_str().unwrap();
     for args in [
-        vec!["start", "--wait", repo, "--branch", "shell"],
+        vec!["create", repo, "--branch", "shell"],
         vec![
             "start", "--mode", "chat", repo, "--name", "talk", "--agent", "pi",
         ],
@@ -190,7 +190,7 @@ fn a_herdr_only_herdr_bin_path_names_serves_a_focused_start() {
     let (output, transcript) = fixture.terminal_command(
         fixture
             .command()
-            .args(["start", "--wait", repo, "--branch", "shell"])
+            .args(["create", repo, "--branch", "shell"])
             .env("HERDR_BIN_PATH", elsewhere.join("herdr")),
         "",
         true,

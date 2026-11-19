@@ -262,12 +262,12 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     assert_eq!(runs(), "background tracked go\nfocused tracked \n");
     assert!(!directive.exists(), "{transcript}");
 
-    // Without an agent the caller's shell enters the workspace.
+    // A workspace without an agent the caller's shell enters.
     let (output, transcript) = fixture.terminal_command(
         fixture
             .command()
             .env("SHOAL_SHELL_DIRECTIVE", &directive)
-            .args(["start", "--wait", repo, "--branch", "shell-here", "--focus"]),
+            .args(["create", repo, "--branch", "shell-here"]),
         "",
         true,
     );

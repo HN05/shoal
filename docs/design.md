@@ -2196,7 +2196,8 @@ An omitted required argument that names an existing record opens a picker on a
 terminal; noninteractive and JSON calls require it.
 An agent whose executables are not on PATH
 is refused before any work starts and left out of pickers, the workspace menu
-and completion; pickers offer “No agent” to continue without launching one. `config show` reports effective repository values with their winning layers and uses a registered checkout
+and completion; a start's picker offers only agents, since every start starts
+one, and the review picker offers “No agent” to run no review. `config show` reports effective repository values with their winning layers and uses a registered checkout
 before a workspace exists, then the picker; `--repo` names a repository's checkout directly. `status` shows any space,
 a workspace or a chat, running or stopped, through one path: links, watched PR state,
 completion, sessions and what awaits the user for both, and for a workspace also
@@ -2439,8 +2440,8 @@ title as its name, which says what the work is.
 
 `start <link>` recognizes issue, PR and branch URLs and selects their registered
 repository by origin identity, offering interactive registration when missing.
-Issue links and numbers invoke issue opening with `agent.default` standing in
-for `--agent`; numbers use `--repo`, the current checkout/workspace, then a picker.
+Issue links and numbers open the issue's workspace; numbers use `--repo`, the
+current checkout/workspace, then a picker.
 PR links open their head against the refreshed remote base and link the PR once
 the workspace is ready, as issue links associate their issue; branch links open
 an origin branch. Both use existing-branch ownership checks and retain an owned
@@ -2449,8 +2450,13 @@ PR's workspace at a commit instead, with the PR's base as its diff base, where
 `--agent` starts its agent, and `--path`, `--git-profile` and `--base` are refused. Interactive `start`
 without a branch, base or issue also offers the repository's open issues and PRs,
 which open as their links do.
-Interactive `start` uses an agent picker when no agent is named; non-interactive
-additions launch only when an agent is named. `start --agent` launches only after
+Every `start` starts an agent, one rule for a new workspace, a new chat,
+`--in` and `contribute`, whatever else it names: `--agent`, else
+`agent.default`, else a picker on a terminal, which shows only where no
+default is set, and otherwise a refusal before anything is created that names
+`shoal create`, which makes a workspace without one. The daemon applies the
+default and the refusal, so a start from any client follows the rule.
+`start --agent` launches only after
 creation, setup, and the post-setup hook
 succeed, or after an explicitly ignored setup failure, and retains the
 workspace whatever the agent does. Desktop handoffs (Claude and Codex apps, T3) provide no

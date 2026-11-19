@@ -620,7 +620,7 @@ fn a_reopened_workspaces_tab_takes_its_closed_issue() {
     fixture.script_github(&issue);
     let url = "https://github.com/team/project/issues/34";
     let repo = fixture.repo.to_str().unwrap();
-    let added = fixture.ok(&["start", "--wait", repo, "--branch", "topic", "--issue", url]);
+    let added = fixture.ok(&["create", repo, "--branch", "topic", "--issue", url]);
     let id = added["id"].as_str().unwrap();
     issue["GET repos/team/project/issues/34"]["body"]["state"] = "closed".into();
     fixture.script_github(&issue);
@@ -766,7 +766,9 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
         config.push_str("[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n");
         let fixture = Fixture::with_config(Some(&config));
         install_fake_herdr(&fixture);
-        let mut args = vec!["start", fixture.repo.to_str().unwrap(), "--branch", "focus"];
+        // A workspace without an agent comes from create.
+        let command = if agent.is_some() { "start" } else { "create" };
+        let mut args = vec![command, fixture.repo.to_str().unwrap(), "--branch", "focus"];
         if let Some(agent) = agent {
             args.extend(["--agent", agent]);
         }
@@ -781,21 +783,11 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
     let fixture = Fixture::new();
     fixture.add_github_origin();
     install_fake_herdr(&fixture);
-    install_test_script(
-        fixture.root.path().join("bin/fzf"),
-        "#!/bin/sh\nawk -F '\t' '$2 == \"No agent\" {print}'\n",
-    );
+    // A workspace on an issue without an agent waits for the user.
     fixture.script_github(&github_issue(34, "Focus", ""));
     let (caller, transcript) = herdr_call(
         &fixture,
-        &[
-            "start",
-            "34",
-            "--repo",
-            fixture.repo.to_str().unwrap(),
-            "--mode",
-            "worker",
-        ],
+        &["create", "34", "--repo", fixture.repo.to_str().unwrap()],
         "",
     );
     assert!(caller.status.success(), "{} {transcript}", printed(&caller));
@@ -903,7 +895,7 @@ fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
     let (caller, _) = herdr_call(
         &fixture,
         &[
-            "start",
+            "create",
             fixture.repo.to_str().unwrap(),
             "--branch",
             "herdr-shell",
@@ -937,16 +929,15 @@ fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
 fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
     let fixture = Fixture::new();
     install_fake_herdr(&fixture);
-    for (name, mode) in [("here", "here"), ("pipe", "pipe"), ("outside", "outside")] {
+    for (name, mode) in [("pipe", "pipe"), ("outside", "outside")] {
         let mut command = fixture.command();
-        command.args(["start", fixture.repo.to_str().unwrap(), "--branch", name]);
+        command.args(["create", fixture.repo.to_str().unwrap(), "--branch", name]);
         if mode != "outside" {
             command
                 .env("HERDR_ENV", "1")
                 .env("HERDR_WORKSPACE_ID", "w1");
         }
         let output = match mode {
-            "here" => fixture.interactive_command(command.arg("--here"), "").0,
             "outside" => fixture.interactive_command(&mut command, "").0,
             _ => command.output().unwrap(),
         };
@@ -962,7 +953,7 @@ fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
         fs::write(fixture.repo.join(".shoal.toml"), config).unwrap();
         let (output, _) = herdr_call(
             &fixture,
-            &["start", fixture.repo.to_str().unwrap(), "--branch", name],
+            &["create", fixture.repo.to_str().unwrap(), "--branch", name],
             "",
         );
         assert!(output.status.success(), "{}", printed(&output));
@@ -1467,16 +1458,18 @@ fn a_focused_worker_start_keeps_its_task_in_the_tab_it_opens() {
     assert!(told.split('\0').any(|arg| arg == "do it"), "{told:?}");
 }
 
-/// A start without an agent in a mode whose `focus` is off opens the
-/// workspace's shell in a background tab, whatever `terminal.focus` says.
+/// An agent started in a mode whose `focus` is off opens its tab in the
+/// background, whatever `terminal.focus` says.
 #[test]
-fn a_shell_started_in_a_background_mode_opens_its_tab_unfocused() {
+fn an_agent_started_in_a_background_mode_opens_its_tab_unfocused() {
     let fixture = Fixture::with_config(Some(
-        "terminal.focus = true\n[modes.quiet]\nkind = 'workspace'\nfocus = false\n",
+        "terminal.focus = true\n[modes.quiet]\nkind = 'workspace'\nfocus = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     install_fake_herdr(&fixture);
     let repo = fixture.repo.to_str().unwrap();
-    let args = ["start", repo, "--branch", "quiet-shell", "--mode", "quiet"];
+    let args = [
+        "start", repo, "--branch", "quiet", "--mode", "quiet", "--agent", "pi",
+    ];
     let (caller, transcript) = herdr_call(&fixture, &args, "");
     assert!(caller.status.success(), "{} {transcript}", printed(&caller));
     let create = (herdr_calls(&fixture).into_iter())

@@ -119,8 +119,7 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     let path = Path::new(workspace["path"].as_str().unwrap());
     let id = workspace["id"].as_str().unwrap();
     fixture.ok(&[
-        "start",
-        "--wait",
+        "create",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "dependent",
@@ -468,13 +467,7 @@ fn concurrent_adds_take_their_own_branches_and_directories() {
     let start = |branch: &str| {
         fixture
             .command()
-            .args([
-                "start",
-                "--wait",
-                fixture.repo.to_str().unwrap(),
-                "--branch",
-                branch,
-            ])
+            .args(["create", fixture.repo.to_str().unwrap(), "--branch", branch])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -572,13 +565,7 @@ fn invalid_branch_names_fail_and_normalized_directories_take_suffixes() {
     ] {
         assert!(
             !fixture
-                .run(&[
-                    "start",
-                    "--wait",
-                    fixture.repo.to_str().unwrap(),
-                    "--branch",
-                    branch
-                ])
+                .run(&["create", fixture.repo.to_str().unwrap(), "--branch", branch])
                 .status
                 .success(),
             "{branch}"

@@ -738,19 +738,17 @@ fn start_branch_opens_or_creates_its_branch_as_typed() {
     let repo = fixture.repo.to_str().unwrap();
     git(&fixture.repo, &["branch", "kept"]);
     git(&fixture.repo, &["branch", "topic"]);
-    let opened = fixture.ok(&["start", "--wait", repo, "--branch", "kept"]);
+    let opened = fixture.ok(&["create", repo, "--branch", "kept"]);
     assert_eq!(opened["branch"], "kept");
     // A new branch takes the name as typed; one an existing branch blocks is
     // refused rather than suffixed.
-    let created = fixture.ok(&["start", "--wait", repo, "--branch", "fresh/part"]);
+    let created = fixture.ok(&["create", repo, "--branch", "fresh/part"]);
     assert_eq!(created["branch"], "fresh/part");
-    let blocked = fixture.run(&["start", "--wait", repo, "--branch", "topic/part"]);
+    let blocked = fixture.run(&["create", repo, "--branch", "topic/part"]);
     assert!(!blocked.status.success(), "{}", printed(&blocked));
     // A branch a workspace has takes the start into it, which refuses what
     // only a new workspace takes.
-    let into = fixture.run(&[
-        "start", "--wait", repo, "--branch", "kept", "--name", "Other",
-    ]);
+    let into = fixture.run(&["create", repo, "--branch", "kept", "--name", "Other"]);
     assert!(!into.status.success(), "{}", printed(&into));
     assert!(
         String::from_utf8_lossy(&into.stderr).contains("--in"),
@@ -770,7 +768,7 @@ fn start_branch_opens_or_creates_its_branch_as_typed() {
         &["remote", "add", "origin", origin.to_str().unwrap()],
     );
     git(&fixture.repo, &["fetch", "origin"]);
-    let untracked = fixture.run(&["start", "--wait", repo, "--branch", "origin/kept"]);
+    let untracked = fixture.run(&["create", repo, "--branch", "origin/kept"]);
     assert!(
         String::from_utf8_lossy(&untracked.stderr).contains("does not track"),
         "{}",
@@ -1483,8 +1481,7 @@ fn trust_entries_follow_the_config_directories_env_gives_agents() {
     fixture.add("early");
     git(&fixture.repo, &["branch", "side"]);
     fixture.ok(&[
-        "start",
-        "--wait",
+        "create",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "late",
@@ -1847,8 +1844,7 @@ fn codex_launches_trust_checkout_shared_repository_directory_and_external_worksp
     // An explicit path must not make its arbitrary parent a trust root.
     let external = home.join("external/workspace");
     let workspace = fixture.ok(&[
-        "start",
-        "--wait",
+        "create",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "trusted",
@@ -1939,7 +1935,7 @@ fn codex_launches_trust_checkout_shared_repository_directory_and_external_worksp
 }
 
 #[test]
-fn agent_picker_can_skip_launch_select_agents_or_cancel() {
+fn agent_picker_selects_agents_or_cancels_and_offers_no_agentless_start() {
     let fixture = Fixture::with_config(Some("[agents.none]\ncommand = ['agent-probe']\n"));
     fixture.add_github_origin();
     let bin = fixture.root.path().join("bin");
@@ -1968,7 +1964,7 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
         install_test_script(&path, script);
     }
     let agent_args = fixture.root.path().join("agent-args");
-    for choice in ["cancel", "No agent", "codex", "none"] {
+    for choice in ["cancel", "codex", "none"] {
         fs::write(fixture.root.path().join("choice"), choice).unwrap();
         let (output, transcript) = fixture.interactive(
             &[
@@ -1990,25 +1986,15 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
             "{}\n{transcript}",
             printed(&output)
         );
+        // A start's picker offers only agents.
+        let offered = fs::read_to_string(fixture.root.path().join("picker-input")).unwrap();
+        assert!(!offered.contains("No agent"), "{offered}");
         let inspection = fixture.ok(&["status", &fixture.id("Pick an agent")]);
         assert_eq!(inspection["workspace"]["state"], "ready");
         assert_eq!(inspection["executions"], serde_json::json!([]));
-        if choice == "No agent" {
-            assert!(!agent_args.exists());
-            // The shared review picker also accepts the choice without a launch.
-            let (output, transcript) =
-                fixture.interactive(&["review", "run", &fixture.id("Pick an agent")], "");
-            assert!(
-                output.status.success(),
-                "{}\n{transcript}",
-                printed(&output)
-            );
-            assert!(!agent_args.exists());
-        } else {
-            let prompt = fs::read_to_string(&agent_args).unwrap();
-            assert!(prompt.contains("Issue context"), "{prompt}");
-            fs::remove_file(&agent_args).unwrap();
-        }
+        let prompt = fs::read_to_string(&agent_args).unwrap();
+        assert!(prompt.contains("Issue context"), "{prompt}");
+        fs::remove_file(&agent_args).unwrap();
         fixture.ok(&["rm", "--wait", &fixture.id("Pick an agent"), "--yes"]);
     }
 
@@ -2071,8 +2057,7 @@ fn a_picked_agent_without_its_session_host_creates_no_workspace() {
 fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     let fixture = Fixture::new();
     let workspace = fixture.ok(&[
-        "start",
-        "--wait",
+        "create",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "configured-agent",
@@ -3755,7 +3740,7 @@ fn an_issue_start_refuses_a_workspace_that_cannot_reopen_before_prompting() {
     fixture.script_github(&github_issue(37, "Sort the queue", "Body."));
     let repo = fixture.repo.to_str().unwrap();
     commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
-    let failed = fixture.run(&["start", "--wait", repo, "--issue", "37"]);
+    let failed = fixture.run(&["create", repo, "--issue", "37"]);
     assert!(!failed.status.success(), "{}", printed(&failed));
     let args = ["start", repo, "--mode", "worker", "--issue", "37"];
     fixture.assert_refused_before_prompting(&args, "is failed");
@@ -3767,22 +3752,57 @@ fn an_issue_start_refuses_a_workspace_that_cannot_reopen_before_prompting() {
 /// A copy's start in a repository named by a number, which beside a branch
 /// names the repository, takes it as the copy's own.
 #[test]
-fn a_copys_start_takes_a_numeric_repository_beside_a_branch() {
+fn a_copy_takes_a_numeric_repository_beside_a_branch() {
     let fixture = Fixture::new();
     fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "007"]);
     let source = fixture.add("source");
     let id = source["id"].as_str().unwrap();
-    let copy = fixture.ok(&["start", "--wait", "007", "--copy", id, "--branch", "new"]);
+    let copy = fixture.ok(&["create", "007", "--copy", id, "--branch", "new"]);
     assert_eq!(copy["branch"], "new");
 }
 
-/// An existing workspace's start without an agent, run here with `--json`,
-/// reports the workspace it reopens.
+/// A start in an existing workspace that names no agent, without an
+/// `agent.default` or a terminal to pick one, is refused before it queues
+/// anything.
 #[test]
-fn an_agentless_existing_workspaces_start_here_reports_it_as_json() {
+fn an_existing_workspaces_start_without_an_agent_or_default_is_refused() {
     let fixture = Fixture::new();
     let workspace = fixture.add("owned");
     let id = workspace["id"].as_str().unwrap();
-    let reopened = fixture.ok(&["start", "--in", id, "--here"]);
-    assert_eq!(reopened["id"], id, "{reopened}");
+
+    let refused = fixture.run(&["start", "--in", id, "--here"]);
+
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("agent.default"));
+    assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
+}
+
+/// Without a terminal, a start that names no agent queues `agent.default`
+/// with the mode and task it names, in a new chat as in an existing
+/// workspace.
+#[test]
+fn a_start_without_an_agent_queues_the_default_with_its_mode_and_task() {
+    let fixture = Fixture::with_config(Some(
+        "machine.max_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n[agent]\ndefault = 'waiter'\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+    ));
+    let repo = fixture.repo.to_str().unwrap();
+    let workspace = fixture.add("owned");
+    let id = workspace["id"].as_str().unwrap();
+
+    for args in [
+        &["start", repo, "--mode", "plan", "--", "Plan it"][..],
+        &["start", "--in", id, "--mode", "worker", "--", "Fix it"],
+    ] {
+        let output = fixture.run(args);
+        assert!(output.status.success(), "{args:?}: {}", printed(&output));
+    }
+
+    let entries = fixture.ok(&["queue"]);
+    let mut queued: Vec<_> = (entries.as_array().unwrap().iter())
+        .map(|entry| (entry["agent"].clone(), entry["mode"].clone()))
+        .collect();
+    queued.sort_by_key(|(_, mode)| mode.to_string());
+    let expected =
+        [("waiter", "plan"), ("waiter", "worker")].map(|(agent, mode)| (agent.into(), mode.into()));
+    assert_eq!(queued, expected, "{entries}");
 }

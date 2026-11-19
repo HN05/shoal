@@ -744,13 +744,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     // existing execution's daemon connection.
     let repo = support::repository_with(root.path(), "repo", &[]);
     run(&["repo", "add", repo.to_str().unwrap()]);
-    run(&[
-        "start",
-        "--wait",
-        repo.to_str().unwrap(),
-        "--branch",
-        "keep-running",
-    ]);
+    run(&["create", repo.to_str().unwrap(), "--branch", "keep-running"]);
     let keep_running = support::daemon_client::space_id(root.path(), "keep-running");
     let marker = root.path().join("started");
     let finish = root.path().join("finish");

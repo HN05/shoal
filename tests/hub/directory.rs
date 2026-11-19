@@ -50,7 +50,7 @@ pub(super) fn hub_machine(hub: &Base) -> String {
 /// Start a workspace on the new branch `name` and return its ID.
 pub(super) fn workspace(machine: &Base, name: &str) -> String {
     let repo = machine.repo.to_str().unwrap();
-    machine.ok(&["start", "--wait", repo, "--branch", name]);
+    machine.ok(&["create", repo, "--branch", name]);
     machine.id(name)
 }
 

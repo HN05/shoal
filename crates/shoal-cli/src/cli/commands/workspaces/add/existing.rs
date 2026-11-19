@@ -7,7 +7,7 @@ use anyhow::{Result, ensure};
 
 use super::{
     AddOptions,
-    agent::{AddSettings, choose_add_agent, resolve_add_agent},
+    agent::{AddSettings, resolve_add_agent},
     launch::launch_worker,
     mode::choose_add_mode,
     resolve::check_named_blockers,
@@ -46,7 +46,6 @@ pub(in crate::cli::commands) async fn start_worker(
     crate::cli::commands::permissions::ensure_held(ctx, repository, &options.narrowing).await?;
     check_named_blockers(ctx, &target, &options.blockers).await?;
     let mode = choose_add_mode(ctx, &settings, options.mode.take()).await?;
-    let agent = choose_add_agent(&settings, agent).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
     let picked = (mode, agent);
     launch_worker(ctx, &workspace, picked, args, (options, &settings)).await

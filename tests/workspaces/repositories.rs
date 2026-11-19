@@ -23,7 +23,7 @@ fn url_registration_clones_once_and_supports_workspaces() {
     assert_eq!(directory.parent().unwrap(), fixture.shoal_dir());
     assert!(!fixture.root.path().join("state/repositories").exists());
     assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
-    let workspace = fixture.ok(&["start", "--wait", &url, "--branch", "cloned"]);
+    let workspace = fixture.ok(&["create", &url, "--branch", "cloned"]);
     assert_eq!(
         Path::new(workspace["path"].as_str().unwrap())
             .parent()
@@ -33,7 +33,7 @@ fn url_registration_clones_once_and_supports_workspaces() {
     fixture.ok(&["rm", "--wait", &fixture.id("cloned")]);
     assert!(clone.is_dir());
     // No workspace name can collide with the clone's directory.
-    let named = fixture.ok(&["start", "--wait", &url, "--branch", "checkout"]);
+    let named = fixture.ok(&["create", &url, "--branch", "checkout"]);
     assert_eq!(named["path"], directory.join("checkout").to_str().unwrap());
 }
 
@@ -63,7 +63,7 @@ fn displayed_repository_name_resolves_old_uuid_clones_and_rejects_ambiguity() {
         let destination = fixture.root.path().join(format!("old-uuid-{parent}"));
         clones.push(fixture.ok(&["repo", "add", &url, "--path", destination.to_str().unwrap()]));
         if parent == "one" {
-            fixture.ok(&["start", "--wait", "saldoir-server", "--branch", "feature"]);
+            fixture.ok(&["create", "saldoir-server", "--branch", "feature"]);
         }
     }
     let ambiguous = fixture.run(&["repo", "rm", "saldoir-server", "--yes"]);
@@ -131,7 +131,7 @@ fn repository_selectors_preserve_names_and_reject_colliding_registered_paths() {
             "cleanup.done.enabled",
             "false",
         ],
-        vec!["start", "--wait", "saldoir-server", "--branch", "collision"],
+        vec!["create", "saldoir-server", "--branch", "collision"],
     ] {
         let output = command(&args);
         assert!(
@@ -231,7 +231,7 @@ fn local_repository_without_remotes_registers_in_place_and_creates_workspaces() 
     ]);
     assert_eq!(repo["path"], fixture.repo.to_str().unwrap());
     assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
-    let workspace = fixture.ok(&["start", "--wait", "local", "--branch", "offline"]);
+    let workspace = fixture.ok(&["create", "local", "--branch", "offline"]);
     assert_eq!(
         git(
             Path::new(workspace["path"].as_str().unwrap()),
@@ -624,7 +624,7 @@ fn configured_root_directory_affects_new_repositories_and_preserves_existing_pat
     .unwrap();
     fixture.restart();
     assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
-    let retained = fixture.ok(&["start", "--wait", &url, "--branch", "retained"]);
+    let retained = fixture.ok(&["create", &url, "--branch", "retained"]);
     assert_eq!(
         Path::new(retained["path"].as_str().unwrap())
             .parent()
@@ -692,7 +692,7 @@ fn repository_clone_path_overrides_default_and_resolves_in_callers_directory() {
     assert!(!output.status.success());
     assert!(!mismatch.exists());
     assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
-    fixture.ok(&["start", "--wait", &url, "--branch", "custom-clone"]);
+    fixture.ok(&["create", &url, "--branch", "custom-clone"]);
 }
 
 #[test]
@@ -757,9 +757,7 @@ fn registration_reuses_repositories_by_origin_across_paths_and_url_forms() {
     assert_eq!(fixture.ok(&["repo", "add", url]), original);
     assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
     // This remote tests identity matching only; explicitly use local history.
-    fixture.ok(&[
-        "start", "--wait", ssh_url, "--branch", "alias", "--base", "HEAD",
-    ]);
+    fixture.ok(&["create", ssh_url, "--branch", "alias", "--base", "HEAD"]);
     fixture.ok(&["rm", "--wait", &fixture.id("alias")]);
 }
 
@@ -1109,7 +1107,7 @@ fn repository_removal_retries_partial_file_deletion_after_restart_but_rejects_re
     };
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute("INSERT INTO repository_removals(repository_id,directory_id,deleting_files) VALUES (?1,?2,1)", rusqlite::params![id, identity]).unwrap();
-    let refused = fixture.run(&["start", id, "--branch", "too-late"]);
+    let refused = fixture.run(&["create", id, "--branch", "too-late"]);
     assert!(!refused.status.success());
     fs::remove_dir_all(fixture.repo.join(".git")).unwrap();
     fixture.restart();
@@ -1162,7 +1160,7 @@ fn repository_removal_serializes_with_workspace_creation() {
     let id = repo["id"].as_str().unwrap().to_owned();
     let add = fixture
         .command()
-        .args(["start", "--wait", &id, "--branch", "racing"])
+        .args(["create", &id, "--branch", "racing"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -1230,7 +1228,7 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
     assert_eq!(fixture.ok(&["repo", "config", id]), saved);
     assert!(
         !fixture
-            .run(&["start", id, "--branch", "blocked"])
+            .run(&["create", id, "--branch", "blocked"])
             .status
             .success()
     );
@@ -1468,13 +1466,7 @@ fn a_repository_that_keeps_its_refs_in_a_reftable_takes_workspaces() {
     let fixture = Fixture::new();
     let repo = shoal_core::test_support::reftable_repository(fixture.root.path(), "reftable");
     fixture.ok(&["repo", "add", repo.to_str().unwrap()]);
-    let workspace = fixture.ok(&[
-        "start",
-        "--wait",
-        repo.to_str().unwrap(),
-        "--branch",
-        "topic",
-    ]);
+    let workspace = fixture.ok(&["create", repo.to_str().unwrap(), "--branch", "topic"]);
     let path = Path::new(workspace["path"].as_str().unwrap());
     assert_eq!(git(path, &["branch", "--show-current"]), "topic\n");
     fs::write(path.join("tracked"), "changed\n").unwrap();

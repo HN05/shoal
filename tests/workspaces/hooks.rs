@@ -43,8 +43,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
         .command()
         .args([
             "--json",
-            "start",
-            "--wait",
+            "create",
             fixture.repo.to_str().unwrap(),
             "--branch",
             "hooked",
@@ -447,8 +446,7 @@ test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
     let home = fixture.root.path();
     fs::write(home.join("fail-before"), "").unwrap();
     let output = fixture.run(&[
-        "start",
-        "--wait",
+        "create",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "hooked",

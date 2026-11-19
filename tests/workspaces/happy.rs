@@ -688,8 +688,7 @@ done
         .command()
         .args([
             "--json",
-            "start",
-            "--wait",
+            "create",
             fixture.repo.to_str().unwrap(),
             "--branch",
             "concurrent",

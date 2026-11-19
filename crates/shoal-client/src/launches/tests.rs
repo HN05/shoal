@@ -37,10 +37,10 @@ async fn a_launch_in_a_workspace_queues_its_worker_on_the_launchs_task() {
     let plan: shoal_core::start_plan::QueuedStart =
         serde_json::from_value(queued_plan(&daemon, &entry).await).unwrap();
     assert_eq!(plan.launch.args, ["Fix the build"]);
-    // Without an agent of its own, it starts none, as a start without a
-    // terminal to pick one does, whatever `agent.default` names.
-    let none = worker(send(&app, launch(&parent, None)).await.unwrap());
-    assert!(none.entry.is_none());
+    // Without an agent of its own, it queues `agent.default`.
+    let other = daemon.workspace("other").await;
+    let default = worker(send(&app, launch(&other, None)).await.unwrap());
+    assert_eq!(default.entry.unwrap().agent, "probe");
 
     // A workspace's agent starts the workers of the workspaces below its
     // own only.

@@ -56,8 +56,7 @@ fn tree_below_hub_config(extra: &str) -> Tree {
     ready_at(&laptop, &coordinator, &hub_machine(&hub));
     let repo = hub.repo.to_str().unwrap().to_owned();
     hub.ok(&[
-        "start",
-        "--wait",
+        "create",
         &repo,
         "--branch",
         "child",
@@ -248,8 +247,7 @@ fn a_question_for_an_offline_coordinator_goes_on_to_the_user() {
     ready_at(&laptop, &coordinator, &desk_id);
     let repo = desk.repo.to_str().unwrap().to_owned();
     desk.ok(&[
-        "start",
-        "--wait",
+        "create",
         &repo,
         "--branch",
         "child",

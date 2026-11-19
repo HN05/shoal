@@ -172,8 +172,7 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
     let request = shoal()
         .args([
             "--json",
-            "start",
-            "--wait",
+            "create",
             repo.to_str().unwrap(),
             "--branch",
             "before",
@@ -203,8 +202,7 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
     let after = shoal()
         .args([
             "--json",
-            "start",
-            "--wait",
+            "create",
             repo.to_str().unwrap(),
             "--branch",
             "after",

@@ -1,9 +1,9 @@
 //! Where a launch's new workspace goes: its target, what it starts on,
 //! settled with the steps of [`crate::launches::workspace`] the CLI's start
-//! takes too, whether it starts an agent, its issue and what holds the
-//! agent; or, where it names the branch of an existing workspace, that
-//! workspace's own agent, and without a branch or issue a chat whose agent
-//! makes it a workspace once it knows the work.
+//! takes too, its issue and what holds its agent; or, where it names the
+//! branch of an existing workspace, that workspace's own agent, and
+//! without a branch or issue a chat whose agent makes it a workspace once
+//! it knows the work.
 use shoal_protocol::launches::{Launch, SpaceChoice};
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -23,13 +23,12 @@ use crate::{
 };
 
 mod copy;
-mod plan;
 mod target;
 
 impl Manager {
     /// Where the new workspace `launch` starts in `shape` goes for
-    /// `caller`, or what it starts instead, with an agent planned there
-    /// unless it `creates` the workspace alone.
+    /// `caller`, or what it starts instead, its agent held by what blocks
+    /// its issue unless it `creates` the workspace alone.
     pub(super) async fn workspace_placement(
         &self,
         launch: &Launch,
@@ -47,7 +46,6 @@ impl Manager {
             return Ok(Placed::Worker(on_branch(launch, workspace, &creation)?));
         }
         let mut blockers = (self.named_blockers(&target.repo.id, &launch.blockers, caller)).await?;
-        let agent = !creates && self.planned_agent(launch, &target).await?;
         let issue = match &target.issue {
             Some(issue) => {
                 let read = self.launch_issue(issue, (&target.repo.id, false), caller);
@@ -60,8 +58,9 @@ impl Manager {
         }
         let creation = self.issue_creation(&reads, &target.repo, creation, issue.as_ref());
         let opening = creation.await?.opening()?;
-        // An agent that starts now waits for nothing.
-        if agent
+        // An agent that starts now waits for nothing, and a creation starts
+        // none.
+        if !creates
             && !launch.now
             && let Some(issue) = &issue
         {
@@ -73,7 +72,6 @@ impl Manager {
         Ok(Placed::New(Placement {
             home: PlacedHome::Workspace(target.repo.id, opening),
             issue,
-            agent,
             blockers,
         }))
     }

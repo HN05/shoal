@@ -20,9 +20,6 @@ use crate::{
 pub(super) struct Target {
     pub repo: Repository,
     pub issue: Option<ItemInput>,
-    /// Its agent defaults to `agent.default`, as a start on a positional
-    /// issue's does, rather than to none.
-    pub issue_default: bool,
 }
 
 impl Manager {
@@ -49,7 +46,7 @@ impl Manager {
                 .repository
                 .clone()
                 .or(copied.map(|repo| repo.id.to_string()));
-            return self.target(launch, named, issue, false, reads).await;
+            return self.target(launch, named, issue, reads).await;
         };
         let names_branch = creation.branch.is_some() || issue.is_some();
         if let StartTarget::Repository(named) = positional {
@@ -57,7 +54,7 @@ impl Manager {
                 launch.repository.is_none(),
                 "a positional repository cannot be combined with --repo"
             );
-            return self.target(launch, Some(named), issue, false, reads).await;
+            return self.target(launch, Some(named), issue, reads).await;
         }
         ensure!(
             !names_branch,
@@ -65,7 +62,7 @@ impl Manager {
         );
         if let StartTarget::Issue(issue) = positional {
             let named = launch.repository.clone();
-            return self.target(launch, named, Some(issue), true, reads).await;
+            return self.target(launch, named, Some(issue), reads).await;
         }
         let repo = self.linked_repository(launch, &positional, reads).await?;
         workspace::ensure_link_in(&repo, positional.linked_repository()).await?;
@@ -78,11 +75,7 @@ impl Manager {
                 unreachable!("returned above")
             }
         }
-        Ok(Target {
-            repo,
-            issue: None,
-            issue_default: false,
-        })
+        Ok(Target { repo, issue: None })
     }
 
     /// The target in the repository `named` names, else that of `issue`'s
@@ -93,7 +86,6 @@ impl Manager {
         launch: &Launch,
         named: Option<String>,
         issue: Option<ItemInput>,
-        issue_default: bool,
         reads: &ManagerReads<'_>,
     ) -> Result<Target> {
         let repos = self.repositories().await?;
@@ -114,11 +106,7 @@ impl Manager {
                 }
             }
         };
-        Ok(Target {
-            repo,
-            issue,
-            issue_default,
-        })
+        Ok(Target { repo, issue })
     }
 
     /// The registered repository a PR or branch link of `launch` belongs to:

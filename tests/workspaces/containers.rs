@@ -307,8 +307,7 @@ fn containers_that_do_not_start_fail_setup_until_it_is_retried() {
     let fixture = with_containers(SETUP);
     fs::write(fixture.root.path().join("compose-fail"), "up").unwrap();
     let failed = fixture.run(&[
-        "start",
-        "--wait",
+        "create",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "worker",

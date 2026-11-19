@@ -306,8 +306,7 @@ fn a_workspaces_agent_resumes_the_agents_below_whoever_stopped_them() {
     let zmx = home.join("bin/zmx");
     let repo = fixture.repo.to_str().unwrap();
     let child = fixture.ok(&[
-        "start",
-        "--wait",
+        "create",
         repo,
         "--branch",
         "child",
@@ -414,8 +413,7 @@ fn restarts_the_agents_below(fixture: &Fixture, parent: &Parent) {
     let home = fixture.root.path().to_owned();
     let repo = fixture.repo.to_str().unwrap();
     let child = fixture.ok(&[
-        "start",
-        "--wait",
+        "create",
         repo,
         "--branch",
         "child",

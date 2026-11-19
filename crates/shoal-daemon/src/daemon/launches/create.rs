@@ -95,7 +95,6 @@ impl Manager {
         Ok(Placement {
             home: PlacedHome::Workspace(workspace.repository().clone(), opening),
             issue: None,
-            agent: false,
             blockers: Vec::new(),
         })
     }
