@@ -134,6 +134,10 @@ pub(crate) struct BelowElsewhere<'a> {
     /// The IDs of the only spaces below it the removal takes, when the
     /// caller confirmed those it saw.
     pub confirmed: Option<&'a [SpaceId]>,
+    /// Have the hub hold a child's removal while its machine is offline, as
+    /// for a removal someone asked for; an unattended one tries again on
+    /// its next round instead, so its rounds pile up no removals.
+    pub queues: bool,
 }
 
 impl<'a> Removal<'a> {
@@ -143,6 +147,7 @@ impl<'a> Removal<'a> {
         (!self.converts()).then(|| BelowElsewhere {
             refuse_holds: self.refuses_holds(),
             confirmed: self.confirmed_children(),
+            queues: self.root_cause() == EventCause::Manual,
         })
     }
 
@@ -317,11 +322,19 @@ impl<'a> Removal<'a> {
     /// removal they did not ask for, themselves or through the space's
     /// repository.
     pub(super) fn announces_children(self) -> bool {
-        let cause = match self {
+        !matches!(
+            self.root_cause(),
+            EventCause::Manual | EventCause::Repository
+        )
+    }
+
+    /// The cause of the removal this one is part of: its own, or for a
+    /// child's, the cause of the removal of the space above it.
+    fn root_cause(self) -> EventCause {
+        match self {
             Removal::Parent { cause, .. } => cause,
             removal => removal.cause(),
-        };
-        !matches!(cause, EventCause::Manual | EventCause::Repository)
+        }
     }
 
     /// What the worktree's state must be: automatic removal needs a safe

@@ -235,8 +235,9 @@ sends while the hub lists an agent above, each fitting a share of the
 coordinator's unread messages, and stays on the space's cursor until the
 hub takes it, and approval requests
 take deciders on the machines above after the local ones. The hub holds
-what can wait for an offline machine, messages, answers, decisions, stops
-and events, in order until it connects, for seven days, after which the
+what can wait for an offline machine, messages, answers, decisions, stops,
+events and the removal someone asked for of a space below one they remove,
+which keeps that space until it goes, in order until it connects, for seven days, after which the
 sender hears it expired; anything else fails at once, naming the machine
 and when the hub last saw it, and a machine whose link is down keeps what
 its spaces pass up until it opens. A question or approval request that

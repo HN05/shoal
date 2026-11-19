@@ -1,7 +1,9 @@
 //! Removing a space whose tree goes on on other machines: the spaces
 //! directly below it there go first, each through its own machine's
 //! removal, which takes the spaces below it in turn, and one that cannot go
-//! keeps the space, as a child here would. While the hub cannot be asked,
+//! keeps the space, as a child here would. One on an offline machine
+//! cannot go: a removal someone asked for leaves the hub holding its
+//! removal until that machine connects. While the hub cannot be asked,
 //! a removal goes by the directory it last answered with, so it never
 //! takes a space whose children elsewhere it cannot reach.
 use anyhow::{Result, anyhow, bail};
@@ -122,8 +124,16 @@ impl Manager {
             method: serde_json::to_value(method)?,
             summary: format!("the removal of space {id} with the space above it"),
         };
-        let frames = match self.send_forwarded(machine, request, Delivery::Now).await? {
+        let delivery = match below.queues {
+            true => Delivery::Queued,
+            false => Delivery::Now,
+        };
+        let frames = match self.send_forwarded(machine, request, delivery).await? {
             Reply::Answered(answered) => answered.frames,
+            Reply::Queued(_) => bail!(
+                "machine {} is offline, so the hub holds its removal until it connects",
+                machine.name
+            ),
             reply => bail!("the hub answered with an unexpected {reply:?}"),
         };
         for frame in frames {

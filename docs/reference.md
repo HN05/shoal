@@ -955,7 +955,9 @@ that space takes it as a parent here would, and its permissions stay no wider
 than that space's, as its machine last reported them. Removing a space
 removes the spaces below it on other machines first, through their own
 machines; one that cannot go, or a removal that confirmed only the spaces it
-saw here, keeps it. What a space passes up the
+saw here, keeps it. A space on an offline machine cannot go: for a removal
+you or an agent asked for, the hub holds that space's removal until its
+machine connects, and the space above stays until it is removed again. What a space passes up the
 tree, its agent's messages, questions, approval requests, completion, ready
 marks and exits, and the issue and PR activity of a space without an agent,
 reaches the nearest space above with an agent wherever it runs, and that

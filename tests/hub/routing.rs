@@ -312,6 +312,31 @@ fn removing_a_coordinator_removes_its_child_on_another_machine_first() {
 }
 
 #[test]
+fn an_offline_child_keeps_its_coordinator_and_goes_once_its_machine_connects() {
+    let Tree {
+        hub,
+        laptop,
+        coordinator,
+        child,
+        ..
+    } = tree_across_machines();
+    reroute(&laptop, Some("false"));
+    wait_for("the hub to see the laptop go", || {
+        let members = hub.ok(&["hub", "ls"])["members"].clone();
+        let laptop = (members.as_array().unwrap().iter()).find(|member| member["name"] == "laptop");
+        (laptop?["connected"] == false).then_some(())
+    });
+    let refused = hub.run(&["rm", &coordinator, "--wait", "--yes"]);
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    hub.ok(&["status", &coordinator]);
+    reroute(&laptop, None);
+    wait_for("the child's removal on the laptop", || {
+        let gone = laptop.run(&["status", &child, "--json"]);
+        (!gone.status.success()).then_some(())
+    });
+}
+
+#[test]
 fn a_child_restored_on_another_machine_stays_below_its_coordinator() {
     let Tree {
         hub,
