@@ -1,4 +1,5 @@
 //! Xcode simulators as Shoal configures, leases and audits them.
+use crate::config::repo::Lifetime;
 use crate::space_names::SpaceName;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::repository_ids::RepositoryId;
@@ -9,7 +10,7 @@ use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use shoal_states::states;
 
-use crate::{approvals::Lifetime, validate};
+use crate::validate;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]

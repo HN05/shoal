@@ -3,7 +3,7 @@
 use crate::daemon::approvals::ApprovalRequestExt;
 use crate::{
     daemon::{
-        approvals::{ApprovalRequest, Lifetime, SecretSpecification, Specification, Target},
+        approvals::{ApprovalRequest, SecretSpecification, Specification, Target},
         test_support::{ProcessGroup, agent_process, manager, repository},
         workspace::Manager,
         workspace_files::Attacher,
@@ -14,6 +14,7 @@ use crate::{
 };
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::config::repo::Lifetime;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// A workspace `root` with an agent, a chat below it running as the

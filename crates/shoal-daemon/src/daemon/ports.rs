@@ -4,6 +4,7 @@ pub(crate) use crate::model::PortRequest;
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Transaction, params};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::config::repo::Lifetime;
 use std::{
     io,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
@@ -14,7 +15,7 @@ use crate::{
     config::{Ports, repo::ConflictPolicy},
     daemon::{
         allocation::Allocation,
-        approvals::{self, ApprovalRequest, Lifetime, PortSpecification, Specification, Target},
+        approvals::{self, ApprovalRequest, PortSpecification, Specification, Target},
         notifications::NotificationKind,
         scope::Caller,
         store,

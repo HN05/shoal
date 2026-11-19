@@ -2,7 +2,7 @@ use super::super::simctl::DeviceState;
 use super::*;
 use crate::config::options::Options;
 use serde_json::json;
-use shoal_protocol::approvals::Lifetime;
+use shoal_protocol::config::repo::Lifetime;
 
 fn inventory() -> Inventory {
     serde_json::from_value(json!({

@@ -498,8 +498,8 @@ impl RepoConfig {
 pub struct SimulatorsConfig {
     #[option(default = false)]
     pub requires_approval: Option<bool>,
-    #[option(default = shoal_protocol::approvals::Lifetime::default())]
-    pub approval_lifetime: Option<shoal_protocol::approvals::Lifetime>,
+    #[option(default = shoal_protocol::config::repo::Lifetime::default())]
+    pub approval_lifetime: Option<shoal_protocol::config::repo::Lifetime>,
     #[option(list)]
     pub preferred: Vec<String>,
 }

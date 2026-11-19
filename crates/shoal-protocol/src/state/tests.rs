@@ -1,4 +1,5 @@
 use super::*;
+use crate::config::repo::Lifetime;
 
 fn assert_spellings<T>(values: &[(T, &str)])
 where
@@ -37,7 +38,7 @@ where
 #[test]
 fn migrated_enums_preserve_spellings() {
     use crate::{
-        approvals::{DecisionStatus, Lifetime},
+        approvals::DecisionStatus,
         config::repo::ConflictPolicy,
         executions::ExecutionKind,
         recovery::DirectoryState,

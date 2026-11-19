@@ -1,8 +1,7 @@
 use super::*;
 use crate::daemon::approvals::ApprovalRequestExt;
-use crate::daemon::approvals::{
-    DecisionStatus, Lifetime, PortSpecification, Specification, Target,
-};
+use crate::daemon::approvals::{DecisionStatus, PortSpecification, Specification, Target};
+use shoal_protocol::config::repo::Lifetime;
 
 #[tokio::test]
 async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals() {

@@ -1,11 +1,12 @@
 use super::*;
 use crate::{
     daemon::{
-        approvals::{DecisionStatus, Lifetime},
+        approvals::DecisionStatus,
         test_support::{manager, repository},
     },
     secrets::Secret,
 };
+use shoal_protocol::config::repo::Lifetime;
 
 fn configure(manager: &Manager, command: &str, lifetime: Lifetime) {
     let mut config = crate::config::Config::default();

@@ -1,4 +1,5 @@
 //! Resource pools: their configuration, leases and what they have free.
+use crate::config::repo::Lifetime;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use std::{collections::BTreeMap, fmt, path::PathBuf, str::FromStr};
@@ -7,7 +8,7 @@ use anyhow::{Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use shoal_states::{states, text_key};
 
-use crate::{approvals::Lifetime, validate};
+use crate::validate;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct RepositoryView {

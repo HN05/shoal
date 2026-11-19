@@ -11,7 +11,10 @@ use shoal_refs::{BranchName, CommitId};
 use shoal_states::{states, text_key};
 
 use crate::{
-    config::{permissions::PermissionKey, repo::ConflictPolicy},
+    config::{
+        permissions::PermissionKey,
+        repo::{ConflictPolicy, Lifetime},
+    },
     forge::items::{
         action::Edit,
         attach::Attachment,
@@ -21,15 +24,6 @@ use crate::{
     resources::{Definition, LockMode, RepositoryView, Scope},
     sim::Profile,
 };
-
-states!(
-    #[derive(Default)]
-    Lifetime {
-        #[default]
-        Lease => "lease",
-        Workspace => "workspace",
-    }
-);
 
 states!(DecisionStatus {
     Pending => "pending",

@@ -3,6 +3,7 @@
 //! its submodules store, route, word and deliver requests.
 use crate::daemon::item_numbers::ItemNumber;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::config::repo::Lifetime;
 
 mod delivery;
 pub(crate) mod gated;
@@ -13,8 +14,8 @@ mod text;
 
 pub(crate) use routing::governing;
 pub(crate) use shoal_protocol::approvals::{
-    ActionSpecification, ApprovalRequest, DecisionStatus, GateStep, HoldSpecification, Lifetime,
-    MERGE, MergeSpecification, PortSpecification, PushSpecification, ResourceSpecification,
+    ActionSpecification, ApprovalRequest, DecisionStatus, GateStep, HoldSpecification, MERGE,
+    MergeSpecification, PortSpecification, PushSpecification, ResourceSpecification,
     SecretSpecification, SimulatorSpecification, Specification, Target, Undecided,
     UnmergeSpecification,
 };

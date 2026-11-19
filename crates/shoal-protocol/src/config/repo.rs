@@ -40,11 +40,20 @@ states!(
     }
 );
 
+states!(
+    #[derive(Default)]
+    Lifetime {
+        #[default]
+        Lease => "lease",
+        Workspace => "workspace",
+    }
+);
+
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct PortDefinition {
     pub requires_approval: bool,
-    pub approval_lifetime: crate::approvals::Lifetime,
+    pub approval_lifetime: Lifetime,
     pub port: Option<u16>,
     pub env: Option<String>,
     pub reason: Option<String>,

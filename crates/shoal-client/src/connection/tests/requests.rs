@@ -7,9 +7,8 @@ use shoal_core::config::repo::ConflictPolicy;
 use shoal_daemon::test_daemon::ApprovalRequestExt as _;
 use shoal_daemon::test_daemon::{TestDaemon, fake};
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::approvals::{
-    ApprovalRequest, Lifetime, PortSpecification, Specification, Target,
-};
+use shoal_protocol::approvals::{ApprovalRequest, PortSpecification, Specification, Target};
+use shoal_protocol::config::repo::Lifetime;
 use shoal_protocol::files::Attacher;
 use shoal_protocol::model::{
     Completion, Inspection, QueueEntry, Relation, Repository, SyncedRepository, Workspace,

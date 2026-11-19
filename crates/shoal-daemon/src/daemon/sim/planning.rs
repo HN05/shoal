@@ -1,6 +1,7 @@
 //! Deterministic simulator decisions over snapshots; no persistence or simctl calls.
 use crate::daemon::sim::SimulatorExt;
 use anyhow::{Result, bail, ensure};
+use shoal_protocol::config::repo::Lifetime;
 
 use super::{Profile, SimConfig, SimRequest, Simulator, SimulatorState, simctl::Inventory};
 use crate::config::Simulators;
@@ -161,7 +162,7 @@ pub(super) fn resolve_request(
         };
         Profile {
             requires_approval: false,
-            approval_lifetime: shoal_protocol::approvals::Lifetime::Lease,
+            approval_lifetime: Lifetime::Lease,
             device: device.clone(),
             runtime: request.runtime.clone().unwrap_or_default(),
         }
@@ -220,10 +221,10 @@ pub(super) fn resolve_request(
         lifetimes.push(repo.approval_lifetime);
     }
     profile.requires_approval = !lifetimes.is_empty();
-    profile.approval_lifetime = if lifetimes.contains(&shoal_protocol::approvals::Lifetime::Lease) {
-        shoal_protocol::approvals::Lifetime::Lease
+    profile.approval_lifetime = if lifetimes.contains(&Lifetime::Lease) {
+        Lifetime::Lease
     } else {
-        shoal_protocol::approvals::Lifetime::Workspace
+        Lifetime::Workspace
     };
     ensure!(
         allowed || config.allow_any,

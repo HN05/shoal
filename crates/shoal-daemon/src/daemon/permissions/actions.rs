@@ -5,6 +5,7 @@
 use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::config::repo::Lifetime;
 use shoal_protocol::scope_tokens::ScopeToken;
 use std::{
     collections::HashMap,
@@ -16,8 +17,7 @@ use crate::{
     config::permissions::{Acting, PermissionKey, Permissions},
     daemon::{
         approvals::{
-            ActionSpecification, ApprovalRequest, Lifetime, Specification, Target, Undecided,
-            request_action,
+            ActionSpecification, ApprovalRequest, Specification, Target, Undecided, request_action,
         },
         scope::Caller,
         workspace::Manager,

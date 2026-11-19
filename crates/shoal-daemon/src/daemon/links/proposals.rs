@@ -4,6 +4,7 @@
 use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Context, Result, bail, ensure};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::config::repo::Lifetime;
 use shoal_refs::CommitId;
 use std::path::PathBuf;
 
@@ -11,7 +12,7 @@ use crate::{
     config::resolve::Effective,
     daemon::{
         approvals::{
-            ApprovalRequest, DecisionStatus, Lifetime, Specification, Target,
+            ApprovalRequest, DecisionStatus, Specification, Target,
             proposals::{
                 self, Duplicate, Finding, IssueSpecification, ProposalDecision, ProposedAt,
                 PullSpecification, PushSpecification, Recorded,

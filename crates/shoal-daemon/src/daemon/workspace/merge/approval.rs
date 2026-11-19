@@ -3,13 +3,14 @@
 //! a merge's once the branch moved.
 use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Context, Result, bail};
+use shoal_protocol::config::repo::Lifetime;
 use shoal_refs::{BranchName, CommitId};
 
 use crate::{
     daemon::{
         approvals::{
-            ApprovalRequest, DecisionStatus, Lifetime, MERGE, MergeSpecification, Specification,
-            Target, Undecided, UnmergeSpecification,
+            ApprovalRequest, DecisionStatus, MERGE, MergeSpecification, Specification, Target,
+            Undecided, UnmergeSpecification,
         },
         log,
         scope::Caller,

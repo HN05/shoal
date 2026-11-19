@@ -1,10 +1,11 @@
 //! Secrets: what a repository configures, and access to the ones that need
 //! approval.
+use crate::config::repo::Lifetime;
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::approvals::{Lifetime, SecretSpecification};
+use crate::approvals::SecretSpecification;
 
 /// A request to fetch a configured secret.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

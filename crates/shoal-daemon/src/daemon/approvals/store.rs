@@ -3,9 +3,10 @@
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Transaction, params};
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
+use shoal_protocol::config::repo::Lifetime;
 use std::fmt;
 
-use super::{ApprovalRequest, DecisionStatus, Lifetime, MERGE, Target, proposals};
+use super::{ApprovalRequest, DecisionStatus, MERGE, Target, proposals};
 use crate::{
     daemon::{
         events::{self, EventKind},

@@ -1,5 +1,6 @@
 use super::*;
 use crate::protocol::MAX_FRAME;
+use shoal_protocol::config::repo::Lifetime;
 
 #[tokio::test]
 async fn an_oversized_reply_is_answered_with_an_error_saying_so() {
@@ -39,7 +40,7 @@ fn refusals_keep_their_codes_under_context() {
 #[test]
 fn an_action_held_for_approval_reaches_the_client_as_its_request() {
     use crate::daemon::approvals::{
-        ApprovalRequest, ApprovalRequestExt, HoldSpecification, Lifetime, Specification, Target,
+        ApprovalRequest, ApprovalRequestExt, HoldSpecification, Specification, Target,
     };
 
     let space = shoal_ids::space_ids::SpaceId::from("space");

@@ -7,6 +7,7 @@ use shoal_core::execution::recovery::LastSessionExt as _;
 use shoal_core::removal::{InspectionPolicy, UnsavedWork};
 use shoal_daemon::test_daemon::{ApprovalRequestExt as _, HANG, TestDaemon, store_issue_proposal};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::config::repo::Lifetime;
 use shoal_protocol::files::Attacher;
 use shoal_protocol::model::{HoldPlacer, Relation};
 use shoal_protocol::protocol::{self, ErrorCode, RemoteError, Request, SubscriptionMethod};
@@ -197,9 +198,7 @@ async fn a_subscription_sends_its_snapshot_then_each_kind_of_change() {
 #[tokio::test]
 async fn an_approval_request_reaches_a_subscription() {
     use shoal_core::config::repo::ConflictPolicy;
-    use shoal_protocol::approvals::{
-        ApprovalRequest, Lifetime, PortSpecification, Specification, Target,
-    };
+    use shoal_protocol::approvals::{ApprovalRequest, PortSpecification, Specification, Target};
     let daemon = TestDaemon::start().await;
     let workspace = daemon.workspace("requester").await;
     let mut subscription = subscribe(daemon.connector(), &[Topic::Approvals]).await;
