@@ -190,3 +190,24 @@ fn the_user_starts_a_space_below_another_machine_s_space_there() {
     let child = on_laptop(&machines, "child", "workspace");
     assert_eq!(child["parent"], there.as_str(), "{child}");
 }
+
+#[test]
+fn a_start_below_another_machine_s_space_leaves_a_repository_it_lacks_to_that_machine() {
+    let machines = machines();
+    // A repository only the laptop has, with an origin the hub never cloned.
+    give_origin(&machines.laptop);
+    let notes = machines.laptop.repo.to_str().unwrap().to_owned();
+    let there = workspace_of(&machines.laptop, &notes, "there");
+    on_laptop(&machines, "there", "workspace");
+    // From the hub's own checkout, whose repository is another one.
+    let args = ["start", "--machine", "laptop", "--parent", &there];
+    let mut command = machines.hub.command();
+    command.current_dir(&machines.hub.repo);
+    let rest = ["--branch", "child", "--agent", "pi", "--json"];
+    let started = machines
+        .hub
+        .output(command.args([&args[..], &rest[..]].concat()));
+    assert!(started.status.success(), "{}", printed(&started));
+    let child = on_laptop(&machines, "child", "workspace");
+    assert_eq!(child["parent"], there.as_str(), "{child}");
+}

@@ -271,17 +271,29 @@ impl Manager {
     /// none for a chat without one, or for a repository this machine has
     /// not registered.
     pub(crate) async fn repository_elsewhere(&self, id: &SpaceId) -> Result<Option<RepositoryId>> {
-        let Some((_, directory)) = self.directory_or_known().await? else {
-            return Ok(None);
-        };
-        let listed = (directory.spaces.iter()).find(|listed| &listed.space.id == id);
-        let origin = listed.and_then(|listed| listed.space.repository.as_ref()?.origin.clone());
-        let Some(origin) = origin else {
+        let Some(origin) = self.origin_elsewhere(id).await? else {
             return Ok(None);
         };
         let repositories = self.repositories().await?;
         let registered = crate::repository::with_origin(&repositories, &origin).await;
         Ok(registered.map(|repository| repository.id.clone()))
+    }
+
+    /// Whether the space `id`, which another machine runs, is in a
+    /// repository this machine has not registered.
+    pub(crate) async fn unregistered_elsewhere(&self, id: &SpaceId) -> Result<bool> {
+        let listed = self.origin_elsewhere(id).await?.is_some();
+        Ok(listed && self.repository_elsewhere(id).await?.is_none())
+    }
+
+    /// The origin of the repository of the space `id`, which another
+    /// machine runs, as the hub lists it; none for a chat without one.
+    async fn origin_elsewhere(&self, id: &SpaceId) -> Result<Option<String>> {
+        let Some((_, directory)) = self.directory_or_known().await? else {
+            return Ok(None);
+        };
+        let listed = (directory.spaces.iter()).find(|listed| &listed.space.id == id);
+        Ok(listed.and_then(|listed| listed.space.repository.as_ref()?.origin.clone()))
     }
 
     /// The origin other machines know the registered repository `id` by.

@@ -12,6 +12,7 @@ use anyhow::{Context as _, Result, bail, ensure};
 use shoal_protocol::hub::Member;
 use shoal_protocol::launches::{Carried, Launch, StartTarget};
 use shoal_protocol::protocol::{LaunchMethod, Launched, Operation};
+use shoal_protocol::space_names::SpaceSelector;
 
 use super::ManagerReads;
 use crate::{
@@ -131,7 +132,8 @@ impl Manager {
     /// it names, refused when this machine has not registered it, else the
     /// one an item it names, its parent or its directory belongs to; none
     /// for one whose mode starts it without one, or that this machine
-    /// finds none for, which the other machine finds on its own.
+    /// finds none for, as for a parent elsewhere in a repository it has
+    /// not registered, which the other machine finds on its own.
     async fn launch_repository(
         &self,
         launch: &Launch,
@@ -147,8 +149,23 @@ impl Manager {
             let repository = crate::repository::select(&repositories, selector).await?;
             return Ok(Some(repository.clone()));
         }
+        if self.parent_unregistered(launch).await? {
+            return Ok(None);
+        }
         let reads = ManagerReads::new(self, caller);
         launches::shape::launch_repository(&reads, launch).await
+    }
+
+    /// Whether the space `launch` goes below runs on another machine in a
+    /// repository this machine has not registered.
+    async fn parent_unregistered(&self, launch: &Launch) -> Result<bool> {
+        let Some(SpaceSelector::Id(parent)) = &launch.parent else {
+            return Ok(false);
+        };
+        if self.find_space(parent).await?.is_some() {
+            return Ok(false);
+        }
+        self.unregistered_elsewhere(parent).await
     }
 }
 
