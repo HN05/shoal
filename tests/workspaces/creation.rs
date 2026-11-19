@@ -2681,7 +2681,11 @@ fn create_outside_a_space_makes_top_level_workspaces_without_an_agent() {
         assert_eq!(created["running"], false, "{created}");
     }
     assert_eq!(on_branch["branch"], "scratch");
-    let placed = fixture.root.path().join("placed");
+    // The daemon records the path as the file system resolves it, such as
+    // macOS's /tmp in /private/tmp.
+    let placed = fs::canonicalize(fixture.root.path())
+        .unwrap()
+        .join("placed");
     assert_eq!(on_branch["path"], placed.to_str().unwrap());
     assert_eq!(on_issue["name"], "Clarify retries");
     assert_eq!(on_issue["links"]["issues"][0]["url"], url);
