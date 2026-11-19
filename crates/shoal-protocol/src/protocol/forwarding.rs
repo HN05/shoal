@@ -164,7 +164,8 @@ impl Operation {
                         | CiMethod::StartCiRun { .. }
                 )
                 | Self::Branch(
-                    BranchMethod::ListBranches { .. } | BranchMethod::DeleteBranches { .. }
+                    BranchMethod::ListForgeBranches { .. }
+                        | BranchMethod::DeleteForgeBranches { .. }
                 )
         )
     }

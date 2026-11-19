@@ -10,7 +10,7 @@ pub enum BranchMethod {
     /// or more `forge_branches` frames and then `ok`; with `merged`, only
     /// those the default branch is known to have the changes of, or to
     /// lack them.
-    ListBranches {
+    ListForgeBranches {
         #[serde(flatten)]
         target: super::RepoTarget,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -20,7 +20,7 @@ pub enum BranchMethod {
     /// none when one is refused, answered in one or more `deleted_branches`
     /// frames and then `ok`; `force` deletes those whose changes the
     /// default branch lacks.
-    DeleteBranches {
+    DeleteForgeBranches {
         #[serde(flatten)]
         target: super::RepoTarget,
         branches: Vec<BranchName>,

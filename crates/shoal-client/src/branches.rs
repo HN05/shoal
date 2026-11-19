@@ -15,7 +15,7 @@ pub async fn list(
     target: RepoTarget,
     merged: Option<bool>,
 ) -> Result<Vec<ListedBranch>> {
-    pages(daemon, BranchMethod::ListBranches { target, merged }).await
+    pages(daemon, BranchMethod::ListForgeBranches { target, merged }).await
 }
 
 /// Delete `branches` on the forge of the `target` repository, those whose
@@ -27,7 +27,7 @@ pub async fn delete(
     branches: Vec<String>,
     force: bool,
 ) -> Result<Vec<DeletedBranch>> {
-    let method = BranchMethod::DeleteBranches {
+    let method = BranchMethod::DeleteForgeBranches {
         target,
         branches: branches.into_iter().map(Into::into).collect(),
         force,

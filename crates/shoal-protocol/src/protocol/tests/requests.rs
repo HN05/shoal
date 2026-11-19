@@ -206,6 +206,9 @@ const REQUESTS: &[&str] = &[
     r#"{"list_ci_runs":{"repository":"https://forge.example/team/tool","filter":{"branch":null,"workflow":"ci.yml","limit":10}}}"#,
     r#"{"start_ci_run":{"space":{"space":"fix"},"workflow":null,"branch":null,"inputs":{"level":"high"}}}"#,
     r#"{"approve_ci_runs":{"space":{"space":"fix"},"run":null,"pr":"7"}}"#,
+    // Branches on the forge.
+    r#"{"list_forge_branches":{"space":{"space":"fix"},"merged":false}}"#,
+    r#"{"delete_forge_branches":{"checkout":"repo","repository":"team/tool","branches":["old-fix"],"force":true}}"#,
     // Reconciliation.
     r#"{"reconcile":{"workspace":null,"options":{"repair":true,"stop":false,"acknowledge_stopped":false,"reclaim":false}}}"#,
     // Notifications and messages.
@@ -332,6 +335,7 @@ fn every_request_has_its_json_above() {
         variants::<DemoMethod>(),
         variants::<ItemMethod>(),
         variants::<CiMethod>(),
+        variants::<BranchMethod>(),
         variants::<NotificationMethod>(),
         variants::<QuestionMethod>(),
         variants::<ApprovalMethod>(),

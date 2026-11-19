@@ -31,7 +31,7 @@ impl Operation {
                         | CiMethod::CiRunJobLog { .. }
                         | CiMethod::ListCiRuns { .. }
                 )
-                | Self::Branch(BranchMethod::ListBranches { .. })
+                | Self::Branch(BranchMethod::ListForgeBranches { .. })
                 | Self::Demo(DemoMethod::ListDemos { .. })
                 | Self::Execution(
                     ExecutionMethod::CheckMerge

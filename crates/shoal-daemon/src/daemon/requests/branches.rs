@@ -18,11 +18,11 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     match method {
-        BranchMethod::ListBranches { target, merged } => {
+        BranchMethod::ListForgeBranches { target, merged } => {
             let listed = manager.list_branches(&target, merged, caller).await;
             Ok(Answer::pages(listed, Body::ForgeBranches))
         }
-        BranchMethod::DeleteBranches {
+        BranchMethod::DeleteForgeBranches {
             target,
             branches,
             force,
@@ -41,14 +41,14 @@ impl Scoped for BranchMethod {
     ) -> Result<Option<&mut SpaceSelector>> {
         match self {
             // Reads go out as the agent account wherever they run.
-            BranchMethod::ListBranches { target, .. } => {
+            BranchMethod::ListForgeBranches { target, .. } => {
                 read_context_space(manager, caller, own_context(caller, target)).await
             }
             // A deletion is made from the caller's own space, or a space below
             // it, and a chat without a repository makes it in a registered
             // checkout as its own space; its `push` permission decides it
             // once it knows the commits it deletes.
-            BranchMethod::DeleteBranches { target, .. } => {
+            BranchMethod::DeleteForgeBranches { target, .. } => {
                 let context = own_context(caller, target);
                 Ok(Some(change_context_space(manager, caller, context).await?))
             }
