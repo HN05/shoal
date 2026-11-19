@@ -354,7 +354,9 @@ A command, merge or unmerge whose start falls in such an update, or in any
 lifecycle operation that returns the workspace to ready or failed on its own,
 waits for it to end and is prepared again for the workspace it leaves: the
 window is Shoal's own, not a reason the command cannot run. Removal, a
-failure and setup, which may wait for other work first, still refuse it.
+failure and setup, which may wait for other work first, still refuse it, as
+such an operation refuses an agent's registration, which holds the queue's
+admission that a stop of its workspace needs.
 The request answers once the workspace is recorded, so a
 caller gets its number and its agent's entry without waiting for Git or
 setup; until its worktree exists, what reads it refuses the workspace, and

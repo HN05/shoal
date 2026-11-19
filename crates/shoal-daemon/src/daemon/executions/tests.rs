@@ -846,3 +846,22 @@ async fn a_command_started_while_a_repair_has_its_worktree_away_runs_once_it_end
     let started = bounded(start).await.unwrap().unwrap();
     assert_eq!(started.space.id, workspace.id);
 }
+
+#[tokio::test]
+async fn an_agent_registering_during_an_update_is_refused_instead_of_waiting() {
+    let (_root, manager, workspace) = fixture("exit 0").await;
+    manager
+        .reserve_lifecycle(&workspace.id, WorkspaceState::Updating)
+        .await
+        .unwrap();
+    // Its registration holds the queue's admission, which a stop needs.
+    let refused = bounded(manager.begin_agent_execution(workspace.id.as_str()))
+        .await
+        .unwrap_err();
+    let reason = crate::refusal::Reason::of(&refused);
+    assert_eq!(
+        reason,
+        Some(crate::refusal::Reason::NotReady),
+        "{refused:#}"
+    );
+}

@@ -13,6 +13,7 @@ use super::{
     workspace::reservation::{self, Reserved},
 };
 use crate::daemon::log;
+use crate::refusal::{Reason, Refusal};
 use crate::{
     config::repo::Cache,
     daemon::{scope::Caller, store},
@@ -109,6 +110,15 @@ struct ExecutionRecord {
     wrapper: Option<Identity>,
     demo: Option<Launch>,
     place: Option<ExecutionPlace>,
+}
+
+impl ExecutionRecord {
+    /// Whether its start waits out a lifecycle operation that passes. A
+    /// tracked agent's does not: its registration holds the agent queue's
+    /// admission, which a stop of its workspace needs.
+    fn waits_out_reservations(&self) -> bool {
+        self.kind != ExecutionKind::Setup && !self.agent
+    }
 }
 
 /// The directories a space's processes use: a workspace's repository's
@@ -396,19 +406,16 @@ impl Manager {
     ) -> Result<(SpaceId, PreparedExecution, RegisteredExecution)> {
         loop {
             let (space_id, preparation) = self
-                .prepare_execution(
-                    selector,
-                    record.wrapper.as_ref(),
-                    record.kind,
-                    caller,
-                    merge.clone(),
-                )
+                .prepare_execution(selector, &record, caller, merge.clone())
                 .await?;
             match self.register_execution(&space_id, record.clone()).await {
-                Err(error) if error.is::<Reserved>() => {
+                Err(error) if error.is::<Reserved>() && record.waits_out_reservations() => {
                     // The operation may need the gates the preparation holds.
                     drop(preparation);
                     self.await_reservation_end(&space_id).await?;
+                }
+                Err(error) if error.is::<Reserved>() => {
+                    return Err(Refusal::wrap(Reason::NotReady, error));
                 }
                 registered => return Ok((space_id, preparation, registered?)),
             }
@@ -552,12 +559,11 @@ impl Manager {
     async fn prepare_execution(
         &self,
         selector: &SpaceSelector,
-        wrapper: Option<&Identity>,
-        kind: ExecutionKind,
+        record: &ExecutionRecord,
         caller: Option<&Caller>,
         merge: Option<crate::model::MergeOptions>,
     ) -> Result<(SpaceId, PreparedExecution)> {
-        if let Some(wrapper) = wrapper {
+        if let Some(wrapper) = &record.wrapper {
             ensure!(
                 process::alive(wrapper)?,
                 "execution wrapper is no longer alive"
@@ -568,11 +574,11 @@ impl Manager {
                 // An operation that passes, such as a reclamation, may leave
                 // the worktree unverifiable until it ends; registration
                 // checks again in its transaction.
-                if kind != ExecutionKind::Setup {
+                if record.waits_out_reservations() {
                     self.await_reservation_end(&workspace.id).await?;
                 }
                 let preparation = self
-                    .prepare_execution_kind(&workspace, kind, caller, merge)
+                    .prepare_execution_kind(&workspace, record.kind, caller, merge)
                     .await?;
                 (workspace.id, preparation)
             }
