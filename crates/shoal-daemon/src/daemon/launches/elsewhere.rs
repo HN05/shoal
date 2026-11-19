@@ -48,6 +48,14 @@ impl Manager {
             .map(Some)
     }
 
+    /// Whether `launch` names another joined machine to start on.
+    pub(super) async fn launches_elsewhere(&self, launch: &Launch) -> Result<bool> {
+        match &launch.machine {
+            Some(named) => Ok(!self.named_machine(named).await?.own),
+            None => Ok(false),
+        }
+    }
+
     /// What `machine` answers `launch` from `caller` with, through the hub.
     async fn forward_launch(
         &self,

@@ -108,12 +108,16 @@ impl Manager {
     /// Refuse what starting the new workspace `launch` names for `caller`
     /// would refuse, before anything is created, returning instead the
     /// existing workspace that has the branch it names, which the start
-    /// goes into.
+    /// goes into; a launch that names another joined machine passes, since
+    /// that machine checks it as it starts it.
     pub(crate) async fn check_workspace_launch(
         &self,
         mut launch: Launch,
         caller: Option<&Caller>,
     ) -> Result<Option<Workspace>> {
+        if self.launches_elsewhere(&launch).await? {
+            return Ok(None);
+        }
         launches::ensure_copy_fits(&launch)?;
         self.select_launch_spaces(&mut launch).await?;
         self.check_workspace_placement(&launch, caller).await
