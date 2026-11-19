@@ -72,6 +72,11 @@ async fn gated_secrets_need_a_decision_bound_to_their_source() -> Result<()> {
 
     let asked = pending(request(&fixture, scoped, "GATED", Some("sign in")).await?);
     assert_eq!(asked.target, Target::Secret("GATED".into()));
+    let token = SecretSpecification {
+        command: vec!["token".into()],
+        tools: vec!["agent-browser".into()],
+    };
+    assert_eq!(asked.specification, Specification::Secret(token.clone()));
     assert_eq!(fixture.daemon.announced.lock().unwrap().len(), 1);
     // The launcher's check names the same request until the user decides.
     assert_eq!(
@@ -87,14 +92,16 @@ async fn gated_secrets_need_a_decision_bound_to_their_source() -> Result<()> {
         Some(true)
     );
 
-    // A launcher started before the configuration changed cannot use it.
+    // A changed source needs a new decision, and a launcher started before
+    // the change cannot use it.
     fixture.configure(&secrets("other-token"));
+    assert!(
+        request(&fixture, scoped, "GATED", None).await.is_err(),
+        "the grant covers the source it was approved for"
+    );
     let stale = SecretRequest {
         reason: None,
-        source: Some(SecretSpecification {
-            command: vec!["token".into()],
-            tools: vec!["agent-browser".into()],
-        }),
+        source: Some(token),
     };
     assert!(acquire(&fixture, scoped, "OPEN", stale).await.is_err());
 

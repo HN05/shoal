@@ -284,7 +284,7 @@ pub(crate) struct StandInHook {
 }
 
 /// Approval requests by owner, target and name, each under a key of its
-/// own, which a test decides; every registered repository can be borrowed,
+/// own and bound to its settings as the daemon's are, which a test decides; every registered repository can be borrowed,
 /// and the fixture's workspace is the only space.
 #[derive(Default)]
 pub(crate) struct StandInRecords {
@@ -317,10 +317,15 @@ impl Records for StandInRecords {
         if !requests.contains_key(&key) {
             ensure!(!request.reason.is_empty(), ReasonRequired);
         }
+        let specification = request.specification.clone();
         let stored = requests.entry(key).or_insert_with(|| ApprovalRequest {
             key: format!("request-{}", self.made.fetch_add(1, Ordering::Relaxed)),
             ..request
         });
+        ensure!(
+            stored.specification == specification,
+            "approval request settings changed"
+        );
         Ok((stored.status != DecisionStatus::Approved).then(|| stored.clone()))
     }
 
