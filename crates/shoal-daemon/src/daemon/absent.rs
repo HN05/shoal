@@ -51,26 +51,35 @@ impl<'a> Routing<'a> {
     }
 }
 
-/// How a request that failed here goes on: its error with the answer it
-/// got here, how it goes to another machine, its caller when its scope
-/// accepted it, and the daemon operation it holds while it is answered.
-pub(super) type Failed<'a> = (
-    (&'a anyhow::Error, Body),
-    Option<Routing<'a>>,
-    Option<Option<Caller>>,
-    OperationGuard,
-);
+/// A request that failed here, which another machine may answer instead.
+pub(super) struct Failed<'a> {
+    pub error: &'a anyhow::Error,
+    /// The answer it got here.
+    pub refused: Body,
+    /// How it goes to another machine.
+    pub routing: Option<Routing<'a>>,
+    /// Its caller, when its scope accepted it.
+    pub caller: Option<Option<Caller>>,
+    /// The daemon operation it holds while it is answered.
+    pub operation: OperationGuard,
+}
 
 /// Answer the request `request_id`, which failed with `error`, from the
 /// machine that has the space `error` names when another one does, else
-/// with `refused`, the answer it got here. `caller` is the request's,
-/// when its scope accepted it.
+/// with `refused`, the answer it got here.
 pub(super) async fn answer(
     mut stream: UnixStream,
     server: &Server,
     request_id: u64,
-    ((error, refused), routing, caller, operation): Failed<'_>,
+    failed: Failed<'_>,
 ) -> Result<()> {
+    let Failed {
+        error,
+        refused,
+        routing,
+        caller,
+        operation,
+    } = failed;
     let (Some(routing), Some(space)) = (routing, Refusal::absent_space(error)) else {
         return reply(&mut stream, request_id, refused).await;
     };

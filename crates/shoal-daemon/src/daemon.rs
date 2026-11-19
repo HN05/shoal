@@ -583,9 +583,14 @@ async fn serve_request(
     let caller = match accepted.await? {
         Accepted::Caller(caller) => caller,
         Accepted::Refused(error) => {
-            let refused = (&error, answer::refusal(&error));
-            let answered = (refused, routing, None, operation_guard);
-            return absent::answer(stream, &server, request.id, answered).await;
+            let failed = absent::Failed {
+                error: &error,
+                refused: answer::refusal(&error),
+                routing,
+                caller: None,
+                operation: operation_guard,
+            };
+            return absent::answer(stream, &server, request.id, failed).await;
         }
         Accepted::Answered => return Ok(()),
     };
@@ -599,9 +604,14 @@ async fn serve_request(
     };
     match answer {
         Ok(answer::Answer::Failed(error)) | Err(error) => {
-            let failed = (&error, answer::failure(&error));
-            let answered = (failed, routing, Some(caller), operation_guard);
-            absent::answer(stream, &server, request.id, answered).await
+            let failed = absent::Failed {
+                error: &error,
+                refused: answer::failure(&error),
+                routing,
+                caller: Some(caller),
+                operation: operation_guard,
+            };
+            absent::answer(stream, &server, request.id, failed).await
         }
         Ok(answer) => (answer.send(stream, request.id, &server.manager, operation_guard)).await,
     }
