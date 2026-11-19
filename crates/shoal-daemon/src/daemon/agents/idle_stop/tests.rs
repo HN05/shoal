@@ -778,8 +778,7 @@ async fn an_agent_the_user_is_away_from_sleeps_to_make_room_for_queued_work() {
     manager.stop_idle_agents(later()).await.unwrap();
     assert!(!*away.stop.borrow());
 
-    let queued =
-        crate::daemon::workspace::agent_queue::tests::request(&manager, &repo, "later", false);
+    let queued = crate::daemon::agent_queue::tests::request(&manager, &repo, "later", false);
     let launch = manager.queue_add(queued.await).await.unwrap();
     assert_eq!(
         launch.entry.unwrap().state,

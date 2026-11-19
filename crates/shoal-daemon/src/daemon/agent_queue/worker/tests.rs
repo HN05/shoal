@@ -1,10 +1,8 @@
 use crate::{
     daemon::{
+        agent_queue::tests::{connected_agent, create, launch_in, register},
         test_support::{global_config, manager},
-        workspace::{
-            Manager,
-            agent_queue::tests::{connected_agent, create, launch_in, register},
-        },
+        workspace::Manager,
     },
     model::{QueueRequest, Workspace},
 };

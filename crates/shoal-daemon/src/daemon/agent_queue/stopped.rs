@@ -555,9 +555,7 @@ impl Manager {
 
     /// The executions of stopped agents whose restore the daemon starts from
     /// the queue, unlike one a waiting wrapper restores.
-    pub(in crate::daemon::workspace) async fn queued_stopped_restores(
-        &self,
-    ) -> Result<HashSet<ExecutionId>> {
+    pub(in crate::daemon) async fn queued_stopped_restores(&self) -> Result<HashSet<ExecutionId>> {
         self.store.run(|db| stopped_restores(db)).await
     }
 

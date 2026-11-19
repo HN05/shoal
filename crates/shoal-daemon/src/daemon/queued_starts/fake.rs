@@ -4,7 +4,7 @@ use anyhow::Result;
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use std::{collections::BTreeMap, sync::Mutex};
 
-use crate::daemon::workspace::agent_queue::Start;
+use crate::daemon::agent_queue::Start;
 
 /// Each start with the environment its worker would receive.
 pub static STARTED: Mutex<Vec<(QueueEntryId, BTreeMap<String, String>)>> = Mutex::new(Vec::new());

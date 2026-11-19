@@ -753,7 +753,7 @@ fn recorded(db: &Connection, owner: &Path, root: Option<&SpaceId>) -> Result<Vec
         chat.progress = crate::daemon::progress::current(db, &chat.id)?;
         chat.sleep = crate::daemon::idle_wakes::sleep::current(db, &chat.id)?;
         chat.wake_at = crate::daemon::wake_timers::due_at(db, &chat.id)?;
-        chat.asleep = workspace::agent_queue::asleep::current(db, &chat.id)?;
+        chat.asleep = super::agent_queue::asleep::current(db, &chat.id)?;
         chat.restart = crate::daemon::restarts::record::current(db, &chat.id)?;
         Ok(chat)
     })

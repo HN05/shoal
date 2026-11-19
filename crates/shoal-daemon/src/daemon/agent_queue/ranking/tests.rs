@@ -5,11 +5,11 @@ use rusqlite::params;
 use super::*;
 use crate::{
     daemon::{
-        test_support::{global_config, manager},
-        workspace::agent_queue::{
+        agent_queue::{
             Serving, last_seq,
             tests::{add, create, launch_in, limit_globally, register, request},
         },
+        test_support::{global_config, manager},
     },
     model::{Blocker, QueueRequest},
     state::QueueState,

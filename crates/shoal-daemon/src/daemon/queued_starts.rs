@@ -7,10 +7,7 @@ use anyhow::Result;
 use tokio::{io::AsyncReadExt as _, net::UnixStream};
 
 use crate::{
-    daemon::{
-        log,
-        workspace::{Manager, agent_queue::Start},
-    },
+    daemon::{agent_queue::Start, log, workspace::Manager},
     paths::Paths,
     protocol::{self, Body, ErrorCode, Response},
 };

@@ -23,7 +23,7 @@ fn caller(space: &SpaceId) -> Caller {
 async fn launch(manager: &Manager, workspace: &Workspace, blocker: &SpaceId) {
     let request = QueueRequest {
         blockers: vec![Blocker::Space(blocker.to_string())],
-        ..crate::daemon::workspace::agent_queue::tests::launch_in(workspace, false)
+        ..crate::daemon::agent_queue::tests::launch_in(workspace, false)
     };
     manager.queue_add(request).await.unwrap();
 }

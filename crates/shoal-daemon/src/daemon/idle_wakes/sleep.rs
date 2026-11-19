@@ -88,7 +88,7 @@ fn record(
     match (sleep, timer) {
         (None, _) => {
             wake_timers::cancel(tx, id)?;
-            crate::daemon::workspace::agent_queue::asleep::wake(tx, id)?;
+            crate::daemon::agent_queue::asleep::wake(tx, id)?;
         }
         (Some(_), Some(timer)) => wake_timers::set(tx, id, &timer)?,
         (Some(_), None) => {}

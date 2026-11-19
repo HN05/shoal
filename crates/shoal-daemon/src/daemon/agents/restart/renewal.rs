@@ -10,7 +10,7 @@ use anyhow::{Result, anyhow};
 
 use super::{Agent, Manager, Restarts};
 use crate::{
-    daemon::workspace::agent_queue::Start,
+    daemon::agent_queue::Start,
     model::{RunningAgent, Space},
 };
 

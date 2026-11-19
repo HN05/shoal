@@ -1,7 +1,7 @@
 use crate::{
     daemon::{
+        agent_queue::tests::launch_in,
         test_support::{global_config, manager, repository},
-        workspace::agent_queue::tests::launch_in,
     },
     model::QueueRequest,
     protocol::{QueueMethod, RetryStart},

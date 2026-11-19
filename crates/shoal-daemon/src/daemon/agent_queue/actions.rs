@@ -308,7 +308,7 @@ impl Manager {
 
     /// Delete `repository`'s job entry `id` if it still waits, leaving its
     /// `job` to other runners, returning whether it still waited.
-    pub(in crate::daemon::workspace) async fn pass_over_job(
+    pub(in crate::daemon) async fn pass_over_job(
         &self,
         id: &QueueEntryId,
         repository: &RepositoryId,

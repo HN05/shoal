@@ -23,12 +23,10 @@ use super::{
 use crate::{
     agent::Agent,
     daemon::{
+        agent_queue::{self, OneShotAdmission, Serving},
         approvals::ApprovalRequest,
         log, oneshot,
-        workspace::{
-            Manager,
-            agent_queue::{self, OneShotAdmission, Serving},
-        },
+        workspace::Manager,
     },
     reviews::{FailureReason, output},
     shoal_dirs::{Contents, ShoalDir},

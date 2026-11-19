@@ -14,9 +14,10 @@ use tokio::{
 };
 
 use super::{
+    agent_queue::Grant,
     agents::{Pause, Protection},
     executions::StopRequest,
-    workspace::{Grant, Manager},
+    workspace::Manager,
 };
 use crate::daemon::log;
 use crate::{

@@ -1,8 +1,8 @@
 use super::*;
 use crate::{
     daemon::{
+        agent_queue::tests::{admitted, create, launch_in, register, request, started},
         test_support::{commit, global_config, manager},
-        workspace::agent_queue::tests::{admitted, create, launch_in, register, request, started},
         workspace_files::Attacher,
     },
     model::{QueueEntry, QueueRequest, Repository},

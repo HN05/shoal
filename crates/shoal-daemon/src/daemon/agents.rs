@@ -13,13 +13,11 @@ use std::{
 use tokio::sync::{OwnedRwLockReadGuard, watch};
 
 use super::{
+    agent_queue::{Grant, OneShotStop},
     agent_turns::Turn,
     capacity::Activity,
     gates::GuardMode,
-    workspace::{
-        Manager,
-        agent_queue::{Grant, OneShotStop},
-    },
+    workspace::Manager,
 };
 pub(crate) use crate::model::Protection;
 

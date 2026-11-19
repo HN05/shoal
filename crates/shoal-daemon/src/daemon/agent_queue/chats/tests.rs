@@ -2,11 +2,9 @@ use std::collections::BTreeMap;
 
 use crate::{
     daemon::{
+        agent_queue::tests::{add, admitted, register, started},
         test_support::{global_config, manager},
-        workspace::{
-            Manager,
-            agent_queue::tests::{add, admitted, register, started},
-        },
+        workspace::Manager,
     },
     model::{ChatQueueRequest, Repository},
     state::QueueState,

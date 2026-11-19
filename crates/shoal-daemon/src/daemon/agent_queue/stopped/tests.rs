@@ -2,14 +2,14 @@ use super::*;
 use crate::execution::recovery::LastSessionExt;
 use crate::{
     daemon::{
-        test_support::{global_config, manager},
-        workspace::agent_queue::{
+        agent_queue::{
             Grant,
             tests::{
                 add, admitted, await_restore, bounded, connected_agent, create, limit_globally,
                 queue, register, started, stopped_agents,
             },
         },
+        test_support::{global_config, manager},
         workspace_files::Attacher,
     },
     execution::recovery::record_path,
@@ -476,7 +476,7 @@ async fn a_restore_whose_agent_never_starts_expires_and_says_so() {
     manager.dispatch_queue().await.unwrap();
     assert!(started(&entry.id));
     let past = crate::time::UnixTime::now()
-        - crate::daemon::workspace::agent_queue::dispatch::START_GRACE
+        - crate::daemon::agent_queue::dispatch::START_GRACE
         - std::time::Duration::from_secs(1);
     manager
         .store

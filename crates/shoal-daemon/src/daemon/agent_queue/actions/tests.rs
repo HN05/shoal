@@ -1,11 +1,11 @@
 use super::*;
 use crate::{
     daemon::{
-        test_support::manager,
-        workspace::agent_queue::tests::{
+        agent_queue::tests::{
             add, await_restore, bounded, create, launch_in, limit_globally, register, request,
             started, stopped_agents,
         },
+        test_support::manager,
     },
     model::{Blocker, QueueRequest},
     protocol::QueuedLaunches,

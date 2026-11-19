@@ -4,8 +4,8 @@ use rusqlite::params;
 
 use crate::{
     daemon::{
+        agent_queue::tests::{add, admitted, create, launch_in, register},
         test_support::{global_config, manager},
-        workspace::agent_queue::tests::{add, admitted, create, launch_in, register},
     },
     execution::recovery::record_path,
     model::QueueRequest,

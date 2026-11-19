@@ -4,7 +4,6 @@ use crate::config_file::ConfigExt;
 use crate::paths::StateFiles;
 use shoal_ids::execution_ids::ExecutionId;
 mod adoption;
-pub(crate) mod agent_queue;
 mod branch_rename;
 mod branches;
 mod checkpoints;
@@ -49,7 +48,6 @@ mod tree;
 mod usage;
 mod xcode;
 
-pub(crate) use agent_queue::Grant;
 pub(crate) use branches::NewWorktreeOptions;
 pub(crate) use contributions::holds::{
     ContributionHold, RESUME_WINDOW as CONTRIBUTION_RESUME_WINDOW,
@@ -117,7 +115,7 @@ pub struct Manager {
     pub overload_recovery: super::overload_recovery::OverloadRecovery,
     /// The busy CPU the overload monitor reads for job admission.
     pub(crate) busy_cpu: super::busy_cpu::BusyCpu,
-    pub agent_queue: agent_queue::AgentQueue,
+    pub agent_queue: super::agent_queue::AgentQueue,
     /// The contributions a running `shoal contribute` keeps from cleanup.
     pub(crate) contribution_holds: contributions::holds::ContributionHolds,
     pub(crate) operations: Arc<crate::daemon::operations::Operations>,
@@ -477,7 +475,7 @@ fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<
     workspace.progress = crate::daemon::progress::current(db, &workspace.id)?;
     workspace.sleep = crate::daemon::idle_wakes::sleep::current(db, &workspace.id)?;
     workspace.wake_at = crate::daemon::wake_timers::due_at(db, &workspace.id)?;
-    workspace.asleep = agent_queue::asleep::current(db, &workspace.id)?;
+    workspace.asleep = super::agent_queue::asleep::current(db, &workspace.id)?;
     workspace.restart = crate::daemon::restarts::record::current(db, &workspace.id)?;
     stack::load(db, workspace)?;
     copies::load(db, workspace)?;
