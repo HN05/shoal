@@ -121,11 +121,15 @@ impl Manager {
 
     /// Write what this daemon answers `method` from `caller` with on its
     /// own socket to `out`, ending it as the answer ends, until no one
-    /// reads `out` any longer.
+    /// reads `out` any longer. The token stands for `caller` only until
+    /// the answer starts, once the request was decided: what its machine
+    /// vouched then would otherwise outlast what that machine vouches for
+    /// its later requests, which it checks against the scope as the answer
+    /// goes on.
     async fn stream_from_socket(&self, caller: Vouched, method: Method, mut out: Outgoing) {
-        let held = self.hub.vouches.hold(caller);
+        let mut held = Some(self.hub.vouches.hold(caller));
         let request = Request {
-            scope: Some(held.token.clone()),
+            scope: held.as_ref().map(|held| held.token.clone()),
             ..Request::new(method)
         };
         let streamed = async {
@@ -142,6 +146,7 @@ impl Manager {
                 if read == 0 {
                     return Ok(());
                 }
+                held = None;
                 out.write(&bytes[..read]).await?;
             }
         };
@@ -209,3 +214,6 @@ impl Manager {
         })
     }
 }
+
+#[cfg(test)]
+mod tests;

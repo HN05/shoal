@@ -402,4 +402,4 @@ pub(super) async fn relay(mut incoming: Incoming, mut outgoing: Outgoing) {
 }
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;

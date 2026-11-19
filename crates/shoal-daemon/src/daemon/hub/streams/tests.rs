@@ -11,13 +11,13 @@ use crate::daemon::hub::{
 
 /// Two sides of a link, each serving it, whose calls each answer with
 /// [`Reply::Left`].
-struct Linked {
-    opener: Arc<Calls>,
-    writer: Arc<Calls>,
+pub(in crate::daemon::hub) struct Linked {
+    pub opener: Arc<Calls>,
+    pub writer: Arc<Calls>,
     _served: [JoinHandle<()>; 2],
 }
 
-fn linked() -> Linked {
+pub(in crate::daemon::hub) fn linked() -> Linked {
     let (ours, theirs) = tokio::io::duplex(1 << 20);
     let side = |stream: tokio::io::DuplexStream, peer: &str| {
         let (read, write) = tokio::io::split(stream);
@@ -41,7 +41,7 @@ fn linked() -> Linked {
 
 impl Linked {
     /// A new stream the opener reads and the writer writes.
-    fn stream(&self) -> (Incoming, Outgoing) {
+    pub(in crate::daemon::hub) fn stream(&self) -> (Incoming, Outgoing) {
         let incoming = self.opener.streams().open();
         let outgoing = self.writer.streams().writer(incoming.number());
         (incoming, outgoing)
