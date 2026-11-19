@@ -74,14 +74,13 @@ async fn picked_creation(
 }
 
 /// Have a terminal's pickers offer what the repository of `parent` holds
-/// when `launch` names no repository, link or copy, as the daemon then
-/// places the child there.
+/// when `launch` names none, as the daemon then places the child there.
 async fn picked_repository(
     ctx: &Context,
     launch: &mut shoal_protocol::launches::Launch,
     parent: Option<&SpaceSelector>,
 ) -> Result<()> {
-    let names = launch.repository.is_some() || launch.target.is_some() || launch.copy.is_some();
+    let names = crate::launches::names_repository(launch)?;
     let Some(parent) = parent.filter(|_| !names) else {
         return Ok(());
     };

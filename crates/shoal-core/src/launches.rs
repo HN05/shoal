@@ -151,6 +151,20 @@ pub fn decided_target(launch: &Launch) -> Result<Option<StartTarget>> {
         .transpose()
 }
 
+/// Whether `launch` names the repository it starts in: by name, with a link
+/// into it, or with a copy of one of its workspaces; a bare issue number
+/// names none.
+pub fn names_repository(launch: &Launch) -> Result<bool> {
+    if launch.repository.is_some() || launch.copy.is_some() {
+        return Ok(true);
+    }
+    Ok(match decided_target(launch)? {
+        Some(StartTarget::Repository(_)) => true,
+        Some(target) => target.linked_repository().is_some(),
+        None => false,
+    })
+}
+
 /// The mode without one named: setup for a setup, chat for a start that
 /// asks for a chat, whose agent the worker mode would not tell it is one,
 /// else the worker.

@@ -334,3 +334,23 @@ fn only_a_setup_starts_in_the_setup_mode() {
     ensure_mode_fits(&start, &ModeName::SETUP).unwrap_err();
     ensure_mode_fits(&start, &ModeName::PLAN).unwrap();
 }
+
+/// A start names its repository by name, by a link into it or by a copy;
+/// a bare issue number names none, but beside a branch it is a repository.
+#[test]
+fn a_start_names_its_repository_unless_it_gives_only_an_issue_number() {
+    let names = |target: &str, branch: Option<&str>| {
+        let launch = Launch {
+            target: Some(target.parse().unwrap()),
+            branch: branch.map(Into::into),
+            ..Launch::default()
+        };
+        names_repository(&launch).unwrap()
+    };
+
+    assert!(!names("42", None));
+    assert!(names("42", Some("fix")));
+    assert!(names("my-project", None));
+    assert!(names("https://github.com/team/project/issues/42", None));
+    assert!(!names_repository(&Launch::default()).unwrap());
+}
