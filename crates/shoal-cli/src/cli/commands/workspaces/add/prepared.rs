@@ -3,7 +3,7 @@
 //! workspace opened without an agent.
 use anyhow::{Context as _, Result};
 
-use super::{finish::finish_add_workspace, waiting::AfterSetup};
+use super::finish::finish_add_workspace;
 use crate::{
     cli::{context::Context, terminal},
     client::preparation::Preparing,
@@ -90,17 +90,12 @@ pub(in crate::cli::commands) async fn follow_preparation(
         warnings: Vec::new(),
     };
     let preparing = Preparing::follow(&ctx.paths, started).await?;
-    // The daemon queued the agent, which waits for a failed setup itself.
-    let mut rest = AfterSetup {
-        pr: None,
-        waiting: None,
-    };
     let agent = ResolvedAddAgent {
         agent,
         model: Default::default(),
     };
     // `--json` reports the workspace once the agent starts, or its waiting
     // entry instead.
-    let finished = finish_add_workspace(ctx, preparing, &mut rest, &agent, ctx.json).await?;
+    let finished = finish_add_workspace(ctx, preparing, &agent, ctx.json).await?;
     Ok(finished.map(|Prepared { workspace, .. }| *workspace))
 }

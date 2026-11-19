@@ -11,10 +11,9 @@ mod reads;
 mod resolve;
 mod source;
 mod target;
-mod waiting;
 
 pub(in crate::cli::commands) use existing::start_worker;
-pub(in crate::cli::commands) use finish::{Opened, open_recorded, reopen_with_shell};
+pub(in crate::cli::commands) use finish::enter_workspace;
 pub(in crate::cli::commands) use launch::{
     enter_created, launch_workspace, pick_start_source, report_launched,
 };

@@ -1,10 +1,11 @@
 //! Running here the agent of a recorded space's starting launch, which
-//! this process holds: a workspace's once it is open and set up, a chat's
-//! at once, both through one launch of the space's agent.
+//! this process holds, in the space the daemon opened for it, whatever its
+//! kind, through one launch of the space's agent.
 use anyhow::{Context as _, Result};
 use std::ffi::OsString;
 
 use crate::{
+    agent::Agent,
     agents::HomeRecords,
     cli::{
         agents::{self, LaunchOptions, ModelRequest, Opening},
@@ -42,71 +43,68 @@ pub(in crate::cli) async fn run_entry(
 }
 
 /// Start the agent of the starting launch `entry` as [`run_entry`] does,
-/// in the `scope` this process issues for its space when it is scoped.
+/// in the `scope` this process issues for its space when it is scoped,
+/// once the daemon opened the space for it.
 async fn start_entry(
     ctx: &Context,
     entry: &QueueEntryId,
     place_name: Option<PlaceName>,
     scope: &mut SpaceScope,
 ) -> Result<i32> {
-    let queued = crate::client::queue::plan(&ctx.paths, entry.clone()).await?;
+    let queued = crate::client::queue::open_start(&ctx.paths, entry.clone()).await?;
     let start = QueuedStart::of(&queued.plan)?;
     let space = (queued.entry.space()).context("the starting launch names no space")?;
     let space = shoal_workers::homes::records(&ctx.paths, &SpaceSelector::id(space)).await?;
-    let (space, entry) = match open(ctx, space, (entry, &start), place_name).await? {
-        Opened::Ready(space, entry) => (*space, entry),
-        Opened::Ended(code) => return Ok(code),
-    };
+    host(ctx, &space, place_name, Some(&start.launch.agent)).await?;
     *scope = SpaceScope::act_in(ctx, &space).await?;
-    launch_in(ctx, space, entry.as_ref(), start.launch).await
+    launch_in(ctx, space, entry, start.launch).await
 }
 
 /// Launch the agent of `launch` in `space`, taking the slot of `entry`.
 async fn launch_in(
     ctx: &Context,
     space: HomeRecords,
-    entry: Option<&QueueEntryId>,
+    entry: &QueueEntryId,
     launch: QueuedLaunch,
 ) -> Result<i32> {
     let subject = subject(ctx, &space, &launch).await?;
-    if let Some(entry) = entry {
-        crate::env::launch_queue_entry(entry);
-    }
+    crate::env::launch_queue_entry(entry);
     self::launch(ctx, space, launch, subject).await
 }
 
-/// What opening a space for its agent left.
-enum Opened {
-    /// The space, ready for the agent of the starting launch `entry`.
-    Ready(Box<HomeRecords>, Option<QueueEntryId>),
-    /// The start ended with this code, as a workspace's failed setup ends
-    /// it.
-    Ended(i32),
+/// Host `space` in the place this process runs in, named as `place_name`
+/// says, for `agent`, else for a shell, which enters a workspace once the
+/// agent ends.
+pub(super) async fn host(
+    ctx: &Context,
+    space: &HomeRecords,
+    place_name: Option<PlaceName>,
+    agent: Option<&Agent>,
+) -> Result<()> {
+    let label = place_label(space, place_name);
+    let runs_agent = agent.is_some();
+    match space {
+        HomeRecords::Workspace(workspace) => {
+            let owner = Owner::Workspace(&workspace.id);
+            terminal::host_space(ctx, owner, runs_agent, &label).await?;
+            workspaces::enter_workspace(ctx, workspace, agent).await
+        }
+        HomeRecords::Chat { chat, .. } => {
+            terminal::host_space(ctx, Owner::Chat(&chat.id), runs_agent, &label).await
+        }
+    }
 }
 
-/// Open `space` for the agent of the starting launch `entry`'s `start` in
-/// the place this process runs in, named as `place_name` says: a workspace
-/// once its preparation sets it up, a chat at once.
-async fn open(
-    ctx: &Context,
-    space: HomeRecords,
-    agent: (&QueueEntryId, &QueuedStart),
-    place_name: Option<PlaceName>,
-) -> Result<Opened> {
-    let workspace = match space {
-        HomeRecords::Workspace(workspace) => workspace,
-        HomeRecords::Chat { ref chat, .. } => {
-            terminal::host_space(ctx, Owner::Chat(&chat.id), true, &chat.name).await?;
-            return Ok(Opened::Ready(Box::new(space), Some(agent.0.clone())));
+/// The label of the place hosting `space`, named as `place_name` says: a
+/// workspace's from its branch and name, a chat's its name.
+fn place_label(space: &HomeRecords, place_name: Option<PlaceName>) -> String {
+    match space {
+        HomeRecords::Workspace(workspace) => {
+            let (branch, name) = (workspace.branch_or_name(), workspace.name.as_str());
+            place_name.map_or_else(|| name.to_owned(), |place| place.render(branch, name))
         }
-    };
-    let opened = workspaces::open_recorded(ctx, &workspace, Some(agent), place_name).await?;
-    Ok(match opened {
-        workspaces::Opened::Ready { workspace, entry } => {
-            Opened::Ready(Box::new(HomeRecords::Workspace(*workspace)), entry)
-        }
-        workspaces::Opened::Ended(code) => Opened::Ended(code),
-    })
+        HomeRecords::Chat { chat, .. } => chat.name.to_string(),
+    }
 }
 
 /// What the agent of `launch` in `space` starts on: the issue it names,

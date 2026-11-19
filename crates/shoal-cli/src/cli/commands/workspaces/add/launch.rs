@@ -17,7 +17,6 @@ use super::{
     resolve::{Resolved, resolve},
     source::pick_add_source,
     target::resolve_add_target,
-    waiting::AfterSetup,
 };
 use crate::{
     cli::{
@@ -314,16 +313,11 @@ async fn follow_workspace(
 ) -> Result<i32> {
     let entry = started.entry.clone();
     let preparing = crate::client::preparation::Preparing::follow(&ctx.paths, started).await?;
-    // The daemon queued the agent, which waits for a failed setup itself.
-    let mut rest = AfterSetup {
-        pr: None,
-        waiting: None,
-    };
     let agent = ResolvedAddAgent {
         agent,
         model: Default::default(),
     };
-    let finished = finish_add_workspace(ctx, preparing, &mut rest, &agent, false).await?;
+    let finished = finish_add_workspace(ctx, preparing, &agent, false).await?;
     let Some(Prepared { workspace, .. }) = finished else {
         return Ok(1);
     };

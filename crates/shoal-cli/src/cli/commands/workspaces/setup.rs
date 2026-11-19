@@ -2,7 +2,6 @@
 use anyhow::{Result, bail, ensure};
 
 use super::recovery::{issues, reconcile};
-use super::waiting::WaitingAgent;
 use crate::{
     cli::{
         commands::operations,
@@ -148,22 +147,21 @@ pub(in crate::cli::commands) async fn setup_workspace(
         post_setup,
         ..Default::default()
     };
-    prepare_settled(ctx, workspace, steps, None).await
+    prepare_settled(ctx, workspace, steps).await
 }
 
 /// Run `steps`, setup among them, in one operation the daemon starts, then
 /// settle a failed setup as [`setup_workspace`] does, a retry running
-/// `steps` again, with the agent `waiting` for it.
+/// `steps` again.
 async fn prepare_settled(
     ctx: &Context,
     workspace: &Workspace,
     steps: Preparation,
-    waiting: Option<&mut WaitingAgent>,
 ) -> Result<Option<SetUp>> {
     let env = env::without_secrets();
     let preparing = preparation::prepare(&ctx.paths, workspace, steps.clone(), env).await?;
     let prepared = operations::follow_preparation(ctx, preparing).await?;
-    settle_setup(ctx, prepared, Some(steps), waiting).await
+    settle_setup(ctx, prepared, Some(steps)).await
 }
 
 /// Follow the preparation the daemon started for the workspace a request
@@ -174,19 +172,16 @@ pub(in crate::cli::commands) async fn follow_setup(
     preparing: Preparing<'_, CommandPaths>,
 ) -> Result<Option<SetUp>> {
     let prepared = operations::follow_preparation(ctx, preparing).await?;
-    settle_setup(ctx, prepared, None, None).await
+    settle_setup(ctx, prepared, None).await
 }
 
 /// The workspace a preparation left, once an interactive user decided what
 /// to do with a failed setup. A retry runs `retry`, or else setup alone,
-/// whose caller runs what follows it as after an ignored failure. A failure
-/// leaves `waiting`, the agent of the start, waiting in the queue, which
-/// starts it once a setup succeeds, so a retry queues no other.
+/// whose caller runs what follows it as after an ignored failure.
 pub(in crate::cli::commands) async fn settle_setup(
     ctx: &Context,
     prepared: Result<Prepared, Unprepared>,
     retry: Option<Preparation>,
-    waiting: Option<&mut WaitingAgent>,
 ) -> Result<Option<SetUp>> {
     let unprepared = match prepared {
         Ok(prepared) => {
@@ -205,19 +200,14 @@ pub(in crate::cli::commands) async fn settle_setup(
             report_setup_verification_failure(ctx, &workspace, exit_code)
         }
         // Nothing exists to ignore or delete until a retry creates it.
-        failure @ Failure::WorktreeFailed { .. } => {
-            if let Some(waiting) = waiting {
-                waiting.park(ctx, &workspace).await;
-            }
-            Err(crate::operations::error(failure))
-        }
+        failure @ Failure::WorktreeFailed { .. } => Err(crate::operations::error(failure)),
         Failure::HookFailed { .. } => Ok(Some(SetUp {
             workspace: *workspace,
             post_setup: Some(Err(crate::operations::error(failure))),
             agent: None,
         })),
         failure if set_up => Err(crate::operations::error(failure)),
-        failure => handle_setup_failure(ctx, &workspace, failure, retry, waiting).await,
+        failure => handle_setup_failure(ctx, &workspace, failure, retry).await,
     }
 }
 
@@ -225,26 +215,13 @@ pub(in crate::cli::commands) async fn settle_setup(
 /// setup failed with `failure`; a workspace whose failure is ignored has not
 /// run its post-setup hook, nor has one retried without `retry`, which says
 /// what a retry runs. A setup that did not start leaves nothing to delete or
-/// ignore. The agent `waiting` for the setup waits in the queue from now on.
+/// ignore.
 async fn handle_setup_failure(
     ctx: &Context,
     workspace: &Workspace,
     failure: Failure,
-    mut retry: Option<Preparation>,
-    mut waiting: Option<&mut WaitingAgent>,
+    retry: Option<Preparation>,
 ) -> Result<Option<SetUp>> {
-    if let Some(waiting) = waiting.as_deref_mut() {
-        waiting.park(ctx, workspace).await;
-        // The waiting agent starts from the queue once a retry gets past
-        // the post-setup hook.
-        if waiting.failed()
-            && let Some(retry) = &mut retry
-        {
-            retry.agent = None;
-            retry.waiting = None;
-            retry.post_setup = true;
-        }
-    }
     let ran = !matches!(failure, Failure::SetupNotStarted { .. });
     let error = format!("{:#}", crate::operations::error(failure));
     let (name, number) = (&workspace.name, workspace.number);
@@ -268,7 +245,7 @@ async fn handle_setup_failure(
         Palette::stderr(ctx.json).paint(Style::Error, failed)
     );
     match ui::setup_failure_choice(ran)? {
-        ui::SetupFailureChoice::Retry => return retry_setup(ctx, workspace, retry, waiting).await,
+        ui::SetupFailureChoice::Retry => return retry_setup(ctx, workspace, retry).await,
         ui::SetupFailureChoice::Delete => {
             delete_failed_workspace(ctx, workspace).await?;
             return Ok(None);
@@ -290,18 +267,17 @@ async fn handle_setup_failure(
 }
 
 /// Run setup again, with `retry` when given, or else alone, leaving what
-/// follows it to the caller, with the agent `waiting` for it.
+/// follows it to the caller.
 async fn retry_setup(
     ctx: &Context,
     workspace: &Workspace,
     retry: Option<Preparation>,
-    waiting: Option<&mut WaitingAgent>,
 ) -> Result<Option<SetUp>> {
     let steps = retry.clone().unwrap_or(Preparation {
         setup: true,
         ..Default::default()
     });
-    let retried = Box::pin(prepare_settled(ctx, workspace, steps, waiting)).await?;
+    let retried = Box::pin(prepare_settled(ctx, workspace, steps)).await?;
     Ok(retried.map(|set_up| SetUp {
         post_setup: set_up.post_setup.filter(|_| retry.is_some()),
         ..set_up

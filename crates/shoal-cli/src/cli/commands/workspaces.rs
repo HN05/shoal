@@ -14,9 +14,9 @@ mod unmerge;
 mod waiting;
 
 pub(super) use add::{
-    AddOptions, DaemonReads, Opened, StartsAsChat, check_start_arguments, check_target,
-    enter_created, follow_preparation, launch_args, launch_workspace, open_recorded,
-    pick_start_source, reopen_with_shell, report_launched, shell_in, start_worker, unprepared,
+    AddOptions, DaemonReads, StartsAsChat, check_start_arguments, check_target, enter_created,
+    enter_workspace, follow_preparation, launch_args, launch_workspace, pick_start_source,
+    report_launched, shell_in, start_worker, unprepared,
 };
 pub(super) use adopt::adopt;
 pub(super) use branch_rename::rename_branch;

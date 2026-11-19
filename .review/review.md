@@ -582,7 +582,8 @@ instead of the PR delivery guidance below.
   limit. A heavy chat's start with no free slot queues as a new workspace's
   does. Every start sends one `Launch` and runs the recorded space's agent
   through one placement step, one place worker and one command builder,
-  whatever its kind; only a workspace's preparation is followed apart. A review holds no
+  whatever its kind, in the space the daemon opens for the admitted agent;
+  only a workspace's preparation is followed apart. A review holds no
   heavy slot, but its memory counts and it waits for room and disk as a start does.
   A starting
   entry keeps its slot only while its launch holds it or within the grace

@@ -9,6 +9,7 @@ use anyhow::{Context as _, Result};
 
 use super::placement::Attach;
 use crate::{
+    agents::HomeRecords,
     cli::{
         commands::{links, queued_agents, workspaces},
         context::Context,
@@ -21,6 +22,7 @@ use crate::{
     state::QueueState,
     terminal::PlaceName,
 };
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::launches::Launch;
 use shoal_protocol::protocol::{Launched, Started};
 use shoal_protocol::space_names::SpaceSelector;
@@ -218,8 +220,7 @@ async fn failing_entry(
 /// Carry out `plan` in the place opened for it, or in no place: follow
 /// the preparation it hands over and run its agent once the queue lets it,
 /// as a place beside a start's terminal does, or run the agent of the
-/// starting launch it names, or else open the workspace it names and give
-/// it a shell.
+/// starting launch it names, or else give the workspace it names a shell.
 pub(in crate::cli) async fn execute_place(ctx: &Context, plan: PlacePlan) -> Result<i32> {
     if plan.handoff.is_some() {
         return Box::pin(run_in_place(ctx, plan)).await;
@@ -227,7 +228,22 @@ pub(in crate::cli) async fn execute_place(ctx: &Context, plan: PlacePlan) -> Res
     if let Some(entry) = &plan.queue_entry {
         return Box::pin(super::run_entry(ctx, entry, plan.place_name)).await;
     }
-    workspaces::reopen_with_shell(ctx, &plan.space, plan.place_name).await
+    shell_in_place(ctx, &plan.space, plan.place_name).await
+}
+
+/// Give the workspace `space`, which its start's launch reopened, a shell
+/// in the place opened for it, named as `place_name` says.
+async fn shell_in_place(
+    ctx: &Context,
+    space: &SpaceId,
+    place_name: Option<PlaceName>,
+) -> Result<i32> {
+    let records = shoal_workers::homes::records(&ctx.paths, &SpaceSelector::id(space)).await?;
+    let HomeRecords::Workspace(workspace) = &records else {
+        anyhow::bail!("a chat starts with its agent");
+    };
+    super::run::host(ctx, &records, place_name, None).await?;
+    terminal::open_shell(ctx, &workspace.path).await
 }
 
 /// Run, in the place opened for it, the agent `plan` names the entry of,

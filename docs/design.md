@@ -293,10 +293,12 @@ from the default branch when none leaves one, so it never starts behind; a
 start nothing follows also waits while disk protection holds back new starts.
 The queue's dispatcher starts it once that allows, in the scope of the space
 that started it, and a stopped agent leaves it waiting for an explicit
-preparation. The start that carries out an admitted launch in an existing
-workspace fast-forwards a branch that holds nothing of its own to what it
-builds on, as `shoal refresh` does, so its agent starts on a current branch;
-a copy is made when its preparation runs, which waited for what it waits for.
+preparation. Before any process runs an admitted launch's agent, the daemon
+opens its workspace for it: the workspace must still be its ready, verified
+worktree, a branch that holds nothing of its own fast-forwards to what it
+builds on, as `shoal refresh` does, so its agent starts on a current branch,
+and the PR the start names is linked, a refusal warning the starter; a copy
+is made when its preparation runs, which waited for what it waits for.
 The request answers once the workspace is recorded, so a
 caller gets its number and its agent's entry without waiting for Git or
 setup; until its worktree exists, what reads it refuses the workspace, and
@@ -1199,7 +1201,8 @@ its agent's entry, which a caller that runs the agent holds, and the CLI
 runs the recorded space's agent through one placement step for both kinds,
 here, beside, in a background place or detached, a workspace's once its
 preparation ends. One place worker runs any recorded space's agent in a
-place, and one builder makes its command from the space's records, so only
+place, in the space the daemon opened for it, so no other process reopens a
+workspace or links what its start names, and one builder makes its command from the space's records, so only
 what the record holds differs by kind, such as a chat's home and the
 instructions its agent receives first. A start that fails fails its queue
 entry. What linking a new space, of
