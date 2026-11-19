@@ -2,7 +2,7 @@
 //! forge.
 use anyhow::{Context, Result, ensure};
 
-use crate::{ForgeRepo, IssueInput, backends::ForgeKind};
+use crate::{ForgeRepo, IssueInput};
 
 pub const ISSUE_URL: &str = "expected an issue URL ending in /issues/<number>";
 pub const PULL_URL: &str = "expected a PR URL ending in /pull/<number>, /pulls/<number>, \
@@ -110,32 +110,4 @@ pub fn item_path(input: &str) -> &str {
         .next()
         .unwrap()
         .trim_end_matches('/')
-}
-
-/// The repository URL that `url` gives before one of the routes `route_of`
-/// gives each forge, and the forge that alone uses that route. Of the
-/// routes `url` has, the one that ends last is taken, and of those that end
-/// there the longest, as GitLab's `/-/issues/` over `/issues/`.
-pub fn locate(
-    url: &str,
-    route_of: impl Fn(ForgeKind) -> Option<&'static str>,
-) -> Option<(&str, Option<ForgeKind>)> {
-    let routes: Vec<_> = ForgeKind::ALL
-        .iter()
-        .filter_map(|&forge| Some((forge, route_of(forge)?)))
-        .collect();
-    let (repository, route) = routes
-        .iter()
-        .filter_map(|&(_, route)| Some((url.rsplit_once(route)?.0, route)))
-        .max_by_key(|(repository, route)| (repository.len() + route.len(), route.len()))?;
-    let users: Vec<_> = routes
-        .iter()
-        .filter(|(_, other)| *other == route)
-        .map(|&(forge, _)| forge)
-        .collect();
-    let forge = match users[..] {
-        [forge] => Some(forge),
-        _ => None,
-    };
-    Some((repository, forge))
 }
