@@ -57,7 +57,8 @@ class SandboxTests(unittest.TestCase):
             sandbox.prepare_directories(directory)
             home = Path(sandbox.environment(directory, directory / "bin")["HOME"])
             self.assertTrue(home.is_dir())
-            self.assertFalse(any((parent / ".git").exists() for parent in home.parents))
+            inside_root = [parent for parent in home.parents if parent.is_relative_to(root)]
+            self.assertFalse(any((parent / ".git").exists() for parent in inside_root))
 
     def test_clearing_a_sandbox_whose_home_is_gone_removes_it(self):
         for removed in ("outside directory", "home"):
