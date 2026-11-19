@@ -9,9 +9,10 @@ use shoal_protocol::{
 };
 
 use crate::{
-    daemon::{hub::streams::tests::linked, manager::Manager, test_support},
+    daemon::{manager::Manager, test_support},
     time::UnixTime,
 };
+use shoal_hub::test_support::linked;
 
 fn device(name: &str) -> Member {
     Member {

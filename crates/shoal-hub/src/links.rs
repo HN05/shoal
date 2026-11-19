@@ -16,10 +16,10 @@ use shoal_protocol::agent::Agent;
 use shoal_protocol::hub::availability::Classified;
 use tokio::sync::Notify;
 
-use super::session::Calls;
+use crate::session::Calls;
 
 #[derive(Default)]
-pub(super) struct Links {
+pub struct Links {
     open: Mutex<HashMap<MemberId, Open>>,
     next: AtomicU64,
 }
@@ -39,7 +39,7 @@ struct Open {
 }
 
 /// A member's open link, which leaves [`Links`] when dropped.
-pub(super) struct Registration<'a> {
+pub struct Registration<'a> {
     links: &'a Links,
     member: MemberId,
     token: u64,
@@ -49,13 +49,13 @@ pub(super) struct Registration<'a> {
 impl Registration<'_> {
     /// Resolves once another link of the same installation replaces this
     /// one, or the hub revokes the member.
-    pub(super) async fn stopped(&self) {
+    pub async fn stopped(&self) {
         self.stop.notified().await
     }
 
     /// Send the hub's calls to the member through `calls` while this link
     /// stays open.
-    pub(super) fn serve_calls(&self, calls: Arc<Calls>) {
+    pub fn serve_calls(&self, calls: Arc<Calls>) {
         let mut open = self.links.open.lock().unwrap();
         if let Some(open) = (open.get_mut(&self.member)).filter(|open| open.token == self.token) {
             open.calls = Some(calls);
@@ -78,7 +78,7 @@ impl Drop for Registration<'_> {
 impl Links {
     /// Register `member`'s link from `instance`, none while another
     /// installation's link holds its credential.
-    pub(super) fn register(&self, member: &MemberId, instance: &str) -> Option<Registration<'_>> {
+    pub fn register(&self, member: &MemberId, instance: &str) -> Option<Registration<'_>> {
         let mut open = self.open.lock().unwrap();
         if let Some(earlier) = open.get(member) {
             if earlier.instance != instance {
@@ -106,7 +106,7 @@ impl Links {
     }
 
     /// End `member`'s link, if one is open.
-    pub(super) fn stop(&self, member: &MemberId) {
+    pub fn stop(&self, member: &MemberId) {
         if let Some(open) = self.open.lock().unwrap().get(member) {
             open.stop.notify_one();
         }
@@ -114,39 +114,39 @@ impl Links {
 
     /// End every open link, as once the daemon no longer takes the hub
     /// role.
-    pub(super) fn stop_all(&self) {
+    pub fn stop_all(&self) {
         for open in self.open.lock().unwrap().values() {
             open.stop.notify_one();
         }
     }
 
     /// The hub's calls to `member`, while its link is open.
-    pub(super) fn calls(&self, member: &MemberId) -> Option<Arc<Calls>> {
+    pub fn calls(&self, member: &MemberId) -> Option<Arc<Calls>> {
         let open = self.open.lock().unwrap();
         open.get(member).and_then(|open| open.calls.clone())
     }
 
     /// The members whose links are open.
-    pub(super) fn connected(&self) -> HashSet<MemberId> {
+    pub fn connected(&self) -> HashSet<MemberId> {
         self.open.lock().unwrap().keys().cloned().collect()
     }
 
     /// Remember that `member`'s open link was told `availability`.
-    pub(super) fn told(&self, member: &MemberId, availability: Classified) {
+    pub fn told(&self, member: &MemberId, availability: Classified) {
         if let Some(open) = self.open.lock().unwrap().get_mut(member) {
             open.told = Some(availability);
         }
     }
 
     /// Remember the agent tools `member`, whose link is open, says it has.
-    pub(super) fn describe_agents(&self, member: &MemberId, agents: Vec<Agent>) {
+    pub fn describe_agents(&self, member: &MemberId, agents: Vec<Agent>) {
         if let Some(open) = self.open.lock().unwrap().get_mut(member) {
             open.agents = agents;
         }
     }
 
     /// The agent tools `member` said it has, while its link is open.
-    pub(super) fn agents(&self, member: &MemberId) -> Vec<Agent> {
+    pub fn agents(&self, member: &MemberId) -> Vec<Agent> {
         let open = self.open.lock().unwrap();
         open.get(member)
             .map_or_else(Vec::new, |open| open.agents.clone())
@@ -154,7 +154,7 @@ impl Links {
 
     /// The machines whose links are open and that described themselves,
     /// with the hub's calls to each and the availability it was told.
-    pub(super) fn described(&self) -> HashMap<MemberId, (Arc<Calls>, Classified)> {
+    pub fn described(&self) -> HashMap<MemberId, (Arc<Calls>, Classified)> {
         let open = self.open.lock().unwrap();
         (open.iter())
             .filter_map(|(member, open)| Some((member.clone(), (open.calls.clone()?, open.told?))))

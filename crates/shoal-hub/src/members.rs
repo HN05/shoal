@@ -9,12 +9,12 @@ use shoal_protocol::hub::{
     availability::{AvailabilitySetting, Description},
 };
 
-use crate::refusal::{Reason, Refusal};
-use crate::time::UnixTime;
+use shoal_core::refusal::{Reason, Refusal};
+use shoal_protocol::time::UnixTime;
 
 /// A member as the store holds it.
 #[derive(Debug)]
-pub(super) struct Recorded {
+pub struct Recorded {
     pub member: Member,
     pub key: PublicKey,
     pub revoked: bool,
@@ -43,7 +43,7 @@ fn recorded(row: &Row<'_>, own: &PublicKey) -> rusqlite::Result<Recorded> {
 }
 
 /// Record the hub's own machine, holding `own`, named `name`, unless it is.
-pub(super) fn record_own(tx: &Transaction<'_>, own: &PublicKey, name: &str) -> Result<()> {
+pub fn record_own(tx: &Transaction<'_>, own: &PublicKey, name: &str) -> Result<()> {
     let recorded: bool = tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM hub_members WHERE public_key=?1)",
         [own],
@@ -57,7 +57,7 @@ pub(super) fn record_own(tx: &Transaction<'_>, own: &PublicKey, name: &str) -> R
 
 /// Record a new member of `kind` named `name`, which proves `key`, under a
 /// new ID.
-pub(super) fn join(
+pub fn join(
     tx: &Transaction<'_>,
     kind: MemberKind,
     name: &str,
@@ -80,11 +80,7 @@ pub(super) fn join(
 }
 
 /// The member `id`, revoked or not.
-pub(super) fn find(
-    tx: &Transaction<'_>,
-    id: &MemberId,
-    own: &PublicKey,
-) -> Result<Option<Recorded>> {
+pub fn find(tx: &Transaction<'_>, id: &MemberId, own: &PublicKey) -> Result<Option<Recorded>> {
     let query = format!("SELECT {COLUMNS} FROM hub_members WHERE id=?1");
     Ok(tx
         .query_row(&query, [id], |row| recorded(row, own))
@@ -92,7 +88,7 @@ pub(super) fn find(
 }
 
 /// Every member the hub has not revoked, its own machine first.
-pub(super) fn list(tx: &Transaction<'_>, own: &PublicKey) -> Result<Vec<Member>> {
+pub fn list(tx: &Transaction<'_>, own: &PublicKey) -> Result<Vec<Member>> {
     let query = format!(
         "SELECT {COLUMNS} FROM hub_members WHERE revoked_at IS NULL
             ORDER BY public_key=?1 DESC, joined_at, id"
@@ -106,7 +102,7 @@ pub(super) fn list(tx: &Transaction<'_>, own: &PublicKey) -> Result<Vec<Member>>
 
 /// The member that `selector`, an ID or a name only one member has, names
 /// among those the hub has not revoked.
-pub(super) fn select(tx: &Transaction<'_>, selector: &str, own: &PublicKey) -> Result<Member> {
+pub fn select(tx: &Transaction<'_>, selector: &str, own: &PublicKey) -> Result<Member> {
     let members = list(tx, own)?;
     if let Some(member) = members.iter().find(|member| member.id.as_str() == selector) {
         return Ok(member.clone());
@@ -128,7 +124,7 @@ pub(super) fn select(tx: &Transaction<'_>, selector: &str, own: &PublicKey) -> R
 }
 
 /// Revoke `id`'s credential, which its links then cannot open.
-pub(super) fn revoke(tx: &Transaction<'_>, id: &MemberId) -> Result<()> {
+pub fn revoke(tx: &Transaction<'_>, id: &MemberId) -> Result<()> {
     tx.execute(
         "UPDATE hub_members SET revoked_at=?2 WHERE id=?1 AND revoked_at IS NULL",
         params![id, UnixTime::now()],
@@ -137,7 +133,7 @@ pub(super) fn revoke(tx: &Transaction<'_>, id: &MemberId) -> Result<()> {
 }
 
 /// Record that `id` connected now, or its link ended now, with `version`.
-pub(super) fn seen(tx: &Transaction<'_>, id: &MemberId, version: &str) -> Result<()> {
+pub fn seen(tx: &Transaction<'_>, id: &MemberId, version: &str) -> Result<()> {
     tx.execute(
         "UPDATE hub_members SET last_seen=?2, version=?3 WHERE id=?1",
         params![id, UnixTime::now(), version],
@@ -146,7 +142,7 @@ pub(super) fn seen(tx: &Transaction<'_>, id: &MemberId, version: &str) -> Result
 }
 
 /// Whether `id` names a member the hub has not revoked.
-pub(super) fn admitted(tx: &Transaction<'_>, id: &MemberId) -> Result<bool> {
+pub fn admitted(tx: &Transaction<'_>, id: &MemberId) -> Result<bool> {
     Ok(tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM hub_members WHERE id=?1 AND revoked_at IS NULL)",
         [id],
@@ -155,11 +151,7 @@ pub(super) fn admitted(tx: &Transaction<'_>, id: &MemberId) -> Result<bool> {
 }
 
 /// Record what the machine `id` says of itself.
-pub(super) fn describe(
-    tx: &Transaction<'_>,
-    id: &MemberId,
-    description: Description,
-) -> Result<()> {
+pub fn describe(tx: &Transaction<'_>, id: &MemberId, description: Description) -> Result<()> {
     tx.execute(
         "UPDATE hub_members SET battery=?2, availability=?3 WHERE id=?1",
         params![id, description.battery, description.availability],
@@ -169,7 +161,7 @@ pub(super) fn describe(
 
 /// What the machine `id` last said of itself: whether it has a battery,
 /// none before it said, and its setting.
-pub(super) fn description(
+pub fn description(
     tx: &Transaction<'_>,
     id: &MemberId,
 ) -> Result<(Option<bool>, AvailabilitySetting)> {

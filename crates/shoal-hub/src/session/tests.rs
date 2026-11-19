@@ -2,7 +2,7 @@ use shoal_protocol::hub::link::{Call, Reply};
 use tokio::io::BufReader;
 
 use super::{Calls, End, serve};
-use crate::daemon::hub::transport::Channel;
+use crate::transport::Channel;
 
 #[tokio::test(start_paused = true)]
 async fn a_call_fails_once_its_session_ends_without_waiting_for_its_timeout() {

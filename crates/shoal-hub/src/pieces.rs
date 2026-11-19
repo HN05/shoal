@@ -10,7 +10,7 @@ use std::{
 use anyhow::{Context as _, Result, ensure};
 use shoal_protocol::hub::link::Frame;
 
-use super::transport::Sender;
+use crate::transport::Sender;
 
 /// The most JSON one piece carries, so that a piece, escaped as a string
 /// and then sealed, stays well within a frame.
@@ -24,7 +24,7 @@ static NEXT: AtomicU64 = AtomicU64::new(1);
 
 /// Send `frame`, in pieces when it is too large for one, and with
 /// `written` return once its last frame is written.
-pub(super) async fn send(sender: &Sender, frame: &Frame, written: bool) -> Result<()> {
+pub async fn send(sender: &Sender, frame: &Frame, written: bool) -> Result<()> {
     let frames = split(frame, PIECE_BYTES)?;
     let last = frames.len() - 1;
     for (index, frame) in frames.iter().enumerate() {
@@ -64,12 +64,12 @@ fn split(frame: &Frame, bytes: usize) -> Result<Vec<Frame>> {
 
 /// The messages the other side is sending in pieces, as far as they came.
 #[derive(Default)]
-pub(super) struct Assembly(HashMap<u64, String>);
+pub struct Assembly(HashMap<u64, String>);
 
 impl Assembly {
     /// Take the piece `data` of the message `id`, and the message once it is
     /// whole: the last piece came, `more` false.
-    pub(super) fn take(&mut self, id: u64, data: String, more: bool) -> Result<Option<Frame>> {
+    pub fn take(&mut self, id: u64, data: String, more: bool) -> Result<Option<Frame>> {
         let message = self.0.entry(id).or_default();
         message.push_str(&data);
         ensure!(

@@ -18,13 +18,13 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use shoal_protocol::hub::link::{Frame, STREAM_WINDOW};
 use tokio::sync::{Semaphore, mpsc};
 
-use super::transport::Sender;
+use crate::transport::Sender;
 
 /// The most bytes one [`Frame::Data`] carries.
 const CHUNK: usize = 64 << 10;
 
 /// The streams of one link, on one side.
-pub(crate) struct Streams {
+pub struct Streams {
     sender: Sender,
     next: AtomicU64,
     state: Arc<Mutex<State>>,
@@ -144,7 +144,7 @@ fn lock(state: &Mutex<State>) -> std::sync::MutexGuard<'_, State> {
 }
 
 impl Streams {
-    pub(super) fn new(sender: Sender) -> Self {
+    pub fn new(sender: Sender) -> Self {
         Self {
             sender,
             next: AtomicU64::new(1),
@@ -154,13 +154,13 @@ impl Streams {
 
     /// A new stream this side reads, with the number the call that asks
     /// for it names.
-    pub(super) fn open(&self) -> Incoming {
+    pub fn open(&self) -> Incoming {
         self.incoming(self.opened())
     }
 
     /// A new duplex stream, which this side reads and also writes, with
     /// the number the call that asks for it names.
-    pub(super) fn open_duplex(&self) -> (Incoming, Outgoing) {
+    pub fn open_duplex(&self) -> (Incoming, Outgoing) {
         let key = self.opened();
         (self.incoming(key), self.outgoing(key))
     }
@@ -169,7 +169,7 @@ impl Streams {
     /// named in its call: its writer, and for a duplex one the reader of
     /// what the other side writes, taken before this side answers the
     /// call, which is when the other side starts writing.
-    pub(crate) fn answering(&self, stream: u64, duplex: bool) -> (Outgoing, Option<Incoming>) {
+    pub fn answering(&self, stream: u64, duplex: bool) -> (Outgoing, Option<Incoming>) {
         let key = Key {
             stream,
             opener: Opener::There,
@@ -231,7 +231,7 @@ impl Streams {
     /// Take the frame `frame` for one of the link's streams, failing the
     /// link for a writer that sent past its credit; `false` for a frame of
     /// no stream.
-    pub(super) fn take(&self, frame: &Frame) -> Result<bool> {
+    pub fn take(&self, frame: &Frame) -> Result<bool> {
         match frame {
             Frame::Data { stream, data, up } => {
                 self.received(Key::named(*stream, *up, true), data)?
@@ -293,7 +293,7 @@ impl Streams {
     }
 
     /// End every stream once the link ended, and open none after it.
-    pub(super) fn end(&self) {
+    pub fn end(&self) {
         let mut state = lock(&self.state);
         state.ended = true;
         for (_, reading) in state.reading.drain() {
@@ -306,7 +306,7 @@ impl Streams {
 }
 
 /// A stream this side reads.
-pub(crate) struct Incoming {
+pub struct Incoming {
     key: Key,
     bytes: mpsc::UnboundedReceiver<Received>,
     state: Arc<Mutex<State>>,
@@ -321,7 +321,7 @@ pub(crate) struct Incoming {
 
 impl Incoming {
     /// The number the call that asks for it names.
-    pub(super) fn number(&self) -> u64 {
+    pub fn number(&self) -> u64 {
         self.key.stream
     }
 
@@ -330,7 +330,7 @@ impl Incoming {
     /// `tokio::select!` does, loses nothing: it grants the credit the bytes
     /// it returned last earned before it waits for more, and holds them
     /// back from no one.
-    pub(crate) async fn next(&mut self) -> Result<Option<Vec<u8>>> {
+    pub async fn next(&mut self) -> Result<Option<Vec<u8>>> {
         if self.ended {
             return Ok(None);
         }
@@ -387,7 +387,7 @@ impl Drop for Incoming {
 
 /// A stream this side writes: one the other side opened, or its own
 /// bytes of a duplex one it opened.
-pub(crate) struct Outgoing {
+pub struct Outgoing {
     key: Key,
     credit: Arc<Credit>,
     state: Arc<Mutex<State>>,
@@ -398,14 +398,14 @@ pub(crate) struct Outgoing {
 impl Outgoing {
     /// Send `bytes`, waiting for credit as the reader grants it; failing
     /// once the reader stopped reading or the link closed.
-    pub(crate) async fn write(&mut self, bytes: &[u8]) -> Result<()> {
+    pub async fn write(&mut self, bytes: &[u8]) -> Result<()> {
         self.send_data(bytes, false).await
     }
 
     /// [`Self::write`], returning once the bytes are written to the
     /// link's transport, as an answer that reports a change is before the
     /// daemon may exit.
-    pub(crate) async fn write_through(&mut self, bytes: &[u8]) -> Result<()> {
+    pub async fn write_through(&mut self, bytes: &[u8]) -> Result<()> {
         self.send_data(bytes, true).await
     }
 
@@ -441,7 +441,7 @@ impl Outgoing {
 
     /// Resolves once the reader stopped reading the stream or the link
     /// ended, so that whatever feeds it stops too.
-    pub(crate) async fn closed(&self) {
+    pub async fn closed(&self) {
         let closed = self.credit.closed.notified();
         tokio::pin!(closed);
         closed.as_mut().enable();
@@ -452,7 +452,7 @@ impl Outgoing {
 
     /// End the stream, with `error` when it failed, returning once its end
     /// and so everything sent before it is written to the transport.
-    pub(crate) async fn end(mut self, error: Option<String>) {
+    pub async fn end(mut self, error: Option<String>) {
         self.ended = true;
         lock(&self.state).writing.remove(&self.key);
         let _ = self.sender.send_written(&self.key.end(error)).await;
@@ -490,7 +490,7 @@ fn send_soon(sender: &Sender, frame: Frame) {
 /// Write what `incoming` brings to `outgoing` until it ends, ending
 /// `outgoing` as `incoming` ended; once no one reads `outgoing`, stop
 /// reading `incoming`.
-pub(super) async fn relay(mut incoming: Incoming, mut outgoing: Outgoing) {
+pub async fn relay(mut incoming: Incoming, mut outgoing: Outgoing) {
     let error = loop {
         let next = tokio::select! {
             next = incoming.next() => next,
@@ -510,4 +510,4 @@ pub(super) async fn relay(mut incoming: Incoming, mut outgoing: Outgoing) {
 }
 
 #[cfg(test)]
-pub(super) mod tests;
+mod tests;

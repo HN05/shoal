@@ -11,6 +11,9 @@ use shoal_ids::member_ids::MemberId;
 use shoal_protocol::hub::{HubRole, Overview};
 
 use super::manager::Manager;
+use shoal_hub::{
+    identity, links, members, membership, presence, sealing, session, shown, streams, transport,
+};
 
 pub(crate) use forwarding::{Elsewhere, Unanswered};
 pub(crate) use machines::Named;
@@ -25,29 +28,19 @@ mod availability;
 mod directory;
 mod escalation;
 mod forwarding;
-mod identity;
 mod known_tree;
-mod links;
 mod listener;
 mod machines;
 mod member;
-mod members;
-mod membership;
 pub(crate) mod numbering;
 mod owners;
 mod pairing;
-mod pieces;
-mod presence;
 mod queue;
 mod removal;
 mod reports;
 mod routing;
-mod sealing;
 mod serving;
-mod session;
-mod streams;
 mod telling;
-mod transport;
 mod tree;
 mod view;
 
@@ -97,20 +90,6 @@ pub(crate) async fn run(manager: Arc<Manager>) {
         manager.keep_marking_presence(),
         member::run(manager.clone()),
     );
-}
-
-/// The most of what the other side of a link sent that the daemon keeps or
-/// shows.
-const SHOWN_TEXT: usize = 300;
-
-/// `text`, which may quote what the other side of a link sent before it was
-/// authenticated, as the daemon keeps and shows it: one line of printable
-/// text, at most [`SHOWN_TEXT`] bytes.
-fn shown(text: &str) -> String {
-    let printable: String = (text.chars())
-        .map(|c| if c.is_control() { ' ' } else { c })
-        .collect();
-    shoal_protocol::validate::shorten(printable, SHOWN_TEXT)
 }
 
 /// Serve the link a member opened on the daemon's socket with `hello`, in a
@@ -196,5 +175,15 @@ impl Manager {
     }
 }
 
-#[cfg(test)]
-mod tests;
+impl Manager {
+    /// The hub's own key pair, made and kept the first time it is asked
+    /// for.
+    pub(crate) async fn hub_identity(&self) -> Result<Arc<identity::Identity>> {
+        let identity = &self.hub.identity;
+        let identity = identity.get_or_try_init(|| async {
+            let key = self.store.write(identity::stored_or_new_key).await?;
+            identity::Identity::new(&key).map(Arc::new)
+        });
+        identity.await.cloned()
+    }
+}

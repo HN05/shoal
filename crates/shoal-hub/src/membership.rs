@@ -6,11 +6,11 @@ use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_ids::member_ids::MemberId;
 use shoal_protocol::hub::{Membership, PublicKey, Route};
 
-use super::identity::KeyPair;
+use crate::identity::KeyPair;
 
 /// The membership as the store holds it.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Joined {
+pub struct Joined {
     pub membership: Membership,
     pub key: KeyPair,
     pub hub_key: PublicKey,
@@ -18,7 +18,7 @@ pub(crate) struct Joined {
     pub revoked: bool,
 }
 
-pub(super) fn load(tx: &Transaction<'_>) -> Result<Option<Joined>> {
+pub fn load(tx: &Transaction<'_>) -> Result<Option<Joined>> {
     Ok(tx
         .query_row(
             "SELECT member_id, name, private_key, hub_key, url, connect, joined_at, revoked
@@ -59,7 +59,7 @@ fn through(row: &rusqlite::Row<'_>) -> rusqlite::Result<Route> {
 }
 
 /// Keep `joined` as this machine's membership, replacing any other.
-pub(super) fn save(tx: &Transaction<'_>, joined: &Joined) -> Result<()> {
+pub fn save(tx: &Transaction<'_>, joined: &Joined) -> Result<()> {
     let Membership {
         member,
         name,
@@ -90,7 +90,7 @@ pub(super) fn save(tx: &Transaction<'_>, joined: &Joined) -> Result<()> {
 
 /// Record that the hub revoked the membership of `member`, which a later
 /// join may have replaced.
-pub(super) fn revoked(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
+pub fn revoked(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
     tx.execute(
         "UPDATE hub_membership SET revoked=1 WHERE id=1 AND member_id=?1",
         [member],
@@ -99,7 +99,7 @@ pub(super) fn revoked(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
 }
 
 /// Forget the membership.
-pub(super) fn forget(tx: &Transaction<'_>) -> Result<()> {
+pub fn forget(tx: &Transaction<'_>) -> Result<()> {
     tx.execute("DELETE FROM hub_membership", [])?;
     Ok(())
 }

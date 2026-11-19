@@ -36,6 +36,7 @@ shoal-core.workspace = true
 shoal-daemon-base.workspace = true
 shoal-forge.workspace = true
 shoal-forge-types = { workspace = true, features = ["rusqlite"] }
+shoal-hub.workspace = true
 shoal-ids = { workspace = true, features = ["rusqlite"] }
 shoal-leases.workspace = true
 shoal-protocol = { workspace = true, features = ["rusqlite"] }
@@ -62,6 +63,7 @@ hmac = "0.13"
 shoal-core = { workspace = true, features = ["test-support"] }
 shoal-daemon-base = { workspace = true, features = ["test-support"] }
 shoal-forge = { workspace = true, features = ["test-support"] }
+shoal-hub = { workspace = true, features = ["test-support"] }
 shoal-ids = { workspace = true, features = ["test-support"] }
 shoal-protocol = { workspace = true, features = ["test-support"] }
 shoal-reviews = { workspace = true, features = ["test-support"] }

@@ -1,5 +1,5 @@
 use super::{Link, UNSEALED_ALERT_EVERY, UnsealedAlert};
-use crate::daemon::hub::SHOWN_TEXT;
+use shoal_hub::SHOWN_TEXT;
 
 #[test]
 fn a_link_keeps_its_problem_bounded_whatever_the_other_side_sent() {

@@ -20,7 +20,7 @@ use tokio_tungstenite::{
     tungstenite::{Message, protocol::WebSocketConfig},
 };
 
-use super::sealing::{Keys, Opener, Sealer};
+use crate::sealing::{Keys, Opener, Sealer};
 
 /// The largest frame either side takes.
 const MAX_FRAME: usize = 16 << 20;
@@ -33,14 +33,14 @@ const CLOSE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// The limits a link's WebSocket holds a message, and each of its
 /// fragments, to: [`MAX_FRAME`].
-pub(super) fn websocket_limits() -> WebSocketConfig {
+pub fn websocket_limits() -> WebSocketConfig {
     WebSocketConfig::default()
         .max_message_size(Some(MAX_FRAME))
         .max_frame_size(Some(MAX_FRAME))
 }
 
 /// One side of an open transport.
-pub(super) struct Channel {
+pub struct Channel {
     incoming: mpsc::Receiver<Result<String>>,
     outgoing: mpsc::Sender<Out>,
     /// Opens the frames received once the channel is sealed.
@@ -84,16 +84,16 @@ impl Drop for Reader {
 /// What sends frames on a [`Channel`], which tasks other than its reader
 /// hold.
 #[derive(Clone)]
-pub(super) struct Sender(mpsc::Sender<Out>);
+pub struct Sender(mpsc::Sender<Out>);
 
 impl Sender {
-    pub(super) async fn send(&self, frame: &impl Serialize) -> Result<()> {
+    pub async fn send(&self, frame: &impl Serialize) -> Result<()> {
         self.queue(frame, None).await
     }
 
     /// Queue `frame` unless the queue is full, as it stays once the other
     /// side stopped reading, so a loop that sends it never waits.
-    pub(super) fn try_send(&self, frame: &impl Serialize) -> Result<()> {
+    pub fn try_send(&self, frame: &impl Serialize) -> Result<()> {
         let text = serde_json::to_string(frame)?;
         let out = Out::Frame {
             text,
@@ -108,7 +108,7 @@ impl Sender {
     /// Send `frame` and return once it is written to the transport, or
     /// fail once the other side has read nothing for [`SILENCE`], whether
     /// the frame waited to be queued or to be written.
-    pub(super) async fn send_written(&self, frame: &impl Serialize) -> Result<()> {
+    pub async fn send_written(&self, frame: &impl Serialize) -> Result<()> {
         let written = async {
             let (written, wrote) = oneshot::channel();
             self.queue(frame, Some(written)).await?;
@@ -135,7 +135,7 @@ impl Sender {
 
 impl Channel {
     /// A channel over `reader` and `writer`, a frame per line.
-    pub(super) fn lines(
+    pub fn lines(
         reader: impl AsyncBufRead + Send + Unpin + 'static,
         writer: impl AsyncWrite + Send + Unpin + 'static,
     ) -> Self {
@@ -152,7 +152,7 @@ impl Channel {
     }
 
     /// A channel over `socket`, a frame per text message.
-    pub(super) fn websocket<S>(socket: WebSocketStream<S>) -> Self
+    pub fn websocket<S>(socket: WebSocketStream<S>) -> Self
     where
         S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static,
     {
@@ -184,17 +184,17 @@ impl Channel {
         }
     }
 
-    pub(super) fn sender(&self) -> Sender {
+    pub fn sender(&self) -> Sender {
         Sender(self.outgoing.clone())
     }
 
-    pub(super) async fn send(&self, frame: &impl Serialize) -> Result<()> {
+    pub async fn send(&self, frame: &impl Serialize) -> Result<()> {
         self.sender().send(frame).await
     }
 
     /// Seal the frames sent after those already queued, and open those
     /// received from the next one on.
-    pub(super) async fn seal(&mut self, keys: Keys) -> Result<()> {
+    pub async fn seal(&mut self, keys: Keys) -> Result<()> {
         let Keys { sending, receiving } = keys;
         self.opener = Some(receiving);
         (self.outgoing.send(Out::Seal(Box::new(sending))).await)
@@ -203,7 +203,7 @@ impl Channel {
 
     /// Send `frame`, then close the channel once it went, or the other side
     /// stopped reading.
-    pub(super) async fn close_with(self, frame: &impl Serialize) {
+    pub async fn close_with(self, frame: &impl Serialize) {
         let _ = self.send(frame).await;
         let Self {
             outgoing,
@@ -215,7 +215,7 @@ impl Channel {
     }
 
     /// The next frame, none once the other side closed the link.
-    pub(super) async fn receive<T: DeserializeOwned>(&mut self) -> Result<Option<T>> {
+    pub async fn receive<T: DeserializeOwned>(&mut self) -> Result<Option<T>> {
         let Some(text) = self.incoming.recv().await else {
             return Ok(None);
         };
@@ -227,7 +227,7 @@ impl Channel {
 
     /// Whether the last frame received came sealed, so that the other side
     /// of the key exchange sent it.
-    pub(super) fn sealed_last(&self) -> bool {
+    pub fn sealed_last(&self) -> bool {
         self.sealed_last
     }
 
@@ -255,7 +255,7 @@ impl Channel {
     }
 
     /// The next frame, which must come.
-    pub(super) async fn expect<T: DeserializeOwned>(&mut self) -> Result<T> {
+    pub async fn expect<T: DeserializeOwned>(&mut self) -> Result<T> {
         match self.receive().await? {
             Some(frame) => Ok(frame),
             None => bail!("the link closed"),

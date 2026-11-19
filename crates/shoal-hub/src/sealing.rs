@@ -15,20 +15,20 @@ use shoal_protocol::hub::{
 };
 
 /// This side's ephemeral key for one link's exchange.
-pub(super) struct Exchange {
+pub struct Exchange {
     private: EphemeralPrivateKey,
     pub public: ExchangeKey,
 }
 
 /// The keys of one link: of the frames this side sends, and of those it
 /// receives.
-pub(super) struct Keys {
+pub struct Keys {
     pub sending: Sealer,
     pub receiving: Opener,
 }
 
 impl Exchange {
-    pub(super) fn new() -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let private = EphemeralPrivateKey::generate(&X25519, &SystemRandom::new())
             .map_err(|_| anyhow!("could not make an exchange key"))?;
         let public = private
@@ -41,7 +41,7 @@ impl Exchange {
     }
 
     /// The keys of the link whose handshake `transcript` holds, for `side`.
-    pub(super) fn keys(self, transcript: &Transcript, side: Signer) -> Result<Keys> {
+    pub fn keys(self, transcript: &Transcript, side: Signer) -> Result<Keys> {
         let theirs = match side {
             Signer::Hub => &transcript.hello.exchange,
             Signer::Member => &transcript.hub_exchange,
@@ -86,13 +86,13 @@ fn nonce(seq: u64) -> aead::Nonce {
 }
 
 /// Seals the frames one side sends, in order.
-pub(super) struct Sealer {
+pub struct Sealer {
     key: aead::LessSafeKey,
     next: u64,
 }
 
 impl Sealer {
-    pub(super) fn seal(&mut self, frame: String) -> Sealed {
+    pub fn seal(&mut self, frame: String) -> Sealed {
         let seq = self.next;
         self.next += 1;
         let mut data = frame.into_bytes();
@@ -108,13 +108,13 @@ impl Sealer {
 }
 
 /// Opens the frames one side receives, each once and in order.
-pub(super) struct Opener {
+pub struct Opener {
     key: aead::LessSafeKey,
     next: u64,
 }
 
 impl Opener {
-    pub(super) fn open(&mut self, sealed: Sealed) -> Result<String> {
+    pub fn open(&mut self, sealed: Sealed) -> Result<String> {
         let Sealed { seq, data } = sealed;
         ensure!(
             seq == self.next,
@@ -134,7 +134,7 @@ impl Opener {
     }
 
     /// Whether it opened no frame yet.
-    pub(super) fn fresh(&self) -> bool {
+    pub fn fresh(&self) -> bool {
         self.next == 0
     }
 }

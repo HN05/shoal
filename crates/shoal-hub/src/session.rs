@@ -15,7 +15,7 @@ use anyhow::{Result, anyhow, bail};
 use shoal_protocol::hub::link::{Call, Frame, Reply, SILENCE};
 use tokio::{sync::oneshot, time::Instant};
 
-use super::{
+use crate::{
     streams::{Incoming, Outgoing, Streams},
     transport::{Channel, Sender},
 };
@@ -25,7 +25,7 @@ const CALL_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// The calls this side sends over a link, each waiting for its reply, and
 /// the link's streams.
-pub(crate) struct Calls {
+pub struct Calls {
     sender: Sender,
     streams: Streams,
     /// What the other side is, as failures name it: the hub, or a member.
@@ -37,7 +37,7 @@ pub(crate) struct Calls {
 }
 
 impl Calls {
-    pub(super) fn new(sender: Sender, peer: impl Into<String>) -> Arc<Self> {
+    pub fn new(sender: Sender, peer: impl Into<String>) -> Arc<Self> {
         Arc::new(Self {
             streams: Streams::new(sender.clone()),
             sender,
@@ -48,7 +48,7 @@ impl Calls {
     }
 
     /// The other side's reply to `call`, failing as [`Reply::Failed`] does.
-    pub(crate) async fn call(&self, call: Call) -> Result<Reply> {
+    pub async fn call(&self, call: Call) -> Result<Reply> {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let (replied, reply) = oneshot::channel();
         match self.pending.lock().unwrap().as_mut() {
@@ -56,7 +56,7 @@ impl Calls {
             None => return Err(Unsent(format!("the link to {} closed", self.peer)).into()),
         };
         let sent_and_replied = async {
-            let sent = super::pieces::send(&self.sender, &Frame::Call { id, call }, false).await;
+            let sent = crate::pieces::send(&self.sender, &Frame::Call { id, call }, false).await;
             sent.map_err(|error| Unsent(format!("{error:#}")))?;
             Ok::<_, Unsent>(reply.await)
         };
@@ -85,7 +85,7 @@ impl Calls {
 
     /// The stream the other side writes in answer to the call `call`
     /// makes of the new stream's number, once it replies that it does.
-    pub(crate) async fn stream(&self, call: impl FnOnce(u64) -> Call) -> Result<Incoming> {
+    pub async fn stream(&self, call: impl FnOnce(u64) -> Call) -> Result<Incoming> {
         let incoming = self.streams.open();
         match self.call(call(incoming.number())).await? {
             Reply::Streaming => Ok(incoming),
@@ -99,10 +99,7 @@ impl Calls {
     /// The duplex stream the other side writes in answer to the call
     /// `call` makes of the new stream's number, once it replies that it
     /// does, with this side's writer of it, which writes nothing before.
-    pub(crate) async fn duplex(
-        &self,
-        call: impl FnOnce(u64) -> Call,
-    ) -> Result<(Incoming, Outgoing)> {
+    pub async fn duplex(&self, call: impl FnOnce(u64) -> Call) -> Result<(Incoming, Outgoing)> {
         let (incoming, outgoing) = self.streams.open_duplex();
         match self.call(call(incoming.number())).await? {
             Reply::Streaming => Ok((incoming, outgoing)),
@@ -114,7 +111,7 @@ impl Calls {
     }
 
     /// The link's streams.
-    pub(crate) fn streams(&self) -> &Streams {
+    pub fn streams(&self) -> &Streams {
         &self.streams
     }
 
@@ -146,12 +143,12 @@ impl Calls {
 
 /// A call that never left this side, which the other side never ran.
 #[derive(Debug)]
-pub(crate) struct Unsent(String);
+pub struct Unsent(String);
 
 /// A call the other side received but never answered, which it may have
 /// run.
 #[derive(Debug)]
-pub(crate) struct Unanswered(String);
+pub struct Unanswered(String);
 
 impl std::fmt::Display for Unsent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -170,7 +167,7 @@ impl std::fmt::Display for Unanswered {
 impl std::error::Error for Unanswered {}
 
 /// How a session ended.
-pub(super) enum End {
+pub enum End {
     /// The other side closed the link.
     Closed,
     /// It failed, or the other side went silent for [`SILENCE`].
@@ -184,7 +181,7 @@ pub(super) enum End {
 /// comes with what it holds until its reply is written, such as the daemon
 /// operation that keeps an update from exiting between a change and the
 /// reply that reports it.
-pub(super) async fn serve<A, F, H>(
+pub async fn serve<A, F, H>(
     channel: Channel,
     calls: &Calls,
     answer: A,
@@ -215,7 +212,7 @@ where
     let sender = channel.sender();
     let mut pings = tokio::time::interval(SILENCE / 3);
     let mut heard = Instant::now();
-    let mut assembly = super::pieces::Assembly::default();
+    let mut assembly = crate::pieces::Assembly::default();
     tokio::pin!(stop);
     loop {
         tokio::select! {
@@ -262,12 +259,12 @@ where
                         tokio::spawn(async move {
                             let (reply, held) = answer.await;
                             let reply = Frame::Reply { id, reply };
-                            let _ = super::pieces::send(&sender, &reply, true).await;
+                            let _ = crate::pieces::send(&sender, &reply, true).await;
                             drop(held);
                         });
                     }
                     frame => {
-                        let frame = super::shown(&format!("{frame:?}"));
+                        let frame = crate::shown(&format!("{frame:?}"));
                         return End::Lost(anyhow!("unexpected hub link frame {frame}"));
                     }
                 }
@@ -277,7 +274,7 @@ where
 }
 
 /// The reply a call that failed with `result`'s error gets.
-pub(super) fn reply(result: Result<Reply>) -> Reply {
+pub fn reply(result: Result<Reply>) -> Reply {
     result.unwrap_or_else(|error| Reply::Failed {
         message: format!("{error:#}"),
     })

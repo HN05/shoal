@@ -7,9 +7,9 @@ use shoal_schedule::priority::Priority;
 use crate::config::permissions::{PermissionKey, PermissionsConfig};
 use crate::daemon::{
     executions::ExecutionKind,
-    hub::streams::tests::linked,
     test_daemon::{HANG, TestDaemon},
 };
+use shoal_hub::test_support::linked;
 
 #[tokio::test]
 async fn concurrent_forwarded_requests_of_one_space_are_each_decided_by_their_own_vouch() {

@@ -1,52 +1,13 @@
-use std::sync::Arc;
-
 use shoal_protocol::hub::link::{Call, Frame, Reply, STREAM_WINDOW};
-use tokio::{io::BufReader, task::JoinHandle};
+use tokio::io::BufReader;
 
 use super::{Incoming, Outgoing};
-use crate::daemon::hub::{
-    session::{Calls, serve},
+use crate::{
+    test_support::{Linked, linked},
     transport::Channel,
 };
 
-/// Two sides of a link, each serving it, whose calls each answer with
-/// [`Reply::Left`].
-pub(in crate::daemon::hub) struct Linked {
-    pub opener: Arc<Calls>,
-    pub writer: Arc<Calls>,
-    _served: [JoinHandle<()>; 2],
-}
-
-pub(in crate::daemon::hub) fn linked() -> Linked {
-    let (ours, theirs) = tokio::io::duplex(1 << 20);
-    let side = |stream: tokio::io::DuplexStream, peer: &str| {
-        let (read, write) = tokio::io::split(stream);
-        let channel = Channel::lines(BufReader::new(read), write);
-        let calls = Calls::new(channel.sender(), peer);
-        let served = calls.clone();
-        let task = tokio::spawn(async move {
-            let answer = |_: Call| async { (Reply::Left, ()) };
-            serve(channel, &served, answer, std::future::pending()).await;
-        });
-        (calls, task)
-    };
-    let (opener, first) = side(ours, "the writer");
-    let (writer, second) = side(theirs, "the opener");
-    Linked {
-        opener,
-        writer,
-        _served: [first, second],
-    }
-}
-
 impl Linked {
-    /// A new stream the opener reads and the writer writes.
-    pub(in crate::daemon::hub) fn stream(&self) -> (Incoming, Outgoing) {
-        let incoming = self.opener.streams().open();
-        let (outgoing, _) = self.writer.streams().answering(incoming.number(), false);
-        (incoming, outgoing)
-    }
-
     /// A new duplex stream: the opener's ends, then the other side's.
     fn duplex(&self) -> ((Incoming, Outgoing), (Incoming, Outgoing)) {
         let (down, up) = self.opener.streams().open_duplex();
