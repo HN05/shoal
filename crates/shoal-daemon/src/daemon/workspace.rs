@@ -55,7 +55,6 @@ pub(crate) mod review;
 pub(crate) mod runner;
 mod sessions;
 mod shutdown_stop;
-mod signals;
 mod space_removal;
 pub(crate) mod spotlight;
 mod stack;
@@ -153,7 +152,7 @@ pub struct Manager {
     /// Held through a stop before a shutdown; true once one finished, until
     /// a system shutdown is cancelled, so later ones leave the work alone.
     pub(crate) shutdown_stopped: tokio::sync::Mutex<bool>,
-    pub(crate) signals: signals::Signals,
+    pub(crate) signals: super::signals::Signals,
     /// The time runs of agent messages settle by.
     pub(crate) settle_clock: crate::daemon::agent_messages::SettleClock,
     pub(crate) usage: usage::Usage,
