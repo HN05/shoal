@@ -68,27 +68,9 @@ async fn picked_creation(
     launch.path = (launch.path.take())
         .map(|path| super::repositories::absolute(ctx, path))
         .transpose()?;
-    if ctx.interactive() {
-        picked_repository(ctx, &mut launch, parent.as_ref()).await?;
-    }
     super::workspaces::pick_start_source(ctx, &mut launch).await?;
     let below = parent.filter(|_| args.parent.is_none());
     Ok(NewCreation { launch, below })
-}
-
-/// Have a terminal's pickers offer what the repository of `parent` holds
-/// when `launch` names none, as the daemon then places the child there.
-async fn picked_repository(
-    ctx: &Context,
-    launch: &mut shoal_protocol::launches::Launch,
-    parent: Option<&SpaceSelector>,
-) -> Result<()> {
-    let names = crate::launches::names_repository(launch)?;
-    let Some(parent) = parent.filter(|_| !names) else {
-        return Ok(());
-    };
-    launch.repository = (space_repository(ctx, parent).await?).map(|id| id.to_string());
-    Ok(())
 }
 
 /// The space a new workspace goes below: the one `named`, else the
