@@ -27,9 +27,13 @@ pub(crate) use state::{Outcome, Restart, Restarts, restarted};
 
 impl Manager {
     /// Every connected agent, every execution whose wrapper is gone, which
-    /// may have run one, and every agent a restart starts in a new wrapper,
-    /// by the execution it ran as; connected commands are left out.
+    /// may have run one, every agent whose wrapper reattaches before this
+    /// daemon tracks it again, and every agent a restart starts in a new
+    /// wrapper, by the execution it ran as; connected commands are left out.
     pub async fn running_agents(&self) -> Result<Vec<RunningAgent>> {
+        // Before the records, so an agent tracked meanwhile shows with what
+        // its tracking left recorded, such as a stop a reattach forgot.
+        let connections = self.executions.connections().await;
         let (executions, reported, stops) = (self.store)
             .read(|db| {
                 let executions = store::all_executions(db)?;
@@ -40,7 +44,6 @@ impl Manager {
                 ))
             })
             .await?;
-        let connections = self.executions.connections().await;
         Ok(connections
             .with_restarts(|agents, renewals| {
                 let mut listed: Vec<RunningAgent> = executions
@@ -49,7 +52,9 @@ impl Manager {
                     .filter(|execution| !renewal::starting(renewals, &execution.id))
                     .filter_map(|execution| {
                         let agent = agents.get(&execution.id);
-                        if agent.is_none() && connections.is_connected(&execution.id) {
+                        // Its record names the agent of a reattaching wrapper.
+                        let command = agent.is_none() && execution.agent.is_none();
+                        if command && connections.is_connected(&execution.id) {
                             return None;
                         }
                         Some(RunningAgent {

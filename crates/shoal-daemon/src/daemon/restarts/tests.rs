@@ -3,7 +3,10 @@ use std::{sync::Arc, time::Duration};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
 
-use super::record::{self, Recorded};
+use super::{
+    deferred::Standing,
+    record::{self, Recorded},
+};
 use crate::{
     config::permissions::PermissionChange,
     daemon::{
@@ -279,6 +282,29 @@ async fn a_recorded_restart_goes_when_its_agent_exits_first() {
         .unwrap();
     assert!(!manager.act_on_restart(&workspace.id).await);
     assert!(recorded(&manager).await.is_empty());
+}
+
+#[tokio::test]
+async fn a_recorded_restart_waits_for_the_agent_of_a_reattaching_wrapper() {
+    let (root, manager) = manager().await;
+    let (workspace, execution) = working(root.path(), &manager).await;
+    let space = SpaceSelector::id(&workspace.id);
+    (manager.restart_space(None, &space, waiting()))
+        .await
+        .unwrap();
+    // A daemon that took over connects the wrapper before it tracks the
+    // agent again.
+    let id = &execution.plan.id;
+    manager.detach_execution(id).await;
+    let token = execution.plan.scope_token.clone();
+    let kind = ExecutionKind::Command;
+    let mut connections = manager.executions.connections().await;
+    let _stop = (connections.connect(id, kind, &workspace.id, token, None, false)).await;
+    drop(connections);
+    let [restart] = recorded(&manager).await.try_into().unwrap();
+    let agents = manager.running_agents().await.unwrap();
+    let standing = manager.standing(&restart, &agents).await.unwrap();
+    assert!(matches!(standing, Standing::Waits));
 }
 
 /// Record a restart of the agent of `workspace`, running as `execution`,

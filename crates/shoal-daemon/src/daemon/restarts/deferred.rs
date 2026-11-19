@@ -23,7 +23,7 @@ use crate::{
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Where the agent of a recorded restart stands.
-enum Standing {
+pub(super) enum Standing {
     /// It waits for its turn to end, for its wrapper to come back, or for
     /// a restart under way.
     Waits,
@@ -64,7 +64,11 @@ impl Manager {
     }
 
     /// Where the agent of `recorded` stands among `agents`.
-    async fn standing(&self, recorded: &Recorded, agents: &[RunningAgent]) -> Result<Standing> {
+    pub(super) async fn standing(
+        &self,
+        recorded: &Recorded,
+        agents: &[RunningAgent],
+    ) -> Result<Standing> {
         let id = &recorded.space_id;
         if self.restarts.acting(id) {
             return Ok(Standing::Waits);
