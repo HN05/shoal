@@ -2,8 +2,10 @@
 //! none goes while one is refused: the default branch, a protected one, the
 //! head or base of an open PR, one whose changes the default branch lacks
 //! unless forced, and the branch of an active space outside the caller's
-//! scope. A scoped caller deletes as its `push` permission allows, each
-//! branch checked at the commit it was read at, which an approval binds.
+//! scope. A scoped caller deletes as its `push` permission allows. Each
+//! branch goes only at the commit it was read at, which an approval binds:
+//! Git deletes it with that commit as its lease, so the forge keeps one
+//! that a push moved after the checks.
 use anyhow::{Context, Result, bail};
 use shoal_refs::BranchName;
 
@@ -12,6 +14,7 @@ use crate::{
     branches::{DeletedBranch, ListedBranch, SpaceWork},
     config::permissions::PermissionKey,
     daemon::{links::place::Access, manager::Manager, permissions::Action, scope::Caller},
+    git,
     protocol::RepoTarget,
 };
 use shoal_forge::branches::BranchRequests;
@@ -31,16 +34,7 @@ impl Manager {
         let doomed = self.deletable(&read, names, force, caller).await?;
         ensure_unmoved(&read, &doomed).await?;
         self.authorize_deletions(&read, &doomed, caller).await?;
-        let mut deleted = Vec::new();
-        for branch in doomed {
-            let (name, head) = (&branch.branch.name, &branch.branch.head);
-            read.forge.delete_branch(&read.account, name, head).await?;
-            deleted.push(DeletedBranch {
-                name: name.clone(),
-                head: head.clone(),
-            });
-        }
-        Ok(deleted)
+        delete_checked(&read, &doomed).await
     }
 
     /// The branches of `read` that `names` names, once none is refused.
@@ -153,6 +147,26 @@ async fn ensure_unmoved(read: &ReadBranches, doomed: &[&ListedBranch]) -> Result
         unmoved.context("deleted no branch")?;
     }
     Ok(())
+}
+
+/// Delete each of `doomed` in turn, as `read`'s account, only at the
+/// commit `read` read it at, stopping at the first that fails.
+async fn delete_checked(
+    read: &ReadBranches,
+    doomed: &[&ListedBranch],
+) -> Result<Vec<DeletedBranch>> {
+    let login = read.account.git_login(&read.forge).await?;
+    let url = read.forge.git_url();
+    let mut deleted = Vec::new();
+    for branch in doomed {
+        let (name, head) = (&branch.branch.name, &branch.branch.head);
+        git::remote_deletion::delete_at(&url, name, head, &login).await?;
+        deleted.push(DeletedBranch {
+            name: name.clone(),
+            head: head.clone(),
+        });
+    }
+    Ok(deleted)
 }
 
 /// Deleting `branch` of `read` at the commit it points to, as the `push`

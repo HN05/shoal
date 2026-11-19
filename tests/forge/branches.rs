@@ -11,8 +11,8 @@ const UNFETCHED: &str = "f00df00df00df00df00df00df00df00df00df00d";
 
 /// A Forgejo fixture whose checkout has a branch the default branch took by
 /// a squash merge, one it took by a rebase merge and one it lacks, and whose
-/// `topic` workspace has a commit of its own; `config` adds to the global
-/// config.
+/// `topic` workspace has a commit of its own, each pushed to the forge's
+/// repository; `config` adds to the global config.
 struct Branches {
     fixture: Fixture,
     /// Each branch's commit.
@@ -38,8 +38,47 @@ impl Branches {
         commit(&topic, "d");
         heads.insert("topic", head(&topic));
         let branches = Self { fixture, heads };
+        git(
+            branches.fixture.root.path(),
+            &[
+                "init",
+                "--quiet",
+                "--bare",
+                branches.remote().to_str().unwrap(),
+            ],
+        );
+        branches.publish();
         branches.respond(&[], &[]);
         branches
+    }
+
+    /// The forge's repository, which takes pushes.
+    fn remote(&self) -> PathBuf {
+        self.fixture.root.path().join("forge/git/team/project.git")
+    }
+
+    /// Push each branch to the forge's repository at its commit.
+    fn publish(&self) {
+        let remote = self.remote();
+        let refspecs = (self.heads.iter()).map(|(name, head)| format!("{head}:refs/heads/{name}"));
+        let args = ["push", "--quiet", "--force", remote.to_str().unwrap()];
+        let args: Vec<String> = args.into_iter().map(String::from).chain(refspecs).collect();
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        git(&self.fixture.repo, &args);
+    }
+
+    /// The commit `branch` points to in the forge's repository, if it is
+    /// there.
+    fn pushed(&self, branch: &str) -> Option<String> {
+        let refs = git(
+            &self.remote(),
+            &[
+                "for-each-ref",
+                "--format=%(objectname)",
+                &format!("refs/heads/{branch}"),
+            ],
+        );
+        refs.lines().next().map(str::to_owned)
     }
 
     /// Have the forge list the fixture's branches and `more`, each as
@@ -121,13 +160,28 @@ impl Branches {
 
     /// The branches the forge was asked to delete since the last call.
     fn deleted(&self) -> Vec<String> {
-        (self.fixture.requests().iter())
-            .filter_map(|request| request[0].as_str()?.strip_prefix("DELETE "))
-            .map(|path| {
-                path.trim_start_matches("repos/team/project/branches/")
-                    .to_owned()
-            })
+        self.deletions()
+            .into_iter()
+            .map(|(branch, _)| branch)
             .collect()
+    }
+
+    /// Each branch a push asked the forge to delete since the last call,
+    /// with the login it signed in with.
+    fn deletions(&self) -> Vec<(String, String)> {
+        let pushes = self.fixture.requests();
+        let pushes = (pushes.iter()).filter(|request| request[0] == "PUSH team/project");
+        let deletions = pushes.flat_map(|push| {
+            let login = push[2].as_str().unwrap().to_owned();
+            let updates = push[1].as_array().unwrap().clone();
+            updates.into_iter().filter_map(move |update| {
+                let (_, deleted) = update
+                    .as_str()?
+                    .split_once(" 0000000000000000000000000000000000000000 refs/heads/")?;
+                Some((deleted.to_owned(), login.clone()))
+            })
+        });
+        deletions.collect()
     }
 }
 
@@ -255,6 +309,31 @@ fn branch_delete_deletes_none_while_one_cannot_go() {
 }
 
 #[test]
+fn branch_delete_keeps_a_branch_pushed_to_after_its_check() {
+    let branches = Branches::new("");
+    // The forge still reports the commit Shoal reads and checks, while a
+    // push has moved the branch.
+    let later = &branches.heads["unmerged"];
+    git(
+        &branches.remote(),
+        &["update-ref", "refs/heads/squashed", later],
+    );
+    let output = branches.delete(&["squashed"]);
+    assert!(!output.status.success(), "{}", printed(&output));
+    assert_eq!(branches.deleted(), Vec::<String>::new());
+    assert_eq!(branches.pushed("squashed").as_ref(), Some(later));
+
+    // The user's deletion signs in with their own login.
+    let deleted = branches.delete(&["rebased"]);
+    assert!(deleted.status.success(), "{}", printed(&deleted));
+    assert_eq!(
+        branches.deletions(),
+        [("rebased".to_owned(), "token:usertoken".to_owned())]
+    );
+    assert_eq!(branches.pushed("rebased"), None);
+}
+
+#[test]
 fn an_agent_deletes_branches_as_its_push_permission_allows() {
     let config = |push: &str| format!("[permissions]\npush = '{push}'\n{}", super::AGENT_TOKEN);
     let denied = Branches::new(&config("deny"));
@@ -291,24 +370,8 @@ fn an_agent_deletes_branches_as_its_push_permission_allows() {
     branches.respond(&[], &[]);
     let deleted = branches.delete_as("topic", &["squashed", "rebased"]);
     assert!(deleted.status.success(), "{}", printed(&deleted));
-    let sent = branches.fixture.requests();
-    let deletes: Vec<_> = (sent.iter())
-        .filter(|request| request[0].as_str().unwrap().starts_with("DELETE"))
-        .map(|request| json!([request[0], request[2]]))
-        .collect();
-    assert_eq!(
-        deletes,
-        [
-            json!([
-                "DELETE repos/team/project/branches/squashed",
-                "token agenttoken"
-            ]),
-            json!([
-                "DELETE repos/team/project/branches/rebased",
-                "token agenttoken"
-            ]),
-        ]
-    );
+    let agent = |branch: &str| (branch.to_owned(), "token:agenttoken".to_owned());
+    assert_eq!(branches.deletions(), [agent("squashed"), agent("rebased")]);
 }
 
 #[test]
@@ -338,6 +401,7 @@ fn an_agent_deletes_an_active_spaces_branch_only_within_its_scope() {
     branches
         .fixture
         .ok(&["done", &branches.fixture.id("finished")]);
+    branches.publish();
     branches.respond(&[], &[]);
 
     let elsewhere = branches.delete_as("topic", &["child", "other", "--force"]);
@@ -390,15 +454,8 @@ fn a_chat_deletes_branches_of_its_repository_as_its_agent_account() {
     agent.kill().unwrap();
     agent.wait().unwrap();
     assert!(output.status.success(), "{}", printed(&output));
-    let deletes: Vec<_> = (fixture.requests().iter())
-        .filter(|request| request[0].as_str().unwrap().starts_with("DELETE"))
-        .map(|request| json!([request[0], request[2]]))
-        .collect();
     assert_eq!(
-        deletes,
-        [json!([
-            "DELETE repos/team/project/branches/squashed",
-            "token agenttoken"
-        ])]
+        branches.deletions(),
+        [("squashed".to_owned(), "token:agenttoken".to_owned())]
     );
 }

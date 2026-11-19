@@ -5383,9 +5383,10 @@ fork into the repository it was forked from included, a branch whose
 changes the default branch lacks, or of which Shoal cannot tell, unless
 `--force`, and for a scoped process the branch of an active workspace outside
 its scope, whatever `--force` says. Just before deleting any, it checks that
-each branch still points to the commit it was read at, and checks it again
-before its own deletion; the forge deletes a branch by name, so a push in the
-moment between that check and the deletion goes with it. You delete with your login, a scoped process as
+each branch still points to the commit it was read at, then deletes each with
+a Git push over HTTPS that the forge refuses once the branch points elsewhere:
+a branch that a push moved after the check stays, and so do the branches after
+it. You delete with your login, a scoped process as
 the agent account, as its space's [`push` permission](#mode-permissions)
 allows: `"propose"` makes one approval request per branch, bound to the commit
 it points to, so a branch that moved needs another. A workspace keeps its

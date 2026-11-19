@@ -9,12 +9,11 @@ use super::{GitHub, graphql::graphql_nodes, rulesets::DeletionRules};
 use crate::{
     account::Account,
     backends::{BranchFields, Branches, github_rest},
-    transport::api::{Request, TransportRequests, encode},
+    transport::api::TransportRequests,
 };
 use shoal_forge_types::{
     ForgeRepo,
     branches::{ForgeBranch, OpenPull},
-    raw::HttpMethod,
 };
 
 const BRANCHES: &str = "query($owner: String!, $name: String!, $after: String) { repository(owner: $owner, name: $name) { refs(refPrefix: \"refs/heads/\", first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { name target { oid ... on Commit { committedDate } } branchProtectionRule { id } } } } }";
@@ -54,11 +53,6 @@ impl Branches for GitHub {
 
     async fn outgoing_pulls(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<OpenPull>> {
         github_rest::outgoing_pulls(repo, account).await
-    }
-
-    fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request {
-        let endpoint = repo.repo_endpoint(&format!("git/refs/heads/{}", encode(branch, true)));
-        Request::new(HttpMethod::Delete, endpoint, None)
     }
 }
 

@@ -1,16 +1,16 @@
 //! What each forge does its own way with a repository's branches: listing
-//! them and the open PRs that join them, and deleting one.
+//! them and the open PRs that join them.
 use anyhow::{Context, Result};
 use serde_json::Value;
 
-use crate::{account::Account, backends::Backend, transport::api::Request};
+use crate::{account::Account, backends::Backend};
 use shoal_forge_types::{
     ForgeRepo,
     backends::ForgeKind,
     branches::{ForgeBranch, OpenPull},
 };
 
-/// How the forge lists and deletes a repository's branches.
+/// How the forge lists a repository's branches.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
 pub(crate) trait Branches: Backend {
     /// The repository's branches.
@@ -26,9 +26,6 @@ pub(crate) trait Branches: Backend {
     /// fork of, which its own listing leaves out; none for a repository that
     /// is no fork.
     async fn outgoing_pulls(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<OpenPull>>;
-
-    /// The request that deletes `branch` from the repository.
-    fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request;
 }
 
 /// Where a forge's listing of branches puts what Shoal reads of each, as

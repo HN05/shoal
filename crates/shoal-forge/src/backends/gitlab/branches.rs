@@ -7,13 +7,12 @@ use super::GitLab;
 use crate::{
     account::Account,
     backends::{BranchFields, Branches},
-    transport::api::{Request, TransportRequests, encode},
+    transport::api::TransportRequests,
 };
 use shoal_forge_types::{
     ForgeRepo,
     branches::{ForgeBranch, OpenPull},
     numbers::PullNumber,
-    raw::HttpMethod,
 };
 
 const FIELDS: BranchFields = BranchFields {
@@ -75,11 +74,5 @@ impl Branches for GitLab {
             }
         }
         Ok(outgoing)
-    }
-
-    fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request {
-        let endpoint =
-            repo.repo_endpoint(&format!("repository/branches/{}", encode(branch, false)));
-        Request::new(HttpMethod::Delete, endpoint, None)
     }
 }

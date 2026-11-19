@@ -5,12 +5,11 @@ use serde_json::Value;
 use super::Forgejo;
 use crate::{
     backends::{BranchFields, Branches, github_rest},
-    transport::api::{Request, TransportRequests, encode},
+    transport::api::TransportRequests,
 };
 use shoal_forge_types::{
     ForgeRepo,
     branches::{ForgeBranch, OpenPull},
-    raw::HttpMethod,
 };
 
 const FIELDS: BranchFields = BranchFields {
@@ -45,10 +44,5 @@ impl Branches for Forgejo {
         account: &crate::account::Account,
     ) -> Result<Vec<OpenPull>> {
         github_rest::outgoing_pulls(repo, account).await
-    }
-
-    fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request {
-        let endpoint = repo.repo_endpoint(&format!("branches/{}", encode(branch, false)));
-        Request::new(HttpMethod::Delete, endpoint, None)
     }
 }

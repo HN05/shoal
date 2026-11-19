@@ -3491,12 +3491,13 @@ without the rewrites. Unless `push` is `"direct"`, a scoped `merge` needs approv
 whatever the `merge` permission says, since it may push the default branch, and a
 forge's `pr revert`, which pushes at once, is refused for scoped callers. A
 pending push request keeps the workspace from unattended removal.
-Deleting branches on the forge is `shoal branch delete`, a forge request a chat
-makes as a workspace does, since a chat has no `git push --delete`; `push`
+Deleting branches on the forge is `shoal branch delete`, which the daemon runs
+for a chat as for a workspace, since a chat has no `git push --delete`; `push`
 governs it as it governs a pushed deletion, with one `"propose"` request per
-branch bound to the commit the branch points to, and each deletion first
-checks that it still points there; the forges' APIs delete a branch by name,
-so a push in the moment between the check and the deletion goes with it. It checks every named branch before deleting
+branch bound to the commit the branch points to. The daemon deletes each with
+a Git push over HTTPS as the caller's account, leased at that commit, since
+the forges' APIs delete a branch by name: the forge keeps a branch that a push
+moved after the checks. It checks every named branch before deleting
 any, and refuses the default and protected branches, the head or base of an
 open PR, a branch whose changes the default branch lacks unless `--force`, and
 an active space's branch outside the caller's scope whatever `--force` says; a

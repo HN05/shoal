@@ -6,12 +6,12 @@ use shoal_refs::BranchName;
 use super::GitHub;
 use crate::{
     account::Account,
-    backends::{Branches, Merging, github_rest, subject_and_body},
+    backends::{Merging, github_rest, subject_and_body},
     items::{
         item::{ItemRequests, text},
         revert::NewRevert,
     },
-    transport::api::{Request, TransportRequests},
+    transport::api::{Request, TransportRequests, encode},
 };
 use shoal_forge_types::{
     ForgeRepo,
@@ -73,7 +73,7 @@ impl Merging for GitHub {
             vec![Request::new(HttpMethod::Put, merge, Some(body)).confirming("merged")];
         // A fork's branch is not this repository's to delete.
         if delete_branch && current.head_in(repo) {
-            requests.push(self.branch_delete(repo, pr.head.as_str()));
+            requests.push(head_delete(repo, pr.head.as_str()));
         }
         Ok(requests)
     }
@@ -154,6 +154,12 @@ fn allowed_merge(repository: &Value) -> Option<MergeMethod> {
     ]
     .into_iter()
     .find_map(|(allowed, method)| (repository[allowed] == true).then_some(method))
+}
+
+/// The request that deletes the merged PR's head `branch` from `repo`.
+fn head_delete(repo: &ForgeRepo, branch: &str) -> Request {
+    let endpoint = repo.repo_endpoint(&format!("git/refs/heads/{}", encode(branch, true)));
+    Request::new(HttpMethod::Delete, endpoint, None)
 }
 
 /// The GraphQL request that has GitHub merge the PR `current` with `method`

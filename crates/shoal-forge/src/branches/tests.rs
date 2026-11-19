@@ -148,63 +148,6 @@ async fn each_forge_lists_open_prs_by_the_branches_they_join() {
 }
 
 #[tokio::test]
-async fn a_branch_is_deleted_only_at_the_commit_it_was_read_at() {
-    let server = forge(vec![
-        (
-            "GET /api/v1/repos/team/project/branches/topic",
-            json!({"commit": {"id": "b2"}}),
-        ),
-        (
-            "DELETE /api/v1/repos/team/project/branches/topic",
-            json!({}),
-        ),
-    ]);
-    let repo = repo_on(&server, ForgeKind::Forgejo, "team/project");
-    let account = agent_on(&server, "agent");
-    let topic = BranchName::from("topic");
-    let (read, moved) = (CommitId::from("b2"), CommitId::from("a1"));
-    let refused = repo.delete_branch(&account, &topic, &moved).await;
-    assert!(refused.is_err());
-    let deletes = |server: &Server| {
-        (server.received().iter())
-            .filter(|request| request.line.starts_with("DELETE"))
-            .count()
-    };
-    assert_eq!(deletes(&server), 0);
-    repo.delete_branch(&account, &topic, &read).await.unwrap();
-    assert_eq!(deletes(&server), 1);
-}
-
-#[test]
-fn each_forge_deletes_a_branch_at_its_encoded_name() {
-    for (remote, endpoint) in [
-        (
-            "git@github.com:team/repo.git",
-            "repos/team/repo/git/refs/heads/fix/a",
-        ),
-        (
-            "https://forge.example/team/repo",
-            "repos/team/repo/branches/fix%2Fa",
-        ),
-        (
-            "git@gitlab.com:team/repo.git",
-            "projects/team%2Frepo/repository/branches/fix%2Fa",
-        ),
-        (
-            "git@bitbucket.org:team/repo.git",
-            "repositories/team/repo/refs/branches/fix%2Fa",
-        ),
-    ] {
-        let repo = ForgeRepo::parse(remote).unwrap();
-        let request = repo.kind().branch_delete(&repo, "fix/a");
-        assert_eq!(
-            (request.method.as_str(), request.endpoint.as_str()),
-            ("DELETE", endpoint)
-        );
-    }
-}
-
-#[tokio::test]
 async fn a_github_ruleset_on_a_later_page_protects_the_branches_it_names() {
     let other: Vec<_> = (1..=100)
         .map(|id| json!({"id": id, "target": "tag", "enforcement": "active"}))
