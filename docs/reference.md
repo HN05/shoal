@@ -916,8 +916,8 @@ below its own on every machine and is refused the rest, and a device's go as
 yours. An action a space's permission sets to `propose` is refused from another
 machine, since its approval request would belong to that space's machine. This covers `status`, `log`, `questions`, `approvals`, `messages send`,
 `stop`, `resume`, `rename`, `done`, `rm`, `priority`,
-`progress`, `sleep`, `conflicts`, `diff`, holds, the issue, PR and CI
-commands that act on a space, and following an agent's session, whose bytes come back as its machine
+`progress`, `sleep`, `conflicts`, `diff`, `attach`, holds, the issue, PR and
+CI commands that act on a space, and following an agent's session, whose bytes come back as its machine
 reads them. The link to the hub carries such answers as byte streams beside
 its other traffic, each held to what its reader has taken, so a reader that
 falls behind holds up nothing else. `restart` acts on the agents of its own machine. Commands that need the
@@ -1624,7 +1624,31 @@ does. Without a session showing an agent, attaching starts the restore an
 asleep agent waits for, and without any session left it restores a stopped
 agent as `shoal restore --now` does. Neither starts a second agent beside one whose wrapper waits. A session
 whose agent stopped without a restore in the queue says why the agent stopped
-and what restores it. Sessions are named after the workspace's directory, or for a
+and what restores it.
+
+`shoal attach <target>` of a space another machine of the hub runs, by its
+number or ID, has that machine run the same attach as you, on a terminal of
+your terminal's size and `TERM`: it wakes or restores the agent, picks a
+session there, `--session` naming one, and draws its picker on that terminal,
+which yours shows in raw mode. Every key goes there, so the host's own detach
+key, such as zmx's Ctrl-\, detaches, and a resize follows. A zmx, tmux,
+Zellij or Herdr session takes a client of its host on that terminal, which
+switches a tmux, Zellij or Herdr session's window or tab for its other
+clients as an attach from a terminal outside it does. A Rex block is selected
+in your own Rex app, which connects to that machine's Rex server under the
+label your machine's Rex reports, and your terminal gets its shell back; one
+that does not connect there is refused, naming the address to add in Rex,
+and without a Rex app here the refusal says to open Rex. A space with no
+session there, such as a chat in the Happy app, is refused, naming its
+machine and `shoal move`. When the link drops, that machine hangs the terminal
+up, so its client detaches and the session keeps running; your terminal says
+so on one line and attaches again to the same session, without a second wake
+or restore, until Ctrl-C, which exits non-zero. A machine offline at the
+start fails at once, naming it. The attach exits as the one there does, and a
+space's process is refused it, as here. An app attaches the same way through
+`shoal-client`, without a Rex app of its own.
+
+Sessions are named after the workspace's directory, or for a
 chat opaquely, such as `chat-0b9c3a52`, since nothing is built from its name, suffixed `-2`, `-3`, ... when the name
 is in use, so `zmx ls` and `zmx attach` work as well, and labelled with their
 owner, `shoal.workspace=<id>` or, once the chat is recorded, `shoal.chat=<id>`.

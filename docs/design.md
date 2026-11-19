@@ -201,7 +201,16 @@ appends, unread: apps parse each tool's format, so a tool changing it changes
 only the app. A diff of another machine's workspace streams what that
 machine's Git writes under its own config for the repository, run as a plain
 read that is no use of the workspace, while the caller's Git decides its
-colour, width and pager, as it would for a diff run there. Apps keep their data in Shoal without Shoal knowing them: every
+colour, width and pager, as it would for a diff run there. Attaching to
+another machine's session runs Shoal's own attach there, as the user, on a
+terminal that machine makes at the viewer's size, so waking, restoring,
+choosing a session and the host's attach stay one code path; a host callback
+decides how a place shows to another machine, a client of the host on that
+terminal by default, and for Rex, which has none, the viewer's own Rex app,
+found by the label it reports. The viewer's keys go there unread, the host's
+detach key included, so Shoal has no detach key of its own; a dropped link
+hangs that terminal up, leaving the session running, and the viewer attaches
+again to the session at the same place, without waking or restoring twice. Apps keep their data in Shoal without Shoal knowing them: every
 daemon keeps an app store of entries per app, bytes with a content type under
 path-like keys, shared across the user's machines and devices or one
 device's own, in its state directory and reached only through the protocol;
