@@ -326,13 +326,17 @@ pub(in crate::cli) fn start_agent(
             ensure_available(&agent, settings)?;
             Ok(Some(agent))
         }
-        None if ctx.interactive() => {
-            let search_path = std::env::var_os("PATH").unwrap_or_default();
-            let installed = |name: &Agent| installed(name, &settings.launchers, &search_path);
-            pick_agent(ctx, settings, installed, None)
-        }
+        None if ctx.interactive() => pick_installed_agent(ctx, settings),
         None => Ok(None),
     }
+}
+
+/// The picker standing in for a missing `agent.default`: the agents whose
+/// programs are installed.
+fn pick_installed_agent(ctx: &Context, settings: &Effective) -> Result<Option<Agent>> {
+    let search_path = std::env::var_os("PATH").unwrap_or_default();
+    let installed = |name: &Agent| installed(name, &settings.launchers, &search_path);
+    pick_agent(ctx, settings, installed, None)
 }
 
 /// The picker standing in for a missing reviewer: the agents with a review
