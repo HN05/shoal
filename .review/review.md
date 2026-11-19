@@ -54,7 +54,9 @@ instead of the PR delivery guidance below.
   operations through a service `Manager` holds and reaches other subsystems
   only through interfaces it declares; `shoal-leases` depends on no Shoal
   crate but `shoal-core`, `shoal-daemon-base`, `shoal-ids`, `shoal-protocol`,
-  `shoal-store` and `shoal-subprocess`. Flag a `Manager` method that does a
+  `shoal-store` and `shoal-subprocess`, and `shoal-reviews` on none but
+  `shoal-core`, `shoal-daemon-base`, `shoal-forge`, `shoal-forge-types`,
+  `shoal-ids`, `shoal-protocol`, `shoal-refs` and `shoal-store`. Flag a `Manager` method that does a
   subsystem's work, a subsystem crate that reads another's tables or calls it
   other than through such an interface, and a test of one subsystem that
   builds a `Manager` instead of the service over stand-ins.

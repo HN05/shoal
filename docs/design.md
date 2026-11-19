@@ -105,6 +105,10 @@ its `Leases` service, which `Manager` holds, owns what leases keep in memory,
 such as the order queued requests take capacity in, and what leases need of
 the spaces, settings, agents and approvals elsewhere is an interface the
 crate declares, which the daemon implements and passes each operation.
+`shoal-reviews` follows it with local reviews and the one-shot agent runs
+they start: its `Reviews` service owns the running reviews and their
+checkouts, and the agent queue admits a run through the same kind of
+interface, as a handle the run holds until it ends.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
 the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
 `shoal-workers` neither the daemon nor its tests: the daemon depends on no
