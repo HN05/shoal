@@ -43,26 +43,22 @@ impl Scratch {
     /// Shoal's, after removing one an earlier run left; its path.
     pub(crate) async fn add(self, repo: &Path, commit: &CommitId) -> Result<PathBuf> {
         self.remove(repo).await?;
+        let worktree = self.create_directory(repo).await?.join("replay");
+        (add_replaced(repo, &worktree, commit).await)
+            .with_context(|| format!("create the worktree shoal {} runs in", self.command))?;
+        Ok(worktree)
+    }
+
+    /// Create the directory in `repo`'s Git directory that holds the
+    /// worktree, marked as Shoal's; its path.
+    async fn create_directory(self, repo: &Path) -> Result<PathBuf> {
         let directory = self.directory(repo).await?;
         let (marked, owner) = (directory.clone(), self.owner);
         off_runtime::run(move || Ok(fsutil::marked_dirs::create_marked_dir(&marked, owner)?))
             .await
             .with_context(|| format!("create {}", directory.display()))?;
         self.ensure_own(&directory).await?;
-        let worktree = directory.join("replay");
-        // `--force` replaces the registration of a scratch worktree whose
-        // directory is gone, and no other worktree's.
-        git::worktree_add::run(|| {
-            let mut command = git::isolated_command(repo);
-            command
-                .args(["worktree", "add", "--quiet", "--detach", "--force"])
-                .arg(&worktree)
-                .arg(commit.as_str());
-            command
-        })
-        .await
-        .with_context(|| format!("create the worktree shoal {} runs in", self.command))?;
-        Ok(worktree)
+        Ok(directory)
     }
 
     /// Remove the worktree an earlier run left and Git's record of it, if
@@ -97,6 +93,22 @@ impl Scratch {
         );
         Ok(())
     }
+}
+
+/// Check out `commit` in a new linked worktree of `repo` at `worktree`, on
+/// no branch. `--force` replaces the registration of a scratch worktree
+/// whose directory is gone, and no other worktree's.
+async fn add_replaced(repo: &Path, worktree: &Path, commit: &CommitId) -> Result<()> {
+    git::worktree_add::run(|| {
+        let mut command = git::isolated_command(repo);
+        command
+            .args(["worktree", "add", "--quiet", "--detach", "--force"])
+            .arg(worktree)
+            .arg(commit.as_str());
+        command
+    })
+    .await
+    .map(drop)
 }
 
 #[cfg(test)]
