@@ -10,7 +10,10 @@ fn an_availability_carries_its_reason_beside_it() {
     };
     let wire = json!({"availability": "intermittent", "reason": "connected", "percent": 87});
     assert_eq!(serde_json::to_value(connected).unwrap(), wire);
-    assert_eq!(serde_json::from_value::<Classified>(wire).unwrap(), connected);
+    assert_eq!(
+        serde_json::from_value::<Classified>(wire).unwrap(),
+        connected
+    );
     let new = json!({"availability": "always_on", "reason": "new", "battery": false});
     let new: Classified = serde_json::from_value(new).unwrap();
     assert_eq!(

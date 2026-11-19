@@ -43,6 +43,7 @@ use shoal_states::states;
 
 use super::{
     ExchangeKey, Mac, MemberKind, Nonce, Overview, PublicKey, Signature,
+    availability::{Classified, Description},
     directory::{Directory, Report},
     numbering::Numbering,
     pairing::Pairing,
@@ -272,6 +273,9 @@ pub enum Call {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         reserved: Vec<SpaceNumber>,
     },
+    /// What a machine says of itself, when its link opens and when its
+    /// setting changes. Answered with [`Reply::Availability`].
+    Describe { description: Description },
     /// The directory of every machine's spaces. Answered with
     /// [`Reply::Directory`].
     Directory,
@@ -343,6 +347,7 @@ pub enum Reply {
     Revoked(super::Member),
     Left,
     Reported(Numbering),
+    Availability(Classified),
     Directory(Directory),
     Owner(Option<super::Member>),
     Claimed(Option<SpaceNumber>),

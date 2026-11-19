@@ -231,7 +231,15 @@ and when the hub last saw it, and a machine whose link is down keeps what
 its spaces pass up until it opens. A question or approval request that
 waits `[machine.hub] escalate_after_minutes` for a coordinator whose
 machine is offline passes to the next space above with an agent on a
-connected machine, or to the user. Browser sessions are a later step.
+connected machine, or to the user. Each machine is `always_on` or
+`intermittent`, which `[machine] availability` sets or else the hub guesses
+from its link history alone, never from what powers the machine:
+`intermittent` below 95% of the last 7 days connected, gaps under 5 minutes
+not counting, and for its first day by whether it reports a battery, so a new
+portable machine takes no lasting work before the hub has seen it behave. The
+hub keeps that history in its own state and counts its own machine from when
+its daemon ran with the machine awake. The
+numbers are fixed, not settings. Browser sessions are a later step.
 The minimum Rust version follows current stable so the code can use its newest
 features; the manifest and CI toolchain advance together, with locked dependencies.
 The daemon raises its open file limit at startup and accepts every connection,

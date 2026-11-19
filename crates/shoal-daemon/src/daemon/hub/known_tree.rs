@@ -82,6 +82,7 @@ impl Known {
                 last_seen: None,
                 connected: false,
                 hub: false,
+                availability: None,
             })
             .collect();
         let spaces = (self.spaces.into_iter()).map(listed).collect();

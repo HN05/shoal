@@ -51,6 +51,12 @@ fn member_rows(overview: &Overview, palette: Palette) -> Vec<String> {
                     Some(Style::Muted),
                 ),
                 (state, Some(style)),
+                (
+                    (member.availability.as_ref())
+                        .map(ToString::to_string)
+                        .unwrap_or_default(),
+                    None,
+                ),
                 (member.id.to_string(), Some(Style::Muted)),
             ]
         })

@@ -4,7 +4,10 @@
 use anyhow::{Result, bail};
 use rusqlite::{OptionalExtension as _, Row, Transaction, params};
 use shoal_ids::member_ids::MemberId;
-use shoal_protocol::hub::{Member, MemberKind, PublicKey};
+use shoal_protocol::hub::{
+    Member, MemberKind, PublicKey,
+    availability::{AvailabilitySetting, Description},
+};
 
 use crate::refusal::{Reason, Refusal};
 use crate::time::UnixTime;
@@ -31,6 +34,7 @@ fn recorded(row: &Row<'_>, own: &PublicKey) -> rusqlite::Result<Recorded> {
             last_seen: row.get("last_seen")?,
             connected: false,
             hub: &key == own,
+            availability: None,
         },
         revoked: row.get::<_, Option<UnixTime>>("revoked_at")?.is_some(),
         key,
@@ -146,5 +150,31 @@ pub(super) fn admitted(tx: &Transaction<'_>, id: &MemberId) -> Result<bool> {
         "SELECT EXISTS(SELECT 1 FROM hub_members WHERE id=?1 AND revoked_at IS NULL)",
         [id],
         |row| row.get(0),
+    )?)
+}
+
+/// Record what the machine `id` says of itself.
+pub(super) fn describe(
+    tx: &Transaction<'_>,
+    id: &MemberId,
+    description: Description,
+) -> Result<()> {
+    tx.execute(
+        "UPDATE hub_members SET battery=?2, availability=?3 WHERE id=?1",
+        params![id, description.battery, description.availability],
+    )?;
+    Ok(())
+}
+
+/// What the machine `id` last said of itself: whether it has a battery,
+/// none before it said, and its setting.
+pub(super) fn description(
+    tx: &Transaction<'_>,
+    id: &MemberId,
+) -> Result<(Option<bool>, AvailabilitySetting)> {
+    Ok(tx.query_row(
+        "SELECT battery, availability FROM hub_members WHERE id=?1",
+        [id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
     )?)
 }

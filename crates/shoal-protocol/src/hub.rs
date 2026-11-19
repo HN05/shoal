@@ -233,6 +233,9 @@ pub struct Member {
     pub connected: bool,
     /// Whether it is the hub's own machine.
     pub hub: bool,
+    /// A machine's availability and why; none for a device.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub availability: Option<availability::Classified>,
 }
 
 /// The hub's listener: where it listens, which Shoal never encrypts, and the

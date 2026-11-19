@@ -824,10 +824,23 @@ admits one join within ten minutes. It warns when the URL is `http://` to
 another machine. `shoal hub join <code>` joins this machine under the host's
 name, or `--name`; an app joins as a device with the same code. The hub gives
 each machine or device an ID at pairing, and `hub ls` lists them with kind,
-name, Shoal version and when each was last seen, by which `hub revoke` names
-one. `hub leave` revokes this machine's own credential, or names what to revoke
+name, Shoal version, when each was last seen and each machine's availability,
+by which `hub revoke` names one. `hub leave` revokes this machine's own credential, or names what to revoke
 on the hub when it cannot reach it. Only your own terminal pairs, joins, leaves
 and revokes; anyone lists.
+
+Each machine is `always_on` or `intermittent`, which `hub ls` shows with the
+reason.
+[`[machine] availability`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine)
+sets it (`set`); under `auto`, the default, the hub guesses from how reachable
+the machine was, never from what powers it. A machine whose link was open less
+than 95% of the last 7 days is `intermittent`, and any other `always_on`
+(`connected N% of 7 days`); an absence shorter than 5 minutes, such as a
+network blip or a daemon restart, counts as connected, and the hub's own
+machine counts as connected while its daemon runs with the machine awake. For
+the first day the hub knows a machine, it goes by the battery instead: a
+machine with one is `intermittent` (`new, battery`) and one without
+`always_on` (`new, no battery`).
 
 A machine can also reach the hub through a command, whose standard input and
 output its daemon uses as the link, restarting it with backoff and logging its

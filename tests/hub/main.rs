@@ -364,3 +364,17 @@ fn the_hub_keeps_a_joiner_s_name_short() {
         name.len()
     );
 }
+
+#[test]
+fn a_machine_s_set_availability_shows_on_the_hub() {
+    let hub = Machine::hub();
+    let laptop = Machine::start("[machine]\navailability = \"intermittent\"\n");
+    laptop.join_through_command(&hub, "laptop");
+    let set = json!({"availability": "intermittent", "reason": "set"});
+    let members = hub.members_once(|members| {
+        named(members, "laptop").is_some_and(|member| member["availability"] == set)
+    });
+    // The hub's own machine, new to it, goes by its battery.
+    let own = members.iter().find(|member| member["hub"] == true).unwrap();
+    assert_eq!(own["availability"]["reason"], "new", "{own}");
+}

@@ -23,6 +23,7 @@ fn device(name: &str) -> Member {
         last_seen: None,
         connected: true,
         hub: false,
+        availability: None,
     }
 }
 

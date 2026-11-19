@@ -257,8 +257,8 @@ impl Manager {
 
     /// Serve the open link on `transport` until it ends or `stop`
     /// resolves, answering what the hub passes this machine, and sending
-    /// what waited for the link, then reporting this machine's spaces,
-    /// meanwhile.
+    /// what waited for the link, then reporting this machine's spaces and
+    /// describing it, meanwhile.
     async fn serve_hub(
         self: &Arc<Self>,
         mut transport: Transport,
@@ -278,6 +278,7 @@ impl Manager {
             tokio::select! {
                 never = self.keep_sending_outbox(&calls) => never,
                 never = self.keep_reporting(&calls) => never,
+                never = self.keep_describing(&calls) => never,
             }
         };
         let end = tokio::select! {

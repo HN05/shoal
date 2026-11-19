@@ -20,13 +20,16 @@ use tokio::{sync::OwnedRwLockReadGuard, time::Instant};
 use super::{
     identity::{nonce, verify},
     links::Registration,
-    members, pairing,
+    members, pairing, presence,
     sealing::Exchange,
     session::{self, Calls, End},
     shown,
     transport::Channel,
 };
-use crate::daemon::{log, manager::Manager, notifications::NotificationKind};
+use crate::{
+    daemon::{log, manager::Manager, notifications::NotificationKind},
+    time::UnixTime,
+};
 
 /// How long a member has to send its proof.
 const PROOF_TIMEOUT: Duration = Duration::from_secs(30);
@@ -390,12 +393,14 @@ impl Manager {
         }
     }
 
-    /// Record that `member` was seen now, running `version`.
+    /// Record that `member` was seen, and was there, now, running
+    /// `version`.
     async fn member_seen(&self, member: &MemberId, version: &str) {
         let (member, version) = (member.clone(), version.to_owned());
-        let seen = self
-            .store
-            .write(move |tx| members::seen(tx, &member, &version));
+        let seen = self.store.write(move |tx| {
+            members::seen(tx, &member, &version)?;
+            presence::mark(tx, &member, UnixTime::now())
+        });
         if let Err(error) = seen.await {
             log!("hub: could not record a member's connection: {error:#}");
         }

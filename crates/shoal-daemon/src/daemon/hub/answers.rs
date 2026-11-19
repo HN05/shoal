@@ -96,6 +96,10 @@ impl Manager {
                 ensure_machine(member)?;
                 Reply::Claimed(self.record_space_claim(&member.id, &space).await?)
             }
+            Call::Describe { description } => {
+                ensure_machine(member)?;
+                Reply::Availability(self.describe_member(&member.id, description).await?)
+            }
             Call::Directory => Reply::Directory(self.local_directory().await?),
             Call::Owner { space } => {
                 Reply::Owner(self.local_space_owner(&space, &member.id).await?)
@@ -163,6 +167,7 @@ impl Manager {
                 member.last_seen = None;
             }
         }
+        self.with_availability(&mut members).await?;
         Ok(Overview {
             listener: self.hub_listener(),
             members,

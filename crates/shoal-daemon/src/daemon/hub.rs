@@ -20,6 +20,7 @@ mod accept;
 pub(crate) mod answers;
 mod app_servers;
 mod apps;
+mod availability;
 mod directory;
 mod escalation;
 mod forwarding;
@@ -34,6 +35,7 @@ pub(crate) mod numbering;
 mod owners;
 mod pairing;
 mod pieces;
+mod presence;
 mod queue;
 mod removal;
 mod reports;
@@ -90,6 +92,7 @@ pub(crate) async fn run(manager: Arc<Manager>) {
         manager.report_own_spaces(),
         manager.expire_held(),
         manager.escalate_waiting(),
+        manager.keep_marking_presence(),
         member::run(manager.clone()),
     );
 }

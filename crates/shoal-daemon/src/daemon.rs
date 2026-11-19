@@ -17,6 +17,7 @@ mod answer;
 pub mod approvals;
 mod apps;
 mod auto_update;
+mod battery;
 pub(crate) mod blockers;
 pub(crate) mod busy_cpu;
 pub(crate) mod caches;
