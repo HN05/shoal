@@ -46,6 +46,37 @@ async fn a_queued_agent_refuses_another_worker() {
     assert_eq!(manager.queue_entries().await.unwrap().len(), 1);
 }
 
+/// An agent that waits for its restore holds its workspace's one agent,
+/// whether its wrapper or, once that is gone, the daemon restores it.
+#[tokio::test]
+async fn an_agent_waiting_for_its_restore_refuses_another_worker() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let workspace = create(&manager, &repo, "asleep").await;
+    let (execution, _stop) = connected_agent(&manager, &workspace).await;
+    assert!(
+        manager
+            .stop_agent_for_overload("critical memory pressure")
+            .await
+    );
+    manager.queue_agent_restore(&execution).await.unwrap();
+    refusal(queue_worker(&manager, &workspace).await);
+
+    // Its wrapper is gone, and the daemon takes over its restore.
+    (manager.store)
+        .run(move |db| {
+            db.execute("DELETE FROM executions WHERE id=?1", [execution])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.dispatch_queue().await.unwrap();
+    let refused = refusal(queue_worker(&manager, &workspace).await);
+    assert!(refused.contains("shoal queue"), "{refused}");
+    let entries = manager.queue_entries().await.unwrap();
+    assert_eq!(entries.len(), 1, "{entries:?}");
+}
+
 #[tokio::test]
 async fn a_stopped_agent_refuses_another_worker_until_it_is_resumed_or_forgotten() {
     let (temp, manager) = manager().await;
