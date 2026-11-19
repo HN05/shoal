@@ -16,7 +16,7 @@ use shoal_forge_types::{
 const FIELDS: BranchFields = BranchFields {
     name: "/name",
     head: "/commit/id",
-    committed_at: "/commit/timestamp",
+    committed_at: Some("/commit/timestamp"),
 };
 
 impl Branches for Forgejo {

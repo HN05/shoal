@@ -5359,13 +5359,13 @@ shoal branch delete spike --force   # one whose changes the default branch lacks
 
 `shoal branch ls` lists the branches on the forge of the space's repository,
 or of the one `--repo` names as for `issue ls`, never local ones: each with
-its head commit and that commit's date, whether it is the default branch or
-the forge protects it, whether the default branch has its changes, the open
-PRs whose head it is, and the workspace whose branch it is, with where that
-workspace's work stands: `done` once marked done, else `merged` once the
-default branch has the changes of its local branch, which may hold commits it
-has not pushed, else `active`. Whether the default branch has
-a branch's changes is the check cleanup makes, which counts squash and rebase
+its head commit and that commit's date, which GitHub gives only to a login,
+whether it is the default branch or the forge protects it, whether the
+default branch has its changes, the open PRs whose head it is, and the
+workspace whose branch it is, with where that workspace's work stands: `done`
+once marked done, else `merged` once the default branch has the changes of
+its local branch, which may hold commits it has not pushed, else `active`.
+Whether the default branch has a branch's changes is the check cleanup makes, which counts squash and rebase
 merges, in the registered checkout against the commits the daemon fetched;
 it is unknown for a commit the checkout lacks and in a repository that is not
 registered. `--merged` and `--unmerged` list only the branches the check

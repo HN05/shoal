@@ -79,6 +79,27 @@ async fn each_forge_lists_branches_with_their_commits_and_protection() {
 }
 
 #[tokio::test]
+async fn an_anonymous_reader_lists_github_branches_through_rest_without_their_times() {
+    let server = forge(vec![
+        (
+            "repos/team/project/branches",
+            json!([
+                {"name": "main", "commit": {"sha": "a1"}, "protected": true},
+                {"name": "topic", "commit": {"sha": "b2"}, "protected": false},
+            ]),
+        ),
+        ("rulesets", json!([])),
+    ]);
+    let repo = repo_on(&server, ForgeKind::GitHub, "team/project");
+    let branches = repo.branches(&Account::default()).await.unwrap();
+    let listed: Vec<_> = (branches.iter())
+        .map(|branch| (branch.name.as_str(), branch.head.as_str(), branch.protected))
+        .collect();
+    assert_eq!(listed, [("main", "a1", true), ("topic", "b2", false)]);
+    assert!(branches.iter().all(|branch| branch.committed_at.is_none()));
+}
+
+#[tokio::test]
 async fn each_forge_lists_open_prs_by_the_branches_they_join() {
     let github_shape = json!([
         {"number": 3, "head": {"ref": "topic", "repo": {"full_name": "Team/Project"}},

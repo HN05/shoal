@@ -20,7 +20,7 @@ use shoal_forge_types::{
 const FIELDS: BranchFields = BranchFields {
     name: "/name",
     head: "/target/hash",
-    committed_at: "/target/date",
+    committed_at: Some("/target/date"),
 };
 
 impl Branches for Bitbucket {

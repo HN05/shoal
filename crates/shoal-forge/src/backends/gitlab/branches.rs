@@ -19,7 +19,7 @@ use shoal_forge_types::{
 const FIELDS: BranchFields = BranchFields {
     name: "/name",
     head: "/commit/id",
-    committed_at: "/commit/committed_date",
+    committed_at: Some("/commit/committed_date"),
 };
 
 impl Branches for GitLab {

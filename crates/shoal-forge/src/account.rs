@@ -137,6 +137,12 @@ impl Account {
         self.logins.get(&repo.host).is_some()
     }
 
+    /// Whether the account reads `repo`'s host without a login, neither
+    /// its own nor the user's.
+    pub(crate) fn reads_anonymously(&self, repo: &ForgeRepo) -> bool {
+        self.signer(&repo.host).is_none()
+    }
+
     /// The login for `host`: the account's own, else the user's.
     fn signer(&self, host: &str) -> Option<&Signer> {
         self.logins.get(host).or_else(|| self.fallback.get(host))

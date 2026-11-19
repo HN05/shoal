@@ -32,11 +32,11 @@ pub(crate) trait Branches: Backend {
 }
 
 /// Where a forge's listing of branches puts what Shoal reads of each, as
-/// JSON pointers.
+/// JSON pointers; none for what it leaves out.
 pub(crate) struct BranchFields {
     pub name: &'static str,
     pub head: &'static str,
-    pub committed_at: &'static str,
+    pub committed_at: Option<&'static str>,
 }
 
 impl BranchFields {
@@ -50,7 +50,7 @@ impl BranchFields {
         Ok(ForgeBranch {
             name: name.into(),
             head: head.into(),
-            committed_at: text(self.committed_at).map(Into::into),
+            committed_at: self.committed_at.and_then(text).map(Into::into),
             protected,
         })
     }

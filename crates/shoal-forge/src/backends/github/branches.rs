@@ -1,6 +1,7 @@
 //! GitHub's branches, which only its GraphQL API lists with their commits'
-//! times, protected by a branch protection rule or a ruleset, and its PRs
-//! by the branches they join.
+//! times and only to a login, so an anonymous reader lists them through REST
+//! without those times; protected by a branch protection rule or a ruleset;
+//! and its PRs by the branches they join.
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
@@ -18,29 +19,29 @@ use shoal_forge_types::{
 
 const BRANCHES: &str = "query($owner: String!, $name: String!, $after: String) { repository(owner: $owner, name: $name) { refs(refPrefix: \"refs/heads/\", first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { name target { oid ... on Commit { committedDate } } branchProtectionRule { id } } } } }";
 
-const FIELDS: BranchFields = BranchFields {
+const GRAPHQL_FIELDS: BranchFields = BranchFields {
     name: "/name",
     head: "/target/oid",
-    committed_at: "/target/committedDate",
+    committed_at: Some("/target/committedDate"),
+};
+
+const REST_FIELDS: BranchFields = BranchFields {
+    name: "/name",
+    head: "/commit/sha",
+    committed_at: None,
 };
 
 impl Branches for GitHub {
     async fn branches(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<ForgeBranch>> {
-        let (owner, name) =
-            (repo.path.split_once('/')).context("GitHub repository path has no owner")?;
-        let variables = json!({ "owner": owner, "name": name });
-        let nodes = graphql_nodes(repo, account, BRANCHES, variables, |data| {
-            &data["repository"]["refs"]
-        })
-        .await?;
+        let mut branches = match account.reads_anonymously(repo) {
+            true => rest_branches(repo, account).await?,
+            false => graphql_branches(repo, account).await?,
+        };
         let rules = DeletionRules::read(repo, account).await?;
-        (nodes.iter())
-            .map(|branch| {
-                let name = branch["name"].as_str().unwrap_or_default();
-                let protected = branch["branchProtectionRule"].is_object() || rules.protects(name);
-                FIELDS.read(branch, protected)
-            })
-            .collect()
+        for branch in &mut branches {
+            branch.protected |= rules.protects(branch.name.as_str());
+        }
+        Ok(branches)
     }
 
     fn open_pulls_path(&self) -> &'static str {
@@ -59,4 +60,28 @@ impl Branches for GitHub {
         let endpoint = repo.repo_endpoint(&format!("git/refs/heads/{}", encode(branch, true)));
         Request::new(HttpMethod::Delete, endpoint, None)
     }
+}
+
+/// The repository's branches with their commits' times, protected where a
+/// branch protection rule covers them.
+async fn graphql_branches(repo: &ForgeRepo, account: &Account) -> Result<Vec<ForgeBranch>> {
+    let (owner, name) =
+        (repo.path.split_once('/')).context("GitHub repository path has no owner")?;
+    let variables = json!({ "owner": owner, "name": name });
+    let nodes = graphql_nodes(repo, account, BRANCHES, variables, |data| {
+        &data["repository"]["refs"]
+    })
+    .await?;
+    (nodes.iter())
+        .map(|branch| GRAPHQL_FIELDS.read(branch, branch["branchProtectionRule"].is_object()))
+        .collect()
+}
+
+/// The repository's branches as REST lists them to anyone, without their
+/// commits' times.
+async fn rest_branches(repo: &ForgeRepo, account: &Account) -> Result<Vec<ForgeBranch>> {
+    let listed = repo.pages(account, &repo.repo_endpoint("branches")).await?;
+    (listed.iter())
+        .map(|branch| REST_FIELDS.read(branch, branch["protected"] == true))
+        .collect()
 }
