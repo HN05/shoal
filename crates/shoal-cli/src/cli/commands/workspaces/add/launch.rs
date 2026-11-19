@@ -147,23 +147,6 @@ fn place_agent(
     Ok(())
 }
 
-/// Have the daemon open the workspace `launch` names without starting an
-/// agent, and follow its preparation here, where the caller's shell enters
-/// it.
-pub(in crate::cli::commands) async fn open_here(ctx: &Context, mut launch: Launch) -> Result<i32> {
-    launch.here = true;
-    let launched = crate::client::launches::launch(&ctx.paths, launch).await?;
-    match &launched.start {
-        Started::Preparing {
-            operation: None, ..
-        } => report_workspace(ctx, attach::workspace_start(launched)?),
-        Started::Preparing { .. } | Started::Worker => {
-            Box::pin(attach::run(ctx, attach::workspace_start(launched)?)).await
-        }
-        Started::Queued { .. } | Started::Detached(_) => start::report_started(ctx, launched),
-    }
-}
-
 /// The chat a start in this caller begins as, since `launch` names nothing
 /// its workspace starts from: in the repository it names, else the
 /// current one.

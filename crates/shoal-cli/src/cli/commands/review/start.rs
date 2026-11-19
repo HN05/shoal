@@ -285,16 +285,23 @@ async fn pull_request(
         }
         None => {
             // The daemon opens the PR's head from origin, compared against
-            // its base, as any start on the PR does.
+            // its base, as any creation on the PR does.
             let launch = Launch {
                 target: Some(StartTarget::Pull(pull.url.clone())),
                 repository: Some(repo.id.to_string()),
-                setup_env: Some(crate::env::without_secrets()),
                 ..Default::default()
             };
-            let code = super::super::workspaces::open_here(ctx, launch).await?;
-            if code != 0 {
-                return Ok(code);
+            let creation = crate::client::preparation::NewCreation {
+                launch,
+                below: None,
+            };
+            let env = crate::env::without_secrets();
+            let preparing = crate::client::preparation::create(&ctx.paths, creation, env);
+            if super::super::create::set_up(ctx, preparing.await?)
+                .await?
+                .is_none()
+            {
+                return Ok(1);
             }
             crate::client::spaces::list(&ctx.paths)
                 .await?
