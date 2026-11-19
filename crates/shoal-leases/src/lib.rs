@@ -16,6 +16,8 @@ use shoal_store as store;
 pub mod allocation;
 pub mod daemon;
 pub mod ports;
+#[cfg(test)]
+mod stand_in;
 
 use daemon::{Daemon, Grants};
 use model::Workspace;

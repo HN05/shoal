@@ -2622,12 +2622,14 @@ dependencies = [
  "futures-util",
  "libc",
  "rusqlite",
+ "serde_json",
  "shoal-core",
  "shoal-daemon-base",
  "shoal-ids",
  "shoal-protocol",
  "shoal-store",
  "socket2",
+ "tempfile",
  "tokio",
 ]
 

@@ -20,6 +20,12 @@ shoal-store.workspace = true
 socket2 = "0.6"
 tokio = { workspace = true, features = ["sync", "time"] }
 
-
 [dev-dependencies]
+serde_json.workspace = true
+shoal-core = { workspace = true, features = ["test-support"] }
+shoal-daemon-base = { workspace = true, features = ["test-support"] }
 shoal-ids = { workspace = true, features = ["test-support"] }
+shoal-protocol = { workspace = true, features = ["test-support"] }
+shoal-store = { workspace = true, features = ["test-support"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "test-util"] }
