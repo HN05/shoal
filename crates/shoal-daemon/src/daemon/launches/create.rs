@@ -35,6 +35,7 @@ impl Manager {
         launches::ensure_copy_fits(&launch)?;
         self.select_launch_spaces(&mut launch).await?;
         launch.setup_env = env;
+        self.default_repository(&mut launch, below.as_ref()).await?;
         let shape = Shape {
             kind: SpaceKind::Workspace,
             mode: ModeName::DEFAULT,
@@ -59,6 +60,22 @@ impl Manager {
         };
         let started = self.start_placed(launch, placement, follows, caller);
         started.await?.into_workspace()
+    }
+
+    /// Name the repository of the space `launch` goes below, else that of
+    /// `below`, where a child goes, when the launch names no repository,
+    /// link or copy.
+    async fn default_repository(
+        &self,
+        launch: &mut Launch,
+        below: Option<&SpaceSelector>,
+    ) -> Result<()> {
+        let names = launch.repository.is_some() || launch.target.is_some() || launch.copy.is_some();
+        let Some(parent) = launch.parent.as_ref().or(below).filter(|_| !names) else {
+            return Ok(());
+        };
+        launch.repository = (self.space(parent).await?.repository_id).map(|id| id.to_string());
+        Ok(())
     }
 
     /// The placement that reopens the existing workspace `worker` names as

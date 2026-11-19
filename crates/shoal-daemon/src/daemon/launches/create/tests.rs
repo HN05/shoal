@@ -1,6 +1,7 @@
 use crate::daemon::test_support::{global_config, manager, repository};
 use crate::daemon::workspace::Manager;
 use shoal_protocol::launches::{Launch, StartTarget};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A registered repository and an agent that starts without limits, which
 /// `agent.default` names.
@@ -65,4 +66,32 @@ async fn a_creation_refuses_an_agent_and_a_start_without_a_branch() {
         );
     }
     assert!(manager.list_workspaces().await.unwrap().is_empty());
+}
+
+/// A creation that names no repository goes below the space it was made
+/// in and in that space's repository, wherever the start was made.
+#[tokio::test]
+async fn a_creation_goes_below_where_it_was_made_in_that_repository() {
+    let (temp, manager) = manager().await;
+    let repo = machine(&manager, &temp).await;
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let launch = Launch {
+        branch: Some("child".into()),
+        ..Launch::default()
+    };
+    let below = Some(SpaceSelector::id(&parent.id));
+
+    let started = (manager.create_placed_workspace(launch, (below, None), None))
+        .await
+        .unwrap();
+
+    let child = &started.workspace;
+    assert_eq!(
+        child.parent.as_ref().map(|parent| &parent.id),
+        Some(&parent.id)
+    );
+    assert_eq!(child.repository(), &repo.id);
 }
