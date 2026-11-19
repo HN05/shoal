@@ -12,9 +12,9 @@ use std::{
 use tokio::process::Command;
 
 use crate::{
-    config::placeholders,
     model::{ExecutionSpace, Part, PortReservation, Space, SpaceKind},
     paths::Paths,
+    placeholders,
 };
 pub use shoal_protocol::env::*;
 

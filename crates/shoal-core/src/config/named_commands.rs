@@ -7,7 +7,7 @@ use std::{
 use anyhow::{Context as _, Result, ensure};
 use shoal_refs::{BranchName, CommitId};
 
-use crate::{config::placeholders::render_os as render, model::Workspace};
+use crate::{model::Workspace, placeholders::render_os as render};
 
 pub type Commands = BTreeMap<String, Vec<String>>;
 

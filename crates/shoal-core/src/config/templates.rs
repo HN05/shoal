@@ -9,7 +9,7 @@ use crate::{
     model::{ChatHome, Head, SpaceKind, SpaceLinks, Workspace},
 };
 
-pub use super::placeholders::render;
+pub use crate::placeholders::render;
 
 /// What a workspace's agent is told about its space.
 const WORKSPACE_FACTS: &str = include_str!("templates/facts/workspace.md");

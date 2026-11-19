@@ -25,6 +25,7 @@ pub mod hooks;
 pub mod installed;
 pub mod launches;
 pub mod paths;
+pub mod placeholders;
 pub mod presets;
 pub mod process;
 pub mod profile;

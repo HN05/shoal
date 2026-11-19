@@ -65,8 +65,7 @@ async fn configured(
     let Some(template) = &host.options.group_template else {
         return Ok(None);
     };
-    let label =
-        crate::config::placeholders::render(template, &[("{repo}", &repo.name(paths).await?)]);
+    let label = shoal_core::placeholders::render(template, &[("{repo}", &repo.name(paths).await?)]);
     terminal::labelled_group(&paths.state, host, near, &label, cwd).await
 }
 
