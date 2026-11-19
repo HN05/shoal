@@ -419,7 +419,7 @@ pub(super) async fn reached_change_context(
 /// names; a caller whose scope reaches every space, which has every
 /// registered repository for its own, also reads from a registered
 /// checkout, which names none.
-async fn read_context_space<'a>(
+pub(super) async fn read_context_space<'a>(
     manager: &Manager,
     caller: &Caller,
     context: &'a mut ItemContext,

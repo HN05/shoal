@@ -369,7 +369,11 @@ impl Manager {
             .await
     }
 
-    async fn repository_workspaces(&self, repository_id: &RepositoryId) -> Result<Vec<Workspace>> {
+    /// The workspaces of the repository `repository_id`.
+    pub(in crate::daemon) async fn repository_workspaces(
+        &self,
+        repository_id: &RepositoryId,
+    ) -> Result<Vec<Workspace>> {
         Ok(self
             .list_workspaces()
             .await?

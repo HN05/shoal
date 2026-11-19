@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::cli::{
     args::changes::{BranchCommand, ChangesCommand},
-    commands::{base, ci, items, merge, review, workspaces},
+    commands::{base, ci, forge_branches, items, merge, review, workspaces},
     context::Context,
 };
 
@@ -28,5 +28,14 @@ async fn branch(ctx: &Context, command: BranchCommand) -> Result<i32> {
             workspaces::rename_branch(ctx, workspace, branch).await
         }
         BranchCommand::Base { command, workspace } => base::run(ctx, command, workspace).await,
+        BranchCommand::Ls {
+            space,
+            repo,
+            merged,
+            unmerged,
+        } => {
+            let filter = forge_branches::MergedFilter { merged, unmerged };
+            forge_branches::list(ctx, space, repo, filter).await
+        }
     }
 }

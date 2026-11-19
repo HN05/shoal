@@ -665,6 +665,7 @@ ones and leaves them running here.
 shoal repo sync
 shoal conflicts [<branch>]
 shoal branch base [set <workspace>]
+shoal branch ls [--merged | --unmerged] [-r REPO]
 shoal refresh [<workspace>]
 shoal merge [-s <space>]
 shoal merge [pr] <number-or-url> [-X merge|squash|rebase] [--message M] [--auto] [--delete-branch]
@@ -689,6 +690,11 @@ repository marks as holding a number each change picks, such as a migration,
 under "Changed on both sides" when both branches changed it. Without a watched
 PR, the watch reports a `merge_conflict` when the check newly fails.
 `branch base set` records that a workspace builds on another's branch.
+`branch ls` lists the forge's branches of the space's repository, or the one
+`--repo` names, with each one's head commit and date, whether it is the
+default or protected, whether the default branch has its changes through any
+merge (unknown outside a registered repository), the open PRs whose head it
+is, and the workspace whose branch it is, `active`, `done` or `merged`.
 
 `merge` merges a space's work: its one open PR linked as assigned or opened,
 on the forge, else a workspace's committed branch into the default branch,

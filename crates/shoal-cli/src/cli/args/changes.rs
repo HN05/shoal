@@ -32,6 +32,24 @@ pub enum BranchCommand {
         command: Option<BaseCommand>,
         workspace: Option<SpaceSelector>,
     },
+    /// List the branches on the forge of the space's repository, or another
+    /// one, with what decides whether each can go: whether the default
+    /// branch has its changes, the open PRs it is the head of and the space
+    /// whose branch it is. Local branches are Git's.
+    Ls {
+        /// Space, a workspace or chat, whose repository to list; defaults to
+        /// the current workspace or chat, or a picker.
+        #[arg(short = 's', long, conflicts_with = "repo")]
+        space: Option<SpaceSelector>,
+        #[command(flatten)]
+        repo: TargetRepo,
+        /// List only the branches whose changes the default branch has.
+        #[arg(long, conflicts_with = "unmerged")]
+        merged: bool,
+        /// List only the branches whose changes the default branch lacks.
+        #[arg(long)]
+        unmerged: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]

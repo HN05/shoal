@@ -1,11 +1,11 @@
 //! The request envelope and the method each request carries.
 use super::{
-    AgentMethod, ApprovalMethod, AssignmentMethod, ChatMethod, CiMethod, ContainerMethod,
-    DaemonMethod, DemoMethod, ExecutionMethod, ExitRequest, FileMethod, HoldMethod, HubMethod,
-    ItemMethod, LaunchMethod, NotificationMethod, OperationMethod, PortMethod, QuestionMethod,
-    QueueMethod, Reattach, RecoveryMethod, RemovalMethod, RepositoryMethod, ResourceMethod,
-    ReviewMethod, SecretMethod, SimulatorMethod, SubscriptionMethod, TriggerMethod, VERSION,
-    WorkspaceMethod,
+    AgentMethod, ApprovalMethod, AssignmentMethod, BranchMethod, ChatMethod, CiMethod,
+    ContainerMethod, DaemonMethod, DemoMethod, ExecutionMethod, ExitRequest, FileMethod,
+    HoldMethod, HubMethod, ItemMethod, LaunchMethod, NotificationMethod, OperationMethod,
+    PortMethod, QuestionMethod, QueueMethod, Reattach, RecoveryMethod, RemovalMethod,
+    RepositoryMethod, ResourceMethod, ReviewMethod, SecretMethod, SimulatorMethod,
+    SubscriptionMethod, TriggerMethod, VERSION, WorkspaceMethod,
 };
 use serde::{Deserialize, Serialize};
 
@@ -74,6 +74,7 @@ pub enum Operation {
     File(FileMethod),
     Item(ItemMethod),
     Ci(CiMethod),
+    Branch(BranchMethod),
     Notification(NotificationMethod),
     Operations(OperationMethod),
     Question(QuestionMethod),
@@ -169,6 +170,7 @@ impl Operation {
             | Self::Demo(_)
             | Self::File(_)
             | Self::Ci(_)
+            | Self::Branch(_)
             | Self::Approval(_)
             | Self::Port(_)
             | Self::Secret(_)
@@ -227,6 +229,7 @@ from_domains!(
     File(FileMethod),
     Item(ItemMethod),
     Ci(CiMethod),
+    Branch(BranchMethod),
     Notification(NotificationMethod),
     Operations(OperationMethod),
     Question(QuestionMethod),

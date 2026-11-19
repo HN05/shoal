@@ -15,7 +15,7 @@ use shoal_core::{
 
 use shoal_forge_types as forge;
 use shoal_protocol::time;
-use shoal_protocol::{agent, demos, model, protocol, state, validate};
+use shoal_protocol::{agent, branches, demos, model, protocol, state, validate};
 use shoal_subprocess as subprocess;
 
 /// A daemon on the socket of a temporary state directory, which other

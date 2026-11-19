@@ -7,6 +7,7 @@ pub mod agent_messages;
 pub mod agents;
 pub mod approvals;
 pub mod assignments;
+pub mod branches;
 pub mod chats;
 pub mod cleanup;
 pub mod config;

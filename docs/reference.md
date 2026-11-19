@@ -5350,6 +5350,30 @@ GitHub approves through its API: Forgejo and Gitea approve in the web UI, so
 there the command fails before any request. `--json` returns the `approved`
 runs' URLs.
 
+#### Branches on the forge
+
+```sh
+shoal branch ls                     # the forge's branches of the space's repository
+shoal branch ls --unmerged          # only those whose changes the default branch lacks
+shoal branch ls --repo team/tool    # another repository's
+```
+
+`shoal branch ls` lists the branches on the forge of the space's repository,
+or of the one `--repo` names as for `issue ls`, never local ones: each with
+its head commit and that commit's date, whether it is the default branch or
+the forge protects it, whether the default branch has its changes, the open
+PRs whose head it is, and the workspace whose branch it is, with where that
+workspace's work stands: `done` once marked done, else `merged` once the
+default branch has its changes, else `active`. Whether the default branch has
+a branch's changes is the check cleanup makes, which counts squash and rebase
+merges, in the registered checkout against the commits the daemon fetched;
+it is unknown for a commit the checkout lacks and in a repository that is not
+registered. `--merged` and `--unmerged` list only the branches the check
+answers so, leaving out the unknown ones. You read them with your login, a
+scoped process as the agent account. `--json` returns each branch's `name`,
+`head`, `committed_at`, `protected`, `default`, `merged` (`null` when
+unknown), `open_prs` and `space` with its `id`, `number`, `name` and `state`.
+
 #### Forge API requests
 
 ```sh

@@ -3,6 +3,7 @@
 mod agents;
 mod approvals;
 mod assignments;
+mod branches;
 mod chats;
 mod ci;
 mod config;
@@ -43,6 +44,7 @@ mod wrapper;
 pub use agents::{AgentMethod, SubagentChange, TurnEnd, WakeEnd, WokenTurn};
 pub use approvals::ApprovalMethod;
 pub use assignments::{AssignmentMethod, SavedAgent};
+pub use branches::BranchMethod;
 pub use chats::{ChatMethod, ChatRoot, ChatStart};
 pub use ci::CiMethod;
 pub use config::{ConfigTarget, RepositoryLayers};

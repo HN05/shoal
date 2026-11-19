@@ -2,6 +2,9 @@
 //! GitHub, and an HTTP server on Forgejo, both from `fixtures/forge.py`.
 mod support;
 
+#[path = "forge/branches.rs"]
+mod branches;
+
 use support::{
     fixture::Base,
     forge::{Server, github_search},

@@ -2,6 +2,7 @@
 mod agents;
 mod approvals;
 mod assignments;
+mod branches;
 mod chats;
 mod ci;
 mod containers;
@@ -75,6 +76,7 @@ pub(super) async fn handle(
         Operation::File(method) => files::handle(&server.manager, method, caller).await,
         Operation::Item(method) => items::handle(&server.manager, method, caller).await,
         Operation::Ci(method) => ci::handle(&server.manager, method, caller).await,
+        Operation::Branch(method) => branches::handle(&server.manager, method, caller).await,
         Operation::Notification(method) => {
             notifications::handle(&server.manager, method, caller).await
         }

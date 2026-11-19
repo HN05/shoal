@@ -60,7 +60,8 @@ impl Need {
             ["stop" | "restart"] => Self::Running,
             ["repo", "labels"]
             | ["forge", "capabilities" | "reactions" | "api" | "download"]
-            | ["ci", ..] => Self::Any,
+            | ["ci", ..]
+            | ["branch", "ls"] => Self::Any,
             ["setup"] => Self::Setup,
             ["status" | "restore" | "rename"] | ["move", "export" | "ssh"] => Self::Any,
             ["convert", ..] => Self::Any,

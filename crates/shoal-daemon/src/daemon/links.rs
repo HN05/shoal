@@ -3,6 +3,7 @@
 //! workspace's completion and cleanup; opened and related items are only
 //! recorded, and watches follow linked runs until they finish.
 mod actions;
+pub(in crate::daemon) mod branches;
 mod checks;
 mod ci;
 pub mod issue;
