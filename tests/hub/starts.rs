@@ -70,6 +70,13 @@ fn on_laptop(machines: &Machines, name: &str, kind: &str) -> Value {
     })
 }
 
+/// Start a workspace of `machine`'s repository `repository` on the new
+/// branch `name` and return its ID.
+fn workspace_of(machine: &Base, repository: &str, name: &str) -> String {
+    machine.ok(&["create", repository, "--branch", name]);
+    machine.id(name)
+}
+
 #[test]
 fn a_space_starts_a_child_workspace_on_another_machine_that_clones_its_repository() {
     let machines = machines();
@@ -147,4 +154,29 @@ fn a_start_on_another_machine_bases_on_a_pushed_commit_its_clone_never_fetched()
         (status["workspace"]["state"] != "preparing").then_some(status)
     });
     assert_eq!(status["workspace"]["state"], "ready", "{status}");
+}
+
+#[test]
+fn the_user_starts_a_space_below_another_machine_s_space_there() {
+    let machines = machines();
+    machines.laptop.ok(&["repo", "add", &machines.origin]);
+    let there = workspace_of(&machines.laptop, "origin", "there");
+    on_laptop(&machines, "there", "workspace");
+    let repo = machines.hub.repo.to_str().unwrap().to_owned();
+    let args = [
+        "start",
+        &repo,
+        "--machine",
+        "laptop",
+        "--parent",
+        &there,
+        "--branch",
+        "child",
+    ];
+    let started = machines
+        .hub
+        .run(&[&args[..], &["--agent", "pi", "--json"]].concat());
+    assert!(started.status.success(), "{}", printed(&started));
+    let child = on_laptop(&machines, "child", "workspace");
+    assert_eq!(child["parent"], there.as_str(), "{child}");
 }

@@ -25,7 +25,7 @@ pub(super) async fn handle(
             if caller.is_none() {
                 (manager.ensure_parent_not_host(workspace.as_ref(), parent.as_ref())).await?;
             }
-            let parent = manager.space_id(parent.as_ref()).await?;
+            let parent = manager.parent_space_id(parent.as_ref()).await?;
             (manager.ensure_parent_takes(repository.as_ref(), parent.as_ref())).await?;
             Body::Ok
         }

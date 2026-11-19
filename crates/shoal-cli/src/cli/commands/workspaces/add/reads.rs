@@ -26,12 +26,19 @@ impl LaunchReads for DaemonReads<'_> {
             .map(shoal_protocol::model::Spaces::into_workspaces)
     }
 
+    /// None for another joined machine's space, whose repository that
+    /// machine reads.
     async fn space_repository(&self, selector: &SpaceSelector) -> Result<Option<RepositoryId>> {
         let spaces = crate::client::spaces::list(&self.0.paths).await?;
-        let space = spaces
-            .find(selector)
-            .ok_or_else(|| Refusal::new(Reason::NotFound, format!("unknown space: {selector}")))?;
-        Ok(space.repository_id)
+        if let Some(space) = spaces.find(selector) {
+            return Ok(space.repository_id.clone());
+        }
+        match crate::cli::commands::machines::space_elsewhere(self.0, selector).await? {
+            Some(_) => Ok(None),
+            None => {
+                Err(Refusal::new(Reason::NotFound, format!("unknown space: {selector}")).into())
+            }
+        }
     }
 
     /// The global config's settings read here, at launch, else the

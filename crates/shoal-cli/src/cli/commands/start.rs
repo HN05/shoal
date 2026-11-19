@@ -77,12 +77,21 @@ fn ensure_fits(args: &StartArgs, kind: SpaceKind, mode: Option<&modes::ModeName>
     launches::ensure_fits(&args.launch(), &unfit, kind, mode)
 }
 
-/// The ID of the space `selector` names, by number or ID.
+/// The ID of the space `selector` names, by number or ID: one of this
+/// machine, else one the hub lists on another joined machine.
 async fn space_id(ctx: &Context, selector: &SpaceSelector) -> Result<SpaceId> {
     let space = crate::client::spaces::list(&ctx.paths)
         .await?
         .find(selector);
-    Ok(space.with_context(|| format!("no space {selector}"))?.id)
+    if let Some(space) = space {
+        return Ok(space.id);
+    }
+    let elsewhere = super::machines::space_elsewhere(ctx, selector).await?;
+    Ok(elsewhere
+        .with_context(|| format!("no space {selector}"))?
+        .0
+        .space
+        .id)
 }
 
 /// Where a start goes, and in which mode.
