@@ -185,7 +185,28 @@ neither the calls nor the other streams; the hub relays a stream from one
 link to the other the same way. Following a session sends its files' bytes
 where the agent's tool keeps them, everything so far and then what the tool
 appends, unread: apps parse each tool's format, so a tool changing it changes
-only the app. A request that needs
+only the app. Apps keep their data in Shoal without Shoal knowing them: every
+daemon keeps an app store of entries per app, bytes with a content type under
+path-like keys, shared across the user's machines and devices or one
+device's own, in its state directory and reached only through the protocol;
+Shoal never reads them. Each change takes a revision from one counter, and a
+write or deletion names the revision it replaces and is refused once another
+change took the entry past it, so devices never silently overwrite each
+other; a watch of a key prefix compares again after each change. Without a
+hub the local daemon keeps everything, so one PC needs none, and turning the
+hub on keeps its entries since it is the same daemon; with one, a joined
+machine keeps its own entries and sends requests of shared ones to the hub,
+over a stream of its link for an answer that goes on, an entry's bytes or a
+watch, while the shared entries it held before it joined stay local. The
+hub keeps each device's own entries by its member ID. Limits per entry and
+per app come from `[machine.app_store]`; a request fits one frame, so an
+entry's bytes follow its write as frames of their own. An app's settings
+the user edits are its `[apps.<name>]` table in any config layer, which
+Shoal checks only as TOML, layers as it layers its own options and hands to
+the app. The hub forwards requests under a `[machine.hub] forward` path
+prefix to a local address, such as an app's own server, a device-paired
+client that is never part of Shoal, once a paired member signed the request
+with a fresh time and an unused nonce. A request that needs
 the space's files or processes stays on its machine and is refused
 elsewhere, naming it. The space tree may span machines, as when a space
 moves without its parent: what a space passes up reaches the nearest space
