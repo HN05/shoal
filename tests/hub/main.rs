@@ -137,6 +137,21 @@ fn a_machine_joins_over_the_listener_with_a_code_it_uses_once() {
     let laptop = Machine::start("");
     let pairing = hub.json(&["hub", "pair"]);
     let code = pairing["code"].as_str().unwrap();
+    // A computer without Shoal joins with the installer the hub serves.
+    let listener = hub.json(&["hub", "ls"])["listener"]["url"].clone();
+    let install = format!("{}/install", listener.as_str().unwrap());
+    assert_eq!(
+        pairing["installer"],
+        format!("curl -fsSL {install} | sh -s -- '{code}'")
+    );
+    let script = std::process::Command::new("curl")
+        .args(["-fsS", &install])
+        .output()
+        .unwrap();
+    assert!(script.status.success(), "{}", printed(&script));
+    let script = String::from_utf8(script.stdout).unwrap();
+    let version = format!("version='{}'", env!("CARGO_PKG_VERSION"));
+    assert!(script.contains(&version), "{script}");
     let membership = laptop.json(&["hub", "join", code, "--name", "laptop"]);
     assert!(
         membership["through"]["url"]

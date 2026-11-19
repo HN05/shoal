@@ -847,7 +847,20 @@ change, add or replay a frame.
 code with its QR code: the hub's URL, its key's fingerprint and a secret that
 admits one join within ten minutes. It warns when the URL is `http://` to
 another machine. `shoal hub join <code>` joins this machine under the host's
-name, or `--name`; an app joins as a device with the same code. The hub gives
+name, or `--name`; an app joins as a device with the same code.
+
+On a computer without Shoal, run the other line `hub pair` prints, `curl -fsSL
+<hub url>/install | sh -s -- '<code>'`: the hub's listener serves that script,
+which downloads exactly the hub's version for the platform from its GitHub
+release, checks it against the release's `SHA256SUMS` and its reported
+version, installs it as a downloaded binary at `~/.local/bin/shoal`, or on
+macOS as `~/Applications/Shoal.app` with that path linked to it, then runs
+`shoal daemon install` and `shoal hub join` with the code, which pins the
+hub's key. It installs neither the [runtime
+dependencies](../README.md#runtime-dependencies) nor agent tools and their
+logins; repositories are cloned once a start there needs them.
+
+The hub gives
 each machine or device an ID at pairing, and `hub ls` lists them with kind,
 name, Shoal version, when each was last seen, each machine's availability
 and, for a connected machine, the agent tools it has installed (`agents` in

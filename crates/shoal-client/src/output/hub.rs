@@ -11,6 +11,9 @@ use crate::output::outputs;
 pub struct Paired {
     #[serde(flatten)]
     pub pairing: Pairing,
+    /// The command that installs the hub's version on a computer without
+    /// Shoal and joins it with the code.
+    pub installer: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
 }

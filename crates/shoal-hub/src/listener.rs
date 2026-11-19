@@ -16,7 +16,7 @@ use std::{
 use anyhow::{Context as _, Result};
 use http_body_util::{BodyExt as _, Empty};
 use hyper::{
-    Request, Response, StatusCode,
+    Method, Request, Response, StatusCode,
     body::Incoming,
     header::{self, HeaderValue},
     server::conn::http1,
@@ -24,7 +24,7 @@ use hyper::{
 };
 use hyper_util::rt::{TokioIo, TokioTimer};
 use serde_json::Value;
-use shoal_protocol::hub::{Listener, link::PATH};
+use shoal_protocol::hub::{Listener, link::PATH, pairing::INSTALL_PATH};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{OwnedSemaphorePermit, Semaphore},
@@ -223,8 +223,8 @@ pub async fn serve(
 }
 
 /// The response to `request`: a WebSocket upgrade at the link's path, whose
-/// link a task then serves, the server's under a forwarded path prefix,
-/// and `404` for anything else.
+/// link a task then serves, the installer at its path, the server's under a
+/// forwarded path prefix, and `404` for anything else.
 async fn respond(
     hub: Arc<Hub>,
     daemon: Arc<dyn Daemon>,
@@ -233,6 +233,9 @@ async fn respond(
 ) -> Response<Body> {
     if request.uri().path() == PATH {
         return open_link(hub, daemon, request, permit);
+    }
+    if request.uri().path() == INSTALL_PATH && request.method() == Method::GET {
+        return super::installer::response();
     }
     let forwarded = (hub.hub_settings(&*daemon)).and_then(|hub| {
         hub.forwarded(request.uri().path())

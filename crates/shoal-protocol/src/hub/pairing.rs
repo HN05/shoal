@@ -12,6 +12,10 @@ use crate::time::UnixTime;
 /// The path of a pairing code's URL on the hub.
 const PATH: &str = "/pair";
 
+/// The path of the installer the hub serves, which installs its version on
+/// a computer without Shoal and joins it with a pairing code.
+pub const INSTALL_PATH: &str = "/install";
+
 /// The hub's URL, its key's fingerprint and the single-use code, written as
 /// `<url>/pair#code=<code>&key=<fingerprint>`. The fragment never reaches a
 /// server, so neither the code nor the fingerprint passes through a proxy's
@@ -56,6 +60,14 @@ impl FromStr for PairingCode {
             key: key.with_context(invalid)?,
             code,
         })
+    }
+}
+
+impl PairingCode {
+    /// The command that installs the hub's version on a computer without
+    /// Shoal and joins it with this code.
+    pub fn installer(&self) -> String {
+        format!("curl -fsSL {}{INSTALL_PATH} | sh -s -- '{self}'", self.url)
     }
 }
 

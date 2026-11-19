@@ -36,6 +36,7 @@ pub mod directory;
 mod escalation;
 mod forwarding;
 pub mod identity;
+mod installer;
 mod known_tree;
 pub mod links;
 pub mod listener;

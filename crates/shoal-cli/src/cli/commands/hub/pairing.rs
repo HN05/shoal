@@ -27,7 +27,12 @@ pub(super) async fn pair(ctx: &Context) -> Result<i32> {
         .render::<qrcode::render::unicode::Dense1x2>()
         .quiet_zone(true)
         .build();
-    let paired = Paired { pairing, warnings };
+    let installer = pairing.code.installer();
+    let paired = Paired {
+        pairing,
+        installer,
+        warnings,
+    };
     ctx.show(&paired, |paired| {
         let palette = Palette::stdout(false);
         for line in qr.lines() {
@@ -38,6 +43,8 @@ pub(super) async fn pair(ctx: &Context) -> Result<i32> {
             "Run shoal hub join with this code on the machine to join, by {}; it admits one join.",
             paired.pairing.expires_at.local_minutes()
         );
+        outln!("On a computer without Shoal, run instead:");
+        outln!("  {}", paired.installer);
         for warning in &paired.warnings {
             eprintln!(
                 "{} {warning}",
