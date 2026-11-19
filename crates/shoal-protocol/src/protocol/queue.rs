@@ -29,6 +29,14 @@ pub enum QueueMethod {
     QueuedPlan {
         entry: QueueEntryId,
     },
+    /// Open the space of the starting launch `entry` for the agent its
+    /// caller runs there now: a workspace must still be ready and its
+    /// verified worktree, its branch is brought up to date as an admitted
+    /// agent's is, and the PR the plan names is linked, a refusal warning
+    /// the space's starter. Answers with the plan, as [`Self::QueuedPlan`].
+    OpenStart {
+        entry: QueueEntryId,
+    },
     /// Cancel a waiting entry, named by ID; a cancelled restore leaves its
     /// agent stopped.
     QueueRemove {

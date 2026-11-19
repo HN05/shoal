@@ -37,6 +37,9 @@ pub(super) async fn handle(
         }
         QueueMethod::ListQueue => Body::QueueEntries(manager.visible_queue().await?),
         QueueMethod::QueuedPlan { entry } => Body::QueuedPlan(manager.queued_plan(&entry).await?),
+        QueueMethod::OpenStart { entry } => {
+            Body::QueuedPlan(manager.open_queued_start(&entry, caller).await?)
+        }
         QueueMethod::QueueRemove { entry } => {
             Body::QueueEntry(manager.queue_remove(&entry, caller).await?)
         }
@@ -133,11 +136,12 @@ impl Scoped for QueueMethod {
                 (manager.authorize_beyond_limits(caller, start, repository)).await?;
                 None
             }
-            // A caller holds, claims, reads, fails and attaches the launches
-            // it starts itself, which its scope reaches.
+            // A caller holds, claims, reads, opens, fails and attaches the
+            // launches it starts itself, which its scope reaches.
             QueueMethod::QueueHold { entry }
             | QueueMethod::QueueClaim { entry }
             | QueueMethod::QueuedPlan { entry }
+            | QueueMethod::OpenStart { entry }
             | QueueMethod::QueueFail { entry, .. } => {
                 manager.ensure_entry_reached(caller, entry).await?;
                 None

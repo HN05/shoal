@@ -12,6 +12,7 @@ mod entries;
 mod expiry;
 mod failures;
 mod limits;
+mod openings;
 mod ranking;
 mod restores;
 mod setup_waits;

@@ -8,7 +8,7 @@ use crate::{
         notifications::NotificationKind,
         operations::fake,
         scope::Caller,
-        test_support::{commit, git, global_config, manager, repository, repository_with},
+        test_support::{git, global_config, manager, repository, repository_with},
     },
     forge::numbers::PullNumber,
     model::{Repository, Workspace},
@@ -21,7 +21,7 @@ use crate::{
     removal::{InspectionPolicy, UnsavedWork},
     state::WorkspaceState,
 };
-use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceNumber};
+use shoal_ids::space_ids::SpaceNumber;
 use shoal_protocol::{
     notifications::Notification,
     space_names::{SpaceName, SpaceSelector},
@@ -575,57 +575,4 @@ async fn a_scoped_start_reopening_a_workspace_keeps_what_its_agent_was_given() {
         .await;
     assert!(refused.is_err(), "{refused:?}");
     assert!(manager.queue_entries().await.unwrap().is_empty());
-}
-
-/// Carry out an admitted launch in the existing `workspace`, as the queue's
-/// start does.
-async fn reopen_for_admitted(
-    manager: &Arc<Manager>,
-    repository: &Repository,
-    workspace: &Workspace,
-) {
-    let opening = Opening {
-        start: WorkspaceStart::Workspace(SpaceSelector::id(&workspace.id)),
-        base: None,
-        new: Default::default(),
-        parent: None,
-    };
-    let preparing = Preparing {
-        issue: None,
-        pr: None,
-        agent: None,
-        waiting: None,
-        queue_entry: Some(QueueEntryId::generate()),
-        blockers: Vec::new(),
-        unfollowed: false,
-        env: None,
-    };
-    let started = manager
-        .start_workspace((&repository.id).into(), opening, preparing, None)
-        .await
-        .unwrap();
-    let _worker = fake::take(started.operation.as_deref().unwrap());
-}
-
-#[tokio::test]
-async fn an_admitted_agent_starts_on_its_untouched_branch_brought_up_to_date() {
-    let (root, manager) = manager().await;
-    let repository = registered(root.path(), &manager).await;
-    let untouched =
-        (manager.create_workspace(&repository.id, "untouched".into(), None, None, None))
-            .await
-            .unwrap();
-    let touched = (manager.create_workspace(&repository.id, "touched".into(), None, None, None))
-        .await
-        .unwrap();
-    std::fs::write(touched.path.join("own"), "own\n").unwrap();
-    commit(&touched.path, "own");
-    std::fs::write(repository.path.join("later"), "later\n").unwrap();
-    commit(&repository.path, "later");
-    reopen_for_admitted(&manager, &repository, &untouched).await;
-    assert!(untouched.path.join("later").exists());
-    // Work of its own keeps a branch as it is.
-    reopen_for_admitted(&manager, &repository, &touched).await;
-    assert!(!touched.path.join("later").exists());
-    assert!(touched.path.join("own").exists());
 }

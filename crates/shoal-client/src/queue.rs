@@ -47,6 +47,12 @@ pub async fn plan(daemon: &impl Daemon, entry: QueueEntryId) -> Result<QueuedPla
     request(daemon, QueueMethod::QueuedPlan { entry }).await
 }
 
+/// Have the daemon open the space of the starting launch `entry` for the
+/// agent this process runs there now, and return its plan.
+pub async fn open_start(daemon: &impl Daemon, entry: QueueEntryId) -> Result<QueuedPlan> {
+    request(daemon, QueueMethod::OpenStart { entry }).await
+}
+
 /// Start the entry `entry` names by ID now, whatever waits before it.
 pub async fn start(daemon: &impl Daemon, entry: String) -> Result<QueueEntry> {
     let here = false;

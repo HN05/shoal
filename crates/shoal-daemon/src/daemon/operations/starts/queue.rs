@@ -14,8 +14,7 @@ use crate::{
 impl Manager {
     /// Give the `recorded` space the start's queue entry and queue the
     /// agent `preparing` names there, linking its PR as it starts once
-    /// its blockers are done. The agent an admitted launch starts in a
-    /// reopened workspace starts on a branch brought up to date.
+    /// its blockers are done.
     pub(super) async fn queue_space_agent(
         &self,
         recorded: &Recorded,
@@ -25,11 +24,6 @@ impl Manager {
         // launch frees its slot even once the caller is gone.
         if let Some(entry) = &preparing.queue_entry {
             self.give_start_entry(entry, &recorded.space).await;
-            if let Ok(workspace) = recorded.space.clone().into_workspace()
-                && recorded.reused
-            {
-                self.refresh_admitted(&workspace).await;
-            }
         }
         let Some(agent) = preparing.agent.take() else {
             return Ok(None);

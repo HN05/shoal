@@ -142,6 +142,7 @@ const REQUESTS: &[&str] = &[
     r#"{"queue_agent":{"workspace":"fix","launch":{"agent":null,"prompt":"Fix the build"}}}"#,
     r#""list_queue""#,
     r#"{"queued_plan":{"entry":"q1"}}"#,
+    r#"{"open_start":{"entry":"q1"}}"#,
     r#"{"queue_remove":{"entry":"q1"}}"#,
     r#"{"queue_start":{"entry":"q1"}}"#,
     r#"{"started_launch":{"entry":"q1"}}"#,
