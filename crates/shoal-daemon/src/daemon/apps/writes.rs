@@ -1,30 +1,44 @@
 //! Writing an entry on the daemon's socket, where a request fits in one
-//! frame and an entry need not: the daemon checks the write first, then
-//! takes its bytes as the frames the client sends after it, and answers
-//! with the entry at its new revision.
+//! frame and an entry need not: the daemon takes the write's bytes as the
+//! frames the client sends after it, and answers with the entry at its new
+//! revision. An entry this daemon keeps is checked before its bytes come;
+//! a shared one of a machine that joined a hub goes to the hub with them,
+//! which answers.
 use anyhow::{Context as _, Result, ensure};
+use shoal_core::config::machine::AppStore;
 use shoal_protocol::{
     apps::{
         AppName,
-        store::{AppData, Entry, Write},
+        store::{AppData, AppScope, Entry, Write},
     },
-    protocol::{self, Body, Response, timing::REQUEST_READ_TIMEOUT},
+    protocol::{self, AppMethod, Body, Response, timing::REQUEST_READ_TIMEOUT},
+    scope_tokens::ScopeToken,
 };
 use tokio::{
-    io::{AsyncBufRead, BufReader},
+    io::{AsyncBufRead, AsyncWrite, BufReader},
     net::UnixStream,
 };
 
 use super::entries::Holder;
-use crate::daemon::{answer, manager::Manager};
+use crate::daemon::{answer, manager::Manager, relayed::Relayed};
 
-/// A write of `size` bytes as `write` to `app`'s entries that `holder`
-/// has.
+/// Who keeps the entries a request reaches.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Keeper {
+    /// This daemon, as `holder`'s.
+    Here(Holder),
+    /// The hub this machine joined, the shared entries'.
+    Hub,
+}
+
+/// A write of `size` bytes as `write` to `app`'s entries that `keeper`
+/// keeps, from a caller with the scope token `scope`.
 pub(crate) struct Writing {
-    pub holder: Holder,
+    pub keeper: Keeper,
     pub app: AppName,
     pub write: Write,
     pub size: u64,
+    pub scope: Option<ScopeToken>,
 }
 
 impl Manager {
@@ -38,34 +52,97 @@ impl Manager {
     ) -> Result<()> {
         let (reader, mut writer) = stream.into_split();
         let mut reader = BufReader::new(reader);
-        let written = self.take_write(&mut writer, &mut reader, request_id, writing);
-        let body = match written.await {
+        let written = match writing.keeper.clone() {
+            Keeper::Here(holder) => {
+                (self.write_here(&mut writer, &mut reader, request_id, holder, writing)).await
+            }
+            Keeper::Hub => {
+                let at_hub = self.write_at_hub(&mut writer, &mut reader, request_id, writing);
+                return at_hub.await;
+            }
+        };
+        let body = match written {
             Ok(entry) => Body::AppEntry(entry),
             Err(error) => answer::failure(&error),
         };
         answer::write_frames(&mut writer, Response::new(request_id, body)).await
     }
 
-    /// Check `writing`, ask the client on `writer` for its bytes, read
-    /// them from `reader` and write them.
-    async fn take_write(
+    /// Check `writing` to `holder`'s entries, ask the client on `writer`
+    /// for its bytes, read them from `reader` and write them.
+    async fn write_here(
         &self,
-        writer: &mut (impl tokio::io::AsyncWrite + Unpin),
+        writer: &mut (impl AsyncWrite + Unpin),
         reader: &mut (impl AsyncBufRead + Unpin),
         request_id: u64,
+        holder: Holder,
         writing: Writing,
     ) -> Result<Entry> {
         let Writing {
-            holder,
+            app, write, size, ..
+        } = writing;
+        (self.check_kept_write(holder.clone(), app.clone(), write.clone(), size)).await?;
+        let bytes = ask_bytes(writer, reader, request_id, size).await?;
+        self.write_kept_entry(holder, app, write, bytes).await
+    }
+
+    /// Take `writing`'s bytes from the client and send them to the hub,
+    /// whose answer goes back to the client as it comes.
+    async fn write_at_hub(
+        &self,
+        writer: &mut (impl AsyncWrite + Unpin),
+        reader: &mut (impl AsyncBufRead + Unpin),
+        request_id: u64,
+        writing: Writing,
+    ) -> Result<()> {
+        let Writing {
             app,
             write,
             size,
+            scope,
+            ..
         } = writing;
-        (self.check_kept_write(holder.clone(), app.clone(), write.clone(), size)).await?;
-        protocol::write(writer, &Response::new(request_id, Body::Ok)).await?;
-        let bytes = receive(reader, size).await?;
-        self.write_kept_entry(holder, app, write, bytes).await
+        let sent = async {
+            ensure!(
+                size <= AppStore::most_entry_bytes(),
+                "an entry holds at most {} bytes",
+                AppStore::most_entry_bytes()
+            );
+            let bytes = ask_bytes(writer, reader, request_id, size).await?;
+            let method = AppMethod::WriteAppEntry {
+                app,
+                scope: AppScope::Shared,
+                write,
+                size,
+            };
+            self.app_request_at_hub(method, Some(&bytes)).await
+        };
+        let incoming = match sent.await {
+            Ok(incoming) => incoming,
+            Err(error) => {
+                let body = answer::failure(&error);
+                return answer::write_frames(writer, Response::new(request_id, body)).await;
+            }
+        };
+        let relayed = Relayed {
+            manager: self,
+            request_id,
+            scope: scope.as_ref(),
+        };
+        relayed.relay(reader, writer, incoming).await
     }
+}
+
+/// Ask the client on `writer` for the write's `size` bytes, and take them
+/// from `reader`.
+async fn ask_bytes(
+    writer: &mut (impl AsyncWrite + Unpin),
+    reader: &mut (impl AsyncBufRead + Unpin),
+    request_id: u64,
+    size: u64,
+) -> Result<Vec<u8>> {
+    protocol::write(writer, &Response::new(request_id, Body::Ok)).await?;
+    receive(reader, size).await
 }
 
 /// The `size` bytes a client sends as [`AppData`] frames, each within the

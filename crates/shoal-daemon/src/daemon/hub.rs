@@ -18,6 +18,7 @@ pub(crate) use telling::Event;
 
 mod accept;
 pub(crate) mod answers;
+mod apps;
 mod directory;
 mod escalation;
 mod forwarding;

@@ -8,7 +8,7 @@ use crate::apps::{
 
 /// Requests of apps built on Shoal: their `[apps.<name>]` settings, and
 /// the entries each keeps in the app store, its own in `scope`.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AppMethod {
     /// The table `[apps.<app>]` resolves to for `target` after every
@@ -62,6 +62,18 @@ pub enum AppMethod {
 }
 
 impl AppMethod {
+    /// Whose entries the request reaches, none for one of none.
+    pub fn kept_in(&self) -> Option<AppScope> {
+        match self {
+            Self::ReadAppConfig { .. } => None,
+            Self::ReadAppEntry { scope, .. }
+            | Self::ListAppEntries { scope, .. }
+            | Self::WriteAppEntry { scope, .. }
+            | Self::DeleteAppEntry { scope, .. }
+            | Self::WatchAppEntries { scope, .. } => Some(*scope),
+        }
+    }
+
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::WriteAppEntry { .. } | Self::WatchAppEntries { .. } => Lifetime::Open,

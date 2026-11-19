@@ -14,8 +14,8 @@ mod watch;
 mod writes;
 
 pub(crate) use entries::Holder;
-pub(crate) use watch::{Socket, Watched};
-pub(crate) use writes::Writing;
+pub(crate) use watch::{Socket, Watched, Watcher};
+pub(crate) use writes::{Keeper, Writing};
 
 /// What the app store keeps while the daemon runs.
 pub(crate) struct Apps {

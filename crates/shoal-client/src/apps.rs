@@ -106,7 +106,8 @@ pub fn stale(error: &anyhow::Error) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Watched {
     /// Every entry it covers, first and again once it watches anew, as
-    /// after a daemon restart, which `resynced` says.
+    /// after a daemon restart or while the hub restarts, which `resynced`
+    /// says.
     Entries {
         entries: Vec<Entry>,
         resynced: bool,
@@ -158,14 +159,21 @@ impl<D: Daemon> Watch<D> {
                     resynced: true,
                 });
             };
-            match stream.next().await {
-                Ok(response) => {
-                    return match response.body.into_result()? {
-                        Body::AppChange(change) => Ok(Watched::Changed(change)),
-                        body => Err(body.unexpected("AppChange")),
-                    };
+            // The hub's link breaking off a watch of shared entries ends it
+            // as a daemon restart does.
+            match stream
+                .next()
+                .await
+                .and_then(|response| response.body.into_result())
+            {
+                Ok(Body::AppChange(change)) => return Ok(Watched::Changed(change)),
+                Ok(body) => return Err(body.unexpected("AppChange")),
+                Err(error)
+                    if connection::stream_closed(&error)
+                        || connection::machine_unreachable(&error) =>
+                {
+                    self.stream = None
                 }
-                Err(error) if connection::stream_closed(&error) => self.stream = None,
                 Err(error) => return Err(error),
             }
         }

@@ -768,8 +768,16 @@ replaces, none for a new entry, and is refused with `stale_revision`, which
 `apps::stale` tells, once another change took the entry past it, so two
 devices never overwrite each other unseen. `apps::Watch` follows the entries
 under a key prefix: all of them, then each one written or deleted, and all
-of them again after a daemon restart. An entry and each app's entries in
-all are held to the
+of them again after a daemon restart. Without a [hub](#hub), the daemon
+keeps every entry itself. Once it is the hub, the same entries are the
+hub's; a machine that joined one keeps its own entries and reaches the
+shared ones on the hub, through its daemon, which sends the hub the
+requests and writes of shared entries and relays its answers, an entry's
+bytes on a byte stream of its link. The shared entries a machine held
+before it joined stay in its state directory, out of reach while it is a
+member. A device keeps its own entries on the hub. A watch of shared
+entries whose link to the hub breaks off starts again with all of them.
+An entry and each app's entries in all are held to the
 [`[machine.app_store]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#app-store)
 limits. Without a scope token the caller is the user; with one, it is
 that workspace's agent, under the rules of its `shoal` commands, reading the

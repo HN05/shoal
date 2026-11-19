@@ -143,6 +143,11 @@ impl AppStore {
     /// The largest entry the hub's link carries whole.
     const MOST_ENTRY_MIB: u64 = 128;
 
+    /// The most bytes an entry may ever hold, whatever the limits.
+    pub fn most_entry_bytes() -> u64 {
+        Self::MOST_ENTRY_MIB << 20
+    }
+
     pub fn max_entry_bytes(&self) -> u64 {
         self.max_entry_mib << 20
     }

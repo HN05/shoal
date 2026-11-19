@@ -318,6 +318,19 @@ pub enum Call {
     /// The hub's call to a machine whose queued request or event expired.
     /// Answered with [`Reply::Delivered`].
     Expired { expired: Expired },
+    /// A request of an app's entries, which the hub answers from its own
+    /// app store as it answers its own callers', a device's own entries
+    /// being the calling member's, by writing the frames its socket would
+    /// answer with on the stream `stream` the caller opened. A write
+    /// carries its bytes in `data`, in unpadded base64url, and is answered
+    /// on the stream with the entry alone. Answered with
+    /// [`Reply::Streaming`].
+    App {
+        method: crate::protocol::AppMethod,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        data: Option<String>,
+        stream: u64,
+    },
 }
 
 /// The answer to a [`Call`].

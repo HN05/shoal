@@ -117,6 +117,15 @@ impl Manager {
                 ensure_machine(member)?;
                 self.route_told(&member.id, told).await?
             }
+            Call::App {
+                method,
+                data,
+                stream,
+            } => {
+                let (out, _) = calls.streams().answering(stream, false);
+                self.serve_app_request(member, method, data, out)?;
+                Reply::Streaming
+            }
             Call::Serve { .. } | Call::ServeStream { .. } | Call::Expired { .. } => {
                 anyhow::bail!("only the hub passes requests and expiries to machines")
             }

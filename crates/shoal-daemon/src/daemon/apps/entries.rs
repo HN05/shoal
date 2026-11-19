@@ -4,6 +4,7 @@
 use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension as _, Row, Transaction, params};
 use shoal_core::config::machine::AppStore;
+use shoal_ids::member_ids::MemberId;
 use shoal_protocol::apps::{
     AppName,
     store::{AppScope, Entry, EntryKey, KeyPrefix, Revision, Stored, Write},
@@ -21,6 +22,8 @@ pub(crate) enum Holder {
     Shared,
     /// This machine's own.
     Own,
+    /// As the hub, a paired device's own.
+    Device(MemberId),
 }
 
 impl Holder {
@@ -37,6 +40,7 @@ impl Holder {
         match self {
             Self::Shared => (AppScope::Shared, ""),
             Self::Own => (AppScope::Device, ""),
+            Self::Device(member) => (AppScope::Device, member.as_str()),
         }
     }
 }
