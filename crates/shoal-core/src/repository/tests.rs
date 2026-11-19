@@ -293,3 +293,20 @@ async fn an_id_selects_only_the_repository_with_that_id() {
         assert_eq!(reason, Some(crate::refusal::Reason::NotFound));
     }
 }
+
+#[tokio::test]
+async fn another_machine_s_origin_names_the_registration_with_that_origin() {
+    let repositories = [
+        repository("one", "/tmp/one", None),
+        repository("two", "/tmp/two", None),
+    ];
+    let origin = identity("https://example.test/team/two").await.unwrap();
+    let found = with_origin(&repositories, &origin.unwrap()).await;
+    assert_eq!(found.map(|repo| repo.id.as_str()), Some("two"));
+    let unknown = identity("https://example.test/team/three").await.unwrap();
+    assert!(
+        with_origin(&repositories, &unknown.unwrap())
+            .await
+            .is_none()
+    );
+}

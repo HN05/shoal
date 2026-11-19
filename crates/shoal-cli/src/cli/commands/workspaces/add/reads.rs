@@ -26,19 +26,28 @@ impl LaunchReads for DaemonReads<'_> {
             .map(shoal_protocol::model::Spaces::into_workspaces)
     }
 
-    /// None for another joined machine's space, whose repository that
-    /// machine reads.
+    /// For another joined machine's space, this machine's registration of
+    /// the repository the hub lists it in, by its origin, if any.
     async fn space_repository(&self, selector: &SpaceSelector) -> Result<Option<RepositoryId>> {
         let spaces = crate::client::spaces::list(&self.0.paths).await?;
         if let Some(space) = spaces.find(selector) {
             return Ok(space.repository_id.clone());
         }
-        match crate::cli::commands::machines::space_elsewhere(self.0, selector).await? {
-            Some(_) => Ok(None),
-            None => {
-                Err(Refusal::new(Reason::NotFound, format!("unknown space: {selector}")).into())
-            }
-        }
+        let elsewhere = crate::cli::commands::machines::space_elsewhere(self.0, selector);
+        let Some((remote, _)) = elsewhere.await? else {
+            let unknown = format!("unknown space: {selector}");
+            return Err(Refusal::new(Reason::NotFound, unknown).into());
+        };
+        let origin = remote
+            .space
+            .repository
+            .and_then(|repository| repository.origin);
+        let Some(origin) = origin else {
+            return Ok(None);
+        };
+        let repos = crate::client::repositories::list(&self.0.paths).await?;
+        let registered = crate::repository::with_origin(&repos, &origin).await;
+        Ok(registered.map(|repository| repository.id.clone()))
     }
 
     /// The global config's settings read here, at launch, else the

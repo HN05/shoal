@@ -312,6 +312,26 @@ async fn find_by_origin_path<'a>(
     None
 }
 
+/// The registered repository among `repos` that other machines know by
+/// `origin`, as [`identity`] reads it, or none.
+pub async fn with_origin<'a>(repos: &'a [Repository], origin: &str) -> Option<&'a Repository> {
+    let origins = Origins::default();
+    for repo in repos {
+        // A checkout whose origin cannot be read matches none.
+        if origins
+            .identity(&repo.source)
+            .await
+            .ok()
+            .flatten()
+            .as_deref()
+            == Some(origin)
+        {
+            return Some(repo);
+        }
+    }
+    None
+}
+
 /// The only registered repository whose origin `item` belongs to, or none
 /// when no registered repository has that origin.
 pub async fn registered_for_item<'a>(

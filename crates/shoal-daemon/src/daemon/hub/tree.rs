@@ -279,13 +279,9 @@ impl Manager {
         let Some(origin) = origin else {
             return Ok(None);
         };
-        for repository in self.repositories().await? {
-            let identity = crate::repository::identity(&repository.source).await;
-            if identity.unwrap_or_default().as_ref() == Some(&origin) {
-                return Ok(Some(repository.id));
-            }
-        }
-        Ok(None)
+        let repositories = self.repositories().await?;
+        let registered = crate::repository::with_origin(&repositories, &origin).await;
+        Ok(registered.map(|repository| repository.id.clone()))
     }
 
     /// The origin other machines know the registered repository `id` by.
