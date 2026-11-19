@@ -213,6 +213,7 @@ response_bodies! {
     Reached(crate::agent_messages::Reached),
     RenamedSpace(crate::model::RenamedSpace),
     Launched(super::Launched),
+    CheckedLaunch(Option<Workspace>),
     Triggers(Vec<crate::triggers::TriggerStatus>),
     Trigger(crate::triggers::TriggerStatus),
     TriggerFired(crate::triggers::Fired),

@@ -20,6 +20,13 @@ pub enum LaunchMethod {
     /// of space it starts in and the repository, creates or selects the
     /// space and queues its agent. Answers with [`super::Body::Launched`].
     Launch { launch: Box<Launch> },
+    /// Refuse what the daemon would refuse of the new workspace `launch`
+    /// starts in, settling it as [`Self::Launch`] does up to where that
+    /// would create or fetch anything, with what a picker has yet to choose
+    /// left unset. Answers with [`super::Body::CheckedLaunch`], the
+    /// workspace that already has the branch it names, which the start goes
+    /// into, if any.
+    CheckLaunch { launch: Box<Launch> },
 }
 
 impl LaunchMethod {
@@ -28,6 +35,7 @@ impl LaunchMethod {
             // A launch whose agent an app runs waits for the worker that
             // starts it.
             Self::Launch { .. } => Lifetime::Open,
+            Self::CheckLaunch { .. } => Lifetime::Reply,
         }
     }
 }

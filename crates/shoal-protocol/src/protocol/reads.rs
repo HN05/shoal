@@ -4,9 +4,9 @@
 use super::{
     AgentMethod, AppMethod, ApprovalMethod, BranchMethod, ChatMethod, CiMethod, ContainerMethod,
     DaemonMethod, DemoMethod, ExecutionMethod, FileMethod, HoldMethod, HubMethod, ItemMethod,
-    NotificationMethod, Operation, PortMethod, QuestionMethod, QueueMethod, RecoveryMethod,
-    RemovalMethod, RepositoryMethod, ResourceMethod, SecretMethod, SimulatorMethod, TriggerMethod,
-    WorkspaceMethod,
+    LaunchMethod, NotificationMethod, Operation, PortMethod, QuestionMethod, QueueMethod,
+    RecoveryMethod, RemovalMethod, RepositoryMethod, ResourceMethod, SecretMethod, SimulatorMethod,
+    TriggerMethod, WorkspaceMethod,
 };
 
 impl Operation {
@@ -24,6 +24,7 @@ impl Operation {
                     ApprovalMethod::ListApprovals { .. } | ApprovalMethod::ShowApproval { .. }
                 )
                 | Self::Chat(ChatMethod::CheckChatParent { .. })
+                | Self::Launch(LaunchMethod::CheckLaunch { .. })
                 | Self::Ci(
                     CiMethod::CheckLog { .. }
                         | CiMethod::ViewCiRun { .. }

@@ -4,7 +4,10 @@ use shoal_protocol::launches::{IssueChoice, Launch, LaunchSource, StartTarget};
 
 /// A registered repository whose remote is a forge's, which Shoal never
 /// reaches, and an agent that starts without limits.
-async fn offline_machine(manager: &Manager, temp: &tempfile::TempDir) -> crate::model::Repository {
+pub(super) async fn offline_machine(
+    manager: &Manager,
+    temp: &tempfile::TempDir,
+) -> crate::model::Repository {
     manager.publish_config(global_config(
         "[machine]\nmax_heavy_agents = 'none'\n[machine.overload.disk]\nenabled = false\n\
          [agents.claude]\ncommand = ['sh']\n",

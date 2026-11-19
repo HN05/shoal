@@ -9,7 +9,10 @@ use shoal_protocol::launches::{IssueChoice, Launch, StartTarget};
 use super::ManagerReads;
 use crate::{
     daemon::manager::Manager,
-    forge::items::reference::{ItemInput, ItemRef},
+    forge::{
+        PullRequest,
+        items::reference::{ItemInput, ItemRef},
+    },
     launches::workspace,
     model::Repository,
     start_plan::Creation,
@@ -24,14 +27,14 @@ pub(super) struct Target {
 impl Manager {
     /// The target of `launch`, whose positional argument classifies as a
     /// repository, an issue, or a PR or branch link, which completes
-    /// `creation`. A copy goes in the copied workspace's repository unless
-    /// the launch names one.
+    /// `creation`, fetching a PR's branches where it `fetches`. A copy goes
+    /// in the copied workspace's repository unless the launch names one.
     pub(super) async fn workspace_target(
         &self,
         launch: &Launch,
         creation: &mut Creation,
         copied: Option<&Repository>,
-        reads: &ManagerReads<'_>,
+        (reads, fetches): (&ManagerReads<'_>, bool),
     ) -> Result<Target> {
         let issue = match &launch.issue {
             Some(IssueChoice::Pick) => {
@@ -66,7 +69,9 @@ impl Manager {
         let repo = self.linked_repository(launch, &positional, reads).await?;
         workspace::ensure_link_in(&repo, positional.linked_repository()).await?;
         match positional {
-            StartTarget::Pull(pull) => self.pull_target(&repo, pull, creation, reads).await?,
+            StartTarget::Pull(pull) => {
+                (self.pull_target(&repo, pull, creation, (reads, fetches))).await?
+            }
             StartTarget::Branch { branch, .. } => {
                 workspace::branch_creation(&branch, creation).await?
             }
@@ -149,19 +154,39 @@ impl Manager {
         self.repository(id).await
     }
 
-    /// Complete `creation` for the PR `pull` names in `repo`.
+    /// Complete `creation` for the PR `pull` names in `repo`, fetching its
+    /// branches where it `fetches`.
     async fn pull_target(
         &self,
         repo: &Repository,
         pull: ItemRef,
         creation: &mut Creation,
-        reads: &ManagerReads<'_>,
+        (reads, fetches): (&ManagerReads<'_>, bool),
     ) -> Result<()> {
         let context = self.launch_read_context(&repo.id, reads.caller).await?;
         let pull = self
             .pull_request(&context, &pull.into(), reads.caller)
             .await?;
-        workspace::pull_creation(reads, repo, pull, creation).await
+        match fetches {
+            true => workspace::pull_creation(reads, repo, pull, creation).await,
+            false => pull_settled(reads, repo, &pull, creation).await,
+        }
+    }
+}
+
+/// Settle `creation` on `pull` as [`workspace::pull_creation`] does, short
+/// of fetching its branches: a fork's head refuses what only a branch
+/// takes, and another PR opens its head branch, in the workspace that owns
+/// it if any.
+async fn pull_settled(
+    reads: &ManagerReads<'_>,
+    repo: &Repository,
+    pull: &PullRequest,
+    creation: &mut Creation,
+) -> Result<()> {
+    match pull.fork {
+        true => workspace::ensure_fork_opens(pull, creation),
+        false => (workspace::pull_head_settled(reads, repo, pull, creation).await).map(drop),
     }
 }
 

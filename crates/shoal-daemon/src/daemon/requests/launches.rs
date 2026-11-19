@@ -23,6 +23,9 @@ pub(super) async fn handle(
             let source = LaunchSource::Manual;
             Body::Launched(manager.launch(*launch, source, caller).await?)
         }
+        LaunchMethod::CheckLaunch { launch } => {
+            Body::CheckedLaunch(manager.check_workspace_launch(*launch, caller).await?)
+        }
     }))
 }
 
@@ -36,13 +39,16 @@ impl Scoped for LaunchMethod {
             // A scoped caller starts agents only in its own tree, in the
             // existing workspace it names as in the new spaces it creates,
             // which the launch puts below its own space or one below it.
-            LaunchMethod::Launch { launch, .. } => {
+            LaunchMethod::Launch { launch } => {
                 manager.select_launch_spaces(launch).await?;
                 match &mut launch.in_workspace {
                     Some(SpaceChoice::Space(workspace)) => Some(workspace),
                     _ => None,
                 }
             }
+            // A check confines where its new workspace goes as the start
+            // does.
+            LaunchMethod::CheckLaunch { .. } => None,
         })
     }
 }

@@ -97,6 +97,20 @@ impl Manager {
         Ok(launched)
     }
 
+    /// Refuse what starting the new workspace `launch` names for `caller`
+    /// would refuse, before anything is created, returning instead the
+    /// existing workspace that has the branch it names, which the start
+    /// goes into.
+    pub(crate) async fn check_workspace_launch(
+        &self,
+        mut launch: Launch,
+        caller: Option<&Caller>,
+    ) -> Result<Option<Workspace>> {
+        launches::ensure_copy_fits(&launch)?;
+        self.select_launch_spaces(&mut launch).await?;
+        self.check_workspace_placement(&launch, caller).await
+    }
+
     /// Record that the user interacted with the agent `launched` started,
     /// which the user's own start made by hand; a scoped caller's start is
     /// not theirs.
