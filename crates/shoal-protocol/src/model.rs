@@ -52,8 +52,8 @@ pub use repositories::{
 };
 pub use restarts::{AgentRestart, RestartOutcome, RestartWait};
 pub use spaces::{
-    ByKind, Part, RefPart, RenamedSpace, Space, SpaceKind, SpacePart, SpaceRef, SpaceTarget,
-    Spaces, Workdir,
+    ByKind, Part, RefPart, RenamedSpace, Space, SpaceKind, SpaceMode, SpacePart, SpaceRef,
+    SpaceTarget, Spaces, Workdir,
 };
 pub use status::{
     Attention, DiffSummary, Inspection, IssueStatus, SpaceDetail, SpaceStatus, WorktreeStatus,

@@ -62,6 +62,15 @@ impl SpaceKind {
     }
 }
 
+/// The mode an agent of a space started in, which resolves as a space of
+/// `kind` with or without a repository.
+#[derive(Debug, Clone, Copy)]
+pub struct SpaceMode<'a> {
+    pub name: &'a crate::config::modes::ModeName,
+    pub kind: SpaceKind,
+    pub repository: bool,
+}
+
 /// A space after it took a new name, with the name it had before, which
 /// the places shown for it may still show.
 #[derive(Debug, Clone, Serialize, Deserialize)]

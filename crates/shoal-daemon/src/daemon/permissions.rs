@@ -10,10 +10,10 @@ use shoal_ids::repository_ids::RepositoryId;
 use crate::{
     config::{
         Config,
-        permissions::{self, PermissionChange, Permissions, PermissionsConfig, SpaceMode},
+        permissions::{self, PermissionChange, Permissions, PermissionsConfig},
     },
     daemon::{manager::Manager, scope::Caller},
-    model::{Space, SpaceKind, Workspace},
+    model::{Space, SpaceKind, SpaceMode, Workspace},
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{

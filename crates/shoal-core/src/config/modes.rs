@@ -16,12 +16,8 @@ use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{
-        options::Options,
-        permissions::{PermissionsConfig, SpaceMode},
-        repo::RepoConfig,
-    },
-    model::SpaceKind,
+    config::{options::Options, permissions::PermissionsConfig, repo::RepoConfig},
+    model::{SpaceKind, SpaceMode},
 };
 
 pub use shoal_protocol::config::modes::ModeName;

@@ -446,10 +446,7 @@ fn a_launch_focuses_as_its_mode_then_the_terminal_says() {
 
 #[test]
 fn only_a_mode_that_sets_idle_wake_minutes_wakes_its_idle_agents() {
-    use crate::{
-        config::{modes::ModeName, permissions::SpaceMode},
-        model::SpaceKind,
-    };
+    use crate::{config::modes::ModeName, model::SpaceKind, model::SpaceMode};
     let minutes = |global: &str, name: ModeName, kind: SpaceKind| {
         let global = Config::from_toml(global).unwrap();
         let effective = global.effective(&RepoConfig::default()).unwrap();

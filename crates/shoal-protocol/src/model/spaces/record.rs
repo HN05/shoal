@@ -3,9 +3,9 @@ use super::super::{
     AgentStatus, Asleep, Chat, ChatPart, ReviewMark, SpaceHold, SpaceLinks, Workspace,
     WorkspaceRef, Worktree,
 };
-use super::{RefPart, SpaceKind, SpaceRef};
+use super::{RefPart, SpaceKind, SpaceMode, SpaceRef};
 use crate::config::modes::ModeName;
-use crate::config::permissions::{PermissionsConfig, SpaceMode};
+use crate::config::permissions::PermissionsConfig;
 use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
 use shoal_ids::repository_ids::RepositoryId;

@@ -8,10 +8,7 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use shoal_states::states;
 
-use crate::{
-    config::options::{Merge, Options},
-    model::SpaceKind,
-};
+use crate::config::options::{Merge, Options};
 
 states!(
     #[derive(PartialOrd, Ord)]
@@ -533,13 +530,4 @@ impl Permissions {
         let (value, from) = self.get(key);
         cite(key.as_str(), &value, from)
     }
-}
-
-/// The mode an agent of a space started in, which resolves as a space of
-/// `kind` with or without a repository.
-#[derive(Debug, Clone, Copy)]
-pub struct SpaceMode<'a> {
-    pub name: &'a crate::config::modes::ModeName,
-    pub kind: SpaceKind,
-    pub repository: bool,
 }

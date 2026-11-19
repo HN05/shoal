@@ -4,9 +4,12 @@
 //! `propose` < `gate` < `direct`.
 use anyhow::Result;
 
-use crate::config::{
-    Settings, modes,
-    options::{Merge, Options},
+use crate::{
+    config::{
+        Settings, modes,
+        options::{Merge, Options},
+    },
+    model::SpaceMode,
 };
 pub use shoal_protocol::config::permissions::*;
 
