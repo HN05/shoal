@@ -86,8 +86,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
             "--",
             support::shoal_binary(),
             "alert",
-            "list",
-            "--unread",
+            "clear",
         ])
         .output()
         .unwrap();
@@ -275,7 +274,7 @@ fn agents_notify_the_user_about_their_own_workspace_without_completing_it() {
         &["alert", "withdraw", &id][..],
         &["send", "hello", "--space", &fixture.id("other")][..],
         &["send", "two\nlines"],
-        &["alert", "list", "--unread"],
+        &["alert", "clear"],
     ] {
         let output = scoped_command(&fixture, "sender", args);
         assert!(
@@ -547,7 +546,7 @@ fn a_message_to_all_reaches_running_chats_but_not_workspaces_without_an_agent() 
     });
     let repo = fixture.repo.to_str().unwrap();
     let sent = fixture.ok(&["send", "--repo", repo, "Rebase onto main"]);
-    assert_eq!(sent, reached);
+    assert_eq!(spaces_reached(sent), reached);
     // A --repo without a value means the current repository.
     let output = fixture
         .command()
@@ -557,10 +556,10 @@ fn a_message_to_all_reaches_running_chats_but_not_workspaces_without_an_agent() 
         .unwrap();
     assert!(output.status.success(), "{}", printed(&output));
     let sent: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(sent, reached);
+    assert_eq!(spaces_reached(sent), reached);
     // --all reaches every repository, from outside any of them.
     let sent = fixture.ok(&["send", "--all", "The network works again"]);
-    assert_eq!(sent, reached);
+    assert_eq!(spaces_reached(sent), reached);
     assert_eq!(
         fixture.ok(&["alert", "list", "--unread", "--space", &fixture.id("idle")]),
         serde_json::json!([])
@@ -575,6 +574,13 @@ fn a_message_to_all_reaches_running_chats_but_not_workspaces_without_an_agent() 
         let output = fixture.run(&["send", conflicting[0], conflicting[1], "idle", "hi"]);
         assert!(!output.status.success(), "{}", printed(&output));
     }
+}
+
+/// The spaces an alert `sent` reached, without the IDs of the alerts it
+/// recorded, which differ from send to send.
+fn spaces_reached(mut sent: Value) -> Value {
+    sent.as_object_mut().map(|sent| sent.remove("alerts"));
+    sent
 }
 
 #[test]
@@ -749,7 +755,7 @@ fn messages_carry_copies_of_attached_files() {
         &fixture.id("receiver"),
     ]);
     assert_eq!(messages[0]["message"], "");
-    let copy = Path::new(messages[0]["attachments"][0].as_str().unwrap());
+    let copy = Path::new(messages[0]["files"][0]["path"].as_str().unwrap());
     assert!(copy.starts_with(fixture.shoal_dir()), "{copy:?}");
     assert_eq!(fs::read_to_string(copy).unwrap(), "image");
     // The workspace's files list the copy after the message is read.
@@ -757,7 +763,7 @@ fn messages_carry_copies_of_attached_files() {
     assert_eq!(files[0]["name"], "shot.png", "{files}");
     assert_eq!(files[0]["source"], "message", "{files}");
     assert_eq!(files[0]["title"], "Login screen", "{files}");
-    assert_eq!(files[0]["path"], messages[0]["attachments"][0], "{files}");
+    assert_eq!(files[0]["path"], messages[0]["files"][0]["path"], "{files}");
     let paths = fixture.run(&["files", &fixture.id("receiver"), "--path"]);
     assert_eq!(
         String::from_utf8(paths.stdout).unwrap().trim(),
@@ -788,7 +794,7 @@ fn messages_reach_a_chat_with_their_files() {
         &fixture.id("planning"),
     ]);
     assert_eq!(messages[0]["message"], "Look at this", "{messages}");
-    let copy = Path::new(messages[0]["attachments"][0].as_str().unwrap());
+    let copy = Path::new(messages[0]["files"][0]["path"].as_str().unwrap());
     assert_eq!(fs::read_to_string(copy).unwrap(), "image");
     let files = fixture.ok(&["files", &fixture.id("planning")]);
     assert_eq!(files[0]["source"], "message", "{files}");

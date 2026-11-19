@@ -1370,7 +1370,7 @@ run stop stop --interrupt "$below"
 run env internal env "$below"
 run ownenv internal env
 run rename rename renamed
-run alerts alert list --unread
+run alerts alert clear
 run repo repo add "$HOME"
 run outside send --space {} hello
 run takeover start "$PWD" --branch outside

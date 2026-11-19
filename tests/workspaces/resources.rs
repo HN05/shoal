@@ -1685,7 +1685,7 @@ pub(crate) fn wait_for_busy(fixture: &Fixture, workspace: &str) {
             .as_array()
             .unwrap()
             .iter()
-            .any(|event| event["kind"] == "resource_busy" && event["workspace"] == workspace)
+            .any(|event| event["kind"] == "resource_busy" && event["space"] == workspace)
     });
 }
 
