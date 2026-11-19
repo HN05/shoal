@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use anyhow::{Context, Result, bail};
 
-use super::Manager;
+use super::workspace::Manager;
 use crate::daemon::scope::Caller;
 use crate::{
     model::{OpenedWorkspace, RemovedSpace, RestoredChat, RestoredSpace, RestoredWorkspace},
@@ -326,7 +326,7 @@ impl Manager {
                 let id = parent.id.clone();
                 (self.store)
                     .read(move |tx| {
-                        Ok(super::super::tree::ensure_parent(
+                        Ok(super::tree::ensure_parent(
                             tx,
                             repository.as_ref(),
                             &space,

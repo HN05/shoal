@@ -118,7 +118,11 @@ impl Manager {
 
     /// The nearest free `-2`, `-3`, ... variant of branch `name`, for a
     /// copy of the work on it, whether or not `name` exists here.
-    pub(super) async fn copy_branch(&self, repo: &Repository, name: &str) -> Result<BranchName> {
+    pub(in crate::daemon) async fn copy_branch(
+        &self,
+        repo: &Repository,
+        name: &str,
+    ) -> Result<BranchName> {
         let mut taken = self.branches_taken(repo).await?;
         taken.push(name.into());
         Ok(allocate_branch(name, &taken))
@@ -411,13 +415,13 @@ impl Manager {
 
     /// [`Self::open_branch_with`], writing a restore's files into a new
     /// worktree before it can be used; a reopened workspace gets none.
-    pub(super) async fn open_branch_restoring(
+    pub(in crate::daemon) async fn open_branch_restoring(
         &self,
         repository: impl Into<crate::repository::Selector>,
         selector: &str,
         base: Option<String>,
         new: super::NewWorkspace<'_>,
-        files: Option<super::restore::RestoredFiles>,
+        files: Option<super::super::restore::RestoredFiles>,
     ) -> Result<OpenedWorkspace> {
         let (repo, git) = self.lock_repository(repository).await?;
         let options = NewWorktreeOptions {

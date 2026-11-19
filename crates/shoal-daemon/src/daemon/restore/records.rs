@@ -251,7 +251,7 @@ impl Manager {
     /// The removal record to reopen, kept with its checkpoints for at least
     /// [`RESTORE_CLAIM`] in the same transaction, so expiry cannot delete
     /// them while the restore runs.
-    pub(in crate::daemon::workspace) async fn claim_removed_space(
+    pub(in crate::daemon) async fn claim_removed_space(
         &self,
         selector: &SpaceSelector,
     ) -> Result<RemovedSpace> {
@@ -283,7 +283,7 @@ pub(in crate::daemon) fn rekey_converted(
         return Ok(());
     }
     let own = SpaceId::generate();
-    super::super::checkpoints::reassign(tx, id, &own)?;
+    super::super::workspace::checkpoints::reassign(tx, id, &own)?;
     tx.execute(
         "UPDATE removed_spaces SET space_id=?2, record=json_set(record,
             '$.workspace_id', ?2, '$.checkpoint.workspace_id', ?2)

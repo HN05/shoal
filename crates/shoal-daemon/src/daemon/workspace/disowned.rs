@@ -29,7 +29,7 @@ impl Manager {
     /// The files left of the worktree of `workspace` once Git disowned it,
     /// as [`Self::disowned`] proves, read against its branch's commit;
     /// `None` while Git knows it.
-    pub(in crate::daemon::workspace) async fn left_files(
+    pub(in crate::daemon) async fn left_files(
         &self,
         workspace: &Workspace,
     ) -> Result<Option<LeftFiles>> {

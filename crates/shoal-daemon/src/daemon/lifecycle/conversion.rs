@@ -34,7 +34,7 @@ impl Manager {
         let (id, chat) = (id.to_owned(), chat.clone());
         self.store
             .write(move |tx| {
-                super::super::workspace::restore::rekey_converted(tx, &id)?;
+                super::super::restore::rekey_converted(tx, &id)?;
                 crate::daemon::conversions::record::replace_workspace(tx, &id, &chat)
             })
             .await

@@ -9,10 +9,12 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_refs::{BranchName, CommitId};
 
-use super::{
-    Manager, NewWorkspace,
-    creation::{Configured, PendingWorktree},
+use super::super::{
     restore::RestoredFiles,
+    workspace::{
+        Manager, NewWorkspace,
+        creation::{Configured, PendingWorktree},
+    },
 };
 use crate::{
     git,

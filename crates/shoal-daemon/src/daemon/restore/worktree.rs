@@ -6,8 +6,8 @@ use std::path::Path;
 
 use anyhow::{Result, bail, ensure};
 
-use super::super::Manager;
-use super::super::commits::NewRecord;
+use super::super::workspace::Manager;
+use super::super::workspace::commits::NewRecord;
 use crate::{
     git,
     model::{Checkpoint, Head, OpenedWorkspace, RemovedSpace, Repository},
@@ -59,7 +59,7 @@ impl Manager {
     ) -> Result<OpenedWorkspace> {
         let branch = self.restore_branch(removed, branch, warnings).await?;
         let base = self.restore_base(removed).await?;
-        let new = super::super::NewWorkspace {
+        let new = super::super::workspace::NewWorkspace {
             options: crate::protocol::CreationOptions {
                 name: Some(removed.name.clone()),
                 skip_setup: removed.kept_workspace()?.setup_skipped,
@@ -179,10 +179,7 @@ pub(in crate::daemon) struct RestoredFiles {
 
 /// Write a removal checkpoint's files into a new worktree still at the removed
 /// HEAD, before the workspace can be used.
-pub(in crate::daemon::workspace) async fn write_files(
-    worktree: &Path,
-    files: &RestoredFiles,
-) -> Result<()> {
+pub(in crate::daemon) async fn write_files(worktree: &Path, files: &RestoredFiles) -> Result<()> {
     let head = git::revision(worktree, "HEAD", git::run).await?;
     ensure!(
         head.trim() == files.head,

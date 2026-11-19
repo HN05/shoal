@@ -82,6 +82,7 @@ mod requests;
 pub mod resources;
 mod restart_recovery;
 pub(crate) mod restarts;
+mod restore;
 pub(crate) mod review;
 pub(crate) mod reviews;
 pub(crate) mod runner;

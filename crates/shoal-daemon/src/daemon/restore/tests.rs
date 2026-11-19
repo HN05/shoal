@@ -12,7 +12,7 @@ use crate::{
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The checkpoint refs in the repository, sorted.
-pub(in crate::daemon::workspace) fn checkpoint_refs(repo: &std::path::Path) -> Vec<String> {
+pub(in crate::daemon) fn checkpoint_refs(repo: &std::path::Path) -> Vec<String> {
     let mut refs: Vec<String> = git(
         repo,
         &["for-each-ref", "--format=%(refname)", "refs/shoal/"],
@@ -811,7 +811,7 @@ async fn restore_skips_setup_a_workspace_skipped() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let new = super::super::NewWorkspace {
+    let new = super::super::workspace::NewWorkspace {
         options: crate::protocol::CreationOptions {
             skip_setup: true,
             ..Default::default()

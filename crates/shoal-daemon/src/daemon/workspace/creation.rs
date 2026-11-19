@@ -2,9 +2,9 @@
 //! and settling its worktree.
 
 use super::super::{
-    tree,
+    restore, tree,
     workspace::{
-        Manager, NewWorktreeOptions, branches, identity, ownership::claims_git_dir, restore, stack,
+        Manager, NewWorktreeOptions, branches, identity, ownership::claims_git_dir, stack,
     },
 };
 use crate::{

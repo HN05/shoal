@@ -7,10 +7,12 @@ use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 
-use super::{
-    Manager, NewWorkspace,
-    creation::{Configured, PendingWorktree},
+use super::super::{
     restore::RestoredFiles,
+    workspace::{
+        Manager, NewWorkspace,
+        creation::{Configured, PendingWorktree},
+    },
 };
 use crate::{
     daemon::scope::Caller,
@@ -55,7 +57,7 @@ impl RecordedJobWorkspace {
 /// its own, the space it goes below, or none at the top, and the worktree
 /// its preparation is still to create, if any.
 #[derive(Default)]
-pub(super) struct NewRecord {
+pub(in crate::daemon) struct NewRecord {
     pub id: Option<SpaceId>,
     pub parent: Option<SpaceId>,
     pub pending: Option<PendingWorktree>,
@@ -414,7 +416,7 @@ impl Manager {
     /// Open the removed workspace at a commit `removed` again, without a
     /// branch, at its removed HEAD with `files` from its checkpoint; it keeps
     /// the commit it started `at`.
-    pub(super) async fn restore_commit_workspace(
+    pub(in crate::daemon) async fn restore_commit_workspace(
         &self,
         removed: &RemovedSpace,
         new: NewRecord,

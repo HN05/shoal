@@ -368,7 +368,7 @@ fn record_import(tx: &rusqlite::Transaction<'_>, mut removed: RemovedSpace) -> R
     }
     if let RemovedKind::Workspace(kept) = &mut removed.kind {
         let checkpoint = &mut kept.checkpoint;
-        checkpoint.number = super::super::checkpoints::insert_numbered(tx, checkpoint)?;
+        checkpoint.number = super::super::workspace::checkpoints::insert_numbered(tx, checkpoint)?;
     }
     super::records::record(tx, &removed)
 }

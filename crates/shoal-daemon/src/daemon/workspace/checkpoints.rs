@@ -84,7 +84,7 @@ impl Manager {
     /// Keep HEAD and the unsaved files, within the archive limit where the
     /// cause is capped, reachable under a new checkpoint. Other than a manual checkpoint, one that would
     /// keep what the latest already keeps extends that one instead.
-    pub(super) async fn checkpoint(
+    pub(in crate::daemon) async fn checkpoint(
         &self,
         workspace: &Workspace,
         cause: CheckpointCause,
@@ -407,7 +407,7 @@ impl Manager {
     /// the restore, at once; its checkpoints, events and files stay where
     /// they are. The files gate keeps the deletion of the removed space's
     /// files from coming between.
-    pub(super) async fn adopt_removal(&self, removed: &RemovedSpace) -> Result<()> {
+    pub(in crate::daemon) async fn adopt_removal(&self, removed: &RemovedSpace) -> Result<()> {
         let _files = match &removed.repository_id {
             Some(repository) => Some(self.gates.lock_message_files(repository).await),
             None => None,
@@ -521,7 +521,7 @@ fn branch_label(branch: Option<&BranchName>) -> String {
 
 /// Record a checkpoint under the workspace's next number, in the caller's
 /// transaction.
-pub(super) fn insert_numbered(
+pub(in crate::daemon) fn insert_numbered(
     tx: &rusqlite::Transaction,
     checkpoint: &Checkpoint,
 ) -> Result<CheckpointNumber> {
@@ -566,7 +566,7 @@ fn extend(db: &Connection, checkpoint: &Checkpoint) -> Result<bool> {
 }
 
 /// Give `to` the unexpired checkpoints of `from`.
-pub(super) fn reassign(db: &Connection, from: &SpaceId, to: &SpaceId) -> Result<()> {
+pub(in crate::daemon) fn reassign(db: &Connection, from: &SpaceId, to: &SpaceId) -> Result<()> {
     db.execute(
         "INSERT INTO checkpoint_numbers(workspace_id,last)
             SELECT ?2, last FROM checkpoint_numbers WHERE workspace_id=?1

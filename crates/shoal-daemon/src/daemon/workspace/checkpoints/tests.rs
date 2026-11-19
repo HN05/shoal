@@ -3,8 +3,8 @@ use std::{fs, sync::Arc};
 
 use super::*;
 use crate::daemon::{
+    restore::tests::checkpoint_refs,
     test_support::{commit, git, manager, repository},
-    workspace::restore::tests::checkpoint_refs,
 };
 use shoal_protocol::space_names::SpaceSelector;
 

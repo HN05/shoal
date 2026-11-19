@@ -15,7 +15,7 @@ use shoal_refs::{BranchName, CommitId};
 /// How the worktree of a recorded workspace that has none yet is created,
 /// as `pending_worktrees` keeps it until it is.
 #[derive(serde::Serialize, serde::Deserialize)]
-pub(in crate::daemon::workspace) struct PendingWorktree {
+pub(in crate::daemon) struct PendingWorktree {
     source: PendingSource,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     git_profile: Option<String>,
