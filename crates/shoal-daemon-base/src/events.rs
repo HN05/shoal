@@ -298,6 +298,21 @@ pub fn record_blocker(
     record_with(db, id, kind, "blocker", blocker)
 }
 
+/// Record one side of an absorb for the space `id`: that it was absorbed,
+/// or that it absorbed another.
+pub fn record_absorb(
+    db: &Connection,
+    id: &SpaceId,
+    kind: EventKind,
+    absorb: &shoal_protocol::events::AbsorbEvent,
+) -> Result<()> {
+    ensure!(matches!(
+        kind,
+        EventKind::Absorbed | EventKind::AbsorbedSpace
+    ));
+    record_with(db, id, kind, "absorb", absorb)
+}
+
 /// Record that the agent of the space `id` started, stopped or exited. An
 /// execution's agent ends once: a stop that saved it for a restore, then its
 /// wrapper's end, records one stop.

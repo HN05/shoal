@@ -90,6 +90,33 @@ impl Manager {
             .await
     }
 
+    /// Record that another branch has the work of the space `id` at `head`
+    /// under other commits, as `shoal done --integrated` records it,
+    /// keeping what a completion it recorded says otherwise.
+    pub(crate) async fn record_integrated(&self, id: &SpaceId, head: CommitId) -> Result<()> {
+        let id = id.to_owned();
+        self.store
+            .write(move |tx| {
+                let completion = match take_completion(tx, &id)? {
+                    Some(recorded) => Completion {
+                        head,
+                        integrated: true,
+                        ..recorded
+                    },
+                    None => Completion {
+                        head,
+                        cleanup: false,
+                        integrated: true,
+                        results: Vec::new(),
+                        summary: None,
+                        error: None,
+                    },
+                };
+                record_completion(tx, &id, &completion).map(drop)
+            })
+            .await
+    }
+
     /// `shoal restore` restores a stopped agent of the space, which says its
     /// work is not finished: withdraw a standing completion, so a protection
     /// stop restores the agent and completion cleanup leaves the space.

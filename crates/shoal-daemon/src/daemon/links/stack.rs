@@ -2,7 +2,7 @@
 //! through its PRs, or into the space that absorbs it.
 use crate::forge::items::reference::ItemRef;
 use crate::model::EventCause;
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use rusqlite::params;
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::{BranchName, CommitId};
@@ -301,6 +301,9 @@ pub(crate) enum Onto {
     Remote,
     /// A local branch of the repository.
     Local,
+    /// The stacked branch has the base's work already, since its
+    /// workspace took that work, so it needs no rebase.
+    Held,
 }
 
 /// What a restack tells a stacked workspace's agent: `updates` for its
@@ -367,14 +370,17 @@ fn base_merged_update(
 /// its base merged, `retargeted`, and how to rebase onto it.
 fn base_merged_message(restack: &Restack<'_>, retargeted: &str) -> String {
     let (target, head) = (restack.target, restack.head);
+    let base = &restack.base.name;
     let rebase = match restack.onto {
         Onto::Remote => format!("git fetch origin && git rebase --onto origin/{target} {head}"),
         Onto::Local => format!("git rebase --onto {target} {head}"),
+        Onto::Held => {
+            return format!(
+                "Base workspace {base} was absorbed; this workspace now builds on {target}{retargeted}. Its branch keeps that work, so it needs no rebase."
+            );
+        }
     };
-    format!(
-        "Base workspace {} merged into {target}{retargeted}. Rebase onto it: {rebase}",
-        restack.base.name,
-    )
+    format!("Base workspace {base} merged into {target}{retargeted}. Rebase onto it: {rebase}")
 }
 
 /// Atomically record the new base of the workspace `stacked` names,
@@ -390,6 +396,12 @@ fn record_restack(tx: &rusqlite::Transaction<'_>, stacked: &Stacked, tell: Tell)
         retargeted,
     } = tell;
     let id = &stacked.id;
+    if let Some(new_base) = &stacked.new_base {
+        ensure!(
+            !builds_on(tx, new_base, id)?,
+            "the workspace's new base builds on it; stacking it there would make a cycle"
+        );
+    }
     let changed = tx.execute(
         "UPDATE workspaces SET base_workspace_id=?3 WHERE id=?1 AND base_workspace_id=?2",
         params![id, stacked.base, stacked.new_base],
@@ -414,4 +426,17 @@ fn record_restack(tx: &rusqlite::Transaction<'_>, stacked: &Stacked, tell: Tell)
         wait::record_own_change(tx, id, change)?;
     }
     Ok(())
+}
+
+/// Whether the workspace `id` is `base` or a workspace whose branch the
+/// branch of `base` builds on.
+fn builds_on(tx: &rusqlite::Transaction<'_>, base: &SpaceId, id: &SpaceId) -> Result<bool> {
+    Ok(tx.query_row(
+        "WITH RECURSIVE up(id) AS (SELECT ?1
+            UNION SELECT workspaces.base_workspace_id FROM workspaces JOIN up USING(id)
+                WHERE workspaces.base_workspace_id IS NOT NULL)
+         SELECT EXISTS(SELECT 1 FROM up WHERE id=?2)",
+        params![base, id],
+        |row| row.get(0),
+    )?)
 }

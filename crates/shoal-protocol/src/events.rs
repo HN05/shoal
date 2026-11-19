@@ -146,6 +146,11 @@ states!(EventKind {
     ChildCreated => "child_created",
     /// A space below the space was removed.
     ChildRemoved => "child_removed",
+    /// The space was absorbed into the space `absorb` names.
+    Absorbed => "absorbed",
+    /// The space absorbed the space `absorb` names, taking over what it
+    /// lists.
+    AbsorbedSpace => "absorbed_space",
     /// The chat became a workspace, or the workspace a chat, as its
     /// `space_kind` says, with the fields of the kind it became.
     Converted => "converted",
@@ -269,6 +274,9 @@ pub struct EventDetails {
     /// The merge whose default branch runs Shoal looked for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge: Option<Box<MergeEvent>>,
+    /// The other side of an absorb, and what moved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub absorb: Option<Box<AbsorbEvent>>,
 }
 
 /// The kind of space that recorded an event, with what only that kind has.
@@ -319,6 +327,29 @@ mod present_or_null {
     ) -> Result<Option<Option<T>>, D::Error> {
         Option::deserialize(deserializer).map(Some)
     }
+}
+
+/// One side of an absorb: the space on the other side, how the absorbed
+/// space's branch merged, and what the space that took it took over.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AbsorbEvent {
+    /// The space that took the work, or the one it took.
+    pub space: crate::model::SpaceRef,
+    /// How its branch merged; none when no code merged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub method: Option<crate::forge::items::action::MergeMethod>,
+    /// The URLs of the links that moved.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub links: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub questions: Vec<crate::item_numbers::ItemNumber>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<crate::model::SpaceRef>,
+    /// The files carried over as uncommitted changes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub carried: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

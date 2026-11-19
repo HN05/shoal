@@ -310,7 +310,7 @@ impl Manager {
 
 /// `message`, refused for a merge by `method` other than a squash, or when
 /// it is empty.
-fn squash_message(method: MergeMethod, message: Option<&str>) -> Result<Option<String>> {
+pub(crate) fn squash_message(method: MergeMethod, message: Option<&str>) -> Result<Option<String>> {
     let Some(message) = message else {
         return Ok(None);
     };

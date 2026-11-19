@@ -321,6 +321,28 @@ impl Manager {
         discard(kept).await;
     }
 
+    /// Attach copies of the files attached to the space `from` to the space
+    /// `to`, each with its title and as whoever attached it, and return each
+    /// one's record ID with its copy's record. The originals stay with
+    /// `from`, so what refers to them keeps them for as long as it does.
+    pub(crate) async fn copy_attached_files(
+        &self,
+        from: &SpaceId,
+        to: &SpaceId,
+    ) -> Result<Vec<(i64, AttachedFile)>> {
+        let (from, to) = (SpaceSelector::id(from), SpaceSelector::id(to));
+        let mut copied = Vec::new();
+        for file in self.attached_files(&from).await? {
+            let new = NewFile {
+                path: file.path.clone(),
+                title: file.title.clone(),
+            };
+            let added = self.add_attached_files(&to, vec![new], &file.attached_by);
+            copied.extend(added.await?.into_iter().map(|added| (file.id, added)));
+        }
+        Ok(copied)
+    }
+
     /// Delete the files attached to the workspace or chat `selector` names,
     /// only the copies of files with one of `names` and the records `ids`
     /// when there are any, and return their records. A name or record it does

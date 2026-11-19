@@ -75,6 +75,8 @@ fn event_line(event: &EventDetails) -> (String, String) {
         EventKind::Removed => fixed("Removed", event.cause.map(cause).unwrap_or_default()),
         EventKind::Restored => fixed("Restored", String::new()),
         EventKind::Converted => fixed("Converted", converted(event)),
+        EventKind::Absorbed => fixed("Absorbed", absorbed_into(event)),
+        EventKind::AbsorbedSpace => fixed("Absorbed a space", took_over(event)),
         EventKind::AgentStarted => fixed("Agent started", started(event)),
         EventKind::AgentStopped => fixed("Agent stopped", agent(event)),
         EventKind::AgentExited => fixed("Agent exited", exit(event)),
@@ -183,6 +185,41 @@ fn converted(event: &EventDetails) -> String {
         }
         EventSpace::Chat => "to chat".to_owned(),
     }
+}
+
+/// The space that took an absorbed space's work, and by what merge.
+fn absorbed_into(event: &EventDetails) -> String {
+    let Some(absorb) = &event.absorb else {
+        return String::new();
+    };
+    match absorb.method {
+        Some(method) => format!("into {} by {method}", absorb.space.name),
+        None => format!("into {}", absorb.space.name),
+    }
+}
+
+/// The space a space absorbed, and what it took over from it.
+fn took_over(event: &EventDetails) -> String {
+    let Some(absorb) = &event.absorb else {
+        return String::new();
+    };
+    let mut parts = vec![absorb.space.name.to_string()];
+    if let Some(method) = absorb.method {
+        parts.push(format!("merged by {method}"));
+    }
+    let counted = [
+        (absorb.carried.len(), "uncommitted files"),
+        (absorb.links.len(), "links"),
+        (absorb.files.len(), "files"),
+        (absorb.questions.len(), "questions"),
+        (absorb.children.len(), "children"),
+    ];
+    for (count, what) in counted {
+        if count > 0 {
+            parts.push(format!("{count} {what}"));
+        }
+    }
+    parts.join(", ")
 }
 
 /// A space's new name.

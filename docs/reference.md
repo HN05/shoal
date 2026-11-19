@@ -3621,8 +3621,8 @@ branch cannot be held by a managed workspace, and any other checkout of it must 
 clean. The workspace must be clean and on its recorded branch. It merges by
 `-X`, else by [`[merge] method`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#merges):
 
-- `merge`, the default: Git fast-forwards or creates a merge commit in the
-  default checkout;
+- `merge`, the default: a fast-forward, or a merge commit of the two that
+  Shoal makes as `git merge` would, without touching a checkout;
 - `squash`: one commit on the default branch, by whoever merges, whose files
   are the merge of the default branch and the branch, as `git merge --squash`
   and a commit make it. `--message` gives its message; without it, a branch of
@@ -3632,7 +3632,8 @@ clean. The workspace must be clean and on its recorded branch. It merges by
   as `git rebase` copies them, keeping their authors, in a worktree of Shoal's
   own; merge commits are left out.
 
-A squash or rebase moves the default branch to the commit it made and leaves
+Every method moves the default branch to the commit it made, fast-forwarding
+its checkout. A squash or rebase leaves
 the workspace's branch as it was, as a forge's squash or rebase merge leaves a
 PR's branch. A merge that does not apply cleanly changes nothing: merge the
 default branch into the workspace with Git (`git merge main`), or for a rebase
@@ -4422,6 +4423,54 @@ starts, so the record holds the final ones. Removal stops agents as `shoal stop`
 does, keeping their recovery records in the removal record; interrupted commands
 are not saved. When the removal's checkpoint keeps HEAD only, merged cleanup keeps the workspace instead.
 [`[cleanup.restore]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup) sets `retention_days` and `archive_max_mb`.
+
+### Absorb a space
+
+`shoal absorb <space> [--into <space>]` folds a space into another and
+removes it. Your own terminal absorbs any space, by default into its parent,
+and a top-level space only with `--into`; an agent absorbs a space below its
+own, by default into its own space. `--into` names any space your scope
+reaches, other than the absorbed space, a space below it, or a chat in its
+worktree or a space below one. A space whose completion is not recorded at its current HEAD, or
+with a chat in its worktree that is not done, is refused unless `--force`,
+which stops their agents first; a done space's running agent stops with its
+removal.
+
+Where both are workspaces of one repository, the absorbed space's branch
+merges into the other's branch in its worktree, by `-X` and `--message` as
+[a local merge](#merge-into-the-default-branch) takes them, else by `[merge]
+method`; a merge commit or a squash without `--message` gets a message naming
+the absorbed space and its branch. The absorbed space's uncommitted and
+untracked files then carry over into that worktree as uncommitted changes,
+never as a commit; `--discard-uncommitted` leaves them behind. The worktree
+that takes them need not be clean: absorbing refuses, changing nothing, when
+the merge would not apply cleanly, the merge or the carried files would
+touch a file it has uncommitted changes to, or the carried files would replace
+a file it ignores, or while another lifecycle operation, such as a stop or a
+removal, runs in either workspace. A squash or rebase records the
+absorbed space's completion as integrated. The default branch is neither
+fetched nor pushed, and `[merge] enabled`, the `merge` permission and review
+gates do not apply.
+
+A chat has no code to merge, and a space that takes the work without a branch
+in its repository takes none: a workspace with commits the default branch lacks
+or uncommitted files is then refused, naming `shoal convert workspace`, unless
+`--force` leaves its code behind.
+
+The space that takes the work also takes the absorbed space's links, with their
+relations and watches, its attached files and its open questions, under its own
+numbers. The absorbed space's pending PR proposals and push requests are
+withdrawn; its issue proposals stay with the repository. The spaces directly
+below it move up one level, below its parent, and each logs its parent change;
+a workspace built on its branch then builds on the branch that took the merge,
+unless that branch builds on it, and else on what the absorbed branch built on, its PRs are retargeted there and its agent is
+told the rebase command. Both spaces' logs record the absorb, and when you are
+not the agent of the space that took the work, that agent gets a message
+saying what it took over. The absorbed space then goes as `shoal rm` removes
+it, in the background, keeping a checkpoint and its branch; a hold of the user's
+refuses an agent as its `user_holds` permission says. `shoal restore` reopens
+its files, without what moved. `--json` reports the merge, the carried files and
+everything that moved.
 
 ### Move a space to another machine
 

@@ -3691,6 +3691,22 @@ workspace: one that needs the user asks, and an open question, like a hold, keep
 workspace from every unattended removal, completion and PR cleanup included. So
 does an agent launch waiting in the agent queue to start in the workspace.
 
+Decision: `shoal absorb` is how a coordinator takes a finished space's work
+back into its own instead of merging it with Git and removing the space. It
+needs no permission of its own, since it ends in removing a space below the
+caller, which scoped callers may. Only done work is absorbed unless forced,
+because absorbing ends the space. Code goes only where a branch of its
+repository can take it, through the local merge `shoal merge` uses, generalized
+to a target branch in its worktree, which need not be clean: every method makes
+its commit without touching a checkout and the target fast-forwards, Git
+keeping that worktree's other changes. Uncommitted files arrive as uncommitted
+changes for the taking agent to review, never as a commit. Everything that is
+checked is checked before anything moves; what binds to the absorbed branch,
+PR proposals and push requests, is withdrawn rather than rebound, and the
+removal path takes the space last, so its checkpoint and branch keep what was
+left behind. Its children move up one level through one operation, which a
+general reparenting command can reuse.
+
 Workspace completion uses `[cleanup.done] enabled` (default true), resolved through the
 normal configuration layers, and an explicit cleanup override. Only an
 explicit done signal completes an assignment; issue closure and merges do not,

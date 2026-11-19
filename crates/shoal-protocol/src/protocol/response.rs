@@ -299,6 +299,7 @@ response_bodies! {
     Execution(ExecutionPlan),
     RemovalCheck(Box<SpaceRemovalCheck>),
     RemovalResult(RemovalResult),
+    Absorbed(Box<crate::absorb::Absorbed>),
     StoppedProcesses(crate::processes::Stopped),
     ExportedSpace(crate::transfer::ExportedSpace),
     DiffBase(DiffBase),

@@ -154,6 +154,18 @@ impl Manager {
         if !self.user_holds_below(&space.id).await? {
             return Ok(false);
         }
+        self.authorize_taking_holds(caller, &space, takes).await?;
+        Ok(true)
+    }
+
+    /// Let `caller` take the user's holds of `space`, or with `takes` false
+    /// check that it may, as its `user_holds` permission allows.
+    pub(in crate::daemon) async fn authorize_taking_holds(
+        &self,
+        caller: &Caller,
+        space: &crate::model::Space,
+        takes: bool,
+    ) -> Result<()> {
         // A name may repeat, so the space's ID binds the approval.
         let removal = format!("remove {} ({}), which the user holds", space.name, space.id);
         let action = Action {
@@ -164,7 +176,7 @@ impl Manager {
             true => self.authorize_action(Some(caller), action).await?,
             false => self.check_action(caller, action).await?,
         }
-        Ok(true)
+        Ok(())
     }
 
     /// Whether the user holds the space `id` or one below it.

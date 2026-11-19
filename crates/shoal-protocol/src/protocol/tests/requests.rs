@@ -85,6 +85,7 @@ const REQUESTS: &[&str] = &[
     r#"{"check_removal":{"space":"fix","include_changes":true}}"#,
     r#"{"remove_space":{"space":"fix","unsaved":"all"}}"#,
     r#"{"start_removal":{"space":"fix","unsaved":"all"}}"#,
+    r#"{"absorb_space":{"space":"fix","into":"parent","method":"squash","force":true}}"#,
     r#"{"cleanup":{"dry_run":true,"spaces":"all","caches":"none"}}"#,
     r#""removed_spaces""#,
     r#"{"removed_space":{"space":"fix"}}"#,

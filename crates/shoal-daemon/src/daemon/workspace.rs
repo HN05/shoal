@@ -27,7 +27,7 @@ mod xcode;
 pub(crate) use branches::NewWorktreeOptions;
 pub(crate) use copies::CopyPlace;
 pub(crate) use creation::{NewWorkspace, build_pending_in};
-pub(crate) use merge::RecordChange;
+pub(crate) use merge::{RecordChange, squash_message};
 pub(crate) use ownership::VerifiedWorktree;
 pub(crate) use stack::record_base_changed;
 

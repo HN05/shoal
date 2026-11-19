@@ -4,6 +4,7 @@ mod absent;
 pub(crate) use shoal_daemon_base::{
     config_state, events, file_access, gates, item_numbers, log, notifications,
 };
+mod absorb;
 pub mod access;
 pub(crate) mod acquired_leases;
 pub mod agent_messages;

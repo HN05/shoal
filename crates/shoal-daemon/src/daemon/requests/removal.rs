@@ -26,6 +26,7 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         RemovalMethod::StopSpace { .. }
         | RemovalMethod::RemoveSpace { .. }
         | RemovalMethod::StartRemoval { .. }
+        | RemovalMethod::AbsorbSpace(_)
         | RemovalMethod::RestoreSpace { .. }
         | RemovalMethod::ExportSpace { .. }
         | RemovalMethod::ExportMovingSpace { .. }
@@ -115,6 +116,9 @@ pub(super) async fn handle(
             let release_holds = releases_holds(manager, caller, &space).await?;
             (manager.start_removal(&space, unsaved, caller, release_holds)).await?;
             Body::Ok
+        }
+        RemovalMethod::AbsorbSpace(absorb) => {
+            Body::Absorbed(Box::new(manager.absorb_space(&absorb, caller).await?))
         }
         RemovalMethod::Cleanup { dry_run, selection } => {
             Body::Cleanup(cleanup::on_request(manager, dry_run, &selection).await?)
@@ -232,6 +236,17 @@ impl Scoped for RemovalMethod {
                 .workspace_below(caller, space, REFUSAL)
                 .await
                 .map(Some),
+            // Into a space its scope reaches, the user's holds taken where
+            // it may release them.
+            RemovalMethod::AbsorbSpace(absorb) => {
+                manager
+                    .ensure_selected_reached(caller, absorb.into.as_mut())
+                    .await?;
+                const ABSORB: &str = "scoped processes absorb only the spaces below their own";
+                (manager.workspace_below(caller, &mut absorb.space, ABSORB))
+                    .await
+                    .map(Some)
+            }
             // Its answer confines the spaces to those below the caller's.
             RemovalMethod::StopTargets => Ok(None),
             RemovalMethod::StopSpace { space, .. } => manager

@@ -86,6 +86,9 @@ pub enum RemovalMethod {
         space: SpaceSelector,
         unsaved: UnsavedWork,
     },
+    /// Fold a space into one above it, which takes its work and records,
+    /// then remove it as `StartRemoval` does.
+    AbsorbSpace(Box<crate::absorb::Absorb>),
     /// Remove idle and merged cleanup candidates without waiting for their
     /// idle delay, and empty shared caches nothing is using.
     Cleanup {

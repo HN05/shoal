@@ -387,6 +387,50 @@ pub(crate) fn asking_spaces(db: &Connection) -> Result<Vec<SpaceId>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// Give the open questions of the space `from` to the space `to`, under
+/// its next numbers, oldest first, retracting their unread notifications,
+/// and return them as they are now: its agent answers or closes them from
+/// now on. Their attached files were copied to `to`, and `copies` maps
+/// each file's record ID to its copy's.
+fn move_open(
+    tx: &Transaction<'_>,
+    from: &SpaceId,
+    to: &SpaceId,
+    copies: &std::collections::HashMap<i64, i64>,
+) -> Result<Vec<Question>> {
+    let open: Vec<(i64, String)> = tx
+        .prepare(&format!(
+            "SELECT q.id,q.files FROM questions q WHERE q.space_id=?1 AND {OPEN} ORDER BY q.id"
+        ))?
+        .query_map([from], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut moved = Vec::new();
+    for (id, files) in open {
+        let before = query(tx, "WHERE q.id=?1", [id])?;
+        for question in &before {
+            let (kind, about) = (NotificationKind::QuestionAsked, question.notification());
+            notifications::retract(tx, &question.space_id, kind, &about)?;
+        }
+        let files: Vec<i64> = serde_json::from_str(&files)?;
+        let files: Vec<i64> = (files.iter())
+            .filter_map(|file| copies.get(file).copied())
+            .collect();
+        let number = item_numbers::next(tx, to)?;
+        tx.execute(
+            "UPDATE questions SET space_id=?2,space_number=?3,number=?4,files=?5 WHERE id=?1",
+            params![
+                id,
+                to,
+                number.space,
+                number.item,
+                serde_json::to_string(&files)?
+            ],
+        )?;
+        moved.extend(query(tx, "WHERE q.id=?1", [id])?);
+    }
+    Ok(moved)
+}
+
 /// Close the space's open questions, which its finished assignment no
 /// longer waits on, and return their numbers.
 pub(crate) fn close_open(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<Vec<ItemNumber>> {
@@ -623,6 +667,29 @@ impl Manager {
                 Ok(Some(question))
             }
         }
+    }
+
+    /// Give the open questions of the space `from` to the space `to`, as
+    /// [`move_open`] does, and announce each under its new number, as one
+    /// asked there is; return those numbers.
+    pub(crate) async fn move_open_questions(
+        &self,
+        from: &SpaceId,
+        to: &SpaceId,
+        copies: std::collections::HashMap<i64, i64>,
+    ) -> Result<Vec<ItemNumber>> {
+        let (from, to) = (from.clone(), to.clone());
+        let moved = {
+            let _gate = self.gates.lock_announcements().await;
+            (self.store)
+                .write(move |tx| move_open(tx, &from, &to, &copies))
+                .await?
+        };
+        self.signals.question_changed();
+        for question in &moved {
+            self.announce_question(question).await;
+        }
+        Ok(moved.into_iter().map(|question| question.number).collect())
     }
 
     /// Tell the user about `question` unless it was withdrawn or answered
