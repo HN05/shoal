@@ -9,14 +9,11 @@ use crate::{
     account::Account,
     backends::Reviews,
     items::item::{ItemRequests, text},
-    review::{
-        diff::{Bases, Diff, FileDiff, Placed},
-        submit::{PlacedReview, Submission},
-    },
+    items::review::{PlacedReview, Submission},
+    review::diff::{Bases, Diff, FileDiff, Placed},
     transport::api::{Request, TransportRequests},
     updates::discussion_key,
 };
-use shoal_forge_types::review::{submit::ReviewVerdict, thread::Target};
 use shoal_forge_types::{
     ForgeRepo,
     items::{item::Current, link::ItemKind},
@@ -24,6 +21,7 @@ use shoal_forge_types::{
     raw::HttpMethod,
     review::{reviewers::Reviewer, thread::Thread},
 };
+use shoal_forge_types::{items::review::ReviewVerdict, review::thread::Target};
 
 impl Reviews for GitLab {
     /// The project's members, inherited ones included; GitLab asks no

@@ -17,11 +17,9 @@ use crate::{
         item::ItemRequests,
         milestone::MilestoneRequests,
         reaction::{ReactionRequests, Subject},
+        review::SubmitSteps,
     },
-    review::{
-        submit::SubmitSteps,
-        thread::{ThreadRequests, ThreadSteps},
-    },
+    review::thread::{ThreadRequests, ThreadSteps},
     transport::api::{Request, TransportRequests},
     updates::{Edited, ItemDetails},
 };

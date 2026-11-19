@@ -6,10 +6,8 @@ use serde_json::Value;
 use crate::{
     account::Account,
     backends::Items,
-    review::{
-        diff::Diff,
-        submit::{PlacedReview, Submission},
-    },
+    items::review::{PlacedReview, Submission},
+    review::diff::Diff,
     transport::api::Request,
 };
 use shoal_forge_types::{

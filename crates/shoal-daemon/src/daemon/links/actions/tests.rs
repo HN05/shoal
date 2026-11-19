@@ -241,7 +241,7 @@ async fn several_assigned_issues_need_the_number_of_the_one_acted_on() {
 
 #[test]
 fn a_scoped_verdict_is_the_space_s_own_post_and_the_user_s_is_not() {
-    use crate::forge::review::submit::{NewReview, ReviewVerdict};
+    use crate::forge::items::review::{NewReview, ReviewVerdict};
     let approval = Action::Review(NewReview {
         verdict: ReviewVerdict::Approve,
         body: "Looks right".into(),

@@ -80,7 +80,7 @@ fn actions_need_the_capabilities_they_use() {
 
 #[test]
 fn reviews_need_line_comments_and_their_verdict_and_only_prs_take_them() {
-    use crate::review::submit::{LineComment, NewReview, ReviewVerdict, Side};
+    use crate::items::review::{LineComment, NewReview, ReviewVerdict, Side};
     let review = |verdict, comments: usize| {
         Action::Review(NewReview {
             verdict,

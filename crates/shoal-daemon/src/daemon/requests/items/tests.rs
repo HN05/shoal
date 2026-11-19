@@ -83,7 +83,7 @@ fn reviewed_forge() -> shoal_forge::test_support::Server {
 
 /// The `pr review --approve` of PR `number` from the chat `id`.
 fn approval(id: &shoal_ids::space_ids::SpaceId, number: &str) -> ItemMethod {
-    use crate::forge::review::submit::{NewReview, ReviewVerdict};
+    use crate::forge::items::review::{NewReview, ReviewVerdict};
     ItemMethod::ItemAction {
         target: ItemContext::space(SpaceSelector::id(id)).into(),
         kind: crate::forge::items::link::ItemKind::Pr,

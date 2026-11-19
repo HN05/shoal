@@ -2,6 +2,5 @@
 pub mod diff;
 pub mod reviewers;
 pub mod status;
-pub mod submit;
 pub mod thread;
 pub mod view;

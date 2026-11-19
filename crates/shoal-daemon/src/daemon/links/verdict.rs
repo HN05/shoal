@@ -11,11 +11,11 @@ use crate::{
     daemon::{links::place::Access, permissions, scope::Caller, workspace::Manager},
     forge::{
         items::reference::ItemInput,
-        review::submit::{LineComment, NewReview, ReviewVerdict},
+        items::review::{LineComment, NewReview, ReviewVerdict},
     },
     protocol::RepoTarget,
 };
-use shoal_forge::review::submit::{OwnPull, SubmitRequests};
+use shoal_forge::items::review::{OwnPull, SubmitRequests};
 use shoal_ids::repository_ids::RepositoryId;
 
 /// What approving a review with a verdict binds.

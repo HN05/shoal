@@ -9,8 +9,8 @@ use shoal_states::states;
 use crate::items::attach::Attachment;
 use crate::items::comment::CommentEdit;
 use crate::items::reaction::ReactionChange;
-use crate::review::submit::NewReview;
-use crate::review::submit::ReviewVerdict;
+use crate::items::review::NewReview;
+use crate::items::review::ReviewVerdict;
 use crate::{
     capability::Capability,
     items::{item::Item, link::ItemKind},

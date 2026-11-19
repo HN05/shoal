@@ -9,7 +9,7 @@ use crate::{
     cli::args::changes::{ReviewArgs, VerdictArgs},
     forge::{
         items::action::Action,
-        review::submit::{LineComment, NewReview, ReviewVerdict, Side},
+        items::review::{LineComment, NewReview, ReviewVerdict, Side},
     },
 };
 

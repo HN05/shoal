@@ -1,6 +1,6 @@
 use super::*;
-use shoal_forge_types::review::submit::LineComment;
-use shoal_forge_types::review::submit::Side;
+use shoal_forge_types::items::review::LineComment;
+use shoal_forge_types::items::review::Side;
 
 #[test]
 fn the_diff_is_the_version_at_the_head_with_the_commits_it_compares() -> Result<()> {

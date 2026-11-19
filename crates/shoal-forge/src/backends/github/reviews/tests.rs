@@ -1,6 +1,6 @@
 use super::*;
 use serde_json::json;
-use shoal_forge_types::review::submit::LineComment;
+use shoal_forge_types::items::review::LineComment;
 
 #[test]
 fn changed_files_keep_their_former_path_and_lack_lines_without_a_patch() -> Result<()> {

@@ -5,8 +5,8 @@ use anyhow::{Context, Result, bail, ensure};
 use crate::{account::Account, backends::Reviews, items::action::ActionRequests};
 use shoal_forge_types::{
     ForgeRepo,
+    items::review::{LineComment, Side},
     items::{item::Current, link::ItemKind},
-    review::submit::{LineComment, Side},
 };
 
 /// The files a PR's diff changes.

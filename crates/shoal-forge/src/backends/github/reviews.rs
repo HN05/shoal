@@ -9,21 +9,19 @@ use crate::{
     account::Account,
     backends::Reviews,
     items::item::text,
-    review::{
-        diff::{Diff, FileDiff},
-        submit::{PlacedReview, Submission},
-    },
+    items::review::{PlacedReview, Submission},
+    review::diff::{Diff, FileDiff},
     transport::api::{Request, TransportRequests},
     updates::{activity_key, id_text},
 };
-use shoal_forge_types::review::{submit::ReviewVerdict, thread::Target};
 use shoal_forge_types::{
     ForgeRepo,
     items::item::Current,
     numbers::{CommentId, PullNumber},
     review::{reviewers::Reviewer, thread::Thread},
 };
-use shoal_forge_types::{raw::HttpMethod, review::submit::Side};
+use shoal_forge_types::{items::review::ReviewVerdict, review::thread::Target};
+use shoal_forge_types::{items::review::Side, raw::HttpMethod};
 
 mod reviewers;
 

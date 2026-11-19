@@ -11,16 +11,16 @@ use super::store;
 use crate::{
     daemon::{log, workspace::Manager},
     forge::{
+        items::review::{LineComment, NewReview, ReviewVerdict, Side},
         items::{action::Action, link::ItemKind},
-        review::submit::{LineComment, NewReview, ReviewVerdict, Side},
     },
     model::Workspace,
     protocol::ItemContext,
     reviews::{AUTOMATED_NOTE, Finding, Posted, Review, ReviewTarget, Severity, severity_counts},
 };
 use shoal_forge::{
-    items::action::ActionRequests,
-    review::{diff::DiffRequests, submit::HeadMoved},
+    items::{action::ActionRequests, review::HeadMoved},
+    review::diff::DiffRequests,
 };
 use shoal_protocol::space_names::SpaceSelector;
 

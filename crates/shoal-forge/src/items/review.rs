@@ -20,8 +20,8 @@ use crate::{
 use shoal_forge_types::{
     ForgeRepo,
     items::link::ItemKind,
+    items::review::{NewReview, ReviewVerdict},
     numbers::PullNumber,
-    review::submit::{NewReview, ReviewVerdict},
 };
 
 /// A review bound to a commit the PR's head has moved past, refused before
