@@ -3734,3 +3734,32 @@ fn migration_keys_merge_run_lookups_by_their_merge_commit() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn migration_binds_the_merge_requests_before_methods_to_a_merge_commit() -> Result<()> {
+    let mut db = historical_database(238)?;
+    db.execute_batch("PRAGMA foreign_keys=OFF;")?;
+    let record = serde_json::json!({
+        "id": "merge",
+        "space_id": "workspace",
+        "target": "merge",
+        "name": "merge",
+        "specification": {"branch": "topic", "head": "abc123"},
+        "status": "approved",
+    });
+    db.execute(
+        "INSERT INTO access_requests(id,space_id,target_key,name,record,space_number,number) VALUES
+            ('merge','workspace','merge','merge',?1,1,1),
+            ('port','workspace','port/web','web','{\"specification\":{\"env\":\"PORT\"}}',1,2)",
+        [record.to_string()],
+    )?;
+    migrate(&mut db)?;
+    let methods = db
+        .prepare(
+            "SELECT json_extract(record,'$.specification.method') FROM access_requests ORDER BY id",
+        )?
+        .query_map([], |row| row.get::<_, Option<String>>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    assert_eq!(methods, [Some("merge".to_owned()), None]);
+    Ok(())
+}

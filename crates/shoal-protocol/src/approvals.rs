@@ -212,6 +212,12 @@ pub struct SimulatorSpecification {
 pub struct MergeSpecification {
     pub branch: BranchName,
     pub head: CommitId,
+    /// How it merges, so an approved merge commit lets no squash through.
+    pub method: crate::forge::items::action::MergeMethod,
+    /// A squash merge's commit message, so another message needs another
+    /// decision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
     /// Where the merge pushes the default branch afterwards: the remote and
     /// the ref there, so another destination needs another decision.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -225,6 +231,23 @@ pub struct MergeSpecification {
     /// them too, so a warning recorded after the decision needs another.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub changed_on_both_sides: Vec<String>,
+}
+
+impl MergeSpecification {
+    /// The merge to decide: `squash fix-login at abc1234 as "Fix login" and
+    /// push to origin/main`.
+    fn subject(&self) -> String {
+        let (method, branch, head) = (self.method, &self.branch, &self.head);
+        let mut subject = format!("{method} {branch} at {head}");
+        if let Some(message) = &self.message {
+            let message = crate::model::message_subject(message);
+            subject.push_str(&format!(" as \"{message}\""));
+        }
+        if let Some(push) = &self.push {
+            subject.push_str(&format!(" and push to {}", push.remote_branch()));
+        }
+        subject
+    }
 }
 
 /// An unmerge decision covers undoing one recorded merge of the branch: the
@@ -680,15 +703,7 @@ impl ApprovalRequest {
     /// to place.
     pub fn subject(&self) -> String {
         match (&self.target, &self.specification) {
-            (Target::Merge, Specification::Merge(merge)) => match &merge.push {
-                Some(push) => format!(
-                    "merge {} at {} and push to {}",
-                    merge.branch,
-                    merge.head,
-                    push.remote_branch()
-                ),
-                None => format!("merge {} at {}", merge.branch, merge.head),
-            },
+            (Target::Merge, Specification::Merge(merge)) => merge.subject(),
             (Target::Unmerge, Specification::Unmerge(unmerge)) => format!(
                 "undo the merge of {} at {} ({})",
                 unmerge.branch, unmerge.source, unmerge.result

@@ -184,10 +184,14 @@ pub struct MergeOptions {
     pub confirmed: Option<MergeConfirmation>,
 }
 
-/// The commits, push destination and warning a user confirmed for a merge.
+/// The commits, method, push destination and warning a user confirmed for a
+/// merge.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MergeConfirmation {
     pub head: CommitId,
+    pub method: MergeMethod,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
     /// The local default branch's commit the merge goes onto.
     pub default_commit: CommitId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -205,6 +209,10 @@ pub struct MergePreview {
     pub branch: BranchName,
     /// The branch's commit that merges.
     pub head: CommitId,
+    pub method: MergeMethod,
+    /// A squash merge's commit message, which Git's otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
     pub default_branch: BranchName,
     /// The local default branch's commit the merge goes onto.
     pub default_commit: CommitId,
@@ -228,6 +236,8 @@ impl MergePreview {
     pub fn confirmation(&self) -> MergeConfirmation {
         MergeConfirmation {
             head: self.head.clone(),
+            method: self.method,
+            message: self.message.clone(),
             default_commit: self.default_commit.clone(),
             push: self.push_to.clone(),
             changed_on_both_sides: self.changed_on_both_sides(),
@@ -248,8 +258,9 @@ impl MergePreview {
             .unwrap_or_default()
     }
 
-    /// The merge, its direction and what follows it, one sentence a line:
-    /// `Merge fix-login (3 commits) into main, then push main to origin.`
+    /// The merge, its method and direction and what follows it, one
+    /// sentence a line: `Merge fix-login (3 commits) into main, then push
+    /// main to origin.`
     pub fn description(&self) -> String {
         self.sentences().join("\n")
     }
@@ -262,7 +273,15 @@ impl MergePreview {
     fn sentences(&self) -> Vec<String> {
         let (branch, default) = (&self.branch, &self.default_branch);
         let commits = count_commits(self.commits);
-        let mut merge = format!("Merge {branch} ({commits}) into {default}");
+        let mut merge = match (self.method, self.message.as_deref()) {
+            (MergeMethod::Squash, Some(message)) => format!(
+                "Squash {branch} ({commits}) into {default} as \"{}\"",
+                message_subject(message)
+            ),
+            (MergeMethod::Squash, None) => format!("Squash {branch} ({commits}) into {default}"),
+            (MergeMethod::Rebase, _) => format!("Rebase {branch} ({commits}) onto {default}"),
+            (MergeMethod::Merge, _) => format!("Merge {branch} ({commits}) into {default}"),
+        };
         let mut unpushed = None;
         if let Some(push) = &self.push_to {
             let destination = push.destination(default);
@@ -281,6 +300,16 @@ impl MergePreview {
             .chain(warning)
             .collect()
     }
+}
+
+/// The first line of the commit message `message`.
+pub fn message_subject(message: &str) -> &str {
+    message
+        .trim_start()
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .trim_end()
 }
 
 /// `1 commit` or `3 commits`.

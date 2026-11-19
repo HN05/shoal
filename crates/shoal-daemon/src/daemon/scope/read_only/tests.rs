@@ -48,6 +48,8 @@ async fn read_only_scope_reads_without_changing() {
             Operation::Workspace(WorkspaceMethod::PreviewMerge {
                 workspace: space,
                 push: false,
+                method: None,
+                message: None,
             }),
         ]
     };

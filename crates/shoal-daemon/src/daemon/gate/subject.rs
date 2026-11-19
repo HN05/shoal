@@ -68,7 +68,14 @@ pub(crate) fn action(request: &ApprovalRequest) -> String {
             serde_json::json!([push.request_name(), push.commit, push.replaces])
         }
         Specification::Merge(merge) => {
-            serde_json::json!([merge.branch, merge.head, merge.push, merge.unpushed])
+            serde_json::json!([
+                merge.branch,
+                merge.head,
+                merge.method,
+                merge.message,
+                merge.push,
+                merge.unpushed
+            ])
         }
         Specification::Unmerge(unmerge) => serde_json::json!([unmerge.merge]),
         other => serde_json::json!([other.to_string()]),

@@ -31,6 +31,15 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
+/// A workspace's branch at the commit that merges, by its method.
+struct Merged<'a> {
+    workspace: &'a Workspace,
+    branch: &'a BranchName,
+    head: &'a CommitId,
+    method: MergeMethod,
+    message: Option<&'a str>,
+}
+
 /// A workspace branch that passed every check a merge makes before it
 /// changes anything.
 struct MergeSource {
@@ -46,31 +55,26 @@ struct MergeSource {
 }
 
 impl Manager {
-    /// What merging the workspace `selector` names does, after the checks
-    /// `caller`'s merge makes before it changes anything; with `push`, the
-    /// merge pushes the default branch afterwards.
+    /// What merging the workspace `selector` names as `options` say does,
+    /// after the checks `caller`'s merge makes before it changes anything.
     pub async fn preview_merge(
         &self,
         selector: &SpaceSelector,
-        push: bool,
+        options: &MergeOptions,
         caller: Option<&Caller>,
     ) -> Result<MergePreview> {
-        let options = MergeOptions {
-            push,
-            ..MergeOptions::default()
-        };
-        let merge = self.validate_merge(selector, &options, caller).await;
+        let merge = self.validate_merge(selector, options, caller).await;
         let merge = self.queue_unreviewed(merge).await?;
         let default_commit = local_commit(&merge.repo, &merge.default).await?;
-        self.merge_preview(
-            &merge.workspace,
-            &merge.branch,
-            &merge.source,
-            &merge.default,
-            &default_commit,
-            merge.push.as_ref(),
-        )
-        .await
+        let merged = Merged {
+            workspace: &merge.workspace,
+            branch: &merge.branch,
+            head: &merge.source,
+            method: merge.method,
+            message: merge.message.as_deref(),
+        };
+        let onto = (&merge.default, &default_commit);
+        self.merge_preview(merged, onto, merge.push.as_ref()).await
     }
 
     /// Validate and refresh `caller`'s merge, which runs as `options` say
@@ -126,15 +130,15 @@ impl Manager {
 
     /// What merging `plan` does, for the approval of a scoped merge.
     async fn plan_preview(&self, plan: &MergePlan) -> Result<MergePreview> {
-        self.merge_preview(
-            &plan.workspace,
-            &plan.branch,
-            &plan.source,
-            &plan.default_refresh.branch,
-            &plan.default_refresh.commit,
-            plan.push.as_ref(),
-        )
-        .await
+        let merged = Merged {
+            workspace: &plan.workspace,
+            branch: &plan.branch,
+            head: &plan.source,
+            method: plan.method,
+            message: plan.message.as_deref(),
+        };
+        let onto = (&plan.default_refresh.branch, &plan.default_refresh.commit);
+        self.merge_preview(merged, onto, plan.push.as_ref()).await
     }
 
     /// The checks `caller`'s merge as `options` say makes before it changes
@@ -241,25 +245,25 @@ impl Manager {
             .with_context(|| format!("could not refresh {default} before merging"))
     }
 
-    /// What merging `workspace`'s `branch` at `head` into `default` at
-    /// `default_commit` does: its commits, where it pushes, the sensitive
-    /// files it brings to a default branch that changed them too.
+    /// What merging `merged` into the default branch `onto`, at its commit,
+    /// does: its commits, where it pushes, the sensitive files it brings to
+    /// a default branch that changed them too.
     async fn merge_preview(
         &self,
-        workspace: &Workspace,
-        branch: &BranchName,
-        head: &CommitId,
-        default: &BranchName,
-        default_commit: &CommitId,
+        merged: Merged<'_>,
+        onto: (&BranchName, &CommitId),
         push: Option<&MergePush>,
     ) -> Result<MergePreview> {
+        let (workspace, (default, default_commit)) = (merged.workspace, onto);
         let warning = self
             .branch_merge_warning(&SpaceSelector::id(&workspace.id))
             .await?;
         Ok(MergePreview {
             workspace_id: workspace.id.clone(),
-            branch: branch.clone(),
-            head: head.clone(),
+            branch: merged.branch.clone(),
+            head: merged.head.clone(),
+            method: merged.method,
+            message: merged.message.map(str::to_owned),
             default_branch: default.clone(),
             default_commit: default_commit.clone(),
             commits: git::status::commits_since(&workspace.path, default_commit.as_str()).await?,
@@ -336,6 +340,10 @@ async fn ensure_confirmed(
     ensure!(
         merge.source == confirmed.head,
         "{branch} moved since you confirmed the merge; run shoal merge again"
+    );
+    ensure!(
+        (merge.method, &merge.message) == (confirmed.method, &confirmed.message),
+        "the merge's method or message is not the one you confirmed; run shoal merge again"
     );
     ensure!(
         merge.push == confirmed.push,

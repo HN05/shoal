@@ -22,25 +22,24 @@ pub(super) async fn merge(
 ) -> Result<i32> {
     let settings =
         shoal_workers::settings::of(&ctx.paths, ConfigTarget::Space(workspace.clone())).await?;
-    let push = args.push().unwrap_or(settings.merge.push);
-    let confirmed = match args.confirmation.yes {
+    let mut options = MergeOptions {
+        push: args.push().unwrap_or(settings.merge.push),
+        method: args.method,
+        message: args.message.clone(),
+        confirmed: None,
+    };
+    options.confirmed = match args.confirmation.yes {
         true => None,
         // An agent's merge asks the user through its approval instead, which
         // names the files the agent's --yes passed over.
         false => {
-            let pushing = match push {
+            let pushing = match options.push {
                 false => Pushing::No,
                 true if settings.merge.confirm && !env::is_scoped() => Pushing::AskingFirst,
                 true => Pushing::WithoutAsking,
             };
-            confirm_merge(ctx, &workspace, pushing).await?
+            confirm_merge(ctx, &workspace, &options, pushing).await?
         }
-    };
-    let options = MergeOptions {
-        push,
-        method: args.method,
-        message: args.message.clone(),
-        confirmed,
     };
     let spec = OperationSpec::Merge {
         workspace: workspace.clone(),
@@ -68,11 +67,11 @@ enum Pushing {
 async fn confirm_merge(
     ctx: &Context,
     workspace: &SpaceSelector,
+    options: &MergeOptions,
     pushing: Pushing,
 ) -> Result<Option<MergeConfirmation>> {
-    let push = pushing != Pushing::No;
     let preview =
-        crate::client::workspaces::preview_merge(&ctx.paths, workspace.clone(), push).await?;
+        crate::client::workspaces::preview_merge(&ctx.paths, workspace.clone(), options).await?;
     if pushing != Pushing::AskingFirst && preview.warning.is_none() {
         return Ok(None);
     }

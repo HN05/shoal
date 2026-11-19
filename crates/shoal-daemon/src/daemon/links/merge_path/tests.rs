@@ -95,7 +95,17 @@ async fn an_open_linked_pr_takes_the_merge_and_refuses_a_local_one() {
     );
     // A local merge asked of the daemon directly is refused too.
     let selector = SpaceSelector::id(&f.workspace.id);
-    let refused = f.manager.preview_merge(&selector, false, None).await;
+    let refused = f
+        .manager
+        .preview_merge(
+            &selector,
+            &crate::model::MergeOptions {
+                push: false,
+                ..Default::default()
+            },
+            None,
+        )
+        .await;
     let refused = refused.unwrap_err().to_string();
     assert!(refused.contains("is open"), "{refused}");
 }

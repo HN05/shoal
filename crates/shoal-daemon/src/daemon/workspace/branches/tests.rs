@@ -1529,6 +1529,19 @@ async fn begin_merge_as_agent(
     workspace: &crate::model::Workspace,
     push: bool,
 ) -> anyhow::Result<crate::daemon::workspace::StartedExecution> {
+    let options = crate::model::MergeOptions {
+        push,
+        ..Default::default()
+    };
+    begin_merge_by_agent(f, workspace, options).await
+}
+
+/// Begin a merge execution as the workspace's agent, as `options` say.
+async fn begin_merge_by_agent(
+    f: &Fixture,
+    workspace: &crate::model::Workspace,
+    options: crate::model::MergeOptions,
+) -> anyhow::Result<crate::daemon::workspace::StartedExecution> {
     let caller = scope::Caller {
         execution: None,
         space_id: workspace.id.clone(),
@@ -1536,12 +1549,7 @@ async fn begin_merge_as_agent(
         read_only: false,
     };
     let request = crate::daemon::workspace::ExecutionRequest {
-        merge: Some(crate::model::MergeOptions {
-            push,
-            method: None,
-            message: None,
-            confirmed: None,
-        }),
+        merge: Some(options),
         ..Default::default()
     };
     f.manager
@@ -1850,6 +1858,52 @@ async fn a_merge_warning_recorded_after_approval_needs_another_decision() {
 }
 
 #[tokio::test]
+async fn an_approved_merge_lets_no_other_method_or_message_through() {
+    use crate::{
+        daemon::approvals::{DecisionStatus, Specification},
+        forge::items::action::MergeMethod,
+    };
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    fs::write(workspace.path.join("feature"), "work\n").unwrap();
+    commit(&workspace.path, "feature");
+    let approve = async |number| {
+        f.manager
+            .decide_approval(number, true, None, Default::default(), None)
+            .await
+            .unwrap();
+    };
+    let squash = |message: &str| crate::model::MergeOptions {
+        method: Some(MergeMethod::Squash),
+        message: Some(message.into()),
+        ..Default::default()
+    };
+    let approved = undecided_merge(&f, &workspace).await;
+    approve(approved.number).await;
+    let squashed = undecided(begin_merge_by_agent(&f, &workspace, squash("Fix login")).await);
+    assert_ne!(squashed.number, approved.number);
+    assert_eq!(squashed.status, DecisionStatus::Pending);
+    let Specification::Merge(merge) = &squashed.specification else {
+        panic!("merge specification expected");
+    };
+    assert_eq!(
+        (merge.method, merge.message.as_deref()),
+        (MergeMethod::Squash, Some("Fix login"))
+    );
+    assert!(
+        squashed
+            .reason
+            .starts_with("Squash worker (1 commit) into main as \"Fix login\""),
+        "{}",
+        squashed.reason
+    );
+    approve(squashed.number).await;
+    let reworded = undecided(begin_merge_by_agent(&f, &workspace, squash("Fix it")).await);
+    assert_ne!(reworded.number, squashed.number);
+    assert_eq!(reworded.status, DecisionStatus::Pending);
+}
+
+#[tokio::test]
 async fn a_pushing_merge_approval_covers_no_other_local_commits_of_main() {
     use crate::daemon::approvals::{DecisionStatus, Specification};
     let f = Fixture::new().await;
@@ -1924,7 +1978,14 @@ async fn unpushed_commits_count_against_a_remapped_upstream() {
     git(&f.repo, &["merge", "--ff-only", "origin/cache-other"]);
     let preview = f
         .manager
-        .preview_merge(&f.manager.named("worker").await, true, None)
+        .preview_merge(
+            &f.manager.named("worker").await,
+            &crate::model::MergeOptions {
+                push: true,
+                ..Default::default()
+            },
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(preview.unpushed, 1);
@@ -1944,7 +2005,14 @@ async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
         message: None,
         confirmed: Some(
             f.manager
-                .preview_merge(&f.manager.named("worker").await, true, None)
+                .preview_merge(
+                    &f.manager.named("worker").await,
+                    &crate::model::MergeOptions {
+                        push: true,
+                        ..Default::default()
+                    },
+                    None,
+                )
                 .await
                 .unwrap()
                 .confirmation(),
@@ -1956,6 +2024,10 @@ async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
             .await
             .is_err()
     };
+    // The merge asks for another method than the one confirmed.
+    let mut options = confirmed().await;
+    options.method = Some(crate::forge::items::action::MergeMethod::Squash);
+    assert!(refused(&options).await);
     // An agent commits while the question is open.
     let options = confirmed().await;
     fs::write(workspace.path.join("feature"), "more\n").unwrap();
@@ -2018,7 +2090,14 @@ async fn a_confirmed_merge_refuses_a_warning_recorded_after_the_question() {
         message: None,
         confirmed: Some(
             f.manager
-                .preview_merge(&f.manager.named("worker").await, false, None)
+                .preview_merge(
+                    &f.manager.named("worker").await,
+                    &crate::model::MergeOptions {
+                        push: false,
+                        ..Default::default()
+                    },
+                    None,
+                )
                 .await
                 .unwrap()
                 .confirmation(),
@@ -2097,9 +2176,16 @@ async fn all_refuses_the_users_merge_before_asking_about_it() {
     require_merge_review(&f, "all");
     let main = git(&f.repo, &["rev-parse", "main"]);
     let selector = f.manager.named("worker").await;
-    (f.manager.preview_merge(&selector, false, None))
-        .await
-        .unwrap_err();
+    (f.manager.preview_merge(
+        &selector,
+        &crate::model::MergeOptions {
+            push: false,
+            ..Default::default()
+        },
+        None,
+    ))
+    .await
+    .unwrap_err();
     f.manager.merge_workspace("worker").await.unwrap_err();
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
 }

@@ -6,6 +6,8 @@ fn merge_preview_names_its_direction_push_and_warning() {
         workspace_id: "id".into(),
         branch: "fix-login".into(),
         head: "abc".into(),
+        method: MergeMethod::Merge,
+        message: None,
         default_branch: "main".into(),
         default_commit: "def".into(),
         commits: 1,
@@ -47,4 +49,29 @@ fn merge_preview_names_its_direction_push_and_warning() {
     preview.branch = "b".repeat(300).into();
     assert_eq!(preview.reason().len(), crate::validate::MAX_REASON_LEN);
     assert!(preview.reason().ends_with('…'));
+}
+
+#[test]
+fn merge_preview_names_its_method_and_a_squash_s_subject() {
+    let mut preview = MergePreview {
+        workspace_id: "id".into(),
+        branch: "fix-login".into(),
+        head: "abc".into(),
+        method: MergeMethod::Squash,
+        message: Some("Fix login\n\nThe session expired early.".into()),
+        default_branch: "main".into(),
+        default_commit: "def".into(),
+        commits: 2,
+        push_to: None,
+        unpushed: 0,
+        warning: None,
+    };
+    let description = preview.description();
+    for part in ["Squash fix-login", "as \"Fix login\""] {
+        assert!(description.contains(part), "{part:?} in {description}");
+    }
+    preview.method = MergeMethod::Rebase;
+    preview.message = None;
+    let description = preview.description();
+    assert!(description.starts_with("Rebase fix-login"), "{description}");
 }

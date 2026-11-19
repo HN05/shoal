@@ -34,7 +34,7 @@ pub use links::{
 };
 pub use merges::{
     MergeConfirmation, MergeOptions, MergePath, MergePlan, MergePreview, MergePush, MergedBranch,
-    PulledBranch, UnmergePlan, Unmerged,
+    PulledBranch, UnmergePlan, Unmerged, message_subject,
 };
 pub use ports::{PortCatalog, PortOverview, PortRequest, PortReservation, PortSuggestion};
 pub use queue::{

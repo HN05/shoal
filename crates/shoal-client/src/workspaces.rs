@@ -13,8 +13,9 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     config::hooks::HookKind,
     model::{
-        Blocker, ConflictCheck, DiffBase, Inspection, MergePreview, OwnedPlace, Refreshed,
-        RenamedSpace, Space, SpacePlaces, SpaceStatus, SpaceTarget, UntrackedWorktree, Workspace,
+        Blocker, ConflictCheck, DiffBase, Inspection, MergeOptions, MergePreview, OwnedPlace,
+        Refreshed, RenamedSpace, Space, SpacePlaces, SpaceStatus, SpaceTarget, UntrackedWorktree,
+        Workspace,
     },
     protocol::{CommitStart, ConfigTarget, CreationOptions, RepositoryLayers, WorkspaceMethod},
     repository::Selector,
@@ -359,12 +360,17 @@ pub async fn conflicts(
     request(daemon, WorkspaceMethod::Conflicts { workspace, target }).await
 }
 
-/// What merging `workspace`'s branch, and pushing the result when `push`,
-/// would do.
+/// What merging `workspace`'s branch as `options` say would do.
 pub async fn preview_merge(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
-    push: bool,
+    options: &MergeOptions,
 ) -> Result<MergePreview> {
-    request(daemon, WorkspaceMethod::PreviewMerge { workspace, push }).await
+    let preview = WorkspaceMethod::PreviewMerge {
+        workspace,
+        push: options.push,
+        method: options.method,
+        message: options.message.clone(),
+    };
+    request(daemon, preview).await
 }

@@ -132,6 +132,8 @@ fn merge_request(plan: &MergePlan, preview: &MergePreview) -> ApprovalRequest {
         Specification::Merge(MergeSpecification {
             branch: plan.branch.clone(),
             head: plan.source.clone(),
+            method: plan.method,
+            message: plan.message.clone(),
             push: plan.push.clone(),
             unpushed: preview.unpushed_default(),
             changed_on_both_sides: preview.changed_on_both_sides(),

@@ -231,12 +231,17 @@ pub enum WorkspaceMethod {
         workspace: SpaceSelector,
         target: Option<String>,
     },
-    /// What merging the workspace into the default branch does, after the
-    /// checks the merge makes before it changes anything; with `push`, the
-    /// merge pushes the default branch afterwards.
+    /// What merging the workspace into the default branch by `method`,
+    /// with a squash's `message`, does, after the checks the merge makes
+    /// before it changes anything; with `push`, the merge pushes the default
+    /// branch afterwards.
     PreviewMerge {
         workspace: SpaceSelector,
         push: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        method: Option<crate::forge::items::action::MergeMethod>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
     },
     /// Keep where an agent of the workspace keeps its configuration, before
     /// Shoal trusts the workspace there, until the repository's removal.

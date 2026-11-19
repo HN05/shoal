@@ -272,6 +272,8 @@ async fn replaced_merge_requests_keep_their_numbers_and_refuse_decisions() -> Re
                     Specification::Merge(MergeSpecification {
                         branch: "feature".into(),
                         head: head.into(),
+                        method: crate::forge::items::action::MergeMethod::Merge,
+                        message: None,
                         push: None,
                         unpushed: None,
                         changed_on_both_sides: Vec::new(),
@@ -311,6 +313,8 @@ async fn a_merge_retried_with_other_wording_keeps_its_request_and_approval() -> 
                     Specification::Merge(MergeSpecification {
                         branch: "feature".into(),
                         head: "abc".into(),
+                        method: crate::forge::items::action::MergeMethod::Merge,
+                        message: None,
                         push: None,
                         unpushed: None,
                         changed_on_both_sides: Vec::new(),
@@ -803,7 +807,8 @@ fn specifications_round_trip_recorded_json_and_reject_mixed_shapes() -> Result<(
         serde_json::json!({"profile": {"requires_approval": true, "approval_lifetime": "workspace",
                 "device": "iPhone", "runtime": "iOS"}, "clean": false}),
         serde_json::json!({"command": ["op", "read", "op://Agents/key"], "tools": ["agent-browser"]}),
-        serde_json::json!({"branch": "feature", "head": "abc"}),
+        serde_json::json!({"branch": "feature", "head": "abc", "method": "squash",
+                "message": "Fix login"}),
         serde_json::json!({"hold": "review"}),
     ];
     for json in recorded {
@@ -811,7 +816,8 @@ fn specifications_round_trip_recorded_json_and_reject_mixed_shapes() -> Result<(
         assert_eq!(serde_json::to_value(&specification)?, json);
     }
     assert!(matches!(
-        serde_json::from_value(serde_json::json!({"branch": "feature", "head": "abc"}))?,
+        serde_json::from_value(serde_json::json!({"branch": "feature", "head": "abc",
+                "method": "merge"}))?,
         Specification::Merge(_)
     ));
     assert!(matches!(
@@ -831,6 +837,7 @@ fn specifications_round_trip_recorded_json_and_reject_mixed_shapes() -> Result<(
                 "range": [3000, 3100]}),
         serde_json::json!({"command": ["op"], "tools": [], "head": "abc"}),
         serde_json::json!({"branch": "feature"}),
+        serde_json::json!({"branch": "feature", "head": "abc"}),
     ] {
         assert!(
             serde_json::from_value::<Specification>(json.clone()).is_err(),
@@ -894,6 +901,8 @@ fn merge_request(workspace: &crate::model::Workspace) -> ApprovalRequest {
     let merge = MergeSpecification {
         branch: workspace.branch().cloned().unwrap(),
         head: head.trim().into(),
+        method: crate::forge::items::action::MergeMethod::Merge,
+        message: None,
         push: None,
         unpushed: None,
         changed_on_both_sides: Vec::new(),

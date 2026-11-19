@@ -1448,7 +1448,8 @@ changes anything; it names the direction, since `git merge main` in a workspace
 merges the other way. A
 local merge asks only when the last check found sensitive files changed on both
 sides, which the same question names. An agent's approval request carries the
-same details and is its confirmation; the agent still answers the question about
+same details, the method and a squash's message among them, so an approved
+merge commit lets no squash through, and is its confirmation; the agent still answers the question about
 sensitive files with `--yes`, so the approver decides on them.
 A repository that merges only through PRs turns local merges off with `[merge]
 enabled = false`, which refuses agents' requests for them too.

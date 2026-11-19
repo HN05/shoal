@@ -3569,13 +3569,13 @@ Merged commits count as pushed for `rm` and automatic cleanup.
 
 A merge that its [review gate](#local-reviews) refuses goes no further. An
 agent's scoped `shoal merge` needs the user's approval for the branch at its
-current commit, and for where it pushes, unless its [`merge` permission](#mode-permissions) is `"direct"` and
+current commit, by its method and with a squash's message, and for where it pushes, unless its [`merge` permission](#mode-permissions) is `"direct"` and
 its [`push` permission](#approval-for-agent-pushes) is `"direct"` too. The first run records a
 `merge` request in `shoal approvals` and exits 2 with `code: "approval_pending"`;
-the request names the branch, the default branch it merges into, its commit count,
+the request names the method, a squash's message subject, the branch, the default branch it merges into, its commit count,
 the remote branch it pushes to, any other local commits of the default branch
 that the push publishes too, and any files changed on both sides as below. After approval, running it again merges that commit with every check above. A new
-commit, a change to where it pushes, other local commits of the default branch
+commit, another method or message, a change to where it pushes, other local commits of the default branch
 that its push would publish too, or a new set of files changed on both sides
 replaces the request; a sync of the default branch from its upstream does not.
 Approving a request after its branch moved is refused as stale, and a denied commit stays refused
@@ -3592,7 +3592,7 @@ published, on the forge of the first URL it pushed to on a network host, as it f
 A merge that pushes asks first, after Shoal has checked it and before anything
 changes. As a [PR merge](#issue-and-pr-actions) does, so does a merge whose last
 check found files [changed on both sides](#conflicts) with the default branch.
-The question names the direction, the commit count, where it pushes, other
+The question names the method and direction, a squash's message subject, the commit count, where it pushes, other
 local commits of the default branch that the push publishes too, and those
 files:
 
@@ -3603,8 +3603,8 @@ Are you sure? [y/N]
 ```
 
 The default answer is no. A merge is refused when, while the question was open,
-its branch moved, the default branch took commits other than its upstream's, the
-push destination changed, or a conflict check found other files changed on both
+its branch moved, the default branch took commits other than its upstream's, its
+method or message is another, the push destination changed, or a conflict check found other files changed on both
 sides than the question named. `--yes` skips the question, and `[merge] confirm =
 false` skips it for a merge that pushes; without a terminal, as in scripts or
 with `--json`, a merge that would ask is refused unless the question is skipped.

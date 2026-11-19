@@ -289,8 +289,19 @@ pub(super) async fn handle(
         WorkspaceMethod::Conflicts { workspace, target } => {
             Body::Conflicts(manager.check_conflicts(&workspace, target).await?)
         }
-        WorkspaceMethod::PreviewMerge { workspace, push } => {
-            Body::MergePreview(manager.preview_merge(&workspace, push, caller).await?)
+        WorkspaceMethod::PreviewMerge {
+            workspace,
+            push,
+            method,
+            message,
+        } => {
+            let options = crate::model::MergeOptions {
+                push,
+                method,
+                message,
+                confirmed: None,
+            };
+            Body::MergePreview(manager.preview_merge(&workspace, &options, caller).await?)
         }
         WorkspaceMethod::CloseOwnedPlace { workspace, place } => {
             Body::PlaceClose(manager.close_recorded_place(&workspace, &place).await?)
