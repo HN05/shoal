@@ -576,3 +576,18 @@ async fn a_scoped_start_reopening_a_workspace_keeps_what_its_agent_was_given() {
     assert!(refused.is_err(), "{refused:?}");
     assert!(manager.queue_entries().await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn a_retried_preparation_checks_out_the_branch_a_cut_short_one_created() {
+    let (root, manager) = manager().await;
+    let repository = registered(root.path(), &manager).await;
+    let started = start(&manager, &repository, "child", "HEAD").await;
+    let _worker = fake::take(started.operation.as_deref().unwrap());
+    // As a preparation a restart cut short after Git created the branch
+    // leaves it.
+    git(&repository.path, &["branch", "child"]);
+    let selector = SpaceSelector::id(&started.workspace.id);
+    let created = manager.create_pending_worktree(&selector).await.unwrap();
+    let branch = git(&created.path, &["branch", "--show-current"]);
+    assert_eq!(branch.trim(), "child");
+}

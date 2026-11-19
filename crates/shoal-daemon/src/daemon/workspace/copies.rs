@@ -14,7 +14,7 @@ use super::super::{
     restore::RestoredFiles,
     workspace::{
         NewWorkspace,
-        creation::{Configured, PendingWorktree},
+        creation::{Configured, PendingWorktree, creates_branch},
     },
 };
 use crate::{
@@ -527,7 +527,9 @@ impl Manager {
         git_profile: Option<&str>,
     ) -> Result<Configured> {
         let path = &workspace.path;
-        git::copy::add_worktree(&repo.path, path, workspace.branch(), head.as_str()).await?;
+        let new_branch = creates_branch(repo, workspace).await?;
+        let branch = workspace.branch();
+        git::copy::add_worktree(&repo.path, path, branch, head.as_str(), new_branch).await?;
         // Recorded before the files are cloned, so a restart can verify and
         // remove the worktree.
         self.record_worktree_identity(workspace).await?;
@@ -565,7 +567,8 @@ impl Manager {
     ) -> Result<Configured> {
         match workspace.branch() {
             Some(branch) => {
-                let head = Some(files.head.as_str());
+                let new_branch = creates_branch(repo, workspace).await?;
+                let head = new_branch.then_some(files.head.as_str());
                 git::worktree::add(&repo.path, &workspace.path, branch, head).await?
             }
             None => {

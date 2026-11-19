@@ -30,7 +30,7 @@ async fn a_copy_has_the_source_index_and_files_on_a_new_branch() {
     let repo = crate::test_support::repository(root.path(), "repo");
     let head = changed_worktree(&repo).await;
     let copy = root.path().join("copy");
-    add_worktree(&repo, &copy, Some(&"repo-copy".into()), &head)
+    add_worktree(&repo, &copy, Some(&"repo-copy".into()), &head, true)
         .await
         .unwrap();
     fill(&repo, &copy, &head.as_str().into()).await.unwrap();
@@ -63,7 +63,9 @@ async fn a_detached_copy_has_no_branch() {
     let repo = crate::test_support::repository(root.path(), "repo");
     let head = changed_worktree(&repo).await;
     let copy = root.path().join("copy");
-    add_worktree(&repo, &copy, None, &head).await.unwrap();
+    add_worktree(&repo, &copy, None, &head, false)
+        .await
+        .unwrap();
     fill(&repo, &copy, &head.as_str().into()).await.unwrap();
     assert!(
         git(&copy, &["branch", "--show-current"])
@@ -84,7 +86,7 @@ async fn a_source_whose_head_moved_is_refused() {
     let repo = crate::test_support::repository(root.path(), "repo");
     let head = changed_worktree(&repo).await;
     let copy = root.path().join("copy");
-    add_worktree(&repo, &copy, Some(&"repo-copy".into()), &head)
+    add_worktree(&repo, &copy, Some(&"repo-copy".into()), &head, true)
         .await
         .unwrap();
     git(&repo, &["commit", "-m", "moved"]).await;

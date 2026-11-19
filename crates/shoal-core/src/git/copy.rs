@@ -6,17 +6,18 @@ use std::path::Path;
 use anyhow::{Context, Result, ensure};
 use shoal_refs::{BranchName, CommitId};
 
-/// Create a linked worktree of `repo` at `path` at `rev`, on the new
-/// branch `branch` or without one, with no file checked out and an empty
-/// index. No hooks run.
+/// Create a linked worktree of `repo` at `path` at `rev`, on `branch`,
+/// which it creates at `rev` first when `new_branch`, or without one, with
+/// no file checked out and an empty index. No hooks run.
 pub async fn add_worktree(
     repo: &Path,
     path: &Path,
     branch: Option<&BranchName>,
     rev: &str,
+    new_branch: bool,
 ) -> Result<()> {
     let context = || format!("create a worktree at {rev} in {}", path.display());
-    if let Some(branch) = branch {
+    if let Some(branch) = branch.filter(|_| new_branch) {
         (super::branch::create(repo, branch, rev).await).with_context(context)?;
     }
     (add_unchecked_out(repo, path, branch, rev).await).with_context(context)

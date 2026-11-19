@@ -461,11 +461,13 @@ impl Manager {
         }
         let base = self.resolve_worktree_base(repo, workspace, &source).await?;
         let commit = self.record_worktree_base(repo, workspace, &base).await?;
+        let new_branch = matches!(&source, WorkspaceSource::New { .. })
+            && creates_branch(repo, workspace).await?;
         git::worktree::add(
             &repo.path,
             &workspace.path,
             workspace.require_branch("creating a branch worktree")?,
-            matches!(&source, WorkspaceSource::New { .. }).then_some(commit.as_str()),
+            new_branch.then_some(commit.as_str()),
         )
         .await?;
         let files = match &source {
@@ -651,6 +653,16 @@ fn ensure_disposable_new(disposable: bool, existing: Option<&str>) -> Result<()>
             bail!("--disposable applies only to a new branch; {branch} already exists")
         }
         _ => Ok(()),
+    }
+}
+
+/// Whether creating the worktree of `workspace` on a new branch has to
+/// create its branch: it has one, which no earlier try cut short created.
+/// The record reserved its name, which no branch had then.
+pub(super) async fn creates_branch(repo: &Repository, workspace: &Workspace) -> Result<bool> {
+    match workspace.branch() {
+        Some(branch) => Ok(!git::ref_exists(&repo.path, &git::local_ref(branch)).await?),
+        None => Ok(false),
     }
 }
 
