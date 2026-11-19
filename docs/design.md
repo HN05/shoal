@@ -90,7 +90,14 @@ that run in the processes Shoal starts and call the daemon. The binary-only
 store: the schema, the migrations and the row mappers and guards every part of
 the daemon shares. A migration runs only the store's code, a copy frozen at the
 shape it migrates of anything it once called elsewhere, so a later change
-elsewhere never changes what an old migration does.
+elsewhere never changes what an old migration does. Over the store,
+`shoal-daemon-base` holds what every part of the daemon uses: its log, the
+global config it runs under, the gates that order conflicting changes, the
+journal of events, the notifications for the user, the numbers of questions
+and approval requests, and the checks of file access that can stall. What
+these read of the rest of the daemon, such as a space's coordinator or a
+repository's retention, is an interface the base declares and the daemon
+implements, and the daemon's `Manager` holds the base's types as fields.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
 the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
 `shoal-workers` neither the daemon nor its tests: the daemon depends on no

@@ -1,5 +1,5 @@
 use super::*;
-use crate::daemon::store::Store;
+use crate::store::Store;
 
 /// The live workspace `plan`, and the journal of `fix`, removed by cleanup
 /// and restored, between Shoal's own events.

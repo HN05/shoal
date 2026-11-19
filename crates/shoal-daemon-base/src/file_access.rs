@@ -29,18 +29,18 @@ use crate::protocol::{AccessStall, PRIVACY_PROMPT};
 
 /// A check still running after this long counts as stalled. Git answers a
 /// check of a directory it can read within seconds, even under load.
-pub(crate) const LIMIT: Duration = Duration::from_secs(30);
+pub const LIMIT: Duration = Duration::from_secs(30);
 
 /// A stalled directory is checked again this long after its last check, so
 /// each cleanup sweep rechecks it once while its other checks skip it.
-pub(crate) const RECHECK_AFTER: Duration = Duration::from_secs(20);
+pub const RECHECK_AFTER: Duration = Duration::from_secs(20);
 
 /// What a process reports when the kernel interrupts its wait on file access.
 const INTERRUPTED: &str = "Interrupted system call";
 
 /// The stalled directories, and the checks running now.
 #[derive(Default)]
-pub(crate) struct FileAccess {
+pub struct FileAccess {
     stalls: Mutex<BTreeMap<PathBuf, Stalled>>,
     running: Mutex<Running>,
 }
@@ -89,7 +89,7 @@ impl FileAccess {
     /// when its directory stalls. Boxed, so the operations that nest
     /// checks, such as removal, hold a pointer rather than each check on
     /// their stack.
-    pub(crate) fn checked<'a, T: Send + 'a>(
+    pub fn checked<'a, T: Send + 'a>(
         &'a self,
         notifications: &'a Notifications,
         path: &'a Path,
@@ -111,7 +111,7 @@ impl FileAccess {
     /// stalled, and reading HEAD there, as a recheck when one is due, does
     /// not show it answers. A worktree deleted meanwhile answers with Git's
     /// error, so its cleanup goes on.
-    pub(crate) async fn sweep_skips(&self, notifications: &Notifications, path: &Path) -> bool {
+    pub async fn sweep_skips(&self, notifications: &Notifications, path: &Path) -> bool {
         if self.stalled(path).is_none() {
             return false;
         }
@@ -158,14 +158,14 @@ impl FileAccess {
     }
 
     /// The stall of `path`'s directory, however long ago it was checked.
-    pub(crate) fn stalled(&self, path: &Path) -> Option<AccessStall> {
+    pub fn stalled(&self, path: &Path) -> Option<AccessStall> {
         lock(&self.stalls)
             .get(&directory(path))
             .map(|stalled| stalled.report.clone())
     }
 
     /// Every stalled directory.
-    pub(crate) fn stalls(&self) -> Vec<AccessStall> {
+    pub fn stalls(&self) -> Vec<AccessStall> {
         lock(&self.stalls)
             .values()
             .map(|stalled| stalled.report.clone())
@@ -173,7 +173,7 @@ impl FileAccess {
     }
 
     /// The path of the check that has run longest, and for how long.
-    pub(crate) fn waiting(&self) -> Option<(PathBuf, Duration)> {
+    pub fn waiting(&self) -> Option<(PathBuf, Duration)> {
         lock(&self.running)
             .checks
             .values()
@@ -241,11 +241,11 @@ impl FileAccess {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl FileAccess {
     /// Record `path`'s directory as stalled with a recheck still waiting, so
     /// every check there skips it however long the test runs.
-    pub(crate) fn stall_rechecking(&self, path: &Path) {
+    pub fn stall_rechecking(&self, path: &Path) {
         let directory = directory(path);
         self.record(directory.clone(), path, "did not finish".to_owned());
         if let Some(stalled) = lock(&self.stalls).get_mut(&directory) {
@@ -254,7 +254,7 @@ impl FileAccess {
     }
 
     /// Record that access in `path`'s directory answers again.
-    pub(crate) fn recover_at(&self, path: &Path) {
+    pub fn recover_at(&self, path: &Path) {
         self.recover(&directory(path));
     }
 }

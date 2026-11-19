@@ -9,7 +9,7 @@ use shoal_ids::space_ids::SpaceId;
 
 use super::{log, store::Store};
 use crate::time::UnixTime;
-pub(crate) use shoal_protocol::events::{
+pub use shoal_protocol::events::{
     AgentEvent, AlertEvent, ApprovalEvent, EventCursor, EventDetails, EventItem, EventKind,
     FileEvent, FileEventDetails, JobEndedEvent, ShoalEvent, ShoalEventDetails, ShoalEventKind,
     SpaceEvent, StoppedProcess,
@@ -141,7 +141,7 @@ fn events_after(db: &Connection, cursor: EventCursor, limit: u32) -> Result<Vec<
 }
 
 /// Append in the transaction that owns the transition, before deleting ownership.
-pub(crate) fn record(
+pub fn record(
     db: &Connection,
     id: &SpaceId,
     kind: EventKind,
@@ -165,7 +165,7 @@ pub(crate) fn record(
 
 /// Leave the workspace `id`, whose removal for `cause` failed with `error`,
 /// in `state`, recording that it stays.
-pub(crate) fn retain(
+pub fn retain(
     db: &Connection,
     id: &SpaceId,
     state: crate::state::WorkspaceState,
@@ -180,7 +180,7 @@ pub(crate) fn retain(
 }
 
 /// Record a link mutation in the transaction that changes its association.
-pub(crate) fn record_link(
+pub fn record_link(
     db: &Connection,
     id: &SpaceId,
     event_kind: EventKind,
@@ -204,7 +204,7 @@ pub(crate) fn record_link(
 }
 
 /// Record a change Shoal made to one of the space's issues or PRs.
-pub(crate) fn record_item(
+pub fn record_item(
     db: &Connection,
     id: &SpaceId,
     kind: impl Into<crate::forge::items::link::LinkKind>,
@@ -223,7 +223,7 @@ pub(crate) fn record_item(
 }
 
 /// Record activity observed on an issue or PR by the background poller.
-pub(crate) fn record_item_activity(
+pub fn record_item_activity(
     db: &Connection,
     id: &SpaceId,
     kind: crate::forge::items::link::LinkKind,
@@ -267,7 +267,7 @@ fn record_with(
 
 /// Record that no CI run of the default branch started for `merge`, which
 /// the space `id` watched, while Shoal looked for one.
-pub(crate) fn record_no_merge_runs(
+pub fn record_no_merge_runs(
     db: &Connection,
     id: &SpaceId,
     merge: &shoal_protocol::events::MergeEvent,
@@ -276,7 +276,7 @@ pub(crate) fn record_no_merge_runs(
 }
 
 /// Record the new `progress` of the space `id`.
-pub(crate) fn record_progress(
+pub fn record_progress(
     db: &Connection,
     id: &SpaceId,
     progress: &shoal_protocol::progress::Progress,
@@ -285,7 +285,7 @@ pub(crate) fn record_progress(
 }
 
 /// Record that a blocker of the space `id` was added, removed or cleared.
-pub(crate) fn record_blocker(
+pub fn record_blocker(
     db: &Connection,
     id: &SpaceId,
     kind: EventKind,
@@ -314,7 +314,7 @@ fn insert_agent(db: &Connection, id: &SpaceId, kind: EventKind, agent: &AgentEve
 
 /// When the agent of the space `id` last stopped or exited, as its log
 /// records; none before it did.
-pub(crate) fn agent_stopped_at(db: &Connection, id: &SpaceId) -> Result<Option<UnixTime>> {
+pub fn agent_stopped_at(db: &Connection, id: &SpaceId) -> Result<Option<UnixTime>> {
     Ok(db.query_row(
         "SELECT MAX(created_at) FROM space_events WHERE space_id=?1
              AND json_extract(record,'$.kind') IN (?2,?3)",
@@ -325,7 +325,7 @@ pub(crate) fn agent_stopped_at(db: &Connection, id: &SpaceId) -> Result<Option<U
 
 /// The removal of the space `id`, which no space has any longer, while the
 /// journal keeps it.
-pub(crate) fn removal(db: &Connection, id: &SpaceId) -> Result<Option<EventDetails>> {
+pub fn removal(db: &Connection, id: &SpaceId) -> Result<Option<EventDetails>> {
     let record: Option<String> = db
         .query_row(
             "SELECT record FROM space_events
@@ -372,7 +372,7 @@ fn insert_shoal(db: &Connection, details: &ShoalEventDetails) -> Result<()> {
 
 /// Record that the request's space asked for it, or that it was decided,
 /// in the transaction that stores it.
-pub(crate) fn record_approval(
+pub fn record_approval(
     db: &Connection,
     kind: EventKind,
     request: &shoal_protocol::approvals::ApprovalRequest,
@@ -392,7 +392,7 @@ pub(crate) fn record_approval(
 
 /// Record the gate's verdict on the request's space's request, in the
 /// transaction that records it.
-pub(crate) fn record_gate(
+pub fn record_gate(
     db: &Connection,
     request: &shoal_protocol::approvals::ApprovalRequest,
     gate: &shoal_protocol::events::GateEvent,
@@ -403,7 +403,7 @@ pub(crate) fn record_gate(
 /// Record an agent's start, stop or exit in the space `id`'s log; a
 /// failure is logged, never returned, as it must not fail the agent's
 /// lifecycle.
-pub(crate) async fn record_agent(store: &Store, id: &SpaceId, kind: EventKind, agent: AgentEvent) {
+pub async fn record_agent(store: &Store, id: &SpaceId, kind: EventKind, agent: AgentEvent) {
     let space = id.clone();
     let recorded = store
         .run(move |db| insert_agent(db, &space, kind, &agent))
@@ -415,7 +415,7 @@ pub(crate) async fn record_agent(store: &Store, id: &SpaceId, kind: EventKind, a
 
 /// Record `details`, an event of Shoal itself, in Shoal's log; a failure
 /// is logged, never returned, as it must not fail what Shoal did.
-pub(crate) async fn record_shoal(store: &Store, details: ShoalEventDetails) {
+pub async fn record_shoal(store: &Store, details: ShoalEventDetails) {
     let kind = details.kind;
     let recorded = store.run(move |db| insert_shoal(db, &details)).await;
     if let Err(error) = recorded {
@@ -424,7 +424,7 @@ pub(crate) async fn record_shoal(store: &Store, details: ShoalEventDetails) {
 }
 
 /// Record `kind` in Shoal's log, with `error` when what it records failed.
-pub(crate) async fn record_shoal_outcome(
+pub async fn record_shoal_outcome(
     store: &Store,
     kind: ShoalEventKind,
     error: Option<&anyhow::Error>,
@@ -436,7 +436,7 @@ pub(crate) async fn record_shoal_outcome(
 
 /// Record the alert the space `id` sent, which reached its coordinator or
 /// the user.
-pub(crate) async fn record_alert(store: &Store, id: &SpaceId, message: String) {
+pub async fn record_alert(store: &Store, id: &SpaceId, message: String) {
     let space = id.clone();
     let recorded = store
         .run(move |db| {
@@ -451,7 +451,7 @@ pub(crate) async fn record_alert(store: &Store, id: &SpaceId, message: String) {
 
 /// Record that Shoal ended the CI job of the workspace `id`, which outlived
 /// its run on the forge.
-pub(crate) async fn record_job_ended(store: &Store, id: &SpaceId, job: JobEndedEvent) {
+pub async fn record_job_ended(store: &Store, id: &SpaceId, job: JobEndedEvent) {
     let space = id.clone();
     let recorded = store
         .run(move |db| record_with(db, &space, EventKind::JobEnded, "job", &job))
@@ -462,7 +462,7 @@ pub(crate) async fn record_job_ended(store: &Store, id: &SpaceId, job: JobEndedE
 }
 
 /// The ID of the journal's newest event.
-pub(crate) async fn latest_id(store: &Store) -> Result<EventCursor> {
+pub async fn latest_id(store: &Store) -> Result<EventCursor> {
     store
         .run(|db| {
             Ok(
@@ -477,7 +477,7 @@ pub(crate) async fn latest_id(store: &Store) -> Result<EventCursor> {
 /// A replay batch after `cursor` and the highest ID retention had deleted,
 /// `pruned`, when the previous batch read it; none for the client's own
 /// cursor. Returns that ID as of this batch, for the next.
-pub(crate) async fn page(
+pub async fn page(
     store: &Store,
     cursor: Option<EventCursor>,
     pruned: Option<EventCursor>,
@@ -492,7 +492,7 @@ pub(crate) async fn page(
 
 /// Leave the workspace `id`, whose removal for `cause` failed with `error`,
 /// in `state`, recording that it stays.
-pub(crate) async fn retain_workspace(
+pub async fn retain_workspace(
     store: &Store,
     id: &SpaceId,
     state: crate::state::WorkspaceState,
@@ -510,11 +510,7 @@ pub(crate) async fn retain_workspace(
 /// retries one for the same cause that just failed, so a cleanup that fails
 /// on every sweep leaves one failure in the log rather than a pair for each
 /// attempt.
-pub(crate) async fn record_removal_start(
-    store: &Store,
-    id: &SpaceId,
-    cause: EventCause,
-) -> Result<()> {
+pub async fn record_removal_start(store: &Store, id: &SpaceId, cause: EventCause) -> Result<()> {
     let id = id.to_owned();
     store
         .write(move |tx| {
@@ -536,7 +532,7 @@ pub(crate) async fn record_removal_start(
 
 /// Record that the space `id`, whose removal for `cause` failed with
 /// `error`, stays.
-pub(crate) async fn record_retained(
+pub async fn record_retained(
     store: &Store,
     id: &SpaceId,
     cause: EventCause,
@@ -549,9 +545,9 @@ pub(crate) async fn record_retained(
         .await
 }
 
-pub(crate) mod retention;
-pub(crate) mod shoal_log;
-pub(crate) mod space_log;
+pub mod retention;
+pub mod shoal_log;
+pub mod space_log;
 
 #[cfg(test)]
 mod tests;

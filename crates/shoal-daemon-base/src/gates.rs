@@ -43,22 +43,22 @@ pub struct Gates {
     prs: Keyed<Mutex<()>>,
     /// Signalled when [`Self::try_lock_prs`] finds a gate held, so a test
     /// releases it only once a caller saw it held.
-    #[cfg(test)]
-    pub(crate) pr_contention: tokio::sync::Notify,
+    #[cfg(any(test, feature = "test-support"))]
+    pub pr_contention: tokio::sync::Notify,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum GuardMode {
+pub enum GuardMode {
     Shared,
     Exclusive,
 }
 
 /// The held PR gates of one or more workspaces.
-pub(crate) struct PrGuard {
+pub struct PrGuard {
     _guards: Vec<OwnedMutexGuard<()>>,
 }
 
-pub(crate) enum ResourceGuard {
+pub enum ResourceGuard {
     Operation { _guard: OwnedRwLockReadGuard<()> },
     Hook { _guard: OwnedRwLockWriteGuard<()> },
 }
@@ -66,7 +66,7 @@ pub(crate) enum ResourceGuard {
 /// Another resource operation in the space holds its resource guard,
 /// such as a hook, so one that needs it fails now and may run once it ends.
 #[derive(Debug)]
-pub(crate) struct ResourcesBusy;
+pub struct ResourcesBusy;
 
 impl std::fmt::Display for ResourcesBusy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -106,7 +106,7 @@ impl std::fmt::Display for Exiting {
 impl std::error::Error for Exiting {}
 
 /// Operations held off for an exit that waited, until it drops.
-pub(crate) struct ExitQuiescence {
+pub struct ExitQuiescence {
     exit_quiet: Arc<watch::Sender<bool>>,
     _quiescence: OwnedRwLockWriteGuard<()>,
 }
@@ -146,7 +146,7 @@ impl Holds {
 
 /// New work held back for an exit that waits, until it drops; work starts
 /// again once every such exit has dropped its hold.
-pub(crate) struct HeldBack {
+pub struct HeldBack {
     held_back: Arc<watch::Sender<Holds>>,
     exit: Exit,
 }
@@ -167,7 +167,7 @@ impl Gates {
     /// [`Self::operation`] for a background pass that starts work an exit
     /// would cut off, such as a cleanup sweep, which waits to start while an
     /// exit holds such work back.
-    pub(crate) async fn background_pass(&self) -> RwLockReadGuard<'_, ()> {
+    pub async fn background_pass(&self) -> RwLockReadGuard<'_, ()> {
         let mut held_back = self.held_back.subscribe();
         // The sender lives as long as the gates.
         let _ = held_back.wait_for(|holds| holds.exiting().is_none()).await;
@@ -175,17 +175,17 @@ impl Gates {
     }
 
     /// [`Self::operation`] for a guard that outlives the borrow.
-    pub(crate) async fn owned_operation(&self) -> OwnedRwLockReadGuard<()> {
+    pub async fn owned_operation(&self) -> OwnedRwLockReadGuard<()> {
         self.background_operations.clone().read_owned().await
     }
 
     /// [`Self::operation`] unless an update is quiescing operations.
-    pub(crate) fn try_operation(&self) -> Option<RwLockReadGuard<'_, ()>> {
+    pub fn try_operation(&self) -> Option<RwLockReadGuard<'_, ()>> {
         self.background_operations.try_read().ok()
     }
 
     /// [`Self::owned_operation`] unless an update is quiescing operations.
-    pub(crate) fn try_owned_operation(&self) -> Option<OwnedRwLockReadGuard<()>> {
+    pub fn try_owned_operation(&self) -> Option<OwnedRwLockReadGuard<()>> {
         self.background_operations.clone().try_read_owned().ok()
     }
 
@@ -203,7 +203,7 @@ impl Gates {
     /// Keep `quiescence` until the daemon has exited, for an exit that
     /// waited, which [`Self::operation_unless_exiting`] tells apart from a
     /// passing attempt to quiesce.
-    pub(crate) fn keep_for_exit(&self, quiescence: OwnedRwLockWriteGuard<()>) -> ExitQuiescence {
+    pub fn keep_for_exit(&self, quiescence: OwnedRwLockWriteGuard<()>) -> ExitQuiescence {
         self.exit_quiet.send_replace(true);
         ExitQuiescence {
             exit_quiet: self.exit_quiet.clone(),
@@ -213,7 +213,7 @@ impl Gates {
 
     /// [`Self::owned_operation`], or `None` once an exit that waited holds
     /// operations off until the daemon has exited.
-    pub(crate) async fn operation_unless_exiting(&self) -> Option<OwnedRwLockReadGuard<()>> {
+    pub async fn operation_unless_exiting(&self) -> Option<OwnedRwLockReadGuard<()>> {
         let mut exit_quiet = self.exit_quiet.subscribe();
         tokio::select! {
             operation = self.owned_operation() => Some(operation),
@@ -224,7 +224,7 @@ impl Gates {
     /// Hold back the background passes and requests that start work an
     /// `exit` would cut off, until the guard drops, so that work in progress
     /// can end before the daemon exits.
-    pub(crate) fn hold_back(&self, exit: Exit) -> HeldBack {
+    pub fn hold_back(&self, exit: Exit) -> HeldBack {
         (self.held_back).send_modify(|holds| *holds.count(exit) += 1);
         HeldBack {
             held_back: self.held_back.clone(),
@@ -233,59 +233,59 @@ impl Gates {
     }
 
     /// The exit that holds back new work, when one does.
-    pub(crate) fn exiting(&self) -> Option<Exiting> {
+    pub fn exiting(&self) -> Option<Exiting> {
         self.held_back.borrow().exiting()
     }
 
     /// Refuse, as [`Exiting`], to start work while an exit holds it back.
-    pub(crate) fn admit(&self) -> Result<(), Exiting> {
+    pub fn admit(&self) -> Result<(), Exiting> {
         self.exiting().map_or(Ok(()), Err)
     }
 
     /// Serialize repository registration, removal, and local config changes.
-    pub(crate) async fn lock_registry(&self) -> MutexGuard<'_, ()> {
+    pub async fn lock_registry(&self) -> MutexGuard<'_, ()> {
         self.registry.lock().await
     }
 
     /// Order checkpoint records and refs against expiry, so a ref is never
     /// deleted between its record and its write. Hold it only for those
     /// steps, since removal takes checkpoints under the repository's Git gate.
-    pub(crate) async fn lock_checkpoints(&self) -> MutexGuard<'_, ()> {
+    pub async fn lock_checkpoints(&self) -> MutexGuard<'_, ()> {
         self.checkpoints.lock().await
     }
 
     /// Serialize every simctl transition.
-    pub(crate) async fn lock_simulators(&self) -> MutexGuard<'_, ()> {
+    pub async fn lock_simulators(&self) -> MutexGuard<'_, ()> {
         self.simulators.lock().await
     }
 
     /// Serialize the `compose` calls on the project of the workspace `id`,
     /// with the record each one changes.
-    pub(crate) async fn lock_containers(&self, id: &SpaceId) -> OwnedMutexGuard<()> {
+    pub async fn lock_containers(&self, id: &SpaceId) -> OwnedMutexGuard<()> {
         self.containers.gate(id.as_str()).lock_owned().await
     }
 
     /// [`Self::lock_simulators`] when no transition is in progress.
-    pub(crate) fn try_lock_simulators(&self) -> Option<MutexGuard<'_, ()>> {
+    pub fn try_lock_simulators(&self) -> Option<MutexGuard<'_, ()>> {
         self.simulators.try_lock().ok()
     }
 
     /// Order copying a proposal's files and storing it against pruning, so
     /// pruning never deletes the copies of a proposal not yet stored.
-    pub(crate) async fn lock_proposal_files(&self) -> MutexGuard<'_, ()> {
+    pub async fn lock_proposal_files(&self) -> MutexGuard<'_, ()> {
         self.proposal_files.lock().await
     }
 
     /// Order announcing a question or approval request against withdrawing
     /// it, so a withdrawn one is never announced afterwards.
-    pub(crate) async fn lock_announcements(&self) -> MutexGuard<'_, ()> {
+    pub async fn lock_announcements(&self) -> MutexGuard<'_, ()> {
         self.announcements.lock().await
     }
 
     /// Hold the repository's gate for ref updates and worktree creation and
     /// removal, without checking that the repository is available. Callers
     /// must not already hold it.
-    pub(crate) async fn lock_git(&self, repository_id: &RepositoryId) -> OwnedMutexGuard<()> {
+    pub async fn lock_git(&self, repository_id: &RepositoryId) -> OwnedMutexGuard<()> {
         self.git.gate(repository_id.as_str()).lock_owned().await
     }
 
@@ -293,14 +293,14 @@ impl Gates {
     /// settles it, so that creation can release the repository's Git gate
     /// before it clones the seed. Creation takes it while it still holds the
     /// Git gate under which it recorded the workspace.
-    pub(crate) async fn lock_creation(&self, id: &SpaceId) -> OwnedMutexGuard<()> {
+    pub async fn lock_creation(&self, id: &SpaceId) -> OwnedMutexGuard<()> {
         self.creations.gate(id.as_str()).lock_owned().await
     }
 
     /// Wait until the creation of the workspace `id`, recorded in
     /// `repository_id`, has ended, or return at once when none runs.
     /// Callers must not hold the repository's Git gate.
-    pub(crate) async fn wait_for_creation(&self, repository_id: &RepositoryId, id: &SpaceId) {
+    pub async fn wait_for_creation(&self, repository_id: &RepositoryId, id: &SpaceId) {
         // Under the Git gate, creation either has yet to record the
         // workspace or already holds its creation gate.
         let git = self.lock_git(repository_id).await;
@@ -312,7 +312,7 @@ impl Gates {
     /// [`Self::wait_for_creation`] for a caller that holds the repository's
     /// Git gate, under which no creation of `id` starts. A creation under
     /// way holds its creation gate and never waits for the Git gate.
-    pub(crate) async fn wait_for_creation_holding_git(&self, id: &SpaceId) {
+    pub async fn wait_for_creation_holding_git(&self, id: &SpaceId) {
         drop(self.lock_creation(id).await);
     }
 
@@ -320,18 +320,18 @@ impl Gates {
     /// syncs of one repository never overlap and moving or removing its
     /// directory waits for the fetch, while commands that take only the Git
     /// gate do not. Callers take it before the Git gate.
-    pub(crate) async fn lock_fetch(&self, repository_id: &RepositoryId) -> OwnedMutexGuard<()> {
+    pub async fn lock_fetch(&self, repository_id: &RepositoryId) -> OwnedMutexGuard<()> {
         self.fetches.gate(repository_id.as_str()).lock_owned().await
     }
 
     /// [`Self::lock_git`] when nothing holds the gate.
-    pub(crate) fn try_lock_git(&self, repository_id: &RepositoryId) -> Option<OwnedMutexGuard<()>> {
+    pub fn try_lock_git(&self, repository_id: &RepositoryId) -> Option<OwnedMutexGuard<()>> {
         self.git.gate(repository_id.as_str()).try_lock_owned().ok()
     }
 
     /// The Git gate of `repository_id`, for tests that count who waits on it.
-    #[cfg(test)]
-    pub(crate) fn git_gate(&self, repository_id: &RepositoryId) -> Arc<Mutex<()>> {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn git_gate(&self, repository_id: &RepositoryId) -> Arc<Mutex<()>> {
         self.git.gate(repository_id.as_str())
     }
 
@@ -340,10 +340,7 @@ impl Gates {
     /// other sends, workspace removal and moving the repository's directory,
     /// so a queued message names copies that exist where it says. Callers
     /// holding the repository's Git gate take it after that one.
-    pub(crate) async fn lock_message_files(
-        &self,
-        repository_id: &RepositoryId,
-    ) -> OwnedMutexGuard<()> {
+    pub async fn lock_message_files(&self, repository_id: &RepositoryId) -> OwnedMutexGuard<()> {
         self.message_files
             .gate(repository_id.as_str())
             .lock_owned()
@@ -352,43 +349,43 @@ impl Gates {
 
     /// [`Self::lock_message_files`] for the files of the chats without a
     /// repository, whose key no repository ID takes.
-    pub(crate) async fn lock_outside_message_files(&self) -> OwnedMutexGuard<()> {
+    pub async fn lock_outside_message_files(&self) -> OwnedMutexGuard<()> {
         self.message_files.gate("").lock_owned().await
     }
 
     /// The attached-files gate of `repository_id`, for tests that count who
     /// waits on it.
-    #[cfg(test)]
-    pub(crate) fn message_files_gate(&self, repository_id: &RepositoryId) -> Arc<Mutex<()>> {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn message_files_gate(&self, repository_id: &RepositoryId) -> Arc<Mutex<()>> {
         self.message_files.gate(repository_id.as_str())
     }
 
     /// Hold `host`'s gate, so concurrent first lookups ask a forge host once.
-    pub(crate) async fn lock_forge_host(&self, host: &str) -> OwnedMutexGuard<()> {
+    pub async fn lock_forge_host(&self, host: &str) -> OwnedMutexGuard<()> {
         self.forge_hosts.gate(host).lock_owned().await
     }
 
     /// Hold the gate of the issue `url`'s assignees, so assigning it for one
     /// space and taking back the assignment another dropped do not overlap.
-    pub(crate) async fn lock_issue_assignees(&self, url: &str) -> OwnedMutexGuard<()> {
+    pub async fn lock_issue_assignees(&self, url: &str) -> OwnedMutexGuard<()> {
         self.issue_assignees.gate(url).lock_owned().await
     }
 
     /// Whether Shoal changes the issue `url`'s assignees, or waits to, so a
     /// poll may read the change before Shoal records it.
-    pub(crate) fn issue_assignees_changing(&self, url: &str) -> bool {
+    pub fn issue_assignees_changing(&self, url: &str) -> bool {
         self.issue_assignees.in_use(url)
     }
 
     /// The gate of `host`, for tests that count who waits on it.
-    #[cfg(test)]
-    pub(crate) fn forge_host_gate(&self, host: &str) -> Arc<Mutex<()>> {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn forge_host_gate(&self, host: &str) -> Arc<Mutex<()>> {
         self.forge_hosts.gate(host)
     }
 
     /// Exclude lifecycle transitions and overlapping permit hooks in the
     /// workspace `id`: a hook takes it exclusively, an operation shared.
-    pub(crate) fn resource_guard(&self, id: &SpaceId, mode: GuardMode) -> Result<ResourceGuard> {
+    pub fn resource_guard(&self, id: &SpaceId, mode: GuardMode) -> Result<ResourceGuard> {
         let gate = self.resources.gate(id.as_str());
         let guard = match mode {
             GuardMode::Exclusive => gate
@@ -406,10 +403,7 @@ impl Gates {
     /// cleanup without making other workspaces wait. Callers lock them
     /// together, in ID order, and never take another while they hold one, so
     /// callers with overlapping sets cannot deadlock.
-    pub(crate) async fn lock_prs<S: AsRef<str>>(
-        &self,
-        ids: impl IntoIterator<Item = S>,
-    ) -> PrGuard {
+    pub async fn lock_prs<S: AsRef<str>>(&self, ids: impl IntoIterator<Item = S>) -> PrGuard {
         let mut guards = Vec::new();
         for gate in self.prs.gates(ids) {
             guards.push(gate.lock_owned().await);
@@ -418,17 +412,14 @@ impl Gates {
     }
 
     /// [`Self::lock_prs`] when nothing holds any of the gates.
-    pub(crate) fn try_lock_prs<S: AsRef<str>>(
-        &self,
-        ids: impl IntoIterator<Item = S>,
-    ) -> Option<PrGuard> {
+    pub fn try_lock_prs<S: AsRef<str>>(&self, ids: impl IntoIterator<Item = S>) -> Option<PrGuard> {
         let guards = self
             .prs
             .gates(ids)
             .into_iter()
             .map(|gate| gate.try_lock_owned().ok())
             .collect::<Option<_>>();
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-support"))]
         if guards.is_none() {
             self.pr_contention.notify_one();
         }
@@ -436,8 +427,8 @@ impl Gates {
     }
 
     /// How many PR gates someone holds or awaits.
-    #[cfg(test)]
-    pub(crate) fn pr_gates_in_use(&self) -> usize {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn pr_gates_in_use(&self) -> usize {
         self.prs.len()
     }
 }

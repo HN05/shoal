@@ -15,7 +15,7 @@ use crate::{
     daemon::{
         approvals::{ApprovalRequest, DecisionStatus},
         file_copies::keep_copies,
-        log::log,
+        log,
         manager::Manager,
     },
     forge::items::attach::Attachment,

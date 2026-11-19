@@ -4,7 +4,7 @@ use anyhow::Result;
 use rusqlite::{Transaction, params};
 
 use super::{EventCursor, EventKind, decode, log_entry};
-use crate::daemon::store::Store;
+use crate::store::Store;
 use crate::time::UnixTime;
 use shoal_protocol::log::{LogEntry, LogFilter};
 
@@ -13,7 +13,7 @@ const BATCH: u32 = 500;
 
 /// The newest `limit` events of Shoal's log that `filter` shows, oldest
 /// first.
-pub(crate) async fn read(store: &Store, filter: LogFilter, limit: u32) -> Result<Vec<LogEntry>> {
+pub async fn read(store: &Store, filter: LogFilter, limit: u32) -> Result<Vec<LogEntry>> {
     store.read(move |tx| newest_shown(tx, filter, limit)).await
 }
 

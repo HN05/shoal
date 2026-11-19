@@ -10,13 +10,13 @@ use rusqlite::{OptionalExtension, params};
 use futures_util::future::BoxFuture;
 use tokio::sync::watch;
 
-use crate::daemon::log;
-use crate::daemon::store::{
+use crate::log;
+use crate::store::{
     Store,
     sent_files::{sent_files, sent_ids},
 };
 use shoal_protocol::files::SentFile;
-pub(crate) use shoal_protocol::notifications::{Cleared, Notification, NotificationKind, Sent};
+pub use shoal_protocol::notifications::{Cleared, Notification, NotificationKind, Sent};
 use shoal_protocol::space_names::SpaceName;
 
 /// Rows kept before older read notifications are pruned; unread ones stay.
@@ -72,7 +72,7 @@ impl NotificationKindExt for NotificationKind {
 
 /// A recorded notification, and whether recording added it rather than
 /// collapsing it into an identical unread one.
-pub(crate) struct Recorded {
+pub struct Recorded {
     pub id: i64,
     pub new: bool,
 }
@@ -81,7 +81,7 @@ pub(crate) struct Recorded {
 /// identity, which withdrawal matches since names change and are reused, and
 /// the key of a request it asks the user to decide.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct About {
+pub struct About {
     pub name: Option<SpaceName>,
     pub id: Option<SpaceId>,
     pub subject: Option<String>,
@@ -90,7 +90,7 @@ pub(crate) struct About {
 impl About {
     /// A space named `name` whose identity the caller does not know, such
     /// as a launch that opened no workspace; names repeat, so it has none.
-    pub(crate) fn named(name: Option<&SpaceName>) -> Self {
+    pub fn named(name: Option<&SpaceName>) -> Self {
         Self {
             name: name.cloned(),
             ..Self::default()
@@ -98,7 +98,7 @@ impl About {
     }
 
     /// The space `id`, which has `name`.
-    pub(crate) fn space(name: &SpaceName, id: &SpaceId) -> Self {
+    pub fn space(name: &SpaceName, id: &SpaceId) -> Self {
         Self {
             name: Some(name.clone()),
             id: Some(id.to_owned()),
@@ -109,8 +109,8 @@ impl About {
 
 /// Record an event for the user in the caller's transaction, with the files
 /// whose record IDs the JSON array `files` lists. Callers wake watchers with
-/// `notifications_changed` after committing a new one.
-pub(crate) fn insert(
+/// [`Notifications::recorded`] after committing a new one.
+pub fn insert(
     tx: &rusqlite::Transaction<'_>,
     about: &About,
     kind: NotificationKind,
@@ -155,7 +155,7 @@ pub(crate) fn insert(
 /// Delete the unread notification of `kind` recording `message` for the
 /// space `space_id`, so the user is not shown an event that no longer
 /// applies. Returns whether there was one.
-pub(crate) fn retract(
+pub fn retract(
     tx: &rusqlite::Transaction<'_>,
     space_id: &SpaceId,
     kind: NotificationKind,
@@ -170,7 +170,7 @@ pub(crate) fn retract(
 
 /// Delete the unread notification of `kind` about the request `subject`.
 /// Returns whether there was one.
-pub(crate) fn retract_about(
+pub fn retract_about(
     tx: &rusqlite::Transaction<'_>,
     kind: NotificationKind,
     subject: &str,
@@ -216,7 +216,7 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Notification> {
         message: row.get(4)?,
         read: row.get(5)?,
         space_id: row.get(6)?,
-        files: crate::daemon::store::json_column(row, "files")?.unwrap_or_default(),
+        files: crate::store::json_column(row, "files")?.unwrap_or_default(),
     })
 }
 
@@ -227,7 +227,7 @@ const COLUMNS: &str = concat!(
 
 /// What tells a space's coordinator, the agent of the nearest space above
 /// it with one, about an event that would otherwise reach the user.
-pub(crate) trait Coordinators: Send + Sync {
+pub trait Coordinators: Send + Sync {
     /// Tell the coordinator of the space `id`, named `name`, about an event
     /// of `kind` that `source` caused, with the files at `files`. Returns
     /// whether one received it.
@@ -244,7 +244,7 @@ pub(crate) trait Coordinators: Send + Sync {
 
 /// What caused an event a coordinator may receive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Source {
+pub enum Source {
     /// The daemon, about the workspace's agent, such as its exit.
     Daemon,
     /// A process acting in the workspace, such as `shoal alerts send`.
@@ -260,7 +260,7 @@ pub struct Notifications {
 }
 
 impl Notifications {
-    pub(crate) fn new(store: Store) -> Self {
+    pub fn new(store: Store) -> Self {
         Self {
             store,
             recorded: watch::channel(0).0,
@@ -269,12 +269,12 @@ impl Notifications {
 
     /// Wake `shoal alerts --follow` for the notification `id`, recorded in a
     /// transaction of another change.
-    pub(crate) fn recorded(&self, id: i64) {
+    pub fn recorded(&self, id: i64) {
         self.recorded.send_replace(id);
     }
 
     /// Follow the newest recorded notification ID.
-    pub(crate) fn watch(&self) -> watch::Receiver<i64> {
+    pub fn watch(&self) -> watch::Receiver<i64> {
         self.recorded.subscribe()
     }
 
@@ -282,7 +282,7 @@ impl Notifications {
     /// or record it for the user with the files the space sent. Failures are
     /// logged, never returned: a notification must not fail the operation it
     /// describes.
-    pub(crate) async fn notify(
+    pub async fn notify(
         &self,
         coordinators: &dyn Coordinators,
         about: About,
@@ -298,7 +298,7 @@ impl Notifications {
     /// Tell the agent coordinating the space `about` names about an event,
     /// or record it for the user and return its ID. A coordinating agent
     /// receives the files the space sent as the message's attached files.
-    pub(crate) async fn record(
+    pub async fn record(
         &self,
         coordinators: &dyn Coordinators,
         about: About,
@@ -324,7 +324,7 @@ impl Notifications {
     /// Record an event about the space `about` names for the user whatever
     /// space above it has an agent, as when its coordinator's machine stays
     /// offline. A failure is logged.
-    pub(crate) async fn notify_user(&self, about: About, kind: NotificationKind, message: String) {
+    pub async fn notify_user(&self, about: About, kind: NotificationKind, message: String) {
         let recorded = self.record_for_user(about, kind, message, "[]".into());
         if let Err(error) = recorded.await {
             log!("notification not recorded: {error:#}");
@@ -354,7 +354,7 @@ impl Notifications {
     /// Delete the message `id` the space `about` names sent the user, which
     /// the user need not see after all. A shown message stays; a correction
     /// follows it.
-    pub(crate) async fn withdraw_message(&self, about: About, id: i64) -> Result<Notification> {
+    pub async fn withdraw_message(&self, about: About, id: i64) -> Result<Notification> {
         self.store
             .write(move |tx| withdraw_message(tx, &about, id))
             .await
@@ -386,7 +386,7 @@ impl Notifications {
     }
 
     /// Notifications after `after`, unread only, oldest first.
-    pub(crate) async fn after(&self, after: i64, limit: u32) -> Result<Vec<Notification>> {
+    pub async fn after(&self, after: i64, limit: u32) -> Result<Vec<Notification>> {
         self.store
             .run(move |db| {
                 Ok(db
@@ -399,7 +399,7 @@ impl Notifications {
             .await
     }
 
-    pub(crate) async fn unread(&self) -> Result<u64> {
+    pub async fn unread(&self) -> Result<u64> {
         self.store
             .run(|db| {
                 let count: i64 = db.query_row(
@@ -413,7 +413,7 @@ impl Notifications {
     }
 
     /// Unread notifications about the workspace or chat `space_id`.
-    pub(crate) async fn unread_of_space(&self, space_id: &SpaceId) -> Result<u64> {
+    pub async fn unread_of_space(&self, space_id: &SpaceId) -> Result<u64> {
         let space_id = space_id.to_owned();
         self.store
             .run(move |db| {
@@ -428,7 +428,7 @@ impl Notifications {
     }
 
     /// Mark exactly these notifications as shown.
-    pub(crate) async fn mark_read(&self, ids: Vec<i64>) -> Result<()> {
+    pub async fn mark_read(&self, ids: Vec<i64>) -> Result<()> {
         self.store
             .write(move |tx| {
                 for id in ids {
@@ -441,7 +441,7 @@ impl Notifications {
 
     /// Delete every notification, read or not. Ids keep increasing, so a
     /// following stream's cursor still sees later ones.
-    pub(crate) async fn clear(&self) -> Result<Cleared> {
+    pub async fn clear(&self) -> Result<Cleared> {
         self.store
             .run(|db| {
                 let cleared = db.execute("DELETE FROM notifications", [])?;

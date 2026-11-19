@@ -11,7 +11,7 @@ use rusqlite::{Connection, Transaction};
 
 use futures_util::future::BoxFuture;
 
-use crate::{daemon::store::Store, time::UnixTime};
+use crate::{store::Store, time::UnixTime};
 use shoal_ids::space_ids::SpaceId;
 
 /// A space that is gone, with its repository and when it went.
@@ -23,7 +23,7 @@ struct Gone {
 
 /// How long a removed space of a repository keeps what it leaves, which
 /// the daemon reads from that repository's settings.
-pub(crate) trait Retention: Send + Sync {
+pub trait Retention: Send + Sync {
     /// The retention of a removed space of `repository`, or of a chat
     /// without one.
     fn of<'a>(&'a self, repository: Option<&'a RepositoryId>) -> BoxFuture<'a, Duration>;
@@ -31,7 +31,7 @@ pub(crate) trait Retention: Send + Sync {
 
 /// Forget the events of each space gone for longer than its `retention`,
 /// and Shoal's own events older than the global retention.
-pub(crate) async fn expire(store: &Store, retention: &dyn Retention) -> Result<()> {
+pub async fn expire(store: &Store, retention: &dyn Retention) -> Result<()> {
     let gone = store.run(|db| gone(db)).await?;
     let expired = expired(gone, retention).await;
     let shoal_kept_from = UnixTime::now() - retention.of(None).await;

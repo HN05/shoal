@@ -21,7 +21,7 @@ use crate::{
     config::Effective,
     daemon::{
         capacity::{self, MemoryState},
-        log::log,
+        log,
         manager::Manager,
         notifications::NotificationKind,
         workspace::identity,

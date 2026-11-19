@@ -507,7 +507,7 @@ impl Manager {
         match recorded.await {
             Ok((linked, _)) => linked,
             Err(error) => {
-                crate::daemon::log::log!("proposed issue not recorded: {error:#}");
+                shoal_daemon_base::log!("proposed issue not recorded: {error:#}");
                 false
             }
         }

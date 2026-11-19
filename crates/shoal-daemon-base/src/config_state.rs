@@ -24,7 +24,7 @@ pub struct ConfigState {
 }
 
 impl ConfigState {
-    pub(crate) fn new(config: Config) -> Self {
+    pub fn new(config: Config) -> Self {
         Self {
             config: watch::channel(Arc::new(config)).0,
             reload: Mutex::new(()),
@@ -35,24 +35,24 @@ impl ConfigState {
 
     /// The config as last loaded. Take one snapshot per operation so a
     /// concurrent reload cannot mix two versions.
-    pub(crate) fn current(&self) -> Arc<Config> {
+    pub fn current(&self) -> Arc<Config> {
         self.config.borrow().clone()
     }
 
     /// Observe reloads, for waits that a policy change must end.
-    pub(crate) fn watch(&self) -> watch::Receiver<Arc<Config>> {
+    pub fn watch(&self) -> watch::Receiver<Arc<Config>> {
         self.config.subscribe()
     }
 
     /// Make `config` the one later operations read.
-    pub(crate) fn publish(&self, config: Config) {
+    pub fn publish(&self, config: Config) {
         self.config.send_replace(Arc::new(config));
         // After the swap: a reader that sees the new generation sees this config.
         self.generation.fetch_add(1, Ordering::SeqCst);
     }
 
     /// Order reloads so the last file read is the one published.
-    pub(crate) async fn lock_reload(&self) -> MutexGuard<'_, ()> {
+    pub async fn lock_reload(&self) -> MutexGuard<'_, ()> {
         self.reload.lock().await
     }
 

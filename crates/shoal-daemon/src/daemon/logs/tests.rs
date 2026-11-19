@@ -1,6 +1,8 @@
 use super::*;
 use crate::daemon::{events::EventKind, test_support::manager};
 
+mod journal;
+
 /// Live workspaces `plan` and `other`, and the journal of `fix`, which
 /// was below `plan` until its removal: created, an agent that worked and
 /// exited, then removed, recorded in `plan`'s log too.

@@ -9,7 +9,11 @@ license.workspace = true
 
 [features]
 # What other crates' tests drive a daemon with: `test_daemon`.
-test-support = ["shoal-core/test-support", "shoal-protocol/test-support"]
+test-support = [
+    "shoal-core/test-support",
+    "shoal-daemon-base/test-support",
+    "shoal-protocol/test-support",
+]
 
 [dependencies]
 anyhow.workspace = true
@@ -29,6 +33,7 @@ serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
 shoal-core.workspace = true
+shoal-daemon-base.workspace = true
 shoal-forge.workspace = true
 shoal-forge-types = { workspace = true, features = ["rusqlite"] }
 shoal-ids = { workspace = true, features = ["rusqlite"] }
@@ -54,6 +59,7 @@ zbus = { version = "6", default-features = false, features = ["tokio", "proxy"] 
 [dev-dependencies]
 hmac = "0.13"
 shoal-core = { workspace = true, features = ["test-support"] }
+shoal-daemon-base = { workspace = true, features = ["test-support"] }
 shoal-forge = { workspace = true, features = ["test-support"] }
 shoal-ids = { workspace = true, features = ["test-support"] }
 shoal-protocol = { workspace = true, features = ["test-support"] }

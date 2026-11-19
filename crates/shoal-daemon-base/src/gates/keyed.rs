@@ -50,7 +50,7 @@ impl<L: Default> Keyed<L> {
     }
 
     /// How many gates someone holds or awaits.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(super) fn len(&self) -> usize {
         self.live().len()
     }

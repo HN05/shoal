@@ -1,6 +1,9 @@
 //! The per-user daemon: owns shared state, serves protocol requests over a
 //! Unix socket, and runs background cleanup.
 mod absent;
+pub(crate) use shoal_daemon_base::{
+    config_state, events, file_access, gates, item_numbers, log, notifications,
+};
 pub mod access;
 pub(crate) mod acquired_leases;
 pub mod agent_messages;
@@ -21,7 +24,6 @@ pub(crate) mod chats;
 pub(crate) mod checkout_sync;
 pub mod cleanup;
 pub(crate) mod completion_cleanup;
-mod config_state;
 mod connections;
 pub(crate) mod containers;
 mod contribution_holds;
@@ -33,34 +35,28 @@ pub(crate) mod demos;
 pub(crate) mod disk;
 pub(crate) mod engagement;
 pub mod environment;
-pub mod events;
 mod execution_connection;
 mod execution_recovery;
 pub(crate) mod executions;
 mod exit_wait;
 pub(crate) mod fake_workers;
-pub(crate) mod file_access;
 mod file_copies;
 pub(crate) mod forge_hosts;
 pub(crate) mod gate;
-mod gates;
 mod git_logins;
 pub(crate) mod holds;
 pub(crate) mod hub;
 mod idle_sleep;
 pub(crate) mod idle_wakes;
 mod imported_sessions;
-pub(crate) mod item_numbers;
 mod keep_awake;
 mod launches;
 pub mod leftovers;
 mod lifecycle;
 pub mod links;
-pub(crate) mod log;
 mod logs;
 pub(crate) mod lost_reports;
 pub mod manager;
-pub mod notifications;
 pub(crate) mod oneshot;
 pub(crate) mod operations;
 mod overload;
@@ -151,7 +147,6 @@ use tokio::{
 use answer::OperationGuard;
 use daemon_exit::Ending;
 use events::{ShoalEventDetails, ShoalEventKind};
-pub(crate) use log::log;
 use manager::Manager;
 use notifications::NotificationKind;
 use ownership::Ownership;

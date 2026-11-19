@@ -37,9 +37,9 @@ fn request(db: &Connection, key: &str, number: ItemNumber) -> Result<()> {
 
 #[tokio::test]
 async fn questions_and_requests_share_one_sequence_per_space() -> Result<()> {
-    let (_root, manager) = crate::daemon::test_support::manager().await;
-    manager
-        .store
+    let temp = tempfile::tempdir().unwrap();
+    let store = shoal_store::test_support::unsynced_store(temp.path().join("state.db")).await?;
+    store
         .run(|db| {
             spaces(db)?;
             let first = next(db, &SpaceId::from("first"))?;
@@ -79,9 +79,9 @@ async fn questions_and_requests_share_one_sequence_per_space() -> Result<()> {
 
 #[tokio::test]
 async fn a_number_of_the_other_kind_names_the_right_command() -> Result<()> {
-    let (_root, manager) = crate::daemon::test_support::manager().await;
-    manager
-        .store
+    let temp = tempfile::tempdir().unwrap();
+    let store = shoal_store::test_support::unsynced_store(temp.path().join("state.db")).await?;
+    store
         .run(|db| {
             spaces(db)?;
             let asked = ItemNumber {

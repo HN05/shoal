@@ -2523,6 +2523,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "shoal-core",
+ "shoal-daemon-base",
  "shoal-forge",
  "shoal-forge-types",
  "shoal-ids",
@@ -2540,6 +2541,25 @@ dependencies = [
  "uuid",
  "webpki-roots",
  "zbus",
+]
+
+[[package]]
+name = "shoal-daemon-base"
+version = "0.19.0"
+dependencies = [
+ "anyhow",
+ "futures-util",
+ "libc",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "shoal-core",
+ "shoal-forge-types",
+ "shoal-ids",
+ "shoal-protocol",
+ "shoal-store",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

@@ -4,14 +4,14 @@ use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{EventCursor, EventKind, decode, log_entry};
-use crate::daemon::store::Store;
+use crate::store::Store;
 use crate::time::UnixTime;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::log::{LogEntry, LogFilter};
 
 /// The newest `limit` events of the space `id`'s log that `filter` shows,
 /// oldest first.
-pub(crate) async fn read(
+pub async fn read(
     store: &Store,
     id: SpaceId,
     filter: LogFilter,
@@ -22,7 +22,7 @@ pub(crate) async fn read(
 }
 
 /// The removed space `id`, while the journal keeps its removal.
-pub(crate) async fn removed(store: &Store, id: SpaceId) -> Result<Option<SpaceId>> {
+pub async fn removed(store: &Store, id: SpaceId) -> Result<Option<SpaceId>> {
     store
         .run(move |db| Ok(super::removal(db, &id)?.map(|removal| removal.space_id)))
         .await
@@ -30,7 +30,7 @@ pub(crate) async fn removed(store: &Store, id: SpaceId) -> Result<Option<SpaceId
 
 /// The space the removed space `id` was below when it went, as that
 /// space's log recorded it.
-pub(crate) async fn parent_at_removal(store: &Store, id: SpaceId) -> Result<Option<SpaceId>> {
+pub async fn parent_at_removal(store: &Store, id: SpaceId) -> Result<Option<SpaceId>> {
     store
         .run(move |db| {
             Ok(db

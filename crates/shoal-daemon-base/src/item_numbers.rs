@@ -7,11 +7,11 @@ use rusqlite::{Connection, params};
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 
 use crate::refusal::{Reason, Refusal};
-pub(crate) use shoal_protocol::item_numbers::{ItemKind, ItemNumber};
+pub use shoal_protocol::item_numbers::{ItemKind, ItemNumber};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The number of the space `id`, a workspace or a chat.
-pub(crate) fn space_number(db: &Connection, id: &SpaceId) -> Result<SpaceNumber> {
+fn space_number(db: &Connection, id: &SpaceId) -> Result<SpaceNumber> {
     Ok(
         db.query_row("SELECT number FROM spaces WHERE id=?1", [id], |row| {
             row.get(0)
@@ -20,7 +20,7 @@ pub(crate) fn space_number(db: &Connection, id: &SpaceId) -> Result<SpaceNumber>
 }
 
 /// The next number of the space `id`.
-pub(crate) fn next(db: &Connection, id: &SpaceId) -> Result<ItemNumber> {
+pub fn next(db: &Connection, id: &SpaceId) -> Result<ItemNumber> {
     let space = space_number(db, id)?;
     Ok(ItemNumber {
         space,
@@ -30,7 +30,7 @@ pub(crate) fn next(db: &Connection, id: &SpaceId) -> Result<ItemNumber> {
 
 /// The smallest item number no question or approval request of the space
 /// numbered `space` holds.
-pub(crate) fn free(db: &Connection, space: SpaceNumber) -> Result<u32> {
+fn free(db: &Connection, space: SpaceNumber) -> Result<u32> {
     Ok(db.query_row(
         "WITH held(number) AS (
             SELECT number FROM questions WHERE space_number=?1
@@ -46,16 +46,12 @@ pub(crate) fn free(db: &Connection, space: SpaceNumber) -> Result<u32> {
 /// right command when it names an item of the other kind, and one naming
 /// the space when no space here has its number, as another joined
 /// machine's may.
-pub(crate) fn unknown(
-    db: &Connection,
-    kind: ItemKind,
-    number: ItemNumber,
-) -> Result<anyhow::Error> {
+pub fn unknown(db: &Connection, kind: ItemKind, number: ItemNumber) -> Result<anyhow::Error> {
     let other = match kind {
         ItemKind::Question => (ItemKind::Approval, "access_requests"),
         ItemKind::Approval => (ItemKind::Question, "questions"),
     };
-    let held = crate::daemon::store::exists(
+    let held = crate::store::exists(
         db,
         &format!(
             "SELECT 1 FROM {} WHERE space_number=?1 AND number=?2",
@@ -69,7 +65,7 @@ pub(crate) fn unknown(
         (false, ItemKind::Approval) => format!("unknown approval request {number}"),
     };
     let numbered =
-        crate::daemon::store::exists(db, "SELECT 1 FROM spaces WHERE number=?1", [number.space])?;
+        crate::store::exists(db, "SELECT 1 FROM spaces WHERE number=?1", [number.space])?;
     Ok(match numbered {
         true => Refusal::new(Reason::NotFound, message).into(),
         false => Refusal::absent(&SpaceSelector::Number(number.space), message).into(),
