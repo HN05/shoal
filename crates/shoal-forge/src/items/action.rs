@@ -7,7 +7,7 @@ use shoal_refs::CommitId;
 
 use crate::{
     account::Account,
-    backends::{Conventions, Items, Merging},
+    backends::{Branches, Conventions, Items, Merging},
     capability::CapabilityRequests,
     conventions::labels::LabelRequests,
     items::{

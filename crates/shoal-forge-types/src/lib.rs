@@ -2,6 +2,7 @@
 //! issues, PRs and CI runs parsed from their URLs, and the data the
 //! requests in `shoal-forge` return, which the daemon's protocol carries.
 pub mod backends;
+pub mod branches;
 pub mod capability;
 pub mod ci;
 pub mod conventions;

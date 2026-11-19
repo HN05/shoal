@@ -2,6 +2,7 @@
 //! [`super::Backend`] that every forge implements in a module of its own.
 mod activity;
 mod attachments;
+mod branches;
 mod checks;
 mod conventions;
 mod items;
@@ -14,6 +15,7 @@ mod runs;
 pub(crate) use activity::Activity;
 pub(crate) use attachments::Attachments;
 pub(super) use attachments::{image, link, served_at};
+pub(crate) use branches::{BranchFields, Branches};
 pub(crate) use checks::Checks;
 pub(crate) use conventions::Conventions;
 pub(crate) use items::Items;

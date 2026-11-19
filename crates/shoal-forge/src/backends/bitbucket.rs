@@ -20,6 +20,7 @@ use shoal_forge_types::{ForgeRepo, backends::bitbucket::Bitbucket, capability::C
 
 mod activity;
 mod attachments;
+mod branches;
 mod checks;
 mod conventions;
 mod items;

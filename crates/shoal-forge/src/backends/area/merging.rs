@@ -1,5 +1,4 @@
-//! What each forge does its own way with merges and reverts of PRs, and the
-//! branches they delete.
+//! What each forge does its own way with merges and reverts of PRs.
 use anyhow::{Context, Result};
 use shoal_refs::{BranchName, CommitId};
 
@@ -21,7 +20,7 @@ use shoal_forge_types::{
     numbers::PullNumber,
 };
 
-/// How the forge merges and reverts PRs and deletes their branches.
+/// How the forge merges and reverts PRs.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
 pub(crate) trait Merging: Backend {
     /// Fail closed on changed output: only commits the merged PR lists can
@@ -109,9 +108,6 @@ pub(crate) trait Merging: Backend {
     ) -> Result<(PullNumber, BranchName)> {
         Err(crate::capability::unsupported(self, Capability::RevertPrs))
     }
-
-    /// The request that deletes `branch` from the repository.
-    fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request;
 }
 
 /// A commit message's subject line and the body after it, for a forge that

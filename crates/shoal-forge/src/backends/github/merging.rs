@@ -6,12 +6,12 @@ use shoal_refs::BranchName;
 use super::GitHub;
 use crate::{
     account::Account,
-    backends::{Merging, github_rest, subject_and_body},
+    backends::{Branches, Merging, github_rest, subject_and_body},
     items::{
         item::{ItemRequests, text},
         revert::NewRevert,
     },
-    transport::api::{Request, TransportRequests, encode},
+    transport::api::{Request, TransportRequests},
 };
 use shoal_forge_types::{
     ForgeRepo,
@@ -142,11 +142,6 @@ impl Merging for GitHub {
             .send(account, &revert_request(current, revert)?)
             .await?;
         reverted(&response)
-    }
-
-    fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request {
-        let endpoint = repo.repo_endpoint(&format!("git/refs/heads/{}", encode(branch, true)));
-        Request::new(HttpMethod::Delete, endpoint, None)
     }
 }
 

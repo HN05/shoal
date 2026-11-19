@@ -3,12 +3,7 @@ use anyhow::Result;
 use serde_json::json;
 
 use super::Bitbucket;
-use crate::{
-    backends::Merging,
-    capability,
-    items::item::ItemRequests,
-    transport::api::{Request, TransportRequests, encode},
-};
+use crate::{backends::Merging, capability, items::item::ItemRequests, transport::api::Request};
 use shoal_forge_types::{
     ForgeRepo,
     capability::Capability,
@@ -60,11 +55,6 @@ impl Merging for Bitbucket {
         method: UpdateMethod,
     ) -> Result<Vec<Request>> {
         Err(capability::unsupported(self, Capability::update(method)))
-    }
-
-    fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request {
-        let endpoint = repo.repo_endpoint(&format!("refs/branches/{}", encode(branch, false)));
-        Request::new(HttpMethod::Delete, endpoint, None)
     }
 }
 

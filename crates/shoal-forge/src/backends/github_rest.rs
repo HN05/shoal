@@ -24,6 +24,7 @@ use crate::{
 use shoal_forge_types::review::view::{Comment, Details, PrDetails};
 use shoal_forge_types::{
     ForgeRepo,
+    branches::OpenPull,
     ci::JobState,
     items::{
         action::{Edit, MilestoneChange},
@@ -434,6 +435,24 @@ pub(crate) fn has_head(pull: &Value, head: &Head<'_>) -> bool {
         && pull["head"]["repo"]["full_name"]
             .as_str()
             .is_some_and(|name| name.eq_ignore_ascii_case(head.repository))
+}
+
+/// The open PR of `repo` a listing of them returned as `pull`. A deleted
+/// fork leaves its head without a repository.
+pub(crate) fn open_pull(repo: &ForgeRepo, pull: &Value) -> Result<OpenPull> {
+    let number = (pull["number"].as_u64()).context("the forge listed a PR without its number")?;
+    let branch = |side: &str| {
+        pull[side]["ref"]
+            .as_str()
+            .with_context(|| format!("the forge listed PR #{number} without its {side} branch"))
+    };
+    let head_repository = pull["head"]["repo"]["full_name"].as_str();
+    Ok(OpenPull {
+        number: PullNumber::new(number),
+        head: branch("head")?.into(),
+        fork: !head_repository.is_some_and(|name| name.eq_ignore_ascii_case(&repo.path)),
+        base: branch("base")?.into(),
+    })
 }
 
 /// Whether the repository's read grants `account` push access.

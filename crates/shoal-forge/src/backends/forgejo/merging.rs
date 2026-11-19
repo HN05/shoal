@@ -7,7 +7,7 @@ use crate::{
     account::Account,
     backends::{Merging, github_rest, subject_and_body},
     items::item::ItemRequests,
-    transport::api::{Request, TransportRequests, encode},
+    transport::api::{Request, TransportRequests},
 };
 use shoal_forge_types::{
     ForgeRepo,
@@ -102,11 +102,6 @@ impl Merging for Forgejo {
             format!("{pull}/update?style={}", method.as_str()),
             None,
         )])
-    }
-
-    fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request {
-        let endpoint = repo.repo_endpoint(&format!("branches/{}", encode(branch, false)));
-        Request::new(HttpMethod::Delete, endpoint, None)
     }
 }
 

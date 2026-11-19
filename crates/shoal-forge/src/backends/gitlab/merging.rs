@@ -8,7 +8,7 @@ use crate::{
     backends::Merging,
     capability,
     items::item::ItemRequests,
-    transport::api::{Request, TransportRequests, encode},
+    transport::api::{Request, TransportRequests},
 };
 use shoal_forge_types::{
     ForgeRepo,
@@ -113,12 +113,6 @@ impl Merging for GitLab {
             format!("{endpoint}/rebase"),
             None,
         )])
-    }
-
-    fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request {
-        let endpoint =
-            repo.repo_endpoint(&format!("repository/branches/{}", encode(branch, false)));
-        Request::new(HttpMethod::Delete, endpoint, None)
     }
 }
 

@@ -18,6 +18,7 @@ use shoal_forge_types::{
 
 mod activity;
 mod attachments;
+mod branches;
 mod checks;
 mod conventions;
 mod items;
