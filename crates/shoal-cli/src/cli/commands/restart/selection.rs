@@ -67,11 +67,9 @@ fn select(
     };
     for space in spaces {
         // An execution whose wrapper is gone may run any agent.
-        let theirs = (agents.iter())
-            .filter(|running| running.space_id == space.id)
-            .find(|running| {
-                agent.is_none() || running.agent.is_none() || running.agent.as_ref() == agent
-            });
+        let theirs = restarted(agents, &space).filter(|running| {
+            agent.is_none() || running.agent.is_none() || running.agent.as_ref() == agent
+        });
         match (theirs, agent) {
             (Some(running), _) if named || running.stopped.is_none() => {
                 if let Some(origin) = &running.origin {
@@ -89,6 +87,17 @@ fn select(
         }
     }
     selection
+}
+
+/// The agent of `agents` a restart of `space` restarts, as the daemon picks
+/// it: one Shoal did not stop before one it did, and a connected one before
+/// an execution whose wrapper is gone.
+fn restarted<'a>(agents: &'a [RunningAgent], space: &Space) -> Option<&'a RunningAgent> {
+    let theirs = || (agents.iter()).filter(|running| running.space_id == space.id);
+    let live = || theirs().filter(|running| running.stopped.is_none());
+    (live().find(|running| running.agent.is_some()))
+        .or_else(|| live().next())
+        .or_else(|| theirs().next())
 }
 
 /// Refuse a selection that includes the scoped caller's own space,

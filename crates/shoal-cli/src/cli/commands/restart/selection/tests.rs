@@ -74,3 +74,16 @@ fn named_spaces_go_to_the_daemon_unless_they_run_another_agent() {
         .collect();
     assert_eq!(skipped, ["codex", "idle"]);
 }
+
+#[test]
+fn the_filter_applies_to_the_agent_the_daemon_restarts() {
+    let mixed = space("mixed");
+    // A wrapper that is gone beside a connected agent of another name.
+    let agents = [running(&mixed, None), running(&mixed, Some("codex"))];
+    for named in [false, true] {
+        let selection = select(vec![mixed.clone()], &agents, Some(&"claude".into()), named);
+        assert!(selection.spaces.is_empty(), "named: {named}");
+    }
+    let codex = select(vec![mixed.clone()], &agents, Some(&"codex".into()), false);
+    assert_eq!(names(&codex.spaces), ["mixed"]);
+}
