@@ -199,6 +199,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                 sleep: None,
                 wake_at: None,
                 asleep: None,
+                restart: None,
                 parent: None,
                 children: Vec::new(),
                 workdir: shoal_protocol::model::Workdir::Checkout {
@@ -285,6 +286,7 @@ fn restore_completes_restorable_spaces() {
         sleep: None,
         wake_at: None,
         asleep: None,
+        restart: None,
         parent: None,
         children: Vec::new(),
         workdir: shoal_protocol::model::Workdir::Checkout {

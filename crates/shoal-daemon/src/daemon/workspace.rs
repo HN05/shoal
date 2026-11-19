@@ -504,6 +504,7 @@ fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<
     workspace.sleep = crate::daemon::idle_wakes::sleep::current(db, &workspace.id)?;
     workspace.wake_at = crate::daemon::wake_timers::due_at(db, &workspace.id)?;
     workspace.asleep = agent_queue::asleep::current(db, &workspace.id)?;
+    workspace.restart = crate::daemon::restarts::record::current(db, &workspace.id)?;
     stack::load(db, workspace)?;
     copies::load(db, workspace)?;
     tree::load(db, workspace)?;

@@ -159,6 +159,7 @@ fn render_chat(chat: &Chat, palette: Palette) {
     }
     render_sleep(chat.sleep, chat.wake_at);
     render_asleep(chat.asleep.as_ref(), chat.number);
+    render_restart(chat.restart.as_ref());
     create::render(&chat.parent, &chat.children);
     render_holds(&chat.holds);
 }
@@ -307,6 +308,7 @@ fn render_agent(status: &WorktreeStatus) {
     render_agent_state(status.workspace.agent_state);
     render_sleep(status.workspace.sleep, status.workspace.wake_at);
     render_asleep(status.workspace.asleep.as_ref(), status.workspace.number);
+    render_restart(status.workspace.restart.as_ref());
 }
 
 /// The retries of the space's agent: the request its proxy waits to make
@@ -356,6 +358,22 @@ fn render_asleep(asleep: Option<&crate::model::Asleep>, number: shoal_ids::space
         let (label, wake) = (ui::asleep_label(asleep), ui::wake_now(number));
         outln!("Asleep:        {label}; {wake}");
     }
+}
+
+/// When the agent restarts for the restart the daemon recorded, how, and
+/// what it changes in the permissions the agent was given.
+fn render_restart(restart: Option<&crate::model::AgentRestart>) {
+    let Some(restart) = restart else {
+        return;
+    };
+    let mut line = ui::restart_label(restart).to_owned();
+    if restart.in_place {
+        line += ", in place";
+    }
+    if let Some(change) = &restart.change {
+        line += &format!(", with {}", change.assignments().join(" "));
+    }
+    outln!("Restart:       {line}");
 }
 
 /// The ports, simulators, containers and resources the workspace holds.

@@ -192,6 +192,9 @@ async fn a_restart_waiting_for_the_turn_is_recorded_until_the_turn_ends() {
         asked_by: None,
     };
     assert_eq!(recorded(&manager).await, [restart]);
+    // The space shows how its agent restarts.
+    let listed = manager.workspace_by_id(&workspace.id).await.unwrap();
+    assert_eq!(listed.restart, Some(waiting()));
     // Nothing restarts while the turn goes on.
     manager.restart_finished_turns().await.unwrap();
     assert!(!*execution.stop.borrow());

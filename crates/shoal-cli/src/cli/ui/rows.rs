@@ -26,8 +26,8 @@ use crate::{
     },
     config::modes::ModeName,
     model::{
-        Asleep, Chat, HeldBy, PreparationWait, QueueEntry, Repository, ReviewMark, SpaceKind,
-        Workspace, WorkspaceUsage,
+        AgentRestart, Asleep, Chat, HeldBy, PreparationWait, QueueEntry, Repository, ReviewMark,
+        SpaceKind, Workspace, WorkspaceUsage,
     },
     state::{AgentState, QueueKind, QueueState},
 };
@@ -63,6 +63,16 @@ pub(super) fn status_cell(status: ListStatus) -> Cell {
     (status.label().into(), Some(status.style()))
 }
 
+/// The chat's status, followed by when its agent restarts for the restart
+/// the daemon recorded.
+fn chat_status_cell(chat: &Chat, status: ListStatus) -> Cell {
+    let (label, style) = status_cell(status);
+    match &chat.restart {
+        Some(restart) => (format!("{label}, {}", restart_label(restart)), style),
+        None => (label, style),
+    }
+}
+
 /// The workspace's status, with the places of `entries`, the agents queued
 /// in it, and what its preparation waits for besides their blockers,
 /// followed by its latest review's, such as `waiting, review 17 finished:
@@ -78,6 +88,9 @@ fn workspace_status_cell(
         .filter(|waits| !matches!(waits, PreparationWait::Blockers { .. }));
     if let Some(waits) = waits {
         label += &format!(", waiting for {waits}");
+    }
+    if let Some(restart) = &workspace.restart {
+        label += &format!(", {}", restart_label(restart));
     }
     match &workspace.latest_review {
         Some(review) => (
@@ -226,7 +239,7 @@ fn chat_row(chat: &Chat, depth: usize, palette: Palette) -> (String, [Cell; 8]) 
                 None,
             ),
             chat_mode_cell(chat),
-            status_cell(status),
+            chat_status_cell(chat, status),
             (String::new(), None),
             progress_cell(chat.progress.as_ref()),
             (
@@ -439,6 +452,17 @@ pub fn held_by_label(held: HeldBy) -> String {
 /// wakes once an update arrives for it`.
 pub fn asleep_label(asleep: &Asleep) -> String {
     format!("{}; wakes once {}", asleep.reason, asleep.wakes_when)
+}
+
+/// When the agent of a space restarts for the restart the daemon recorded:
+/// once its turn ends, in turn with the other sequential restarts, or once
+/// the restart under way started it.
+pub fn restart_label(restart: &AgentRestart) -> &'static str {
+    match (restart.wait, restart.sequential) {
+        (true, _) => "restarts once its turn ends",
+        (false, true) => "restarts in turn",
+        (false, false) => "restarts once it runs again",
+    }
 }
 
 /// The commands that wake the asleep agent of the space numbered `number`

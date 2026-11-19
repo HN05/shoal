@@ -95,6 +95,7 @@ fn chat(
         sleep: None,
         wake_at: None,
         asleep: None,
+        restart: None,
         parent: None,
         children: Vec::new(),
         workdir: crate::model::Workdir::Checkout {

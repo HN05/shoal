@@ -152,6 +152,20 @@ fn a_waiting_preparation_shows_what_its_agent_does_not() {
 }
 
 #[test]
+fn a_recorded_restart_shows_beside_the_status_until_it_happens() {
+    let mut space = workspace("repo", "ui", "ui", WorkspaceState::Ready);
+    let status = ListStatus::of_workspace(&space, false);
+    let (plain, _) = workspace_status_cell(&space, status, &[]);
+    let restart = AgentRestart {
+        wait: true,
+        ..Default::default()
+    };
+    space.restart = Some(restart.clone());
+    let (label, _) = workspace_status_cell(&space, status, &[]);
+    assert_eq!(label, format!("{plain}, {}", restart_label(&restart)));
+}
+
+#[test]
 fn queue_status_names_a_restore_that_waits_for_an_update() {
     let mut entry = QueueEntry {
         narrowing: Default::default(),

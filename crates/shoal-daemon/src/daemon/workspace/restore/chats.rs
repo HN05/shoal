@@ -87,6 +87,7 @@ fn restored_record(removed: &RemovedSpace, kept: &KeptChat, workdir: Workdir) ->
         sleep: None,
         wake_at: None,
         asleep: None,
+        restart: None,
         parent: None,
         children: Vec::new(),
         workdir,

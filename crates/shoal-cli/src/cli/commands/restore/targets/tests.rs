@@ -31,6 +31,7 @@ fn spaces() -> Spaces {
         sleep: None,
         wake_at: None,
         asleep: None,
+        restart: None,
         parent: None,
         children: Vec::new(),
         workdir: shoal_protocol::model::Workdir::Checkout {

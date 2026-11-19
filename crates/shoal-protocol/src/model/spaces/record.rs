@@ -64,6 +64,10 @@ pub struct Space<P = SpacePart> {
     /// Shoal brings that agent back on its own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub asleep: Option<Asleep>,
+    /// How its agent restarts once the daemon acts on the restart it
+    /// recorded for later.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restart: Option<super::super::AgentRestart>,
     /// The space above this one.
     #[serde(default)]
     pub parent: Option<SpaceRef>,
@@ -177,6 +181,7 @@ impl<P> Space<P> {
             sleep,
             wake_at,
             asleep,
+            restart,
             parent,
             children,
             workdir,
@@ -198,6 +203,7 @@ impl<P> Space<P> {
             sleep,
             wake_at,
             asleep,
+            restart,
             parent,
             children,
             workdir,

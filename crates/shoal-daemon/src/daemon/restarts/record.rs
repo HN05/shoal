@@ -37,6 +37,12 @@ pub(super) fn take(db: &Connection, id: &SpaceId) -> Result<Option<Recorded>> {
     Ok(recorded)
 }
 
+/// How the agent of the space `id` restarts once the daemon acts on the
+/// restart it recorded, if it did.
+pub(crate) fn current(db: &Connection, id: &SpaceId) -> Result<Option<AgentRestart>> {
+    Ok(find(db, id)?.map(|recorded| recorded.restart))
+}
+
 /// Every recorded restart, in the order they were recorded.
 pub(super) fn all(db: &Connection) -> Result<Vec<Recorded>> {
     let rows = db
