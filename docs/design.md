@@ -2146,17 +2146,30 @@ first job never waits for it, so agents' load cannot starve jobs, and
 agents never do. The reading comes from the overload monitor's samples,
 taken while dynamic job admission applies, so no second sampler runs.
 Automatic restores are typed queue entries ordered with launches, queued when
-the stopped agent's processes are proven stopped. A restore of an agent stopped
-between turns waits for an update instead, holding no slot and holding back
-nothing, since that agent has nothing to do until one arrives; until then it
-also keeps its workspace from no cleanup, whose removal cancels it and keeps
-the agent stopped for `shoal restore`. Woken, it is
-admitted like a launch once free disk space has recovered, and an update's
-admission holds through later stops. Any other waiting restore keeps the
-agent's slot, so fixed limits let it take that slot back rather than counting it
-twice, which would deadlock a full machine of stopped agents, while dynamic
-admission measures its memory like a new start. Restores also need the recovery
-interval's healthy readings, one per interval. An entry waiting for anything
+the stopped agent's processes are proven stopped. One daemon operation decides
+what a queued restore waits for, from the agent's recovery record, whatever
+carries it out, so the two cannot drift apart: a free slot once the user asked
+for it; nothing blocking the space for an agent stopped because it was blocked;
+an update for one stopped between turns; the recovery interval's healthy
+readings, one restore per interval, for one load or disk space stopped mid-turn,
+which the daemon marks in the record before the stop; and a free slot for any
+other stop. A restore of an agent stopped between turns holds no slot and
+holds back nothing, since that agent has nothing to do until an update
+arrives; until then it also keeps its workspace from no cleanup, whose
+removal cancels it and keeps the agent stopped for `shoal restore`. Woken, it
+is admitted like a launch once free disk space has recovered, and an update's
+admission holds through later stops. A restore waiting for healthy readings in
+its wrapper keeps the agent's slot, so fixed limits let it take that slot back
+rather than counting it twice, which would deadlock a full machine of stopped
+agents, while dynamic admission measures its memory like a new start; disabling
+recovery leaves it for `shoal restore`. Who carries a restore out is decided
+after admission: the agent's waiting wrapper while it holds its link, which
+it takes once the agent's processes are proven stopped and through which
+admission hands it the restore, otherwise the daemon, which starts the agent in
+a new place. A wrapper whose execution has ended can no longer reattach, so
+the daemon takes its restore over then rather than dropping it, and a wrapper
+whose session ends while it waits leaves its restore to the queue as a running
+agent's does. An entry waiting for anything
 besides a slot, such as those readings, an update or a blocker, keeps its
 place without holding back work queued behind it: the stopped agent's slot still
 counts and dynamic admission measures memory, so the limits, not the order, keep
@@ -2164,15 +2177,14 @@ new starts from undoing the protection. Admission binds the recovery epoch, whic
 readings turning unsafe advance, so any of them before the agent restarts
 returns the restore to its place. The slot passes to the
 agent when its restored process registers. The entry is keyed by execution, so a reattached wrapper keeps its
-place and a restart cannot restore it twice; an entry without its wrapper for the
-start grace period is dropped, and cancellation or failure leaves the recovery
-record.
+place and a restart cannot restore it twice, and cancellation or failure leaves
+the recovery record.
 `shoal restore` queues restores instead of starting every stopped agent at once,
 which overloaded the machine; `--now` starts them at once, as `start --now` does.
 No wrapper waits for such a restore, so the daemon starts it through the queue
-start worker as it starts a launch in an existing workspace, and admits it like
-a launch: its stopped agent holds no slot while it waits, so stopped agents past
-a limit cannot keep each other from restoring. Its entry names the execution
+start worker as it starts a launch in an existing workspace: its stopped agent
+holds no slot while it waits, so stopped agents past a limit cannot keep each
+other from restoring. Its entry names the execution
 without referencing its row, which ended with the agent, and leaves the queue
 once the recovery record or last session is gone. A last session's admitted
 restore counts as a launch, having no slot to take over.

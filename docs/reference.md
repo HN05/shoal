@@ -606,7 +606,9 @@ asleep agent's wrapper waits in a terminal for its restore, it keeps what the
 agent last showed and draws a block under it saying what wakes the agent and
 why it sleeps, ignoring other keys: Enter wakes the agent there, as
 `shoal queue start` does, once its processes have stopped, and Ctrl-C stops
-the wait, leaving the agent stopped for `shoal restore`.
+the wait, leaving the agent stopped for `shoal restore`. Closing that terminal,
+or ending its session, leaves the restore to the agent queue, which restores
+the agent elsewhere.
 
 An [idle](#agent-state) heavy agent, a workspace's or a chat's, sleeps once it
 has waited for you: seconds after its turn ends when you are not engaged with
@@ -2508,34 +2510,40 @@ restore` as fits. A last session, whose agent exited on its own, does not
 count: the new agent replaces it. Chats in the workspace's worktree never
 count.
 
-An agent's automatic restore after a protection stop waits in the same queue,
-ranked with launches, from when its processes stop. A restore of an agent
-stopped while idle holds back nothing behind it, and holds no slot once its
-processes are proven stopped, until an update arrives for the agent; then it needs a free slot, or room for its load,
-as a launch does, and with disk protection on `disk.cleanup_free_gib`
-available, without waiting for healthy readings. Any other restore keeps
-the agent's slot,
-so a fixed limit lets it take that slot back on a full machine, while `dynamic`
-still needs room for its load; a lowered limit holds it until other agents
-leave. It starts only after the recovery interval's healthy readings, one
-restore per interval, and keeps its place meanwhile without holding back the
-entries behind it; a stop, reload or unhealthy reading before the restored agent
-starts returns it to its place. The restored
-agent takes the slot over once it runs. Stopping the workspace or a restore
-Shoal refuses removes the entry and keeps the recovery record. A wrapper that
-exits after its restore is admitted and before the agent starts, as one whose
-binary an upgrade removed can, leaves the restore in the queue as a signal
-stop's restore waits there, opening where the agent ran. A daemon restart or a
-lost connection keeps the order; an entry whose waiting wrapper has not
-reattached within two minutes is removed, leaving its record to `shoal restore`.
-`shoal restore` of an agent whose wrapper waits uses this entry: the restore
-keeps its place and waits only for a heavy slot, and
+An agent's automatic restore waits in the same queue, ranked with launches,
+from when its processes stop, and waits for what the agent's stop calls for,
+whether its wrapper or the daemon restores it: nothing blocking the space for
+an agent stopped because its space was blocked, an update for one stopped
+while idle, the recovery interval's healthy readings for one load or disk
+space stopped mid-turn, and a free slot, or room for its load, for one stopped
+mid-turn otherwise, such as by a signal. A restore that waits for an update
+holds back nothing behind it, and holds no slot once its processes are proven
+stopped, until an update arrives for the agent; then it needs a free slot, or
+room for its load, as a launch does, and with disk protection on
+`disk.cleanup_free_gib` available, without waiting for healthy readings. A
+restore that waits for healthy readings starts one per interval and keeps its
+place meanwhile without holding back the entries behind it; while its wrapper
+waits, it keeps the agent's slot, so a fixed limit lets it take that slot back
+on a full machine, while `dynamic` still needs room for its load, and a lowered
+limit holds it until other agents leave. A stop, reload or unhealthy reading
+before the restored agent starts returns it to its place, and disabling
+`[machine.overload.recovery]` leaves it stopped for `shoal restore`. The
+restored agent takes the slot over once it runs. Stopping the workspace or a
+restore Shoal refuses removes the entry and keeps the recovery record.
+
+A waiting wrapper restores its agent in place. A wrapper that exits after its
+restore is admitted and before the agent starts, as one whose binary an
+upgrade removed can, leaves the restore in the queue as a signal stop's
+restore waits there, opening where the agent ran. A daemon restart or a lost
+connection keeps the order, and once a waiting wrapper's execution has ended
+without it reattaching, the daemon starts the agent as it starts a signal
+stop's restore. `shoal restore` of an agent whose wrapper waits uses this
+entry: the restore keeps its place and waits only for a heavy slot, and
 `--now` or `--focus` starts it at once in its wrapper.
 
 A restore that `shoal restore` or a signal stop queues joins the back of the
-queue and needs a free slot, or room for its load, as a launch does. A signal
-stop's restore of an idle agent holds no slot and holds nothing back until its
-update arrives; `shoal restore` makes it wait only for a heavy slot, keeping its place.
+queue and waits as above; `shoal restore` makes it wait only for a heavy slot,
+keeping its place.
 The daemon
 starts it as it starts a queued launch: in the place the agent stopped in, where
 its host keeps that place after its agent, once that is back at its prompt,
