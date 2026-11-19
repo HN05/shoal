@@ -107,9 +107,10 @@ async fn start_target(ctx: &Context, launch: &mut Launch) -> Result<AddTarget> {
 }
 
 /// Refuse the agent `launch` names, and the model it asks of it, before a
-/// picker asks anything, when `settings` cannot start them.
+/// picker asks anything, when `settings` cannot start them; another
+/// machine checks its own.
 async fn ensure_agent_runs(settings: &AddSettings<'_>, launch: &Launch) -> Result<()> {
-    let Some(agent) = &launch.agent else {
+    let Some(agent) = launch.agent.as_ref().filter(|_| launch.machine.is_none()) else {
         return Ok(());
     };
     let settings = settings.get().await?;
