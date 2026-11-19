@@ -31,7 +31,7 @@ pub mod sim;
 #[cfg(test)]
 mod stand_in;
 
-use daemon::{Daemon, Grants};
+use daemon::{Daemon, Records};
 use gates::Gates;
 use model::Workspace;
 use store::Store;
@@ -42,7 +42,7 @@ pub struct Leases {
     gates: Arc<Gates>,
     config: Arc<ConfigState>,
     notifications: Arc<Notifications>,
-    grants: Arc<dyn Grants>,
+    records: Arc<dyn Records>,
     /// Arrival order of queued resource and simulator requests.
     queues: queue::Queues,
     /// Woken when a simulator goes idle, which its expiry checks.
@@ -57,14 +57,14 @@ impl Leases {
         gates: Arc<Gates>,
         config: Arc<ConfigState>,
         notifications: Arc<Notifications>,
-        grants: Arc<dyn Grants>,
+        records: Arc<dyn Records>,
     ) -> Self {
         Self {
             store,
             gates,
             config,
             notifications,
-            grants,
+            records,
             queues: queue::Queues::default(),
             simulator_idle: Notify::new(),
             containers_started: Notify::new(),
@@ -99,9 +99,9 @@ impl Leases {
     /// Record `request` unless a grant covers it, in a transaction of its
     /// own, returning the request still waiting for or refused a decision.
     async fn request_approval(&self, request: ApprovalRequest) -> Result<Option<ApprovalRequest>> {
-        let grants = self.grants.clone();
+        let records = self.records.clone();
         (self.store)
-            .write(move |tx| grants.check(tx, request))
+            .write(move |tx| records.check_approval(tx, request))
             .await
     }
 

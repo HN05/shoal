@@ -80,7 +80,7 @@ async fn gated_secrets_need_a_decision_bound_to_their_source() -> Result<()> {
     );
     let target = Target::Secret("GATED".into());
     fixture
-        .grants
+        .records
         .decide(&target, "GATED", DecisionStatus::Approved);
     assert_eq!(
         granted(request(&fixture, scoped, "GATED", None).await?),

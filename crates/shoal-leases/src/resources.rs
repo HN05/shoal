@@ -13,7 +13,7 @@ use crate::{
     Leases,
     allocation::Allocation,
     callers::Caller,
-    daemon::{Daemon, Grants},
+    daemon::{Daemon, Records},
     gates::GuardMode,
     hooks::{Hook, HookKind},
     model::Workspace,
@@ -84,16 +84,12 @@ pub fn row_acquirer(row: &rusqlite::Row<'_>) -> rusqlite::Result<Acquirer> {
 
 /// `; held by a, b` naming the workspaces with leases in the pool, for the
 /// busy message and the notification the user sees.
-fn holders(db: &Connection, active: &[ResourceLease]) -> Result<String> {
-    let ids: BTreeSet<&str> = active.iter().map(|l| l.workspace_id.as_str()).collect();
+fn holders(db: &Connection, records: &dyn Records, active: &[ResourceLease]) -> Result<String> {
+    let ids: BTreeSet<&SpaceId> = active.iter().map(|l| &l.workspace_id).collect();
     let mut names = Vec::with_capacity(ids.len());
     for id in ids {
-        let name: Option<String> = db
-            .query_row("SELECT name FROM spaces WHERE id=?1", [id], |row| {
-                row.get(0)
-            })
-            .optional()?;
-        names.push(name.unwrap_or_else(|| id.to_owned()));
+        let name = records.space_name(db, id)?;
+        names.push(name.map_or_else(|| id.to_string(), |name| name.to_string()));
     }
     Ok(if names.is_empty() {
         String::new()
@@ -421,7 +417,7 @@ impl Leases {
         let acquirer = self.acquirer(daemon, caller).await;
         let caller = caller.cloned();
         let ahead = place.ahead();
-        let grants = self.grants.clone();
+        let records = self.records.clone();
         let acquisition = self
             .store
             .run(move |db| {
@@ -431,7 +427,7 @@ impl Leases {
                     acquirer,
                     ahead,
                 };
-                acquire_lease(db, &*grants, claimant, scope, definition, request, related)
+                acquire_lease(db, &*records, claimant, scope, definition, request, related)
             })
             .await;
         place.settle(&acquisition);
@@ -510,9 +506,11 @@ impl Leases {
                 .await?;
         }
         let holder = holder.cloned();
-        let grants = self.grants.clone();
+        let records = self.records.clone();
         self.store
-            .write(move |tx| release_lease(tx, &*grants, &workspace, &pool, &name, holder.as_ref()))
+            .write(move |tx| {
+                release_lease(tx, &*records, &workspace, &pool, &name, holder.as_ref())
+            })
             .await
     }
 
@@ -625,7 +623,7 @@ fn releasable_lease(
 /// nothing when `holder` names an acquirer the lease no longer has.
 fn release_lease(
     tx: &Transaction<'_>,
-    grants: &dyn Grants,
+    records: &dyn Records,
     workspace: &Workspace,
     pool: &str,
     name: &str,
@@ -644,7 +642,7 @@ fn release_lease(
             scope,
             pool: pool.to_owned(),
         };
-        released |= grants.release(tx, &workspace.id, &target, name)?;
+        released |= records.release_approval(tx, &workspace.id, &target, name)?;
     }
     ensure!(
         tx.execute(
@@ -674,7 +672,7 @@ struct Claimant {
 /// requests keep new claims busy but never block renewal or approval.
 fn acquire_lease(
     db: &mut Connection,
-    grants: &dyn Grants,
+    records: &dyn Records,
     claimant: Claimant,
     scope: Scope,
     definition: Definition,
@@ -712,7 +710,8 @@ fn acquire_lease(
         pool: request.pool.clone(),
     };
     if caller.is_some()
-        && let Some(pending) = grants.current(&tx, &workspace_id, &target, &request.name)?
+        && let Some(pending) =
+            records.current_approval(&tx, &workspace_id, &target, &request.name)?
     {
         let Specification::Resource(bound) = &pending.specification else {
             bail!(
@@ -746,7 +745,7 @@ fn acquire_lease(
             "no compatible capacity for {} in pool {}{}",
             request.resource.as_deref().unwrap_or("any resource"),
             request.pool,
-            holders(&tx, &active)?
+            holders(&tx, records, &active)?
         )))
     };
     let Some((resource, settings, mode)) = selected else {
@@ -755,7 +754,7 @@ fn acquire_lease(
     let repository = settings
         .repo
         .as_deref()
-        .map(|selector| repositories::resolve(&tx, selector, &mut related))
+        .map(|selector| repositories::resolve(&tx, records, selector, &mut related))
         .transpose()?;
     if caller.is_some() && settings.requires_approval {
         let bound = ResourceSpecification {
@@ -772,7 +771,7 @@ fn acquire_lease(
             settings.approval_lifetime,
             request.reason.as_deref(),
         );
-        if let Some(approval) = grants.check(&tx, approval)? {
+        if let Some(approval) = records.check_approval(&tx, approval)? {
             tx.commit()?;
             return Ok(Allocation::Approval(Box::new(approval)));
         }

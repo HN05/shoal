@@ -5,7 +5,9 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, params};
 use shoal_ids::repository_ids::RepositoryId;
 
-use super::{manager::Manager, workspace::paths::real_directory_identity};
+use super::{
+    leases::DaemonRecords, manager::Manager, resources, workspace::paths::real_directory_identity,
+};
 
 pub(crate) mod holds;
 use crate::{
@@ -198,7 +200,7 @@ async fn advertised_refs(checkout: &std::path::Path) -> Result<Vec<git::RemoteHe
 /// record or removed space's files, or a resource another repository's
 /// workspace borrows.
 fn in_use(db: &Connection, id: &RepositoryId) -> Result<bool> {
-    Ok(recorded_use(db, id)? || crate::daemon::resources::borrowed(db, id)?)
+    Ok(recorded_use(db, id)? || resources::borrowed(db, &DaemonRecords, id)?)
 }
 
 fn recorded_use(db: &Connection, id: &RepositoryId) -> Result<bool> {

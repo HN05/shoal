@@ -5,6 +5,7 @@
 //! do.
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result, ensure};
@@ -17,6 +18,7 @@ use shoal_daemon_base::{
     notifications::{Coordinators, Notifications, Source},
 };
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::approvals::{ApprovalRequest, DecisionStatus, Target};
 use shoal_protocol::notifications::NotificationKind;
@@ -26,7 +28,7 @@ use crate::{
     Leases,
     callers::Caller,
     config::{Config, Effective, repo::ConfigLayers},
-    daemon::{Agents, Approvals, Grants, Settings, Spaces},
+    daemon::{Agents, Approvals, Records, Settings, Spaces, Unborrowable},
     hooks::{Hook, HookKind},
     model::{Repository, Workspace},
 };
@@ -36,7 +38,7 @@ pub(crate) struct Fixture {
     _root: tempfile::TempDir,
     pub(crate) leases: Leases,
     pub(crate) daemon: StandIn,
-    pub(crate) grants: Arc<StandInGrants>,
+    pub(crate) records: Arc<StandInRecords>,
     pub(crate) workspace: Workspace,
 }
 
@@ -54,9 +56,9 @@ impl Fixture {
             global,
         )));
         let notifications = Arc::new(Notifications::new(store.clone()));
-        let grants = Arc::new(StandInGrants::default());
+        let records = Arc::new(StandInRecords::default());
         let gates = Arc::new(Gates::default());
-        let leases = Leases::new(store, gates, config, notifications, grants.clone());
+        let leases = Leases::new(store, gates, config, notifications, records.clone());
         let daemon = StandIn {
             workspace: workspace.clone(),
             layers: Mutex::new(layers(repo)),
@@ -70,7 +72,7 @@ impl Fixture {
             _root: root,
             leases,
             daemon,
-            grants,
+            records,
             workspace,
         }
     }
@@ -281,13 +283,17 @@ pub(crate) struct StandInHook {
     pub(crate) fails: bool,
 }
 
-/// Approval requests by owner, target and name, which a test decides.
+/// Approval requests by owner, target and name, each under a key of its
+/// own, which a test decides; every registered repository can be borrowed,
+/// and the fixture's workspace is the only space.
 #[derive(Default)]
-pub(crate) struct StandInGrants {
+pub(crate) struct StandInRecords {
     requests: Mutex<HashMap<(SpaceId, Target, String), ApprovalRequest>>,
+    /// How many requests it recorded, which numbers their keys.
+    made: AtomicUsize,
 }
 
-impl StandInGrants {
+impl StandInRecords {
     /// Decide the request for `name` of `target`.
     pub(crate) fn decide(&self, target: &Target, name: &str, status: DecisionStatus) {
         let mut requests = self.requests.lock().unwrap();
@@ -296,8 +302,8 @@ impl StandInGrants {
     }
 }
 
-impl Grants for StandInGrants {
-    fn check(
+impl Records for StandInRecords {
+    fn check_approval(
         &self,
         _tx: &Transaction<'_>,
         request: ApprovalRequest,
@@ -311,11 +317,14 @@ impl Grants for StandInGrants {
         if !requests.contains_key(&key) {
             ensure!(!request.reason.is_empty(), ReasonRequired);
         }
-        let stored = requests.entry(key).or_insert(request);
+        let stored = requests.entry(key).or_insert_with(|| ApprovalRequest {
+            key: format!("request-{}", self.made.fetch_add(1, Ordering::Relaxed)),
+            ..request
+        });
         Ok((stored.status != DecisionStatus::Approved).then(|| stored.clone()))
     }
 
-    fn release(
+    fn release_approval(
         &self,
         _tx: &Transaction<'_>,
         owner: &SpaceId,
@@ -326,7 +335,7 @@ impl Grants for StandInGrants {
         Ok(self.requests.lock().unwrap().remove(&key).is_some())
     }
 
-    fn current(
+    fn current_approval(
         &self,
         _db: &Connection,
         owner: &SpaceId,
@@ -335,5 +344,21 @@ impl Grants for StandInGrants {
     ) -> Result<Option<ApprovalRequest>> {
         let key = (owner.clone(), target.clone(), name.to_owned());
         Ok(self.requests.lock().unwrap().get(&key).cloned())
+    }
+
+    fn unborrowable(
+        &self,
+        _db: &Connection,
+        _repository: &Repository,
+    ) -> Result<Option<Unborrowable>> {
+        Ok(None)
+    }
+
+    fn space_name(&self, _db: &Connection, id: &SpaceId) -> Result<Option<SpaceName>> {
+        Ok((id.as_str() == "workspace").then(|| "worker".into()))
+    }
+
+    fn space_repository(&self, _db: &Connection, id: &SpaceId) -> Result<Option<RepositoryId>> {
+        Ok((id.as_str() == "workspace").then(|| "repo".into()))
     }
 }

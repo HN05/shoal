@@ -86,11 +86,11 @@ impl Leases {
     ) -> Result<()> {
         let workspace = daemon.workspace(selector).await?;
         daemon.touch(&workspace.id).await;
-        let grants = self.grants.clone();
+        let records = self.records.clone();
         let released = self.store.write(move |tx| {
             store::require_ready(tx, &workspace.id)?;
             let target = Target::Secret(name.clone());
-            let released = grants.release(tx, &workspace.id, &target, &name)?;
+            let released = records.release_approval(tx, &workspace.id, &target, &name)?;
             ensure!(released, "no secret grant or approval request {name}");
             Ok(())
         });

@@ -321,12 +321,9 @@ async fn queued_requests_take_freed_capacity_in_arrival_order() {
     assert!(plain.await.is_err());
     drop(hook);
     assert_eq!(acquire("held", true).await.unwrap(), "held");
-    assert!(
-        acquire("first", true)
-            .await
-            .unwrap_err()
-            .starts_with("no compatible")
-    );
+    let busy = acquire("first", true).await.unwrap_err();
+    assert!(busy.starts_with("no compatible"), "{busy}");
+    assert!(busy.ends_with("; held by worker"), "{busy}");
     let queued = acquire("second", true).await.unwrap_err();
     assert!(queued.starts_with("1 earlier"), "{queued}");
     (leases.release_resource(daemon, &selector, "lock".into(), "held".into()))

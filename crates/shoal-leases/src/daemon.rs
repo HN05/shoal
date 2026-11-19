@@ -8,9 +8,10 @@ use anyhow::Result;
 use futures_util::future::BoxFuture;
 use rusqlite::{Connection, Transaction};
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::approvals::{ApprovalRequest, Target};
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 use crate::{
     callers::Caller,
@@ -104,22 +105,24 @@ pub trait Daemon: Spaces + Settings + Agents + Approvals + Coordinators {}
 
 impl<T: Spaces + Settings + Agents + Approvals + Coordinators> Daemon for T {}
 
-/// The approval records of leases, read and written in the transaction that
-/// claims or releases one, so a decision never lands between the check and
+/// The records of other subsystems that leases read or write in the
+/// transaction that claims or releases one, so nothing they check changes
+/// before the claim commits: a decision never lands between the check and
 /// the claim. Its methods run on the store's thread, so they are not
 /// futures.
-pub trait Grants: Send + Sync {
-    /// Record `request` unless a grant covers it, returning the request
-    /// still waiting for or refused a decision, or `None` once granted.
-    fn check(
+pub trait Records: Send + Sync {
+    /// Record the approval `request` unless a grant covers it, returning
+    /// the request still waiting for or refused a decision, or `None` once
+    /// granted.
+    fn check_approval(
         &self,
         tx: &Transaction<'_>,
         request: ApprovalRequest,
     ) -> Result<Option<ApprovalRequest>>;
 
-    /// Cancel the request of `owner` for `name` of `target`, or end its
-    /// grant, returning whether there was one.
-    fn release(
+    /// Cancel the approval request of `owner` for `name` of `target`, or end
+    /// its grant, returning whether there was one.
+    fn release_approval(
         &self,
         tx: &Transaction<'_>,
         owner: &SpaceId,
@@ -127,12 +130,40 @@ pub trait Grants: Send + Sync {
         name: &str,
     ) -> Result<bool>;
 
-    /// The active request of `owner` for `name` of `target`.
-    fn current(
+    /// The active approval request of `owner` for `name` of `target`.
+    fn current_approval(
         &self,
         db: &Connection,
         owner: &SpaceId,
         target: &Target,
         name: &str,
     ) -> Result<Option<ApprovalRequest>>;
+
+    /// Why a pool member cannot borrow the registered `repository` now, or
+    /// `None` when it can.
+    fn unborrowable(
+        &self,
+        db: &Connection,
+        repository: &Repository,
+    ) -> Result<Option<Unborrowable>>;
+
+    /// The name of the space `id`, while it exists.
+    fn space_name(&self, db: &Connection, id: &SpaceId) -> Result<Option<SpaceName>>;
+
+    /// The repository of the space `id`, while it exists and has one.
+    fn space_repository(&self, db: &Connection, id: &SpaceId) -> Result<Option<RepositoryId>>;
+}
+
+/// Why a registered repository cannot be borrowed, in the order the checks
+/// run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unborrowable {
+    /// It is no longer registered at the path it was resolved at.
+    Registration,
+    /// Its removal is incomplete.
+    Removal,
+    /// Its move is incomplete.
+    Move,
+    /// A managed workspace's worktree is at its checkout's path.
+    Worktree,
 }

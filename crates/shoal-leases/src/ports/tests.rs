@@ -184,7 +184,7 @@ async fn a_scoped_reservation_waits_for_its_approval_and_the_user_needs_none() {
 
     let target = Target::Port("web".into());
     fixture
-        .grants
+        .records
         .decide(&target, "web", DecisionStatus::Approved);
     assert_eq!(granted(acquire(&fixture, Some(&caller)).await).port, port);
     release(&fixture).await;

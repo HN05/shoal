@@ -15,7 +15,7 @@ use crate::{
     allocation::Allocation,
     callers::Caller,
     config::{Ports, repo::ConflictPolicy},
-    daemon::{Daemon, Grants},
+    daemon::{Daemon, Records},
     env,
     model::{PortCatalog, PortOverview, PortReservation, PortSuggestion},
     protocol::Body,
@@ -134,9 +134,9 @@ impl Leases {
             .ports;
         let claim = PortClaim::resolve(workspace.id.clone(), name, request, ports, caller)?;
         daemon.touch(&workspace.id).await;
-        let grants = self.grants.clone();
+        let records = self.records.clone();
         let (outcome, conflict) = (self.store)
-            .write(move |tx| claim_port(tx, &*grants, claim))
+            .write(move |tx| claim_port(tx, &*records, claim))
             .await?;
         let space = (&workspace.name, &workspace.id);
         if let Some(conflict) = conflict {
@@ -201,12 +201,12 @@ impl Leases {
     ) -> Result<()> {
         let workspace = daemon.workspace(selector).await?;
         daemon.touch(&workspace.id).await;
-        let grants = self.grants.clone();
+        let records = self.records.clone();
         self.store
             .write(move |tx| {
                 store::require_ready(tx, &workspace.id)?;
                 let target = Target::Port(name.clone());
-                let released = grants.release(tx, &workspace.id, &target, &name)?;
+                let released = records.release_approval(tx, &workspace.id, &target, &name)?;
                 ensure!(
                     tx.execute(
                         "DELETE FROM ports WHERE workspace_id=?1 AND name=?2",
@@ -290,10 +290,10 @@ enum Selection {
 }
 
 /// Claim or renew atomically, returning the outcome and any port conflict to
-/// report. Grants and approval requests commit; a suggestion changes nothing.
+/// report. Records and approval requests commit; a suggestion changes nothing.
 fn claim_port(
     tx: &Transaction<'_>,
-    grants: &dyn Grants,
+    records: &dyn Records,
     claim: PortClaim,
 ) -> Result<(Acquisition, Option<String>)> {
     store::require_ready(tx, &claim.workspace_id)?;
@@ -321,7 +321,7 @@ fn claim_port(
             lifetime,
             claim.request.reason.as_deref(),
         );
-        if let Some(approval) = grants.check(tx, approval)? {
+        if let Some(approval) = records.check_approval(tx, approval)? {
             return Ok((
                 Acquisition::Allocation(Allocation::Approval(Box::new(approval))),
                 None,

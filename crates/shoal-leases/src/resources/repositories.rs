@@ -1,14 +1,19 @@
 //! Borrow registered checkouts without creating or deleting filesystem views.
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, params};
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
 };
 
 use super::{Definition, RepositoryView, ResourceLease};
-use crate::{daemon::Daemon, model::Repository, repository, store};
+use crate::{
+    daemon::{Daemon, Records, Unborrowable},
+    model::Repository,
+    repository,
+};
 
 /// Registered repositories named by a pool's members, keyed by selector.
 pub(super) type Related = BTreeMap<String, Result<Repository>>;
@@ -38,39 +43,23 @@ pub(super) async fn related(daemon: &dyn Daemon, definition: &Definition) -> Res
 
 pub(super) fn resolve(
     db: &Connection,
+    records: &dyn Records,
     selector: &str,
     related: &mut Related,
 ) -> Result<RepositoryView> {
     let repo = related
         .remove(selector)
         .with_context(|| format!("related repository was not resolved: {selector}"))??;
-    ensure!(
-        store::exists(
-            db,
-            "SELECT 1 FROM repositories WHERE id=?1 AND path=?2",
-            params![
-                repo.id,
-                repo.path.to_str().context("repository path is not UTF-8")?
-            ]
-        )?,
-        "related repository registration changed: {selector}"
-    );
-    ensure!(
-        !store::exists(
-            db,
-            "SELECT 1 FROM repository_removals WHERE repository_id=?1",
-            [&repo.id]
-        )?,
-        "related repository removal is incomplete: {selector}"
-    );
-    ensure!(
-        !store::exists(
-            db,
-            "SELECT 1 FROM repository_moves WHERE repository_id=?1",
-            [&repo.id]
-        )?,
-        "related repository move is incomplete: {selector}"
-    );
+    let unborrowable = records.unborrowable(db, &repo)?;
+    let refusal = |reason| match reason {
+        Unborrowable::Registration => "registration changed",
+        Unborrowable::Removal => "removal is incomplete",
+        Unborrowable::Move => "move is incomplete",
+        Unborrowable::Worktree => "checkout belongs to a managed workspace",
+    };
+    if let Some(reason) = unborrowable.filter(|reason| *reason != Unborrowable::Worktree) {
+        bail!("related repository {}: {selector}", refusal(reason));
+    }
     ensure!(
         fs::canonicalize(&repo.path)
             .with_context(|| format!("related repository checkout is unavailable: {selector}"))?
@@ -79,14 +68,9 @@ pub(super) fn resolve(
             && repo.path.join(".git").exists(),
         "related repository checkout is unavailable or moved: {selector}"
     );
-    ensure!(
-        !store::exists(
-            db,
-            "SELECT 1 FROM workspaces WHERE path=?1",
-            [repo.path.to_str().context("repository path is not UTF-8")?]
-        )?,
-        "related repository checkout belongs to a managed workspace: {selector}"
-    );
+    if let Some(reason) = unborrowable {
+        bail!("related repository {}: {selector}", refusal(reason));
+    }
     Ok(RepositoryView {
         id: repo.id,
         path: repo.path,
@@ -109,9 +93,13 @@ pub(super) fn record(db: &Connection, lease: &ResourceLease) -> Result<()> {
 
 /// Check in the transaction that records removal, excluding its own workspaces
 /// whose leases will be released by the shared workspace removal path.
-pub fn ensure_no_external_leases(db: &Connection, repository_id: &RepositoryId) -> Result<()> {
+pub fn ensure_no_external_leases(
+    db: &Connection,
+    records: &dyn Records,
+    repository_id: &RepositoryId,
+) -> Result<()> {
     ensure!(
-        !borrowed(db, repository_id)?,
+        !borrowed(db, records, repository_id)?,
         "repository is borrowed by another workspace; release its repo resource leases first"
     );
     Ok(())
@@ -119,13 +107,23 @@ pub fn ensure_no_external_leases(db: &Connection, repository_id: &RepositoryId) 
 
 /// Whether a workspace of another repository holds a lease on one of the
 /// repository's resources.
-pub fn borrowed(db: &Connection, repository_id: &RepositoryId) -> Result<bool> {
-    store::exists(
-        db,
-        "SELECT 1 FROM repository_resource_leases r
-         JOIN resource_leases l ON l.id=r.lease_id
-         JOIN spaces s ON s.id=l.workspace_id
-         WHERE r.repository_id=?1 AND s.repository_id<>?1",
-        [repository_id],
-    )
+pub fn borrowed(
+    db: &Connection,
+    records: &dyn Records,
+    repository_id: &RepositoryId,
+) -> Result<bool> {
+    let holders: Vec<SpaceId> = db
+        .prepare(
+            "SELECT DISTINCT l.workspace_id FROM repository_resource_leases r
+             JOIN resource_leases l ON l.id=r.lease_id WHERE r.repository_id=?1",
+        )?
+        .query_map([repository_id], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    for holder in holders {
+        let repository = records.space_repository(db, &holder)?;
+        if repository.is_some_and(|repository| repository != *repository_id) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }

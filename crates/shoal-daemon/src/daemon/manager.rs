@@ -110,7 +110,7 @@ impl Manager {
             gates.clone(),
             config_state.clone(),
             notifications.clone(),
-            Arc::new(super::leases::ApprovalGrants),
+            Arc::new(super::leases::DaemonRecords),
         );
         Ok(Arc::new(Self {
             config_state,

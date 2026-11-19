@@ -11,7 +11,8 @@ use super::{
 };
 use crate::{
     daemon::{
-        resources::Scope,
+        leases::DaemonRecords,
+        resources::{self, Scope},
         seed::{SeedPause, SeedStop},
         store,
     },
@@ -124,7 +125,7 @@ impl Manager {
             .run(move |db| {
                 // An unfinished move may leave the checkout in either place.
                 store::ensure_repository_not_moving(db, &id)?;
-                crate::daemon::resources::ensure_no_external_leases(db, &id)
+                resources::ensure_no_external_leases(db, &DaemonRecords, &id)
             })
             .await?;
         let workspaces: Vec<_> = self
@@ -344,7 +345,7 @@ impl Manager {
         );
         self.store
             .write(move |tx| {
-                crate::daemon::resources::ensure_no_external_leases(tx, &id)?;
+                resources::ensure_no_external_leases(tx, &DaemonRecords, &id)?;
                 tx.execute(
                     "INSERT INTO repository_removals(repository_id,directory_id,workspace_paths) VALUES (?1,?2,?3) ON CONFLICT(repository_id) DO UPDATE SET directory_id=excluded.directory_id, workspace_paths=excluded.workspace_paths",
                     params![id, recorded_identity, workspace_paths],

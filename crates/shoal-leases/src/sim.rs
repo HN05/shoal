@@ -628,9 +628,11 @@ impl Leases {
     }
 
     async fn release_simulator_access(&self, owner: SpaceId, name: String) -> Result<bool> {
-        let grants = self.grants.clone();
+        let records = self.records.clone();
         self.store
-            .write(move |tx| grants.release(tx, &owner, &approvals::Target::Simulator, &name))
+            .write(move |tx| {
+                records.release_approval(tx, &owner, &approvals::Target::Simulator, &name)
+            })
             .await
     }
 

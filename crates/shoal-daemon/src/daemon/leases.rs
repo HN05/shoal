@@ -4,18 +4,20 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use futures_util::future::BoxFuture;
-use rusqlite::{Connection, Transaction};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
-use shoal_leases::daemon::{Agents, Approvals, Grants, Settings, Spaces};
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_leases::daemon::{Agents, Approvals, Records, Settings, Spaces, Unborrowable};
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 use super::{
     approvals::{self, ApprovalRequest, Target},
     manager::Manager,
     scope::Caller,
+    store,
 };
 use crate::{
     config::{Config, Effective},
@@ -119,12 +121,13 @@ impl Approvals for Manager {
     }
 }
 
-/// The approval requests the daemon records, as leases check and release
-/// them.
-pub(super) struct ApprovalGrants;
+/// The records of the daemon's other subsystems, as leases read and write
+/// them in their own transactions: approval requests, registered
+/// repositories and spaces.
+pub(super) struct DaemonRecords;
 
-impl Grants for ApprovalGrants {
-    fn check(
+impl Records for DaemonRecords {
+    fn check_approval(
         &self,
         tx: &Transaction<'_>,
         request: ApprovalRequest,
@@ -132,7 +135,7 @@ impl Grants for ApprovalGrants {
         approvals::check(tx, request)
     }
 
-    fn release(
+    fn release_approval(
         &self,
         tx: &Transaction<'_>,
         owner: &SpaceId,
@@ -142,7 +145,7 @@ impl Grants for ApprovalGrants {
         approvals::release(tx, owner, target, name)
     }
 
-    fn current(
+    fn current_approval(
         &self,
         db: &Connection,
         owner: &SpaceId,
@@ -150,6 +153,45 @@ impl Grants for ApprovalGrants {
         name: &str,
     ) -> Result<Option<ApprovalRequest>> {
         approvals::current(db, owner, target, name)
+    }
+
+    fn unborrowable(
+        &self,
+        db: &Connection,
+        repository: &Repository,
+    ) -> Result<Option<Unborrowable>> {
+        let path = repository
+            .path
+            .to_str()
+            .context("repository path is not UTF-8")?;
+        let id = &repository.id;
+        let registered = "SELECT 1 FROM repositories WHERE id=?1 AND path=?2";
+        if !store::exists(db, registered, params![id, path])? {
+            return Ok(Some(Unborrowable::Registration));
+        }
+        let removing = "SELECT 1 FROM repository_removals WHERE repository_id=?1";
+        if store::exists(db, removing, [id])? {
+            return Ok(Some(Unborrowable::Removal));
+        }
+        let moving = "SELECT 1 FROM repository_moves WHERE repository_id=?1";
+        if store::exists(db, moving, [id])? {
+            return Ok(Some(Unborrowable::Move));
+        }
+        let worktree = "SELECT 1 FROM workspaces WHERE path=?1";
+        Ok(store::exists(db, worktree, [path])?.then_some(Unborrowable::Worktree))
+    }
+
+    fn space_name(&self, db: &Connection, id: &SpaceId) -> Result<Option<SpaceName>> {
+        let name = "SELECT name FROM spaces WHERE id=?1";
+        Ok(db.query_row(name, [id], |row| row.get(0)).optional()?)
+    }
+
+    fn space_repository(&self, db: &Connection, id: &SpaceId) -> Result<Option<RepositoryId>> {
+        let repository = "SELECT repository_id FROM spaces WHERE id=?1";
+        let found = db
+            .query_row(repository, [id], |row| row.get(0))
+            .optional()?;
+        Ok(found.flatten())
     }
 }
 
