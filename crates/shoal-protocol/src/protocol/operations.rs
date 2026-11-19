@@ -88,10 +88,14 @@ pub enum OperationMethod {
     /// the repository, issue, PR or branch link, branch or copy it names,
     /// or the existing workspace that has the branch it names, reopened,
     /// then prepared with `env` as [`Self::StartWorkspace`] prepares it.
-    /// A launch that names an agent, a mode or anything else only an agent
-    /// takes is refused. Answers with [`super::Body::WorkspaceStarted`].
+    /// A new workspace goes below the space the launch names, else below
+    /// `below`, the space the creation was made in. A launch that names an
+    /// agent, a mode or anything else only an agent takes is refused.
+    /// Answers with [`super::Body::WorkspaceStarted`].
     StartCreation {
         launch: Box<crate::launches::Launch>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        below: Option<SpaceSelector>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         env: Option<BTreeMap<String, String>>,
     },

@@ -8,7 +8,7 @@ use shoal_ids::repository_ids::RepositoryId;
 
 use crate::client::{
     output::create::Child,
-    preparation::{self, NewChild, Preparing},
+    preparation::{self, NewChild, NewCreation, Preparing},
 };
 use crate::{
     cli::{
@@ -37,14 +37,18 @@ pub(super) async fn run(ctx: &Context, args: CreateArgs) -> Result<i32> {
     if args.no_branch {
         return at_commit(ctx, parent, &args).await;
     }
-    let mut launch = args.launch(parent);
+    let mut launch = args.launch(args.parent.clone());
     launch.directory = ui::current_directory()?;
     launch.path = (launch.path.take())
         .map(|path| super::repositories::absolute(ctx, path))
         .transpose()?;
     super::workspaces::pick_start_source(ctx, &mut launch).await?;
+    // Only a parent named with --parent keeps the start out of the
+    // existing workspace of the branch it names.
+    let below = parent.filter(|_| args.parent.is_none());
+    let creation = NewCreation { launch, below };
     let env = crate::env::without_secrets();
-    let preparing = preparation::create(&ctx.paths, launch, env).await?;
+    let preparing = preparation::create(&ctx.paths, creation, env).await?;
     let Some(created) = set_up(ctx, preparing).await? else {
         return Ok(1);
     };

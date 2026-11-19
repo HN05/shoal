@@ -103,9 +103,9 @@ pub(super) async fn handle(
                     .await?,
             )
         }
-        OperationMethod::StartCreation { launch, env } => Body::WorkspaceStarted(
+        OperationMethod::StartCreation { launch, below, env } => Body::WorkspaceStarted(
             manager
-                .create_placed_workspace(*launch, env, caller)
+                .create_placed_workspace(*launch, (below, env), caller)
                 .await?,
         ),
         OperationMethod::StartChild {

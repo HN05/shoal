@@ -31,7 +31,7 @@ async fn a_creation_records_a_top_level_workspace_without_an_agent() {
     let (temp, manager) = manager().await;
     let repo = machine(&manager, &temp).await;
 
-    let started = (manager.create_placed_workspace(on_branch(&repo, "fix"), None, None))
+    let started = (manager.create_placed_workspace(on_branch(&repo, "fix"), (None, None), None))
         .await
         .unwrap();
 
@@ -59,7 +59,7 @@ async fn a_creation_refuses_an_agent_and_a_start_without_a_branch() {
     for launch in [with_agent, without_branch] {
         assert!(
             manager
-                .create_placed_workspace(launch, None, None)
+                .create_placed_workspace(launch, (None, None), None)
                 .await
                 .is_err()
         );

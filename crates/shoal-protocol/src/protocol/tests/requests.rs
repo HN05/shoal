@@ -273,7 +273,7 @@ const REQUESTS: &[&str] = &[
     r#"{"subscribe":{"topics":["spaces","questions"]}}"#,
     // Operations that create a workspace.
     r#"{"start_workspace":{"repository":"app","name":"fix","issue":"https://forge.example/team/app/issues/42","agent":{"agent":"claude","prompt":null}}}"#,
-    r#"{"start_creation":{"launch":{"target":"app","branch":"fix","parent":"3"}}}"#,
+    r#"{"start_creation":{"launch":{"target":"app","branch":"fix","parent":"3"},"below":"4"}}"#,
     r#"{"start_child":{"parent":"fix","name":"part","base":"HEAD"}}"#,
     r#"{"convert_to_workspace":{"chat":"app-chat","branch":"fix","issue":"https://forge.example/team/app/issues/42"}}"#,
 ];

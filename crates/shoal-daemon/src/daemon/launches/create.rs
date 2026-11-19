@@ -6,6 +6,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Result, bail};
 use shoal_protocol::launches::{Launch, SpaceChoice};
+use shoal_protocol::space_names::SpaceSelector;
 
 use super::{
     shape::Shape,
@@ -21,11 +22,13 @@ use crate::{
 
 impl Manager {
     /// Create the workspace `launch` describes for `caller`, starting no
-    /// agent there, and start preparing it with `env`.
+    /// agent there, a new one below the space the launch names, else
+    /// below `below`, and start preparing it with `env`. Only a parent the
+    /// launch names refuses the existing workspace of the branch it names.
     pub(crate) async fn create_placed_workspace(
         self: &Arc<Self>,
         mut launch: Launch,
-        env: Option<BTreeMap<String, String>>,
+        (below, env): (Option<SpaceSelector>, Option<BTreeMap<String, String>>),
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
         ensure_creates(&launch)?;
@@ -47,6 +50,9 @@ impl Manager {
                 "a workspace starts on a branch; name it with --branch, an issue, a PR or branch link, or a copy"
             ),
         };
+        if !reopens(&placement) {
+            launch.parent = launch.parent.or(below);
+        }
         let follows = Follows {
             agent: None,
             unfollowed: false,
@@ -77,6 +83,15 @@ impl Manager {
             blockers: Vec::new(),
         })
     }
+}
+
+/// Whether `placement` reopens a recorded workspace, which keeps its
+/// place.
+fn reopens(placement: &Placement) -> bool {
+    matches!(
+        &placement.home,
+        PlacedHome::Workspace(_, opening) if matches!(opening.start, WorkspaceStart::Workspace(_))
+    )
 }
 
 /// Refuse what `launch` names that only an agent's start takes: a

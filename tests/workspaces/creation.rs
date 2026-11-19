@@ -2693,3 +2693,24 @@ fn create_outside_a_space_makes_top_level_workspaces_without_an_agent() {
     assert_eq!(at_commit["repository_id"], on_branch["repository_id"]);
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
 }
+
+/// Inside a workspace, `shoal create` makes a child below it, and naming
+/// the child's branch again reopens that child rather than refusing the
+/// parent it was not given.
+#[test]
+fn create_inside_a_workspace_makes_a_child_and_reopens_it() {
+    let fixture = Fixture::with_config(Some("[machine.overload.disk]\nenabled = false\n"));
+    let parent = fixture.add("parent");
+    let path = PathBuf::from(parent["path"].as_str().unwrap());
+    let create = || {
+        let mut command = fixture.command();
+        command.current_dir(&path);
+        fixture.ok_from(&mut command, &["create", "--branch", "child"])
+    };
+
+    let child = create();
+    let again = create();
+
+    assert_eq!(child["parent"]["id"], parent["id"], "{child}");
+    assert_eq!(again["id"], child["id"], "{again}");
+}
