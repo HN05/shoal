@@ -1,5 +1,5 @@
 //! A repository's branches on its forge: listing them with the open PRs
-//! that join them, and deleting one at the commit it was read at.
+//! that join them, and deleting one checked at the commit it was read at.
 use anyhow::{Result, ensure};
 use shoal_refs::{BranchName, CommitId};
 
@@ -49,8 +49,9 @@ impl ForgeRepo {
         Ok(())
     }
 
-    /// Delete `branch` while it still points to `head`, the commit it was
-    /// read at, so the deletion removes no commit its caller did not see.
+    /// Delete `branch` once it still points to `head`, the commit it was
+    /// read at. The forge deletes it by name, so a push between the check
+    /// and the deletion goes with it.
     pub async fn delete_branch(
         &self,
         account: &Account,

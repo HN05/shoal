@@ -3,7 +3,7 @@
 //! head or base of an open PR, one whose changes the default branch lacks
 //! unless forced, and the branch of an active space outside the caller's
 //! scope. A scoped caller deletes as its `push` permission allows, each
-//! branch at the commit it was read at, which an approval binds.
+//! branch checked at the commit it was read at, which an approval binds.
 use anyhow::{Context, Result, bail};
 use shoal_refs::BranchName;
 

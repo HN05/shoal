@@ -5381,8 +5381,10 @@ branch first and deletes none while one is refused: the default branch, a
 branch the forge protects, the head or base of an open PR, a branch whose
 changes the default branch lacks, or of which Shoal cannot tell, unless
 `--force`, and for a scoped process the branch of an active workspace outside
-its scope, whatever `--force` says. Each branch goes only while it still points
-to the commit it was read at. You delete with your login, a scoped process as
+its scope, whatever `--force` says. Just before deleting any, it checks that
+each branch still points to the commit it was read at, and checks it again
+before its own deletion; the forge deletes a branch by name, so a push in the
+moment between that check and the deletion goes with it. You delete with your login, a scoped process as
 the agent account, as its space's [`push` permission](#mode-permissions)
 allows: `"propose"` makes one approval request per branch, bound to the commit
 it points to, so a branch that moved needs another. A workspace keeps its

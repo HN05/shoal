@@ -696,8 +696,9 @@ PR, the watch reports a `merge_conflict` when the check newly fails.
 default or protected, whether the default branch has its changes through any
 merge (unknown outside a registered repository), the open PRs whose head it
 is, and the workspace whose branch it is, `active`, `done` or `merged`.
-`branch delete` deletes branches on the forge, never local ones, each only at
-the commit it was read at, as the space's `push` permission allows,
+`branch delete` deletes branches on the forge, never local ones, each only
+while it points to the commit it was read at when checked just before, as the
+space's `push` permission allows,
 `propose` asking once per branch. It deletes none while one is the default
 or protected, the head or base of an open PR, or lacks its changes on the
 default branch without `--force`, or is the branch of an active workspace
