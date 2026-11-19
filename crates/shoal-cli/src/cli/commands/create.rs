@@ -153,14 +153,21 @@ fn launch_repository(
 }
 
 /// Refuse a repository a creation names that is not registered, before a
-/// copy's picker opens.
+/// copy's picker opens, offering an unregistered checkout for registration
+/// first as a start does from the user's own terminal.
 async fn check_registered(
     ctx: &Context,
     repository: Option<crate::repository::Selector>,
 ) -> Result<()> {
-    let Some(repository) = repository else {
+    let Some(mut repository) = repository else {
         return Ok(());
     };
+    let offer = !crate::env::is_scoped() && crate::env::own_chat().is_none();
+    if offer
+        && let Some(registered) = super::repositories::offer_unregistered(ctx, &repository).await?
+    {
+        repository = registered.id.into();
+    }
     let repos = crate::client::repositories::list(&ctx.paths).await?;
     crate::repository::select(&repos, repository).await?;
     Ok(())

@@ -2732,3 +2732,21 @@ fn create_refuses_an_unknown_repository_before_its_copy_picker() {
         fixture.assert_refused_before_prompting(args, "missing");
     }
 }
+
+/// On a terminal, a create on a checkout that is not registered offers to
+/// register it, as a start does, and creates the workspace there.
+#[test]
+fn create_offers_to_register_an_unregistered_checkout() {
+    let fixture = Fixture::with_config(Some("[machine.overload.disk]\nenabled = false\n"));
+    let other = repository_with(fixture.root.path(), "other", &[("tracked", "other\n")]);
+
+    let (output, transcript) = fixture.interactive(
+        &["create", other.to_str().unwrap(), "--branch", "fix"],
+        "y\n",
+    );
+
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
+    let listed = fixture.ok(&["list"]);
+    let created = &listed.as_array().unwrap()[0];
+    assert_eq!(created["branch"], "fix", "{listed}");
+}
