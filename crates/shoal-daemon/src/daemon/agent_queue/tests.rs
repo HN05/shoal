@@ -1306,6 +1306,56 @@ async fn a_wrappers_link_carries_its_restore_without_a_wait_in_flight() {
     assert!(matches!(grant.unwrap(), Grant::Recovery(_)));
 }
 
+/// An agent restored after a load stop mid-turn reports its turns again:
+/// the turn it ends leaves it idle, and activity on its PR then reaches the
+/// wait that wakes it.
+#[tokio::test]
+async fn a_restored_agent_ends_its_turn_and_an_update_reaches_it() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let loaded = create(&manager, &repo, "loaded").await;
+    let space = SpaceSelector::id(&loaded.id);
+    let (execution, _stop) = connected_agent(&manager, &loaded).await;
+    let working = crate::state::AgentState::Working;
+    let report = |state| manager.set_agent_state(&space, state, Some(execution.clone()), None);
+    report(working).await.unwrap();
+    assert!(
+        manager
+            .stop_agent_for_overload("critical memory pressure")
+            .await
+    );
+    manager.queue_agent_restore(&execution).await.unwrap();
+    let link = manager.agent_queue.link_restore(&execution);
+    publish_recovery(&manager);
+    manager.dispatch_queue().await.unwrap();
+    let grant = bounded(manager.await_restore_admission(&link))
+        .await
+        .unwrap();
+    drop(link);
+    let resumed = manager.resume_agent_execution(&execution, Some(grant));
+    assert!(resumed.await.unwrap());
+
+    report(working).await.unwrap();
+    let turn_end = crate::protocol::TurnEnd::default();
+    let ended = manager.end_agent_turn(&space, Some(execution.clone()), None, turn_end);
+    assert_eq!(ended.await.unwrap().state, crate::state::AgentState::Idle);
+    let id = loaded.id.clone();
+    let current = manager
+        .store
+        .read(move |db| crate::daemon::agent_state::current(db, &id))
+        .await
+        .unwrap();
+    assert_eq!(
+        current.map(|status| status.state),
+        Some(crate::state::AgentState::Idle)
+    );
+
+    crate::daemon::links::wait::test_support::comment_on_watched_pr(&manager, &loaded.id).await;
+    let woken = bounded(manager.wait_space_updates(&space)).await.unwrap();
+    assert_eq!(woken.updates.len(), 1, "{woken:?}");
+}
+
 #[tokio::test]
 async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
     let (temp, manager) = manager().await;
