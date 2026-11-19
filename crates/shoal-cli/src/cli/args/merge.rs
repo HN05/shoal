@@ -99,14 +99,20 @@ impl MergeArgs {
     }
 
     /// Refuse flags of both paths together, which no merge takes, and a
-    /// message for a method that does not squash, before anything asks
-    /// which space merges.
+    /// message that is empty or for a method that does not squash, before
+    /// anything asks which space merges.
     fn ensure_one_path(&self) -> Result<()> {
         if let (Some(method), Some(_)) = (self.method, &self.message)
             && method != MergeMethod::Squash
         {
             bail!("--message is a squash merge's commit message; -X {method} does not squash");
         }
+        ensure!(
+            self.message
+                .as_ref()
+                .is_none_or(|message| !message.trim().is_empty()),
+            "the merge message is empty"
+        );
         let Some(local) = self.local_flag() else {
             return Ok(());
         };

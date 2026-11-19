@@ -119,5 +119,8 @@ fn flags_of_both_paths_are_refused_before_a_space_is_chosen() -> Result<()> {
     }
     assert_eq!(merged(&["-X", "squash", "--message", "Fix"])?, Merged::Work);
     assert_eq!(merged(&["--message", "Fix"])?, Merged::Work);
+    for empty in ["", "  \n"] {
+        assert!(merged(&["--message", empty]).is_err(), "{empty:?}");
+    }
     Ok(())
 }
