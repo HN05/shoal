@@ -3,7 +3,7 @@
 //! workspace opened without an agent.
 use anyhow::{Context as _, Result};
 
-use super::finish::finish_add_workspace;
+use super::finish::finish_workspace;
 use crate::{
     cli::{context::Context, terminal},
     client::preparation::Preparing,
@@ -91,6 +91,6 @@ pub(in crate::cli::commands) async fn follow_preparation(
     let preparing = Preparing::follow(&ctx.paths, started).await?;
     // `--json` reports the workspace once the agent starts, or its waiting
     // entry instead.
-    let finished = finish_add_workspace(ctx, preparing, agent.as_ref(), ctx.json).await?;
+    let finished = finish_workspace(ctx, preparing, agent.as_ref(), ctx.json).await?;
     Ok(finished.map(|Prepared { workspace, .. }| *workspace))
 }

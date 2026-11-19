@@ -44,6 +44,7 @@ mod merge_warning;
 mod messages;
 mod notifications;
 pub(crate) mod operations;
+mod preparation;
 
 mod permissions;
 mod ports;

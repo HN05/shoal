@@ -45,7 +45,7 @@ pub(super) async fn run(ctx: &Context, args: CreateArgs) -> Result<i32> {
     let started = preparation::start(&ctx.paths, creation, env).await?;
     // From the user's terminal it enters the workspace as a start without
     // an agent does; an agent's creation follows it and reports it.
-    if let Some(code) = super::workspaces::enter_created(ctx, &launch, &started).await? {
+    if let Some(code) = super::preparation::enter_created(ctx, &launch, &started).await? {
         return Ok(code);
     }
     let preparing = Preparing::follow(&ctx.paths, started).await?;
@@ -133,7 +133,7 @@ async fn at_commit(ctx: &Context, parent: Option<SpaceSelector>, args: &CreateAr
         warnings: Vec::new(),
     };
     let launch = shoal_protocol::launches::Launch::default();
-    if let Some(code) = super::workspaces::enter_created(ctx, &launch, &started).await? {
+    if let Some(code) = super::preparation::enter_created(ctx, &launch, &started).await? {
         return Ok(code);
     }
     report(ctx, &child)?;

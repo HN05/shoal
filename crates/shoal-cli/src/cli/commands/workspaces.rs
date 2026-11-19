@@ -1,5 +1,4 @@
 //! CLI workspace workflows; all state mutations go through the daemon.
-mod add;
 mod adopt;
 mod branch_rename;
 mod cd;
@@ -13,9 +12,6 @@ mod setup;
 mod unmerge;
 mod waiting;
 
-pub(super) use add::{
-    enter_created, enter_workspace, follow_preparation, report_launched, shell_in, unprepared,
-};
 pub(super) use adopt::adopt;
 pub(super) use branch_rename::rename_branch;
 pub(super) use cd::cd;
@@ -24,7 +20,9 @@ pub(in crate::cli) use environment::agent_environment;
 pub(super) use refresh::refresh;
 pub(super) use removal::{ensure_batch_removable, leaving};
 pub(super) use run::{edit, exec};
-pub(super) use setup::{SetUp, follow_setup, run_post_setup, setup, setup_workspace, skip_setup};
+pub(super) use setup::{
+    SetUp, follow_setup, run_post_setup, settle_setup, setup, setup_workspace, skip_setup,
+};
 pub(super) use unmerge::unmerge;
 pub(super) use waiting::awaits_setup;
 

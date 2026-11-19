@@ -9,7 +9,7 @@ use crate::{
         agents,
         commands::{
             operations,
-            workspaces::{SetUp, setup::settle_setup},
+            workspaces::{SetUp, settle_setup},
         },
         context::Context,
         output::{Palette, Style},
@@ -28,7 +28,7 @@ use shoal_protocol::space_names::SpaceSelector;
 /// its PR and queues its agent, before reporting it, unless the start
 /// `named` it, which reports only its agent, and entering it unless `agent`
 /// takes the terminal.
-pub(super) async fn finish_add_workspace(
+pub(super) async fn finish_workspace(
     ctx: &Context,
     preparing: Preparing<'_, CommandPaths>,
     agent: Option<&Agent>,
@@ -39,7 +39,7 @@ pub(super) async fn finish_add_workspace(
         workspace,
         post_setup,
         agent: entry,
-    }) = follow_add_setup(ctx, preparing).await?
+    }) = followed_setup(ctx, preparing).await?
     else {
         return Ok(None);
     };
@@ -62,7 +62,7 @@ pub(super) async fn finish_add_workspace(
                 "{} {} {}",
                 if reused { "Opened" } else { "Created" },
                 Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
-                super::super::location_phrase(workspace),
+                crate::cli::commands::workspaces::location_phrase(workspace),
             );
         })?;
     }
@@ -75,7 +75,7 @@ pub(super) async fn finish_add_workspace(
 /// Follow the preparation of the started workspace and settle a failed
 /// setup, which leaves its agent waiting in the queue, as its preparation
 /// queued it; a retry runs what follows setup with it.
-async fn follow_add_setup(
+async fn followed_setup(
     ctx: &Context,
     preparing: Preparing<'_, CommandPaths>,
 ) -> Result<Option<SetUp>> {

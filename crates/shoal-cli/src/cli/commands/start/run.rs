@@ -9,7 +9,7 @@ use crate::{
     agents::HomeRecords,
     cli::{
         agents::{self, LaunchOptions, ModelRequest, Opening},
-        commands::{issues, queued_agents::Hold, workspaces},
+        commands::{issues, preparation, queued_agents::Hold},
         context::Context,
         terminal,
     },
@@ -87,7 +87,7 @@ pub(super) async fn host(
         HomeRecords::Workspace(workspace) => {
             let owner = Owner::Workspace(&workspace.id);
             terminal::host_space(ctx, owner, runs_agent, &label).await?;
-            workspaces::enter_workspace(ctx, workspace, agent).await
+            preparation::enter_workspace(ctx, workspace, agent).await
         }
         HomeRecords::Chat { chat, .. } => {
             terminal::host_space(ctx, Owner::Chat(&chat.id), runs_agent, &label).await

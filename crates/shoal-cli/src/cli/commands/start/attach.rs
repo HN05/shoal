@@ -11,7 +11,7 @@ use super::placement::Attach;
 use crate::{
     agents::HomeRecords,
     cli::{
-        commands::{links, queued_agents, workspaces},
+        commands::{links, preparation, queued_agents},
         context::Context,
         terminal,
     },
@@ -94,7 +94,7 @@ pub(in crate::cli::commands) async fn send(
             Started::Queued { .. } | Started::Detached(_) => {
                 super::reports::report_started(ctx, launched)
             }
-            _ => workspaces::report_launched(ctx, launched, (wait, agent)).await,
+            _ => preparation::report_launched(ctx, launched, (wait, agent)).await,
         };
     };
     match &launched.start {
@@ -103,7 +103,7 @@ pub(in crate::cli::commands) async fn send(
         // agent to the queue's start once it is done.
         Started::Preparing {
             operation: None, ..
-        } => workspaces::report_launched(ctx, launched, (false, agent)).await,
+        } => preparation::report_launched(ctx, launched, (false, agent)).await,
         _ => {
             links::print_warnings(&launched.warnings);
             run(ctx, Placed::of(launched), attach).await
@@ -142,9 +142,9 @@ async fn run_named(ctx: &Context, placed: Placed, place_name: Option<PlaceName>)
     let space = match (operation, space.to_workspace()) {
         (Some(operation), Some(workspace)) => {
             let agent = entry.as_ref().map(|entry| entry.agent.clone());
-            match workspaces::follow_preparation(ctx, workspace.clone(), operation, agent).await? {
+            match preparation::follow_preparation(ctx, workspace.clone(), operation, agent).await? {
                 Some(prepared) => Box::new(prepared.into()),
-                None => return workspaces::unprepared(ctx, &workspace, entry.is_some()).await,
+                None => return preparation::unprepared(ctx, &workspace, entry.is_some()).await,
             }
         }
         // An existing workspace opened without an agent, which the daemon
@@ -163,7 +163,7 @@ async fn run_named(ctx: &Context, placed: Placed, place_name: Option<PlaceName>)
         Some(entry) => start_held(ctx, &space, &entry, place_name).await,
         None => {
             let workspace = (space.to_workspace()).context("a chat starts with its agent")?;
-            workspaces::shell_in(ctx, &workspace).await
+            preparation::shell_in(ctx, &workspace).await
         }
     }
 }

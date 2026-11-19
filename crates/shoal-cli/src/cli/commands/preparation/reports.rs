@@ -2,7 +2,7 @@
 //! creation without an agent enters it.
 use anyhow::Result;
 
-use super::{finish::finish_add_workspace, prepared};
+use super::{finish::finish_workspace, prepared};
 use crate::{
     cli::{
         commands::{
@@ -90,7 +90,7 @@ async fn follow_workspace(
 ) -> Result<i32> {
     let entry = started.entry.clone();
     let preparing = crate::client::preparation::Preparing::follow(&ctx.paths, started).await?;
-    let finished = finish_add_workspace(ctx, preparing, agent.as_ref(), false).await?;
+    let finished = finish_workspace(ctx, preparing, agent.as_ref(), false).await?;
     let Some(Prepared { workspace, .. }) = finished else {
         return Ok(1);
     };
@@ -137,7 +137,7 @@ pub(super) fn report_workspace(ctx: &Context, started: StartedWorkspace) -> Resu
             "{} {} {}; `shoal status {}` shows its preparation",
             if reused { "Opened" } else { "Created" },
             Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
-            super::super::location_phrase(workspace),
+            crate::cli::commands::workspaces::location_phrase(workspace),
             workspace.number,
         );
     })?;
