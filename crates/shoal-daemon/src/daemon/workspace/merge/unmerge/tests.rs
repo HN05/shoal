@@ -263,6 +263,19 @@ async fn a_rebase_merge_is_undone_with_later_merges_replayed() {
     later_merges_replay_when_a_merge_by(MergeMethod::Rebase).await;
 }
 
+#[tokio::test]
+async fn a_squash_merge_moves_main_s_checkout_whatever_its_merge_options() {
+    let f = Fixture::new().await;
+    f.add("first", "first").await;
+    write_commit(&f.repo, "tracked", "main side");
+    git(&f.repo, &["config", "branch.main.mergeOptions", "--squash"]);
+    let before = f.main();
+    f.merge_by("first", MergeMethod::Squash).await.unwrap();
+    assert_eq!(rev(&f.repo, "main~1"), before);
+    assert_eq!(git(&f.repo, &["status", "--porcelain"]), "");
+    assert_eq!(f.recorded().await, [("squash".to_owned(), f.main())]);
+}
+
 /// Merge by `method` a workspace whose change conflicts with main's.
 async fn a_conflicting_merge_by(method: MergeMethod) {
     let f = Fixture::new().await;

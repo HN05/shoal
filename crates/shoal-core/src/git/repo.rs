@@ -273,6 +273,7 @@ async fn move_default(plan: &MergePlan, applied: Applied) -> Result<bool> {
                 &[
                     "merge",
                     "--ff-only",
+                    "--no-squash",
                     "--no-stat",
                     "--no-autostash",
                     "--no-overwrite-ignore",
