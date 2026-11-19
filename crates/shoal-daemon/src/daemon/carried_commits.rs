@@ -46,18 +46,31 @@ impl Manager {
             commit: commit.clone(),
             branch: branch.to_owned(),
         };
-        let operation = Operation::Repository(receive);
-        let (incoming, mut outgoing) = self.open_duplex(machine, operation, caller).await?;
-        let mut answers = Answers::new(incoming);
-        answers.next().await?;
-        send_file(&file, &mut outgoing).await?;
-        outgoing.end(None).await;
-        answers.next().await.with_context(|| {
+        (self.send_bundle(machine, receive, &file, caller).await).with_context(|| {
             format!(
                 "machine {} could not take the commits of the base",
                 machine.name
             )
         })
+    }
+
+    /// Send the bundle `file` to `machine` for `caller` as `receive` asks:
+    /// once that machine's daemon answers it, write the bundle and end this
+    /// side, then wait for its answer that it took the commits.
+    async fn send_bundle(
+        &self,
+        machine: &Member,
+        receive: RepositoryMethod,
+        file: &Path,
+        caller: Option<&Caller>,
+    ) -> Result<()> {
+        let operation = Operation::Repository(receive);
+        let (incoming, mut outgoing) = self.open_duplex(machine, operation, caller).await?;
+        let mut answers = Answers::new(incoming);
+        answers.next().await?;
+        send_file(file, &mut outgoing).await?;
+        outgoing.end(None).await;
+        answers.next().await
     }
 
     /// Take the bundle of `commit` that the caller writes on `stream` once
