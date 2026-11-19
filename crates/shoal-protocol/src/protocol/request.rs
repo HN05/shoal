@@ -19,8 +19,8 @@ pub struct Request {
 }
 
 impl Request {
-    /// An unscoped request, which [`crate::connection`] gives its caller's
-    /// scope.
+    /// An unscoped request, which `shoal-client`'s connection gives its
+    /// caller's scope.
     pub fn new(method: impl Into<Method>) -> Self {
         Self {
             protocol: VERSION,
