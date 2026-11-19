@@ -129,6 +129,7 @@ impl Manager {
             Ok(found) => found,
             Err(skipped) => return Ok(answered(waiting, skipped)),
         };
+        let earlier = self.of_agent(earlier, &execution).await?;
         let recorded = Recorded {
             space_id: space.id.clone(),
             execution: execution.clone(),
@@ -179,6 +180,20 @@ impl Manager {
         };
         answer_all(waiting, &Ok(skipped));
         Ok(cancelled.map(|recorded| recorded.restart))
+    }
+
+    /// `earlier`, if it is a restart of the agent that runs as `execution`;
+    /// one of an agent that exited ended with it.
+    async fn of_agent(
+        &self,
+        earlier: Option<Recorded>,
+        execution: &ExecutionId,
+    ) -> Result<Option<Recorded>> {
+        let Some(earlier) = earlier else {
+            return Ok(None);
+        };
+        let same = self.runs_as_recorded(&earlier, execution).await?;
+        Ok(same.then_some(earlier))
     }
 
     /// Whether the agent of the space `id` ended its turn.

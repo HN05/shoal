@@ -629,3 +629,32 @@ async fn a_recorded_restart_follows_its_agent_to_a_new_execution() {
         .unwrap();
     assert_eq!(recorded(&manager).await, [recorded_for("new")]);
 }
+
+#[tokio::test]
+async fn a_newer_request_for_another_agent_takes_no_permission_change_of_the_one_before() {
+    let (root, manager) = manager().await;
+    let (workspace, first) = working(root.path(), &manager).await;
+    let space = SpaceSelector::id(&workspace.id);
+    let restart = AgentRestart {
+        change: Some(PermissionChange::assigned("push=direct").unwrap()),
+        ..waiting()
+    };
+    (manager.restart_space(None, &space, restart))
+        .await
+        .unwrap();
+    let ended = first.plan.id.clone();
+    (manager.finish_execution(ended, ExecutionKind::Command, Some(0)))
+        .await
+        .unwrap();
+    let next = manager
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    track(&manager, &workspace, &next.plan.id, "claude", true).await;
+    (manager.restart_space(None, &space, waiting()))
+        .await
+        .unwrap();
+    let [recorded] = recorded(&manager).await.try_into().unwrap();
+    assert_eq!(recorded.execution, next.plan.id);
+    assert_eq!(recorded.restart.change, None);
+}

@@ -180,7 +180,11 @@ impl Manager {
 
     /// Whether `execution`, which a restart of the space of `recorded` picks
     /// now, runs the agent `recorded` is for, as it did or since a restart.
-    async fn runs_as_recorded(&self, recorded: &Recorded, execution: &ExecutionId) -> Result<bool> {
+    pub(super) async fn runs_as_recorded(
+        &self,
+        recorded: &Recorded,
+        execution: &ExecutionId,
+    ) -> Result<bool> {
         let agents = self.running_agents().await?;
         Ok((agents.iter())
             .any(|agent| agent.execution == *execution && agent.ran_as(&recorded.execution)))
