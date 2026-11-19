@@ -7,7 +7,7 @@
 use std::{
     collections::HashMap,
     net::SocketAddr,
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -21,6 +21,7 @@ use hyper::{
 use hyper_util::rt::TokioIo;
 use shoal_ids::member_ids::MemberId;
 use shoal_protocol::hub::{Nonce, Signature, app_servers};
+use tokio::sync::OwnedSemaphorePermit;
 
 use super::{identity::verify, members};
 use crate::daemon::{log, manager::Manager};
@@ -45,11 +46,13 @@ impl Nonces {
 
 impl Manager {
     /// The response to `request` from the server at `address`, once its
-    /// member proves it signed it.
+    /// member proves it signed it; the listener's `permit` for its
+    /// connection stays held while an upgrade of it goes on.
     pub(super) async fn forward_to_server(
         &self,
         mut request: Request<Incoming>,
         address: SocketAddr,
+        permit: Arc<OwnedSemaphorePermit>,
     ) -> Response<Body> {
         if let Err(error) = self.prove_member(&request).await {
             log!(
@@ -69,7 +72,7 @@ impl Manager {
         ] {
             headers.remove(name);
         }
-        match forward(request, address).await {
+        match forward(request, address, permit).await {
             Ok(response) => response,
             Err(error) => {
                 log!("hub: could not forward a request to {address}: {error:#}");
@@ -158,8 +161,13 @@ impl Claim {
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// The server at `address`'s response to `request`, on a connection of
-/// its own, joining the two connections once both sides upgrade it.
-async fn forward(mut request: Request<Incoming>, address: SocketAddr) -> Result<Response<Body>> {
+/// its own, joining the two connections, holding `permit`, once both sides
+/// upgrade it.
+async fn forward(
+    mut request: Request<Incoming>,
+    address: SocketAddr,
+    permit: Arc<OwnedSemaphorePermit>,
+) -> Result<Response<Body>> {
     let stream = tokio::time::timeout(CONNECT_TIMEOUT, tokio::net::TcpStream::connect(address))
         .await
         .context("it did not accept the connection in time")??;
@@ -175,19 +183,29 @@ async fn forward(mut request: Request<Incoming>, address: SocketAddr) -> Result<
     let mut response = sender.send_request(request).await?;
     if let (Some(upgrading), StatusCode::SWITCHING_PROTOCOLS) = (upgrading, response.status()) {
         let upgraded = hyper::upgrade::on(&mut response);
-        tokio::spawn(async move {
-            let joined = async {
-                let (client, server) = tokio::try_join!(upgrading, upgraded)?;
-                let (mut client, mut server) = (TokioIo::new(client), TokioIo::new(server));
-                tokio::io::copy_bidirectional(&mut client, &mut server).await?;
-                anyhow::Ok(())
-            };
-            if let Err(error) = joined.await {
-                log!("hub: a forwarded upgrade ended: {error:#}");
-            }
-        });
+        tokio::spawn(join_upgrade(upgrading, upgraded, permit));
     }
     Ok(response.map(|body| body.boxed()))
+}
+
+/// Carry bytes both ways between the client's and the server's upgraded
+/// connections until either ends, holding the client connection's
+/// `permit` until then.
+async fn join_upgrade(
+    client: hyper::upgrade::OnUpgrade,
+    server: hyper::upgrade::OnUpgrade,
+    permit: Arc<OwnedSemaphorePermit>,
+) {
+    let joined = async {
+        let (client, server) = tokio::try_join!(client, server)?;
+        let (mut client, mut server) = (TokioIo::new(client), TokioIo::new(server));
+        tokio::io::copy_bidirectional(&mut client, &mut server).await?;
+        anyhow::Ok(())
+    };
+    if let Err(error) = joined.await {
+        log!("hub: a forwarded upgrade ended: {error:#}");
+    }
+    drop(permit);
 }
 
 /// A response with `status` and `message` as its text.

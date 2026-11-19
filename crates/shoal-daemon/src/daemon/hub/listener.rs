@@ -228,7 +228,7 @@ async fn respond(
             .map(|(_, address)| address)
     });
     match forwarded {
-        Some(address) => manager.forward_to_server(request, address).await,
+        Some(address) => manager.forward_to_server(request, address, permit).await,
         None => status(StatusCode::NOT_FOUND),
     }
 }

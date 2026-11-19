@@ -159,3 +159,61 @@ async fn a_request_no_paired_member_signed_never_reaches_the_server() {
     assert!(response.starts_with("HTTP/1.1 404"), "{response}");
     assert!(heads.try_recv().is_err());
 }
+
+/// A server that upgrades each connection and then echoes what comes.
+async fn echo_server() -> SocketAddr {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        read_head(&mut stream).await;
+        let answer =
+            b"HTTP/1.1 101 Switching Protocols\r\nconnection: upgrade\r\nupgrade: echo\r\n\r\n";
+        stream.write_all(answer).await.unwrap();
+        let (mut reader, mut writer) = stream.split();
+        let _ = tokio::io::copy(&mut reader, &mut writer).await;
+    });
+    address
+}
+
+/// Read up to the end of an HTTP head from `stream`.
+async fn read_head(stream: &mut TcpStream) -> String {
+    let mut head = Vec::new();
+    while !head.ends_with(b"\r\n\r\n") {
+        let mut byte = [0];
+        stream.read_exact(&mut byte).await.unwrap();
+        head.push(byte[0]);
+    }
+    String::from_utf8(head).unwrap()
+}
+
+#[tokio::test]
+async fn an_upgrade_carries_bytes_both_ways_and_holds_its_connection_s_permit() {
+    let (_root, manager, member, device) = hub(echo_server().await).await;
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let connections = Arc::new(Semaphore::new(1));
+    let permit = Arc::new(connections.clone().acquire_owned().await.unwrap());
+    tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        listener::serve(manager, stream, permit).await;
+    });
+    let mut client = TcpStream::connect(address).await.unwrap();
+    let request = signed(&member, &device, "/quay/live", &nonce().to_string())
+        .replace("connection: close", "connection: upgrade\r\nupgrade: echo");
+    client.write_all(request.as_bytes()).await.unwrap();
+    let head = tokio::time::timeout(HANG, read_head(&mut client))
+        .await
+        .unwrap();
+    assert!(head.starts_with("HTTP/1.1 101"), "{head}");
+    client.write_all(b"ping").await.unwrap();
+    let mut echoed = [0; 4];
+    let read = client.read_exact(&mut echoed);
+    tokio::time::timeout(HANG, read).await.unwrap().unwrap();
+    assert_eq!(&echoed, b"ping");
+    // The connection goes on, so it still counts against the listener's.
+    assert_eq!(connections.available_permits(), 0);
+    drop(client);
+    let released = connections.acquire();
+    let _released = tokio::time::timeout(HANG, released).await.unwrap().unwrap();
+}
