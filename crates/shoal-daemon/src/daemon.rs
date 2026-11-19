@@ -80,6 +80,7 @@ mod requests;
 pub mod resources;
 mod restart_recovery;
 pub(crate) mod restarts;
+pub(crate) mod review;
 pub(crate) mod reviews;
 pub(crate) mod runner;
 pub mod scope;

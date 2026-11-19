@@ -9,7 +9,7 @@ use std::path::Path;
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, params};
 
-use super::super::{gates::GuardMode, workspace::Manager};
+use super::{gates::GuardMode, workspace::Manager};
 use crate::{
     config::Effective,
     daemon::{
@@ -122,7 +122,7 @@ impl Manager {
             None,
             ready_notice(&ready.marks),
             Vec::new(),
-            super::super::tree::Source::Agent,
+            super::tree::Source::Agent,
         )
         .await;
         undrafted.context("marked ready for review, but a PR is still a draft")?;
