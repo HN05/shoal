@@ -7,7 +7,6 @@ use shoal_refs::CommitId;
 
 use crate::{
     daemon::{links::wait::PushedMerge, log, workspace::Manager},
-    forge::items::action::MergeMethod,
     git,
     model::MergePlan,
 };
@@ -35,9 +34,8 @@ impl Manager {
 
 /// What the execution of `plan` pushed: the default branch's tip, once it
 /// holds the merge and the branch's upstream, as Git tracks it after the
-/// push, holds the tip. A merge commit or fast-forward an earlier push
-/// failed to publish counts, though this execution merged nothing new,
-/// since its push publishes it.
+/// push, holds the tip. A merge an earlier push failed to publish counts,
+/// though this execution merged nothing new, since its push publishes it.
 async fn pushed_merge(plan: &MergePlan) -> Result<Option<PushedMerge>> {
     let Some(push) = &plan.push else {
         return Ok(None);
@@ -64,22 +62,11 @@ async fn pushed_merge(plan: &MergePlan) -> Result<Option<PushedMerge>> {
     }))
 }
 
-/// Whether the default branch at `tip` holds the merge of `plan`: the
-/// merged branch, or the commits a squash or rebase of it made.
+/// Whether the default branch at `tip` holds the merge of `plan`, by any
+/// method: the merged branch, or its changes, which a squash or rebase
+/// copied, as this execution or an earlier one merged them.
 async fn holds_merge(plan: &MergePlan, tip: &CommitId) -> Result<bool> {
-    let repo = &plan.repo.path;
-    if plan.method == MergeMethod::Merge {
-        return git::is_ancestor(
-            repo,
-            plan.source.as_str(),
-            tip.as_str(),
-            git::isolated_command,
-        )
-        .await;
-    }
-    let previous = &plan.default_refresh.commit;
-    let found = git::unmerge::merge_result(repo, tip.as_str(), previous, &plan.source, plan.method);
-    Ok(found.await?.is_some())
+    git::status::merged_into(&plan.repo.path, plan.source.as_str(), tip.as_str()).await
 }
 
 #[cfg(test)]

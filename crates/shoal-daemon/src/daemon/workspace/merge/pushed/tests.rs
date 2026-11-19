@@ -6,6 +6,7 @@ use crate::{
         test_support::{commit, configure, git, manager, repository},
         workspace::Manager,
     },
+    forge::items::action::MergeMethod,
     model::{MergeOptions, Workspace},
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -49,12 +50,16 @@ impl Fixture {
     /// Merge the workspace's branch into `main` as a merge execution does,
     /// pushing with `push`, and return its plan and whether it succeeded.
     async fn merge(&self, push: bool) -> (MergePlan, bool) {
+        self.merge_by(push, MergeMethod::Merge).await
+    }
+
+    /// [`Self::merge`] by `method`.
+    async fn merge_by(&self, push: bool, method: MergeMethod) -> (MergePlan, bool) {
         let selector = SpaceSelector::id(&self.workspace.id);
         let options = MergeOptions {
             push,
-            method: None,
-            message: None,
-            confirmed: None,
+            method: Some(method),
+            ..MergeOptions::default()
         };
         let plan = self.manager.prepare_merge(&selector, &options, None).await;
         let plan = plan.unwrap();
@@ -105,25 +110,44 @@ async fn a_push_names_the_tip_it_published_and_the_url_it_pushed_to() {
     );
 }
 
-#[tokio::test]
-async fn a_retried_push_publishes_the_merge_a_failed_push_left() {
+/// Merge by `method` with a push that fails, then again with one that
+/// works, which publishes the first merge and merges nothing new.
+async fn retried_push_publishes_the_merge_by(method: MergeMethod) {
     let f = Fixture::new().await;
     git(
         &f.repo,
         &["config", "remote.origin.pushurl", "/nonexistent/push.git"],
     );
     f.work();
-    let (plan, merged) = f.merge(true).await;
+    // main moves on, so a squash or rebase makes commits of its own.
+    fs::write(f.repo.join("other"), "other\n").unwrap();
+    commit(&f.repo, "other");
+    let (plan, merged) = f.merge_by(true, method).await;
     assert!(!merged);
     assert!(pushed_merge(&plan).await.unwrap().is_none());
 
     let merge = f.main();
     git(&f.repo, &["config", "--unset", "remote.origin.pushurl"]);
-    let (plan, merged) = f.merge(true).await;
+    let (plan, merged) = f.merge_by(true, method).await;
     assert!(merged);
     assert_eq!(f.main(), merge);
     let pushed = pushed_merge(&plan).await.unwrap().unwrap();
     assert_eq!(pushed.commit.as_str(), merge);
+}
+
+#[tokio::test]
+async fn a_retried_push_publishes_the_merge_a_failed_push_left() {
+    retried_push_publishes_the_merge_by(MergeMethod::Merge).await;
+}
+
+#[tokio::test]
+async fn a_retried_push_publishes_the_squash_a_failed_push_left() {
+    retried_push_publishes_the_merge_by(MergeMethod::Squash).await;
+}
+
+#[tokio::test]
+async fn a_retried_push_publishes_the_rebase_a_failed_push_left() {
+    retried_push_publishes_the_merge_by(MergeMethod::Rebase).await;
 }
 
 #[tokio::test]
