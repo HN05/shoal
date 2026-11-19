@@ -96,7 +96,7 @@ impl Manager {
     /// until it ends, so a daemon that exits meanwhile leaves it to the next.
     /// Whether the agent runs again.
     pub(super) async fn act_on_restart(&self, id: &SpaceId) -> bool {
-        let (recorded, waiting, begun) = match self.begin_recorded_restart(id).await {
+        let (recorded, generation, waiting, begun) = match self.begin_recorded_restart(id).await {
             Ok(Some(begun)) => begun,
             Ok(None) => return false,
             Err(error) => {
@@ -110,7 +110,7 @@ impl Manager {
             }
             Begun::Ended(outcome) => outcome,
         };
-        self.end_recorded_restart(&recorded).await;
+        self.end_recorded_restart(id, &generation).await;
         let ran = matches!(outcome, Ok(RestartOutcome::Restarted { .. }));
         if !answer_all(waiting, &outcome)
             && let Err(error) = &outcome
@@ -129,14 +129,14 @@ impl Manager {
     async fn begin_recorded_restart(
         &self,
         id: &SpaceId,
-    ) -> Result<Option<(Recorded, Vec<Waiter>, Begun)>> {
+    ) -> Result<Option<(Recorded, String, Vec<Waiter>, Begun)>> {
         let mut waiters = self.restarts.decisions.lock().await;
         if self.restarts.acting(id) {
             return Ok(None);
         }
         let space = id.to_owned();
-        let found = self.store.read(move |tx| super::record::find(tx, &space));
-        let Some(recorded) = found.await? else {
+        let found = (self.store).read(move |tx| super::record::find_generation(tx, &space));
+        let Some((recorded, generation)) = found.await? else {
             return Ok(None);
         };
         let space = self.space(&SpaceSelector::id(id)).await?;
@@ -159,24 +159,21 @@ impl Manager {
         };
         self.restarts.set_acting(id, true);
         let waiting = waiters.remove(id).unwrap_or_default();
-        Ok(Some((recorded, waiting, begun)))
+        Ok(Some((recorded, generation, waiting, begun)))
     }
 
-    /// Forget `recorded`, which ended, unless a newer request replaced it,
-    /// and let the daemon act on the space's restarts again.
-    async fn end_recorded_restart(&self, recorded: &Recorded) {
+    /// Forget the restart of `generation` recorded for the space `id`,
+    /// which ended, unless a newer request replaced it, and let the daemon
+    /// act on the space's restarts again.
+    async fn end_recorded_restart(&self, id: &SpaceId, generation: &str) {
         let _decisions = self.restarts.decisions.lock().await;
-        let kept = recorded.clone();
-        let forgotten = self
-            .store
-            .write(move |tx| super::record::take_same(tx, &kept));
+        let (space, ended) = (id.to_owned(), generation.to_owned());
+        let forgotten =
+            (self.store).write(move |tx| super::record::take_generation(tx, &space, &ended));
         if let Err(error) = forgotten.await {
-            log!(
-                "ended restart of {} not forgotten: {error:#}",
-                recorded.space_id
-            );
+            log!("ended restart of {id} not forgotten: {error:#}");
         }
-        self.restarts.set_acting(&recorded.space_id, false);
+        self.restarts.set_acting(id, false);
         // A newer restart recorded meanwhile waits for the watcher.
         self.signals.agent_changed();
     }

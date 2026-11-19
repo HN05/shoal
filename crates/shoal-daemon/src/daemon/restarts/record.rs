@@ -1,5 +1,7 @@
 //! The store side of the restarts the daemon took for later: one per space,
-//! with how its agent restarts and who asked.
+//! with how its agent restarts and who asked, and a generation each record
+//! takes anew, which tells a newer request's record from the one it
+//! replaced.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::space_ids::SpaceId;
@@ -18,13 +20,16 @@ pub(crate) struct Recorded {
 /// Record `recorded`, replacing what the space had.
 pub(super) fn put(db: &Connection, recorded: &Recorded) -> Result<()> {
     db.execute(
-        "INSERT INTO agent_restarts(space_id,restart,asked_by,recorded_at) VALUES (?1,?2,?3,?4)
-         ON CONFLICT(space_id) DO UPDATE SET restart=excluded.restart,asked_by=excluded.asked_by",
+        "INSERT INTO agent_restarts(space_id,restart,asked_by,recorded_at,generation)
+         VALUES (?1,?2,?3,?4,?5)
+         ON CONFLICT(space_id) DO UPDATE SET restart=excluded.restart,asked_by=excluded.asked_by,
+            generation=excluded.generation",
         params![
             recorded.space_id,
             serde_json::to_string(&recorded.restart)?,
             recorded.asked_by,
             UnixTime::now(),
+            uuid::Uuid::new_v4().to_string(),
         ],
     )?;
     Ok(())
@@ -37,15 +42,26 @@ pub(super) fn take(db: &Connection, id: &SpaceId) -> Result<Option<Recorded>> {
     Ok(recorded)
 }
 
-/// Forget `recorded` unless a newer restart replaced it.
-pub(super) fn take_same(db: &Connection, recorded: &Recorded) -> Result<()> {
+/// The restart recorded for the space `id`, with its generation, if it has
+/// one.
+pub(super) fn find_generation(db: &Connection, id: &SpaceId) -> Result<Option<(Recorded, String)>> {
+    let Some(recorded) = find(db, id)? else {
+        return Ok(None);
+    };
+    let generation = db.query_row(
+        "SELECT generation FROM agent_restarts WHERE space_id=?1",
+        [id],
+        |row| row.get(0),
+    )?;
+    Ok(Some((recorded, generation)))
+}
+
+/// Forget the restart recorded for the space `id` if it is still of
+/// `generation`, which a newer request's record replaces.
+pub(super) fn take_generation(db: &Connection, id: &SpaceId, generation: &str) -> Result<()> {
     db.execute(
-        "DELETE FROM agent_restarts WHERE space_id=?1 AND restart=?2 AND asked_by IS ?3",
-        params![
-            recorded.space_id,
-            serde_json::to_string(&recorded.restart)?,
-            recorded.asked_by,
-        ],
+        "DELETE FROM agent_restarts WHERE space_id=?1 AND generation=?2",
+        params![id, generation],
     )?;
     Ok(())
 }

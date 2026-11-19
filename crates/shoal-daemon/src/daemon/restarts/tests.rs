@@ -491,3 +491,31 @@ async fn a_cancel_drops_the_recorded_restart_and_its_permission_change() {
     run_again(&manager, &id).await;
     restarting.await.unwrap().unwrap();
 }
+
+#[tokio::test]
+async fn the_end_of_a_recorded_restart_keeps_an_identical_newer_one() {
+    let (root, manager) = manager().await;
+    let (workspace, execution) = working(root.path(), &manager).await;
+    let space = SpaceSelector::id(&workspace.id);
+    (manager.restart_space(None, &space, waiting()))
+        .await
+        .unwrap();
+    (manager.set_agent_state(&space, AgentState::Idle, None, None))
+        .await
+        .unwrap();
+    manager.restart_finished_turns().await.unwrap();
+    let mut stop = execution.stop.clone();
+    stop.wait_for(|stopping| *stopping).await.unwrap();
+    let id = execution.plan.id.clone();
+    assert!(manager.settle_restart(&id).await);
+    // The same request again, once the first settled, restarts the agent
+    // again after it runs.
+    (manager.restart_space(None, &space, waiting()))
+        .await
+        .unwrap();
+    run_again(&manager, &id).await;
+    while manager.restarts.acting(&workspace.id) {
+        tokio::task::yield_now().await;
+    }
+    assert_eq!(recorded(&manager).await.len(), 1);
+}
