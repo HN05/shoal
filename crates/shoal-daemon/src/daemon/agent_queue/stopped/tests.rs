@@ -271,6 +271,33 @@ async fn a_daemon_started_restore_after_a_load_stop_waits_for_healthy_readings()
     assert!(started(&entry(&manager, "second-agent").await.id));
 }
 
+/// A stop, reload or unsafe reading after healthy readings admitted a
+/// restore the daemon starts returns it to its place as its agent takes
+/// over, and the next healthy interval admits it again.
+#[tokio::test]
+async fn readings_withdrawn_before_a_daemon_started_load_restore_runs_return_it() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 4);
+    let loaded = create(&manager, &repo, "loaded").await;
+    load_stops(&manager, &[&loaded]);
+    publish_recovery(&manager);
+    manager.dispatch_queue().await.unwrap();
+    let admitted = entry(&manager, "loaded-agent").await;
+    assert_eq!(admitted.state, Starting);
+
+    manager.overload_recovery.reset();
+    let refused = manager.reserve_queue_entry(&admitted.id).await;
+    assert!(refused.is_err());
+    assert_eq!(entry(&manager, "loaded-agent").await.state, Queued);
+
+    publish_recovery(&manager);
+    manager.dispatch_queue().await.unwrap();
+    let readmitted = entry(&manager, "loaded-agent").await;
+    assert_eq!(readmitted.state, Starting);
+    assert!(manager.reserve_queue_entry(&readmitted.id).await.is_ok());
+}
+
 /// Disabling recovery leaves a restore the daemon would start after a load
 /// stop for `shoal restore`, keeping the agent's record.
 #[tokio::test]

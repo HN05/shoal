@@ -217,8 +217,9 @@ impl Manager {
     /// Hold the queue gate for an agent taking over `entry`'s slot, refusing
     /// an entry no longer starting, whose start a stop or completion
     /// cancelled, and returning one to the queue while the system shuts
-    /// down, which admitted it before. The guard keeps cancellation out until
-    /// the agent has taken the slot.
+    /// down, or once a stop, reload or unsafe reading withdrew the healthy
+    /// readings that admitted it. The guard keeps cancellation out until the
+    /// agent has taken the slot.
     pub(crate) async fn reserve_queue_entry(
         &self,
         entry: &QueueEntryId,
@@ -228,11 +229,25 @@ impl Manager {
             self.return_start(entry).await?;
             bail!("the system is shutting down; the agent queue starts this agent later");
         }
+        if !self.recovery_admission_holds(entry) {
+            self.return_start(entry).await?;
+            bail!(
+                "the healthy readings that admitted this restore no longer hold; it waits in the agent queue again"
+            );
+        }
         ensure!(
             self.queue_entry_starting(entry).await?,
             "this agent's start from the agent queue was cancelled"
         );
         Ok(gate)
+    }
+
+    /// Whether the healthy readings that admitted the restore `entry`, if
+    /// they did, still hold: no stop, reload or unsafe reading advanced the
+    /// recovery epoch since.
+    fn recovery_admission_holds(&self, entry: &QueueEntryId) -> bool {
+        (self.agent_queue.take_recovery_start(entry))
+            .is_none_or(|epoch| epoch == self.overload_recovery.epoch())
     }
 
     /// Return the starting entry `id` to the queue, to be admitted again.

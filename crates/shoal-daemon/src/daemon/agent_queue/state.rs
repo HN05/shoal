@@ -37,6 +37,9 @@ pub struct AgentQueue {
     /// agent, every process of which has stopped, with what admitted the
     /// restore once admission did.
     restore_links: StdMutex<HashMap<ExecutionId, Option<Grant>>>,
+    /// The recovery epoch whose healthy readings admitted each starting
+    /// restore the daemon starts, which its agent checks as it takes over.
+    recovery_starts: StdMutex<HashMap<QueueEntryId, u64>>,
     /// One-shot runs by request number, so the oldest comes first.
     oneshots: StdMutex<OneShots>,
     /// What held back each waiting entry at the last admission pass.
@@ -223,6 +226,21 @@ impl AgentQueue {
         if let Some(granted) = self.restore_links.lock().unwrap().get_mut(execution) {
             *granted = None;
         }
+    }
+
+    /// Record that the healthy readings of recovery `epoch` admitted the
+    /// restore `id`, which the daemon starts.
+    pub(crate) fn admit_on_recovery(&self, id: &QueueEntryId, epoch: u64) {
+        self.recovery_starts
+            .lock()
+            .unwrap()
+            .insert(id.to_owned(), epoch);
+    }
+
+    /// The recovery epoch that admitted the restore `id`, forgotten as its
+    /// agent takes it over; none for an entry readings did not admit.
+    pub(crate) fn take_recovery_start(&self, id: &QueueEntryId) -> Option<u64> {
+        self.recovery_starts.lock().unwrap().remove(id)
     }
 
     /// What admitted the restore of `execution`, if admission did.

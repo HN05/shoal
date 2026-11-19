@@ -13,7 +13,7 @@ use anyhow::{Context, Result};
 use rusqlite::params;
 
 use super::{
-    blockers,
+    Grant, blockers,
     carrier::Carrier,
     expiry,
     limits::{Admission, Waiting, Wake, Work, admit},
@@ -103,12 +103,14 @@ impl WaitingWork {
             .any(|entry| kind(&entry.work) && admitted.contains(&entry.id))
     }
 
-    /// The restores in `admitted`.
+    /// The restores in `admitted`, by entry ID.
     fn admitted_restores<'a>(
         &'a self,
         admitted: &'a [QueueEntryId],
-    ) -> impl Iterator<Item = &'a QueuedRestore> {
-        admitted.iter().filter_map(|id| self.restores.get(id))
+    ) -> impl Iterator<Item = (&'a QueueEntryId, &'a QueuedRestore)> {
+        admitted
+            .iter()
+            .filter_map(|id| Some((id, self.restores.get(id)?)))
     }
 
     /// Whether `admitted` holds an entry that waited for healthy readings: a
@@ -116,7 +118,7 @@ impl WaitingWork {
     /// run protection stopped.
     fn needs_recovery(&self, admitted: &[QueueEntryId]) -> bool {
         self.admitted_restores(admitted)
-            .any(|restore| restore.wake == Wake::Recovery)
+            .any(|(_, restore)| restore.wake == Wake::Recovery)
             || self.admits(admitted, |work| *work == Work::OneShot { after_stop: true })
     }
 
@@ -226,8 +228,9 @@ impl Manager {
 
     /// Grant the `admitted` entries of `work` their start: wake the runners
     /// for a CI job, let each restore's waiting wrapper go and admit one-shot
-    /// runs, using up the recovery epoch `published` for those
-    /// that waited for healthy readings. Return the entries left to mark
+    /// runs, using up the recovery epoch `published` for those that waited
+    /// for healthy readings, which a restore the daemon starts keeps for its
+    /// agent to check. Return the entries left to mark
     /// starting, or none when a stop, reload or unsafe reading withdrew the
     /// readings since; the pass it wakes decides again.
     fn grant_admission(
@@ -243,11 +246,15 @@ impl Manager {
             true => Some(published.and_then(|epoch| self.overload_recovery.consume(epoch))?),
             false => None,
         };
-        let wrappers = (work.admitted_restores(&admitted))
-            .filter(|restore| restore.carrier == Carrier::Wrapper);
-        for restore in wrappers {
-            if let Some(grant) = restore.wake.grant(epoch) {
-                self.agent_queue.grant_restore(&restore.execution, grant);
+        for (id, restore) in work.admitted_restores(&admitted) {
+            match (restore.carrier, restore.wake.grant(epoch)) {
+                (Carrier::Wrapper, Some(grant)) => {
+                    self.agent_queue.grant_restore(&restore.execution, grant);
+                }
+                (Carrier::Daemon, Some(Grant::Recovery(epoch))) => {
+                    self.agent_queue.admit_on_recovery(id, epoch);
+                }
+                (Carrier::Daemon, _) | (Carrier::Wrapper, None) => {}
             }
         }
         Some(
