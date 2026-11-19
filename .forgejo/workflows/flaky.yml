@@ -22,6 +22,8 @@ concurrency:
 env:
   # Rounds of `cargo nextest run`; each takes about as long as ci.yml's test step.
   ROUNDS: "10"
+  # Builds as the seed did; see ci.yml's rust job.
+  CARGO_INCREMENTAL: "1"
 
 jobs:
   hunt:

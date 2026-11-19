@@ -524,7 +524,9 @@ the repository directory; where that disk stalls on fsync, the machine's local
 config sets `TMPDIR` in `[env]` to a tmpfs. Each job runs in a workspace at its
 commit that starts from the `cargo` preset's seed build of `main`, so it has no
 checkout step and rebuilds only what its commit changed; keep settings that
-change Cargo's fingerprints out of the workflows.
+change Cargo's fingerprints out of the workflows. The runner sets `CI`, under
+which Cargo leaves incremental compilation off, so those jobs set
+`CARGO_INCREMENTAL=1` to build as the seed did.
 Code that tests run must not keep a path the seed build compiled in, such as
 `env!("CARGO_BIN_EXE_shoal")`; read it at run time.
 The other jobs and workflows run on the Docker runner, in the image built from

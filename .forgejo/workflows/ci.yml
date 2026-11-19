@@ -35,8 +35,8 @@
 # disposable workspace at the job's commit, so there is no checkout step. The
 # workspace starts from the seed build of main that .shoal.toml's `cargo`
 # preset makes, so a job rebuilds only what its commit changed. Build settings
-# that change Cargo's fingerprints, such as CARGO_INCREMENTAL or a profile's
-# debuginfo, would rebuild everything instead. The undraft and gate jobs only
+# that change Cargo's fingerprints, such as a profile's debuginfo, would
+# rebuild everything instead. The undraft and gate jobs only
 # query the forge and gain nothing from a seeded workspace, so they stay on
 # Docker, as does the musl job, which needs the CI image's Zig and musl
 # targets.
@@ -141,6 +141,11 @@ jobs:
     env:
       # Empty outside PRs.
       PR_BASE: ${{ github.event.pull_request.base.sha }}
+      # The runner sets CI, under which Cargo leaves incremental compilation
+      # off. The seed builds with it on, as Cargo does by default, so without
+      # this every workspace crate would miss the seed's build and compile
+      # from scratch.
+      CARGO_INCREMENTAL: "1"
     steps:
       - name: Toolchain
         run: .forgejo/scripts/check-toolchain.sh
