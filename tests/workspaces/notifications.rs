@@ -155,7 +155,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     let text = String::from_utf8_lossy(&text.stdout);
     assert!(
         text.lines()
-            .all(|line| line.contains("  waiter  ") && line.get(2..3) == Some(":")),
+            .all(|line| line.contains(" waiter  to user") && line.get(2..3) == Some(":")),
         "{text}"
     );
     // Once read, the same conflict is news again.
