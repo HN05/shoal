@@ -1,10 +1,11 @@
 //! The store side of the restarts the daemon took for later: one per space,
-//! with how its agent restarts and who asked, and a generation each record
+//! with the execution of the agent it is for, how that agent restarts and
+//! who asked, and a generation each record
 //! takes anew, which tells a newer request's record from the one it
 //! replaced.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 
 use crate::{model::AgentRestart, time::UnixTime};
 
@@ -12,6 +13,9 @@ use crate::{model::AgentRestart, time::UnixTime};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Recorded {
     pub space_id: SpaceId,
+    /// The execution the agent ran as when the restart was asked for, which
+    /// one a restart runs it as later followed.
+    pub execution: ExecutionId,
     pub restart: AgentRestart,
     /// The space whose process asked for it; none for the user.
     pub asked_by: Option<SpaceId>,
@@ -20,16 +24,17 @@ pub(crate) struct Recorded {
 /// Record `recorded`, replacing what the space had.
 pub(super) fn put(db: &Connection, recorded: &Recorded) -> Result<()> {
     db.execute(
-        "INSERT INTO agent_restarts(space_id,restart,asked_by,recorded_at,generation)
-         VALUES (?1,?2,?3,?4,?5)
+        "INSERT INTO agent_restarts(space_id,restart,asked_by,recorded_at,generation,execution)
+         VALUES (?1,?2,?3,?4,?5,?6)
          ON CONFLICT(space_id) DO UPDATE SET restart=excluded.restart,asked_by=excluded.asked_by,
-            generation=excluded.generation",
+            generation=excluded.generation,execution=excluded.execution",
         params![
             recorded.space_id,
             serde_json::to_string(&recorded.restart)?,
             recorded.asked_by,
             UnixTime::now(),
             uuid::Uuid::new_v4().to_string(),
+            recorded.execution,
         ],
     )?;
     Ok(())
@@ -90,18 +95,19 @@ pub(super) fn find(db: &Connection, id: &SpaceId) -> Result<Option<Recorded>> {
     found.map(recorded).transpose()
 }
 
-const COLUMNS: &str = "space_id,restart,asked_by";
+const COLUMNS: &str = "space_id,execution,restart,asked_by";
 
 /// A row of [`COLUMNS`], with the restart as its JSON.
-type Row = (SpaceId, String, Option<SpaceId>);
+type Row = (SpaceId, ExecutionId, String, Option<SpaceId>);
 
 fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
-    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
 }
 
-fn recorded((space_id, restart, asked_by): Row) -> Result<Recorded> {
+fn recorded((space_id, execution, restart, asked_by): Row) -> Result<Recorded> {
     Ok(Recorded {
         space_id,
+        execution,
         restart: serde_json::from_str(&restart)?,
         asked_by,
     })

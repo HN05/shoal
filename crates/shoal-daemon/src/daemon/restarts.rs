@@ -131,6 +131,7 @@ impl Manager {
         };
         let recorded = Recorded {
             space_id: space.id.clone(),
+            execution: execution.clone(),
             restart: superseding(earlier, restart),
             asked_by,
         };

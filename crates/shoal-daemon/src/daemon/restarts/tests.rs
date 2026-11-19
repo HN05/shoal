@@ -188,6 +188,7 @@ async fn a_restart_waiting_for_the_turn_is_recorded_until_the_turn_ends() {
     assert_eq!(outcome.unwrap(), waits);
     let restart = Recorded {
         space_id: workspace.id.clone(),
+        execution: execution.plan.id.clone(),
         restart: waiting(),
         asked_by: None,
     };
@@ -518,4 +519,61 @@ async fn the_end_of_a_recorded_restart_keeps_an_identical_newer_one() {
         tokio::task::yield_now().await;
     }
     assert_eq!(recorded(&manager).await.len(), 1);
+}
+
+#[tokio::test]
+async fn a_request_whose_restart_went_with_its_space_is_answered() {
+    let (root, manager) = manager().await;
+    let (workspace, _execution) = working(root.path(), &manager).await;
+    let space = SpaceSelector::id(&workspace.id);
+    (manager.set_agent_state(&space, AgentState::Idle, None, None))
+        .await
+        .unwrap();
+    let sequential = AgentRestart {
+        sequential: true,
+        ..Default::default()
+    };
+    let in_line = tokio::spawn({
+        let (manager, space) = (manager.clone(), space.clone());
+        async move { manager.restart_space(None, &space, sequential).await }
+    });
+    while recorded(&manager).await.is_empty() {
+        tokio::task::yield_now().await;
+    }
+    // As the removal of the space deletes its record.
+    (manager.store)
+        .run(|db| Ok(db.execute("DELETE FROM agent_restarts", [])?))
+        .await
+        .unwrap();
+    manager.restart_finished_turns().await.unwrap();
+    let outcome = in_line.await.unwrap().unwrap();
+    assert!(
+        matches!(outcome, RestartOutcome::Skipped { .. }),
+        "{outcome:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_recorded_restart_goes_with_its_agent_rather_than_restart_the_next() {
+    let (root, manager) = manager().await;
+    let (workspace, first) = working(root.path(), &manager).await;
+    let space = SpaceSelector::id(&workspace.id);
+    (manager.restart_space(None, &space, waiting()))
+        .await
+        .unwrap();
+    let ended = first.plan.id.clone();
+    (manager.finish_execution(ended, ExecutionKind::Command, Some(0)))
+        .await
+        .unwrap();
+    let next = manager
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    track(&manager, &workspace, &next.plan.id, "claude", true).await;
+    (manager.set_agent_state(&space, AgentState::Idle, None, None))
+        .await
+        .unwrap();
+    assert!(!manager.act_on_restart(&workspace.id).await);
+    assert!(!*next.stop.borrow());
+    assert!(recorded(&manager).await.is_empty());
 }

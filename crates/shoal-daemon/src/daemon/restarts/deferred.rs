@@ -2,10 +2,10 @@
 //! ends, in the line for sequential ones, and dropping one whose agent
 //! stopped or exited first. A restart that fails with no request left to
 //! answer reaches the coordinator that asked for it, or else the user.
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use anyhow::Result;
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use tokio::sync::oneshot;
 
 use super::{Waiter, answer_all, record::Recorded};
@@ -42,8 +42,10 @@ enum Begun {
 
 impl Manager {
     /// Act on each recorded restart whose agent can restart now, or that
-    /// it ended: one in the line joins it, and any other restarts at once.
+    /// it ended: one in the line joins it, and any other restarts at once;
+    /// and answer the requests whose restart went with its space.
     pub(crate) async fn restart_finished_turns(self: &Arc<Self>) -> Result<()> {
+        self.answer_orphaned_waiters().await?;
         let recorded = self.store.read(|db| super::record::all(db)).await?;
         let agents = self.running_agents().await?;
         for recorded in recorded {
@@ -66,8 +68,10 @@ impl Manager {
         if self.restarts.acting(id) {
             return Ok(Standing::Waits);
         }
+        // The record ends with the agent it is for, which a newer agent of
+        // the space does not take over.
         let theirs: Vec<&RunningAgent> = (agents.iter())
-            .filter(|agent| agent.space_id == *id)
+            .filter(|agent| agent.ran_as(&recorded.execution))
             .collect();
         for agent in &theirs {
             if self.restarting(&agent.execution).await {
@@ -140,7 +144,15 @@ impl Manager {
             return Ok(None);
         };
         let space = self.space(&SpaceSelector::id(id)).await?;
-        let begun = match self.restartable_agent(&space).await? {
+        let agent = match self.restartable_agent(&space).await? {
+            Ok((agent, execution)) if !self.runs_as_recorded(&recorded, &execution).await? => {
+                let reason = "the agent it was for no longer runs".to_owned();
+                let agent = Some(agent);
+                Err(RestartOutcome::Skipped { agent, reason })
+            }
+            agent => agent,
+        };
+        let begun = match agent {
             Err(skipped) => Begun::Ended(Ok(skipped)),
             Ok(_) if recorded.restart.wait && !self.agent_turn_ended(id).await? => {
                 return Ok(None);
@@ -160,6 +172,36 @@ impl Manager {
         self.restarts.set_acting(id, true);
         let waiting = waiters.remove(id).unwrap_or_default();
         Ok(Some((recorded, generation, waiting, begun)))
+    }
+
+    /// Whether `execution`, which a restart of the space of `recorded` picks
+    /// now, runs the agent `recorded` is for, as it did or since a restart.
+    async fn runs_as_recorded(&self, recorded: &Recorded, execution: &ExecutionId) -> Result<bool> {
+        let agents = self.running_agents().await?;
+        Ok((agents.iter())
+            .any(|agent| agent.execution == *execution && agent.ran_as(&recorded.execution)))
+    }
+
+    /// Answer the requests that wait for a restart no longer recorded, which
+    /// went with its space.
+    async fn answer_orphaned_waiters(&self) -> Result<()> {
+        let mut waiters = self.restarts.decisions.lock().await;
+        let recorded: HashSet<SpaceId> = (self.store.read(|db| super::record::all(db)).await?)
+            .into_iter()
+            .map(|recorded| recorded.space_id)
+            .collect();
+        let orphaned: Vec<SpaceId> = (waiters.keys())
+            .filter(|id| !recorded.contains(*id))
+            .cloned()
+            .collect();
+        for id in orphaned {
+            let skipped = RestartOutcome::Skipped {
+                agent: None,
+                reason: "the restart went with its space".into(),
+            };
+            answer_all(waiters.remove(&id).unwrap_or_default(), &Ok(skipped));
+        }
+        Ok(())
     }
 
     /// Forget the restart of `generation` recorded for the space `id`,
