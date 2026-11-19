@@ -176,10 +176,16 @@ impl Scoped for RepositoryMethod {
     ) -> Result<Option<&mut SpaceSelector>> {
         let repository = match self {
             RepositoryMethod::ListRepositories => return Ok(None),
-            // A start's commits, which a caller that starts a space here
-            // carries; they go under a ref of Shoal's own and change no
-            // branch.
-            RepositoryMethod::ReceiveCommits { .. } => return Ok(None),
+            // A start's commits, which another machine carries for a start
+            // there that it confined to the caller's scope; they go under a
+            // ref of Shoal's own and change no branch.
+            RepositoryMethod::ReceiveCommits { .. } => {
+                anyhow::ensure!(
+                    caller.vouched.is_some(),
+                    "only a start from another joined machine carries commits here"
+                );
+                return Ok(None);
+            }
             // Nothing binds it to the registration it resumes, so a scoped
             // caller holds only where it administers without approval; one
             // that waited for a decision would leave the contribution unheld.
@@ -218,3 +224,6 @@ impl Scoped for RepositoryMethod {
         Ok(None)
     }
 }
+
+#[cfg(test)]
+mod tests;
