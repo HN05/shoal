@@ -30,5 +30,11 @@ pub async fn for_clone(repo: &Path, rev: &str) -> Result<Option<String>> {
     Ok((!holding.trim().is_empty()).then(|| commit.to_string()))
 }
 
+/// Fetch the branches of `repo`'s origin, which hold a base [`for_clone`]
+/// named, as a commit they hold.
+pub async fn fetch_origin(repo: &Path) -> Result<()> {
+    super::fetch::remote(repo, ORIGIN).await.map(drop)
+}
+
 #[cfg(test)]
 mod tests;

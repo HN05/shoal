@@ -21,6 +21,8 @@ const AGENT: &str = "[agents.pi]\ncommand = ['sh', '-c', 'exec sleep 600']\n";
 /// agent the hub lacks, by ID.
 struct Machines {
     hub: Base,
+    /// The URL of the hub's repository's origin.
+    origin: String,
     laptop: Base,
     laptop_id: String,
     coordinator: String,
@@ -30,13 +32,14 @@ fn machines() -> Machines {
     // Only the laptop has the agent, which a start there checks.
     let config = "[machine.hub]\nenabled = true\nlisten = \"127.0.0.1:0\"\n";
     let hub = Base::start(home(), config, "app", &[]);
-    give_origin(&hub);
+    let origin = give_origin(&hub);
     let laptop = Base::start(home(), AGENT, "notes", &[]);
     let laptop_id = join(&laptop, &hub, "laptop");
     let coordinator = workspace(&hub, "coordinator");
     ready_at(&laptop, &coordinator, &hub_machine(&hub));
     Machines {
         hub,
+        origin,
         laptop,
         laptop_id,
         coordinator,
@@ -113,4 +116,35 @@ fn a_start_on_another_machine_refuses_a_repository_this_machine_has_not_register
     let listed = machines.laptop.ok(&["list"]);
     let started = (listed.as_array().unwrap().iter()).any(|space| space["name"] == "x");
     assert!(!started, "{listed}");
+}
+
+#[test]
+fn a_start_on_another_machine_bases_on_a_pushed_commit_its_clone_never_fetched() {
+    let machines = machines();
+    machines.laptop.ok(&["repo", "add", &machines.origin]);
+    // A commit the origin gets only after the laptop cloned it.
+    let tree = ["commit-tree", "HEAD^{tree}", "-p", "HEAD", "-m", "later"];
+    let commit = git_with_identity(&machines.hub.repo, &tree);
+    let commit = commit.trim();
+    git(
+        &machines.hub.repo,
+        &[
+            "push",
+            "-q",
+            "origin",
+            &format!("{commit}:refs/heads/later"),
+        ],
+    );
+    git(&machines.hub.repo, &["fetch", "-q", "origin"]);
+    let repo = machines.hub.repo.to_str().unwrap().to_owned();
+    let started = start_in_coordinator(&machines, &[&repo, "--branch", "x", "--base", commit]);
+    assert!(started.status.success(), "{}", printed(&started));
+    let child = on_laptop(&machines, "x", "workspace");
+    let id = child["id"].as_str().unwrap();
+    // Its worktree starts from the commit, which the laptop fetched first.
+    let status = wait_for("the child's preparation", || {
+        let status = machines.laptop.ok(&["status", id]);
+        (status["workspace"]["state"] != "preparing").then_some(status)
+    });
+    assert_eq!(status["workspace"]["state"], "ready", "{status}");
 }

@@ -63,7 +63,9 @@ impl Manager {
 
     /// Take what `launch`, which another joined machine forwarded here,
     /// carries: the repository its origin names, registered as a URL clone
-    /// where this machine has none of it, which the launch then starts in.
+    /// where this machine has none of it, which the launch then starts in,
+    /// with its origin's branches fetched for a base, which one of them
+    /// holds.
     pub(super) async fn take_carried(&self, launch: &mut Launch) -> Result<()> {
         let Some(carried) = launch.forwarded.take() else {
             return Ok(());
@@ -74,6 +76,9 @@ impl Manager {
         );
         if let Some(origin) = carried.origin {
             let repository = (self.register_repository(origin.into(), None, None)).await?;
+            if launch.base.is_some() {
+                crate::git::clone_base::fetch_origin(&repository.path).await?;
+            }
             launch.repository = Some(repository.id.to_string());
         }
         Ok(())
