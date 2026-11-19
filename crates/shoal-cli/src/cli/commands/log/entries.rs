@@ -213,6 +213,7 @@ fn cause(cause: EventCause) -> String {
         EventCause::Parent => "parent removed",
         EventCause::Repository => "repository removed",
         EventCause::ParentCompletion => "parent done",
+        EventCause::Absorbed => "base absorbed",
         EventCause::StartFailed => "start failed",
         EventCause::Blocker => "blocker done",
     }

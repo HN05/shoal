@@ -33,6 +33,9 @@ shoal_states::states!(EventCause {
     /// The work a new workspace's agent waited for is done, and its
     /// worktree builds on that work's branch.
     Blocker => "blocker",
+    /// A space above absorbed the space's parent or base, whose work it
+    /// took over.
+    Absorbed => "absorbed",
 });
 
 /// A Git worktree under a repository's Shoal directory that no workspace owns.

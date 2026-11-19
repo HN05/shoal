@@ -24,7 +24,7 @@ mod revert;
 mod run_approval;
 mod runs;
 pub(crate) mod space;
-mod stack;
+pub(in crate::daemon) mod stack;
 pub(in crate::daemon) mod target;
 mod verdict;
 mod view;
