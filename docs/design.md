@@ -4088,8 +4088,11 @@ parents first, so each opens below its parent again and a copied tree keeps
 its shape, each copy below the copy of its parent. `--no-children` instead
 leaves the spaces below here, moved up one level through the tree's parent
 link, and keeps the branch a staying workspace builds on, so they keep running
-as they were. An imported space's agents, a
-chat's as a workspace's, stay stopped unless the import queues their restores.
+as they were. An import restores the agents of every space it opens, a
+chat's as a workspace's, unless told to leave them stopped, as a move over SSH
+does, so a move behaves the same whatever carries it. Import is a form of
+`shoal restore`, `--from` a package, since it opens removed spaces as a
+restore does.
 Each package uses the lowest format version that reads it, so an older importer
 refuses as newer what it would misread; a chat package from before chats moved
 as their removal records, and a workspace package from before the record held

@@ -109,12 +109,12 @@ impl Remote {
         Ok(())
     }
 
-    /// Import the export in `file` there, queueing its agents' restores when
-    /// it resumes them, and return what the import reported.
+    /// Import the export in `file` there, queueing its agents' restores
+    /// unless it leaves them stopped, and return what the import reported.
     async fn import(&self, file: &Path) -> Result<Reopened, ImportFailure> {
-        let mut args = vec!["move", "import"];
-        if self.restore {
-            args.push("--restore");
+        let mut args = vec!["restore", "--from", "-"];
+        if !self.restore {
+            args.push("--no-agents");
         }
         let input =
             std::fs::File::open(file).map_err(|error| ImportFailure::Refused(error.into()))?;

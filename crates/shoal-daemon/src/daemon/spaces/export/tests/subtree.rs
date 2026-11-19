@@ -33,7 +33,7 @@ async fn tree(manager: &std::sync::Arc<Manager>, repo: &Repository) -> [SpaceId;
     [worker.id, child.id, notes.id]
 }
 
-/// Import the package `bytes` into `repo` as `shoal move import` does: its
+/// Import the package `bytes` into `repo` as `shoal restore --from` does: its
 /// space, then each space it carries, a copy below the copies made before
 /// it.
 async fn import_package(manager: &Manager, repo: &Repository, bytes: &[u8]) -> Vec<SpaceId> {

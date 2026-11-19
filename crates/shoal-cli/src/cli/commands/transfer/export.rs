@@ -207,7 +207,7 @@ impl Output {
         };
         ctx.emit(
             &format!(
-                "Exported {exported_space} to {}; shoal move import opens it {opens}",
+                "Exported {exported_space} to {}; shoal restore --from opens it {opens}",
                 path.display()
             ),
             Exported {

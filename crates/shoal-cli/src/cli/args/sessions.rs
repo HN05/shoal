@@ -1,8 +1,8 @@
 //! Arguments of commands for agent sessions, demos and triggers.
 use shoal_ids::execution_ids::ExecutionId;
-use std::ffi::OsString;
+use std::{ffi::OsString, path::PathBuf};
 
-use clap::Subcommand;
+use clap::{Args, Subcommand};
 
 use crate::{
     agent::Agent,
@@ -29,9 +29,21 @@ pub enum SessionsCommand {
     /// Without a space, restores the current one when it has something to restore; otherwise
     /// picks among stopped work, stopped chats and removed workspaces, or lists them without a
     /// terminal. `--all` restores every space with stopped work whose assignment is not done.
+    ///
+    /// `--from` continues the workspaces and chats shoal move wrote to a file, in the repository
+    /// with the same origin: each space is recorded as removed and opens again under its ID, a
+    /// workspace fetching the default branch when the file builds on commits the repository
+    /// lacks, a chat in the worktree it ran in when that workspace is here, else in the
+    /// repository's checkout, or in root_dir without a repository, and their agents restore. The
+    /// spaces a file carries open after it, parents first, each below its parent. The agents'
+    /// session files go where the agents look for them; a session the file lacks continues only
+    /// on the machine that wrote it, which --keep-sessions and --new-sessions override. `-`
+    /// reads standard input, and a directory each .shoal file in it.
     Restore {
         #[command(flatten)]
         targets: SpaceTargets,
+        #[command(flatten)]
+        import: ImportArgs,
         /// Return the workspace to this checkpoint after keeping its current state in a new
         /// one; without a number, pick one of its checkpoints or list them.
         #[arg(
@@ -48,7 +60,8 @@ pub enum SessionsCommand {
         #[arg(long)]
         forget: bool,
         /// Restore everything but the agents, which stay saved for a later restore: open a
-        /// removed workspace again, or retry a failed setup, whose waiting agent stays queued.
+        /// removed workspace again, or the spaces --from reads, or retry a failed setup, whose
+        /// waiting agent stays queued.
         #[arg(long, conflicts_with_all = ["forget", "now", "focus", "permissions"])]
         no_agents: bool,
         /// Start at once regardless of the agent limits, where each agent
@@ -315,4 +328,38 @@ pub enum DemoCommand {
         #[arg(short = 'w', long)]
         workspace: Option<SpaceSelector>,
     },
+}
+
+// The options of `shoal restore --from`.
+#[derive(Debug, Args)]
+pub struct ImportArgs {
+    /// A file shoal move wrote, a directory of them, or - for standard input; repeatable.
+    #[arg(
+        long,
+        value_name = "FILE",
+        conflicts_with_all = ["space", "all", "checkpoint", "execution", "forget", "now", "focus", "permissions"]
+    )]
+    pub from: Vec<PathBuf>,
+    /// Repository to restore into, when it does not share the written repository's origin.
+    #[arg(short = 'r', long = "repo", requires = "from")]
+    pub repository: Option<String>,
+    /// Continue every agent's session, such as one whose files were copied by hand; refused for
+    /// a copy, whose agents start from forks.
+    #[arg(long, requires = "from", conflicts_with = "new_sessions")]
+    pub keep_sessions: bool,
+    /// Start new sessions even on the machine that wrote the file.
+    #[arg(long, requires = "from", conflicts_with = "keep_sessions")]
+    pub new_sessions: bool,
+}
+
+impl ImportArgs {
+    /// Whether the agents keep their sessions; `None` keeps those on the
+    /// machine that wrote the file or whose files it carries.
+    pub fn sessions(&self) -> Option<bool> {
+        match (self.keep_sessions, self.new_sessions) {
+            (true, _) => Some(true),
+            (_, true) => Some(false),
+            _ => None,
+        }
+    }
 }

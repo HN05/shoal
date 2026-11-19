@@ -1,4 +1,4 @@
-//! Agents' session files that `shoal move import` puts where the agents
+//! Agents' session files that `shoal restore --from` puts where the agents
 //! look for them.
 use shoal_protocol::transcripts::CarriedSessionFile;
 use std::{

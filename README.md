@@ -250,11 +250,11 @@ shoal restore <id>            # Open a removed workspace or chat again
 shoal restore 3 --checkpoint  # Pick one of the workspace's checkpoints
 shoal restore 3 --checkpoint 3 # Return the workspace to checkpoint 3
 shoal move ssh other 3 # Move the workspace or chat to another machine; its agents continue there
-shoal move export 3 | ssh other shoal move import # The same through any pipe
+shoal move export 3 | ssh other shoal restore --from - # The same through any pipe
 shoal move export --repo app --all -o moving # Export every workspace and chat of app, a file each
 shoal move export 3 --keep -o copy.shoal # Export a copy and keep fix-login running here
 shoal move ssh other 3 --keep # Copy fix-login to another machine and keep it running here
-shoal move import moving           # Import every space exported to a directory
+shoal restore --from moving   # Open every space exported to a directory
 shoal pr open                 # Push, then link the branch's open PR or open one
 shoal pr edit --draft         # Change the linked PR's text, labels, reviewers or draft
 shoal pr reviewers            # Users and teams who can review the linked PR
@@ -510,7 +510,7 @@ submodule, or, for an agent's exit or stop, exceed `archive_max_mb`; see [Checkp
 `shoal restore <workspace> --checkpoint <number>` returns an existing workspace
 to one of its checkpoints. `shoal move export <workspace> -o <file>`
 removes a workspace and writes its removal checkpoint and record to a file, and `shoal
-move import <file>` opens it on another machine or the same one, where `shoal restore`
+restore --from <file>` opens it on another machine or the same one and
 continues its agents' sessions from the transcripts the file carries;
 `--new-sessions` starts them over. A chat moves the same way, with the chats
 below it: the export ends it, and the import opens it again under its ID.

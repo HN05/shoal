@@ -659,7 +659,7 @@ shoal cleanup spaces
 shoal cleanup --dry-run
 shoal cleanup caches
 shoal move ssh <host> <workspace> --yes
-shoal move export <workspace> --yes | shoal move import --restore
+shoal move export <workspace> --yes | shoal restore --from -
 ```
 
 Removing a space removes the spaces below it first, held ones included, and
@@ -668,8 +668,9 @@ removes the space in the background; a later failure arrives as a message,
 and `--wait` waits for the removal. A checkpoint keeps HEAD and unsaved files;
 Shoal also takes one when an agent exits or is stopped. `restore <id>` also
 reopens a removed workspace or chat with its agents, below the space it was
-below; an agent restores one whose parent its scope reaches. `cleanup` and
-`move` are as the space's `admin` permission allows; `restore --checkpoint` lists a workspace's checkpoints,
+below; an agent restores one whose parent its scope reaches. `restore --from`
+opens the spaces `shoal move` wrote to a file. `cleanup`, `move` and
+`restore --from` are as the space's `admin` permission allows; `restore --checkpoint` lists a workspace's checkpoints,
 and with a number returns to one after keeping the current state in a new
 checkpoint, refusing while another command runs in the workspace. `cleanup spaces` removes every
 space automatic cleanup would remove without waiting for its idle delay;

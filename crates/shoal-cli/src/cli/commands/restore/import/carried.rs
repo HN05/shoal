@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result};
 
+use super::super::reopen::{self, ReopenedExt};
 use super::{Package, restored_id};
-use crate::cli::commands::restore::reopen::{self, ReopenedExt};
 use crate::{
     cli::{context::Context, ui},
     model::RemovedSpace,

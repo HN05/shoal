@@ -1,5 +1,5 @@
 //! `shoal move export --keep`: write copies of spaces that keep running
-//! here, with copies of the spaces below them, which `shoal move import`
+//! here, with copies of the spaces below them, which `shoal restore --from`
 //! opens as new spaces.
 use std::path::{Path, PathBuf};
 

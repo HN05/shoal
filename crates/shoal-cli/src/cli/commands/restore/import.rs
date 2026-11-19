@@ -1,13 +1,13 @@
-//! `shoal move import`: continue spaces from the packages `shoal move
-//! export` wrote: record each space as removed here and open it again as
+//! `shoal restore --from`: continue spaces from the packages `shoal move`
+//! wrote: record each space as removed here and open it again as
 //! `shoal restore` does, then the spaces that go with it.
-use crate::cli::commands::restore::reopen::ReopenedExt;
+use super::reopen::ReopenedExt;
 use crate::transfer::ManifestExt;
 use crate::transfer::PackagedSpaceExt;
 use shoal_protocol::transcripts::CarriedSessionFile;
 use std::{
     collections::{BTreeMap, BTreeSet},
-    io::BufReader,
+    io::{BufReader, IsTerminal},
     path::{Path, PathBuf},
 };
 
@@ -19,7 +19,7 @@ use crate::client::output::{
 };
 use crate::{
     cli::{
-        commands::restore::reopen,
+        commands::transfer::STANDARD_STREAM,
         context::Context,
         output::{Palette, Style},
         ui,
@@ -31,28 +31,28 @@ use crate::{
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::space_ids::SpaceId;
 
-use super::STANDARD_STREAM;
+use super::reopen;
 
 mod carried;
 
 use carried::CarriedImport;
 
-/// How `shoal move import` opens each space.
-pub(super) struct ImportOptions {
+/// How `shoal restore --from` opens each space.
+pub(in crate::cli::commands) struct ImportOptions {
     /// The repository to import into instead of the one with the export's
     /// origin.
-    pub repository: Option<String>,
+    pub(in crate::cli::commands) repository: Option<String>,
     /// Whether the agents keep their sessions; `None` keeps those on the
     /// machine that exported the space or whose files it carries.
-    pub sessions: Option<bool>,
+    pub(in crate::cli::commands) sessions: Option<bool>,
     /// Whether to queue the restores of the agents the export stopped.
-    pub restore: bool,
+    pub(in crate::cli::commands) restore: bool,
 }
 
-/// `shoal move import`: continue the spaces exported to `files`, or to the
-/// `.shoal` files in the directories among them, as `options` says. A
+/// `shoal restore --from`: continue the spaces exported to `files`, or to
+/// the `.shoal` files in the directories among them, as `options` says. A
 /// directory or several files import each space and report every result.
-pub(super) async fn import(
+pub(in crate::cli::commands) async fn import(
     ctx: &Context,
     files: Vec<PathBuf>,
     options: ImportOptions,
@@ -191,7 +191,7 @@ fn import_files(files: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
     for file in files {
         ensure!(
             file.as_os_str() != STANDARD_STREAM,
-            "standard input holds one export; import - on its own"
+            "standard input holds one export; restore --from - on its own"
         );
         if !file.is_dir() {
             found.push(file);
@@ -346,9 +346,14 @@ fn sessions_here(manifest: &Manifest, sessions: Option<bool>) -> Sessions {
     manifest.sessions_on(crate::process::machine::id().as_deref(), sessions)
 }
 
-/// Read the export in `file`, or on standard input for `-`.
+/// Read the export in `file`, or on standard input for `-`, which must
+/// not be a terminal, since no one types an archive.
 fn read_import(file: &Path) -> Result<Import> {
     if file.as_os_str() == STANDARD_STREAM {
+        ensure!(
+            !std::io::stdin().is_terminal(),
+            "--from - reads a package piped in; name its file instead"
+        );
         return Import::read(&mut std::io::stdin().lock());
     }
     let input = std::fs::File::open(file).with_context(|| format!("open {}", file.display()))?;

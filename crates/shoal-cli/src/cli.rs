@@ -348,6 +348,11 @@ impl Command {
                 command:
                     ConfigCommand::Install { .. } | ConfigCommand::Reset | ConfigCommand::Setup(_),
             }) => Some(PermissionKey::Admin),
+            Command::Sessions(SessionsCommand::Restore { import, .. })
+                if !import.from.is_empty() =>
+            {
+                Some(PermissionKey::Admin)
+            }
             Command::Create(CreateCommand::Start(args)) if args.now => Some(PermissionKey::Limits),
             Command::Sessions(SessionsCommand::Restore { now, focus, .. }) if *now || *focus => {
                 Some(PermissionKey::Limits)

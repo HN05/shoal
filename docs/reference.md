@@ -4613,15 +4613,15 @@ everything that moved.
 ```sh
 shoal move export 7 -o topic.shoal             # remove workspace 7 and write it to a file
 shoal move export 5 -o plan.shoal              # end the chat 5 and write it to a file
-shoal move import topic.shoal                  # continue it in the repository with the same origin
-shoal move export 7 | ssh other shoal move import --restore      # agents continue there
+shoal restore --from topic.shoal               # continue it in the repository with the same origin
+shoal move export 7 | ssh other shoal restore --from -      # agents continue there
 shoal move ssh other 5                         # the same, once ssh reaches Shoal there
 shoal move export --repo app --all -o moving   # end every space of app, a file per tree
 shoal move export 7 8 -o moving                # remove both, a file each unless 8 is below 7
 shoal move export 7 --no-children -o topic.shoal  # leave the spaces below 7 here, one level up
 shoal move export 7 --keep -o copy.shoal       # keep workspace 7 running and write a copy of it
 shoal move ssh other 7 --keep                  # keep workspace 7 running and copy it there
-shoal move import moving                       # continue every space exported to moving
+shoal restore --from moving                    # continue every space exported to moving
 ```
 
 `shoal move export [space] -o <file>` ends a workspace or chat here and writes
@@ -4698,14 +4698,14 @@ space it was below, and a workspace copy that builds on its parent's branch
 builds on the copy's branch. Forks get session IDs of their own, so
 the original conversations never change. A copy of an earlier checkpoint warns at
 export and import that the agents' conversations describe work its files lack,
-and tells the agents so. Import refuses `--keep-sessions` for a copy.
+and tells the agents so. `restore --from` refuses `--keep-sessions` for a copy.
 
-`shoal move import <file>` reads an export, or standard input without a file or for
-`-`, refusing a terminal and an export another Shoal version wrote, and continues it in the registered repository with the
+`shoal restore --from <file>` reads an export, or standard input for `-`,
+refusing a terminal and an export another Shoal version wrote, and continues it in the registered repository with the
 exported repository's origin, or the one `--repo` names, or a chat without a
 repository in `root_dir`. A space the file carries goes to the repository
 with its own origin, or where the file goes when it is of the file's
-repository. Given several files, or a
+repository. Given `--from` several times, or a
 directory, whose `.shoal` files it reads in name order, it imports each one, going
 on after a failure, lists every space it continued and exits 1 naming each file it
 could not import or whose `hooks.post_setup` failed. The export carries the files of each
@@ -4726,8 +4726,7 @@ space puts them in place, as its own
 configuration describes the agents, and an export of that record carries them
 again. Files that restore cannot put in place, as in a development build
 without `SHOAL_DEV_USER_FILES`, stay for the space's next removal record.
-`shoal restore` continues its agents' sessions,
-and `--restore` queues the restores of the agents the export stopped, as `shoal
+The import queues the restores of the agents the export stopped, as `shoal
 restore` does, under the importing machine's agent limits. Every reopen, by import or
 `shoal restore`, trusts the workspace's path for the agents that resume there. An agent
 without a kept session `shoal restore` starts as `shoal start --in` starts a new
@@ -4740,7 +4739,7 @@ repository. The spaces a file carries open again after its space the same way,
 parents first, each below its parent and each workspace set up before the
 spaces below it; one that cannot open fails the import, which goes on with the
 rest and names each failure, so `shoal move ssh` keeps the spaces here, and its
-record, where the import made one, stays for `shoal restore <id>`. Without `--restore`, the agents of every imported space
+record, where the import made one, stays for `shoal restore <id>`. With `--no-agents`, the agents of every imported space
 stay stopped and the report names the `shoal restore` that restores them.
 An import is refused, before it records anything, when a space with the ID of
 the package's space, or of a space it carries, is already here, or a carried
@@ -4751,7 +4750,7 @@ anything of the space reports the error code `not_imported`. Workspace
 processes can neither export nor import.
 
 `shoal move ssh <host> [space]...`, or `--repo <repository> --all`, moves each
-space with `ssh <host> shoal --json move import --restore`, after
+space with `ssh <host> shoal --json restore --from -`, after
 `ssh <host> shoal repo ls` shows Shoal answers there; when it does not, nothing
 ends. `--shoal <path>` names the program there when the remote shell's `PATH`
 lacks it, and `--no-restore` leaves the agents stopped there, a chat's as a

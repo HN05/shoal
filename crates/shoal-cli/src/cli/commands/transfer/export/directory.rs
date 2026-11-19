@@ -109,7 +109,7 @@ impl<'a> DirectoryReport<'a> {
         };
         let summary = if failed == 0 {
             format!(
-                "Exported {spaces}{exported} spaces to {shown}; shoal move import {shown} opens them {opens}"
+                "Exported {spaces}{exported} spaces to {shown}; shoal restore --from {shown} opens them {opens}"
             )
         } else {
             format!(

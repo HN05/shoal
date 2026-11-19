@@ -60,7 +60,7 @@ async fn chat_running(name: &str, script: &str) -> (tempfile::TempDir, Arc<Manag
     (root, manager, pid)
 }
 
-/// What `shoal move import` sends to import the carried chat `chat` into
+/// What `shoal restore --from` sends to import the carried chat `chat` into
 /// `repository`, or into none.
 fn chat_import(repository: Option<&crate::model::Repository>, chat: RemovedSpace) -> SpaceImport {
     SpaceImport {

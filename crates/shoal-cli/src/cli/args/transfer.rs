@@ -10,7 +10,7 @@ use shoal_protocol::space_names::SpaceSelector;
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum MoveCommand {
-    /// End a workspace or chat here and write it to a file that shoal move import continues on another machine.
+    /// End a workspace or chat here and write it to a file that shoal restore --from continues on another machine.
     ///
     /// A workspace is removed: the file holds its checkpoint, as a Git bundle without the
     /// commits of the default branch, its base, links and stopped agents. A chat's agent is
@@ -24,24 +24,12 @@ pub enum MoveCommand {
     /// be exported. --no-children leaves the spaces below here instead, moved up one level.
     /// --keep leaves the spaces running and writes copies of them instead.
     Export(ExportArgs),
-    /// Continue workspaces and chats shoal move export wrote, in the repository with the same origin.
-    ///
-    /// It puts the agents' session files where the agents look for them; a session the file
-    /// lacks continues only on the machine that exported it. --keep-sessions and --new-sessions
-    /// override that. Each space opens again under its ID, as shoal restore opens a removed
-    /// one: a workspace fetching the default branch when the file builds on commits the
-    /// repository lacks, a chat in the worktree it ran in when that workspace is here, else in
-    /// the repository's checkout, or in root_dir without a repository. The spaces a file
-    /// carries open after it, parents first, each below its parent. shoal restore restores
-    /// their agents. Without a file, or with `-`, it reads from standard input, which must not
-    /// be a terminal. A directory imports each .shoal file in it.
-    Import(ImportArgs),
     /// Move workspaces and chats to another machine's Shoal over SSH, where their agents continue.
     ///
-    /// Runs shoal move export | ssh HOST shoal move import --restore for each space, once ssh
+    /// Runs shoal move export | ssh HOST shoal restore --from - for each space, once ssh
     /// reaches Shoal there; nothing ends when it does not. The other machine needs a repository
     /// with the same origin. A workspace whose import fails stays removed here, and shoal
-    /// restore opens it again; a chat's file stays here for shoal move import. --keep copies the
+    /// restore opens it again; a chat's file stays here for shoal restore --from. --keep copies the
     /// spaces instead and leaves them running here.
     Ssh(SshArgs),
 }
@@ -62,7 +50,7 @@ pub struct ExportArgs {
     #[arg(short, long, required_if_eq("all", "true"))]
     pub output: Option<PathBuf>,
     /// Leave the spaces running and export copies of them and of the spaces below them, which
-    /// shoal move import opens as new spaces: a workspace at a new checkpoint on a branch of its
+    /// shoal restore --from opens as new spaces: a workspace at a new checkpoint on a branch of its
     /// own, or a chat whose agent starts from a fork of its session.
     #[arg(long)]
     pub keep: bool,
@@ -75,26 +63,6 @@ pub struct ExportArgs {
     pub no_children: bool,
     #[command(flatten)]
     pub confirmation: ConfirmationArgs,
-}
-
-// Arguments of `shoal move import`.
-#[derive(Debug, Args)]
-pub struct ImportArgs {
-    /// Export files or directories of them; defaults to standard input.
-    pub files: Vec<PathBuf>,
-    /// Repository to import into, when it does not share the exported repository's origin.
-    #[arg(short = 'r', long = "repo")]
-    pub repository: Option<String>,
-    /// Continue every stopped agent's session, such as one whose files were copied by hand;
-    /// refused for a copy, whose agents start from forks.
-    #[arg(long, conflicts_with = "new_sessions")]
-    pub keep_sessions: bool,
-    /// Start new sessions even on the machine that exported the space.
-    #[arg(long, conflicts_with = "keep_sessions")]
-    pub new_sessions: bool,
-    /// Queue the restores of the agents the export stopped, as shoal restore does.
-    #[arg(long)]
-    pub restore: bool,
 }
 
 // Arguments of `shoal move ssh`.

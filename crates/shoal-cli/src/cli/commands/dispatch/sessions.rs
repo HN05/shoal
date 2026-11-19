@@ -22,6 +22,16 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             workspace,
         } => demo::run(&ctx, command, name, workspace).await,
         SessionsCommand::Restore {
+            import, no_agents, ..
+        } if !import.from.is_empty() => {
+            let options = restore::import::ImportOptions {
+                sessions: import.sessions(),
+                repository: import.repository,
+                restore: !no_agents,
+            };
+            restore::import::import(&ctx, import.from, options).await
+        }
+        SessionsCommand::Restore {
             targets,
             checkpoint,
             execution,
@@ -33,6 +43,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             queue_entry,
             opened_in,
             close_in,
+            import: _,
         } => {
             if let Some(host) = opened_in {
                 agents::queued::record_place(&ctx, host, &targets).await;

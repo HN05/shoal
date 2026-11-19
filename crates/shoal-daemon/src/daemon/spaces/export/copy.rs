@@ -1,6 +1,6 @@
 //! Copies of spaces that keep running: a space with its agents and the
 //! sessions they reported, a workspace at a checkpoint, with copies of the
-//! spaces below it that the package carries, which `shoal move import`
+//! spaces below it that the package carries, which `shoal restore --from`
 //! opens as new spaces whose agents start from forks.
 use crate::model::EventCause;
 use anyhow::Result;

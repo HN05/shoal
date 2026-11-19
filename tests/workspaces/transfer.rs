@@ -61,11 +61,11 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     assert_eq!(agents[0]["record"]["moved"], true);
     assert!(!path.exists());
     // The repository has no origin to select the importing one by.
-    let unselected = fixture.run(&["move", "import", file]);
+    let unselected = fixture.run(&["restore", "--from", file, "--no-agents"]);
     assert!(!unselected.status.success());
 
     let repo = fixture.repo.to_str().unwrap();
-    let imported = fixture.ok(&["move", "import", file, "--repo", repo]);
+    let imported = fixture.ok(&["restore", "--from", file, "--repo", repo, "--no-agents"]);
     assert_eq!(imported["space"]["name"], "moving");
     assert_eq!(imported["space"]["state"], "ready");
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
@@ -126,7 +126,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     );
     let mut import = fixture
         .command()
-        .args(["--json", "move", "import"])
+        .args(["--json", "restore", "--from", "-", "--no-agents"])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -216,28 +216,14 @@ fn import_restore_queues_the_agents_the_export_stopped_once_post_setup_succeeds(
 
     // A failed post-setup leaves the agents stopped.
     fs::write(&armed, "").unwrap();
-    let failed = fixture.run(&[
-        "move",
-        "import",
-        file.to_str().unwrap(),
-        "--repo",
-        repo,
-        "--restore",
-    ]);
+    let failed = fixture.run(&["restore", "--from", file.to_str().unwrap(), "--repo", repo]);
     assert!(!failed.status.success(), "{}", printed(&failed));
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
     assert!(path.exists() && !path.join("post-setup-done").exists());
 
     fs::remove_file(&armed).unwrap();
     let file = export("second.shoal");
-    let imported = fixture.ok(&[
-        "move",
-        "import",
-        file.to_str().unwrap(),
-        "--repo",
-        repo,
-        "--restore",
-    ]);
+    let imported = fixture.ok(&["restore", "--from", file.to_str().unwrap(), "--repo", repo]);
     let queued = imported["queued"]["queued"].as_array().unwrap();
     assert_eq!(queued.len(), 1, "{imported}");
     wait_until("agent restarted", || {
@@ -487,7 +473,7 @@ fn wrap_imports(fixture: &Fixture, before: &str, after: &str) {
         bin.join("ssh"),
         format!(
             "#!/bin/sh\n\
-             case \"$*\" in *'move import'*) \
+             case \"$*\" in *'restore --from'*) \
              {before}\n'{ssh}' \"$@\"; status=$?\n{after}\nexit $status;; \
              esac\n\
              exec '{ssh}' \"$@\"\n",
@@ -697,11 +683,12 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
         .command()
         .args([
             "--json",
-            "move",
-            "import",
+            "restore",
+            "--from",
             directory.to_str().unwrap(),
             "--repo",
             repo,
+            "--no-agents",
         ])
         .output()
         .unwrap();
@@ -935,7 +922,14 @@ fn export_finishes_when_its_terminal_ends_after_the_removal() {
 
     wait_until("export written", || file.exists());
     let repo = fixture.repo.to_str().unwrap();
-    let imported = fixture.ok(&["move", "import", file.to_str().unwrap(), "--repo", repo]);
+    let imported = fixture.ok(&[
+        "restore",
+        "--from",
+        file.to_str().unwrap(),
+        "--repo",
+        repo,
+        "--no-agents",
+    ]);
     assert_eq!(imported["space"]["name"], "cut");
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
 }
@@ -989,7 +983,7 @@ fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
     // The import trusts the workspace's path for the agent it resumes there.
     let config = fixture.root.path().join(".claude.json");
     fs::remove_file(&config).unwrap();
-    let imported = fixture.ok(&["move", "import", file, "--repo", repo]);
+    let imported = fixture.ok(&["restore", "--from", file, "--repo", repo, "--no-agents"]);
     assert_eq!(imported["warnings"], serde_json::json!([]));
     // A machine without an ID cannot tell it exported the workspace.
     if exported["manifest"]["sessions"]["machine"].is_null() {
@@ -1017,7 +1011,15 @@ fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
         exported["manifest"]["sessions"]["last_sessions"][0]["session"], "carried-session",
         "{exported}"
     );
-    fixture.ok(&["move", "import", file, "--repo", repo, "--new-sessions"]);
+    fixture.ok(&[
+        "restore",
+        "--from",
+        file,
+        "--repo",
+        repo,
+        "--new-sessions",
+        "--no-agents",
+    ]);
     resume();
     assert!(!path.join("resumed").exists());
 }
@@ -1217,7 +1219,7 @@ fn import_continues_the_chat(fixture: &Fixture, file: &str, id: &str) {
     let output = fixture
         .command()
         .env("SHOAL_DEV_USER_FILES", "1")
-        .args(["move", "import", file, "--repo", repo])
+        .args(["restore", "--from", file, "--repo", repo, "--no-agents"])
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -1341,7 +1343,7 @@ fn a_workspace_moves_with_the_chat_in_its_worktree() {
     );
     assert_eq!(fixture.ok(&["list", "--chats"]), serde_json::json!([]));
     let repo = fixture.repo.to_str().unwrap();
-    let imported = fixture.run(&["move", "import", file, "--repo", repo]);
+    let imported = fixture.run(&["restore", "--from", file, "--repo", repo, "--no-agents"]);
     assert!(imported.status.success(), "{}", printed(&imported));
 
     // It opens again under its ID in the worktree, stopped.
@@ -1376,7 +1378,7 @@ fn a_chat_from_a_worktree_moves_back_into_it() {
     fs::remove_file(home.join("in-worktree")).unwrap();
 
     let repo = fixture.repo.to_str().unwrap();
-    let imported = fixture.run(&["move", "import", file, "--repo", repo]);
+    let imported = fixture.run(&["restore", "--from", file, "--repo", repo, "--no-agents"]);
     assert!(imported.status.success(), "{}", printed(&imported));
     restore_here(&fixture, &id);
     assert!(home.join("in-worktree").exists());
@@ -1585,7 +1587,15 @@ fn import_without_opening(fixture: &Fixture, file: &str, branch: &str) {
     let imported = fixture
         .command()
         .env("SHOAL_DEV_USER_FILES", "1")
-        .args(["--json", "move", "import", file, "--repo", repo])
+        .args([
+            "--json",
+            "restore",
+            "--from",
+            file,
+            "--repo",
+            repo,
+            "--no-agents",
+        ])
         .output()
         .unwrap();
     assert!(!imported.status.success(), "{}", printed(&imported));
@@ -1639,7 +1649,7 @@ fn exporting_a_parent_takes_its_children_which_import_opens_below_it() {
     assert!(!parent.exists() && !child.exists());
 
     let repo = fixture.repo.to_str().unwrap();
-    let imported = fixture.run(&["move", "import", file, "--repo", repo]);
+    let imported = fixture.run(&["restore", "--from", file, "--repo", repo, "--no-agents"]);
     assert!(imported.status.success(), "{}", printed(&imported));
     assert_eq!(fs::read_to_string(child.join("notes")).unwrap(), "draft\n");
     let status = fixture.ok(&["status", &ids[1]]);
@@ -1673,7 +1683,7 @@ fn an_import_whose_carried_space_fails_to_open_fails() {
     fs::write(&armed, "").unwrap();
 
     let repo = fixture.repo.to_str().unwrap();
-    let imported = fixture.run(&["move", "import", file, "--repo", repo]);
+    let imported = fixture.run(&["restore", "--from", file, "--repo", repo, "--no-agents"]);
 
     assert!(!imported.status.success(), "{}", printed(&imported));
     let stderr = String::from_utf8_lossy(&imported.stderr);

@@ -1,5 +1,5 @@
 //! Moving a space to another Shoal: a package with what continues the space
-//! there, which `shoal move import` opens. Every package holds the space's
+//! there, which `shoal restore --from` opens. Every package holds the space's
 //! removal record, its agents with their sessions and the sessions' files;
 //! a workspace's also holds a Git bundle of its checkpoint.
 use crate::execution::recovery::LastSessionExt;
@@ -110,7 +110,7 @@ pub fn session_sources(
 
 /// Write the package `manifest` describes, spaces of `repos` or of none,
 /// with their agents' session files `sessions` and a bundle of each
-/// workspace's checkpoint, to the new file `path` for `shoal move import`,
+/// workspace's checkpoint, to the new file `path` for `shoal restore --from`,
 /// with a warning for each session left out because a file of it cannot
 /// be read; a failure leaves no partial file and an existing one is never
 /// replaced.

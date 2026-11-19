@@ -31,6 +31,7 @@ pub(super) async fn run(
 
 pub(super) mod agents;
 mod checkpoints;
+pub(super) mod import;
 pub(super) mod reopen;
 mod targets;
 

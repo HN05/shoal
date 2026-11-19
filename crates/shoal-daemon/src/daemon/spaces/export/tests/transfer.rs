@@ -112,7 +112,7 @@ pub(super) async fn import(
 }
 
 /// Import the workspace `import` packages as `workspace` says, as `shoal
-/// move import` does, which keeps the sessions on the exporting machine.
+/// restore --from` does, which keeps the sessions on the exporting machine.
 async fn import_here(
     manager: &Manager,
     repo: &Repository,
@@ -139,7 +139,7 @@ async fn import_record(
     }
 }
 
-/// What `shoal move import` sends to import the workspace `import`
+/// What `shoal restore --from` sends to import the workspace `import`
 /// packages into `repo` as `workspace`, with `session_files`.
 pub(super) fn workspace_import(
     repo: &Repository,

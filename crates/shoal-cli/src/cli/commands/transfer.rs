@@ -1,8 +1,7 @@
 //! `shoal move`: moving spaces to another Shoal, where `export` ends a space
-//! here, or copies one, and writes it to a file, `import` continues it from
-//! one and `ssh` pipes one into the other.
+//! here, or copies one, and writes it to a file, which `shoal restore
+//! --from` continues, and `ssh` pipes one into the other.
 mod export;
-mod import;
 mod ssh;
 
 use std::{io::IsTerminal, path::PathBuf};
@@ -10,12 +9,12 @@ use std::{io::IsTerminal, path::PathBuf};
 use anyhow::{Context as _, Result, ensure};
 
 use crate::cli::{
-    args::transfer::{ExportArgs, ImportArgs, MoveCommand},
+    args::transfer::{ExportArgs, MoveCommand},
     context::Context,
 };
 
 /// The file name that reads or writes the standard streams.
-const STANDARD_STREAM: &str = "-";
+pub(super) const STANDARD_STREAM: &str = "-";
 
 pub(super) async fn run(ctx: &Context, command: MoveCommand) -> Result<i32> {
     match command {
@@ -54,31 +53,6 @@ pub(super) async fn run(ctx: &Context, command: MoveCommand) -> Result<i32> {
                 false => export::export(ctx, space, file, confirmation.yes, no_children).await,
             }
         }
-        MoveCommand::Import(ImportArgs {
-            files,
-            repository,
-            keep_sessions,
-            new_sessions,
-            restore,
-        }) => {
-            let sessions = if keep_sessions {
-                Some(true)
-            } else if new_sessions {
-                Some(false)
-            } else {
-                None
-            };
-            let options = import::ImportOptions {
-                repository,
-                sessions,
-                restore,
-            };
-            let files = match files.is_empty() {
-                true => vec![standard_input()?],
-                false => files,
-            };
-            import::import(ctx, files, options).await
-        }
         MoveCommand::Ssh(args) => ssh::run(ctx, args).await,
     }
 }
@@ -88,17 +62,7 @@ pub(super) async fn run(ctx: &Context, command: MoveCommand) -> Result<i32> {
 fn standard_output() -> Result<PathBuf> {
     ensure!(
         !std::io::stdout().is_terminal(),
-        "the export is an archive, not text; name a file with -o, or pipe it, as in shoal move export | ssh host shoal move import"
-    );
-    Ok(PathBuf::from(STANDARD_STREAM))
-}
-
-/// Standard input for an import without a file, refusing a terminal, which
-/// cannot type an archive.
-fn standard_input() -> Result<PathBuf> {
-    ensure!(
-        !std::io::stdin().is_terminal(),
-        "name the export file to import, or pipe one in"
+        "the export is an archive, not text; name a file with -o, or pipe it, as in shoal move export | ssh host shoal restore --from -"
     );
     Ok(PathBuf::from(STANDARD_STREAM))
 }
