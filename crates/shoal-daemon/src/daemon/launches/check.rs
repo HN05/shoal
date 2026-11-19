@@ -143,10 +143,7 @@ impl Manager {
 /// default mode starts. One whose mode a terminal has yet to pick decides
 /// none.
 fn decides_kind(launch: &Launch) -> bool {
-    launch.mode.is_some()
-        || launch.chat
-        || launch.setup.is_some()
-        || launches::fitting_kind(launch).is_some()
+    launch.mode.is_some() || launch.setup.is_some() || launches::fitting_kind(launch).is_some()
 }
 
 /// The existing workspace `launch` names with `--in`, once named by ID.

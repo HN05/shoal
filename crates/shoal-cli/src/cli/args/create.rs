@@ -332,7 +332,6 @@ impl StartArgs {
             skip_setup: self.creation.skip_setup,
             disposable: self.creation.disposable,
             in_workspace: self.in_workspace.clone().map(SpaceChoice::from),
-            chat: false,
             mode: self.mode.clone(),
             agent: self.agent.clone(),
             model: self.model.clone().into(),

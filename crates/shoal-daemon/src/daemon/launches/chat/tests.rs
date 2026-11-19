@@ -16,7 +16,7 @@ async fn a_chat_launch_queues_its_agent_with_its_prompt() {
     manager.publish_config(global_config("[agents.claude]\ncommand = ['sh']\n"));
     let launch = Launch {
         target: Some(StartTarget::Repository(repo.id.to_string())),
-        chat: true,
+        mode: Some("chat".into()),
         name: Some("prompted talk".into()),
         agent: Some("claude".into()),
         prompt: Some("Set up the repository".into()),
@@ -57,7 +57,7 @@ async fn a_chat_run_here_leaves_its_starting_agent_to_its_caller() {
     manager.publish_config(global_config("[agents.claude]\ncommand = ['sh']\n"));
     let launch = Launch {
         target: Some(StartTarget::Repository(repo.id.to_string())),
-        chat: true,
+        mode: Some("chat".into()),
         name: Some("talk here".into()),
         agent: Some("claude".into()),
         here: true,
@@ -107,7 +107,7 @@ async fn a_launched_chat_is_recorded_with_its_issue_before_its_agent_starts() {
     let repo = offline_machine(&manager, &temp).await;
     let launch = Launch {
         target: Some(StartTarget::Repository(repo.id.to_string())),
-        chat: true,
+        mode: Some("chat".into()),
         name: Some("planning".into()),
         agent: Some("claude".into()),
         issue: Some(IssueChoice::Named("316".parse().unwrap())),
@@ -179,7 +179,7 @@ async fn a_chat_on_an_issue_nothing_can_resolve_is_refused() {
     let repo = manager.register_repository(path, None, None).await.unwrap();
     let launch = Launch {
         target: Some(StartTarget::Repository(repo.id.to_string())),
-        chat: true,
+        mode: Some("chat".into()),
         name: Some("planning".into()),
         agent: Some("claude".into()),
         issue: Some(IssueChoice::Named("316".parse().unwrap())),

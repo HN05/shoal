@@ -13,9 +13,8 @@ use crate::{
     protocol::ConfigTarget,
 };
 
-/// The kind of space `launch` creates in `mode`, which must exist unless
-/// the launch asks for a chat, and whether `mode` starts it in a
-/// repository. A setup starts where [`setup_kind`] says, and the default
+/// The kind of space `launch` creates in `mode`, which must exist, and
+/// whether `mode` starts it in a repository. A setup starts where [`setup_kind`] says, and the default
 /// mode always exists and always starts in a workspace, so neither reads
 /// settings. In the existing workspace the launch names, the mode's kind
 /// decides whether the agent is the workspace's worker or a chat in its
@@ -29,18 +28,14 @@ pub async fn launch_kind(
         return Ok(setup_kind(setup));
     }
     if let Some(workspace) = launch_workspace(launch) {
-        let kind = kind_in_workspace(reads, launch, workspace, mode).await?;
+        let kind = kind_in_workspace(reads, workspace, mode).await?;
         return Ok((kind, true));
     }
-    if *mode == ModeName::DEFAULT && !launch.chat {
+    if *mode == ModeName::DEFAULT {
         return Ok((SpaceKind::Workspace, true));
     }
     let settings = launch_settings(reads, launch).await?;
-    let found = modes::get(&settings.modes, mode);
-    if launch.chat {
-        return Ok((SpaceKind::Chat, found.map_or(true, |mode| mode.repository)));
-    }
-    let found = found?;
+    let found = modes::get(&settings.modes, mode)?;
     Ok((found.kind, found.repository))
 }
 
@@ -54,13 +49,11 @@ fn setup_kind(setup: Setup) -> (SpaceKind, bool) {
     }
 }
 
-/// The role of the agent `launch` starts in `mode` in `workspace`: its
+/// The role of the agent a launch starts in `mode` in `workspace`: its
 /// worker for a mode that starts in a workspace, else a chat in its
-/// worktree, as for a launch that asks for a chat whatever the mode. A mode
-/// without a repository is refused.
+/// worktree. A mode without a repository is refused.
 async fn kind_in_workspace(
     reads: &impl LaunchReads,
-    launch: &Launch,
     workspace: &SpaceSelector,
     mode: &ModeName,
 ) -> Result<SpaceKind> {
@@ -72,10 +65,7 @@ async fn kind_in_workspace(
         found.repository,
         "mode {mode} starts a chat without a repository, which --in cannot"
     );
-    Ok(match launch.chat {
-        true => SpaceKind::Chat,
-        false => found.kind,
-    })
+    Ok(found.kind)
 }
 
 /// The settings whose modes decide the kind of `launch`: those of the

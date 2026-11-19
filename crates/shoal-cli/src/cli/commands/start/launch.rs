@@ -107,10 +107,7 @@ pub(in crate::cli::commands::start) async fn chat(
     args: StartArgs,
     (mode, in_repository): (ModeChoice, bool),
 ) -> Result<i32> {
-    let mut launch = Launch {
-        chat: true,
-        ..located_launch(ctx, &args).await?
-    };
+    let mut launch = located_launch(ctx, &args).await?;
     if ctx.interactive() && in_repository {
         name_repository(ctx, &mut launch).await?;
     }

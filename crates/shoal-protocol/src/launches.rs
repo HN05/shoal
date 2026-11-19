@@ -63,9 +63,6 @@ pub struct Launch {
     /// its worker, or a chat in its worktree.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "in")]
     pub in_workspace: Option<SpaceChoice>,
-    /// Start in a chat whatever the mode's kind.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub chat: bool,
     /// The mode the agent starts in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<ModeName>,

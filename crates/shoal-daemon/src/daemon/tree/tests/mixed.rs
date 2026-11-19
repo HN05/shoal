@@ -454,7 +454,7 @@ async fn a_scoped_chat_starts_chats_only_in_the_worktrees_of_its_tree() {
             in_workspace: Some(shoal_protocol::launches::SpaceChoice::Space(
                 SpaceSelector::id(&workspace.id),
             )),
-            chat: true,
+            mode: Some("chat".into()),
             name: Some("auditing".into()),
             agent: Some("claude".into()),
             ..Default::default()

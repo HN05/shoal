@@ -55,7 +55,7 @@ pub fn ensure_in_fits(launch: &Launch) -> Result<()> {
     if let Some(mode) = &launch.mode {
         config::modes::ensure_startable(mode)?;
     }
-    if launch.mode == Some(ModeName::DEFAULT) && !launch.chat {
+    if launch.mode == Some(ModeName::DEFAULT) {
         ensure_worker_fits(launch)?;
     }
     let repository =
@@ -165,16 +165,11 @@ pub fn names_repository(launch: &Launch) -> Result<bool> {
     })
 }
 
-/// The mode without one named: setup for a setup, chat for a start that
-/// asks for a chat, whose agent the worker mode would not tell it is one,
-/// else the worker.
+/// The mode without one named: setup for a setup, else the worker.
 pub fn default_mode(launch: &Launch) -> ModeName {
-    if launch.setup.is_some() {
-        return ModeName::SETUP;
-    }
-    match launch.chat {
-        true => ModeName::CHAT,
-        false => ModeName::DEFAULT,
+    match launch.setup {
+        Some(_) => ModeName::SETUP,
+        None => ModeName::DEFAULT,
     }
 }
 

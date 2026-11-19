@@ -21,7 +21,7 @@ async fn machine(manager: &Manager, temp: &tempfile::TempDir) -> Repository {
 fn chat_launch(repo: &Repository) -> Launch {
     Launch {
         target: Some(StartTarget::Repository(repo.id.to_string())),
-        chat: true,
+        mode: Some("chat".into()),
         agent: Some("claude".into()),
         ..Launch::default()
     }

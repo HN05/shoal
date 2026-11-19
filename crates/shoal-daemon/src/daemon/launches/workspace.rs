@@ -257,7 +257,6 @@ fn as_chat(launch: &Launch, shape: &Shape, repo: &Repository) -> Result<Placed> 
     let chat = Launch {
         target: None,
         repository: Some(repo.id.to_string()),
-        chat: true,
         ..launch.clone()
     };
     let shape = Shape {

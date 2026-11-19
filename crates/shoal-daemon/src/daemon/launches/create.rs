@@ -123,7 +123,6 @@ fn ensure_creates(launch: &Launch) -> Result<()> {
         ("--here", launch.here),
         ("--in", launch.in_workspace.is_some()),
         ("a task", !launch.task.is_empty() || launch.prompt.is_some()),
-        ("a chat", launch.chat),
         ("a setup", launch.setup.is_some()),
     ];
     match agent_flags.iter().find(|(_, set)| *set) {

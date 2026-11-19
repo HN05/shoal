@@ -160,14 +160,14 @@ async fn launched_chats(daemon: &TestDaemon) -> Vec<QueuedLaunch> {
 }
 
 #[tokio::test]
-async fn an_app_starts_a_chat_whose_agent_and_mode_the_daemon_resolves() {
+async fn an_app_starts_a_chat_whose_agent_the_daemon_resolves() {
     let daemon = TestDaemon::start().await;
     let app = daemon.connector();
     let start = || Launch {
         target: Some(StartTarget::Repository(
             daemon.repository.path.to_str().unwrap().into(),
         )),
-        chat: true,
+        mode: Some("chat".into()),
         task: vec!["Read the build".into()],
         ..Default::default()
     };
@@ -214,7 +214,7 @@ async fn a_scoped_app_starts_chats_below_its_own_space() {
     let parent_id = parent.id.clone();
     let start = |parent: Option<SpaceSelector>| Launch {
         target: Some(StartTarget::Repository(daemon.repository.id.to_string())),
-        chat: true,
+        mode: Some("chat".into()),
         agent: Some("probe".into()),
         parent,
         ..Default::default()
