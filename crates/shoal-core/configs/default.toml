@@ -42,6 +42,11 @@ root_dir = "~/shoal"
 # closed lid without an external display.
 # keep_awake = false
 
+# Whether this machine stays reachable, for the hub it joined or takes:
+# "always_on", "intermittent", or "auto" for the hub's guess from how
+# reachable it was.
+# availability = "auto"
+
 # Named Git settings; omitted keys keep their normal Git values.
 # [machine.git_profiles.work]
 # user.name = "Your Name"

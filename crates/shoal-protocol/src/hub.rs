@@ -15,6 +15,7 @@ use shoal_states::{states, text_key};
 use crate::time::UnixTime;
 
 pub mod app_servers;
+pub mod availability;
 pub mod directory;
 pub mod link;
 pub mod numbering;

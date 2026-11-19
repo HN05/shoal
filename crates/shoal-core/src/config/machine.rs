@@ -32,6 +32,9 @@ pub struct Machine {
     pub load: overload::Load,
     /// Hold off sleep, including from a closed laptop lid, while agents have work.
     pub keep_awake: bool,
+    /// Whether this machine stays reachable for lasting work, which the hub
+    /// guesses under `auto`.
+    pub availability: shoal_protocol::hub::availability::AvailabilitySetting,
     /// Heavy slots: heavy modes' agents running at once on this machine;
     /// defaults to measured load and `shoal start` queues past it. Use `none`
     /// for unlimited admission.

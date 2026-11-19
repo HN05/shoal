@@ -74,6 +74,7 @@ max_jobs = "dynamic"     # Or a positive number, or "none"
 schedule = "balanced"    # "balanced", "speed" or "cache"
 load = "balanced"        # "light", "balanced" or "full"
 keep_awake = false       # Keep the machine from sleeping while agents work
+availability = "auto"    # "auto", "always_on" or "intermittent"
 ```
 
 `root_dir` is absolute or starts with `~/`, outside Shoal's state directory,
@@ -98,6 +99,11 @@ and so dynamic admission.
 
 `keep_awake` keeps the machine from sleeping while an agent works or waits on
 a watched PR; see [keeping the machine awake](../../../../../../docs/reference.md#keeping-the-machine-awake).
+
+`availability` tells the [hub](../../../../../../docs/reference.md#hub) this
+machine joined, or takes, whether it stays reachable: `always_on`,
+`intermittent`, or `auto` for the hub's guess from how reachable it was. It
+does nothing without a hub.
 
 `git_profile`, at the top level of any file, names the [Git profile](#git-profiles)
 new worktrees get; `shoal start --git-profile` overrides it for one creation.
