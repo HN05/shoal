@@ -3,12 +3,12 @@
 //! notice.
 use std::fmt::Write as _;
 
-use super::store;
 use crate::{
     daemon::{log, manager::Manager, notifications::Source},
     reviews::{AUTOMATED_NOTE, Review, ReviewId, ReviewState, severity_counts},
     validate::MAX_AGENT_MESSAGE_LEN,
 };
+use shoal_reviews::store;
 
 impl Manager {
     /// Deliver review `id`, which has ended: to the workspace's agents,
@@ -17,7 +17,12 @@ impl Manager {
     pub(super) async fn deliver_review(&self, id: ReviewId) {
         let loaded = self
             .store
-            .run(move |db| Ok((store::load(db, id)?, store::cancelled_by(db, id)?)))
+            .run(move |db| {
+                Ok((
+                    store::load(db, &super::ReviewRecords, id)?,
+                    store::cancelled_by(db, id)?,
+                ))
+            })
             .await;
         let (review, cancelled_by) = match loaded {
             Ok((Some(review), cancelled_by)) => (review, cancelled_by),

@@ -7,7 +7,6 @@ use std::fmt::Write as _;
 use anyhow::Result;
 use shoal_refs::CommitId;
 
-use super::store;
 use crate::{
     daemon::{log, manager::Manager},
     forge::items::{
@@ -24,6 +23,7 @@ use shoal_forge::{
     review::diff::DiffRequests,
 };
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_reviews::store;
 
 impl Manager {
     /// Post finished review `review` on its PR when its target asks to, and

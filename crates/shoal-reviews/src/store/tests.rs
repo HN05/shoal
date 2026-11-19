@@ -1,31 +1,18 @@
 use super::*;
-use crate::time::UnixTime;
-use crate::{
-    daemon::store::Store,
-    reviews::{FixCheck, OutcomeKind, Severity, Verdict, output::NewFinding},
-};
+use crate::reviews::{FixCheck, OutcomeKind, Severity, Verdict, output::NewFinding};
 use shoal_ids::space_ids::SpaceId;
+use shoal_store::Store;
 
-/// A migrated store with one workspace, `work`.
+/// A migrated store with one workspace, `work`, in the stand-in's records.
 async fn store(directory: &tempfile::TempDir) -> Store {
-    let store = Store::open(directory.path().join("state.sqlite3"))
-        .await
-        .unwrap();
-    store
-        .run(|db| {
-            db.execute_batch(
-                "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-                INSERT INTO spaces(id,kind,repository_id,name)
-                    VALUES ('work','workspace','repo','fix-login');
-                INSERT INTO workspaces(id,path,branch,state)
-                    VALUES ('work','/work','fix-login','ready');",
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    store
+    crate::stand_in::store(directory.path().join("state.sqlite3"), "work").await
 }
+
+/// The records of one workspace, `work`, named `fix-login`.
+const RECORDS: &crate::stand_in::StandInRecords = &crate::stand_in::StandInRecords {
+    workspace: "work",
+    name: "fix-login",
+};
 
 fn output(findings: usize, checked: Vec<Checked>) -> ReviewerOutput {
     ReviewerOutput {
@@ -56,7 +43,7 @@ async fn one_review_is_queued_or_running_per_workspace() {
             };
             let first = queue(db, &SpaceId::from("work"), &ReviewTarget::Workspace, &"claude".into(), &model, UnixTime::from_seconds(1))?;
             assert!(matches!(first, Queued::New(_)));
-            assert_eq!(load(db, first.id())?.unwrap().model, model);
+            assert_eq!(load(db, RECORDS, first.id())?.unwrap().model, model);
             let again = queue(
                 db,
                 &SpaceId::from("work"),
@@ -187,7 +174,7 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                 UnixTime::from_seconds(8)
             )?);
 
-            let review = load(tx, first)?.unwrap();
+            let review = load(tx, RECORDS, first)?.unwrap();
             assert_eq!(review.workspace, "fix-login");
             assert_eq!(review.state, ReviewState::Finished);
             assert_eq!(review.duration(), Some(std::time::Duration::from_secs(1)));
@@ -203,18 +190,24 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
             assert_eq!(review.findings[1].check, None);
             assert_eq!(review.unresolved().count(), 0);
 
-            let listed = list(tx, &["work".into()])?;
+            let listed = list(tx, RECORDS, &["work".into()])?;
             assert_eq!(
                 listed.iter().map(|review| review.id).collect::<Vec<_>>(),
                 [second, first]
             );
-            assert_eq!(latest(tx, &SpaceId::from("work"))?.unwrap().id, second);
-            let status = latest_status(tx, &SpaceId::from("work"))?.unwrap();
+            assert_eq!(
+                latest(tx, RECORDS, &SpaceId::from("work"))?.unwrap().id,
+                second
+            );
+            let status = latest_status(tx, RECORDS, &SpaceId::from("work"))?.unwrap();
             assert_eq!((status.id, status.unresolved), (second, 0));
-            assert_eq!(earlier(tx, &SpaceId::from("work"), second)?.len(), 1);
+            assert_eq!(
+                earlier(tx, RECORDS, &SpaceId::from("work"), second)?.len(),
+                1
+            );
 
             resolve(tx, finding, None)?;
-            assert_eq!(load(tx, first)?.unwrap().unresolved().count(), 1);
+            assert_eq!(load(tx, RECORDS, first)?.unwrap().unresolved().count(), 1);
             Ok(())
         })
         .await
@@ -266,7 +259,7 @@ async fn failures_are_typed_and_interrupted_runs_start_over() {
                 UnixTime::from_seconds(2),
             )?;
             assert_eq!(requeue_running(db, &[])?, 1);
-            let review = load(db, id)?.unwrap();
+            let review = load(db, RECORDS, id)?.unwrap();
             assert_eq!((review.state, review.head), (ReviewState::Queued, None));
             assert_eq!(queued(db)?, [id]);
             assert!(fail(
@@ -276,7 +269,7 @@ async fn failures_are_typed_and_interrupted_runs_start_over() {
                 FailureReason::RateLimit,
                 UnixTime::from_seconds(3)
             )?);
-            let review = load(db, id)?.unwrap();
+            let review = load(db, RECORDS, id)?.unwrap();
             assert_eq!(review.failure, Some(FailureReason::RateLimit));
             Ok(())
         })

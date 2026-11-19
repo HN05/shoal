@@ -8,7 +8,6 @@ use std::fmt::Write as _;
 
 use anyhow::{Result, bail};
 
-use super::store;
 use crate::{
     config::{Effective, repo::Requester},
     daemon::{manager::Manager, scope::Caller},
@@ -16,6 +15,7 @@ use crate::{
     reviews::{Review, ReviewId, ReviewState, ReviewTarget},
 };
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_reviews::store;
 
 /// What a gate guards.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,7 +101,7 @@ impl Manager {
             .store
             .read(move |tx| {
                 Ok((
-                    store::finished_at(tx, &id, &covering)?,
+                    store::finished_at(tx, &super::ReviewRecords, &id, &covering)?,
                     store::active(tx, &id)?,
                 ))
             })

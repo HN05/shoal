@@ -2695,9 +2695,15 @@ version = "0.19.0"
 dependencies = [
  "anyhow",
  "libc",
+ "rusqlite",
+ "serde",
+ "serde_json",
  "shoal-core",
  "shoal-daemon-base",
+ "shoal-ids",
  "shoal-protocol",
+ "shoal-refs",
+ "shoal-store",
  "tempfile",
  "tokio",
 ]

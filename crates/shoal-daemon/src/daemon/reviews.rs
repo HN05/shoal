@@ -17,7 +17,11 @@ use crate::{
     config::Effective,
     reviews::{FindingId, Outcome, Review, ReviewId, ReviewTarget},
 };
-use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
+use shoal_protocol::{
+    space_names::{SpaceName, SpaceSelector},
+    time::UnixTime,
+};
+use shoal_reviews::store;
 
 mod delivery;
 mod false_positives;
@@ -26,7 +30,6 @@ mod history;
 mod post;
 mod reviewer;
 mod run;
-pub(crate) mod store;
 
 pub(crate) use run::run;
 
@@ -207,7 +210,10 @@ impl Manager {
 
     /// Review `id` in full, marked outdated once its workspace's HEAD moved.
     pub async fn review(&self, id: ReviewId) -> Result<Review> {
-        let review = self.store.run(move |db| store::load(db, id)).await?;
+        let review = self
+            .store
+            .run(move |db| store::load(db, &ReviewRecords, id))
+            .await?;
         let mut review = review.with_context(|| format!("review {id} does not exist"))?;
         self.annotate_reviews(std::slice::from_mut(&mut review))
             .await;
@@ -218,7 +224,10 @@ impl Manager {
     pub async fn latest_review(&self, selector: &SpaceSelector) -> Result<Review> {
         let workspace = self.workspace(selector).await?;
         let id = workspace.id.clone();
-        let latest = self.store.run(move |db| store::latest(db, &id)).await?;
+        let latest = self
+            .store
+            .run(move |db| store::latest(db, &ReviewRecords, &id))
+            .await?;
         let mut review = latest.with_context(|| {
             format!(
                 "{} has no reviews; start one with shoal review run",
@@ -245,13 +254,16 @@ impl Manager {
             None => None,
         };
         self.store
-            .run(move |db| store::workspaces(db, repository.as_ref()))
+            .run(move |db| super::spaces::workspace_ids(db, repository.as_ref()))
             .await
     }
 
     /// The reviews of the workspaces `ids`, newest first.
     pub async fn reviews(&self, ids: Vec<SpaceId>) -> Result<Vec<Review>> {
-        let mut reviews = self.store.run(move |db| store::list(db, &ids)).await?;
+        let mut reviews = self
+            .store
+            .run(move |db| store::list(db, &ReviewRecords, &ids))
+            .await?;
         self.annotate_reviews(&mut reviews).await;
         Ok(reviews)
     }
@@ -317,13 +329,19 @@ impl Manager {
 
     /// Review `id` as stored, without what its workspace says of it.
     async fn stored_review(&self, id: ReviewId) -> Result<Review> {
-        let review = self.store.run(move |db| store::load(db, id)).await?;
+        let review = self
+            .store
+            .run(move |db| store::load(db, &ReviewRecords, id))
+            .await?;
         review.with_context(|| format!("review {id} does not exist"))
     }
 
     /// The workspace review `id` is of.
     pub(crate) async fn review_workspace(&self, id: ReviewId) -> Result<SpaceId> {
-        let review = self.store.run(move |db| store::load(db, id)).await?;
+        let review = self
+            .store
+            .run(move |db| store::load(db, &ReviewRecords, id))
+            .await?;
         Ok(review
             .with_context(|| format!("review {id} does not exist"))?
             .workspace_id)
@@ -356,7 +374,10 @@ impl Manager {
     /// [`Self::ensure_no_review_runs_left`] refuses.
     pub(crate) async fn ensure_no_reviews_in(&self, repository_id: &RepositoryId) -> Result<()> {
         let id = repository_id.to_owned();
-        let active = self.store.run(move |db| store::active_in(db, &id)).await?;
+        let active = self
+            .store
+            .run(move |db| store::active_in(db, &ReviewRecords, &id))
+            .await?;
         ensure!(
             active.is_empty() && !self.reviews.holds_checkout_of(repository_id, false),
             "a review of the repository is queued or running; wait for it or cancel it"
@@ -386,7 +407,11 @@ impl Manager {
     /// the repository its removal would otherwise refuse.
     pub(crate) async fn stop_repository_reviews(&self, repository_id: &RepositoryId) {
         let id = repository_id.to_owned();
-        let active = match self.store.run(move |db| store::active_in(db, &id)).await {
+        let active = match self
+            .store
+            .run(move |db| store::active_in(db, &ReviewRecords, &id))
+            .await
+        {
             Ok(active) => active,
             Err(error) => {
                 log!("reviews of a removed repository: {error:#}");
@@ -436,6 +461,23 @@ fn reviewing_agent(settings: &Effective, agent: Option<Agent>) -> Result<Agent> 
         .context("no reviewer: pass --agent, or set review.agent or agent.default")?;
     settings.check_reviewer(&agent)?;
     Ok(agent)
+}
+
+/// The spaces' records, as reviews read them in their own connections.
+pub(crate) struct ReviewRecords;
+
+impl shoal_reviews::daemon::Records for ReviewRecords {
+    fn space_name(&self, db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<SpaceName>> {
+        super::spaces::space_name(db, id)
+    }
+
+    fn workspaces(
+        &self,
+        db: &rusqlite::Connection,
+        repository: Option<&RepositoryId>,
+    ) -> Result<Vec<SpaceId>> {
+        super::spaces::workspace_ids(db, repository)
+    }
 }
 
 #[cfg(test)]

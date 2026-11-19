@@ -13,7 +13,6 @@ use tokio::{sync::watch, task::JoinSet};
 use super::{
     CheckoutHold, history,
     reviewer::{self, Ended, Files, Reviewer},
-    store,
 };
 use crate::{
     agent::{Agent, ModelChoice},
@@ -31,6 +30,7 @@ use shoal_forge::review::view::ViewRequests;
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
 use shoal_reviews::oneshot;
+use shoal_reviews::store;
 
 /// Start every queued review, now and whenever one is queued; each then
 /// waits in the agent queue for admission.
@@ -179,7 +179,10 @@ impl Manager {
 
     /// Review `id` while it is queued.
     async fn queued_review(&self, id: ReviewId) -> Result<Option<Review>> {
-        let review = self.store.run(move |db| store::load(db, id)).await?;
+        let review = self
+            .store
+            .run(move |db| store::load(db, &super::ReviewRecords, id))
+            .await?;
         Ok(review.filter(|review| review.state == ReviewState::Queued))
     }
 
@@ -478,7 +481,10 @@ impl Manager {
         if !recorded {
             return Ok(Pass::Ended);
         }
-        let review = self.store.run(move |db| store::load(db, id)).await?;
+        let review = self
+            .store
+            .run(move |db| store::load(db, &super::ReviewRecords, id))
+            .await?;
         if let Some(review) = review.filter(|review| review.state == ReviewState::Finished) {
             self.post_review(&review, workspace).await;
         }
@@ -512,7 +518,7 @@ impl Manager {
         let false_positives = self.false_positives(workspace.repository()).await?;
         let earlier = self
             .store
-            .run(move |db| store::earlier(db, &workspace_id, id))
+            .run(move |db| store::earlier(db, &super::ReviewRecords, &workspace_id, id))
             .await?;
         let pull = match &review.target {
             ReviewTarget::Pr { url, .. } => self.pull_discussion(workspace, url).await,
@@ -639,7 +645,11 @@ impl Manager {
     /// Where running review `id`'s run is: in the reviewed workspace's
     /// repository's directory, while the workspace exists.
     async fn running_run(&self, id: ReviewId) -> Option<LeftRun> {
-        let review = self.store.run(move |db| store::load(db, id)).await.ok()??;
+        let review = self
+            .store
+            .run(move |db| store::load(db, &super::ReviewRecords, id))
+            .await
+            .ok()??;
         let workspace = self.workspace_by_id(&review.workspace_id).await.ok()?;
         let repository = self.repository(workspace.repository()).await.ok()?;
         let place = run_files(&repository, &review).ok()?;

@@ -182,8 +182,7 @@ impl Records for DaemonRecords {
     }
 
     fn space_name(&self, db: &Connection, id: &SpaceId) -> Result<Option<SpaceName>> {
-        let name = "SELECT name FROM spaces WHERE id=?1";
-        Ok(db.query_row(name, [id], |row| row.get(0)).optional()?)
+        super::spaces::space_name(db, id)
     }
 
     fn space_repository(&self, db: &Connection, id: &SpaceId) -> Result<Option<RepositoryId>> {

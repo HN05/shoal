@@ -603,7 +603,7 @@ async fn a_queued_or_running_review_holds_back_the_move() -> Result<()> {
         .run({
             let id = workspace.id.clone();
             move |db| {
-                crate::daemon::reviews::store::queue(
+                shoal_reviews::store::queue(
                     db,
                     &id,
                     &crate::reviews::ReviewTarget::Workspace,

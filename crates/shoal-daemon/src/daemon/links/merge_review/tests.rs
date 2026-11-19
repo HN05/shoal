@@ -3,7 +3,6 @@ use std::sync::Arc;
 use super::*;
 use crate::{
     daemon::{
-        reviews::store,
         scope::Scoped,
         test_support::{configure, git, manager, repository},
     },
@@ -12,6 +11,7 @@ use crate::{
     reviews::{ReviewTarget, output::ReviewerOutput},
 };
 use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
+use shoal_reviews::store;
 
 /// A workspace on `topic`, whose forge serves PR 1 from `head_branch` at
 /// the workspace's HEAD, in a repository whose `require_for_merge` is

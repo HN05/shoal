@@ -224,7 +224,11 @@ fn recorded_workspace(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<
 fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<()> {
     workspace.holds = super::holds::list(db, &workspace.id)?;
     workspace.review = super::ready_marks::list(db, &workspace.id)?;
-    workspace.latest_review = crate::daemon::reviews::store::latest_status(db, &workspace.id)?;
+    workspace.latest_review = shoal_reviews::store::latest_status(
+        db,
+        &crate::daemon::reviews::ReviewRecords,
+        &workspace.id,
+    )?;
     workspace.agent_state = super::agent_state::current(db, &workspace.id)?;
     workspace.progress = crate::daemon::progress::current(db, &workspace.id)?;
     workspace.sleep = crate::daemon::idle_wakes::sleep::current(db, &workspace.id)?;
