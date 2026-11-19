@@ -6,8 +6,8 @@
 //! alike: the space the new one goes below by its ID, the scoped caller's
 //! own when it names none, the repository by the URL of its origin, which
 //! that machine clones where it has none of it, and the base as a branch
-//! or commit of that origin. A base only this machine has is refused,
-//! naming the push that lets the other machine fetch it.
+//! or commit of that origin, or else as the commit this machine carries
+//! there, with the history only it has.
 use anyhow::{Context as _, Result, bail, ensure};
 use shoal_protocol::hub::Member;
 use shoal_protocol::launches::{Carried, Launch, StartTarget};
@@ -43,7 +43,7 @@ impl Manager {
         if let Some(caller) = caller {
             self.parent_below(caller, &mut launch.parent).await?;
         }
-        launch.forwarded = Some(self.carried(&mut launch, &machine.name, caller).await?);
+        launch.forwarded = Some(self.carried(&mut launch, &machine, caller).await?);
         self.forward_launch(&machine, launch, caller)
             .await
             .map(Some)
@@ -93,14 +93,14 @@ impl Manager {
         Ok(())
     }
 
-    /// What `launch` carries to the machine `machine` for `caller`: the
-    /// URL of the origin of the repository it starts in, which then names
-    /// that repository in place of how this machine names it, and its base
-    /// as that machine fetches it.
+    /// What `launch` carries to `machine` for `caller`: the URL of the
+    /// origin of the repository it starts in, which then names that
+    /// repository in place of how this machine names it, and its base as
+    /// that machine fetches it, or with the commits it carries there.
     async fn carried(
         &self,
         launch: &mut Launch,
-        machine: &str,
+        machine: &Member,
         caller: Option<&Caller>,
     ) -> Result<Carried> {
         let Some(repository) = self.launch_repository(launch, caller).await? else {
@@ -109,13 +109,15 @@ impl Manager {
         let origin = crate::repository::remote_url_from_source(&repository.source).await?;
         let origin = origin.with_context(|| {
             format!(
-                "repository {} has no origin that machine {machine} could clone",
-                repository.display_name()
+                "repository {} has no origin that machine {} could clone",
+                repository.display_name(),
+                machine.name
             )
         })?;
         let mut base_branch = None;
         if let Some(base) = &launch.base {
-            let found = clone_base(&repository, base, machine).await?;
+            let carrying = (machine, &repository, origin.as_str());
+            let found = self.clone_base(carrying, base, caller).await?;
             (launch.base, base_branch) = (Some(found.base), Some(found.branch));
         }
         if matches!(launch.target, Some(StartTarget::Repository(_))) {
@@ -125,6 +127,33 @@ impl Manager {
         Ok(Carried {
             origin: Some(origin),
             base_branch,
+        })
+    }
+
+    /// `base`, a ref of `repository`, whose origin's URL is `origin`, as a
+    /// clone of that origin on `machine` fetches it, or else, where only
+    /// this machine has its commits, its commit, which this machine
+    /// carries there for `caller` with the history the origin's default
+    /// branch lacks.
+    async fn clone_base(
+        &self,
+        (machine, repository, origin): (&Member, &Repository, &str),
+        base: &str,
+        caller: Option<&Caller>,
+    ) -> Result<CloneBase> {
+        let path = &repository.path;
+        if let Some(base) = crate::git::clone_base::for_clone(path, base).await? {
+            return Ok(base);
+        }
+        let commit = crate::git::clone_base::carried_commit(path, base).await?;
+        let lookup = crate::git::default_branch::DefaultBranchLookup::Cached;
+        let branch = crate::git::default_branch::resolve(path, lookup).await?;
+        let carrying = (repository, origin);
+        let carried = (&commit, branch.as_str());
+        (self.carry_commit(machine, carrying, carried, caller)).await?;
+        Ok(CloneBase {
+            base: commit.to_string(),
+            branch: branch.to_string(),
         })
     }
 
@@ -166,17 +195,6 @@ impl Manager {
             return Ok(false);
         }
         self.unregistered_elsewhere(parent).await
-    }
-}
-
-/// `base`, a ref of `repository`, as a clone of its origin on the machine
-/// `machine` fetches it; refused where only this machine has its commits.
-async fn clone_base(repository: &Repository, base: &str, machine: &str) -> Result<CloneBase> {
-    match crate::git::clone_base::for_clone(&repository.path, base).await? {
-        Some(base) => Ok(base),
-        None => bail!(
-            "base {base} has commits only this machine has, which machine {machine} cannot fetch; push them with git push origin {base}, then start again"
-        ),
     }
 }
 

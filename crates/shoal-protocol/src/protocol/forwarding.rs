@@ -10,7 +10,7 @@ use crate::{approvals::ApprovalRequest, item_numbers::ItemNumber, questions::Que
 use super::{
     AgentMethod, ApprovalMethod, AssignmentMethod, BranchMethod, CiMethod, DemoMethod, HoldMethod,
     ItemMethod, LaunchMethod, Operation, QuestionMethod, QueueMethod, RemovalMethod,
-    WorkspaceMethod,
+    RepositoryMethod, WorkspaceMethod,
 };
 
 /// What a daemon does with a request for another machine's space.
@@ -31,8 +31,8 @@ pub enum Forwarding {
     Streamed,
     /// It goes to the space's machine, whose answer comes back on a stream
     /// as for [`Self::Streamed`], and after the answer's first frame the
-    /// caller's bytes go there on the same stream, as a demo's do; it fails
-    /// at once while that machine is offline.
+    /// caller's bytes go there on the same stream, as a demo's and carried
+    /// commits' do; it fails at once while that machine is offline.
     Duplex,
 }
 
@@ -102,7 +102,11 @@ impl Operation {
             Forwarding::Queued
         } else if matches!(self, Self::Workspace(WorkspaceMethod::FollowSession { .. })) {
             Forwarding::Streamed
-        } else if matches!(self, Self::Demo(DemoMethod::OpenDemoStream { .. })) {
+        } else if matches!(
+            self,
+            Self::Demo(DemoMethod::OpenDemoStream { .. })
+                | Self::Repository(RepositoryMethod::ReceiveCommits { .. })
+        ) {
             Forwarding::Duplex
         } else if self.forwards() {
             Forwarding::Online

@@ -87,6 +87,18 @@ pub enum RepositoryMethod {
         repository: RepositoryId,
         environment: std::collections::BTreeMap<String, String>,
     },
+    /// Take the commit `commit` that another joined machine carries here
+    /// for a start in the repository whose origin is `origin`, registered
+    /// as a URL clone where there is none: once the daemon answers with
+    /// [`Body::Ok`](super::Body::Ok), the caller writes a bundle of it with
+    /// the history the origin's `branch` lacks, which the daemon fetches
+    /// first, and ends its side, and the daemon answers again once the
+    /// repository has the commit.
+    ReceiveCommits {
+        origin: String,
+        commit: shoal_refs::CommitId,
+        branch: String,
+    },
 }
 
 impl RepositoryMethod {
@@ -96,6 +108,8 @@ impl RepositoryMethod {
             // `HoldContribution`.
             Self::RegisterContribution { .. } => Lifetime::Open,
             Self::HoldContribution { .. } => Lifetime::Resumed,
+            // It takes the bundle the caller writes.
+            Self::ReceiveCommits { .. } => Lifetime::Open,
             _ => Lifetime::Reply,
         }
     }

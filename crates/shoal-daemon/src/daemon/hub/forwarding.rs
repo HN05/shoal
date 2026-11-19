@@ -175,20 +175,48 @@ impl Manager {
     pub(crate) async fn ask_machine(
         &self,
         machine: &Member,
-        mut operation: Operation,
+        operation: Operation,
         caller: Option<&Caller>,
     ) -> Result<Body> {
-        operation.leave_caller_machine();
-        let name = shoal_protocol::protocol::name_of(serde_json::to_value(&operation));
-        let request = Forwarded {
-            caller: self.vouch(caller).await?,
-            method: serde_json::to_value(operation)?,
-            summary: format!("{name} on machine {}", machine.name),
-        };
+        let request = self.forwarded_to(machine, operation, caller).await?;
         match self.send_forwarded(machine, request, Delivery::Now).await? {
             Reply::Answered(answered) => answered_body(answered.frames),
             reply => Err(anyhow!("the hub answered with an unexpected {reply:?}")),
         }
+    }
+
+    /// The duplex stream `machine` answers `operation` from `caller` on,
+    /// which this machine forwards there through the hub, with the stream
+    /// that carries what this machine writes there; it fails at once while
+    /// that machine is offline.
+    pub(crate) async fn open_duplex(
+        &self,
+        machine: &Member,
+        operation: Operation,
+        caller: Option<&Caller>,
+    ) -> Result<(Incoming, Outgoing)> {
+        let request = self.forwarded_to(machine, operation, caller).await?;
+        match self.stream_forwarded(machine, request, true).await? {
+            Elsewhere::Duplex(incoming, outgoing) => Ok((incoming, outgoing)),
+            _ => Err(anyhow!("the hub opened no duplex stream")),
+        }
+    }
+
+    /// `operation` from `caller` as this machine forwards it to `machine`,
+    /// without what belongs to this machine.
+    async fn forwarded_to(
+        &self,
+        machine: &Member,
+        mut operation: Operation,
+        caller: Option<&Caller>,
+    ) -> Result<Forwarded> {
+        operation.leave_caller_machine();
+        let name = shoal_protocol::protocol::name_of(serde_json::to_value(&operation));
+        Ok(Forwarded {
+            caller: self.vouch(caller).await?,
+            method: serde_json::to_value(operation)?,
+            summary: format!("{name} on machine {}", machine.name),
+        })
     }
 
     /// Send `request` to `machine` through the hub: this daemon's own

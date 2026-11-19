@@ -944,8 +944,9 @@ leases are that machine's, and its queue starts the agent in the background
 there with that machine's agent tools. That machine finds the repository by
 its origin, cloning it as `shoal repo add <url>` does where it has none. A
 `--base` goes as the origin's branch of that name, or as a commit one of the
-origin's branches holds; a base with commits only your machine has is
-refused, naming the `git push` that lets the other machine fetch it.
+origin's branches holds; a base with commits only your machine has, such as
+a stacked branch you have not pushed, goes along as a Git bundle of what the
+origin's default branch lacks, so nothing needs a push first.
 `--here`, `--focus`, `--wait`, `--in`, `--copy` and `--fork`, which need your
 machine's terminal, files or sessions, do not combine with `--machine`.
 

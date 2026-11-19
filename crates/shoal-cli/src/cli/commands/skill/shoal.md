@@ -81,8 +81,8 @@ is prepared, until it exits, as the new space's own agent. `--fork` starts the c
 own agent from a fork of its session, so it needs only its task after `--`.
 `--machine <name or ID>` starts the space on another machine of the hub, below
 the caller there too, where that machine's queue starts its agent in the
-background; it clones the repository where that machine has none, and refuses
-a `--base` with commits only this machine has until they are pushed.
+background; it clones the repository where that machine has none, and carries
+a `--base` with commits only this machine has there in a Git bundle.
 
 `start` returns once the daemon records a new workspace, with the workspace
 and the agent's queue entry, which waits while the daemon creates the

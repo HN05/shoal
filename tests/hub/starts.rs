@@ -77,6 +77,14 @@ fn workspace_of(machine: &Base, repository: &str, name: &str) -> String {
     machine.id(name)
 }
 
+/// The laptop's status of its workspace `id` once its preparation ended.
+fn prepared_on_laptop(machines: &Machines, id: &str) -> Value {
+    wait_for("the child's preparation", || {
+        let status = machines.laptop.ok(&["status", id]);
+        (status["workspace"]["state"] != "preparing").then_some(status)
+    })
+}
+
 #[test]
 fn a_space_starts_a_child_workspace_on_another_machine_that_clones_its_repository() {
     let machines = machines();
@@ -102,17 +110,20 @@ fn a_space_starts_a_child_chat_on_another_machine() {
 }
 
 #[test]
-fn a_start_on_another_machine_refuses_a_base_only_this_machine_has() {
+fn a_start_on_another_machine_carries_a_base_only_this_machine_has() {
     let machines = machines();
     let repo = machines.hub.repo.to_str().unwrap().to_owned();
     // A commit past `main` that only the hub has.
     let tree = ["commit-tree", "HEAD^{tree}", "-p", "HEAD", "-m", "local"];
     let commit = git_with_identity(&machines.hub.repo, &tree);
-    git(&machines.hub.repo, &["branch", "unpushed", commit.trim()]);
+    let commit = commit.trim();
+    git(&machines.hub.repo, &["branch", "unpushed", commit]);
     let started = start_in_coordinator(&machines, &[&repo, "--branch", "x", "--base", "unpushed"]);
-    assert!(!started.status.success(), "{}", printed(&started));
-    let error = String::from_utf8_lossy(&started.stderr);
-    assert!(error.contains("git push"), "{error}");
+    assert!(started.status.success(), "{}", printed(&started));
+    let child = on_laptop(&machines, "x", "workspace");
+    let status = prepared_on_laptop(&machines, child["id"].as_str().unwrap());
+    assert_eq!(status["workspace"]["state"], "ready", "{status}");
+    assert_eq!(status["workspace"]["base_commit"], commit, "{status}");
 }
 
 #[test]
@@ -157,12 +168,8 @@ fn a_start_on_another_machine_bases_on_a_pushed_commit_its_clone_never_fetched()
     let started = start_in_coordinator(&machines, &[&repo, "--branch", "x", "--base", commit]);
     assert!(started.status.success(), "{}", printed(&started));
     let child = on_laptop(&machines, "x", "workspace");
-    let id = child["id"].as_str().unwrap();
     // Its worktree starts from the commit, which the laptop fetched first.
-    let status = wait_for("the child's preparation", || {
-        let status = machines.laptop.ok(&["status", id]);
-        (status["workspace"]["state"] != "preparing").then_some(status)
-    });
+    let status = prepared_on_laptop(&machines, child["id"].as_str().unwrap());
     assert_eq!(status["workspace"]["state"], "ready", "{status}");
 }
 

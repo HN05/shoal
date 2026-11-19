@@ -225,8 +225,10 @@ the hub to the machine it names, whose daemon starts it as its own caller's,
 so the space's queue, admission, cleanup and leases are that machine's; the
 launch carries its parent by ID, its repository by its origin's URL, which
 that machine registers as a URL clone where it has none, and its base as a
-branch or commit of that origin, and a base only the caller's machine has
-is refused, naming the push, until bundles carry it. The space tree may span
+branch or commit of that origin, or, for a base only the caller's machine
+has, as a commit it carries first in a Git bundle of the history the
+origin's default branch lacks, over a duplex stream of the hub's links,
+which that machine fetches under a ref of Shoal's own. The space tree may span
 machines, as when a space moves without its parent or starts elsewhere: what a space passes up reaches the nearest space
 above with an agent wherever it runs, through the first space above that
 runs elsewhere, whose machine goes on from there; the item activity of a

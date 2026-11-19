@@ -22,6 +22,7 @@ pub(crate) mod blockers;
 pub(crate) mod busy_cpu;
 pub(crate) mod caches;
 pub(crate) mod capacity;
+mod carried_commits;
 pub(crate) mod chats;
 pub(crate) mod checkout_sync;
 pub mod cleanup;

@@ -40,6 +40,18 @@ pub(super) async fn handle(
                 contribution_holds::register(stream, request_id, manager, (source, name), guard)
             }));
         }
+        RepositoryMethod::ReceiveCommits {
+            origin,
+            commit,
+            branch,
+        } => {
+            let repository = (manager.register_repository(origin.into(), None, None)).await?;
+            let manager = manager.clone();
+            let carried = (repository, commit, branch);
+            return Ok(Answer::connection(move |stream, request_id, guard| {
+                manager.receive_commits(stream, request_id, carried, guard)
+            }));
+        }
         RepositoryMethod::HoldContribution { repository } => {
             let manager = manager.clone();
             return Ok(Answer::connection(move |stream, request_id, guard| {
@@ -164,6 +176,10 @@ impl Scoped for RepositoryMethod {
     ) -> Result<Option<&mut SpaceSelector>> {
         let repository = match self {
             RepositoryMethod::ListRepositories => return Ok(None),
+            // A start's commits, which a caller that starts a space here
+            // carries; they go under a ref of Shoal's own and change no
+            // branch.
+            RepositoryMethod::ReceiveCommits { .. } => return Ok(None),
             // Nothing binds it to the registration it resumes, so a scoped
             // caller holds only where it administers without approval; one
             // that waited for a decision would leave the contribution unheld.
