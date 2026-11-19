@@ -4,9 +4,8 @@
 use super::worktree::{WorktreeRemoval, WorktreeStage};
 use super::{Removal, Stage};
 use crate::daemon::{
-    executions::StopRequest,
-    space_removal::AgentState,
-    workspace::{Manager, completion_cleanup::CompletedAncestor},
+    completion_cleanup::CompletedAncestor, executions::StopRequest, space_removal::AgentState,
+    workspace::Manager,
 };
 use crate::model::EventCause;
 use crate::{

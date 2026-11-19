@@ -4,7 +4,7 @@ use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;
 
-use super::super::Manager;
+use super::super::workspace::Manager;
 use crate::model::Space;
 
 /// A space above another whose completion with cleanup stands.
@@ -41,10 +41,7 @@ impl Manager {
     /// read, as off its branch or in a directory whose file access stalled,
     /// is not that HEAD; the read runs under [`Manager::check_access`], so a
     /// stall holds it no longer than file access may take.
-    pub(in crate::daemon::workspace) async fn completion_stands(
-        &self,
-        space: &Space,
-    ) -> Result<bool> {
+    pub(in crate::daemon) async fn completion_stands(&self, space: &Space) -> Result<bool> {
         let Some(completion) = self.completion(&space.id).await? else {
             return Ok(false);
         };

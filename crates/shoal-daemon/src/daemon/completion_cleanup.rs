@@ -5,7 +5,7 @@ use anyhow::{Result, ensure};
 use rusqlite::OptionalExtension;
 use shoal_ids::space_ids::SpaceId;
 
-use super::Manager;
+use super::workspace::Manager;
 use crate::{
     daemon::spaces::removal_notices::Cleanup,
     model::{Space, Workspace},
@@ -59,7 +59,7 @@ impl Manager {
         };
         if space
             .worktree()
-            .and_then(super::super::lifecycle::not_ready)
+            .and_then(super::lifecycle::not_ready)
             .is_some()
         {
             return Ok(());

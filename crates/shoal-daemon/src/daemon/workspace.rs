@@ -8,7 +8,6 @@ mod branch_rename;
 mod branches;
 mod checkpoints;
 pub(super) mod commits;
-pub(crate) mod completion_cleanup;
 pub(crate) mod conflicts;
 mod contributions;
 mod converted;

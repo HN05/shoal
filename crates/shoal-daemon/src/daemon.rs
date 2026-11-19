@@ -19,6 +19,7 @@ pub(crate) mod capacity;
 pub(crate) mod chats;
 pub(crate) mod checkout_sync;
 pub mod cleanup;
+pub(crate) mod completion_cleanup;
 mod config_state;
 mod connections;
 pub(crate) mod containers;
