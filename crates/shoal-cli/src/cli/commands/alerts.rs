@@ -159,7 +159,7 @@ pub(super) async fn withdraw(ctx: &Context, id: i64) -> Result<i32> {
 /// the stream resumes after the last one printed. On a terminal, each one
 /// is also raised as a terminal notification so the emulator can show it
 /// while another window has focus.
-async fn follow(ctx: &Context, keep_unread: bool, after: i64) -> Result<i32> {
+pub(super) async fn follow(ctx: &Context, keep_unread: bool, after: i64) -> Result<i32> {
     refuse_workspace_processes(ctx)?;
     let executable = Executable::current();
     let mut watch = Watch::start(&ctx.paths, keep_unread, after).await?;

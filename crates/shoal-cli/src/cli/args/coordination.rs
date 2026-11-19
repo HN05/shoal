@@ -52,6 +52,17 @@ pub enum CoordinationCommand {
         #[arg(long, required = true)]
         hook: bool,
     },
+    /// The alert stream of an earlier release, which a follower it started
+    /// continues with after an upgrade: `shoal alert list --follow`.
+    #[command(hide = true)]
+    Alerts {
+        #[arg(long, required = true)]
+        follow: bool,
+        #[arg(long)]
+        keep_unread: bool,
+        #[arg(long)]
+        resume: Option<i64>,
+    },
     /// Review and answer questions from the agents of workspaces and chats.
     #[command(args_conflicts_with_subcommands = true)]
     Questions {

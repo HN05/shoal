@@ -84,7 +84,7 @@ impl Need {
             [
                 "diff" | "conflicts" | "rm" | "absorb" | "leases" | "send" | "messages" | "files"
                 | "questions" | "approvals" | "view" | "catalog" | "history" | "config" | "pr"
-                | "issue" | "alert" | "demo" | "queue" | "review" | "progress" | "sleep"
+                | "issue" | "alert" | "alerts" | "demo" | "queue" | "review" | "progress" | "sleep"
                 | "priority" | "log",
                 ..,
             ] => Self::Any,
