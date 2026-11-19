@@ -17,7 +17,8 @@ use super::{
 const AGENT: &str = "[agents.pi]\ncommand = ['sh', '-c', 'exec sleep 600']\n";
 
 /// The hub, whose repository has an origin, with a coordinator workspace
-/// there, and a laptop joined to it that has another repository, by ID.
+/// there, and a laptop joined to it that has another repository and the
+/// agent the hub lacks, by ID.
 struct Machines {
     hub: Base,
     laptop: Base,
@@ -26,8 +27,9 @@ struct Machines {
 }
 
 fn machines() -> Machines {
-    let config = format!("[machine.hub]\nenabled = true\nlisten = \"127.0.0.1:0\"\n{AGENT}");
-    let hub = Base::start(home(), &config, "app", &[]);
+    // Only the laptop has the agent, which a start there checks.
+    let config = "[machine.hub]\nenabled = true\nlisten = \"127.0.0.1:0\"\n";
+    let hub = Base::start(home(), config, "app", &[]);
     give_origin(&hub);
     let laptop = Base::start(home(), AGENT, "notes", &[]);
     let laptop_id = join(&laptop, &hub, "laptop");

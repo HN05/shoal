@@ -156,8 +156,11 @@ async fn pick_missing(ctx: &Context, launch: &mut Launch, resolved: &Resolved<'_
     if begins_as_chat(launch) {
         return Ok(());
     }
-    let settings = resolved.settings.get().await?;
-    launch.agent = agents::start_agent(ctx, settings, launch.agent.take())?;
+    // Another machine checks and picks its own agents.
+    if launch.machine.is_none() {
+        let settings = resolved.settings.get().await?;
+        launch.agent = agents::start_agent(ctx, settings, launch.agent.take())?;
+    }
     Ok(())
 }
 

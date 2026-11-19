@@ -120,7 +120,11 @@ pub(in crate::cli::commands::start) async fn chat(
         false => None,
     };
     let settings = chat_settings(ctx, repository.as_ref()).await?;
-    launch.agent = crate::agents::checked_agent(&settings, launch.agent.take(), &launch.model)?;
+    // Another machine checks and picks its own agents.
+    let here = launch.machine.is_none();
+    if here {
+        launch.agent = crate::agents::checked_agent(&settings, launch.agent.take(), &launch.model)?;
+    }
     check_chat(ctx, &launch, repository.as_ref()).await?;
     launch.mode = match ctx.interactive() {
         true => Some(mode.chosen(
@@ -131,7 +135,9 @@ pub(in crate::cli::commands::start) async fn chat(
         false => mode.named(),
     };
     pick_plan_issue(ctx, &mut launch, (repository.as_ref(), &settings)).await?;
-    launch.agent = agents::start_agent(ctx, &settings, launch.agent.take())?;
+    if here {
+        launch.agent = agents::start_agent(ctx, &settings, launch.agent.take())?;
+    }
     super::place(ctx, launch, &settings, &options(&args)).await
 }
 
