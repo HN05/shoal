@@ -8,7 +8,7 @@
 //! machine.
 use std::sync::Arc;
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context as _, Result, anyhow};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     hub::{
@@ -17,7 +17,7 @@ use shoal_protocol::{
         link::{Call, Reply},
         routing::{Delivery, Forwarded, Vouched, VouchedSpace},
     },
-    protocol::Forwarding,
+    protocol::{Body, Forwarding, Operation, Response},
     space_names::SpaceSelector,
 };
 
@@ -169,6 +169,28 @@ impl Manager {
         }
     }
 
+    /// The answer `machine` gives `operation` from `caller`, which this
+    /// machine forwards there through the hub, leaving out what belongs to
+    /// this machine; it fails at once while that machine is offline.
+    pub(crate) async fn ask_machine(
+        &self,
+        machine: &Member,
+        mut operation: Operation,
+        caller: Option<&Caller>,
+    ) -> Result<Body> {
+        operation.leave_caller_machine();
+        let name = shoal_protocol::protocol::name_of(serde_json::to_value(&operation));
+        let request = Forwarded {
+            caller: self.vouch(caller).await?,
+            method: serde_json::to_value(operation)?,
+            summary: format!("{name} on machine {}", machine.name),
+        };
+        match self.send_forwarded(machine, request, Delivery::Now).await? {
+            Reply::Answered(answered) => answered_body(answered.frames),
+            reply => Err(anyhow!("the hub answered with an unexpected {reply:?}")),
+        }
+    }
+
     /// Send `request` to `machine` through the hub: this daemon's own
     /// routing on the hub, else this machine's link to it.
     pub(super) async fn send_forwarded(
@@ -255,6 +277,22 @@ impl Manager {
             chat_modes,
         }))
     }
+}
+
+/// The body of the last answer of `frames`, what another machine's daemon
+/// wrote, after any it sent while it still prepared it, its refusal as an
+/// error.
+fn answered_body(frames: Vec<serde_json::Value>) -> Result<Body> {
+    let mut answered = None;
+    for frame in frames {
+        let response: Response = serde_json::from_value(frame)?;
+        if !matches!(response.body, Body::Keepalive) {
+            answered = Some(response.body);
+        }
+    }
+    answered
+        .context("the other machine's daemon closed the request unanswered")?
+        .into_result()
 }
 
 /// The call that asks for a stream, on its number.

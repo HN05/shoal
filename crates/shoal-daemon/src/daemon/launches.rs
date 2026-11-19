@@ -20,6 +20,7 @@ use crate::{
 mod blockers;
 mod chat;
 mod create;
+mod elsewhere;
 mod setup;
 mod shape;
 mod space;
@@ -83,6 +84,10 @@ impl Manager {
         source: LaunchSource,
         caller: Option<&Caller>,
     ) -> Result<Launched> {
+        if let Some(launched) = self.launch_on_machine(&mut launch, caller).await? {
+            return Ok(launched);
+        }
+        self.take_carried(&mut launch).await?;
         launches::ensure_copy_fits(&launch)?;
         launches::ensure_in_fits(&launch)?;
         self.select_launch_spaces(&mut launch).await?;

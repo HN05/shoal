@@ -13,6 +13,7 @@ use shoal_protocol::hub::{HubRole, Overview};
 use super::manager::Manager;
 
 pub(crate) use forwarding::{Elsewhere, Unanswered};
+pub(crate) use machines::Named;
 pub(crate) use streams::{Incoming, Outgoing};
 pub(crate) use telling::Event;
 
@@ -28,6 +29,7 @@ mod identity;
 mod known_tree;
 mod links;
 mod listener;
+mod machines;
 mod member;
 mod members;
 mod membership;

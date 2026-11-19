@@ -342,6 +342,8 @@ impl StartArgs {
             env: None,
             setup_env: None,
             unplaceable: None,
+            machine: None,
+            forwarded: None,
         }
     }
 

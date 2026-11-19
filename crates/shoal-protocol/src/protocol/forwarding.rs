@@ -9,7 +9,8 @@ use crate::{approvals::ApprovalRequest, item_numbers::ItemNumber, questions::Que
 
 use super::{
     AgentMethod, ApprovalMethod, AssignmentMethod, BranchMethod, CiMethod, DemoMethod, HoldMethod,
-    ItemMethod, Operation, QuestionMethod, QueueMethod, RemovalMethod, WorkspaceMethod,
+    ItemMethod, LaunchMethod, Operation, QuestionMethod, QueueMethod, RemovalMethod,
+    WorkspaceMethod,
 };
 
 /// What a daemon does with a request for another machine's space.
@@ -38,10 +39,20 @@ pub enum Forwarding {
 impl Operation {
     /// Leave out what belongs to the caller's machine before the request
     /// goes to another: an approval's environment, where the owning
-    /// machine pushes in its daemon's own.
+    /// machine pushes in its daemon's own, and a launch's directory and
+    /// terminal, where that machine starts the agent in a place of its own,
+    /// marking the launch as one another machine forwarded.
     pub fn leave_caller_machine(&mut self) {
-        if let Self::Approval(ApprovalMethod::DecideApproval { env, .. }) = self {
-            *env = None;
+        match self {
+            Self::Approval(ApprovalMethod::DecideApproval { env, .. }) => *env = None,
+            Self::Launch(LaunchMethod::Launch { launch }) => {
+                launch.directory = None;
+                launch.env = None;
+                launch.setup_env = None;
+                launch.unplaceable = None;
+                launch.forwarded.get_or_insert_default();
+            }
+            _ => {}
         }
     }
 
@@ -146,6 +157,7 @@ impl Operation {
                     | RemovalMethod::RemoveSpace { .. }
                     | RemovalMethod::StartRemoval { .. }
             ) | Self::Queue(QueueMethod::SetPriority { .. } | QueueMethod::QueueRestore { .. })
+                | Self::Launch(LaunchMethod::Launch { .. })
                 | Self::Demo(DemoMethod::ListDemos { .. })
                 | Self::Hold(
                     HoldMethod::HoldAcquire { .. }

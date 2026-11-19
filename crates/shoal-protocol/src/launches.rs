@@ -128,6 +128,24 @@ pub struct Launch {
     /// anything.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unplaceable: Option<String>,
+    /// The joined machine the space starts on, by its name or ID; the
+    /// caller's machine without one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<String>,
+    /// What a launch another joined machine forwarded here carries of what
+    /// that machine read for it; none for one made on this machine.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forwarded: Option<Carried>,
+}
+
+/// What a launch forwarded from another joined machine carries of what that
+/// machine read for it, in a form this machine reads alike.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Carried {
+    /// The URL of the origin of the repository it starts in, which this
+    /// machine registers as a URL clone where it has none of it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
 }
 
 /// What a setup launch sets up, which decides the space its agent starts in.

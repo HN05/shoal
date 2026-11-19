@@ -1,0 +1,171 @@
+//! Launches on another joined machine, which `shoal start --machine` names:
+//! this machine forwards the launch through the hub to that machine's
+//! daemon, which starts it as its own caller's, so the new space's queue,
+//! admission, cleanup and leases are that machine's. What this machine
+//! reads for the launch goes along in a form the other machine reads
+//! alike: the space the new one goes below by its ID, the scoped caller's
+//! own when it names none, the repository by the URL of its origin, which
+//! that machine clones where it has none of it, and the base as a branch
+//! or commit of that origin. A base only this machine has is refused,
+//! naming the push that lets the other machine fetch it.
+use anyhow::{Context as _, Result, bail, ensure};
+use shoal_protocol::hub::Member;
+use shoal_protocol::launches::{Carried, Launch, StartTarget};
+use shoal_protocol::protocol::{LaunchMethod, Launched, Operation};
+
+use super::ManagerReads;
+use crate::{
+    daemon::{hub::Named, manager::Manager, scope::Caller},
+    launches,
+    model::Repository,
+};
+
+impl Manager {
+    /// Start `launch` for `caller` on the other joined machine it names;
+    /// none when it names no machine, or this one, where it starts here.
+    pub(super) async fn launch_on_machine(
+        &self,
+        launch: &mut Launch,
+        caller: Option<&Caller>,
+    ) -> Result<Option<Launched>> {
+        let Some(named) = launch.machine.take() else {
+            return Ok(None);
+        };
+        let Named { machine, own } = self.named_machine(&named).await?;
+        if own {
+            return Ok(None);
+        }
+        ensure_carried(launch, &machine.name)?;
+        let mut launch = std::mem::take(launch);
+        self.select_launch_spaces(&mut launch).await?;
+        if let Some(caller) = caller {
+            self.parent_below(caller, &mut launch.parent).await?;
+        }
+        launch.forwarded = Some(self.carried(&mut launch, &machine.name, caller).await?);
+        self.forward_launch(&machine, launch, caller)
+            .await
+            .map(Some)
+    }
+
+    /// What `machine` answers `launch` from `caller` with, through the hub.
+    async fn forward_launch(
+        &self,
+        machine: &Member,
+        launch: Launch,
+        caller: Option<&Caller>,
+    ) -> Result<Launched> {
+        let launch = LaunchMethod::Launch {
+            launch: Box::new(launch),
+        };
+        let body = (self.ask_machine(machine, Operation::Launch(launch), caller)).await?;
+        Launched::try_from(body)
+    }
+
+    /// Take what `launch`, which another joined machine forwarded here,
+    /// carries: the repository its origin names, registered as a URL clone
+    /// where this machine has none of it, which the launch then starts in.
+    pub(super) async fn take_carried(&self, launch: &mut Launch) -> Result<()> {
+        let Some(carried) = launch.forwarded.take() else {
+            return Ok(());
+        };
+        ensure!(
+            !launch.here,
+            "--here runs an agent in the caller's terminal, which another machine has none of"
+        );
+        if let Some(origin) = carried.origin {
+            let repository = (self.register_repository(origin.into(), None, None)).await?;
+            launch.repository = Some(repository.id.to_string());
+        }
+        Ok(())
+    }
+
+    /// What `launch` carries to the machine `machine` for `caller`: the
+    /// URL of the origin of the repository it starts in, which then names
+    /// that repository in place of how this machine names it, and its base
+    /// as that machine fetches it.
+    async fn carried(
+        &self,
+        launch: &mut Launch,
+        machine: &str,
+        caller: Option<&Caller>,
+    ) -> Result<Carried> {
+        let Some(repository) = self.launch_repository(launch, caller).await? else {
+            return Ok(Carried::default());
+        };
+        let origin = crate::repository::remote_url_from_source(&repository.source).await?;
+        let origin = origin.with_context(|| {
+            format!(
+                "repository {} has no origin that machine {machine} could clone",
+                repository.display_name()
+            )
+        })?;
+        if let Some(base) = &launch.base {
+            launch.base = Some(clone_base(&repository, base, machine).await?);
+        }
+        if matches!(launch.target, Some(StartTarget::Repository(_))) {
+            launch.target = None;
+        }
+        launch.repository = None;
+        Ok(Carried {
+            origin: Some(origin),
+        })
+    }
+
+    /// The registered repository `launch` starts in for `caller`, none for
+    /// one whose mode starts it without one or that names a repository
+    /// this machine has not registered, which the other machine finds on
+    /// its own.
+    async fn launch_repository(
+        &self,
+        launch: &Launch,
+        caller: Option<&Caller>,
+    ) -> Result<Option<Repository>> {
+        if !self.launch_shape(launch, caller).await?.repository {
+            return Ok(None);
+        }
+        let reads = ManagerReads::new(self, caller);
+        launches::shape::launch_repository(&reads, launch).await
+    }
+}
+
+/// `base`, a ref of `repository`, as a clone of its origin on the machine
+/// `machine` fetches it; refused where only this machine has its commits.
+async fn clone_base(repository: &Repository, base: &str, machine: &str) -> Result<String> {
+    match crate::git::clone_base::for_clone(&repository.path, base).await? {
+        Some(base) => Ok(base),
+        None => bail!(
+            "base {base} has commits only this machine has, which machine {machine} cannot fetch; push them with git push origin {base}, then start again"
+        ),
+    }
+}
+
+/// Refuse what `launch` asks of this machine that the machine `machine`
+/// starts it without: this terminal, files and agent sessions, or the
+/// existing workspace `--in` names, whose own machine starts its agents.
+fn ensure_carried(launch: &Launch, machine: &str) -> Result<()> {
+    let local = [
+        ("--here", launch.here, "it runs the agent in this terminal"),
+        (
+            "--in",
+            launch.in_workspace.is_some(),
+            "a workspace's own machine starts its agents",
+        ),
+        (
+            "--copy",
+            launch.copy.is_some() || launch.checkpoint.is_some(),
+            "it copies this machine's files",
+        ),
+        (
+            "--fork",
+            launch.fork.is_some(),
+            "it forks a session this machine keeps",
+        ),
+    ];
+    match local.iter().find(|(_, set, _)| *set) {
+        Some((flag, _, why)) => bail!("a start on machine {machine} takes no {flag}: {why}"),
+        None => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod tests;
