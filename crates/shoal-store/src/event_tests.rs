@@ -1,6 +1,5 @@
 //! Lifecycle events must share the mutation's transaction and survive removal.
 use super::*;
-use shoal_ids::space_ids::SpaceId;
 
 #[test]
 fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {
@@ -76,86 +75,6 @@ fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {
     assert!(records.iter().all(|r| r["space_id"] == "w"
         && r["space_kind"] == "workspace"
         && r["repository_id"] == "repo"));
-    Ok(())
-}
-
-#[test]
-fn link_events_include_item_kind_and_url() -> Result<()> {
-    let mut db = Connection::open_in_memory()?;
-    migrate(&mut db)?;
-    db.execute(
-        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1)",
-        [],
-    )?;
-    db.execute_batch(
-        "BEGIN;
-         INSERT INTO workspaces(id,path,branch,state,observed_branch)
-            VALUES ('w','/work','worker','ready','worker');
-         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','worker');
-         COMMIT;",
-    )?;
-    crate::daemon::events::record_link(
-        &db,
-        &SpaceId::from("w"),
-        crate::daemon::events::EventKind::Linked,
-        crate::model::Relation::Assigned,
-        crate::forge::items::link::ItemKind::Pr,
-        "https://forge.example/team/repo/pulls/7",
-    )?;
-    let record: String = db.query_row(
-        "SELECT record FROM space_events WHERE json_extract(record,'$.kind')='linked'",
-        [],
-        |row| row.get(0),
-    )?;
-    let record: serde_json::Value = serde_json::from_str(&record)?;
-    assert_eq!(record["link"]["kind"], "pr");
-    assert_eq!(
-        record["link"]["url"],
-        "https://forge.example/team/repo/pulls/7"
-    );
-    Ok(())
-}
-
-#[test]
-fn item_activity_events_include_item_and_update_details() -> Result<()> {
-    let mut db = Connection::open_in_memory()?;
-    migrate(&mut db)?;
-    db.execute(
-        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1)",
-        [],
-    )?;
-    db.execute_batch(
-        "BEGIN;
-         INSERT INTO workspaces(id,path,branch,state,observed_branch)
-            VALUES ('w','/work','worker','ready','worker');
-         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','worker');
-         COMMIT;",
-    )?;
-    let update = crate::forge::updates::Update {
-        url: "https://forge.example/team/repo/pulls/7".into(),
-        kind: crate::forge::updates::UpdateKind::Comment,
-        message: "read the new review".into(),
-        delivery: String::new(),
-        check: None,
-        workspace: None,
-    };
-    crate::daemon::events::record_item_activity(
-        &db,
-        &SpaceId::from("w"),
-        crate::forge::items::link::LinkKind::Pr,
-        &update.url,
-        &update,
-    )?;
-    let record: String = db.query_row(
-        "SELECT record FROM space_events WHERE json_extract(record,'$.kind')='item_activity'",
-        [],
-        |row| row.get(0),
-    )?;
-    let record: serde_json::Value = serde_json::from_str(&record)?;
-    assert_eq!(record["item_activity"]["kind"], "pr");
-    assert_eq!(record["item_activity"]["url"], update.url);
-    assert_eq!(record["item_activity"]["update"]["kind"], "comment");
-    assert_eq!(record["item_activity"]["update"]["message"], update.message);
     Ok(())
 }
 
@@ -443,139 +362,6 @@ fn remove_schema_objects(db: &Connection) -> Result<()> {
 }
 
 #[test]
-fn run_link_activity_and_approval_events_read_back() -> Result<()> {
-    use crate::{daemon::events::EventDetails, forge::items::link::LinkKind};
-    let mut db = Connection::open_in_memory()?;
-    migrate(&mut db)?;
-    db.execute(
-        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1)",
-        [],
-    )?;
-    db.execute_batch(
-        "BEGIN;
-         INSERT INTO workspaces(id,path,branch,state,observed_branch)
-            VALUES ('w','/work','worker','ready','worker');
-         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','worker');
-         COMMIT;",
-    )?;
-    let url = "https://forge.example/team/repo/actions/runs/2765";
-    crate::daemon::events::record_link(
-        &db,
-        &SpaceId::from("w"),
-        crate::daemon::events::EventKind::Linked,
-        crate::model::Relation::Related,
-        LinkKind::Ci,
-        url,
-    )?;
-    let update = crate::forge::updates::Update {
-        url: url.into(),
-        kind: crate::forge::updates::UpdateKind::CiCompleted,
-        message: "Run finished".into(),
-        delivery: String::new(),
-        check: None,
-        workspace: None,
-    };
-    crate::daemon::events::record_item_activity(
-        &db,
-        &SpaceId::from("w"),
-        LinkKind::Ci,
-        url,
-        &update,
-    )?;
-    crate::daemon::events::record_item(&db, &SpaceId::from("w"), LinkKind::Ci, url, "approve")?;
-    let records = db
-        .prepare("SELECT record FROM space_events ORDER BY id")?
-        .query_map([], |row| row.get::<_, String>(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    let events = records
-        .iter()
-        .map(|record| serde_json::from_str::<EventDetails>(record))
-        .collect::<serde_json::Result<Vec<_>>>()?;
-    let kinds = events
-        .iter()
-        .filter_map(|event| {
-            let link = event.link.as_ref().map(|link| link.kind);
-            let item = event.item.as_ref().map(|item| item.kind);
-            let activity = event.item_activity.as_ref().map(|activity| activity.kind);
-            link.or(item).or(activity)
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(kinds, [LinkKind::Ci, LinkKind::Ci, LinkKind::Ci]);
-    Ok(())
-}
-
-#[test]
-fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
-    use crate::daemon::events::{EventDetails, EventKind};
-    let mut db = Connection::open_in_memory()?;
-    migrate(&mut db)?;
-    db.execute_batch(
-        "BEGIN;
-         INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-         INSERT INTO chats(id)
-             VALUES ('c');
-         INSERT INTO spaces(id,kind,repository_id,name,mode)
-             VALUES ('c','chat','repo','planner','chat');
-         INSERT INTO space_review(space_id,url,kind) VALUES ('c','',NULL);
-         COMMIT;",
-    )?;
-    crate::daemon::events::record_link(
-        &db,
-        &SpaceId::from("c"),
-        EventKind::Linked,
-        crate::model::Relation::Assigned,
-        crate::forge::items::link::LinkKind::Issue,
-        "https://forge.example/team/repo/issues/1",
-    )?;
-    db.execute_batch(
-        "INSERT INTO space_completion(space_id,record)
-             VALUES ('c','{\"head\":\"abc\",\"cleanup\":true,\"error\":null}');
-         DELETE FROM space_completion WHERE space_id='c';",
-    )?;
-    let rows = db
-        .prepare("SELECT space_id,record FROM space_events ORDER BY id")?
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    let events = rows
-        .iter()
-        .map(|(space, record)| {
-            Ok((
-                space.as_str(),
-                serde_json::from_str::<EventDetails>(record)?,
-            ))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    let kinds: Vec<_> = events.iter().map(|(_, event)| event.kind).collect();
-    assert_eq!(
-        kinds,
-        [
-            EventKind::Created,
-            EventKind::ReviewReady,
-            EventKind::Linked,
-            EventKind::Completed,
-            EventKind::Undone
-        ]
-    );
-    for (space, event) in &events {
-        assert_eq!(*space, "c");
-        assert_eq!(event.space_id.as_str(), "c");
-        assert_eq!(event.space, shoal_protocol::events::EventSpace::Chat);
-        assert_eq!(event.name, "planner");
-    }
-    for (_, record) in &rows {
-        let record: serde_json::Value = serde_json::from_str(record)?;
-        assert_eq!(
-            (record.get("path"), record.get("branch")),
-            (None, None),
-            "{record}"
-        );
-    }
-    Ok(())
-}
-
-#[test]
 fn stored_chat_events_lose_their_path_and_branch() -> Result<()> {
     use shoal_protocol::events::EventSpace;
     let mut db = Connection::open_in_memory()?;
@@ -616,7 +402,7 @@ fn stored_chat_events_lose_their_path_and_branch() -> Result<()> {
 }
 
 /// The journal's records, oldest first.
-fn journal(db: &Connection) -> Result<Vec<crate::daemon::events::EventDetails>> {
+fn journal(db: &Connection) -> Result<Vec<shoal_protocol::events::EventDetails>> {
     db.prepare("SELECT record FROM space_events ORDER BY id")?
         .query_map([], |row| row.get::<_, String>(0))?
         .map(|record| Ok(serde_json::from_str(&record?)?))
@@ -625,7 +411,7 @@ fn journal(db: &Connection) -> Result<Vec<crate::daemon::events::EventDetails>> 
 
 #[test]
 fn renames_questions_and_children_reach_their_spaces_logs() -> Result<()> {
-    use crate::daemon::events::EventKind;
+    use shoal_protocol::events::EventKind;
     let mut db = Connection::open_in_memory()?;
     migrate(&mut db)?;
     db.execute_batch(
@@ -722,7 +508,7 @@ fn a_workspace_s_creation_takes_the_base_recorded_after_it() -> Result<()> {
     )?;
     let created: Vec<_> = journal(&db)?
         .into_iter()
-        .filter(|event| event.kind == crate::daemon::events::EventKind::Created)
+        .filter(|event| event.kind == shoal_protocol::events::EventKind::Created)
         .map(|event| event.base_ref)
         .collect();
     assert_eq!(created, [Some("refs/heads/main".to_owned())]);
@@ -731,7 +517,7 @@ fn a_workspace_s_creation_takes_the_base_recorded_after_it() -> Result<()> {
 
 #[test]
 fn the_journal_names_every_space_it_recorded_by_its_id_and_kind() -> Result<()> {
-    use crate::daemon::events::{EventDetails, FileEventDetails, ShoalEventDetails};
+    use shoal_protocol::events::{EventDetails, FileEventDetails, ShoalEventDetails};
     let mut db = Connection::open_in_memory()?;
     migrate_to(&mut db, 183)?;
     let chat = r#""chat":{"id":"c","repository_id":"repo","name":"planner","agent":"claude","started_at":1}"#;
@@ -784,7 +570,8 @@ fn the_journal_names_every_space_it_recorded_by_its_id_and_kind() -> Result<()> 
             ))
         })
         .collect::<Result<_>>()?;
-    use crate::{daemon::events::EventKind, model::SpaceKind};
+    use crate::model::SpaceKind;
+    use shoal_protocol::events::EventKind;
     let chat = |kind, name: &str| (kind, "c".to_owned(), SpaceKind::Chat, name.to_owned());
     assert_eq!(
         summary,

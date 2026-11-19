@@ -6,6 +6,7 @@ use shoal_protocol::files::SentFile;
 /// SQL for a `files` column with the files whose record IDs the JSON array
 /// in `$column` lists, in its order, as a JSON array of [`SentFile`]s; a file
 /// whose record is gone, as after `shoal files rm`, drops out.
+#[macro_export]
 macro_rules! sent_files {
     ($column:literal) => {
         concat!(
@@ -17,10 +18,10 @@ macro_rules! sent_files {
         )
     };
 }
-pub(crate) use sent_files;
+pub use crate::sent_files;
 
 /// The record IDs of `files`, as a column [`sent_files`] reads stores them.
-pub(crate) fn sent_ids(files: &[SentFile]) -> Result<String> {
+pub fn sent_ids(files: &[SentFile]) -> Result<String> {
     let ids: Vec<i64> = files.iter().map(|file| file.id).collect();
     Ok(serde_json::to_string(&ids)?)
 }

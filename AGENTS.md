@@ -148,6 +148,12 @@ for delivering a PR, under Committing near the end, decide when work is done.
   snapshot, which the daemon builds from its state, and never the state
   itself; admission stays in the daemon. It depends on no Shoal crate but
   `shoal-ids`, `shoal-time` and `shoal-states`.
+- `crates/shoal-store` holds the daemon's `Store`, its schema, its
+  migrations and the row mappers and guards every subsystem shares; a
+  subsystem's own record functions stay with it. A migration calls no code
+  outside the store: one that needs a subsystem's logic takes a copy frozen at
+  the shape it migrates. It depends on no Shoal crate but `shoal-core`,
+  `shoal-ids`, `shoal-protocol` and `shoal-refs`.
 - `crates/shoal-time` holds the wall-clock timestamp type,
   `crates/shoal-refs` the commit and branch name types, `crates/shoal-ids`
   the record IDs and numbers, and `crates/shoal-states` the macros that

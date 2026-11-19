@@ -109,7 +109,7 @@ impl Manager {
             triggers: Default::default(),
             publications: Default::default(),
             agent_settles: Default::default(),
-            store: Store::open(paths.database()).await?,
+            store: open_store(&paths).await?,
             // Tests inject hosts and never discover or close the user's
             // sessions.
             session_hosts: if crate::daemon::fake_workers::faked() {
@@ -200,6 +200,15 @@ impl Manager {
         self.ensure_repository_available(&repo.id).await?;
         Ok((repo, guard))
     }
+}
+
+/// The store in `paths`' state directory, whose commits tests do not sync
+/// to disk.
+async fn open_store(paths: &Paths) -> Result<Store> {
+    #[cfg(test)]
+    return shoal_store::test_support::unsynced_store(paths.database()).await;
+    #[cfg(not(test))]
+    Store::open(paths.database()).await
 }
 
 #[cfg(test)]

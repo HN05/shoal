@@ -1,4 +1,3 @@
-use rusqlite::Connection;
 use serde_json::json;
 
 use super::*;
@@ -21,13 +20,7 @@ fn an_event_names_the_files_that_stay_on_its_machine() {
 
 #[test]
 fn the_outbox_sends_in_the_order_events_came() {
-    let mut db = Connection::open_in_memory().unwrap();
-    for schema in [
-        include_str!("../../store/hub.sql"),
-        include_str!("../../store/hub_routing.sql"),
-    ] {
-        db.execute_batch(schema).unwrap();
-    }
+    let mut db = shoal_store::test_support::migrated().unwrap();
     let tx = db.transaction().unwrap();
     for message in ["first", "second"] {
         let mut event = told(&[]);

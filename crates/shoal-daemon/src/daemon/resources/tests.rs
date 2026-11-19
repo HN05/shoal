@@ -1,12 +1,63 @@
 use super::*;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_store::test_support::queries::{check_owner_query, lease_database};
 
 mod accounting;
 
 #[test]
 fn owner_lease_reads_search_existing_index() -> Result<()> {
-    store::query_tests::check_owner_query(&leases_query(true), "resource_leases", "workspace_id")
+    check_owner_query(&leases_query(true), "resource_leases", "workspace_id")
+}
+
+#[test]
+fn lease_lists_preserve_global_order_and_owner_selection() -> Result<()> {
+    let db = lease_database()?;
+    let all_leases = leases(&db, None)?;
+    assert_eq!(all_leases.len(), 20);
+    let lease_key = |lease: &ResourceLease| {
+        (
+            lease.scope.to_string(),
+            lease.pool.clone(),
+            lease.resource.clone(),
+            lease.name.clone(),
+            lease.id.clone(),
+        )
+    };
+    assert!(
+        all_leases
+            .windows(2)
+            .all(|pair| lease_key(&pair[0]) < lease_key(&pair[1]))
+    );
+    for owner in ["owner-0", "owner-9", "missing", ""] {
+        let expected_leases: Vec<_> = all_leases
+            .iter()
+            .filter(|l| l.workspace_id == owner)
+            .collect();
+        assert_eq!(
+            serde_json::to_value(leases(&db, Some(&SpaceId::from(owner)))?)?,
+            serde_json::to_value(expected_leases)?
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn lease_lists_propagate_decoding_and_prepare_errors() -> Result<()> {
+    let db = lease_database()?;
+    db.execute_batch(
+        "PRAGMA ignore_check_constraints=ON;
+        UPDATE resource_leases SET mode='invalid' WHERE workspace_id='owner-0';",
+    )?;
+    for owner in [None, Some(SpaceId::from("owner-0"))] {
+        assert!(leases(&db, owner.as_ref()).is_err());
+    }
+    assert_eq!(leases(&db, Some(&SpaceId::from("owner-1")))?.len(), 2);
+    db.execute_batch("DROP TABLE resource_leases;")?;
+    for owner in [None, Some(SpaceId::from("owner-0"))] {
+        assert!(leases(&db, owner.as_ref()).is_err());
+    }
+    Ok(())
 }
 
 #[test]
@@ -70,11 +121,11 @@ fn leases_use_named_columns() -> Result<()> {
 #[test]
 fn allocation_reads_only_the_named_lease_and_selected_pool() -> Result<()> {
     let mut db = Connection::open_in_memory()?;
-    db.execute_batch(include_str!("../../../tests/fixtures/schema_v17.sql"))?;
+    db.execute_batch(shoal_store::test_support::SCHEMA_V17)?;
     db.execute_batch(
         "CREATE TABLE repository_resource_leases (lease_id TEXT, repository_id TEXT, path TEXT);",
     )?;
-    db.execute_batch(include_str!("../store/lease_acquirers.sql"))?;
+    db.execute_batch(shoal_store::test_support::LEASE_ACQUIRERS)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('a','/a','a',0),('b','/b','b',0);
              INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES

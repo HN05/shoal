@@ -1,5 +1,13 @@
 //! SQLite persistence: schema migrations, row mappers, and the small
 //! guards every mutation shares.
+use shoal_core::{config, fsutil, process, refusal};
+use shoal_protocol::{agent, model, state};
+#[cfg(test)]
+use {
+    shoal_core::{sessions, start_plan},
+    shoal_protocol::time,
+};
+
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Row, Transaction, TransactionBehavior};
@@ -29,11 +37,20 @@ mod place_owners;
 mod place_servers;
 mod queue_plans;
 mod record_shapes;
-pub(crate) mod sent_files;
+pub mod sent_files;
 mod space_titles;
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
 mod worker;
 #[cfg(test)]
 mod workspace_availability_tests;
+
+/// Whether the store's commits sync to disk, which tests skip.
+#[derive(Clone, Copy)]
+enum Syncs {
+    Kept,
+    Skipped,
+}
 
 #[derive(Clone)]
 pub struct Store {
@@ -43,8 +60,16 @@ pub struct Store {
 impl Store {
     /// Open persistence and migrate its schema without changing active operations.
     pub async fn open(path: PathBuf) -> Result<Self> {
+        let syncs = match cfg!(test) {
+            true => Syncs::Skipped,
+            false => Syncs::Kept,
+        };
+        Self::open_with(path, syncs).await
+    }
+
+    async fn open_with(path: PathBuf, syncs: Syncs) -> Result<Self> {
         let store = Self {
-            worker: worker::Worker::start(path)?,
+            worker: worker::Worker::start(path, syncs)?,
         };
         // Not `write`: tests migrate plain connections, so the migration
         // opens its own transaction.
@@ -326,7 +351,7 @@ pub fn json_text<T: Serialize>(value: Option<&T>) -> Result<Option<String>> {
 
 /// The column value of a `--permission` narrowing: its JSON, or none for
 /// one that narrows nothing.
-pub(crate) fn narrowing_column(
+pub fn narrowing_column(
     narrowing: &crate::config::permissions::PermissionsConfig,
 ) -> Result<Option<String>> {
     Ok((!narrowing.is_empty())
@@ -335,10 +360,7 @@ pub(crate) fn narrowing_column(
 }
 
 /// Parse an optional JSON text column, reporting failures as SQL conversions.
-pub(crate) fn json_column<T: DeserializeOwned>(
-    row: &Row<'_>,
-    name: &str,
-) -> rusqlite::Result<Option<T>> {
+pub fn json_column<T: DeserializeOwned>(row: &Row<'_>, name: &str) -> rusqlite::Result<Option<T>> {
     let index = row.as_ref().column_index(name)?;
     row.get::<_, Option<String>>(index)?
         .map(|json| {
@@ -615,7 +637,7 @@ pub fn setup_finished(db: &Connection, workspace_id: &SpaceId) -> Result<bool> {
 }
 
 #[cfg(test)]
-pub(super) mod query_tests;
+mod query_tests;
 
 #[cfg(test)]
 use migrations::*;

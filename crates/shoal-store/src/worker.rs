@@ -7,7 +7,7 @@ use std::{
 use tokio::sync::{mpsc, oneshot, watch};
 
 const QUEUE_CAPACITY: usize = 128;
-type Job = Box<dyn FnOnce(&mut Option<Connection>, &Path) + Send>;
+type Job = Box<dyn FnOnce(&mut Option<Connection>, &Path, Syncs) + Send>;
 
 pub(super) struct Worker {
     sender: Mutex<Option<mpsc::Sender<Job>>>,
@@ -18,7 +18,7 @@ pub(super) struct Worker {
 }
 
 impl Worker {
-    pub(super) fn start(path: PathBuf) -> Result<Arc<Self>> {
+    pub(super) fn start(path: PathBuf, syncs: Syncs) -> Result<Arc<Self>> {
         let (sender, mut receiver) = mpsc::channel::<Job>(QUEUE_CAPACITY);
         let (finished, stopped) = watch::channel(());
         std::thread::Builder::new()
@@ -29,7 +29,7 @@ impl Worker {
                 let mut connection = None;
                 while let Some(job) = receiver.blocking_recv() {
                     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        job(&mut connection, &path);
+                        job(&mut connection, &path, syncs);
                     }));
                     // A panic or an unfinished raw transaction must not leak state
                     // into the next operation. Never replay the failed operation.
@@ -57,17 +57,20 @@ impl Worker {
         let changed = self.changed.clone();
         #[cfg(test)]
         let opens = self.opens.clone();
-        let job = Box::new(move |connection: &mut Option<Connection>, path: &Path| {
-            let result = execute_operation(
-                connection,
-                path,
-                &changed,
-                #[cfg(test)]
-                &opens,
-                operation,
-            );
-            let _ = send.send(result);
-        });
+        let job = Box::new(
+            move |connection: &mut Option<Connection>, path: &Path, syncs| {
+                let result = execute_operation(
+                    connection,
+                    path,
+                    syncs,
+                    &changed,
+                    #[cfg(test)]
+                    &opens,
+                    operation,
+                );
+                let _ = send.send(result);
+            },
+        );
         // Callers are bounded by the daemon's client limit, so waiting for queue
         // space applies backpressure instead of failing ordinary requests.
         let sender = self
@@ -97,6 +100,7 @@ impl Worker {
 fn execute_operation<T>(
     connection: &mut Option<Connection>,
     path: &Path,
+    syncs: Syncs,
     changed: &watch::Sender<()>,
     #[cfg(test)] opens: &std::sync::atomic::AtomicU64,
     operation: impl FnOnce(&mut Connection) -> Result<T>,
@@ -104,7 +108,7 @@ fn execute_operation<T>(
     let db = match connection {
         Some(db) => db,
         None => {
-            let db = connection.insert(connect(path)?);
+            let db = connection.insert(connect(path, syncs)?);
             #[cfg(test)]
             opens.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             db
@@ -118,12 +122,13 @@ fn execute_operation<T>(
     result
 }
 
-fn connect(path: &Path) -> Result<Connection> {
+fn connect(path: &Path, syncs: Syncs) -> Result<Connection> {
     let db = Connection::open(path).context("open Shoal state database")?;
     db.busy_timeout(Duration::from_secs(5))?;
     db.execute_batch("PRAGMA foreign_keys=ON;")?;
-    #[cfg(test)]
-    crate::daemon::test_support::skip_syncs(&db)?;
+    if let Syncs::Skipped = syncs {
+        db.pragma_update(None, "synchronous", "OFF")?;
+    }
     Ok(db)
 }
 

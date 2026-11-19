@@ -40,6 +40,10 @@ instead of the PR delivery guidance below.
   `shoal-states`. Flag a policy that reads the daemon's state rather than its
   snapshot, a `match` on `machine.schedule` inside the ranking, and admission
   outside the daemon.
+- `crates/shoal-store` holds the daemon's `Store`, schema, migrations and the
+  row mappers and guards every subsystem shares, and depends on no Shoal crate
+  but `shoal-core`, `shoal-ids`, `shoal-protocol` and `shoal-refs`. Flag a
+  migration that calls code outside the store instead of a frozen copy.
 - The CLI (`crates/shoal-cli`) and the daemon (`crates/shoal-daemon`) depend
   on neither each other; the `shoal` package's `main` joins them. Flag a
   dependency of the daemon, even a dev-dependency, on a crate that calls the

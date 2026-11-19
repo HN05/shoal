@@ -105,7 +105,7 @@ pub(crate) mod spotlight;
 mod startup;
 mod startup_audit;
 pub(crate) mod stopped_work;
-pub mod store;
+pub(crate) use shoal_store as store;
 pub(crate) mod subagents;
 mod subscriptions;
 #[cfg(any(test, feature = "test-support"))]

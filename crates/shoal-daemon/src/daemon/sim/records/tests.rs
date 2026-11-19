@@ -1,9 +1,9 @@
 use super::*;
 use crate::daemon::store::Store;
-use crate::daemon::test_support::open_database;
 use rusqlite::params;
 use serde_json::{Value, json};
 use shoal_ids::space_ids::SpaceId;
+use shoal_store::test_support::open_database;
 
 fn record(id: &str, current: Option<&str>, last: Option<&str>) -> Value {
     json!({
@@ -32,7 +32,7 @@ async fn migration_and_transitions_preserve_json_ownership_and_audits() -> Resul
     let root = tempfile::tempdir()?;
     let path = root.path().join("state.db");
     let db = open_database(&path)?;
-    db.execute_batch(include_str!("../../../../tests/fixtures/schema_v17.sql"))?;
+    db.execute_batch(shoal_store::test_support::SCHEMA_V17)?;
     let mut sim = record("b", Some("A"), None);
     save(&db, &sim)?;
     save(&db, &record("a", None, Some("A")))?;
@@ -107,7 +107,7 @@ async fn malformed_migration_rolls_back_and_names_the_record() -> Result<()> {
         let root = tempfile::tempdir()?;
         let path = root.path().join("state.db");
         let db = open_database(&path)?;
-        db.execute_batch(include_str!("../../../../tests/fixtures/schema_v17.sql"))?;
+        db.execute_batch(shoal_store::test_support::SCHEMA_V17)?;
         db.execute("INSERT INTO simulators VALUES ('broken',?1)", [invalid])?;
         let error = Store::open(path.clone()).await.err().unwrap();
         assert!(format!("{error:#}").contains("decode simulator record broken"));

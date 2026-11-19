@@ -1,4 +1,3 @@
-use rusqlite::Connection;
 use serde_json::json;
 
 use super::*;
@@ -20,16 +19,7 @@ fn a_kept_tree_reads_back_with_its_machines_and_parents() {
         }],
     }))
     .unwrap();
-    let mut db = Connection::open_in_memory().unwrap();
-    db.execute_batch(
-        include_str!("../../store/hub_routing.sql")
-            .split("-- What a joined machine last learned")
-            .nth(1)
-            .map(|rest| format!("--{rest}"))
-            .unwrap()
-            .as_str(),
-    )
-    .unwrap();
+    let mut db = shoal_store::test_support::migrated().unwrap();
     let tx = db.transaction().unwrap();
     let here = MemberId::from("desk".to_owned());
     store(&tx, &Known::of(&here, &directory)).unwrap();

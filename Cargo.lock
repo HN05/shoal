@@ -2529,6 +2529,7 @@ dependencies = [
  "shoal-protocol",
  "shoal-refs",
  "shoal-schedule",
+ "shoal-store",
  "shoal-subprocess",
  "socket2",
  "tempfile",
@@ -2664,6 +2665,24 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "shoal-store"
+version = "0.19.0"
+dependencies = [
+ "anyhow",
+ "libc",
+ "rusqlite",
+ "rustix",
+ "serde",
+ "serde_json",
+ "shoal-core",
+ "shoal-ids",
+ "shoal-protocol",
+ "shoal-refs",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

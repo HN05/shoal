@@ -32,6 +32,7 @@ shoal-proxy = { path = "crates/shoal-proxy" }
 shoal-refs = { path = "crates/shoal-refs" }
 shoal-schedule = { path = "crates/shoal-schedule" }
 shoal-states = { path = "crates/shoal-states" }
+shoal-store = { path = "crates/shoal-store" }
 shoal-subprocess = { path = "crates/shoal-subprocess" }
 shoal-time = { path = "crates/shoal-time" }
 shoal-workers = { path = "crates/shoal-workers" }

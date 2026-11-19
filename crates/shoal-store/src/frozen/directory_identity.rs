@@ -11,7 +11,7 @@ use std::{
 /// The identity of the directory at `path`, which a test of the migration
 /// expects.
 #[cfg(test)]
-pub(in crate::daemon::store) fn directory_identity(path: &Path) -> Result<String> {
+pub(crate) fn directory_identity(path: &Path) -> Result<String> {
     let (metadata, birth) = directory_metadata(path)?;
     Ok(format_identity(metadata.dev(), metadata.ino(), birth))
 }
@@ -19,7 +19,7 @@ pub(in crate::daemon::store) fn directory_identity(path: &Path) -> Result<String
 /// The identity of the directory at `path`, when `recorded` is the
 /// `device:inode` an earlier version recorded for it where its birth time
 /// now names it.
-pub(in crate::daemon::store) fn birth_identity(path: &Path, recorded: &str) -> Option<String> {
+pub(crate) fn birth_identity(path: &Path, recorded: &str) -> Option<String> {
     let (metadata, birth) = directory_metadata(path).ok()?;
     let identity = format_identity(metadata.dev(), metadata.ino(), birth);
     (recorded == format!("{}:{}", metadata.dev(), metadata.ino()) && identity != recorded)

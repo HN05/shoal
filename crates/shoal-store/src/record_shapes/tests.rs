@@ -1,5 +1,5 @@
 use super::*;
-use crate::daemon::store::migrations::{migrate, migrate_to};
+use crate::migrations::{migrate, migrate_to};
 
 /// A database at the schema before migration `version`.
 fn before(version: i64) -> Result<Connection> {
@@ -215,7 +215,7 @@ fn a_snapshot_that_saw_no_state_leaves_it_out() -> Result<()> {
 #[test]
 fn saved_agent_files_take_the_current_shape() -> Result<()> {
     let state = tempfile::tempdir()?;
-    let mut db = crate::daemon::test_support::open_database(state.path().join("state.db"))?;
+    let mut db = crate::test_support::open_database(state.path().join("state.db"))?;
     migrate_to(&mut db, 210)?;
     let space = state.path().join("workspaces/w");
     fs::create_dir_all(&space)?;

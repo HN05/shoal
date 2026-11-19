@@ -2,8 +2,6 @@ use super::*;
 use rusqlite::StatementStatus;
 use shoal_ids::space_ids::SpaceId;
 
-const INDEX_SCHEMA: &str = include_str!("../../../store/simulator_owner.sql");
-
 fn owner(index: usize) -> SpaceId {
     SpaceId::from(format!("10000000-0000-0000-0000-{index:012}"))
 }
@@ -51,9 +49,7 @@ fn legacy_list(db: &Connection, owner: &str) -> Result<Vec<Simulator>> {
 #[test]
 fn indexed_plan_and_decode_counts_stay_bounded_as_inventory_grows() -> Result<()> {
     for size in [4, 16, 64, 256, 1_000, 10_000] {
-        let mut db = Connection::open_in_memory()?;
-        db.execute_batch("CREATE TABLE simulators(id TEXT PRIMARY KEY, record TEXT NOT NULL)")?;
-        db.execute_batch(INDEX_SCHEMA)?;
+        let mut db = shoal_store::test_support::migrated()?;
         populate(&mut db, size)?;
         let plan = db
             .prepare(&format!("EXPLAIN QUERY PLAN {OWNED}"))?

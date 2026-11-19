@@ -123,7 +123,7 @@ async fn full_queue_waits_and_drains_cancelled_callers_before_shutdown() -> Resu
             .unwrap()
             .as_ref()
             .unwrap()
-            .try_send(Box::new(move |_, _| {
+            .try_send(Box::new(move |_, _, _| {
                 let _ = send.send(());
             }))
             .unwrap();
@@ -141,14 +141,14 @@ async fn full_queue_waits_and_drains_cancelled_callers_before_shutdown() -> Resu
     });
     let clone = store.clone();
     let mut waiting_caller = Box::pin(async move { clone.run(|_| Ok(())).await });
-    crate::daemon::test_support::assert_pending(&mut cancelled_caller).await;
-    crate::daemon::test_support::assert_pending(&mut waiting_caller).await;
+    shoal_core::test_support::assert_pending(&mut cancelled_caller).await;
+    shoal_core::test_support::assert_pending(&mut waiting_caller).await;
     // Cancelling before admission drops the operation without running it.
     drop(cancelled_caller);
     active.abort();
     let clone = store.clone();
     let mut shutdown = Box::pin(async move { clone.shutdown().await });
-    crate::daemon::test_support::assert_pending(&mut shutdown).await;
+    shoal_core::test_support::assert_pending(&mut shutdown).await;
     release.send(())?;
     let ((), result) = tokio::join!(shutdown, waiting_caller);
     result?;

@@ -86,7 +86,11 @@ every layer is merged, so an option takes another's final value. The CLI and the
 which makes no daemon calls, but not on each other; the CLI also depends on
 `shoal-client` and on `shoal-workers`, the execution wrapper and the workers
 that run in the processes Shoal starts and call the daemon. The binary-only
-`shoal` package joins them.
+`shoal` package joins them. Below the daemon, `shoal-store` holds its SQLite
+store: the schema, the migrations and the row mappers and guards every part of
+the daemon shares. A migration runs only the store's code, a copy frozen at the
+shape it migrates of anything it once called elsewhere, so a later change
+elsewhere never changes what an old migration does.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
 the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
 `shoal-workers` neither the daemon nor its tests: the daemon depends on no

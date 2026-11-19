@@ -149,7 +149,9 @@ async fn inspection(backend: &Backend, metrics: &Arc<Metrics>, id: SpaceId) -> R
         .run(metrics.clone(), move |db| {
             assert_eq!(executions(db, &id)?.len(), 1);
             ports(db, Some(&id))?;
-            crate::daemon::resources::leases(db, Some(&id))?;
+            db.prepare("SELECT * FROM resource_leases WHERE workspace_id=?1")?
+                .query_map([&id], |_| Ok(()))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
             Ok(())
         })
         .await?;

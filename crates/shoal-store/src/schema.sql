@@ -1,6 +1,6 @@
 -- The schema the migrations in migrations.rs make, which a new database
 -- takes. Written by
--- SHOAL_WRITE_SCHEMA=1 cargo nextest run -p shoal-daemon -E 'test(a_new_database_takes)'
+-- SHOAL_WRITE_SCHEMA=1 cargo nextest run -p shoal-store -E 'test(a_new_database_takes)'
 
 CREATE TABLE repositories (
             id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, source TEXT NOT NULL, last_used INTEGER NOT NULL

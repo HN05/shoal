@@ -5,14 +5,7 @@ use shoal_protocol::hub::directory::{Report, SpaceSummary};
 use super::*;
 
 fn database() -> Connection {
-    let db = Connection::open_in_memory().unwrap();
-    for schema in [
-        include_str!("../../../store/hub.sql"),
-        include_str!("../../../store/hub_directory.sql"),
-        include_str!("../../../store/hub_numbers.sql"),
-    ] {
-        db.execute_batch(schema).unwrap();
-    }
+    let db = shoal_store::test_support::migrated().unwrap();
     db.execute_batch(
         "INSERT INTO hub_members(id, kind, name, public_key, joined_at)
          VALUES ('desk','machine','desk','k1',0), ('laptop','machine','laptop','k2',0);",

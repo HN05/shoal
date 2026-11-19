@@ -10,7 +10,7 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
     if version == 0 {
         return Ok(db);
     }
-    db.execute_batch(include_str!("../../../tests/fixtures/schema_v17.sql"))?;
+    db.execute_batch(crate::test_support::SCHEMA_V17)?;
     if version >= 18 {
         db.execute_batch(
             "CREATE INDEX executions_workspace ON executions(workspace_id);
@@ -1504,11 +1504,17 @@ fn migrated_spaces_keep_their_issue_first_and_take_more() -> Result<()> {
         "INSERT INTO space_issue(space_id,url) VALUES ('workspace',?1)",
         ["https://forge.example/o/r/issues/5"],
     )?;
-    let links = crate::daemon::links::linked::space_links(&db, &"workspace".into())?;
-    let issues: Vec<_> = (links.issues.iter())
-        .map(|issue| (issue.url.number().get(), issue.title.as_deref()))
-        .collect();
-    assert_eq!(issues, [(4, Some("Fix it")), (5, None)]);
+    let issues = db
+        .prepare("SELECT url,title FROM space_issue WHERE space_id='workspace' ORDER BY rowid")?
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let issue = |number| format!("https://forge.example/o/r/issues/{number}");
+    assert_eq!(
+        issues,
+        [(issue(4), Some("Fix it".into())), (issue(5), None)]
+    );
     Ok(())
 }
 
@@ -1520,14 +1526,26 @@ fn migrated_workspaces_keep_their_turn_retry() -> Result<()> {
              VALUES ('workspace','execution','overloaded',2,1000,0);",
     )?;
     migrate(&mut db)?;
-    let retry = crate::daemon::turn_retry::get(&db, &"workspace".into())?;
-    let kept = crate::daemon::turn_retry::TurnRetry {
-        failure: crate::state::TurnFailure::Overloaded,
-        attempt: 2,
-        due_at: UnixTime::from_seconds(1000),
-        delivered: false,
-    };
-    assert_eq!(retry, Some(kept));
+    let retry = db.query_row(
+        "SELECT failure,attempt,due_at,delivered FROM space_turn_retries
+            WHERE space_id='workspace'",
+        [],
+        |row| {
+            Ok((
+                row.get::<_, crate::state::TurnFailure>(0)?,
+                row.get::<_, u32>(1)?,
+                row.get::<_, UnixTime>(2)?,
+                row.get::<_, bool>(3)?,
+            ))
+        },
+    )?;
+    let kept = (
+        crate::state::TurnFailure::Overloaded,
+        2,
+        UnixTime::from_seconds(1000),
+        false,
+    );
+    assert_eq!(retry, kept);
     Ok(())
 }
 
@@ -1597,7 +1615,7 @@ fn migration_keeps_question_numbers_numbers_approvals_and_drops_delivered_questi
         .collect::<rusqlite::Result<Vec<_>>>()?;
     assert_eq!(requests, [("grant".into(), 1, 1), ("land".into(), 2, 2)]);
     // Both kinds now share their space's numbers.
-    assert_eq!(crate::daemon::item_numbers::free(&db, 1.into())?, 3);
+    assert_eq!(frozen::free_item(&db, 1.into())?, 3);
     Ok(())
 }
 
@@ -2449,7 +2467,8 @@ fn migrated_issue_proposals_name_the_workspace_head_in_one_value() -> Result<()>
 
 #[test]
 fn migrated_file_events_name_their_space_in_the_file() -> Result<()> {
-    use crate::{daemon::events::FileEventDetails, model::SpaceKind};
+    use crate::model::SpaceKind;
+    use shoal_protocol::events::FileEventDetails;
     let mut db = historical_database(202)?;
     db.execute(
         r#"INSERT INTO space_events(space_id,record) VALUES ('chat','{"kind":"file_added",
@@ -2787,7 +2806,7 @@ async fn approval_records_survive_reopen_and_follow_workspace_ownership() {
 async fn migrates_original_database_without_losing_ownership_records() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("state.db");
-    let mut db = crate::daemon::test_support::open_database(&path).unwrap();
+    let mut db = crate::test_support::open_database(&path).unwrap();
     db.execute_batch("CREATE TABLE repositories(id TEXT PRIMARY KEY,path TEXT UNIQUE,source TEXT,last_used INTEGER);
             CREATE TABLE workspaces(id TEXT PRIMARY KEY,repository_id TEXT,name TEXT UNIQUE,path TEXT UNIQUE,branch TEXT,state TEXT,error TEXT);
             CREATE TABLE executions(id TEXT PRIMARY KEY,workspace_id TEXT,state TEXT);
@@ -2858,34 +2877,31 @@ async fn migrates_semaphore_leases_and_definitions_from_version_eight() {
     let migrated = Store::open(path.clone()).await.unwrap();
     migrated
             .run(|db| {
-                let leases = crate::daemon::resources::leases(db, None)?;
-                assert_eq!(leases.len(), 1);
-                assert_eq!(leases[0].id, "lease");
-                assert_eq!(leases[0].mode, crate::daemon::resources::LockMode::Permit);
-                assert_eq!(leases[0].created_at, UnixTime::from_seconds(123));
+                let leases = db
+                    .prepare("SELECT id,mode,created_at FROM resource_leases")?
+                    .query_map([], |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, UnixTime>(2)?,
+                        ))
+                    })?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                assert_eq!(
+                    leases,
+                    [("lease".into(), "permit".into(), UnixTime::from_seconds(123))]
+                );
                 let json: String =
                     db.query_row("SELECT definition FROM resource_pools", [], |row| {
                         row.get(0)
                     })?;
-                let stored: crate::daemon::resources::Definition = serde_json::from_str(&json)?;
-                let config: crate::config::repo::RepoConfig =
-                    toml::from_str("[resources.worker]\ncapacity=2")?;
                 assert_eq!(
-                    stored,
-                    crate::daemon::resources::definitions(
-                        &config.resources,
-                        &config.resource_pools
-                    )?["worker"]
+                    json,
+                    r#"{"capacity":2,"reason":null,"resources":{"worker":{"capacity":2,"reason":null}}}"#
                 );
                 assert!(
                     db.execute("UPDATE resource_leases SET mode='invalid'", [])
                         .is_err()
-                );
-                assert!(
-                    db.query_row("SELECT 'invalid'", [], |row| {
-                        row.get::<_, crate::daemon::resources::LockMode>(0)
-                    })
-                    .is_err()
                 );
                 Ok(())
             })

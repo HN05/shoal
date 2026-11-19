@@ -74,7 +74,7 @@ fn schema_of(db: &Connection) -> Result<String> {
     Ok(format!(
         "-- The schema the migrations in migrations.rs make, which a new database\n\
          -- takes. Written by\n\
-         -- {WRITE_SCHEMA}=1 cargo nextest run -p shoal-daemon -E 'test(a_new_database_takes)'\n\n{};\n",
+         -- {WRITE_SCHEMA}=1 cargo nextest run -p shoal-store -E 'test(a_new_database_takes)'\n\n{};\n",
         sql.join(";\n\n")
     ))
 }
@@ -114,7 +114,7 @@ fn a_new_database_takes_the_schema_the_migrations_make() -> Result<()> {
         // Read at run time: a test binary a workspace keeps from its seed
         // build was compiled in the seed's checkout.
         let package = std::env::var_os("CARGO_MANIFEST_DIR").context("no CARGO_MANIFEST_DIR")?;
-        let path = std::path::Path::new(&package).join("src/daemon/store/schema.sql");
+        let path = std::path::Path::new(&package).join("src/schema.sql");
         std::fs::write(path, schema_of(&migrated)?)?;
     }
     let mut created = Connection::open_in_memory()?;
@@ -123,7 +123,7 @@ fn a_new_database_takes_the_schema_the_migrations_make() -> Result<()> {
     assert!(
         contents(&created)? == contents(&migrated)?,
         "schema.sql is not what the migrations make; write it anew with \
-         {WRITE_SCHEMA}=1 cargo nextest run -p shoal-daemon -E 'test(a_new_database_takes)'"
+         {WRITE_SCHEMA}=1 cargo nextest run -p shoal-store -E 'test(a_new_database_takes)'"
     );
     Ok(())
 }

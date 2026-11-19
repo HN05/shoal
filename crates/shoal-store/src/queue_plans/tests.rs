@@ -1,8 +1,8 @@
 use anyhow::Result;
 use serde_json::json;
 
-use crate::daemon::store::{migrations::migrate, tests::historical_database};
 use crate::start_plan::QueuedStart;
+use crate::{migrations::migrate, tests::historical_database};
 use shoal_protocol::launches::LaunchSource;
 
 /// The plan of the queue entry `id` once `db` migrated.
