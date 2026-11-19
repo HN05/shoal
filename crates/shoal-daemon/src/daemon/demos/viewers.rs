@@ -46,12 +46,18 @@ const ERROR_LINES: usize = 10;
 /// The default viewer's program, and what installs it.
 const SERVE_SIM: (&str, &str) = ("serve-sim", "npm install -g serve-sim");
 
-/// The starts of demos' viewers, by the execution that runs each demo, so
-/// two opens of one demo start one viewer.
+/// The locks of demos' viewers, by the execution that runs each demo.
 #[derive(Default)]
 pub(crate) struct Viewers {
-    starts: Mutex<HashMap<ExecutionId, Arc<AsyncMutex<()>>>>,
+    /// Held while a viewer starts, so two opens of one demo start one.
+    starts: Locks,
+    /// Held from a viewer's spawn until its record commits, and while the
+    /// demo's survivors are stopped, so they never include an unrecorded
+    /// viewer.
+    spawns: Locks,
 }
+
+type Locks = Mutex<HashMap<ExecutionId, Arc<AsyncMutex<()>>>>;
 
 /// A viewer the daemon started: the port it serves on, its process, which
 /// leads a process group of its own, and whether it serves yet.
@@ -62,22 +68,24 @@ pub(crate) struct Viewer {
 }
 
 impl Viewers {
-    fn start_lock(&self, execution: &ExecutionId) -> Arc<AsyncMutex<()>> {
-        let mut starts = self
-            .starts
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        starts.entry(execution.clone()).or_default().clone()
+    /// The lock a demo `execution` runs holds while its survivors stop or
+    /// its viewer spawns.
+    pub(crate) fn spawn_lock(&self, execution: &ExecutionId) -> Arc<AsyncMutex<()>> {
+        lock(&self.spawns, execution)
     }
 
     /// Forget the demo `execution` ran, whose viewer record went with it.
     pub(crate) fn end(&self, execution: &ExecutionId) {
-        let mut starts = self
-            .starts
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        starts.remove(execution);
+        for locks in [&self.starts, &self.spawns] {
+            let mut locks = locks.lock().unwrap_or_else(|error| error.into_inner());
+            locks.remove(execution);
+        }
     }
+}
+
+fn lock(locks: &Locks, execution: &ExecutionId) -> Arc<AsyncMutex<()>> {
+    let mut locks = locks.lock().unwrap_or_else(|error| error.into_inner());
+    locks.entry(execution.clone()).or_default().clone()
 }
 
 impl Manager {
@@ -90,16 +98,47 @@ impl Manager {
                 format!("demo {name} has its viewer turned off; open it on its own machine");
             return Err(Refusal::new(Reason::NotReady, message).into());
         }
-        let start = self.viewers.start_lock(&demo.execution_id);
+        let start = lock(&self.viewers.starts, &demo.execution_id);
         let _starting = start.lock().await;
         if let Some(viewer) = self.running_viewer(&demo.execution_id).await? {
-            return Ok(viewer.port);
+            let port = viewer.port;
+            if !viewer.serving {
+                self.await_recorded_viewer(demo, viewer).await?;
+            }
+            return Ok(port);
         }
         let place = self.viewer_place(demo).await?;
         let port = self.reserve_viewer_port(demo).await?;
-        let starting = Starting::spawn(demo, port, &place)?;
-        // Recorded before it serves, so a run ending meanwhile spares it.
-        let mut viewer = Viewer {
+        let starting = self.spawn_recorded_viewer(demo, port, &place).await?;
+        let process = starting.process.clone();
+        if let Err(error) = starting.serve(port).await {
+            self.forget_viewer(&demo.execution_id).await;
+            return Err(error);
+        }
+        self.record_serving(
+            &demo.execution_id,
+            Viewer {
+                port,
+                process,
+                serving: true,
+            },
+        )
+        .await?;
+        Ok(port)
+    }
+
+    /// Spawn `demo`'s viewer on `port` at `place` and record it as starting,
+    /// while no stop of the demo's survivors can take it for one.
+    async fn spawn_recorded_viewer(
+        &self,
+        demo: &Running,
+        port: u16,
+        place: &Place,
+    ) -> Result<Starting> {
+        let spawning = self.viewers.spawn_lock(&demo.execution_id);
+        let _spawning = spawning.lock().await;
+        let starting = Starting::spawn(demo, port, place)?;
+        let viewer = Viewer {
             port,
             process: starting.process.clone(),
             serving: false,
@@ -108,13 +147,26 @@ impl Manager {
             starting.stop().await;
             return Err(error);
         }
-        if let Err(error) = starting.serve(port).await {
-            self.forget_viewer(&demo.execution_id).await;
-            return Err(error);
-        }
-        viewer.serving = true;
-        self.record_viewer(&demo.execution_id, &viewer).await?;
-        Ok(port)
+        Ok(starting)
+    }
+
+    /// Wait until the viewer `process` an earlier daemon started for `demo`
+    /// serves, then record that it does.
+    async fn await_recorded_viewer(&self, demo: &Running, viewer: Viewer) -> Result<()> {
+        let tool = demo.launch.viewer(None).map(|viewer| viewer.tool);
+        let program = tool.as_deref().unwrap_or("the viewer");
+        let exited = || Ok((!runs(&viewer.process)).then(|| "exited".to_owned()));
+        await_port(viewer.port, program, exited).await?;
+        self.record_serving(&demo.execution_id, viewer).await
+    }
+
+    /// Record that `viewer` serves.
+    async fn record_serving(&self, execution: &ExecutionId, viewer: Viewer) -> Result<()> {
+        let serving = Viewer {
+            serving: true,
+            ..viewer
+        };
+        self.record_viewer(execution, &serving).await
     }
 
     /// The viewer of the demo `execution` runs, while its process runs.
@@ -127,20 +179,21 @@ impl Manager {
     /// Where `demo`'s viewer runs: the demo's verified worktree, with the
     /// environment the demo's execution gives its commands, scope included.
     async fn viewer_place(&self, demo: &Running) -> Result<Place> {
-        let space = self.execution_home(&demo.workspace_id).await?.plan_space();
-        let workspace = SpaceSelector::id(&demo.workspace_id);
-        let ports = self.leases.list_ports(self, Some(&workspace)).await?;
+        let home = self.execution_home(&demo.workspace_id).await?;
+        let (home, configured, ports) = self.joining_environment(home).await?;
+        let space = home.plan_space();
         let execution = demo.execution_id.clone();
         let token = self
             .store
             .read(move |db| scope_token(db, &execution))
             .await?;
-        let environment = env::execution_environment(&space, &self.paths, &ports, &token);
+        let execution = env::execution_environment(&space, &self.paths, &ports, &token);
         let paths = self.paths.clone();
         Ok(Place {
             space,
             paths,
-            environment,
+            configured,
+            execution,
         })
     }
 
@@ -238,12 +291,13 @@ fn runs(process: &Identity) -> bool {
     process::alive(process).unwrap_or(false) && !process::unreaped(process).unwrap_or(true)
 }
 
-/// Where a viewer runs: the demo's space, and the environment its
-/// execution gives its commands.
+/// Where a viewer runs: the demo's space, its configured environment, and
+/// what its execution exports to its commands, scope included.
 struct Place {
     space: ExecutionSpace,
     paths: Paths,
-    environment: BTreeMap<String, OsString>,
+    configured: BTreeMap<String, OsString>,
+    execution: BTreeMap<String, OsString>,
 }
 
 /// A viewer this daemon started that does not serve yet.
@@ -265,10 +319,11 @@ impl Starting {
         let (program, args) = command.split_first().context("the viewer has no program")?;
         let mut viewer = Command::new(program);
         env::apply_space_identity(&mut viewer, &place.space, &place.paths);
+        env::apply_configured(&mut viewer, &place.configured);
         let mut child = viewer
             .args(args)
             .current_dir(&place.space.path)
-            .envs(&place.environment)
+            .envs(&place.execution)
             .envs(&demo.launch.environment)
             .env(env::EXECUTION_ID, &demo.execution_id)
             .stdin(Stdio::null())
@@ -309,30 +364,43 @@ impl Starting {
     }
 
     async fn await_port(&mut self, port: u16) -> Result<()> {
-        let (program, deadline) = (&self.program, Instant::now() + START_LIMIT);
-        loop {
-            if connect(port).await.is_ok() {
-                return Ok(());
-            }
-            if let Some(status) = self.child.try_wait()? {
-                let printed = printed(&self.errors);
-                let message = format!("viewer {program} exited with {status}{printed}");
-                return Err(Refusal::new(Reason::NotReady, message).into());
-            }
-            if Instant::now() >= deadline {
-                let message = format!(
-                    "viewer {program} took no connection on port {port} within {}s{}",
-                    START_LIMIT.as_secs(),
-                    printed(&self.errors)
-                );
-                return Err(Refusal::new(Reason::NotReady, message).into());
-            }
-            tokio::time::sleep(START_POLL).await;
-        }
+        let (child, errors) = (&mut self.child, &self.errors);
+        let exited = || {
+            let status = child.try_wait()?;
+            Ok(status.map(|status| format!("exited with {status}{}", printed(errors))))
+        };
+        await_port(port, &self.program, exited).await
     }
 
     async fn stop(mut self) {
         stop(&mut self.child).await;
+    }
+}
+
+/// Wait until `port` takes a connection, failing once the viewer `program`
+/// has `exited`, which says how, or [`START_LIMIT`] passes.
+async fn await_port(
+    port: u16,
+    program: &str,
+    mut exited: impl FnMut() -> Result<Option<String>>,
+) -> Result<()> {
+    let deadline = Instant::now() + START_LIMIT;
+    loop {
+        if connect(port).await.is_ok() {
+            return Ok(());
+        }
+        if let Some(how) = exited()? {
+            let message = format!("viewer {program} {how}");
+            return Err(Refusal::new(Reason::NotReady, message).into());
+        }
+        if Instant::now() >= deadline {
+            let message = format!(
+                "viewer {program} took no connection on port {port} within {}s",
+                START_LIMIT.as_secs()
+            );
+            return Err(Refusal::new(Reason::NotReady, message).into());
+        }
+        tokio::time::sleep(START_POLL).await;
     }
 }
 

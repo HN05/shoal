@@ -590,6 +590,9 @@ impl Manager {
     /// Stop the execution's verified survivors and report what keeps its
     /// processes from being proven stopped, if anything does.
     async fn stop_agent_survivors(&self, record: &crate::model::Execution) -> Option<String> {
+        // A demo's viewer spawning meanwhile is spared once recorded.
+        let spawning = self.viewers.spawn_lock(&record.id);
+        let _spawning = spawning.lock().await;
         let mut processes = match self.inspect_processes(record).await {
             Ok(processes) => processes,
             Err(error) => return Some(format!("process inspection failed: {error:#}")),

@@ -49,6 +49,25 @@ pub(super) struct Provisions {
 }
 
 impl Manager {
+    /// What the space `home` gives a process that joins one of its
+    /// executions, as it gives a new execution's command: its configured
+    /// environment, and the ports it reserved.
+    pub(crate) async fn joining_environment(
+        &self,
+        home: Home,
+    ) -> Result<(Home, BTreeMap<String, OsString>, Vec<PortReservation>)> {
+        let caches = home.caches();
+        let (home, provisions) = self
+            .store
+            .write(move |tx| {
+                let provisions = home.provide(tx, &caches)?;
+                Ok((home, provisions))
+            })
+            .await?;
+        let environment = home.environment(&provisions.ports, &provisions.directories);
+        Ok((home, environment, provisions.ports))
+    }
+
     /// The space `id` as a place to run an execution: a workspace whose
     /// worktree is there and verified to be its own, or a chat whose home
     /// is there. Running there counts as the space's activity.

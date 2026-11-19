@@ -198,6 +198,75 @@ async fn a_run_that_ends_while_the_viewer_starts_spares_it() {
 }
 
 #[tokio::test]
+async fn a_run_that_ends_while_the_viewer_spawns_waits_until_it_is_recorded() {
+    let (temp, manager) = manager().await;
+    let (workspace, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
+    exited_run(&manager, &demo.execution_id).await;
+    let spawning = manager.viewers.spawn_lock(&demo.execution_id);
+    let spawning = spawning.lock().await;
+    // A process marked as the demo's, as a viewer is before its record.
+    let viewer = ProcessGroup::spawn(
+        std::process::Command::new("sleep")
+            .arg("30")
+            .env(env::EXECUTION_ID, &demo.execution_id),
+    );
+    let process = crate::process::identity::capture(viewer.id())
+        .unwrap()
+        .unwrap();
+    let releasing = {
+        let (manager, execution) = (manager.clone(), demo.execution_id.clone());
+        tokio::spawn(async move { manager.release_exited_child(&execution, &workspace).await })
+    };
+    let recorded = Viewer {
+        port: 1,
+        process: process.clone(),
+        serving: false,
+    };
+    (manager.record_viewer(&demo.execution_id, &recorded))
+        .await
+        .unwrap();
+    drop(spawning);
+    releasing.await.unwrap().unwrap();
+    assert!(runs(&process), "the release stopped the recorded viewer");
+    viewer.kill();
+}
+
+#[tokio::test]
+async fn an_open_waits_for_a_viewer_an_earlier_daemon_left_starting() {
+    let (temp, manager) = manager().await;
+    let (workspace, demo) = running(&manager, temp.path(), Some(&["false"])).await;
+    let port = manager.reserve_viewer_port(&demo).await.unwrap();
+    let gate = temp.path().join("serve");
+    let earlier = ProcessGroup::spawn(std::process::Command::new("python3").args([
+        "-c",
+        ECHO_DEVICE,
+        &port.to_string(),
+        "UDID-1",
+        gate.to_str().unwrap(),
+    ]));
+    let process = crate::process::identity::capture(earlier.id())
+        .unwrap()
+        .unwrap();
+    let starting = Viewer {
+        port,
+        process,
+        serving: false,
+    };
+    (manager.record_viewer(&demo.execution_id, &starting))
+        .await
+        .unwrap();
+    let opening = {
+        let (manager, demo) = (manager.clone(), demo.clone());
+        tokio::spawn(async move { manager.open_viewer(&demo).await })
+    };
+    std::fs::write(&gate, "").unwrap();
+    assert_eq!(opening.await.unwrap().unwrap(), port);
+    let listed = listed(&manager, &workspace).await.viewer.unwrap();
+    assert_eq!(listed.url, Some(format!("http://localhost:{port}")));
+    earlier.kill();
+}
+
+#[tokio::test]
 async fn a_viewer_an_earlier_daemon_started_is_the_demo_s_until_it_exits() {
     let (temp, manager) = manager().await;
     let (_, demo) = running(&manager, temp.path(), Some(&["false"])).await;
