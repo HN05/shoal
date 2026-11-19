@@ -253,8 +253,14 @@ async fn observe_branches(manager: &Manager) -> Result<()> {
             continue;
         }
         let observed = manager.observe_workspace_branch(&workspace);
-        if let Err(error) = manager.check_access(&workspace.path, observed).await
-            && !manager.sweep_skips(&workspace.path).await
+        if let Err(error) = manager
+            .file_access
+            .checked(&manager.notifications, &workspace.path, observed)
+            .await
+            && !manager
+                .file_access
+                .sweep_skips(&manager.notifications, &workspace.path)
+                .await
         {
             failed.push(&workspace.id, &workspace.name, &error);
         }
@@ -321,7 +327,11 @@ async fn sweep_space(
 ) -> Result<()> {
     if let Some(workspace) = space.worktree() {
         // Its idle timer stays for the pass after a check there finishes.
-        if manager.sweep_skips(&workspace.path).await {
+        if manager
+            .file_access
+            .sweep_skips(&manager.notifications, &workspace.path)
+            .await
+        {
             return Ok(());
         }
         if deleted(workspace).await?

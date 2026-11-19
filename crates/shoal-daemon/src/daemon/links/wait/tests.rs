@@ -2802,7 +2802,12 @@ async fn a_stalled_worktree_fails_the_background_branch_check_at_once() {
     register_watch(&manager, &workspace.id, PR.as_str()).await;
     tokio::time::pause();
     let stalled = manager
-        .check_access(&workspace.path, std::future::pending::<Result<()>>())
+        .file_access
+        .checked(
+            &manager.notifications,
+            &workspace.path,
+            std::future::pending::<Result<()>>(),
+        )
         .await;
     tokio::time::resume();
     assert!(stalled.is_err());

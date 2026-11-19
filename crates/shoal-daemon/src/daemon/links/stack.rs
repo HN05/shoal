@@ -55,7 +55,10 @@ impl Manager {
         }
         // The rebase cutoff is HEAD, so commits the merge left out would be
         // dropped from every stacked branch.
-        let head = self.check_access(&base.path, current_head(base)).await?;
+        let head = self
+            .file_access
+            .checked(&self.notifications, &base.path, current_head(base))
+            .await?;
         if !merged.contains(&head) {
             return Ok(Some(anyhow::anyhow!(
                 "the merged PRs do not contain the base workspace's HEAD"
@@ -191,10 +194,15 @@ impl Manager {
     }
 
     /// [`Manager::verify_worktree`] of `workspace`, inspected under
-    /// [`Manager::check_access`] since it may be in another directory than
+    /// `FileAccess::checked` since it may be in another directory than
     /// the workspace the sweep is handling.
     async fn verify_checked(&self, workspace: &Workspace) -> Result<()> {
-        self.check_access(&workspace.path, self.verify_worktree(workspace))
+        self.file_access
+            .checked(
+                &self.notifications,
+                &workspace.path,
+                self.verify_worktree(workspace),
+            )
             .await
     }
 
@@ -205,7 +213,10 @@ impl Manager {
             current_head(base).await
         };
         anyhow::ensure!(
-            self.check_access(&base.path, current).await? == *head,
+            self.file_access
+                .checked(&self.notifications, &base.path, current)
+                .await?
+                == *head,
             "the base workspace's HEAD changed while restacking; retrying next sweep"
         );
         Ok(())

@@ -285,7 +285,9 @@ impl Manager {
                 let baseline = self.inspection_baseline(&workspace).await?;
                 (self.check_worktree(&workspace, removal, Stage::Initial, &[], &baseline)).await
             };
-            self.check_access(&workspace.path, checked).await?;
+            self.file_access
+                .checked(&self.notifications, &workspace.path, checked)
+                .await?;
         }
         let grace = self.space_settings(space).await?.cleanup.grace();
         let cleanup_at = self.claim_grace(&space.id, grace).await?;

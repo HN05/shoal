@@ -218,7 +218,12 @@ impl Manager {
         missing: &'static str,
     ) -> Result<ForgeRepo> {
         let remote = self
-            .check_access(checkout, repository::remote_url_from_path(checkout))
+            .file_access
+            .checked(
+                &self.notifications,
+                checkout,
+                repository::remote_url_from_path(checkout),
+            )
             .await?
             .context(missing)?;
         self.forge(&remote).await
@@ -254,14 +259,22 @@ impl Manager {
     /// Git and may be in another directory. One the sweep removed since the
     /// listing is passed over.
     async fn pr_sweep_skips(&self, listed: &Workspace) -> Result<bool> {
-        if self.sweep_skips(&listed.path).await {
+        if self
+            .file_access
+            .sweep_skips(&self.notifications, &listed.path)
+            .await
+        {
             return Ok(true);
         }
         for stacked in &listed.stacked_workspaces {
             let Some(stacked) = self.find_workspace(&stacked.id).await? else {
                 continue;
             };
-            if self.sweep_skips(&stacked.path).await {
+            if self
+                .file_access
+                .sweep_skips(&self.notifications, &stacked.path)
+                .await
+            {
                 return Ok(true);
             }
         }
@@ -334,7 +347,10 @@ impl Manager {
                 self.verify_worktree(workspace).await?;
                 current_head(workspace).await
             };
-            let head = self.check_access(&workspace.path, verified).await?;
+            let head = self
+                .file_access
+                .checked(&self.notifications, &workspace.path, verified)
+                .await?;
             if !self
                 .confirm_pr_completion(workspace, &mut registration.kind, &head)
                 .await?

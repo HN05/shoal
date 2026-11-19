@@ -229,7 +229,12 @@ impl Manager {
     async fn answers_to(&self, repository: &Repository, named: &str) -> Result<bool> {
         let path = &repository.path;
         let remote = self
-            .check_access(path, crate::repository::remote_url_from_path(path))
+            .file_access
+            .checked(
+                &self.notifications,
+                path,
+                crate::repository::remote_url_from_path(path),
+            )
             .await?;
         let Some(remote) = remote else {
             return Ok(false);

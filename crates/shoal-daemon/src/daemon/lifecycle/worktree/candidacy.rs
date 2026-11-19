@@ -181,7 +181,7 @@ impl Manager {
 
     /// HEAD of the worktree of `workspace` as an idle cleanup candidate, or
     /// the first reason it keeps it, inspected under
-    /// [`Manager::check_access`]: commands and leases, its Git state, then
+    /// `FileAccess::checked`: commands and leases, its Git state, then
     /// the processes in it, read from `users`, since Git state rules out
     /// most worktrees. `cancelled` are the restores a removal stopped.
     pub(in crate::daemon) async fn idle_worktree(
@@ -207,11 +207,13 @@ impl Manager {
             }
             Ok(Ok(head(&path).await?))
         };
-        self.check_access(&path, inspected).await
+        self.file_access
+            .checked(&self.notifications, &path, inspected)
+            .await
     }
 
     /// HEAD of the worktree of `workspace` as a merged cleanup candidate,
-    /// inspected under [`Manager::check_access`], or `None` when it is not
+    /// inspected under `FileAccess::checked`, or `None` when it is not
     /// one: unused, merged into the default branch, with no Git operation
     /// under way, no workspace stacked on it and any unsaved files left over
     /// from merged work. `cancelled` are the restores a removal stopped, and
@@ -247,11 +249,13 @@ impl Manager {
             }
             Ok(Some(head(&path).await?))
         };
-        self.check_access(&path, inspected).await
+        self.file_access
+            .checked(&self.notifications, &path, inspected)
+            .await
     }
 
     /// HEAD of `worktree`, of the workspace `id`, whose idle timer runs,
-    /// inspected under [`Manager::check_access`], or `None` when its
+    /// inspected under `FileAccess::checked`, or `None` when its
     /// commands, leases or a process `users` finds in it keep it.
     pub(in crate::daemon) async fn idle_timer_worktree(
         &self,
@@ -270,7 +274,9 @@ impl Manager {
             }
             Ok(Some(head(path).await?))
         };
-        self.check_access(path, inspected).await
+        self.file_access
+            .checked(&self.notifications, path, inspected)
+            .await
     }
 
     /// One walk of the files in `worktree`.

@@ -82,7 +82,9 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         let path = workspace.path.clone();
         let check = self.watched_check(workspace, only_sensitive);
-        self.check_access(&path, check).await
+        self.file_access
+            .checked(&self.notifications, &path, check)
+            .await
     }
 
     async fn watched_check(

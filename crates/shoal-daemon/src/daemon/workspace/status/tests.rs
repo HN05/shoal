@@ -40,7 +40,12 @@ async fn status_reports_git_checks_that_stall_as_unavailable() {
 
     tokio::time::pause();
     let stalled = manager
-        .check_access(&workspace.path, std::future::pending::<Result<()>>())
+        .file_access
+        .checked(
+            &manager.notifications,
+            &workspace.path,
+            std::future::pending::<Result<()>>(),
+        )
         .await;
     tokio::time::resume();
     assert!(stalled.is_err());

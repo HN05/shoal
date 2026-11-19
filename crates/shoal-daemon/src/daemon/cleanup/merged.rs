@@ -88,7 +88,11 @@ async fn sweep_at(
     let mut failed = super::SpaceFailures::default();
     for space in spaces {
         if let Some(workspace) = space.worktree()
-            && (not_ready(workspace).is_some() || manager.sweep_skips(&workspace.path).await)
+            && (not_ready(workspace).is_some()
+                || manager
+                    .file_access
+                    .sweep_skips(&manager.notifications, &workspace.path)
+                    .await)
         {
             continue;
         }

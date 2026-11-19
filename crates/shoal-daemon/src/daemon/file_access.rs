@@ -21,7 +21,10 @@ use anyhow::Result;
 use futures_util::future::BoxFuture;
 use tokio::time::Instant;
 
-use super::{log, manager::Manager, notifications::NotificationKind};
+use super::{
+    log,
+    notifications::{About, NotificationKind, Notifications},
+};
 use crate::protocol::{AccessStall, PRIVACY_PROMPT};
 
 /// A check still running after this long counts as stalled. Git answers a
@@ -82,6 +85,41 @@ impl Drop for RunningCheck<'_> {
 }
 
 impl FileAccess {
+    /// Run `check` of `path` under the time limit, and tell the user once
+    /// when its directory stalls. Boxed, so the operations that nest
+    /// checks, such as removal, hold a pointer rather than each check on
+    /// their stack.
+    pub(crate) fn checked<'a, T: Send + 'a>(
+        &'a self,
+        notifications: &'a Notifications,
+        path: &'a Path,
+        check: impl Future<Output = Result<T>> + Send + 'a,
+    ) -> BoxFuture<'a, Result<T>> {
+        Box::pin(async move {
+            let (result, stall) = self.check(path, check).await;
+            if let Some(stall) = stall {
+                let kind = NotificationKind::AccessStalled;
+                (notifications)
+                    .notify_user(About::default(), kind, stall.message())
+                    .await;
+            }
+            result
+        })
+    }
+
+    /// Whether the cleanup sweep skips `path`: file access in its directory
+    /// stalled, and reading HEAD there, as a recheck when one is due, does
+    /// not show it answers. A worktree deleted meanwhile answers with Git's
+    /// error, so its cleanup goes on.
+    pub(crate) async fn sweep_skips(&self, notifications: &Notifications, path: &Path) -> bool {
+        if self.stalled(path).is_none() {
+            return false;
+        }
+        let head = crate::git::revision(path, "HEAD", crate::git::run);
+        let _ = self.checked(notifications, path, head).await;
+        self.stalled(path).is_some()
+    }
+
     /// Run `check` of `path` within [`LIMIT`], unless its directory stalled
     /// within [`RECHECK_AFTER`] or another check rechecks it. A check that
     /// runs out or is interrupted fails with the stall; any other outcome
@@ -200,40 +238,6 @@ impl FileAccess {
         if lock(&self.stalls).remove(directory).is_some() {
             log!("file access in {} answers again", directory.display());
         }
-    }
-}
-
-impl Manager {
-    /// Run `check` of `path` under [`FileAccess`]'s time limit, and tell
-    /// the user once when its directory stalls. Boxed, so the operations
-    /// that nest checks, such as removal, hold a pointer rather than each
-    /// check on their stack.
-    pub(crate) fn check_access<'a, T: Send + 'a>(
-        &'a self,
-        path: &'a Path,
-        check: impl Future<Output = Result<T>> + Send + 'a,
-    ) -> BoxFuture<'a, Result<T>> {
-        Box::pin(async move {
-            let (result, stall) = self.file_access.check(path, check).await;
-            if let Some(stall) = stall {
-                self.notify(None, NotificationKind::AccessStalled, stall.message())
-                    .await;
-            }
-            result
-        })
-    }
-
-    /// Whether the cleanup sweep skips `path`: file access in its directory
-    /// stalled, and reading HEAD there, as a recheck when one is due, does
-    /// not show it answers. A worktree deleted meanwhile answers with Git's
-    /// error, so its cleanup goes on.
-    pub(crate) async fn sweep_skips(&self, path: &Path) -> bool {
-        if self.file_access.stalled(path).is_none() {
-            return false;
-        }
-        let head = crate::git::revision(path, "HEAD", crate::git::run);
-        let _ = self.check_access(path, head).await;
-        self.file_access.stalled(path).is_some()
     }
 }
 

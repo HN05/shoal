@@ -72,7 +72,9 @@ impl Manager {
             ByKind::Chat(chat) => {
                 let path = self.chat_path(&chat).await?;
                 ensure!(
-                    self.check_access(&path, off_runtime::is_dir(&path)).await?,
+                    self.file_access
+                        .checked(&self.notifications, &path, off_runtime::is_dir(&path))
+                        .await?,
                     "the directory of chat {} is missing at {}",
                     chat.name,
                     path.display()

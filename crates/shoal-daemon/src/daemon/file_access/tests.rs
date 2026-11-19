@@ -159,20 +159,24 @@ async fn waiting_names_the_check_that_has_run_longest() {
 
 #[tokio::test]
 async fn the_daemon_alerts_once_while_a_directory_stays_stalled() {
-    let (temp, manager) = crate::daemon::test_support::manager().await;
+    let temp = tempfile::tempdir().unwrap();
+    let store = shoal_store::test_support::unsynced_store(temp.path().join("state.db"))
+        .await
+        .unwrap();
+    let (access, notifications) = (FileAccess::default(), Notifications::new(store));
     let path = temp.path().join("workspace");
     tokio::time::pause();
     for _ in 0..2 {
         tokio::time::advance(RECHECK_AFTER).await;
-        let result = manager.check_access(&path, never()).await;
+        let result = access.checked(&notifications, &path, never()).await;
         assert!(result.is_err());
     }
     tokio::time::resume();
 
-    let alerts = manager.notifications.list(false, 10).await.unwrap();
+    let alerts = notifications.list(false, 10).await.unwrap();
     let [alert] = alerts.as_slice() else {
         panic!("expected one alert: {alerts:?}");
     };
     assert_eq!(alert.kind, NotificationKind::AccessStalled);
-    assert_eq!(manager.file_access.stalls().len(), 1);
+    assert_eq!(access.stalls().len(), 1);
 }

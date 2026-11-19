@@ -39,7 +39,7 @@ impl Manager {
     /// Whether `space` is marked done with cleanup, as recorded and, where it
     /// has a worktree, at the worktree's current HEAD. A HEAD that cannot be
     /// read, as off its branch or in a directory whose file access stalled,
-    /// is not that HEAD; the read runs under [`Manager::check_access`], so a
+    /// is not that HEAD; the read runs under `FileAccess::checked`, so a
     /// stall holds it no longer than file access may take.
     pub(in crate::daemon) async fn completion_stands(&self, space: &Space) -> Result<bool> {
         let Some(completion) = self.completion(&space.id).await? else {
@@ -55,7 +55,10 @@ impl Manager {
             return Ok(false);
         }
         let head = crate::daemon::links::pr::current_head(&workspace);
-        Ok((self.check_access(&workspace.path, head).await)
+        Ok((self
+            .file_access
+            .checked(&self.notifications, &workspace.path, head)
+            .await)
             .is_ok_and(|head| head == completion.head))
     }
 }

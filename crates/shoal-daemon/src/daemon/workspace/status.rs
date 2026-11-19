@@ -27,7 +27,11 @@ impl Manager {
             mut simulators,
             ..
         } = self.inspect_workspace(selector).await?;
-        let diff = self.check_access(&workspace.path, self.diff_summary(&workspace));
+        let diff = self.file_access.checked(
+            &self.notifications,
+            &workspace.path,
+            self.diff_summary(&workspace),
+        );
         let (diff, diff_error) = match diff.await {
             Ok(diff) => (Some(diff), None),
             Err(error) => (None, Some(format!("{error:#}"))),
@@ -47,7 +51,8 @@ impl Manager {
         // A worktree Git cannot read shows none, as `diff_error` says why.
         let changed = self.current_changed_on_both_sides(&workspace);
         let changed_on_both_sides = self
-            .check_access(&workspace.path, changed)
+            .file_access
+            .checked(&self.notifications, &workspace.path, changed)
             .await
             .ok()
             .flatten()

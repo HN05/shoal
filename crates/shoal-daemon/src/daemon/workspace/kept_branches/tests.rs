@@ -118,7 +118,12 @@ async fn the_sweep_rechecks_a_stalled_checkout_without_workspaces_and_deletes_it
     // out its time limit. No workspace is left to recheck the directory.
     tokio::time::pause();
     let stalled = manager
-        .check_access(&repo.path, std::future::pending::<anyhow::Result<()>>())
+        .file_access
+        .checked(
+            &manager.notifications,
+            &repo.path,
+            std::future::pending::<anyhow::Result<()>>(),
+        )
         .await;
     tokio::time::advance(crate::daemon::file_access::RECHECK_AFTER).await;
     tokio::time::resume();

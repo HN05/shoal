@@ -202,12 +202,15 @@ impl Manager {
         );
         let path = &workspace.path;
         ensure!(
-            self.check_access(path, off_runtime::is_dir(path)).await?,
+            self.file_access
+                .checked(&self.notifications, path, off_runtime::is_dir(path))
+                .await?,
             "the worktree of workspace {} is missing at {}",
             workspace.name,
             path.display()
         );
-        self.check_access(path, self.verify_worktree(&workspace))
+        self.file_access
+            .checked(&self.notifications, path, self.verify_worktree(&workspace))
             .await?;
         Ok(workspace)
     }

@@ -45,7 +45,10 @@ impl Manager {
     /// Remove `listed` for its own completion or a completed ancestor's.
     async fn sweep_completed_space(&self, listed: &Space) -> Result<()> {
         if let Some(workspace) = listed.worktree()
-            && self.sweep_skips(&workspace.path).await
+            && self
+                .file_access
+                .sweep_skips(&self.notifications, &workspace.path)
+                .await
         {
             return Ok(());
         }

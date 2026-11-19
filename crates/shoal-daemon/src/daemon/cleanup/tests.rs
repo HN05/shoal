@@ -1026,7 +1026,12 @@ async fn a_sweep_rechecks_a_stalled_worktree_deleted_since_and_forgets_it() {
     // out its time limit.
     tokio::time::pause();
     let stalled = manager
-        .check_access(&workspace.path, std::future::pending::<Result<()>>())
+        .file_access
+        .checked(
+            &manager.notifications,
+            &workspace.path,
+            std::future::pending::<Result<()>>(),
+        )
         .await;
     tokio::time::advance(file_access::RECHECK_AFTER).await;
     tokio::time::resume();

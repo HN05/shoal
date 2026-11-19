@@ -97,11 +97,13 @@ async fn status_names_the_file_access_a_step_waits_on() {
     assert_eq!(waiting(access), None);
     let path = root.path().join("workspace");
     let (started, finish) = (tokio::sync::Notify::new(), tokio::sync::Notify::new());
-    let check = manager.check_access(&path, async {
-        started.notify_one();
-        finish.notified().await;
-        Ok(())
-    });
+    let check = manager
+        .file_access
+        .checked(&manager.notifications, &path, async {
+            started.notify_one();
+            finish.notified().await;
+            Ok(())
+        });
     let observe = async {
         started.notified().await;
         tokio::time::advance(Duration::from_secs(1)).await;
@@ -124,7 +126,12 @@ async fn status_names_the_file_access_a_step_waits_on() {
     );
 
     let stalled = manager
-        .check_access(&path, std::future::pending::<anyhow::Result<()>>())
+        .file_access
+        .checked(
+            &manager.notifications,
+            &path,
+            std::future::pending::<anyhow::Result<()>>(),
+        )
         .await;
     assert!(stalled.is_err());
     let stalled = waiting(access).unwrap();

@@ -260,13 +260,15 @@ impl Manager {
     }
 
     /// The config file and template files of the checkout or worktree at
-    /// `path`, read under [`Manager::check_access`], since reading them waits
+    /// `path`, read under `FileAccess::checked`, since reading them waits
     /// on any privacy prompt for its volume.
     async fn worktree_file(
         &self,
         path: &std::path::Path,
     ) -> Result<(RepoConfig, config::modes::Files)> {
-        self.check_access(path, load_worktree_file(path)).await
+        self.file_access
+            .checked(&self.notifications, path, load_worktree_file(path))
+            .await
     }
 
     /// The local config file in the repository directory `directory`, unless

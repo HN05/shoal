@@ -21,7 +21,11 @@ impl Manager {
                 continue;
             }
             let verified = self.verify_and_record_worktree(&workspace, true);
-            match self.check_access(&workspace.path, verified).await {
+            match self
+                .file_access
+                .checked(&self.notifications, &workspace.path, verified)
+                .await
+            {
                 Err(error) => {
                     self.set_state(
                         &workspace.id,
@@ -64,7 +68,12 @@ impl Manager {
         // Check without reserving first, so a workspace that still fails
         // never leaves the failed state for another operation to trip over.
         let verified = self.verify_worktree(workspace);
-        if self.check_access(&workspace.path, verified).await.is_err() {
+        if self
+            .file_access
+            .checked(&self.notifications, &workspace.path, verified)
+            .await
+            .is_err()
+        {
             return Ok(());
         }
         let previous = self
@@ -76,7 +85,9 @@ impl Manager {
         listed.state = previous;
         let verified = failed_at_startup(&listed)
             && self
-                .check_access(
+                .file_access
+                .checked(
+                    &self.notifications,
                     &current.path,
                     self.verify_and_record_worktree(&current, true),
                 )

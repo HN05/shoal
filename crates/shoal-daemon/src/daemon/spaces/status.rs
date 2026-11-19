@@ -136,7 +136,12 @@ impl Manager {
         records: &Records,
     ) -> (Vec<PrStatus>, Vec<IssueStatus>) {
         let remote = self
-            .check_access(origin, repository::remote_url_from_path(origin))
+            .file_access
+            .checked(
+                &self.notifications,
+                origin,
+                repository::remote_url_from_path(origin),
+            )
             .await;
         let account = self.user_account();
         let hosts = self.forge_hosts();

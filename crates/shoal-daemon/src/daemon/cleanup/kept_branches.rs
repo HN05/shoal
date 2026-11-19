@@ -90,5 +90,8 @@ pub async fn sweep(manager: &Manager, state: &mut State) -> Result<()> {
 /// answers, as [`Manager::sweep_skips`] tells.
 async fn checkout_answers(manager: &Manager, repository_id: &RepositoryId) -> Result<bool> {
     let repo = manager.repository(repository_id).await?;
-    Ok(!manager.sweep_skips(&repo.path).await)
+    Ok(!manager
+        .file_access
+        .sweep_skips(&manager.notifications, &repo.path)
+        .await)
 }

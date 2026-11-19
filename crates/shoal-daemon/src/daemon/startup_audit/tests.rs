@@ -66,7 +66,12 @@ async fn the_audit_fails_workspaces_whose_file_access_stalls_until_a_recheck_fin
     // run out its time limit.
     tokio::time::pause();
     let stalled = manager
-        .check_access(&workspace.path, std::future::pending::<Result<()>>())
+        .file_access
+        .checked(
+            &manager.notifications,
+            &workspace.path,
+            std::future::pending::<Result<()>>(),
+        )
         .await;
     tokio::time::resume();
     assert!(stalled.is_err());
