@@ -407,3 +407,36 @@ async fn a_request_after_the_restart_settled_restarts_the_agent_again_once_it_ru
         "{outcome:?}"
     );
 }
+
+#[tokio::test]
+async fn a_cancel_drops_the_recorded_restart_and_its_permission_change() {
+    let (root, manager) = manager().await;
+    let (workspace, execution) = working(root.path(), &manager).await;
+    let space = SpaceSelector::id(&workspace.id);
+    let restart = AgentRestart {
+        change: Some(PermissionChange::assigned("push=direct").unwrap()),
+        ..waiting()
+    };
+    (manager.restart_space(None, &space, restart.clone()))
+        .await
+        .unwrap();
+    assert_eq!(manager.cancel_restart(&space).await.unwrap(), Some(restart));
+    assert!(recorded(&manager).await.is_empty());
+    assert_eq!(manager.cancel_restart(&space).await.unwrap(), None);
+
+    // A later restart no longer takes the dropped change.
+    let restarting = tokio::spawn({
+        let (manager, space) = (manager.clone(), space.clone());
+        async move {
+            manager
+                .restart_space(None, &space, AgentRestart::default())
+                .await
+        }
+    });
+    let mut stop = execution.stop.clone();
+    stop.wait_for(|stopping| *stopping).await.unwrap();
+    let id = execution.plan.id.clone();
+    assert_eq!(manager.restart_change(&id).await, None);
+    run_again(&manager, &id).await;
+    restarting.await.unwrap().unwrap();
+}

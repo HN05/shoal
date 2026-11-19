@@ -14,9 +14,11 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
+mod cancel;
 mod progress;
 mod selection;
 
+pub(super) use cancel::cancel;
 use progress::Progress;
 
 /// How many restarts the command asks for at once, each holding one of the

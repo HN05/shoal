@@ -127,6 +127,15 @@ pub async fn restart(
     request(daemon, AgentMethod::RestartAgent { space, restart }).await
 }
 
+/// Drop the restart the daemon recorded for the agent of `space`, returning
+/// how it would have restarted, if anything was recorded.
+pub async fn cancel_restart(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+) -> Result<Option<AgentRestart>> {
+    request(daemon, AgentMethod::CancelRestart { space }).await
+}
+
 /// The agents connected in `space`, a workspace or a running chat.
 pub async fn running(daemon: &impl Daemon, space: SpaceSelector) -> Result<Vec<RunningAgent>> {
     request(daemon, AgentMethod::SpaceAgents { space }).await

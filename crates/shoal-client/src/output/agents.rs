@@ -106,6 +106,14 @@ pub struct RestartedAgent {
     pub place: Option<shoal_protocol::sessions::Origin>,
 }
 
+/// The spaces whose recorded restarts a cancel dropped, and those that had
+/// none.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CancelledRestarts {
+    pub cancelled: Vec<SpaceName>,
+    pub unrecorded: Vec<SpaceName>,
+}
+
 /// An agent whose restart the daemon took for later, by its space's name,
 /// with what the restart waits for.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -129,7 +137,8 @@ outputs!(
     StoppedProcesses,
     Interrupted,
     Continued,
-    Restarted
+    Restarted,
+    CancelledRestarts
 );
 
 /// An agent session started detached in an app.

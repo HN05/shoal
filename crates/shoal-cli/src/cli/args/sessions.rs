@@ -87,7 +87,8 @@ pub enum SessionsCommand {
     ///
     /// Agents restart together and run the agent's current binary; commands
     /// keep running. A chat restarts in a background place, as shoal restore
-    /// restores it.
+    /// restores it. A newer restart of a space supersedes the earlier one,
+    /// keeping the permissions that one set unless it sets them again.
     Restart {
         #[command(flatten)]
         targets: SpaceTargets,
@@ -115,6 +116,13 @@ pub enum SessionsCommand {
             value_parser = permission_assignment
         )]
         permissions: Vec<crate::config::permissions::PermissionChange>,
+        /// Drop the restarts the daemon keeps for later, with their
+        /// permissions, instead of restarting.
+        #[arg(
+            long,
+            conflicts_with_all = ["agent", "wait", "sequential", "in_place", "permissions"]
+        )]
+        cancel: bool,
     },
     /// List the agent queue, or start or cancel an entry.
     ///

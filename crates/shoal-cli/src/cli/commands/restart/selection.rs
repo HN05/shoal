@@ -33,16 +33,22 @@ pub(super) async fn load(
     agent: Option<&Agent>,
 ) -> Result<Selection> {
     let named = !targets.all && !targets.space.is_empty();
-    let spaces = crate::client::spaces::list(&ctx.paths).await?;
-    let spaces = match targets.all {
-        true => crate::cli::scoping::Scoping::inherited(&ctx.paths.state).reached_below(spaces),
-        false => {
-            let selected = ui::select_spaces(ctx, targets.space, false).await?;
-            in_order(ctx, &spaces, selected).await?
-        }
-    };
+    let spaces = spaces(ctx, targets).await?;
     let agents = crate::client::agents::all(&ctx.paths).await?;
     Ok(select(spaces, &agents, agent, named))
+}
+
+/// The spaces `targets` selects: with `--all` every workspace and chat but
+/// the caller's own, else those its names select, or the picker.
+pub(super) async fn spaces(ctx: &Context, targets: SpaceTargets) -> Result<Vec<Space>> {
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
+    match targets.all {
+        true => Ok(crate::cli::scoping::Scoping::inherited(&ctx.paths.state).reached_below(spaces)),
+        false => {
+            let selected = ui::select_spaces(ctx, targets.space, false).await?;
+            in_order(ctx, &spaces, selected).await
+        }
+    }
 }
 
 /// The spaces of `spaces` whose agent among `agents` is named `agent`, and

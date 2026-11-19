@@ -57,11 +57,17 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
         }
         SessionsCommand::Restart {
             targets,
+            cancel: true,
+            ..
+        } => restart::cancel(&ctx, targets).await,
+        SessionsCommand::Restart {
+            targets,
             agent,
             wait,
             sequential,
             in_place,
             permissions,
+            cancel: false,
         } => {
             let restart = crate::model::AgentRestart {
                 wait,

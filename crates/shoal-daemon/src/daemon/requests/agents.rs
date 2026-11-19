@@ -184,6 +184,9 @@ pub(super) async fn handle(
         AgentMethod::RestartAgent { space, restart } => {
             Body::Restart(manager.restart_space(caller, &space, restart).await?)
         }
+        AgentMethod::CancelRestart { space } => {
+            Body::CancelledRestart(manager.cancel_restart(&space).await?)
+        }
         AgentMethod::AgentSession { space } => Body::AgentSession(
             manager
                 .agent_session(&space, caller.and_then(Caller::execution_id))
@@ -320,7 +323,7 @@ impl Scoped for AgentMethod {
                     )
                     .await?,
             ),
-            AgentMethod::RestartAgent { space, .. } => Some(
+            AgentMethod::RestartAgent { space, .. } | AgentMethod::CancelRestart { space } => Some(
                 manager
                     .workspace_below(
                         caller,

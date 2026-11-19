@@ -139,6 +139,25 @@ impl Manager {
         }
     }
 
+    /// Drop the restart recorded for the agent of `space`, answering the
+    /// requests that wait for it; one under way goes on. Returns how the
+    /// agent would have restarted, if anything was recorded.
+    pub(crate) async fn cancel_restart(
+        &self,
+        space: &SpaceSelector,
+    ) -> Result<Option<AgentRestart>> {
+        let space = self.space(space).await?;
+        let mut waiters = self.restarts.decisions.lock().await;
+        let cancelled = self.forget_restart(&space.id).await?;
+        let waiting = waiters.remove(&space.id).unwrap_or_default();
+        let skipped = RestartOutcome::Skipped {
+            agent: None,
+            reason: "the restart was cancelled".into(),
+        };
+        answer_all(waiting, &Ok(skipped));
+        Ok(cancelled.map(|recorded| recorded.restart))
+    }
+
     /// Whether the agent of the space `id` ended its turn.
     async fn agent_turn_ended(&self, id: &SpaceId) -> Result<bool> {
         self.turn_ended(id, |agent| agent.space_id == *id).await

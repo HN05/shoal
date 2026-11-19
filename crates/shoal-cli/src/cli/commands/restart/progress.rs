@@ -153,7 +153,9 @@ fn restarted(
 /// What the restart of the agent of the space numbered `number` waits for.
 fn waiting(waits: &RestartWait, number: SpaceNumber) -> String {
     match waits {
-        RestartWait::Turn => "restarts once its turn ends".into(),
+        RestartWait::Turn => {
+            format!("restarts once its turn ends; shoal restart --cancel {number} cancels it")
+        }
         RestartWait::Processes { issue } => format!(
             "restarts once its remaining processes exit: {issue}; shoal stop {number} cancels the restart"
         ),

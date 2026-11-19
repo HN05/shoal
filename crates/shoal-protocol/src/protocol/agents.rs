@@ -161,6 +161,11 @@ pub enum AgentMethod {
         space: SpaceSelector,
         restart: crate::model::AgentRestart,
     },
+    /// Drop the restart the daemon recorded for the agent of `space`,
+    /// answering with the one it dropped, if any.
+    CancelRestart {
+        space: SpaceSelector,
+    },
     /// The session of the space's agent that a fork starts from: the
     /// caller's own agent there, else its only one.
     AgentSession {

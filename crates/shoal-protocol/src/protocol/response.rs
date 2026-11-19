@@ -190,6 +190,7 @@ response_bodies! {
     StoppedSpace(crate::model::StoppedSpace),
     RunningAgents(Vec<crate::model::RunningAgent>),
     Restart(crate::model::RestartOutcome),
+    CancelledRestart(Option<crate::model::AgentRestart>),
     OwnedPlaces(Vec<crate::model::OwnedPlace>),
     SpacePlaces(crate::model::SpacePlaces),
     PlaceClose(crate::sessions::PlaceClose),
