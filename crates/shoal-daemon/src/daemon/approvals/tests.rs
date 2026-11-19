@@ -13,6 +13,8 @@ use crate::daemon::{
 };
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, Params, params};
+use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::config::repo::Lifetime;
 use shoal_protocol::space_names::SpaceSelector;
 
 fn resource(mode: LockMode) -> Specification {
