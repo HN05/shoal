@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use shoal_protocol::status::{DiffSummary, Inspection, WorktreeStatus};
 
 use super::super::manager::Manager;
 use crate::{
@@ -8,7 +9,7 @@ use crate::{
         items::{link, reference::ItemInput},
     },
     git,
-    model::{DiffSummary, Inspection, Selected, SelectedItem, Workspace, WorktreeStatus},
+    model::{Selected, SelectedItem, Workspace},
     repository,
 };
 use shoal_protocol::space_names::SpaceSelector;

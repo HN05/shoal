@@ -11,7 +11,7 @@ use shoal_protocol::approvals::{ApprovalRequest, PortSpecification, Specificatio
 use shoal_protocol::config::repo::Lifetime;
 use shoal_protocol::files::Attacher;
 use shoal_protocol::model::{
-    Completion, Inspection, QueueEntry, Relation, Repository, SyncedRepository, Workspace,
+    Completion, QueueEntry, Relation, Repository, SyncedRepository, Workspace,
 };
 use shoal_protocol::protocol::operations::LaunchRequest;
 use shoal_protocol::protocol::{
@@ -22,6 +22,7 @@ use shoal_protocol::protocol::{
 use shoal_protocol::questions::{Ask, Question};
 use shoal_protocol::removal::{RemovalResult, SpaceRemovalCheck, UnsavedWork};
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::status::Inspection;
 use shoal_refs::BranchName;
 
 async fn inspect(daemon: &Connector, workspace: &str) -> anyhow::Result<Workspace> {

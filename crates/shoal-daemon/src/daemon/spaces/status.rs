@@ -2,6 +2,7 @@
 //! state of the items it links and what awaits the user.
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::ByKind;
+use shoal_protocol::status::{Attention, IssueStatus, SpaceDetail, SpaceStatus};
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -13,7 +14,7 @@ use crate::{
         turn_retry, workspace_files,
     },
     forge::{ForgeRepo, items::reference::ItemRef, review::status::PrStatus},
-    model::{Attention, Completion, IssueStatus, Space, SpaceDetail, SpaceStatus},
+    model::{Completion, Space},
     repository,
 };
 use shoal_forge::{RepoRequests, account::Account, items::issue::IssueRequests};

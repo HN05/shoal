@@ -9,9 +9,10 @@ use crate::{
         ui,
     },
     forge::review::status::PrStatus,
-    model::{AgentStatus, Chat, Completion, Head, SpaceDetail, SpaceStatus, WorktreeStatus},
+    model::{AgentStatus, Chat, Completion, Head},
 };
 use shoal_protocol::links::pr::RegistrationKind;
+use shoal_protocol::status::{SpaceDetail, SpaceStatus, WorktreeStatus};
 
 pub(super) fn render_status(view: &StatusView, json: bool) {
     let palette = Palette::stdout(json);

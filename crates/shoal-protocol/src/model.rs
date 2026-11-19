@@ -16,7 +16,6 @@ mod removal;
 mod repositories;
 mod restarts;
 mod spaces;
-mod status;
 mod sync;
 mod workspaces;
 
@@ -54,9 +53,6 @@ pub use restarts::{AgentRestart, RestartOutcome, RestartWait};
 pub use spaces::{
     ByKind, Part, RefPart, RenamedSpace, Space, SpaceKind, SpaceMode, SpacePart, SpaceRef,
     SpaceTarget, Spaces, Workdir,
-};
-pub use status::{
-    Attention, DiffSummary, Inspection, IssueStatus, SpaceDetail, SpaceStatus, WorktreeStatus,
 };
 pub use sync::{CheckoutSync, SyncedRepository};
 pub use workspaces::{

@@ -49,6 +49,7 @@ pub mod sim;
 pub mod sleep;
 pub mod space_names;
 pub mod state;
+pub mod status;
 pub mod subscriptions;
 pub mod time;
 pub mod transcripts;

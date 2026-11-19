@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use shoal_protocol::sessions::TerminalSession;
 
 use crate::output::outputs;
-use shoal_protocol::{model::SpaceStatus, transcripts::Transcript};
+use shoal_protocol::{status::SpaceStatus, transcripts::Transcript};
 
 /// The daemon's space status with the terminal sessions the CLI finds.
 #[derive(Debug, Serialize, Deserialize)]

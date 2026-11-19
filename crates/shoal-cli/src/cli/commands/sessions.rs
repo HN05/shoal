@@ -4,6 +4,7 @@
 use anyhow::{Context as _, Result, bail, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::status::Inspection;
 
 use crate::{
     cli::{
@@ -15,7 +16,7 @@ use crate::{
         ui::{self, Fallback, NoCurrentWorkspace},
     },
     client::connection::CommandPaths,
-    model::{Chat, Inspection, Protection, Spaces},
+    model::{Chat, Protection, Spaces},
     protocol::ConfigTarget,
     sessions::Origin,
     terminal::Session,

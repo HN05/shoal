@@ -4,6 +4,7 @@
 //! chats together.
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::progress::Blocker;
+use shoal_protocol::status::{Inspection, SpaceStatus};
 use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::Result;
@@ -14,8 +15,8 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     config::hooks::HookKind,
     model::{
-        ConflictCheck, DiffBase, Inspection, MergeOptions, MergePreview, OwnedPlace, Refreshed,
-        RenamedSpace, Space, SpacePlaces, SpaceStatus, SpaceTarget, UntrackedWorktree, Workspace,
+        ConflictCheck, DiffBase, MergeOptions, MergePreview, OwnedPlace, Refreshed, RenamedSpace,
+        Space, SpacePlaces, SpaceTarget, UntrackedWorktree, Workspace,
     },
     protocol::{CommitStart, ConfigTarget, CreationOptions, RepositoryLayers, WorkspaceMethod},
     repository::Selector,

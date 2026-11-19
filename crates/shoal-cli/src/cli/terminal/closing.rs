@@ -8,6 +8,7 @@
 //! workspace.
 use crate::paths::StateFiles;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::status::Inspection;
 use std::{
     cell::{Cell, RefCell},
     future::Future,
@@ -21,7 +22,6 @@ use anyhow::{Context as _, Result};
 use crate::{
     cli::{context::Context, installed},
     daemon_owner, env,
-    model::Inspection,
     paths::Paths,
     sessions::{HostName, Origin, PlaceClose, PlaceOwnership},
     state::AgentState,

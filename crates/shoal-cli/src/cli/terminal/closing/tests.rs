@@ -2,12 +2,13 @@ use super::*;
 use crate::terminal::Closes;
 use crate::time::UnixTime;
 use crate::{
-    model::{AgentStatus, Completion, Execution, Inspection, Workspace},
+    model::{AgentStatus, Completion, Execution, Workspace},
     paths::Paths,
     protocol::{self, Body, Method, Operation, RecoveryMethod, Request, Response, WorkspaceMethod},
     state::{ExecutionState, WorkspaceState},
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::status::Inspection;
 use tokio::{io::BufReader, net::UnixListener};
 
 #[tokio::test]

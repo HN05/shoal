@@ -1,7 +1,7 @@
 //! A space's status and the workspace inspection it builds on.
-use super::{
+use crate::model::{
     ChangedOnBothSides, Chat, CheckoutSync, CleanupReason, Completion, Execution, PortReservation,
-    ReviewMark, SpaceLinks, SpaceRef, Workspace,
+    QueueEntry, ReviewMark, SpaceLinks, SpaceRef, Workspace,
 };
 use crate::resources::ResourceLease;
 use crate::sim::Simulator;
@@ -68,7 +68,7 @@ pub struct SpaceStatus {
     /// The CI jobs waiting to start for its PR, or a workspace's branch,
     /// each with what holds it back.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub waiting_jobs: Vec<super::QueueEntry>,
+    pub waiting_jobs: Vec<QueueEntry>,
     /// The retry of the agent's turn an API failure ended.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turn_retry: Option<crate::executions::TurnRetry>,

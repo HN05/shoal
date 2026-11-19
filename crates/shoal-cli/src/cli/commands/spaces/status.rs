@@ -4,6 +4,7 @@ mod elsewhere;
 mod render;
 
 use anyhow::{Context as _, Result, ensure};
+use shoal_protocol::status::SpaceDetail;
 
 use self::render::render_status;
 use crate::client::{output::status::StatusView, transcripts};
@@ -15,7 +16,7 @@ use crate::{
         ui,
     },
     forge::IssueInput,
-    model::{SpaceDetail, SpaceTarget},
+    model::SpaceTarget,
     protocol::ConfigTarget,
 };
 use shoal_protocol::space_names::SpaceSelector;

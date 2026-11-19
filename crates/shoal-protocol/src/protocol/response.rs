@@ -5,14 +5,16 @@ use super::{
 };
 use crate::events::EventItem;
 use crate::model::{
-    ConflictCheck, DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation,
-    PortSuggestion, Repository, RepositoryRemoval, SpaceStatus, SyncedRepository, Workspace,
+    ConflictCheck, DiffBase, ExecutionPlan, PortOverview, PortReservation, PortSuggestion,
+    Repository, RepositoryRemoval, SyncedRepository, Workspace,
 };
 use crate::notifications::Notification;
 use crate::recovery::Report;
 use crate::removal::{RemovalResult, SpaceRemovalCheck};
 use crate::resources::{Overview, ResourceLease};
 use crate::sim::{AuditEntry, Simulator, SimulatorCatalog};
+use crate::status::Inspection;
+use crate::status::SpaceStatus;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 

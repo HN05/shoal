@@ -34,12 +34,13 @@ pub(crate) use stack::record_base_changed;
 use super::manager::Manager;
 use crate::{
     daemon::{spaces::status::Records, store},
-    model::{Execution, Inspection, Workspace},
+    model::{Execution, Workspace},
 };
 use anyhow::Result;
 use rusqlite::OptionalExtension;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::status::Inspection;
 use std::collections::HashSet;
 
 impl Manager {

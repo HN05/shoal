@@ -2,10 +2,11 @@
 //! rechecked that its recorded processes are gone.
 use anyhow::{Context as _, Result, ensure};
 
-use crate::{cli::context::Context, model::Inspection, state::ExecutionState};
+use crate::{cli::context::Context, state::ExecutionState};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::recovery::ReconcileOptions;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::status::Inspection;
 
 /// A daemon restart quarantines interrupted executions as unknown. Recovery
 /// records are still safe to use once the daemon has rechecked that execution's

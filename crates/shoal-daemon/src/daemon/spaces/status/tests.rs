@@ -1,8 +1,6 @@
-use crate::{
-    daemon::notifications::NotificationKind,
-    model::{SpaceDetail, SpaceStatus},
-};
+use crate::daemon::notifications::NotificationKind;
 use shoal_protocol::files::Attacher;
+use shoal_protocol::status::{SpaceDetail, SpaceStatus};
 
 #[tokio::test]
 async fn status_counts_only_the_spaces_own_unread_notifications() {
