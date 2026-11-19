@@ -3467,7 +3467,7 @@ already at `~/shoal/<name>/<anything>` keeps that directory.
 [`machine.root_dir`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) changes the parent for new
 registrations; symlinks and `..` are resolved before checking and creating the root,
 even across missing components. Existing registrations keep their paths until
-[`move root`](#move-repositories-to-a-new-root) moves them, as do workspaces
+[`repo move`](#move-repositories-to-a-new-root) moves them, as do workspaces
 created before this layout. `repo add <url> --path <dir>` clones one repository to an exact new
 directory (relative to the current directory; `~/` allowed). Re-registering a URL
 with its existing path is fine; a different path is rejected. Registering, and
@@ -3477,7 +3477,7 @@ it would write within 30 seconds, as on a volume macOS has not given it access t
 On macOS, Spotlight does not index a `root_dir` Shoal creates: it is a symlink
 to `<parent>/.<name>.noindex`, a directory Spotlight skips by name, so `~/shoal`
 still leads to every workspace while Shoal and Git show the real paths. An
-existing `root_dir` is used as it is; [`move root`](#move-repositories-to-a-new-root)
+existing `root_dir` is used as it is; [`repo move`](#move-repositories-to-a-new-root)
 moves it out of Spotlight, or back with `--regular-dir`.
 
 Registration is idempotent by normalized `origin` URL (HTTPS/SSH forms and
@@ -3645,7 +3645,7 @@ resolves its options from the other layers, `shoal config show` warns about
 it, and the daemon logs the error and notifies you once per error while it
 runs, until the file is fixed. Its resource leases are the exception: since the
 file may name their hooks, acquiring or releasing one, and removing a
-workspace that holds one, fails until it is fixed. `move root` moves the
+workspace that holds one, fails until it is fixed. `repo move` moves the
 file with the repository's directory and `repo rm` deletes it. `--json` returns `path` and `toml`, unset
 while the file does not exist. Scoped processes read and change it as their
 space's [`admin` permission](#permitted-actions) allows.
@@ -3677,9 +3677,9 @@ workspace creation is blocked until the same command is retried.
 ### Move repositories to a new root
 
 ```sh
-shoal move root /Volumes/Work/shoal -y  # Save root_dir, then move
-shoal move root -y                      # Move into the configured root_dir
-shoal move root --regular-dir -y        # Keep root_dir a regular directory
+shoal repo move /Volumes/Work/shoal -y  # Save root_dir, then move
+shoal repo move -y                      # Move into the configured root_dir
+shoal repo move --regular-dir -y        # Keep root_dir a regular directory
 ```
 
 Moves each repository directory outside `root_dir` into it whole, with its URL
@@ -3712,7 +3712,7 @@ the repositories into the new root, where the chat runs from then on; a running
 one stops and restores as their agents do, and the move deletes the `.tmp`,
 `.attachments` and `.sessions` left in the root they left. The move is recorded before anything moves; a failed or
 interrupted move rolls back, or finishes once the directory has arrived, and the
-repository refuses other changes until the next `move root` or daemon start
+repository refuses other changes until the next `repo move` or daemon start
 completes it. Agent trust for the old paths is removed, and the new paths are
 trusted for the agents their workspaces keep for `shoal restore`.
 
@@ -4367,7 +4367,7 @@ exports its environment or records the chat, reserving the repository directory
 for a registration without one. It marks `.tmp` with the repository and refuses
 to start the process or chat while an unmarked `.tmp` is in the way. A chat
 without a repository has its directory in the `.tmp` of the `root_dir` it started
-in, where it stays when `root_dir` changes until [`move root`](#move-repositories-to-a-new-root) takes it along, and the daemon marks that `.tmp` with
+in, where it stays when `root_dir` changes until [`repo move`](#move-repositories-to-a-new-root) takes it along, and the daemon marks that `.tmp` with
 its state directory: a daemon with another state directory that
 shares `root_dir` neither uses nor deletes it, and starts no chat without a
 repository there.

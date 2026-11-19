@@ -802,7 +802,7 @@ to save, so a manual stop cancels it before stopping anything, under the queue
 gate so admission cannot start it after, and reports it; one already starting
 belongs to its agent. `shoal stop` of a waiting launch of a new workspace
 cancels it as `shoal rm` does, and `--all` also selects the workspaces such a
-launch waits to start in. `shoal move root`, which starts the stopped work
+launch waits to start in. `shoal repo move`, which starts the stopped work
 again after the move, keeps them. User commands
 save their arguments, which a restore reports once, as the restored agent's first
 prompt or else to the user, and never reruns, because replaying an arbitrary
@@ -1003,7 +1003,7 @@ On macOS a root Shoal creates links to `<parent>/.<name>.noindex`, which holds
 its contents: Spotlight ignores `.metadata_never_index` below a volume root and
 its privacy list needs root, so only a skipped name keeps build output out of
 the index, and the link keeps `root_dir` the same on every system. An existing
-root is used as found; only `move root` changes it, by default to the link,
+root is used as found; only `repo move` changes it, by default to the link,
 or back to a regular directory with `--regular-dir`.
 Before registration, workspace creation or an export writes a directory, the
 daemon creates a file there itself under a time limit: its file access can
@@ -1055,7 +1055,7 @@ in-place checkout placed as `~/shoal/<name>/<x>` adopts that directory, and
 move is recorded before anything moves, then the records switch and Git's
 worktree links are repaired, so a stopped daemon finishes a completed move and
 rolls back an incomplete one, deleting only directories with their recorded identity. Checkouts and workspaces outside it stay.
-`move root` stops the commands and agents running there as `shoal stop`
+`repo move` stops the commands and agents running there as `shoal stop`
 does and queues the agents' restores after the move, trusting the new paths
 for them: a stop keeps sessions, which resume by ID from any directory. The
 chats without a repository, which run in `root_dir`, go with the root: their

@@ -292,7 +292,7 @@ pub fn ensure_no_pending_move(db: &Connection, workspace_id: &SpaceId) -> Result
                 WHERE spaces.id=?1 AND spaces.kind='workspace'",
             [workspace_id]
         )?,
-        "repository move is incomplete; run shoal move root again"
+        "repository move is incomplete; run shoal repo move again"
     );
     Ok(())
 }
@@ -305,7 +305,7 @@ pub fn ensure_repository_not_moving(db: &Connection, repository_id: &RepositoryI
             "SELECT 1 FROM repository_moves WHERE repository_id=?1",
             [repository_id]
         )?,
-        "repository move is incomplete; run shoal move root again"
+        "repository move is incomplete; run shoal repo move again"
     );
     Ok(())
 }

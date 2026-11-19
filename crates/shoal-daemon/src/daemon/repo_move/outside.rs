@@ -1,4 +1,4 @@
-//! The files of the chats without a repository, which `shoal move root`
+//! The files of the chats without a repository, which `shoal repo move`
 //! moves into the directory that holds the repositories once it is done:
 //! the temporary directory, attached files and kept session files of each
 //! such chat, running, stopped or removed, whose records then name the configured root, which

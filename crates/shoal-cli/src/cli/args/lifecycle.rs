@@ -51,7 +51,7 @@ pub enum LifecycleCommand {
         #[command(flatten)]
         args: CleanupArgs,
     },
-    /// Move workspaces to another machine, or repositories to another root directory.
+    /// Move workspaces and chats to another machine.
     Move {
         #[command(subcommand)]
         command: MoveCommand,

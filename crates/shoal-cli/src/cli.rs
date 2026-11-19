@@ -336,6 +336,7 @@ impl Command {
                         | RepoCommand::Add { .. }
                         | RepoCommand::Rename { .. }
                         | RepoCommand::Rm { .. }
+                        | RepoCommand::Move(_)
                         | RepoCommand::Config { .. },
                     ),
             })

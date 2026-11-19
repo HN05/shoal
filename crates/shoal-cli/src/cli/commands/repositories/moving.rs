@@ -1,4 +1,4 @@
-//! `shoal move root`: move every repository directory into a new `root_dir`.
+//! `shoal repo move`: move every repository directory into a new `root_dir`.
 use super::super::restore::agents::queue::{Stopped, restore_stopped, saved_executions};
 use crate::cli::commands::restore::agents::reports::QueuedExt;
 use crate::client::output::restore::Queued;
@@ -15,7 +15,7 @@ use anyhow::{Result, ensure};
 use crate::{
     cli::{
         agents,
-        args::transfer::RootArgs,
+        args::repository::MoveArgs,
         client,
         context::Context,
         output::{Palette, Style},
@@ -32,16 +32,14 @@ use crate::{
 /// commands and agents running in them, then have the daemon move them,
 /// into a directory Spotlight skips unless they ask for a regular one, and
 /// queue the stopped agents' restores, even when the move fails.
-pub(super) async fn run(ctx: &Context, args: RootArgs) -> Result<()> {
-    let RootArgs {
+pub(super) async fn run(ctx: &Context, args: MoveArgs) -> Result<()> {
+    let MoveArgs {
         root,
         regular_dir,
         confirmation,
     } = args;
     let confirmed = confirmation.yes;
-    let root = root
-        .map(|root| super::super::repositories::absolute(ctx, root))
-        .transpose()?;
+    let root = root.map(|root| super::absolute(ctx, root)).transpose()?;
     let before = Registrations::load(ctx).await?;
     let moves = plan_moves(ctx, root.clone(), regular_dir).await?;
     if !confirmed && !(moves.repositories.is_empty() && moves.chats.is_empty()) {

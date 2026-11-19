@@ -368,14 +368,14 @@ fn migrate_moves_workspaces_into_a_saved_root() {
         .current_dir(&old)
         .spawn()
         .unwrap();
-    let output = fixture.run(&["move", "root", "~/moved", "--yes"]);
+    let output = fixture.run(&["repo", "move", "~/moved", "--yes"]);
     inside.kill().unwrap();
     inside.wait().unwrap();
     assert!(!output.status.success(), "{}", printed(&output));
-    assert!(!fixture.run(&["move", "root", "~/moved"]).status.success());
+    assert!(!fixture.run(&["repo", "move", "~/moved"]).status.success());
     assert!(old.exists());
 
-    let moved = fixture.ok(&["move", "root", "~/moved", "--yes"]);
+    let moved = fixture.ok(&["repo", "move", "~/moved", "--yes"]);
     let [moved] = moved.as_array().unwrap().as_slice() else {
         panic!("expected one move: {moved}");
     };
@@ -411,7 +411,7 @@ fn migrate_moves_workspaces_into_a_saved_root() {
     let next = fixture.add("next");
     assert!(Path::new(next["path"].as_str().unwrap()).starts_with(directory));
     assert_eq!(
-        fixture.ok(&["move", "root", "--yes"]),
+        fixture.ok(&["repo", "move", "--yes"]),
         serde_json::json!([])
     );
 }
@@ -471,14 +471,14 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
     );
 
     // Without confirmation nothing stops.
-    assert!(!fixture.run(&["move", "root", "~/moved"]).status.success());
+    assert!(!fixture.run(&["repo", "move", "~/moved"]).status.success());
     let running = fixture.ok(&["status", &fixture.id("moving")]);
     assert!(
         !running["executions"].as_array().unwrap().is_empty(),
         "{running}"
     );
 
-    let output = fixture.run(&["--json", "move", "root", "~/moved", "--yes"]);
+    let output = fixture.run(&["--json", "repo", "move", "~/moved", "--yes"]);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "{stderr}");
     // The repository stays registered, so its agents' configs stay known.

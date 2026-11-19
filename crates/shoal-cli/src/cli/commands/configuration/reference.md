@@ -79,7 +79,7 @@ availability = "auto"    # "auto", "always_on" or "intermittent"
 
 `root_dir` is absolute or starts with `~/`, outside Shoal's state directory,
 every checkout and every repository directory; it applies to new registrations
-after `shoal config reload`, and [`move root`](../../../../../../docs/reference.md#move-repositories-to-a-new-root)
+after `shoal config reload`, and [`repo move`](../../../../../../docs/reference.md#move-repositories-to-a-new-root)
 moves existing ones.
 
 `max_heavy_agents` limits the heavy slots, the agents of [`heavy` modes](#modes-and-rules)

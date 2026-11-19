@@ -2,6 +2,7 @@
 
 mod configuration;
 mod listing;
+mod moving;
 mod naming;
 mod registration;
 mod removal;
@@ -43,5 +44,9 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
             repository,
             confirmation,
         } => removal::remove(ctx, repository, confirmation.yes).await,
+        RepoCommand::Move(args) => {
+            moving::run(ctx, args).await?;
+            Ok(0)
+        }
     }
 }

@@ -150,5 +150,21 @@ pub enum RepoCommand {
         #[command(flatten)]
         confirmation: ConfirmationArgs,
     },
+    /// Move every repository directory, with its workspaces and clone, and the files of the chats
+    /// without a repository into root_dir.
+    Move(MoveArgs),
     Ls,
+}
+
+// Arguments of `shoal repo move`.
+#[derive(Debug, Args)]
+pub struct MoveArgs {
+    /// New root directory, saved as root_dir first; omit to use the configured one.
+    #[arg(value_hint = clap::ValueHint::DirPath)]
+    pub root: Option<PathBuf>,
+    /// Keep root_dir a regular directory instead of a link to one Spotlight skips (macOS).
+    #[arg(long)]
+    pub regular_dir: bool,
+    #[command(flatten)]
+    pub confirmation: ConfirmationArgs,
 }

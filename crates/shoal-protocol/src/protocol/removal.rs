@@ -10,7 +10,7 @@ pub enum QueuedLaunches {
     /// Cancel them, as `shoal stop` does, so no agent starts in a workspace
     /// the user stopped.
     Cancel,
-    /// Leave them queued, as `shoal daemon stop` and `shoal move root` do,
+    /// Leave them queued, as `shoal daemon stop` and `shoal repo move` do,
     /// which start the stopped work again later.
     Keep,
 }
@@ -26,7 +26,7 @@ pub enum UntrackedProcesses {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         requester: Option<u32>,
     },
-    /// Leave them running, as `shoal move root` does, which starts only the
+    /// Leave them running, as `shoal repo move` does, which starts only the
     /// stopped agents and commands again.
     Keep,
 }

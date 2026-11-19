@@ -1,11 +1,8 @@
 //! `shoal move`: moving spaces to another Shoal, where `export` ends a space
 //! here, or copies one, and writes it to a file, `import` continues it from
-//! one and `ssh`
-//! pipes one into the other, and moving repositories to another root
-//! directory.
+//! one and `ssh` pipes one into the other.
 mod export;
 mod import;
-mod root;
 mod ssh;
 
 use std::{io::IsTerminal, path::PathBuf};
@@ -83,10 +80,6 @@ pub(super) async fn run(ctx: &Context, command: MoveCommand) -> Result<i32> {
             import::import(ctx, files, options).await
         }
         MoveCommand::Ssh(args) => ssh::run(ctx, args).await,
-        MoveCommand::Root(args) => {
-            root::run(ctx, args).await?;
-            Ok(0)
-        }
     }
 }
 

@@ -214,7 +214,7 @@ fn a_root_move_takes_a_master_session_with_it() {
     let started = run_agent(&fixture, &START_MASTER);
     fs::write(started.tmp_dir.join("notes"), "kept").unwrap();
 
-    fixture.ok(&["move", "root", "~/moved", "--yes"]);
+    fixture.ok(&["repo", "move", "~/moved", "--yes"]);
 
     let moved = fs::canonicalize(home.join("moved")).unwrap();
     let resumed = run_agent(&fixture, &["restore", &fixture.id("master"), "--focus"]);
