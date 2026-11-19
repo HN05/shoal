@@ -63,38 +63,12 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     install_fake_agent(&path);
     let workspace_id = fixture.id("restarted");
-    let mut launches = [
-        Launch::spawn(
-            &fixture,
-            "agent",
-            Some("claude"),
-            &[
-                "start",
-                "--in",
-                &workspace_id,
-                "--here",
-                "--agent",
-                "claude",
-            ],
-            path.join("agent-started"),
-        ),
-        Launch::spawn(
-            &fixture,
-            "command",
-            None,
-            &[
-                "run",
-                "--workspace",
-                &workspace_id,
-                "--",
-                "sh",
-                "-c",
-                "touch command-started; while [ ! -f release ]; do sleep 0.1; done; touch command-exited; exit 3",
-            ],
-            path.join("command-started"),
-        ),
-    ];
-    Launch::wait_started(&fixture, &workspace_id, &mut launches);
+    let mut launches = Launch::agent_and_command(
+        &fixture,
+        &workspace_id,
+        &path,
+        "touch command-started; while [ ! -f release ]; do sleep 0.1; done; touch command-exited; exit 3",
+    );
     let [agent, command] = &mut launches;
     let state = fixture
         .root

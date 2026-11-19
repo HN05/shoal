@@ -14,7 +14,7 @@ pub(crate) struct Launch {
 }
 
 impl Launch {
-    pub(crate) fn spawn(
+    fn spawn(
         fixture: &Fixture,
         name: &'static str,
         agent: Option<&'static str>,
@@ -39,12 +39,43 @@ impl Launch {
         }
     }
 
+    /// Start the workspace's own `claude` agent in `path`, whose fake agent
+    /// touches `agent-started`, then the command `sh -c script`, which
+    /// touches `command-started`, and wait until both run. The agent's start
+    /// brings the workspace up to date, during which a command's start is
+    /// refused, so the command starts only once the agent has.
+    pub(crate) fn agent_and_command(
+        fixture: &Fixture,
+        workspace: &str,
+        path: &Path,
+        script: &str,
+    ) -> [Self; 2] {
+        let mut agent = Self::spawn(
+            fixture,
+            "agent",
+            Some("claude"),
+            &["start", "--in", workspace, "--here", "--agent", "claude"],
+            path.join("agent-started"),
+        );
+        Self::wait_started(fixture, workspace, std::slice::from_mut(&mut agent));
+        let command = Self::spawn(
+            fixture,
+            "command",
+            None,
+            &["run", "--workspace", workspace, "--", "sh", "-c", script],
+            path.join("command-started"),
+        );
+        let mut launches = [agent, command];
+        Self::wait_started(fixture, workspace, &mut launches);
+        launches
+    }
+
     /// Wait until the daemon records every launch's execution with its child
     /// and each has touched its marker, the state a restart or removal of the
     /// workspace acts on.
     /// A launch that exits first fails the test at once, and one that never
     /// starts fails it at the hang guard, naming it with what each printed.
-    pub(crate) fn wait_started(fixture: &Fixture, workspace: &str, launches: &mut [Self]) {
+    fn wait_started(fixture: &Fixture, workspace: &str, launches: &mut [Self]) {
         let mut executions = Value::Null;
         let started = try_wait_for(|| {
             if launches.iter_mut().any(|launch| launch.exited().is_some()) {

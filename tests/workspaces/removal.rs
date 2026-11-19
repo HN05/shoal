@@ -272,38 +272,12 @@ impl RemovedWithAgent {
         install_fake_agent(&path);
         fs::write(path.join("resume.sh"), "touch resumed\n").unwrap();
         let workspace_id = fixture.id("removed");
-        let mut launches = [
-            Launch::spawn(
-                &fixture,
-                "agent",
-                Some("claude"),
-                &[
-                    "start",
-                    "--in",
-                    &workspace_id,
-                    "--here",
-                    "--agent",
-                    "claude",
-                ],
-                path.join("agent-started"),
-            ),
-            Launch::spawn(
-                &fixture,
-                "command",
-                None,
-                &[
-                    "run",
-                    "--workspace",
-                    &workspace_id,
-                    "--",
-                    "sh",
-                    "-c",
-                    "touch command-started; while :; do sleep 1; done",
-                ],
-                path.join("command-started"),
-            ),
-        ];
-        Launch::wait_started(&fixture, &workspace_id, &mut launches);
+        let mut launches = Launch::agent_and_command(
+            &fixture,
+            &workspace_id,
+            &path,
+            "touch command-started; while :; do sleep 1; done",
+        );
         fixture.ok(&["rm", "--wait", &workspace_id, "--yes"]);
         for launch in &mut launches {
             launch.wait_exited();
