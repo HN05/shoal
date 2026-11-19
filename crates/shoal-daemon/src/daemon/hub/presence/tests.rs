@@ -41,14 +41,15 @@ fn span(start: u64, end: u64) -> Span {
 }
 
 #[test]
-fn a_gap_shorter_than_five_minutes_extends_a_span_and_a_longer_one_starts_another() {
+fn a_gap_shorter_than_five_minutes_extends_a_span_and_one_of_five_starts_another() {
     let mut db = database();
-    for minute in [0, 1, 2, 6, 20, 21] {
+    for minute in [0, 1, 2, 6, 20, 21, 26] {
         mark_at(&mut db, minute);
     }
-    let history = history_at(&mut db, 21);
+    let history = history_at(&mut db, 26);
     assert_eq!(history.since, Some(at(0)));
-    assert_eq!(history.spans, [span(0, 6), span(20, 21)]);
+    // An absence of exactly five minutes counts.
+    assert_eq!(history.spans, [span(0, 6), span(20, 21), span(26, 26)]);
 }
 
 #[test]

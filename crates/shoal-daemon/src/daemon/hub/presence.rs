@@ -2,7 +2,7 @@
 //! link stayed open, and the hub's own machine's daemon ran with the
 //! machine awake, over the last [`KEPT`]. The hub marks each machine that is
 //! there at once when its link opens and ends, and every minute meanwhile;
-//! a mark within [`SHORT_GAP`] of a span's end extends it, so gaps shorter
+//! a mark less than [`SHORT_GAP`] after a span's end extends it, so gaps shorter
 //! than that, such as a network blip or a daemon restart, never show.
 use std::time::Duration;
 
@@ -15,7 +15,7 @@ use crate::time::UnixTime;
 /// How long the hub keeps a span after it ended.
 pub(super) const KEPT: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
-/// The longest absence that does not end a span.
+/// The shortest absence that ends a span.
 pub(super) const SHORT_GAP: Duration = Duration::from_secs(5 * 60);
 
 /// A time `member` was there, from `start` to `end`.
@@ -34,12 +34,12 @@ pub(super) struct History {
 }
 
 /// Record that `member` is there at `now`: its latest span lasts until
-/// `now` when it ended within [`SHORT_GAP`], and a new one starts
-/// otherwise.
+/// `now` when it ended less than [`SHORT_GAP`] before, and a new one
+/// starts otherwise.
 pub(super) fn mark(tx: &Transaction<'_>, member: &MemberId, now: UnixTime) -> Result<()> {
     let extended = tx.execute(
         "UPDATE hub_presence SET ended_at=MAX(ended_at, ?2)
-            WHERE member_id=?1 AND ended_at >= ?3
+            WHERE member_id=?1 AND ended_at > ?3
               AND started_at=(SELECT MAX(started_at) FROM hub_presence WHERE member_id=?1)",
         params![member, now, now - SHORT_GAP],
     )?;
