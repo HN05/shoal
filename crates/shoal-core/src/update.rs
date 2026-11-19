@@ -170,10 +170,15 @@ impl Target {
     /// Whether `release` replaces `current`.
     pub fn replaces(&self, release: &str, current: &str) -> Result<bool> {
         match self {
-            Self::Latest => Ok(version(release)? > version(current)?),
+            Self::Latest => is_newer(release, current),
             Self::Exact(_) => Ok(release != current),
         }
     }
+}
+
+/// Whether release `candidate` is newer than `current`.
+pub fn is_newer(candidate: &str, current: &str) -> Result<bool> {
+    Ok(version(candidate)? > version(current)?)
 }
 
 fn version(text: &str) -> Result<(u64, u64, u64)> {

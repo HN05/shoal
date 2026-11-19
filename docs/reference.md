@@ -883,9 +883,9 @@ member.
 The hub refuses a link that presents a revoked credential, which stops the
 machine from trying again until it joins again; one that presents a
 credential another machine's link holds, as a copy of a state directory does,
-which is told to join as a machine of its own; and one of another protocol
-version, recording an alert that names the machine, its version and the
-upgrade to run. A refused machine keeps working on its own.
+which is told to join as a machine of its own; and one that runs another
+Shoal version, recording an alert that names the machine, its version and the
+update to run. A refused machine keeps working on its own.
 
 Each machine keeps its spaces and reports a summary of each to the hub as it
 changes, all of them again whenever its link opens: its number and name, its

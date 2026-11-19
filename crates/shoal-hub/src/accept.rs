@@ -12,8 +12,10 @@ use serde_json::Value;
 use shoal_ids::member_ids::MemberId;
 use shoal_protocol::{
     hub::{
-        ExchangeKey, Mac, Member, PublicKey, Signature,
-        link::{Frame, Hello, Intent, Joining, Refusal, RefusalReason, Signer, Transcript},
+        ExchangeKey, Mac, Member, Nonce, PublicKey, Signature,
+        link::{
+            Frame, Hello, HubVersion, Intent, Joining, Refusal, RefusalReason, Signer, Transcript,
+        },
     },
     protocol,
 };
@@ -29,6 +31,9 @@ use super::{
     transport::Channel,
 };
 use crate::{Hub, daemon::Daemon, log, time::UnixTime};
+
+/// The only Shoal version the hub takes.
+const OWN_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// How long a member has to send its proof.
 const PROOF_TIMEOUT: Duration = Duration::from_secs(30);
@@ -118,7 +123,7 @@ impl Hub {
         if !self.is_hub(daemon) {
             return Ok(Err(not_hub()));
         }
-        if protocol != protocol::VERSION {
+        if !same_release(protocol, &opening) {
             return Ok(Err(self.refuse_version(daemon, &opening, protocol).await));
         }
         let hello: Hello = serde_json::from_value(opening).context("unreadable hub link hello")?;
@@ -321,22 +326,24 @@ impl Hub {
             .await
     }
 
-    /// The refusal of a member that speaks `protocol`, after recording an
-    /// alert that names it, its version and the upgrade it needs. What a
-    /// peer sends here is not yet authenticated, so the alert names only a
-    /// member the hub recorded, holds the version it claims short and
-    /// printable, and comes at most once an hour for each member, or for
-    /// all joiners together.
+    /// The refusal of a member that runs another version or speaks
+    /// `protocol`, with the hub's version signed over its nonce, after
+    /// recording an alert that names it, its version and the update it
+    /// needs. What a peer sends here is not yet authenticated, so the alert
+    /// names only a member the hub recorded, holds the version it claims
+    /// short and printable, and comes at most once an hour for each member,
+    /// or for all joiners together.
     async fn refuse_version(&self, daemon: &dyn Daemon, opening: &Value, protocol: u32) -> Refusal {
-        let ours = env!("CARGO_PKG_VERSION");
         let theirs = claimed_version(opening);
         let (alerted, name) = self.refused_member(opening).await;
-        let upgrade = match protocol > protocol::VERSION {
-            true => "run shoal update on this hub",
-            false => "run shoal update on it",
+        let newer = shoal_core::update::is_newer(&theirs, OWN_VERSION)
+            .unwrap_or(protocol > protocol::VERSION);
+        let update = match newer {
+            true => "run shoal update on this hub".to_owned(),
+            false => format!("run shoal update --version {OWN_VERSION} on it"),
         };
         let message = format!(
-            "The hub refused {name}, which runs Shoal {theirs} (protocol {protocol}); this hub runs Shoal {ours} (protocol {}) and takes only that one: {upgrade}",
+            "The hub refused {name}, which runs Shoal {theirs} (protocol {protocol}); this hub runs Shoal {OWN_VERSION} (protocol {}) and takes only that one: {update}",
             protocol::VERSION
         );
         if self.refusal_alerts.due(alerted) {
@@ -348,7 +355,22 @@ impl Hub {
             )
             .await;
         }
-        refusal(RefusalReason::Version, message)
+        Refusal {
+            version: self.signed_version(opening).await,
+            ..refusal(RefusalReason::Version, message)
+        }
+    }
+
+    /// The hub's version signed over the nonce of the hello `opening`, none
+    /// when it carries none the hub reads.
+    async fn signed_version(&self, opening: &Value) -> Option<HubVersion> {
+        let nonce: Nonce = serde_json::from_value(opening["nonce"].clone()).ok()?;
+        let identity = self.hub_identity().await.ok()?;
+        Some(HubVersion {
+            version: OWN_VERSION.to_owned(),
+            key: identity.public.clone(),
+            signature: identity.sign(&HubVersion::signed(OWN_VERSION, &nonce)),
+        })
     }
 
     /// Who an alert about the refused `opening` is for, and how it names
@@ -516,7 +538,14 @@ fn refusal(reason: RefusalReason, message: impl Into<String>) -> Refusal {
     Refusal {
         reason,
         message: message.into(),
+        version: None,
     }
+}
+
+/// Whether the member that sent `opening` in a request of `protocol` runs
+/// the hub's own release.
+fn same_release(protocol: u32, opening: &Value) -> bool {
+    protocol == protocol::VERSION && claimed_version(opening) == OWN_VERSION
 }
 
 /// The Shoal version `opening` claims, held to a short run of the

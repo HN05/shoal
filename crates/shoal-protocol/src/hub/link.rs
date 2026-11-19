@@ -225,11 +225,37 @@ pub enum Frame {
 pub struct Refusal {
     pub reason: RefusalReason,
     pub message: String,
+    /// The hub's own version, with a refusal of another one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<HubVersion>,
+}
+
+/// The hub's Shoal version, signed with its key over the member's nonce, so
+/// a member that checks it with the key it paired with follows it although
+/// the refusal that carries it comes before the link is sealed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HubVersion {
+    pub version: String,
+    pub key: PublicKey,
+    pub signature: Signature,
+}
+
+impl HubVersion {
+    /// What the hub signs: its role, then `version` and the `nonce` of the
+    /// member's hello, so the signature serves that hello alone.
+    pub fn signed(version: &str, nonce: &Nonce) -> Vec<u8> {
+        let mut bytes = b"shoal hub link: version\n".to_vec();
+        for field in [version.as_bytes(), nonce.as_bytes()] {
+            bytes.extend_from_slice(&(field.len() as u32).to_be_bytes());
+            bytes.extend_from_slice(field);
+        }
+        bytes
+    }
 }
 
 states! {
     RefusalReason {
-        /// The member speaks another protocol version.
+        /// The member runs another Shoal version.
         Version => "version",
         /// The hub revoked the member's credential.
         Revoked => "revoked",

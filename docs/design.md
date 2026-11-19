@@ -157,9 +157,10 @@ running commands there as the user proves more than a pairing code, so a
 join that way needs none. Link frames are lines or WebSocket messages of at
 most 16 MiB. A credential records its kind, a machine or a device, the hub
 refuses a revoked one or one another installation's link holds, and
-versions match exactly: the hub refuses a member of another protocol,
-reading only the protocol of its first request, and records an alert naming
-the upgrade, while the member keeps working on its own. Pairing codes live
+versions match exactly: the hub refuses a member of another release,
+reading only the protocol and version of its first request, with its own
+version signed over the member's nonce, and records an alert naming the
+update, while the member keeps working on its own. Pairing codes live
 in the hub's memory and admit one join within ten minutes. Each machine
 owns its spaces' records and reports a summary of each to the hub as it
 changes, all of them whenever its link opens; the hub keeps a directory of
