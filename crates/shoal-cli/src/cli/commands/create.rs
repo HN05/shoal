@@ -42,6 +42,16 @@ pub(super) async fn run(ctx: &Context, args: CreateArgs) -> Result<i32> {
     launch.path = (launch.path.take())
         .map(|path| super::repositories::absolute(ctx, path))
         .transpose()?;
+    // A child is in its parent's repository unless the start names one.
+    let names_repository = launch.repository.is_some() || launch.target.is_some();
+    if let Some(parent) = parent
+        .as_ref()
+        .filter(|_| !names_repository && launch.copy.is_none())
+    {
+        launch.repository = space_repository(ctx, parent)
+            .await?
+            .map(|id| id.to_string());
+    }
     super::workspaces::pick_start_source(ctx, &mut launch).await?;
     // Only a parent named with --parent keeps the start out of the
     // existing workspace of the branch it names.
