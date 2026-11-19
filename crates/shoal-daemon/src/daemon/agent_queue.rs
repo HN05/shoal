@@ -27,7 +27,7 @@ mod worker;
 
 pub(crate) use blockers::Readiness;
 pub(crate) use dispatch::Start;
-pub(crate) use state::{AgentQueue, OneShotAdmission, OneShotStop, Serving};
+pub(crate) use state::{AgentQueue, OneShotAdmission, OneShotStop, RestoreLink, Serving};
 pub(crate) use store::last_seq;
 pub(crate) use wake::Grant;
 

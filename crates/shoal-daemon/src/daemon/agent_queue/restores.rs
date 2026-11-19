@@ -1,5 +1,6 @@
 //! Restores a stopped agent's waiting wrapper carries out: queuing one,
-//! waiting for its admission, and keeping, returning or removing its entry.
+//! waiting over the wrapper's link for its admission, and keeping, returning
+//! or removing its entry.
 use anyhow::{Context, Result, bail};
 use rusqlite::{OptionalExtension, params};
 use shoal_ids::execution_ids::ExecutionId;
@@ -7,7 +8,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 use super::{
-    Grant,
+    Grant, RestoreLink,
     store::{WaitingRestore, record_waiting_restore},
 };
 use crate::{daemon::manager::Manager, state::QueueState};
@@ -33,12 +34,12 @@ impl Manager {
             .await
     }
 
-    /// Wait until admission starts the queued restore of `execution`, whose
-    /// agent waits with every process stopped, and return what admitted it.
-    pub(crate) async fn await_restore_admission(&self, execution: &ExecutionId) -> Result<Grant> {
+    /// Wait until admission hands the queued restore to the wrapper of
+    /// `link`, whose agent waits with every process stopped, and return what
+    /// admitted it.
+    pub(crate) async fn await_restore_admission(&self, link: &RestoreLink<'_>) -> Result<Grant> {
         let mut changed = self.store.watch_changes();
-        let _waiter = self.agent_queue.wait_for_restore(execution);
-        self.agent_queue.wake();
+        let execution = link.execution();
         loop {
             let id = execution.to_owned();
             let state = self
@@ -70,6 +71,7 @@ impl Manager {
 
     /// Return `execution`'s revoked restore to its place in the queue.
     pub(crate) async fn requeue_restore(&self, execution: &ExecutionId) -> Result<()> {
+        self.agent_queue.revoke_restore(execution);
         let execution = execution.to_owned();
         self.store
             .run(move |db| {

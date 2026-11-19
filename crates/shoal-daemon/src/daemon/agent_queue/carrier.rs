@@ -42,7 +42,7 @@ impl Manager {
     /// The carriers of the queued restores as they stand now.
     pub(super) fn carriers(&self) -> Carriers {
         Carriers {
-            links: self.agent_queue.restore_waiters(),
+            links: self.agent_queue.restore_links(),
         }
     }
 }

@@ -80,10 +80,10 @@ impl Manager {
     /// Start the waiting restore of `execution` now, regardless of the
     /// limits, as its waiting wrapper asks when the user wakes the agent in
     /// its place, or nothing once it starts or leaves the queue; `false`
-    /// while the agent still stops, before its restore waits for admission.
+    /// while the agent still stops, before its wrapper waits over its link.
     pub(crate) async fn wake_waiting_restore(&self, execution: &ExecutionId) -> Result<bool> {
         let _gate = self.agent_queue.lock_admission().await;
-        if !self.agent_queue.restore_waiters().contains(execution) {
+        if !self.agent_queue.restore_links().contains(execution) {
             return Ok(false);
         }
         let entries = self.reachable_queue(None).await?;
@@ -159,7 +159,7 @@ impl Manager {
     /// agent once every process of it is proven stopped.
     async fn grant_now(&self, entry: &QueueEntry, execution: &ExecutionId) -> Result<()> {
         ensure!(
-            self.agent_queue.restore_waiters().contains(execution),
+            self.agent_queue.restore_links().contains(execution),
             "{} is still stopping; start it once its processes have stopped",
             entry.name
         );

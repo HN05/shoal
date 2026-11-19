@@ -435,7 +435,7 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
         .queue_restore(&execution.plan.id, &agent, &workspace.id)
         .await
         .unwrap();
-    let waiter = manager.agent_queue.wait_for_restore(&execution.plan.id);
+    let link = manager.agent_queue.link_restore(&execution.plan.id);
     assert!(
         manager
             .idle_restores(&workspace.id)
@@ -443,7 +443,7 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
             .unwrap()
             .is_empty()
     );
-    drop(waiter);
+    drop(link);
     // An update does not make its restore due; the space clearing does.
     manager.publish_config(crate::daemon::test_support::global_config(
         "[machine.overload.disk]\nenabled = false",
@@ -682,7 +682,7 @@ async fn an_asleep_agents_timer_keeps_its_workspace_and_restores_it() {
         .queue_restore(&execution.plan.id, &agent, &workspace.id)
         .await
         .unwrap();
-    let _waiter = manager.agent_queue.wait_for_restore(&execution.plan.id);
+    let _link = manager.agent_queue.link_restore(&execution.plan.id);
     let idle = manager.idle_restores(&workspace.id).await.unwrap();
     assert!(idle.is_empty(), "{idle:?}");
     let due = manager.restore_due(&workspace.id, &execution.plan.id);

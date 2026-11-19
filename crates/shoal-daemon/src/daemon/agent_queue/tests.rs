@@ -566,17 +566,21 @@ pub(super) async fn stopped_agents(
     agents
 }
 
-/// The restore of `execution` waiting for admission, once its waiter counts.
+/// The restore of `execution` waiting for admission over its wrapper's link,
+/// once the link counts.
 pub(super) async fn await_restore(
     manager: &std::sync::Arc<Manager>,
     execution: &ExecutionId,
 ) -> tokio::task::JoinHandle<Result<Grant>> {
     let waiting = {
         let (manager, execution) = (manager.clone(), execution.to_owned());
-        tokio::spawn(async move { manager.await_restore_admission(&execution).await })
+        tokio::spawn(async move {
+            let link = manager.agent_queue.link_restore(&execution);
+            manager.await_restore_admission(&link).await
+        })
     };
     bounded(async {
-        while !manager.agent_queue.restore_waiters().contains(execution) {
+        while !manager.agent_queue.restore_links().contains(execution) {
             tokio::task::yield_now().await;
         }
     })
@@ -1249,6 +1253,44 @@ async fn a_message_to_every_agent_restores_an_idle_stopped_agent() {
     );
     manager.dispatch_queue().await.unwrap();
     assert_eq!(bounded(restoring).await.unwrap().unwrap(), Grant::Update);
+}
+
+/// Admission hands a restore to its wrapper's link whether or not the
+/// wrapper waits for it at that moment, and a revoked one returns to its
+/// place on the same link.
+#[tokio::test]
+async fn a_wrappers_link_carries_its_restore_without_a_wait_in_flight() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let loaded = create(&manager, &repo, "loaded").await;
+    let (execution, _stop) = connected_agent(&manager, &loaded).await;
+    assert!(
+        manager
+            .stop_agent_for_overload("critical memory pressure")
+            .await
+    );
+    manager.queue_agent_restore(&execution).await.unwrap();
+    let link = manager.agent_queue.link_restore(&execution);
+    publish_recovery(&manager);
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(
+        queue(&manager).await,
+        [("loaded".into(), Restore, Starting)]
+    );
+    let grant = bounded(manager.await_restore_admission(&link)).await;
+    let grant = grant.unwrap();
+    assert!(matches!(grant, Grant::Recovery(_)), "{grant:?}");
+
+    // A stop since the readings revokes it, and the link waits again.
+    manager.overload_recovery.reset();
+    let confirmed = manager.confirm_restore(&execution, &loaded.id, grant);
+    assert!(!confirmed.await.unwrap());
+    assert_eq!(queue(&manager).await, [("loaded".into(), Restore, Queued)]);
+    publish_recovery(&manager);
+    manager.dispatch_queue().await.unwrap();
+    let grant = bounded(manager.await_restore_admission(&link)).await;
+    assert!(matches!(grant.unwrap(), Grant::Recovery(_)));
 }
 
 #[tokio::test]

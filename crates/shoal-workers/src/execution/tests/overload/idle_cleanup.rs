@@ -193,15 +193,16 @@ async fn stop_agent_in(
     id
 }
 
-/// Waits until the stopped agent's wrapper waits for the queue to admit its
-/// restore, which it does once every process of the agent is proven stopped.
+/// Waits until the stopped agent's wrapper waits over its link for the
+/// queue to admit its restore, which it does once every process of the agent
+/// is proven stopped.
 #[track_caller]
 fn wait_restore_waits<'a>(
     manager: &'a Manager,
     execution: &'a str,
 ) -> impl Future<Output = ()> + 'a {
     bounded(async move {
-        while !manager.agent_queue.restore_waiters().contains(execution) {
+        while !manager.agent_queue.restore_links().contains(execution) {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })

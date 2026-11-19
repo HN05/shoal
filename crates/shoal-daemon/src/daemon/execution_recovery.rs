@@ -14,7 +14,7 @@ use tokio::{
 };
 
 use super::{
-    agent_queue::Grant,
+    agent_queue::{Grant, RestoreLink},
     agents::{Pause, Protection},
     executions::StopRequest,
     manager::Manager,
@@ -151,7 +151,8 @@ pub(super) async fn pause(
             await_stopped(manager, execution_id, workspace_id, stopped, notices).await?;
             // Every process the agent left has stopped writing.
             manager.checkpoint_after_agent(workspace_id).await;
-            admit_restore(manager, execution_id, workspace_id, hold).await
+            let link = manager.agent_queue.link_restore(execution_id);
+            admit_restore(manager, &link, workspace_id, hold).await
         } => ready,
     };
     let resume = async {
@@ -285,25 +286,21 @@ async fn wake_restore(manager: &Manager, execution_id: &ExecutionId) -> bool {
     }
 }
 
-/// Wait until the agent queue admits the restore. A wait for an update, or
-/// for its turn in the queue after `moved`, may last indefinitely, so it lets
-/// a daemon update through, which hands the wait to the next daemon as other
+/// Wait until the agent queue hands the restore to this wrapper over its
+/// `link`. A wait for an update may last indefinitely, so it lets a daemon
+/// update through, which hands the wait to the next daemon as other
 /// shutdowns do, and takes `hold` back before the agent resumes.
 async fn admit_restore(
     manager: &Manager,
-    execution_id: &ExecutionId,
+    link: &RestoreLink<'_>,
     workspace_id: &SpaceId,
     hold: &mut Option<OwnedRwLockReadGuard<()>>,
 ) -> Result<Grant> {
-    if !manager.restore_waits_for_update(workspace_id, execution_id) {
-        return manager
-            .admit_agent_restore(execution_id, workspace_id)
-            .await;
+    if !manager.restore_waits_for_update(workspace_id, link.execution()) {
+        return manager.admit_agent_restore(link, workspace_id).await;
     }
     hold.take();
-    let grant = manager
-        .admit_agent_restore(execution_id, workspace_id)
-        .await?;
+    let grant = manager.admit_agent_restore(link, workspace_id).await?;
     *hold = Some(manager.gates.owned_operation().await);
     Ok(grant)
 }

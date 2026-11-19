@@ -1,5 +1,6 @@
 //! What the daemon keeps in memory about the agent queue: who holds starting
-//! entries, which stopped agents wait for their restore, which one-shot runs
+//! entries, which stopped agents' wrappers wait over their link to restore
+//! them, which one-shot runs
 //! wait for or hold their admission, what held back waiting entries at the last
 //! admission pass, and what wakes the dispatcher.
 use shoal_ids::execution_ids::ExecutionId;
@@ -32,9 +33,10 @@ pub struct AgentQueue {
     /// Waiting chat launches kept out of admission until their caller
     /// attaches the chat it records, with since when.
     attach_keeps: StdMutex<HashMap<QueueEntryId, Instant>>,
-    /// Executions whose stopped agent waits for its queued restore with
-    /// every process stopped, with what admitted it once admission did.
-    restore_waiters: StdMutex<HashMap<ExecutionId, Option<Grant>>>,
+    /// Executions whose wrapper waits over its link to restore its stopped
+    /// agent, every process of which has stopped, with what admitted the
+    /// restore once admission did.
+    restore_links: StdMutex<HashMap<ExecutionId, Option<Grant>>>,
     /// One-shot runs by request number, so the oldest comes first.
     oneshots: StdMutex<OneShots>,
     /// What held back each waiting entry at the last admission pass.
@@ -186,40 +188,46 @@ impl AgentQueue {
         self.held_back.lock().unwrap().get(id).copied()
     }
 
-    /// Mark the stopped agent of `execution` as waiting for its restore
-    /// while the returned waiter lives.
-    pub(crate) fn wait_for_restore(&self, execution: &ExecutionId) -> RestoreWaiter<'_> {
-        self.restore_waiters
+    /// Mark the wrapper of `execution`, every process of whose stopped agent
+    /// has stopped, as waiting over its link to restore it while the
+    /// returned link lives, so admission hands the restore to it.
+    pub(crate) fn link_restore(&self, execution: &ExecutionId) -> RestoreLink<'_> {
+        self.restore_links
             .lock()
             .unwrap()
             .insert(execution.to_owned(), None);
-        RestoreWaiter {
+        // Its restore may be admitted now.
+        self.wake();
+        RestoreLink {
             queue: self,
             execution: execution.to_owned(),
         }
     }
 
-    /// The executions whose agent waits for its restore.
-    pub fn restore_waiters(&self) -> HashSet<ExecutionId> {
-        self.restore_waiters
-            .lock()
-            .unwrap()
-            .keys()
-            .cloned()
-            .collect()
+    /// The executions whose wrapper waits over its link to restore its agent.
+    pub fn restore_links(&self) -> HashSet<ExecutionId> {
+        self.restore_links.lock().unwrap().keys().cloned().collect()
     }
 
-    /// Record that `grant` admitted the restore of `execution`, if its agent
-    /// still waits.
+    /// Record that `grant` admitted the restore of `execution`, if its
+    /// wrapper still waits over its link.
     pub(crate) fn grant_restore(&self, execution: &ExecutionId, grant: Grant) {
-        if let Some(granted) = self.restore_waiters.lock().unwrap().get_mut(execution) {
+        if let Some(granted) = self.restore_links.lock().unwrap().get_mut(execution) {
             *granted = Some(grant);
+        }
+    }
+
+    /// Forget what admitted the restore of `execution`, which returns to its
+    /// place in the queue.
+    pub(crate) fn revoke_restore(&self, execution: &ExecutionId) {
+        if let Some(granted) = self.restore_links.lock().unwrap().get_mut(execution) {
+            *granted = None;
         }
     }
 
     /// What admitted the restore of `execution`, if admission did.
     pub(crate) fn restore_grant(&self, execution: &ExecutionId) -> Option<Grant> {
-        self.restore_waiters
+        self.restore_links
             .lock()
             .unwrap()
             .get(execution)
@@ -427,16 +435,24 @@ impl Drop for OneShotAdmission<'_> {
     }
 }
 
-/// Marks a restore's agent as waiting for admission while it lives.
-pub(crate) struct RestoreWaiter<'a> {
+/// The link of a wrapper that waits to restore its stopped agent, through
+/// which admission hands it the restore, while it lives.
+pub(crate) struct RestoreLink<'a> {
     queue: &'a AgentQueue,
     execution: ExecutionId,
 }
 
-impl Drop for RestoreWaiter<'_> {
+impl RestoreLink<'_> {
+    /// The execution of the agent the wrapper restores.
+    pub(crate) fn execution(&self) -> &ExecutionId {
+        &self.execution
+    }
+}
+
+impl Drop for RestoreLink<'_> {
     fn drop(&mut self) {
         self.queue
-            .restore_waiters
+            .restore_links
             .lock()
             .unwrap()
             .remove(&self.execution);

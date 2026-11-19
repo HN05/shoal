@@ -14,7 +14,7 @@ use std::{
 use tokio::sync::{OwnedRwLockReadGuard, watch};
 
 use super::{
-    agent_queue::{Grant, OneShotStop},
+    agent_queue::{Grant, OneShotStop, RestoreLink},
     agent_turns::Turn,
     capacity::Activity,
     gates::GuardMode,
@@ -737,16 +737,19 @@ impl Manager {
         self.queue_restore(id, &name, &workspace_id).await
     }
 
-    /// Wait until the agent queue admits the restore of `id` and the
-    /// admission holds through the checks of its workspace.
+    /// Wait until the agent queue hands the restore to the wrapper of `link`
+    /// and the admission holds through the checks of its workspace.
     pub(crate) async fn admit_agent_restore(
         &self,
-        id: &ExecutionId,
+        link: &RestoreLink<'_>,
         workspace_id: &SpaceId,
     ) -> anyhow::Result<Grant> {
         loop {
-            let grant = self.await_restore_admission(id).await?;
-            if self.confirm_restore(id, workspace_id, grant).await? {
+            let grant = self.await_restore_admission(link).await?;
+            if self
+                .confirm_restore(link.execution(), workspace_id, grant)
+                .await?
+            {
                 return Ok(grant);
             }
         }
@@ -791,13 +794,13 @@ impl Manager {
     }
 
     /// Each tracked agent's execution, workspace and load, with the memory
-    /// its workspace used at the latest usage sample. One waiting for its
-    /// restore with every process proven stopped runs nothing; until that
-    /// proof its load may still show.
+    /// its workspace used at the latest usage sample. One whose wrapper
+    /// waits over its link to restore it, every process of it proven
+    /// stopped, runs nothing; until that proof its load may still show.
     pub(super) async fn agent_executions(
         &self,
     ) -> std::collections::HashMap<ExecutionId, (SpaceId, Activity)> {
-        let waiting = self.agent_queue.restore_waiters();
+        let waiting = self.agent_queue.restore_links();
         let agents: Vec<(ExecutionId, SpaceId, std::time::Duration)> = self
             .executions
             .with_agents(|agents| {
