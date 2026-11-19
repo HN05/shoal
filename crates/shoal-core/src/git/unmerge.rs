@@ -1,13 +1,12 @@
 //! Undoing a local merge into the default branch: the history queries the
 //! daemon checks an undo against, and the moves the unmerge worker makes.
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
 use shoal_refs::{BranchName, CommitId};
 
 use crate::{
-    fsutil::{self, off_runtime},
-    git::{self, repo::clean_branch, run_isolated as git_run},
+    git::{self, repo::clean_branch, run_isolated as git_run, scratch},
     model::{UnmergePlan, Unmerged},
 };
 
@@ -311,9 +310,9 @@ async fn move_default(plan: &UnmergePlan, target: &CommitId) -> Result<()> {
 /// were.
 async fn replay(plan: &UnmergePlan) -> Result<u64> {
     let repo = &plan.repo.path;
-    let worktree = add_replay_worktree(repo, &plan.tip).await?;
+    let worktree = scratch::UNMERGE.add(repo, &plan.tip).await?;
     let replayed = replay_in(plan, &worktree).await;
-    remove_replay_worktree(repo).await?;
+    scratch::UNMERGE.remove(repo).await?;
     let (commit, replayed) = replayed?;
     move_default(plan, &commit).await?;
     Ok(replayed)
@@ -359,82 +358,6 @@ async fn replay_in(plan: &UnmergePlan, worktree: &Path) -> Result<(CommitId, u64
     Ok((commit, replayed as u64))
 }
 
-/// The owner a replay directory is marked with.
-const REPLAY_OWNER: &str = "shoal unmerge";
-
-/// The directory in `repo`'s Git directory that holds a replay's worktree:
-/// one place, which the repository Git gate gives one unmerge at a time, so
-/// rollback finds what an interrupted replay left.
-async fn replay_directory(repo: &Path) -> Result<PathBuf> {
-    git::git_path(repo, "shoal-unmerge").await
-}
-
-/// Create a worktree detached at `tip` to replay in, in a directory marked
-/// as Shoal's, after removing one an earlier replay left; its path.
-async fn add_replay_worktree(repo: &Path, tip: &CommitId) -> Result<PathBuf> {
-    remove_replay_worktree(repo).await?;
-    let directory = replay_directory(repo).await?;
-    let marked = directory.clone();
-    off_runtime::run(move || {
-        Ok(fsutil::marked_dirs::create_marked_dir(
-            &marked,
-            REPLAY_OWNER,
-        )?)
-    })
-    .await
-    .with_context(|| format!("create {}", directory.display()))?;
-    ensure_replay_directory(&directory).await?;
-    let worktree = directory.join("replay");
-    let path = worktree.to_string_lossy();
-    // `--force` replaces the registration of a replay worktree whose
-    // directory is gone, and no other worktree's.
-    git_run(
-        repo,
-        &[
-            "worktree",
-            "add",
-            "--quiet",
-            "--detach",
-            "--force",
-            &path,
-            tip.as_str(),
-        ],
-    )
-    .await
-    .context("create the worktree the replay runs in")?;
-    Ok(worktree)
-}
-
-/// Remove the replay worktree an unmerge left and Git's record of it, if
-/// any; a directory Shoal did not mark as its own is refused, not deleted.
-async fn remove_replay_worktree(repo: &Path) -> Result<()> {
-    let directory = replay_directory(repo).await?;
-    if !off_runtime::exists(&directory).await? {
-        return Ok(());
-    }
-    ensure_replay_directory(&directory).await?;
-    git::detached::remove(&directory.join("replay")).await
-}
-
-/// Refuse a replay directory Shoal did not create.
-async fn ensure_replay_directory(directory: &Path) -> Result<()> {
-    let checked = directory.to_owned();
-    let marked = off_runtime::run(move || {
-        Ok(fsutil::marked_dirs::check_marked_dir(
-            &checked,
-            REPLAY_OWNER,
-        )?)
-    })
-    .await
-    .with_context(|| format!("read {}", directory.display()))?;
-    ensure!(
-        marked,
-        "{} exists and Shoal did not create it, so the unmerge does not replay there; remove it to unmerge",
-        directory.display()
-    );
-    Ok(())
-}
-
 /// `git rebase` replaying `worktree`'s HEAD after `upstream` onto `onto`,
 /// keeping merge commits and commits that become empty, without hooks.
 fn rebase_command(worktree: &Path, onto: &str, upstream: &str) -> tokio::process::Command {
@@ -470,7 +393,8 @@ async fn recreate_branch(plan: &UnmergePlan) -> Result<bool> {
 /// a replay it interrupted ran in a worktree of its own, which goes, and
 /// the default branch moves only once the replay is done.
 pub async fn rollback_unmerge(plan: &UnmergePlan) -> Result<()> {
-    remove_replay_worktree(&plan.repo.path)
+    scratch::UNMERGE
+        .remove(&plan.repo.path)
         .await
         .context("could not remove the interrupted unmerge's replay worktree")
 }
