@@ -143,10 +143,17 @@ fn the_user_s_terminal_renames_and_removes_a_space_on_another_machine() {
 #[test]
 fn a_command_that_needs_the_space_s_files_names_its_machine() {
     let (hub, _laptop, there) = laptop_space();
-    let output = hub.run(&["diff", &there]);
+    let output = hub.run(&["files", &there]);
     assert!(!output.status.success(), "{}", printed(&output));
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(error.contains("laptop"), "{error}");
+}
+
+#[test]
+fn the_user_s_terminal_checks_conflicts_of_a_space_on_another_machine() {
+    let (hub, _laptop, there) = laptop_space();
+    let check = hub.ok(&["conflicts", "--workspace", &there]);
+    assert_eq!(check["files"], json!([]), "{check}");
 }
 
 #[test]

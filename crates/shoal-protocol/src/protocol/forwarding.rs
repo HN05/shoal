@@ -137,6 +137,7 @@ impl Operation {
                 WorkspaceMethod::SpaceStatus { .. }
                     | WorkspaceMethod::SpaceLog { .. }
                     | WorkspaceMethod::RenameSpace { .. }
+                    | WorkspaceMethod::Conflicts { .. }
             ) | Self::Agent(
                 AgentMethod::SetProgress { .. }
                     | AgentMethod::Progress { .. }

@@ -916,12 +916,12 @@ below its own on every machine and is refused the rest, and a device's go as
 yours. An action a space's permission sets to `propose` is refused from another
 machine, since its approval request would belong to that space's machine. This covers `status`, `log`, `questions`, `approvals`, `messages send`,
 `stop`, `resume`, `rename`, `done`, `rm`, `priority`,
-`progress`, `sleep`, holds, the issue, PR and CI commands that act on a
-space, and following an agent's session, whose bytes come back as its machine
+`progress`, `sleep`, `conflicts`, holds, the issue, PR and CI commands that
+act on a space, and following an agent's session, whose bytes come back as its machine
 reads them. The link to the hub carries such answers as byte streams beside
 its other traffic, each held to what its reader has taken, so a reader that
 falls behind holds up nothing else. `restart` acts on the agents of its own machine. Commands that need the
-space's files or processes, such as `diff`, `conflicts`, `setup`, leases, demos,
+space's files or processes, such as `diff`, `setup`, leases, demos,
 `stop --interrupt`, `--leftovers` and `--processes`, `files` and an agent's
 hooks, run only
 on its machine and are refused elsewhere, naming it, as is a command that
