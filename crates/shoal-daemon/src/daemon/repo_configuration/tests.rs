@@ -226,7 +226,8 @@ async fn a_lease_is_kept_while_the_file_that_may_name_its_hooks_is_rejected() {
         queue: false,
     };
     manager
-        .acquire_resource(&selector, request, None)
+        .leases
+        .acquire_resource(&*manager, &selector, request, None)
         .await
         .unwrap();
     std::fs::write(workspace.path.join(".shoal.toml"), "setup_cmd = \"x\"\n").unwrap();
@@ -234,11 +235,19 @@ async fn a_lease_is_kept_while_the_file_that_may_name_its_hooks_is_rejected() {
     // Other hooks go with the ignored file.
     let pre_remove = manager.workspace_hook(&workspace, HookKind::PreRemove);
     assert_eq!(pre_remove.await.unwrap(), None);
-    let release = manager.release_resource(&selector, "lock".into(), "held".into());
+    let release =
+        manager
+            .leases
+            .release_resource(&*manager, &selector, "lock".into(), "held".into());
     let error = format!("{:#}", release.await.unwrap_err());
     assert!(error.contains("pre_resource_release"), "{error}");
     assert_eq!(
-        manager.list_resources(Some(&selector)).await.unwrap().len(),
+        manager
+            .leases
+            .list_resources(&*manager, Some(&selector))
+            .await
+            .unwrap()
+            .len(),
         1
     );
 }

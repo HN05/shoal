@@ -45,7 +45,7 @@ impl Manager {
     async fn ranking_snapshot(&self) -> Result<Snapshot> {
         let jobs = self.waiting_job_spaces().await?;
         let oneshots = self.agent_queue.waiting_oneshots();
-        let leases = self.queues.waiters();
+        let leases = self.leases.waiters();
         let (mut snapshot, labelled, areas) = (self.store)
             .read(move |tx| {
                 Ok((

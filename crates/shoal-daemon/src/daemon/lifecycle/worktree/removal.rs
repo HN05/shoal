@@ -519,7 +519,8 @@ impl Manager {
     /// file is rejected.
     async fn run_resource_release_hooks(&self, workspace: &Workspace) -> Result<()> {
         let leases = self
-            .list_resources(Some(&SpaceSelector::id(&workspace.id)))
+            .leases
+            .list_resources(self, Some(&SpaceSelector::id(&workspace.id)))
             .await?;
         if leases.is_empty() {
             return Ok(());
@@ -528,7 +529,8 @@ impl Manager {
             .workspace_hook(workspace, HookKind::PreResourceRelease)
             .await?;
         for lease in leases {
-            self.run_resource_release_hook(workspace, &lease, release_hook.as_deref())
+            self.leases
+                .run_resource_release_hook(self, workspace, &lease, release_hook.as_deref())
                 .await?;
         }
         Ok(())
@@ -604,7 +606,7 @@ impl Manager {
         registration: Registration,
     ) -> Result<WorktreeRemoval> {
         self.remove_containers(workspace).await?;
-        self.remove_simulators(&workspace.id).await?;
+        self.leases.remove_simulators(&workspace.id).await?;
         match registration {
             Registration::Listed => {
                 self.destroy_seed_outputs(workspace).await;

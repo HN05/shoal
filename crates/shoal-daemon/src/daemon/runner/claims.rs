@@ -276,7 +276,8 @@ impl Manager {
             queue: false,
         };
         match self
-            .acquire_resource(&SpaceSelector::id(&workspace.id), request, None)
+            .leases
+            .acquire_resource(self, &SpaceSelector::id(&workspace.id), request, None)
             .await?
         {
             Allocation::Granted(_) => Ok(true),

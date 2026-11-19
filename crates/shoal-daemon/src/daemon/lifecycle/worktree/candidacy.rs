@@ -296,13 +296,15 @@ impl Manager {
             return Ok(Some(CleanupReason::RunningCommands));
         }
         if !self
-            .list_resources(Some(&SpaceSelector::id(id)))
+            .leases
+            .list_resources(self, Some(&SpaceSelector::id(id)))
             .await?
             .is_empty()
         {
             return Ok(Some(CleanupReason::Permits));
         }
         if self
+            .leases
             .list_simulators(Some(id))
             .await?
             .iter()

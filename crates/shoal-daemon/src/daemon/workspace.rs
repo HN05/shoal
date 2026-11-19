@@ -123,7 +123,7 @@ impl Manager {
 
     pub async fn inspect_workspace(&self, selector: &SpaceSelector) -> Result<Inspection> {
         let workspace = self.workspace(selector).await?;
-        let simulators = self.list_simulators(Some(&workspace.id)).await?;
+        let simulators = self.leases.list_simulators(Some(&workspace.id)).await?;
         let Records {
             issues,
             pr_cleanup,

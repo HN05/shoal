@@ -1,5 +1,5 @@
 //! Deterministic simulator decisions over snapshots; no persistence or simctl calls.
-use crate::daemon::sim::SimulatorExt;
+use crate::sim::SimulatorExt;
 use anyhow::{Result, bail, ensure};
 use shoal_protocol::config::repo::Lifetime;
 

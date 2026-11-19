@@ -1,5 +1,4 @@
 //! Cooperative semaphores and reader/writer locks; only Shoal bookkeeping is enforced.
-use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use shoal_ids::repository_ids::RepositoryId;
@@ -8,22 +7,22 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use uuid::Uuid;
 
 mod repositories;
-pub(crate) use repositories::{borrowed, ensure_no_external_leases};
+pub use repositories::{borrowed, ensure_no_external_leases};
 
 use crate::{
-    daemon::{
-        allocation::Allocation,
-        approvals::{self, ApprovalRequest, ResourceSpecification, Specification, Target},
-        gates::GuardMode,
-        manager::Manager,
-        queue,
-        scope::Caller,
-        store,
-    },
-    validate,
+    Leases,
+    allocation::Allocation,
+    callers::Caller,
+    daemon::{Daemon, Grants},
+    gates::GuardMode,
+    hooks::{Hook, HookKind},
+    model::Workspace,
+    queue, store, validate,
 };
+use shoal_daemon_base::approval_requests::ApprovalRequestExt;
 use shoal_protocol::acquirers::Acquirer;
-pub(crate) use shoal_protocol::resources::{
+use shoal_protocol::approvals::{ApprovalRequest, ResourceSpecification, Specification, Target};
+pub use shoal_protocol::resources::{
     Catalog, CatalogPool, Definition, LockMode, Overview, PoolStatus, RepositoryView,
     ResourceConfig, ResourceKind, ResourceLease, ResourceRequest, ResourceStatus, Scope,
     definitions,
@@ -76,7 +75,7 @@ fn row_lease(row: &rusqlite::Row<'_>) -> rusqlite::Result<ResourceLease> {
 }
 
 /// The acquirer a lease row records in its two columns.
-pub(crate) fn row_acquirer(row: &rusqlite::Row<'_>) -> rusqlite::Result<Acquirer> {
+pub fn row_acquirer(row: &rusqlite::Row<'_>) -> rusqlite::Result<Acquirer> {
     let index = row.as_ref().column_index("acquirer")?;
     Acquirer::from_parts(row.get(index)?, row.get("acquirer_execution")?).map_err(|error| {
         rusqlite::Error::FromSqlConversionFailure(index, rusqlite::types::Type::Text, error.into())
@@ -335,15 +334,16 @@ fn select_member<'a>(
         .map(|(name, settings, mode, _)| (name, settings, mode)))
 }
 
-impl Manager {
+impl Leases {
     /// Global definitions plus the workspace repository's, keyed by pool name
     /// with the scope each belongs to.
     async fn resource_definitions(
         &self,
-        workspace: &crate::model::Workspace,
+        daemon: &dyn Daemon,
+        workspace: &Workspace,
     ) -> Result<BTreeMap<String, (Scope, Definition)>> {
-        let config = self.config();
-        let repo = self.workspace_settings_from(&config, workspace).await?;
+        let config = self.config.current();
+        let repo = daemon.settings(&config, workspace).await?;
         let global = config.global_settings()?;
         let global = definitions(&global.resources, &global.resource_pools)?;
         let local = definitions(&repo.resources, &repo.resource_pools)?;
@@ -369,6 +369,7 @@ impl Manager {
 
     pub async fn acquire_resource(
         &self,
+        daemon: &dyn Daemon,
         selector: &SpaceSelector,
         request: ResourceRequest,
         caller: Option<&Caller>,
@@ -379,16 +380,16 @@ impl Manager {
             validate::lowercase_name("resource", resource)?;
         }
         validate::reason("resource", request.reason.as_deref())?;
-        let workspace = self.workspace(selector).await?;
-        self.touch(&workspace.id).await;
-        let mut definitions = self.resource_definitions(&workspace).await?;
+        let workspace = daemon.workspace(selector).await?;
+        daemon.touch(&workspace.id).await;
+        let mut definitions = self.resource_definitions(daemon, &workspace).await?;
         let (scope, definition) = definitions
             .remove(&request.pool)
             .ok_or_else(|| anyhow::anyhow!("unknown resource or pool: {}", request.pool))?;
-        let related = self.related_repositories(&definition).await?;
+        let related = repositories::related(daemon, &definition).await?;
         let hook_workspace = workspace.clone();
-        let hook = self
-            .workspace_hook(&workspace, crate::hooks::HookKind::PostResourceAcquire)
+        let hook = daemon
+            .hook(&workspace, HookKind::PostResourceAcquire)
             .await?;
         let mode = if hook.is_some() {
             GuardMode::Exclusive
@@ -414,12 +415,13 @@ impl Manager {
             Err(error) => return Err(error),
         };
         if hook.is_some() {
-            self.verify_worktree(&workspace).await?;
+            daemon.verify_worktree(&workspace).await?;
         }
         let workspace_name = (workspace.name.clone(), workspace.id.clone());
-        let acquirer = self.acquirer(caller).await;
+        let acquirer = self.acquirer(daemon, caller).await;
         let caller = caller.cloned();
         let ahead = place.ahead();
+        let grants = self.grants.clone();
         let acquisition = self
             .store
             .run(move |db| {
@@ -429,7 +431,7 @@ impl Manager {
                     acquirer,
                     ahead,
                 };
-                acquire_lease(db, claimant, scope, definition, request, related)
+                acquire_lease(db, &*grants, claimant, scope, definition, request, related)
             })
             .await;
         place.settle(&acquisition);
@@ -437,46 +439,34 @@ impl Manager {
         if let Allocation::Granted(lease) = &acquisition
             && let Some(command) = hook
         {
-            let settings = self.workspace_settings(&hook_workspace).await?;
-            let repository = hook_workspace.repository();
-            let configured_env =
-                (self.hook_environment(&hook_workspace, repository, &settings)).await?;
-            crate::hooks::run_detached(
-                crate::hooks::Hook::PostResourceAcquire(lease),
-                &hook_workspace,
-                &command,
-                &self.paths,
-                &configured_env,
-            )
-            .await
-            .context("resource lease retained; repeat acquire to retry the hook, or release it")?;
+            (daemon.run_hook(&hook_workspace, Hook::PostResourceAcquire(lease), &command))
+                .await
+                .context(
+                    "resource lease retained; repeat acquire to retry the hook, or release it",
+                )?;
         }
-        self.leases
-            .notify_allocation(
-                self,
-                (&workspace_name.0, &workspace_name.1),
-                &acquisition,
-                "",
-            )
-            .await;
+        let space = (&workspace_name.0, &workspace_name.1);
+        (self.notify_allocation(daemon, space, &acquisition, "")).await;
         Ok(acquisition)
     }
 
     pub async fn list_resources(
         &self,
+        daemon: &dyn Daemon,
         selector: Option<&SpaceSelector>,
     ) -> Result<Vec<ResourceLease>> {
-        let owner = self.workspace_filter(selector).await?;
+        let owner = self.workspace_filter(daemon, selector).await?;
         self.store.run(move |db| leases(db, owner.as_ref())).await
     }
 
     pub async fn release_resource(
         &self,
+        daemon: &dyn Daemon,
         selector: &SpaceSelector,
         pool: String,
         name: String,
     ) -> Result<()> {
-        self.release_resource_held_by(selector, pool, name, None)
+        self.release_resource_held_by(daemon, selector, pool, name, None)
             .await
     }
 
@@ -484,19 +474,20 @@ impl Manager {
     /// `holder` names an acquirer it no longer has, as when the user took
     /// over an agent's lease since a release of it was decided. Only a
     /// release without `holder`, which someone asked for, is activity.
-    pub(crate) async fn release_resource_held_by(
+    pub async fn release_resource_held_by(
         &self,
+        daemon: &dyn Daemon,
         selector: &SpaceSelector,
         pool: String,
         name: String,
         holder: Option<&Acquirer>,
     ) -> Result<()> {
-        let workspace = self.workspace(selector).await?;
+        let workspace = daemon.workspace(selector).await?;
         if holder.is_none() {
-            self.touch(&workspace.id).await;
+            daemon.touch(&workspace.id).await;
         }
-        let hook = self
-            .workspace_hook(&workspace, crate::hooks::HookKind::PreResourceRelease)
+        let hook = daemon
+            .hook(&workspace, HookKind::PreResourceRelease)
             .await?;
         let mode = if hook.is_some() {
             GuardMode::Exclusive
@@ -515,17 +506,18 @@ impl Manager {
             return Ok(());
         }
         if let Some(lease) = &owned {
-            self.run_resource_release_hook(&workspace, lease, hook.as_deref())
+            self.run_resource_release_hook(daemon, &workspace, lease, hook.as_deref())
                 .await?;
         }
         let holder = holder.cloned();
+        let grants = self.grants.clone();
         self.store
-            .write(move |tx| release_lease(tx, &workspace, &pool, &name, holder.as_ref()))
+            .write(move |tx| release_lease(tx, &*grants, &workspace, &pool, &name, holder.as_ref()))
             .await
     }
 
     /// Make the lease `name` of `pool` in `workspace` the user's.
-    pub(crate) async fn give_resource_lease_to_user(
+    pub async fn give_resource_lease_to_user(
         &self,
         workspace: &SpaceId,
         pool: &str,
@@ -544,34 +536,32 @@ impl Manager {
             .await
     }
 
-    pub(crate) async fn run_resource_release_hook(
+    /// Run the release hook `command` of `workspace` for `lease`, once its
+    /// worktree verifies; a failure keeps the lease.
+    pub async fn run_resource_release_hook(
         &self,
-        workspace: &crate::model::Workspace,
+        daemon: &dyn Daemon,
+        workspace: &Workspace,
         lease: &ResourceLease,
         command: Option<&std::path::Path>,
     ) -> Result<()> {
         if let Some(command) = command {
-            self.verify_worktree(workspace).await?;
-            let settings = self.workspace_settings(workspace).await?;
-            let repository = workspace.repository();
-            let configured_env = (self.hook_environment(workspace, repository, &settings)).await?;
-            crate::hooks::run_detached(
-                crate::hooks::Hook::PreResourceRelease(lease),
-                workspace,
-                command,
-                &self.paths,
-                &configured_env,
-            )
-            .await
-            .context("resource lease retained; retry release after fixing its hook")?;
+            daemon.verify_worktree(workspace).await?;
+            (daemon.run_hook(workspace, Hook::PreResourceRelease(lease), command))
+                .await
+                .context("resource lease retained; retry release after fixing its hook")?;
         }
         Ok(())
     }
 
-    pub async fn resource_catalog(&self, selector: &SpaceSelector) -> Result<Catalog> {
-        let workspace = self.workspace(selector).await?;
+    pub async fn resource_catalog(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+    ) -> Result<Catalog> {
+        let workspace = daemon.workspace(selector).await?;
         let pools = self
-            .resource_definitions(&workspace)
+            .resource_definitions(daemon, &workspace)
             .await?
             .into_iter()
             .map(|(name, (scope, definition))| CatalogPool {
@@ -583,9 +573,13 @@ impl Manager {
         Ok(Catalog { pools })
     }
 
-    pub async fn resource_overview(&self, selector: &SpaceSelector) -> Result<Overview> {
-        let workspace = self.workspace(selector).await?;
-        let definitions = self.resource_definitions(&workspace).await?;
+    pub async fn resource_overview(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+    ) -> Result<Overview> {
+        let workspace = daemon.workspace(selector).await?;
+        let definitions = self.resource_definitions(daemon, &workspace).await?;
         self.store
             .read(move |tx| {
                 let all = leases(tx, None)?;
@@ -631,7 +625,8 @@ fn releasable_lease(
 /// nothing when `holder` names an acquirer the lease no longer has.
 fn release_lease(
     tx: &Transaction<'_>,
-    workspace: &crate::model::Workspace,
+    grants: &dyn Grants,
+    workspace: &Workspace,
     pool: &str,
     name: &str,
     holder: Option<&Acquirer>,
@@ -649,7 +644,7 @@ fn release_lease(
             scope,
             pool: pool.to_owned(),
         };
-        released |= approvals::release(tx, &workspace.id, &target, name)?;
+        released |= grants.release(tx, &workspace.id, &target, name)?;
     }
     ensure!(
         tx.execute(
@@ -679,6 +674,7 @@ struct Claimant {
 /// requests keep new claims busy but never block renewal or approval.
 fn acquire_lease(
     db: &mut Connection,
+    grants: &dyn Grants,
     claimant: Claimant,
     scope: Scope,
     definition: Definition,
@@ -716,7 +712,7 @@ fn acquire_lease(
         pool: request.pool.clone(),
     };
     if caller.is_some()
-        && let Some(pending) = approvals::current(&tx, &workspace_id, &target, &request.name)?
+        && let Some(pending) = grants.current(&tx, &workspace_id, &target, &request.name)?
     {
         let Specification::Resource(bound) = &pending.specification else {
             bail!(
@@ -776,7 +772,7 @@ fn acquire_lease(
             settings.approval_lifetime,
             request.reason.as_deref(),
         );
-        if let Some(approval) = approvals::check(&tx, approval)? {
+        if let Some(approval) = grants.check(&tx, approval)? {
             tx.commit()?;
             return Ok(Allocation::Approval(Box::new(approval)));
         }

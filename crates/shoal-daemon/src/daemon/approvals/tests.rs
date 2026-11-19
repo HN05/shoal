@@ -26,7 +26,7 @@ fn resource(mode: LockMode) -> Specification {
             crate::daemon::resources::ResourceConfig::default(),
         )]),
     };
-    Specification::Resource(ResourceSpecification {
+    Specification::Resource(shoal_protocol::approvals::ResourceSpecification {
         repository: None,
         definition,
         member: "lock".into(),
@@ -581,7 +581,8 @@ async fn resource_release_targets_both_scopes_and_rolls_back_invalid_candidates(
         }).await?;
     assert!(
         manager
-            .release_resource(&"owner".into(), "lock".into(), "default".into())
+            .leases
+            .release_resource(&*manager, &"owner".into(), "lock".into(), "default".into())
             .await
             .is_err()
     );
@@ -592,7 +593,8 @@ async fn resource_release_targets_both_scopes_and_rolls_back_invalid_candidates(
             Ok(())
         }).await?;
     manager
-        .release_resource(&"owner".into(), "lock".into(), "default".into())
+        .leases
+        .release_resource(&*manager, &"owner".into(), "lock".into(), "default".into())
         .await?;
     manager
         .store

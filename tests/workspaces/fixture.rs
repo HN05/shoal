@@ -60,7 +60,7 @@ impl Fixture {
             let script = root.path().join("bin/xcrun");
             install_test_script(
                 &script,
-                include_str!("../../crates/shoal-daemon/tests/fixtures/simctl.py"),
+                include_str!("../../crates/shoal-leases/tests/fixtures/simctl.py"),
             );
         }
         // Remove eligible workspaces on their first sweep unless a test sets

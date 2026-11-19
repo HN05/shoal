@@ -14,7 +14,7 @@ pub struct Manager {
     /// Held while the owner of a recorded place is read and its place
     /// closed, or its ownership moves to another workspace.
     pub(crate) place_ownership: tokio::sync::Mutex<()>,
-    pub gates: super::gates::Gates,
+    pub gates: Arc<super::gates::Gates>,
     pub(crate) waits: crate::daemon::links::wait::ActiveWaits,
     /// The reads of items for watches, and those watches started from.
     pub(crate) watch_starts: crate::daemon::links::wait::WatchStarts,
@@ -34,8 +34,6 @@ pub struct Manager {
     /// The leases workspaces hold.
     pub leases: shoal_leases::Leases,
     pub paths: Paths,
-    /// Arrival order of queued resource and simulator requests.
-    pub(crate) queues: super::queue::Queues,
     pub executions: super::executions::Executions,
     pub overload_recovery: super::overload_recovery::OverloadRecovery,
     /// The busy CPU the overload monitor reads for job admission.
@@ -106,8 +104,10 @@ impl Manager {
         let store = open_store(&paths).await?;
         let config_state = Arc::new(super::config_state::ConfigState::new(config));
         let notifications = Arc::new(super::notifications::Notifications::new(store.clone()));
+        let gates = Arc::new(super::gates::Gates::default());
         let leases = shoal_leases::Leases::new(
             store.clone(),
+            gates.clone(),
             config_state.clone(),
             notifications.clone(),
             Arc::new(super::leases::ApprovalGrants),
@@ -134,9 +134,8 @@ impl Manager {
                 crate::sessions::hosts()
             },
             place_ownership: Default::default(),
-            gates: Default::default(),
+            gates,
             paths,
-            queues: Default::default(),
             executions: Default::default(),
             overload_recovery: Default::default(),
             busy_cpu: Default::default(),

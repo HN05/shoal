@@ -3,7 +3,7 @@ use shoal_ids::space_ids::SpaceId;
 
 fn pool() -> Target {
     Target::Resource {
-        scope: crate::daemon::resources::Scope::Global,
+        scope: crate::resources::Scope::Global,
         pool: "devices".into(),
     }
 }

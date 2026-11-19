@@ -17,21 +17,34 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        SimulatorMethod::SimCatalog { workspace } => {
-            Body::SimCatalog(manager.simulator_catalog(&workspace).await?)
-        }
-        SimulatorMethod::SimOverview { workspace } => {
-            Body::SimOverview(manager.simulator_overview(workspace.as_ref()).await?)
-        }
-        SimulatorMethod::SimList { workspace } => {
-            Body::Simulators(manager.selected_simulators(workspace.as_ref()).await?)
-        }
+        SimulatorMethod::SimCatalog { workspace } => Body::SimCatalog(
+            manager
+                .leases
+                .simulator_catalog(&**manager, &workspace)
+                .await?,
+        ),
+        SimulatorMethod::SimOverview { workspace } => Body::SimOverview(
+            manager
+                .leases
+                .simulator_overview(&**manager, workspace.as_ref())
+                .await?,
+        ),
+        SimulatorMethod::SimList { workspace } => Body::Simulators(
+            manager
+                .leases
+                .selected_simulators(&**manager, workspace.as_ref())
+                .await?,
+        ),
         SimulatorMethod::SimAcquire { workspace, request } => manager
-            .acquire_simulator(&workspace, request, caller)
+            .leases
+            .acquire_simulator(&**manager, &workspace, request, caller)
             .await?
             .into_body(|sim| Body::Simulator(*sim)),
         SimulatorMethod::SimRelease { workspace, name } => {
-            manager.release_simulator(&workspace, name).await?;
+            manager
+                .leases
+                .release_simulator(&**manager, &workspace, name)
+                .await?;
             Body::Ok
         }
         SimulatorMethod::SimHistory {
@@ -40,7 +53,8 @@ pub(super) async fn handle(
             before,
         } => Body::SimHistory(
             manager
-                .clean_history(workspace.as_ref(), limit, before)
+                .leases
+                .clean_history(&**manager, workspace.as_ref(), limit, before)
                 .await?,
         ),
     }))

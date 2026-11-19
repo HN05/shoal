@@ -18,7 +18,8 @@ pub(super) async fn handle(
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
         ResourceMethod::ResourceAcquire { workspace, request } => manager
-            .acquire_resource(&workspace, request, caller)
+            .leases
+            .acquire_resource(&**manager, &workspace, request, caller)
             .await?
             .into_body(Body::ResourceLease),
         ResourceMethod::ResourceRelease {
@@ -26,15 +27,24 @@ pub(super) async fn handle(
             pool,
             name,
         } => {
-            manager.release_resource(&workspace, pool, name).await?;
+            manager
+                .leases
+                .release_resource(&**manager, &workspace, pool, name)
+                .await?;
             Body::Ok
         }
-        ResourceMethod::ResourceOverview { workspace } => {
-            Body::ResourceOverview(manager.resource_overview(&workspace).await?)
-        }
-        ResourceMethod::ResourceCatalog { workspace } => {
-            Body::ResourceCatalog(manager.resource_catalog(&workspace).await?)
-        }
+        ResourceMethod::ResourceOverview { workspace } => Body::ResourceOverview(
+            manager
+                .leases
+                .resource_overview(&**manager, &workspace)
+                .await?,
+        ),
+        ResourceMethod::ResourceCatalog { workspace } => Body::ResourceCatalog(
+            manager
+                .leases
+                .resource_catalog(&**manager, &workspace)
+                .await?,
+        ),
     }))
 }
 

@@ -1,5 +1,5 @@
 use super::*;
-use crate::daemon::store::Store;
+use crate::store::Store;
 use rusqlite::params;
 use serde_json::{Value, json};
 use shoal_ids::space_ids::SpaceId;
@@ -66,7 +66,7 @@ async fn migration_and_transitions_preserve_json_ownership_and_audits() -> Resul
     assert_eq!(ids(&db, Some(&SpaceId::from("A")))?, ["a"]);
     assert_eq!(ids(&db, Some(&SpaceId::from("B")))?, ["b"]);
     drop(store);
-    crate::daemon::quarantine::interrupted_operations(&Store::open(path).await?).await?;
+    drop(Store::open(path).await?);
     assert_eq!(ids(&db, Some(&SpaceId::from("B")))?, ["b"]);
     sim["last_workspace_id"] = json!("B");
     sim["state"] = json!("failed");

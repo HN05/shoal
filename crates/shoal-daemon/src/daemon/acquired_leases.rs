@@ -1,7 +1,7 @@
 //! The simulator leases, containers and resource permits an execution
-//! acquired, which end with it: who acquires a lease, the lease a demo takes over from the
-//! agent that started it, and releasing an execution's leases through each
-//! kind's release path once it ends.
+//! acquired, which end with it: the lease a demo takes over from the agent
+//! that started it, and releasing an execution's leases through each kind's
+//! release path once it ends.
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -10,7 +10,7 @@ use shoal_ids::space_ids::SpaceId;
 
 #[cfg(test)]
 use super::allocation::Allocation;
-use super::{containers, gates::ResourcesBusy, log, manager::Manager, resources, scope::Caller};
+use super::{containers, gates::ResourcesBusy, log, manager::Manager, resources};
 use crate::refusal::Reason;
 use crate::{model::Workspace, state::WorkspaceState};
 use shoal_protocol::{
@@ -55,42 +55,6 @@ impl std::fmt::Display for Held {
 }
 
 impl Manager {
-    /// Whose lease a request from `caller` acquires: the demo its execution
-    /// runs, else the agent it runs or that registered it, else the user's,
-    /// as for an unscoped caller or a command no agent started.
-    pub(crate) async fn acquirer(&self, caller: Option<&Caller>) -> Acquirer {
-        let Some(caller) = caller else {
-            return Acquirer::User;
-        };
-        if let Some(execution) = caller.execution_id()
-            && self.runs_demo(execution).await
-        {
-            return Acquirer::Demo {
-                execution_id: execution.to_owned(),
-            };
-        }
-        match self.caller_agent(caller).await {
-            Some(agent) => Acquirer::Agent {
-                execution_id: agent.execution,
-            },
-            None => Acquirer::User,
-        }
-    }
-
-    /// Whether `execution` runs a demo; one that cannot be read is taken
-    /// for none, so its lease falls to the agent that started it.
-    async fn runs_demo(&self, execution: &ExecutionId) -> bool {
-        let id = execution.to_owned();
-        let demo = self
-            .store
-            .read(move |db| super::demos::runs_demo(db, &id))
-            .await;
-        demo.unwrap_or_else(|error| {
-            log!("demo of execution {execution} unreadable: {error:#}");
-            false
-        })
-    }
-
     /// Give the demo `execution` of `workspace` the lease its preset
     /// acquired for it, as `launch` records, so the lease ends with the demo
     /// rather than with the agent that started it. A lease that cannot be
@@ -101,7 +65,7 @@ impl Manager {
         workspace: &SpaceId,
         launch: &Launch,
     ) {
-        let given = self.give_simulator_to_demo(execution, workspace, launch);
+        let given = (self.leases).give_simulator_to_demo(execution, workspace, launch);
         if let Err(error) = given.await {
             log!(
                 "the simulator lease of demo {} stays the agent's: {error:#}",
@@ -183,7 +147,7 @@ impl Manager {
                 name: lease.name,
             },
         });
-        let simulators = self.list_simulators(None).await?.into_iter();
+        let simulators = self.leases.list_simulators(None).await?.into_iter();
         let simulators = simulators.filter_map(|sim| {
             Some(Acquired {
                 workspace: sim.workspace_id?,
@@ -231,12 +195,19 @@ impl Manager {
         let holder = Some(&lease.acquirer);
         let released = match &lease.held {
             Held::Simulator { name } => {
-                (self.release_simulator_held_by(&selector, name.clone(), holder)).await
+                let name = name.clone();
+                (self
+                    .leases
+                    .release_simulator_held_by(self, &selector, name, holder))
+                .await
             }
             Held::Containers => self.release_containers_held_by(&selector, holder).await,
             Held::Permit { pool, name } => {
                 let (pool, name) = (pool.clone(), name.clone());
-                (self.release_resource_held_by(&selector, pool, name, holder)).await
+                (self
+                    .leases
+                    .release_resource_held_by(self, &selector, pool, name, holder))
+                .await
             }
         };
         match released {
@@ -253,11 +224,17 @@ impl Manager {
     async fn hand_to_user(&self, workspace: &Workspace, lease: &Acquired, error: &anyhow::Error) {
         let handed = match &lease.held {
             Held::Simulator { name } => {
-                (self.give_simulator_lease_to_user(&workspace.id, name)).await
+                (self
+                    .leases
+                    .give_simulator_lease_to_user(&workspace.id, name))
+                .await
             }
             Held::Containers => self.give_containers_to_user(&workspace.id).await,
             Held::Permit { pool, name } => {
-                (self.give_resource_lease_to_user(&workspace.id, pool, name)).await
+                (self
+                    .leases
+                    .give_resource_lease_to_user(&workspace.id, pool, name))
+                .await
             }
         };
         // Shoal tries again on the next pass while the lease stays the agent's.

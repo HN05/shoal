@@ -3,6 +3,7 @@ use std::{sync::Arc, time::Duration};
 use shoal_ids::execution_ids::ExecutionId;
 
 use super::*;
+use crate::daemon::scope::Caller;
 use crate::{
     daemon::test_support::{agent_process, configure, manager, repository},
     model::Workspace,
@@ -78,7 +79,8 @@ impl Fixture {
         };
         let acquired = self
             .manager
-            .acquire_resource(&self.selector(), request, caller)
+            .leases
+            .acquire_resource(&*self.manager, &self.selector(), request, caller)
             .await
             .unwrap();
         assert!(
@@ -89,7 +91,11 @@ impl Fixture {
 
     /// The workspace's permits by name, with who acquired each.
     async fn permits(&self) -> Vec<(String, Acquirer)> {
-        let leases = self.manager.list_resources(Some(&self.selector())).await;
+        let leases = self
+            .manager
+            .leases
+            .list_resources(&*self.manager, Some(&self.selector()))
+            .await;
         let mut permits: Vec<_> = (leases.unwrap().into_iter())
             .map(|lease| (lease.name, lease.acquirer))
             .collect();
@@ -159,7 +165,10 @@ impl Fixture {
 
     /// The names of the workspace's simulator leases.
     async fn simulators(&self) -> Vec<String> {
-        let sims = self.manager.list_simulators(Some(&self.workspace.id));
+        let sims = self
+            .manager
+            .leases
+            .list_simulators(Some(&self.workspace.id));
         let mut names: Vec<_> = (sims.await.unwrap().into_iter())
             .filter(|sim| sim.workspace_id.is_some())
             .filter_map(|sim| sim.lease_name)
@@ -340,7 +349,10 @@ impl Fixture {
 
     /// Who acquired each of the workspace's simulator leases, by name.
     async fn simulator_acquirers(&self) -> Vec<(String, Acquirer)> {
-        let sims = self.manager.list_simulators(Some(&self.workspace.id));
+        let sims = self
+            .manager
+            .leases
+            .list_simulators(Some(&self.workspace.id));
         let mut leases: Vec<_> = (sims.await.unwrap().into_iter())
             .filter_map(|sim| Some((sim.lease_name?, sim.acquirer)))
             .collect();
@@ -458,7 +470,10 @@ async fn a_simulator_release_a_lifecycle_operation_holds_off_waits() {
         .unwrap();
 
     let selector = fixture.selector();
-    let released = manager.release_simulator(&selector, "agent".into()).await;
+    let released = manager
+        .leases
+        .release_simulator(&**manager, &selector, "agent".into())
+        .await;
 
     assert!(waits(&released.unwrap_err()));
 }
@@ -474,15 +489,25 @@ async fn a_release_decided_for_an_agent_leaves_a_lease_the_user_took_over_since(
     fixture.lease_simulator("sim", agent.clone()).await;
     let manager = &fixture.manager;
     fixture.acquire("permit", None).await;
-    (manager.give_simulator_lease_to_user(&fixture.workspace.id, "sim"))
-        .await
-        .unwrap();
+    (manager
+        .leases
+        .give_simulator_lease_to_user(&fixture.workspace.id, "sim"))
+    .await
+    .unwrap();
 
     let selector = fixture.selector();
-    let permit =
-        manager.release_resource_held_by(&selector, "lock".into(), "permit".into(), Some(&agent));
+    let permit = manager.leases.release_resource_held_by(
+        &**manager,
+        &selector,
+        "lock".into(),
+        "permit".into(),
+        Some(&agent),
+    );
     permit.await.unwrap();
-    let sim = manager.release_simulator_held_by(&selector, "sim".into(), Some(&agent));
+    let sim =
+        manager
+            .leases
+            .release_simulator_held_by(&**manager, &selector, "sim".into(), Some(&agent));
     sim.await.unwrap();
 
     assert_eq!(

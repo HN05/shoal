@@ -1,6 +1,6 @@
 use super::*;
+use crate::stand_in::Fixture;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::space_names::SpaceSelector;
 use shoal_store::test_support::queries::{check_owner_query, lease_database};
 
 mod accounting;
@@ -292,59 +292,33 @@ fn repository_resources_validate_and_layer_by_name() -> Result<()> {
 
 #[tokio::test]
 async fn queued_requests_take_freed_capacity_in_arrival_order() {
-    use crate::daemon::test_support::{manager, repository};
-    let (temp, manager) = manager().await;
-    crate::daemon::test_support::configure(&manager, "[resources.lock]\n").await;
-    let repository_dir = repository(temp.path(), "repo");
-    let repo = manager
-        .register_repository(repository_dir.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "worker".into(), None, None, None)
-        .await
-        .unwrap()
-        .id;
+    let fixture = Fixture::new("[resources.lock]\n", "").await;
+    let (leases, daemon) = (&fixture.leases, &fixture.daemon);
+    let selector = fixture.selector();
+    let request = |name: &str, queue: bool| ResourceRequest {
+        mode: None,
+        kind: None,
+        pool: "lock".into(),
+        name: name.into(),
+        resource: None,
+        reason: None,
+        queue,
+    };
     let acquire = async |name: &str, queue: bool| {
-        let request = ResourceRequest {
-            mode: None,
-            kind: None,
-            pool: "lock".into(),
-            name: name.into(),
-            resource: None,
-            reason: None,
-            queue,
-        };
-        match manager
-            .acquire_resource(&SpaceSelector::from(workspace.as_str()), request, None)
-            .await
-        {
+        let acquired = leases.acquire_resource(daemon, &selector, request(name, queue), None);
+        match acquired.await {
             Ok(Allocation::Granted(lease)) => Ok(lease.name),
             Ok(Allocation::Busy(message)) => Err(message),
             Ok(Allocation::Approval(_)) => panic!("no approval configured"),
             Err(error) => panic!("{error:#}"),
         }
     };
-    let hook = manager
-        .gates
-        .resource_guard(&workspace, crate::daemon::gates::GuardMode::Exclusive)
+    let hook = (leases.gates)
+        .resource_guard(&fixture.workspace.id, GuardMode::Exclusive)
         .unwrap();
     assert!(acquire("held", true).await.is_err());
-    let request = ResourceRequest {
-        mode: None,
-        kind: None,
-        pool: "lock".into(),
-        name: "plain".into(),
-        resource: None,
-        reason: None,
-        queue: false,
-    };
-    assert!(
-        manager
-            .acquire_resource(&SpaceSelector::from(workspace.as_str()), request, None)
-            .await
-            .is_err()
-    );
+    let plain = leases.acquire_resource(daemon, &selector, request("plain", false), None);
+    assert!(plain.await.is_err());
     drop(hook);
     assert_eq!(acquire("held", true).await.unwrap(), "held");
     assert!(
@@ -355,12 +329,7 @@ async fn queued_requests_take_freed_capacity_in_arrival_order() {
     );
     let queued = acquire("second", true).await.unwrap_err();
     assert!(queued.starts_with("1 earlier"), "{queued}");
-    manager
-        .release_resource(
-            &SpaceSelector::from(workspace.as_str()),
-            "lock".into(),
-            "held".into(),
-        )
+    (leases.release_resource(daemon, &selector, "lock".into(), "held".into()))
         .await
         .unwrap();
     let late = acquire("late", false).await.unwrap_err();
@@ -384,23 +353,12 @@ async fn queued_requests_take_freed_capacity_in_arrival_order() {
 /// workspace's settings resolve it, rather than conflicting with it.
 #[tokio::test]
 async fn a_global_resource_takes_another_ones_definition() {
-    use crate::daemon::test_support::{manager, repository};
-    let (temp, manager) = manager().await;
-    crate::daemon::test_support::configure(
-        &manager,
-        "[resources]\nlock = { capacity = 2 }\ncopy = { same_as = \"lock\" }\n",
-    )
-    .await;
-    let repository_dir = repository(temp.path(), "repo");
-    let repo = manager
-        .register_repository(repository_dir.to_str().unwrap().into(), None, None)
+    let global = "[resources]\nlock = { capacity = 2 }\ncopy = { same_as = \"lock\" }\n";
+    let fixture = Fixture::new(global, "").await;
+    let definitions = (fixture.leases)
+        .resource_definitions(&fixture.daemon, &fixture.workspace)
         .await
         .unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "worker".into(), None, None, None)
-        .await
-        .unwrap();
-    let definitions = manager.resource_definitions(&workspace).await.unwrap();
     let (scope, copy) = &definitions["copy"];
     assert_eq!(*scope, Scope::Global);
     assert_eq!(copy.capacity, 2);

@@ -6,18 +6,15 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
 use super::{SimRequest, Simulator};
-use crate::{
-    daemon::{allocation::Allocation, approvals::DecisionStatus, manager::Manager},
-    model::Workspace,
-    time::UnixTime,
-};
-pub(crate) use shoal_protocol::sim::{
+use crate::{Leases, allocation::Allocation, daemon::Daemon, model::Workspace, time::UnixTime};
+use shoal_protocol::approvals::DecisionStatus;
+pub use shoal_protocol::sim::{
     AuditEntry, CleanAction, CleanRequest, CleanRequestStatus, EvictedDevice,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Operations on the client type [`CleanRequest`] that only the `shoal` command uses.
-pub(crate) trait CleanRequestExt {
+pub trait CleanRequestExt {
     /// Record an idle device about to be deleted to make room.
     fn record_eviction(&mut self, sim: &Simulator);
 
@@ -80,7 +77,7 @@ impl CleanRequestExt for CleanRequest {
     }
 }
 
-impl Manager {
+impl Leases {
     /// Record a clean request before acting on it. A busy request may be
     /// retried under the same ID; anything else needs a new one.
     pub async fn start_clean_request(
@@ -178,11 +175,12 @@ impl Manager {
     /// them, newest first.
     pub async fn clean_history(
         &self,
+        daemon: &dyn Daemon,
         selector: Option<&SpaceSelector>,
         limit: u32,
         before: Option<i64>,
     ) -> Result<Vec<AuditEntry>> {
-        let owner = self.workspace_filter(selector).await?;
+        let owner = self.workspace_filter(daemon, selector).await?;
         ensure!(
             (1..=50).contains(&limit),
             "history limit must be between 1 and 50"

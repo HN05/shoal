@@ -4,7 +4,7 @@ mod absent;
 pub(crate) use shoal_daemon_base::{
     config_state, events, file_access, gates, item_numbers, log, notifications,
 };
-pub(crate) use shoal_leases::{allocation, ports};
+pub(crate) use shoal_leases::{allocation, ports, resources};
 mod absorb;
 pub mod access;
 pub(crate) mod acquired_leases;
@@ -74,7 +74,6 @@ pub(crate) mod progress;
 pub(crate) mod proxy_retries;
 mod quarantine;
 pub mod questions;
-pub(crate) mod queue;
 pub(crate) mod queued_starts;
 pub(crate) mod ready_marks;
 pub mod recovery;
@@ -85,7 +84,6 @@ mod repo_configuration;
 mod repo_move;
 mod repo_removal;
 mod requests;
-pub mod resources;
 mod restart_recovery;
 pub(crate) mod restarts;
 mod restore;
@@ -97,7 +95,6 @@ mod sessions;
 mod shutdown_lock;
 mod shutdown_stop;
 mod signals;
-pub(crate) mod sim;
 pub(crate) mod space_processes;
 mod space_removal;
 pub(crate) mod spaces;
@@ -486,11 +483,11 @@ where
 async fn expire_simulators(manager: Arc<Manager>) {
     loop {
         tokio::select! {
-            () = manager.signals.simulator_idled() => {}
+            () = manager.leases.simulator_idled() => {}
             () = tokio::time::sleep(SIMULATOR_SWEEP_INTERVAL) => {}
         }
         let _operation = manager.gates.background_pass().await;
-        if let Err(error) = manager.expire_simulators().await {
+        if let Err(error) = manager.leases.expire_simulators().await {
             log!("simulator cleanup: {error:#}");
         }
     }

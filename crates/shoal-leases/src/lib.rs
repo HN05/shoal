@@ -1,51 +1,80 @@
-//! The leases the daemon grants a workspace: TCP port reservations and
-//! grants of secrets, and the outcome every allocation shares. [`Leases`] offers their operations;
+//! The leases the daemon grants a workspace: TCP port reservations,
+//! resource permits, simulators and grants of secrets, the order queued
+//! requests take capacity in, and the outcome every allocation shares.
+//! [`Leases`] holds what they keep in memory and offers their operations;
 //! what they need of the rest of the daemon is the interface in [`daemon`].
 use std::sync::Arc;
 
 use anyhow::Result;
-use shoal_core::{config, env};
-use shoal_daemon_base::{callers, notifications};
+use shoal_core::{config, env, hooks, repository, tools};
+use shoal_daemon_base::{callers, gates, log, notifications};
 use shoal_daemon_base::{config_state::ConfigState, notifications::Notifications};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::approvals::ApprovalRequest;
 use shoal_protocol::notifications::NotificationKind;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
-use shoal_protocol::{model, protocol, validate};
+use shoal_protocol::{model, protocol, state, time, validate};
 use shoal_store as store;
+use shoal_subprocess as subprocess;
+use tokio::sync::{Notify, futures::Notified};
 
+pub mod acquired_leases;
 pub mod allocation;
 pub mod daemon;
 pub mod ports;
+mod queue;
+pub mod resources;
 pub mod secrets;
+pub mod sim;
 #[cfg(test)]
 mod stand_in;
 
 use daemon::{Daemon, Grants};
+use gates::Gates;
 use model::Workspace;
 use store::Store;
 
 /// The leases of every workspace, with the daemon's services they use.
 pub struct Leases {
     store: Store,
+    gates: Arc<Gates>,
     config: Arc<ConfigState>,
     notifications: Arc<Notifications>,
     grants: Arc<dyn Grants>,
+    /// Arrival order of queued resource and simulator requests.
+    queues: queue::Queues,
+    /// Woken when a simulator goes idle, which its expiry checks.
+    simulator_idle: Notify,
 }
 
 impl Leases {
     pub fn new(
         store: Store,
+        gates: Arc<Gates>,
         config: Arc<ConfigState>,
         notifications: Arc<Notifications>,
         grants: Arc<dyn Grants>,
     ) -> Self {
         Self {
             store,
+            gates,
             config,
             notifications,
             grants,
+            queues: queue::Queues::default(),
+            simulator_idle: Notify::new(),
         }
+    }
+
+    /// Each workspace still waiting for a lease, with the pool or the
+    /// simulators it waits for.
+    pub fn waiters(&self) -> Vec<(shoal_protocol::approvals::Target, SpaceId)> {
+        self.queues.waiters()
+    }
+
+    /// Wait until a simulator goes idle, which may let an idle one expire.
+    pub fn simulator_idled(&self) -> Notified<'_> {
+        self.simulator_idle.notified()
     }
 
     /// The settings of `workspace` over the current global config.

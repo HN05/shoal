@@ -8,7 +8,8 @@ use std::{
 };
 use tokio::time::Instant;
 
-use crate::daemon::{allocation::Allocation, approvals::Target};
+use crate::allocation::Allocation;
+use shoal_protocol::approvals::Target;
 
 /// A waiter that has not polled for this long has stopped waiting. Requests in
 /// progress never expire, so a long simulator boot keeps every place.

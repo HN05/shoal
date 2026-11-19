@@ -764,7 +764,9 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
     }
     for workspace in [&child, &sibling] {
         manager
+            .leases
             .acquire_resource(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 crate::daemon::resources::ResourceRequest {
                     mode: None,

@@ -8,38 +8,32 @@ use std::{
 };
 
 use super::{Definition, RepositoryView, ResourceLease};
-use crate::{
-    daemon::{manager::Manager, store},
-    model::Repository,
-    repository,
-};
+use crate::{daemon::Daemon, model::Repository, repository, store};
 
 /// Registered repositories named by a pool's members, keyed by selector.
 pub(super) type Related = BTreeMap<String, Result<Repository>>;
 
-impl Manager {
-    /// Resolve selectors before the claim transaction: remote identity reads
-    /// each local checkout's origin. Failures surface only if their member is chosen.
-    pub(super) async fn related_repositories(&self, definition: &Definition) -> Result<Related> {
-        let selectors: BTreeSet<_> = definition
-            .resources
-            .values()
-            .filter_map(|resource| resource.repo.as_deref())
-            .collect();
-        if selectors.is_empty() {
-            return Ok(Related::new());
-        }
-        let repositories = self.repositories().await?;
-        let mut related = Related::new();
-        for selector in selectors {
-            let repo = repository::select(&repositories, selector)
-                .await
-                .cloned()
-                .with_context(|| format!("resolve related repository {selector}"));
-            related.insert(selector.to_owned(), repo);
-        }
-        Ok(related)
+/// Resolve selectors before the claim transaction: remote identity reads
+/// each local checkout's origin. Failures surface only if their member is chosen.
+pub(super) async fn related(daemon: &dyn Daemon, definition: &Definition) -> Result<Related> {
+    let selectors: BTreeSet<_> = definition
+        .resources
+        .values()
+        .filter_map(|resource| resource.repo.as_deref())
+        .collect();
+    if selectors.is_empty() {
+        return Ok(Related::new());
     }
+    let repositories = daemon.repositories().await?;
+    let mut related = Related::new();
+    for selector in selectors {
+        let repo = repository::select(&repositories, selector)
+            .await
+            .cloned()
+            .with_context(|| format!("resolve related repository {selector}"));
+        related.insert(selector.to_owned(), repo);
+    }
+    Ok(related)
 }
 
 pub(super) fn resolve(
@@ -115,10 +109,7 @@ pub(super) fn record(db: &Connection, lease: &ResourceLease) -> Result<()> {
 
 /// Check in the transaction that records removal, excluding its own workspaces
 /// whose leases will be released by the shared workspace removal path.
-pub(crate) fn ensure_no_external_leases(
-    db: &Connection,
-    repository_id: &RepositoryId,
-) -> Result<()> {
+pub fn ensure_no_external_leases(db: &Connection, repository_id: &RepositoryId) -> Result<()> {
     ensure!(
         !borrowed(db, repository_id)?,
         "repository is borrowed by another workspace; release its repo resource leases first"
@@ -128,7 +119,7 @@ pub(crate) fn ensure_no_external_leases(
 
 /// Whether a workspace of another repository holds a lease on one of the
 /// repository's resources.
-pub(crate) fn borrowed(db: &Connection, repository_id: &RepositoryId) -> Result<bool> {
+pub fn borrowed(db: &Connection, repository_id: &RepositoryId) -> Result<bool> {
     store::exists(
         db,
         "SELECT 1 FROM repository_resource_leases r

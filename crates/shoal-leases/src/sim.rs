@@ -1,10 +1,9 @@
 //! Exclusive, worktree-owned Xcode simulator leases. Claims are persisted
 //! before every simctl mutation so interrupted work can be reconciled.
-use crate::daemon::approvals::ApprovalRequestExt;
-use crate::daemon::sim::audit::CleanRequestExt;
+use crate::sim::audit::CleanRequestExt;
 pub mod audit;
 mod planning;
-pub(crate) mod records;
+pub mod records;
 mod simctl;
 
 use anyhow::{Result, ensure};
@@ -14,19 +13,18 @@ use shoal_ids::space_ids::SpaceId;
 use uuid::Uuid;
 
 use audit::CleanRequest;
-pub(crate) use shoal_protocol::sim::{
+pub use shoal_protocol::sim::{
     Profile, SimConfig, SimRequest, Simulator, SimulatorCatalog, SimulatorOverview, SimulatorState,
 };
 use simctl::Inventory;
 
-use crate::refusal::{Reason, Refusal};
 use crate::{
-    daemon::{allocation::Allocation, approvals, manager::Manager, queue, scope::Caller},
-    model::Workspace,
-    state::WorkspaceState,
-    time::UnixTime,
-    validate,
+    Leases, allocation::Allocation, callers::Caller, daemon::Daemon, model::Workspace, queue,
+    state::WorkspaceState, time::UnixTime, validate,
 };
+use shoal_core::refusal::{Reason, Refusal};
+use shoal_daemon_base::approval_requests::ApprovalRequestExt;
+use shoal_protocol::approvals;
 use shoal_protocol::{
     acquirers::Acquirer,
     demos::{Launch, Preset, SIM_UDID},
@@ -126,12 +124,16 @@ fn available(runtimes: Vec<simctl::Runtime>) -> Vec<simctl::Runtime> {
     runtimes.into_iter().filter(|r| r.is_available).collect()
 }
 
-impl Manager {
-    pub async fn simulator_catalog(&self, selector: &SpaceSelector) -> Result<SimulatorCatalog> {
-        let workspace = self.workspace(selector).await?;
-        let config = self.config();
-        let preferred = self
-            .workspace_settings_from(&config, &workspace)
+impl Leases {
+    pub async fn simulator_catalog(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+    ) -> Result<SimulatorCatalog> {
+        let workspace = daemon.workspace(selector).await?;
+        let config = self.config.current();
+        let preferred = daemon
+            .settings(&config, &workspace)
             .await?
             .into_settings()
             .simulators
@@ -151,19 +153,21 @@ impl Manager {
 
     pub async fn simulator_overview(
         &self,
+        daemon: &dyn Daemon,
         selector: Option<&SpaceSelector>,
     ) -> Result<SimulatorOverview> {
         Ok(SimulatorOverview {
-            simulators: self.selected_simulators(selector).await?,
+            simulators: self.selected_simulators(daemon, selector).await?,
         })
     }
 
     /// The simulators of the workspace `selector` names, or all of them.
     pub async fn selected_simulators(
         &self,
+        daemon: &dyn Daemon,
         selector: Option<&SpaceSelector>,
     ) -> Result<Vec<Simulator>> {
-        let owner = self.workspace_filter(selector).await?;
+        let owner = self.workspace_filter(daemon, selector).await?;
         self.list_simulators(owner.as_ref()).await
     }
 
@@ -247,12 +251,13 @@ impl Manager {
 
     pub async fn acquire_simulator(
         &self,
+        daemon: &dyn Daemon,
         selector: &SpaceSelector,
         request: SimRequest,
         caller: Option<&Caller>,
     ) -> Result<Allocation<Box<Simulator>>> {
         // Join before the gate: waiting behind another boot keeps the place.
-        let workspace_id = self.workspace(selector).await?.id;
+        let workspace_id = daemon.workspace(selector).await?.id;
         let mut place = self.queues.enter(
             approvals::Target::Simulator,
             &workspace_id,
@@ -260,7 +265,7 @@ impl Manager {
             request.queue,
         );
         let _guard = self.gates.lock_simulators().await;
-        let workspace = self.workspace(selector).await?;
+        let workspace = daemon.workspace(selector).await?;
         let execution_id = caller.and_then(|c| c.execution_id().cloned());
         let mut audit = if request.clean {
             Some(
@@ -272,23 +277,17 @@ impl Manager {
         };
         let workspace_name = (workspace.name.clone(), workspace.id.clone());
         let claimant = Claimant {
-            acquirer: self.acquirer(caller).await,
+            acquirer: self.acquirer(daemon, caller).await,
             approves: caller.is_some(),
             ahead: place.ahead(),
         };
         let result = self
-            .allocate_simulator(workspace, request, &mut audit, claimant)
+            .allocate_simulator(daemon, workspace, request, &mut audit, claimant)
             .await;
         place.settle(&result);
         if let Ok(outcome) = &result {
-            self.leases
-                .notify_allocation(
-                    self,
-                    (&workspace_name.0, &workspace_name.1),
-                    outcome,
-                    "simulator: ",
-                )
-                .await;
+            let space = (&workspace_name.0, &workspace_name.1);
+            (self.notify_allocation(daemon, space, outcome, "simulator: ")).await;
         }
         if let Some(audit) = audit {
             self.finish_clean_request(audit, &result).await?;
@@ -301,6 +300,7 @@ impl Manager {
     /// Earlier queued requests keep new devices busy, not existing leases.
     async fn allocate_simulator(
         &self,
+        daemon: &dyn Daemon,
         workspace: Workspace,
         request: SimRequest,
         audit: &mut Option<CleanRequest>,
@@ -316,8 +316,8 @@ impl Manager {
             workspace.state == WorkspaceState::Ready,
             "workspace is not ready"
         );
-        self.touch(&workspace.id).await;
-        let config = self.config();
+        daemon.touch(&workspace.id).await;
+        let config = self.config.current();
         let limits = &config.machine.simulators;
         let mut records = self.list_simulators(None).await?;
         let inventory = simctl::inventory().await?;
@@ -331,6 +331,7 @@ impl Manager {
         } else {
             Some(
                 self.resolve_profile(
+                    daemon,
                     &config,
                     &workspace,
                     &request,
@@ -385,14 +386,19 @@ impl Manager {
         }
         let plan = planning::plan(&records, &inventory, limits, &profile, request.clean);
         let claim = (request, claimant.acquirer);
-        self.execute_simulator_plan(&config, workspace, claim, profile, plan, audit)
+        self.execute_simulator_plan(daemon, &config, workspace, claim, profile, plan, audit)
             .await
     }
 
     /// Called only after approval, under the allocation caller's simulator gate.
     /// Audits precede destructive actions; claims survive every failed boot step.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the plan and what it acts for, which only allocation passes"
+    )]
     async fn execute_simulator_plan(
         &self,
+        daemon: &dyn Daemon,
         config: &crate::config::Config,
         workspace: Workspace,
         (request, acquirer): (SimRequest, Acquirer),
@@ -428,7 +434,7 @@ impl Manager {
         }
         sim.claim(&workspace.id, request, acquirer);
         self.save_sim(&sim).await?; // ownership precedes every external mutation
-        let result = self.boot(&mut sim, &workspace, needs_reset, audit).await;
+        let result = (self.boot(daemon, &mut sim, &workspace, needs_reset, audit)).await;
         sim.finish_boot(workspace.id, &result);
         self.save_sim(&sim).await?;
         result?;
@@ -491,6 +497,7 @@ impl Manager {
     /// Create the device if needed, optionally erase it, and boot it.
     async fn boot(
         &self,
+        daemon: &dyn Daemon,
         sim: &mut Simulator,
         workspace: &Workspace,
         needs_reset: bool,
@@ -527,7 +534,7 @@ impl Manager {
         // Removal may have started while simctl was running. Its cleanup waits
         // for our gate, so retain the claim and let that path remove it.
         ensure!(
-            self.workspace_by_id(&workspace.id).await?.state == WorkspaceState::Ready,
+            daemon.workspace_by_id(&workspace.id).await?.state == WorkspaceState::Ready,
             "workspace removal started during simulator boot"
         );
         Ok(())
@@ -535,13 +542,14 @@ impl Manager {
 
     async fn resolve_profile(
         &self,
+        daemon: &dyn Daemon,
         config: &crate::config::Config,
         workspace: &Workspace,
         request: &SimRequest,
         inventory: &Inventory,
         existing_runtime: Option<&str>,
     ) -> Result<Profile> {
-        let settings = self.workspace_settings_from(config, workspace).await?;
+        let settings = daemon.settings(config, workspace).await?;
         planning::resolve_request(
             &config.machine.simulators,
             &settings.simulators,
@@ -551,28 +559,34 @@ impl Manager {
         )
     }
 
-    pub async fn release_simulator(&self, selector: &SpaceSelector, name: String) -> Result<()> {
-        self.release_simulator_held_by(selector, name, None).await
+    pub async fn release_simulator(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+        name: String,
+    ) -> Result<()> {
+        (self.release_simulator_held_by(daemon, selector, name, None)).await
     }
 
     /// Release the simulator lease `name` of `selector`'s workspace, unless
     /// `holder` names an acquirer it no longer has, as when the user took
     /// over an agent's lease since a release of it was decided. Only a
     /// release without `holder`, which someone asked for, is activity.
-    pub(crate) async fn release_simulator_held_by(
+    pub async fn release_simulator_held_by(
         &self,
+        daemon: &dyn Daemon,
         selector: &SpaceSelector,
         name: String,
         holder: Option<&Acquirer>,
     ) -> Result<()> {
         let guard = self.gates.lock_simulators().await;
-        let workspace = self.workspace(selector).await?;
+        let workspace = daemon.workspace(selector).await?;
         ensure!(
             workspace.state == WorkspaceState::Ready,
             Refusal::new(Reason::NotReady, "workspace is not ready")
         );
         if holder.is_none() {
-            self.touch(&workspace.id).await;
+            daemon.touch(&workspace.id).await;
         }
         let sim = self
             .list_simulators(Some(&workspace.id))
@@ -609,17 +623,14 @@ impl Manager {
         self.release_simulator_access(workspace.id, name).await?;
         // Expiry passes over the devices while another holds the lock.
         drop(guard);
-        self.signals.simulator_went_idle();
+        self.simulator_idle.notify_one();
         Ok(())
     }
 
     async fn release_simulator_access(&self, owner: SpaceId, name: String) -> Result<bool> {
+        let grants = self.grants.clone();
         self.store
-            .write(move |tx| {
-                let released =
-                    approvals::release(tx, &owner, &approvals::Target::Simulator, &name)?;
-                Ok(released)
-            })
+            .write(move |tx| grants.release(tx, &owner, &approvals::Target::Simulator, &name))
             .await
     }
 
@@ -627,7 +638,7 @@ impl Manager {
     /// on, as `launch` names it, when an agent acquired it for the demo, so
     /// the lease ends with the demo rather than with the agent. The user's
     /// lease stays the user's, and another demo's that demo's.
-    pub(crate) async fn give_simulator_to_demo(
+    pub async fn give_simulator_to_demo(
         &self,
         execution: &ExecutionId,
         workspace: &SpaceId,
@@ -656,7 +667,7 @@ impl Manager {
     }
 
     /// Make the simulator lease `name` of `workspace` the user's.
-    pub(crate) async fn give_simulator_lease_to_user(
+    pub async fn give_simulator_lease_to_user(
         &self,
         workspace: &SpaceId,
         name: &str,
@@ -684,7 +695,7 @@ impl Manager {
         let Some(_guard) = self.gates.try_lock_simulators() else {
             return Ok(());
         };
-        let idle_seconds = self.config().machine.simulators.idle_seconds;
+        let idle_seconds = self.config.current().machine.simulators.idle_seconds;
         for mut sim in self.list_simulators(None).await? {
             if sim.workspace_id.is_none()
                 && UnixTime::now().duration_since(sim.last_used)

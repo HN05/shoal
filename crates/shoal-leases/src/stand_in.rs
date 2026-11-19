@@ -4,17 +4,19 @@
 //! memory, which a test decides and which need a reason as the daemon's
 //! do.
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result, ensure};
 use futures_util::future::BoxFuture;
-use rusqlite::Transaction;
+use rusqlite::{Connection, Transaction};
 use shoal_daemon_base::approval_requests::ReasonRequired;
 use shoal_daemon_base::{
     config_state::ConfigState,
+    gates::Gates,
     notifications::{Coordinators, Notifications, Source},
 };
+use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::approvals::{ApprovalRequest, DecisionStatus, Target};
 use shoal_protocol::notifications::NotificationKind;
@@ -22,9 +24,11 @@ use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 use crate::{
     Leases,
+    callers::Caller,
     config::{Config, Effective, repo::ConfigLayers},
-    daemon::{Approvals, Grants, Settings, Spaces},
-    model::Workspace,
+    daemon::{Agents, Approvals, Grants, Settings, Spaces},
+    hooks::{Hook, HookKind},
+    model::{Repository, Workspace},
 };
 
 /// The service over a stand-in daemon with one ready workspace.
@@ -51,10 +55,14 @@ impl Fixture {
         )));
         let notifications = Arc::new(Notifications::new(store.clone()));
         let grants = Arc::new(StandInGrants::default());
-        let leases = Leases::new(store, config, notifications, grants.clone());
+        let gates = Arc::new(Gates::default());
+        let leases = Leases::new(store, gates, config, notifications, grants.clone());
         let daemon = StandIn {
             workspace: workspace.clone(),
             layers: Mutex::new(layers(repo)),
+            hooks: Mutex::default(),
+            hooks_run: Mutex::default(),
+            demos: Vec::new(),
             touched: Mutex::default(),
             announced: Mutex::default(),
         };
@@ -145,6 +153,12 @@ async fn record(store: &shoal_store::Store, workspace: &Workspace) {
 pub(crate) struct StandIn {
     workspace: Workspace,
     layers: Mutex<ConfigLayers>,
+    /// The hooks configured by kind.
+    pub(crate) hooks: Mutex<HashMap<HookKind, StandInHook>>,
+    /// The executables of the hooks run, in order.
+    pub(crate) hooks_run: Mutex<Vec<PathBuf>>,
+    /// The executions that run demos; every other execution runs an agent.
+    pub(crate) demos: Vec<ExecutionId>,
     /// The workspaces whose requests counted as their activity.
     pub(crate) touched: Mutex<Vec<SpaceId>>,
     /// The approval requests announced to whoever decides them.
@@ -161,9 +175,17 @@ impl Spaces for StandIn {
         })
     }
 
+    fn workspace_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Workspace>> {
+        Box::pin(async move { self.workspace(&SpaceSelector::id(id)).await })
+    }
+
     fn touch<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, ()> {
         self.touched.lock().unwrap().push(id.clone());
         Box::pin(async {})
+    }
+
+    fn verify_worktree<'a>(&'a self, _workspace: &'a Workspace) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
     }
 }
 
@@ -175,6 +197,47 @@ impl Settings for StandIn {
     ) -> BoxFuture<'a, Result<Effective>> {
         let layers = self.layers.lock().unwrap().clone();
         Box::pin(async move { config.resolve(&layers) })
+    }
+
+    fn hook<'a>(
+        &'a self,
+        _workspace: &'a Workspace,
+        kind: HookKind,
+    ) -> BoxFuture<'a, Result<Option<PathBuf>>> {
+        let hooks = self.hooks.lock().unwrap();
+        let executable = hooks.get(&kind).map(|hook| hook.executable.clone());
+        Box::pin(async move { Ok(executable) })
+    }
+
+    fn run_hook<'a>(
+        &'a self,
+        _workspace: &'a Workspace,
+        _hook: Hook<'a>,
+        executable: &'a Path,
+    ) -> BoxFuture<'a, Result<()>> {
+        let hooks = self.hooks.lock().unwrap();
+        let hook = hooks.values().find(|hook| hook.executable == executable);
+        let fails = hook.expect("a configured hook").fails;
+        self.hooks_run.lock().unwrap().push(executable.to_owned());
+        Box::pin(async move {
+            ensure!(!fails, "the hook failed");
+            Ok(())
+        })
+    }
+
+    fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+}
+
+impl Agents for StandIn {
+    fn caller_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<ExecutionId>> {
+        let agent = caller.execution_id().filter(|id| !self.demos.contains(id));
+        Box::pin(async move { agent.cloned() })
+    }
+
+    fn runs_demo<'a>(&'a self, execution: &'a ExecutionId) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async move { Ok(self.demos.contains(execution)) })
     }
 }
 
@@ -197,6 +260,12 @@ impl Coordinators for StandIn {
     ) -> BoxFuture<'a, bool> {
         Box::pin(async { false })
     }
+}
+
+/// A configured hook, and whether running it fails.
+pub(crate) struct StandInHook {
+    pub(crate) executable: PathBuf,
+    pub(crate) fails: bool,
 }
 
 /// Approval requests by owner, target and name, which a test decides.
@@ -242,5 +311,16 @@ impl Grants for StandInGrants {
     ) -> Result<bool> {
         let key = (owner.clone(), target.clone(), name.to_owned());
         Ok(self.requests.lock().unwrap().remove(&key).is_some())
+    }
+
+    fn current(
+        &self,
+        _db: &Connection,
+        owner: &SpaceId,
+        target: &Target,
+        name: &str,
+    ) -> Result<Option<ApprovalRequest>> {
+        let key = (owner.clone(), target.clone(), name.to_owned());
+        Ok(self.requests.lock().unwrap().get(&key).cloned())
     }
 }

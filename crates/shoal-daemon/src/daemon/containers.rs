@@ -136,7 +136,7 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         self.touch(&workspace.id).await;
         let starter = Starter {
-            acquirer: self.acquirer(caller).await,
+            acquirer: self.leases.acquirer(self, caller).await,
             for_agent: false,
             agent_start: false,
             reason,

@@ -33,7 +33,7 @@ impl Manager {
         // The agent takes the project over when it starts.
         let acquirer = match for_agent {
             true => Acquirer::User,
-            false => self.acquirer(caller).await,
+            false => self.leases.acquirer(self, caller).await,
         };
         let starter = Starter {
             acquirer,
@@ -68,7 +68,7 @@ impl Manager {
             return Ok(());
         }
         let starter = Starter {
-            acquirer: self.acquirer(caller).await,
+            acquirer: self.leases.acquirer(self, caller).await,
             for_agent: false,
             agent_start: true,
             reason: None,

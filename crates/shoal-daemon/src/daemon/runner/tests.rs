@@ -568,7 +568,8 @@ pub(super) async fn hold_the_builds_permit(fixture: &Fixture) -> crate::model::W
         queue: false,
     };
     manager
-        .acquire_resource(&SpaceSelector::id(&other.id), request, None)
+        .leases
+        .acquire_resource(&**manager, &SpaceSelector::id(&other.id), request, None)
         .await
         .unwrap();
     other
@@ -606,7 +607,9 @@ async fn a_job_waits_while_its_permit_pool_is_full() {
     // Once the pool has a permit, the job holds it while it runs.
     manager.runners.forget_permits_busy();
     manager
+        .leases
         .release_resource(
+            &**manager,
             &SpaceSelector::id(&other.id),
             "builds".into(),
             "held".into(),
@@ -617,7 +620,11 @@ async fn a_job_waits_while_its_permit_pool_is_full() {
     let claimed = manager.claimed_jobs().await.unwrap();
     assert_eq!(claimed.len(), 1);
     let leases = manager
-        .list_resources(Some(&SpaceSelector::id(&claimed[0].workspace_id)))
+        .leases
+        .list_resources(
+            &**manager,
+            Some(&SpaceSelector::id(&claimed[0].workspace_id)),
+        )
         .await
         .unwrap();
     assert_eq!(leases.len(), 1);
@@ -859,7 +866,9 @@ async fn every_space_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
     // chat's scope.
     manager.runners.forget_permits_busy();
     manager
+        .leases
         .release_resource(
+            &**manager,
             &SpaceSelector::id(&other.id),
             "builds".into(),
             "held".into(),
@@ -1375,7 +1384,8 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
         queue: false,
     };
     manager
-        .acquire_resource(&SpaceSelector::id(&workspace.id), request, None)
+        .leases
+        .acquire_resource(&**manager, &SpaceSelector::id(&workspace.id), request, None)
         .await
         .unwrap();
 
@@ -1388,7 +1398,11 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
     assert_eq!(claimed.len(), 1);
     assert_ne!(claimed[0].workspace_id, workspace.id);
     let leases = manager
-        .list_resources(Some(&SpaceSelector::id(&claimed[0].workspace_id)))
+        .leases
+        .list_resources(
+            &**manager,
+            Some(&SpaceSelector::id(&claimed[0].workspace_id)),
+        )
         .await
         .unwrap();
     assert_eq!(leases.len(), 1);

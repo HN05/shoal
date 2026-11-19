@@ -91,7 +91,9 @@ async fn deleted_parent_sweep_releases_leases_and_keeps_a_branch_with_work() {
             .await
             .unwrap();
         manager
+            .leases
             .acquire_resource(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 ResourceRequest {
                     mode: None,
@@ -131,7 +133,14 @@ async fn deleted_parent_sweep_releases_leases_and_keeps_a_branch_with_work() {
                 .unwrap()
                 .is_empty()
         );
-        assert!(manager.list_resources(None).await.unwrap().is_empty());
+        assert!(
+            manager
+                .leases
+                .list_resources(&*manager, None)
+                .await
+                .unwrap()
+                .is_empty()
+        );
         let branch = if pending_rename {
             "refs/heads/new/topic"
         } else {
@@ -444,7 +453,9 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
     // Work on the local default branch is retained without any remote.
     git_in(&repository_dir, &["merge", "--ff-only", "idle"]);
     manager
+        .leases
         .acquire_resource(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             lease("test-lock", None),
             None,
@@ -456,7 +467,9 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
         "a resource lease must prevent automatic removal"
     );
     manager
+        .leases
         .release_resource(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             "test-lock".into(),
             "default".into(),
@@ -470,7 +483,9 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
         crate::daemon::resources::LockMode::Write,
     ] {
         manager
+            .leases
             .acquire_resource(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 lease("cache", Some(mode)),
                 None,
@@ -481,7 +496,9 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
         fs::remove_file(&rwlock_config).unwrap();
         assert!(snapshot(&manager).await.is_none());
         manager
+            .leases
             .release_resource(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 "cache".into(),
                 "default".into(),
