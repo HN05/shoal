@@ -13,6 +13,7 @@ pub(crate) mod caches;
 pub(crate) mod chats;
 pub(crate) mod checkout_sync;
 pub mod cleanup;
+mod config_state;
 mod connections;
 pub(crate) mod containers;
 mod contribution_holds;

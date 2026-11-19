@@ -15,7 +15,6 @@ pub(crate) mod capacity;
 mod checkpoints;
 mod commits;
 pub(crate) mod completion_cleanup;
-mod config_state;
 pub(crate) mod conflicts;
 mod contributions;
 mod converted;
@@ -136,7 +135,7 @@ pub struct Manager {
     pub(crate) publications: super::progress::Publications,
     /// The spaces whose issues wait for the agent account to be settled.
     pub(crate) agent_settles: super::links::issue::agent_settles::AgentSettles,
-    pub config_state: config_state::ConfigState,
+    pub config_state: super::config_state::ConfigState,
     pub paths: Paths,
     /// Arrival order of queued resource and simulator requests.
     pub(crate) queues: super::queue::Queues,
@@ -205,7 +204,7 @@ impl Manager {
         let config = Config::load(&paths)?;
         super::forge_hosts::learn_forge_pins(&Default::default(), &config.machine.forges);
         Ok(Arc::new(Self {
-            config_state: config_state::ConfigState::new(config),
+            config_state: super::config_state::ConfigState::new(config),
             waits: Default::default(),
             watch_starts: Default::default(),
             cleanup_health: Default::default(),
@@ -259,7 +258,7 @@ impl Manager {
         }))
     }
 
-    /// The global config as last loaded; see [`config_state::ConfigState::current`].
+    /// The global config as last loaded; see [`super::config_state::ConfigState::current`].
     pub fn config(&self) -> Arc<Config> {
         self.config_state.current()
     }
