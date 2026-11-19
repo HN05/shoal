@@ -22,7 +22,7 @@ use crate::{
     model::{SpaceRef, Workspace},
     protocol::{
         CommitStart, CreationOptions,
-        operations::{Prepared, QueuedLaunch},
+        operations::{Prepared, QueuedLaunch, StartedWorkspace},
     },
     refusal::{Reason, Refusal},
     state::WorkspaceState,
@@ -120,6 +120,19 @@ async fn at_commit(ctx: &Context, parent: Option<SpaceSelector>, args: &CreateAr
     let Some(child) = prepare(ctx, created).await? else {
         return Ok(1);
     };
+    // From the user's terminal it enters the workspace as a creation on a
+    // branch does, once its setup is done.
+    let started = StartedWorkspace {
+        operation: None,
+        workspace: Box::new(child.clone()),
+        reused: false,
+        entry: None,
+        warnings: Vec::new(),
+    };
+    let launch = shoal_protocol::launches::Launch::default();
+    if let Some(code) = super::workspaces::enter_created(ctx, &launch, &started).await? {
+        return Ok(code);
+    }
     report(ctx, &child)?;
     Ok(0)
 }

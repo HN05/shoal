@@ -1120,3 +1120,40 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
     let output = start(&["--here"]);
     assert!(output.status.success(), "{}", printed(&output));
 }
+
+/// From the user's terminal, a workspace at a commit opens its shell in its
+/// session too, once its setup is done.
+#[test]
+fn background_create_at_a_commit_opens_the_workspace_shell_in_its_session() {
+    let fixture = Fixture::with_config(Some("terminal.focus = false\n"));
+    let home = fixture.root.path();
+    let shell = home.join("bin/test-shell");
+    install_test_script(&shell, "#!/bin/sh\npwd > \"$HOME/shell-cwd\"\n");
+    let repo = fixture.repo.to_str().unwrap();
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .env("SHELL", &shell)
+            .args(["create", repo, "--no-branch"]),
+        "",
+        true,
+    );
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
+    wait_until("the detached workspace shell", || {
+        fs::read_to_string(home.join("shell-cwd")).is_ok_and(|cwd| !cwd.is_empty())
+    });
+    let listed = fixture.ok(&["list"]);
+    let workspace = &listed.as_array().unwrap()[0];
+    assert_eq!(workspace["branch"], Value::Null, "{workspace}");
+    assert_eq!(
+        fs::read_to_string(home.join("shell-cwd")).unwrap().trim(),
+        fs::canonicalize(workspace["path"].as_str().unwrap())
+            .unwrap()
+            .to_str()
+            .unwrap(),
+    );
+}
