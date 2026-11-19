@@ -165,7 +165,7 @@ impl Manager {
             (Some(repository), None) => Some(self.repository(repository.clone()).await?.id),
             (None, None) => None,
         };
-        let giver = Some(&caller.space_id);
+        let giver = Some(caller);
         (self.ensure_caller_holds(giver, given, repository.as_ref())).await
     }
 

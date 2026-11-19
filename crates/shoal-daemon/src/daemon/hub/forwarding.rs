@@ -204,7 +204,7 @@ impl Manager {
         let everywhere = self.reach_root(Some(caller)).await?.is_none();
         let space = self.space_by_id(&caller.space_id).await?;
         let repository = space.repository_id.as_ref();
-        let permissions = self.space_permissions(&caller.space_id, repository).await?;
+        let permissions = self.caller_permissions(caller, repository).await?;
         let chat_modes = self.chat_modes(&space).await?;
         let priority = self.space_priority(&caller.space_id).await?;
         Ok(Vouched::Space(VouchedSpace {

@@ -98,9 +98,8 @@ impl Manager {
     ) -> Result<RestartOutcome> {
         let space = self.space(space).await?;
         if let Some(change) = &restart.change {
-            let giver = caller.map(|caller| &caller.space_id);
             let repository = space.repository_id.as_ref();
-            (self.ensure_change_held(giver, &space, change, repository)).await?;
+            (self.ensure_change_held(caller, &space, change, repository)).await?;
         }
         let asked_by = caller.map(|caller| caller.space_id.clone());
         match self.decide_restart(&space, restart, asked_by).await? {

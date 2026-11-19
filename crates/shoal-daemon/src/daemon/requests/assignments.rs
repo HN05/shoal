@@ -30,12 +30,11 @@ pub(super) async fn handle(
             launches,
             change,
         } => {
-            let giver = caller.map(|caller| &caller.space_id);
             let targets = PermissionTargets {
                 agents: &agents,
                 launches: &launches,
             };
-            (manager.change_stopped_permissions(targets, &change, giver)).await?;
+            (manager.change_stopped_permissions(targets, &change, caller)).await?;
             Body::Ok
         }
         AssignmentMethod::MarkReady { space, selection } => {

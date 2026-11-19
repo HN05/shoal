@@ -1496,7 +1496,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
     for workspace in [&root, &parent] {
         let decided = manager
             .decide_routed_approval(
-                &workspace.id,
+                &Caller::of_space(workspace.id.clone()),
                 requested.number,
                 true,
                 None,
@@ -1523,13 +1523,13 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         .unwrap();
     let told = messages(&root).await.len();
     let escalated = manager
-        .escalate_approval(&SpaceSelector::id(&parent.id), requested.number, None)
+        .escalate_approval(None, &SpaceSelector::id(&parent.id), requested.number, None)
         .await
         .unwrap();
     assert_eq!(escalated.decider.as_ref(), Some(&root.id));
     assert_eq!(messages(&root).await.len(), told + 1);
     let escalated = manager
-        .escalate_approval(&SpaceSelector::id(&root.id), requested.number, None)
+        .escalate_approval(None, &SpaceSelector::id(&root.id), requested.number, None)
         .await
         .unwrap();
     assert_eq!(escalated.decider, None);
@@ -1537,7 +1537,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
     assert_eq!(user().await, 1);
     assert!(
         manager
-            .escalate_approval(&SpaceSelector::id(&root.id), requested.number, None)
+            .escalate_approval(None, &SpaceSelector::id(&root.id), requested.number, None)
             .await
             .is_err()
     );
@@ -1631,7 +1631,7 @@ async fn a_request_passed_up_to_a_full_inbox_reports_the_user_deciding() {
         n += 1;
     }
     let escalated = manager
-        .escalate_approval(&SpaceSelector::id(&parent.id), requested.number, None)
+        .escalate_approval(None, &SpaceSelector::id(&parent.id), requested.number, None)
         .await
         .unwrap();
     assert_eq!(escalated.decider, None);
@@ -2071,7 +2071,13 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
         .unwrap();
     assert!(
         manager
-            .decide_routed_approval(&parent.id, requested.number, true, None, Default::default())
+            .decide_routed_approval(
+                &Caller::of_space(parent.id.clone()),
+                requested.number,
+                true,
+                None,
+                Default::default()
+            )
             .await
             .is_err()
     );
@@ -2107,12 +2113,24 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
     manager.notify_approval(&longer).await;
     assert!(
         manager
-            .decide_routed_approval(&parent.id, longer.number, true, None, Default::default())
+            .decide_routed_approval(
+                &Caller::of_space(parent.id.clone()),
+                longer.number,
+                true,
+                None,
+                Default::default()
+            )
             .await
             .is_err()
     );
     let denied = manager
-        .decide_routed_approval(&parent.id, longer.number, false, None, Default::default())
+        .decide_routed_approval(
+            &Caller::of_space(parent.id.clone()),
+            longer.number,
+            false,
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     assert_eq!(denied.status, DecisionStatus::Denied);
@@ -2520,7 +2538,13 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         .resource_guard(&child.id, crate::daemon::gates::GuardMode::Exclusive)
         .unwrap();
     manager
-        .decide_routed_approval(&parent.id, requested.number, true, None, Default::default())
+        .decide_routed_approval(
+            &Caller::of_space(parent.id.clone()),
+            requested.number,
+            true,
+            None,
+            Default::default(),
+        )
         .await
         .unwrap_err();
     let pending = manager
@@ -2531,7 +2555,13 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
     assert_eq!(pending.status, DecisionStatus::Pending);
     drop(hook);
     let decided = manager
-        .decide_routed_approval(&parent.id, requested.number, true, None, Default::default())
+        .decide_routed_approval(
+            &Caller::of_space(parent.id.clone()),
+            requested.number,
+            true,
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     assert_eq!(decided.status, DecisionStatus::Approved);

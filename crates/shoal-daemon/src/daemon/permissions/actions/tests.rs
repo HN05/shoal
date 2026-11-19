@@ -73,9 +73,15 @@ async fn the_permission_takes_refuses_or_proposes_the_action() {
     let routed = manager.show_approval(request.number).await.unwrap();
     assert_eq!(routed.decider.as_ref(), Some(&parent.id));
     let shown = Some(routed);
-    (manager.decide_routed_approval(&parent.id, request.number, true, shown, Default::default()))
-        .await
-        .unwrap();
+    (manager.decide_routed_approval(
+        &Caller::of_space(parent.id.clone()),
+        request.number,
+        true,
+        shown,
+        Default::default(),
+    ))
+    .await
+    .unwrap();
 
     // The approval lets the same action proceed once.
     (manager.authorize_action(Some(&proposing), restart()))
@@ -100,11 +106,12 @@ async fn a_parent_without_the_key_at_direct_cannot_approve() {
     let parent = chat(&manager, "parent", "plan", Some(&repo), None).await;
     let child = chat(&manager, "child", "chat", Some(&repo), Some(&parent.id)).await;
     let request = undecided((manager.authorize_action(Some(&caller(&child.id)), restart())).await);
+    let parent = Caller::of_space(parent.id.clone());
     let refused =
-        manager.decide_routed_approval(&parent.id, request.number, true, None, Default::default());
+        manager.decide_routed_approval(&parent, request.number, true, None, Default::default());
     let error = refused.await.unwrap_err();
     assert!(format!("{error:#}").contains("daemon"), "{error:#}");
-    (manager.decide_routed_approval(&parent.id, request.number, false, None, Default::default()))
+    (manager.decide_routed_approval(&parent, request.number, false, None, Default::default()))
         .await
         .unwrap();
     let denied = undecided(

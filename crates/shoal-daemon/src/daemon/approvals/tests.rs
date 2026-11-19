@@ -8,6 +8,7 @@ use crate::daemon::resources::{Definition, LockMode, Scope};
 use crate::daemon::{
     item_numbers::{self, ItemNumber},
     notifications::NotificationKind,
+    scope::Caller,
     store,
 };
 use anyhow::Result;
@@ -942,8 +943,9 @@ async fn a_parent_approves_a_merge_with_its_own_merge_permission_at_its_commit()
             .unwrap()
             .unwrap();
         manager.notify_approval(&requested).await;
+        let deciding = Caller::of_space(worker.id.clone());
         let approved = manager.decide_routed_approval(
-            &worker.id,
+            &deciding,
             requested.number,
             true,
             None,
@@ -951,7 +953,7 @@ async fn a_parent_approves_a_merge_with_its_own_merge_permission_at_its_commit()
         );
         assert!(approved.await.is_err());
         let selected = SpaceSelector::id(&worker.id);
-        let passed = manager.escalate_approval(&selected, requested.number, None);
+        let passed = manager.escalate_approval(None, &selected, requested.number, None);
         assert_eq!(passed.await.unwrap().decider, Some(top.id.clone()));
         requested
     };
@@ -959,7 +961,13 @@ async fn a_parent_approves_a_merge_with_its_own_merge_permission_at_its_commit()
     // The chat merges directly, so it approves.
     let requested = request().await;
     let approved = manager
-        .decide_routed_approval(&top.id, requested.number, true, None, Default::default())
+        .decide_routed_approval(
+            &Caller::of_space(top.id.clone()),
+            requested.number,
+            true,
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     assert_eq!(approved.status, DecisionStatus::Approved);
@@ -972,7 +980,13 @@ async fn a_parent_approves_a_merge_with_its_own_merge_permission_at_its_commit()
     std::fs::write(child.path.join("tracked"), "changed again\n").unwrap();
     commit(&child.path, "tracked");
     let stale = manager
-        .decide_routed_approval(&top.id, requested.number, true, None, Default::default())
+        .decide_routed_approval(
+            &Caller::of_space(top.id.clone()),
+            requested.number,
+            true,
+            None,
+            Default::default(),
+        )
         .await;
     assert!(stale.is_err());
     let retired = manager.approval_by_key(&requested.key).await.unwrap();

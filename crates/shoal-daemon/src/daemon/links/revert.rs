@@ -52,7 +52,7 @@ impl Manager {
         let settings = self.acting_settings(&space).await?;
         if let Some(caller) = caller {
             let permissions = self
-                .caller_permissions(caller, space.repository_id())
+                .caller_permissions(caller, Some(space.repository_id()))
                 .await?;
             ensure!(
                 permissions.pr_open.value == Opening::Direct,

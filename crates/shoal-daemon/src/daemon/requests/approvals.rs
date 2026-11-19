@@ -78,7 +78,7 @@ pub(super) async fn handle(
             shown,
         } => Body::ApprovalRequest(Box::new(
             manager
-                .escalate_approval(&space, number, shown.map(|shown| *shown))
+                .escalate_approval(caller, &space, number, shown.map(|shown| *shown))
                 .await?,
         )),
     }))

@@ -2,6 +2,7 @@ use crate::paths::StateFiles;
 use crate::{
     config::permissions::{PermissionChange, PermissionsConfig},
     daemon::{
+        scope::Caller,
         stopped_work::PermissionTargets,
         test_support::{chat, manager, repository},
     },
@@ -67,8 +68,9 @@ async fn a_permission_change_changes_no_agent_when_one_is_refused() {
     assert_eq!(stopped(&manager, &talk.id), PermissionsConfig::default());
     // A space's process gives only what it holds: no workspace's mode merges
     // directly here.
-    let giver = Some(&running.id);
-    let changed = manager.change_stopped_permissions(stopped_of(&agents[..2]), &change, giver);
+    let giver = Caller::of_space(running.id.clone());
+    let changed =
+        manager.change_stopped_permissions(stopped_of(&agents[..2]), &change, Some(&giver));
     assert!(changed.await.is_err());
     assert_eq!(
         stopped(&manager, &workspace.id),

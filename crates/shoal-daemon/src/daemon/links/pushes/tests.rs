@@ -375,15 +375,16 @@ async fn a_parent_approves_a_push_only_with_its_own_push_permission() {
     );
 
     // The worker proposes its own pushes, so it may only deny or pass up.
+    let deciding = Caller::of_space(worker.id.clone());
     let approved =
-        manager.decide_routed_approval(&worker.id, request.number, true, None, Default::default());
+        manager.decide_routed_approval(&deciding, request.number, true, None, Default::default());
     assert!(approved.await.is_err());
     assert_eq!(
         decider(request.number).await,
         (Some(worker.id.clone()), DecisionStatus::Pending)
     );
     let selected = SpaceSelector::id(&worker.id);
-    (manager.escalate_approval(&selected, request.number, None))
+    (manager.escalate_approval(None, &selected, request.number, None))
         .await
         .unwrap();
     assert_eq!(
@@ -393,7 +394,13 @@ async fn a_parent_approves_a_push_only_with_its_own_push_permission() {
 
     // The chat pushes directly, so it approves as the user would.
     let running = manager
-        .decide_routed_approval(&top.id, request.number, true, None, Default::default())
+        .decide_routed_approval(
+            &Caller::of_space(top.id.clone()),
+            request.number,
+            true,
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     assert_eq!(running.status, DecisionStatus::Pending);

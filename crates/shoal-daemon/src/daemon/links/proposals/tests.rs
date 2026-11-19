@@ -1,6 +1,7 @@
 use super::*;
 use crate::daemon::{
     approvals::proposals::PR,
+    scope::Caller,
     test_support::{manager, repository},
 };
 use crate::forge::items::attach::Attachment;
@@ -395,7 +396,13 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
             ..ProposalDecision::default()
         };
         let decided = manager
-            .decide_routed_approval(&parent.id, proposed.number, true, None, details)
+            .decide_routed_approval(
+                &Caller::of_space(parent.id.clone()),
+                proposed.number,
+                true,
+                None,
+                details,
+            )
             .await;
         assert!(decided.is_err());
     }
@@ -408,7 +415,13 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         ..ProposalDecision::default()
     };
     let denied = manager
-        .decide_routed_approval(&parent.id, proposed.number, false, None, duplicate)
+        .decide_routed_approval(
+            &Caller::of_space(parent.id.clone()),
+            proposed.number,
+            false,
+            None,
+            duplicate,
+        )
         .await
         .unwrap();
     assert_eq!(denied.status, DecisionStatus::Denied);
@@ -430,14 +443,20 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         ..ProposalDecision::default()
     };
     let decided = manager
-        .decide_routed_approval(&parent.id, original.number, false, None, duplicate)
+        .decide_routed_approval(
+            &Caller::of_space(parent.id.clone()),
+            original.number,
+            false,
+            None,
+            duplicate,
+        )
         .await;
     assert!(decided.is_err());
     let outside = manager.approval_request(outside.number).await.unwrap();
     assert!(outside.unwrap().findings().is_empty());
     let denied = manager
         .decide_routed_approval(
-            &parent.id,
+            &Caller::of_space(parent.id.clone()),
             original.number,
             false,
             None,
@@ -483,7 +502,13 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         ..ProposalDecision::default()
     };
     let decided = manager
-        .decide_routed_approval(&parent.id, elsewhere.number, false, None, duplicate)
+        .decide_routed_approval(
+            &Caller::of_space(parent.id.clone()),
+            elsewhere.number,
+            false,
+            None,
+            duplicate,
+        )
         .await;
     assert!(decided.is_err());
     let kept = manager.approval_request(elsewhere.number).await.unwrap();
@@ -493,7 +518,13 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         ..ProposalDecision::default()
     };
     let denied = manager
-        .decide_routed_approval(&parent.id, elsewhere.number, false, None, reason)
+        .decide_routed_approval(
+            &Caller::of_space(parent.id.clone()),
+            elsewhere.number,
+            false,
+            None,
+            reason,
+        )
         .await
         .unwrap();
     assert_eq!(denied.status, DecisionStatus::Denied);
