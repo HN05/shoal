@@ -437,7 +437,8 @@ space elsewhere, as `--json` does in `machine`. The command asks the daemon to
 restart the agent of each selected space, which has at most one, and the
 daemon restarts them together; `--sequential` has it restart them in one line
 per machine with its other sequential restarts, one at a time, each once the
-previous one runs again and at least 10 seconds after it started. With
+previous one runs again and at least 10 seconds after it started, and the
+command reports each as pending once it joins the line. With
 `--wait`, the daemon keeps each restart until that agent's turn ends, where a
 permission prompt or an agent without turn reports counts as working, through
 daemon restarts, and the command returns at once, reporting the agent as

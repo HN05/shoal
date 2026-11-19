@@ -162,6 +162,9 @@ fn waiting(waits: &RestartWait, number: SpaceNumber) -> String {
         RestartWait::Turn => {
             format!("restarts once its turn ends; shoal restart --cancel {number} cancels it")
         }
+        RestartWait::Line => format!(
+            "restarts in turn with the other sequential restarts; shoal restart --cancel {number} cancels it"
+        ),
         RestartWait::Processes { issue } => format!(
             "restarts once its remaining processes exit: {issue}; shoal stop {number} cancels the restart"
         ),

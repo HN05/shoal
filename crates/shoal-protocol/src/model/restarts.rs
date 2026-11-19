@@ -50,6 +50,9 @@ pub enum RestartOutcome {
 pub enum RestartWait {
     /// The agent's turn to end.
     Turn,
+    /// Its turn among the sequential restarts the daemon holds, which it
+    /// carries out one at a time.
+    Line,
     /// The stopped agent's remaining processes to exit, which `issue` keeps
     /// from being proven, until the user ends them.
     Processes { issue: String },

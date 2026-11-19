@@ -239,13 +239,20 @@ async fn a_restart_the_line_took_waits_for_the_turn_a_newer_request_waits_for() 
     (manager.set_agent_state(&space, AgentState::Idle, None, None))
         .await
         .unwrap();
-    let in_line = tokio::spawn({
-        let (manager, space) = (manager.clone(), space.clone());
-        async move { manager.restart_space(None, &space, sequential).await }
-    });
-    while recorded(&manager).await.is_empty() {
-        tokio::task::yield_now().await;
-    }
+    let in_line = (manager.restart_space(None, &space, sequential))
+        .await
+        .unwrap();
+    // It answers once in the line, which keeps it.
+    assert!(
+        matches!(
+            in_line,
+            RestartOutcome::Waits {
+                waits: RestartWait::Line,
+                ..
+            }
+        ),
+        "{in_line:?}"
+    );
     (manager.set_agent_state(&space, AgentState::Working, None, None))
         .await
         .unwrap();
@@ -256,17 +263,6 @@ async fn a_restart_the_line_took_waits_for_the_turn_a_newer_request_waits_for() 
     assert!(!manager.act_on_restart(&workspace.id).await);
     assert!(!*execution.stop.borrow());
     assert!(recorded(&manager).await[0].restart.wait);
-    let waits = in_line.await.unwrap().unwrap();
-    assert!(
-        matches!(
-            waits,
-            RestartOutcome::Waits {
-                waits: RestartWait::Turn,
-                ..
-            }
-        ),
-        "{waits:?}"
-    );
 }
 
 #[tokio::test]
@@ -379,7 +375,7 @@ async fn a_deferred_restart_that_fails_reaches_the_coordinator_that_asked() {
 }
 
 #[tokio::test]
-async fn a_sequential_restart_answers_once_the_line_restarted_its_agent() {
+async fn a_sequential_restart_answers_once_in_the_line_which_restarts_its_agent() {
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
     let execution = manager
@@ -394,20 +390,25 @@ async fn a_sequential_restart_answers_once_the_line_restarted_its_agent() {
         in_place: true,
         ..Default::default()
     };
-    let restarting = tokio::spawn({
-        let (manager, space) = (manager.clone(), SpaceSelector::id(&workspace.id));
-        async move { manager.restart_space(None, &space, restart).await }
-    });
+    let space = SpaceSelector::id(&workspace.id);
+    let outcome = manager.restart_space(None, &space, restart).await.unwrap();
+    assert!(
+        matches!(
+            outcome,
+            RestartOutcome::Waits {
+                waits: RestartWait::Line,
+                ..
+            }
+        ),
+        "{outcome:?}"
+    );
     let mut stop = execution.stop.clone();
     stop.wait_for(|stopping| *stopping).await.unwrap();
     assert!(manager.resume_agent_execution(&id, None).await.unwrap());
     manager.agent_started(&id).await;
-    let outcome = restarting.await.unwrap().unwrap();
-    assert!(
-        matches!(outcome, RestartOutcome::Restarted { .. }),
-        "{outcome:?}"
-    );
-    assert!(recorded(&manager).await.is_empty());
+    while !recorded(&manager).await.is_empty() {
+        tokio::task::yield_now().await;
+    }
     line.abort();
 }
 
@@ -562,20 +563,23 @@ async fn the_end_of_a_recorded_restart_keeps_an_identical_newer_one() {
 #[tokio::test]
 async fn a_request_whose_restart_went_with_its_space_is_answered() {
     let (root, manager) = manager().await;
-    let (workspace, _execution) = working(root.path(), &manager).await;
+    let (workspace, execution) = working(root.path(), &manager).await;
     let space = SpaceSelector::id(&workspace.id);
-    (manager.set_agent_state(&space, AgentState::Idle, None, None))
-        .await
-        .unwrap();
-    let sequential = AgentRestart {
-        sequential: true,
+    let in_place = AgentRestart {
+        in_place: true,
         ..Default::default()
     };
-    let in_line = tokio::spawn({
-        let (manager, space) = (manager.clone(), space.clone());
-        async move { manager.restart_space(None, &space, sequential).await }
-    });
-    while recorded(&manager).await.is_empty() {
+    let request = || {
+        let (manager, space, restart) = (manager.clone(), space.clone(), in_place.clone());
+        tokio::spawn(async move { manager.restart_space(None, &space, restart).await })
+    };
+    let _first = request();
+    let mut stop = execution.stop.clone();
+    stop.wait_for(|stopping| *stopping).await.unwrap();
+    assert!(manager.settle_restart(&execution.plan.id).await);
+    // It waits for the agent the first starts.
+    let second = request();
+    while !recorded(&manager).await.iter().any(|kept| !kept.begun) {
         tokio::task::yield_now().await;
     }
     // As the removal of the space deletes its record.
@@ -584,7 +588,7 @@ async fn a_request_whose_restart_went_with_its_space_is_answered() {
         .await
         .unwrap();
     manager.restart_finished_turns().await.unwrap();
-    let outcome = in_line.await.unwrap().unwrap();
+    let outcome = second.await.unwrap().unwrap();
     assert!(
         matches!(outcome, RestartOutcome::Skipped { .. }),
         "{outcome:?}"

@@ -114,7 +114,8 @@ impl Manager {
     /// Decide, holding the decisions, what becomes of `restart` of the agent
     /// of `space`, which `asked_by` asks for and which supersedes the
     /// restart recorded for it: skip it, record it until the agent's turn
-    /// ends, record it in the line, begin it now or with the restart under
+    /// ends, record it in the line, either answering at once, since a long
+    /// wait is the daemon's to keep, begin it now or with the restart under
     /// way, or record it until the agent that restart started runs.
     async fn decide_restart(
         &self,
@@ -141,11 +142,11 @@ impl Manager {
         if !self.restarting(&execution).await {
             if recorded.restart.wait && !self.agent_turn_ended(&space.id).await? {
                 self.record_restart(&recorded).await?;
-                return Ok(answered(waiting, waits_for_turn(agent)));
+                return Ok(answered(waiting, waits(agent, RestartWait::Turn)));
             }
             if recorded.restart.sequential {
                 self.line_up(recorded).await?;
-                return Ok(wait_for_recorded(&mut waiters, &space.id, waiting));
+                return Ok(answered(waiting, waits(agent, RestartWait::Line)));
             }
         }
         match self.restart_now(&execution, &recorded).await? {
@@ -159,7 +160,7 @@ impl Manager {
             (Requested::Settled, _) => {
                 self.record_restart(&recorded).await?;
                 Ok(match recorded.restart.wait {
-                    true => answered(waiting, waits_for_turn(agent)),
+                    true => answered(waiting, waits(agent, RestartWait::Turn)),
                     false => wait_for_recorded(&mut waiters, &space.id, waiting),
                 })
             }
@@ -311,8 +312,8 @@ fn superseding(earlier: Option<Recorded>, restart: AgentRestart) -> AgentRestart
     AgentRestart { change, ..restart }
 }
 
-fn waits_for_turn(agent: Agent) -> RestartOutcome {
-    let waits = RestartWait::Turn;
+/// That the restart of `agent` waits for what `waits` names.
+fn waits(agent: Agent, waits: RestartWait) -> RestartOutcome {
     RestartOutcome::Waits { agent, waits }
 }
 
