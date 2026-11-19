@@ -15,17 +15,22 @@ pub async fn add_worktree(
     branch: Option<&BranchName>,
     rev: &str,
 ) -> Result<()> {
-    let mut command = super::isolated_command_without_submodules(repo);
-    command.args(["worktree", "add", "--no-checkout"]);
-    match branch {
-        Some(branch) => command.args(["-b", branch.as_str()]),
-        None => command.arg("--detach"),
-    };
-    command.arg("--").arg(path).arg(rev);
-    super::output(command)
-        .await
-        .with_context(|| format!("create a worktree at {rev} in {}", path.display()))
-        .map(drop)
+    let context = || format!("create a worktree at {rev} in {}", path.display());
+    if let Some(branch) = branch {
+        (super::branch::create(repo, branch, rev).await).with_context(context)?;
+    }
+    super::worktree_add::run(|| {
+        let mut command = super::isolated_command_without_submodules(repo);
+        command.args(["worktree", "add", "--no-checkout"]);
+        match branch {
+            Some(branch) => command.arg("--").arg(path).arg(branch.as_str()),
+            None => command.args(["--detach", "--"]).arg(path).arg(rev),
+        };
+        command
+    })
+    .await
+    .with_context(context)
+    .map(drop)
 }
 
 /// Give the worktree at `copy`, which [`add_worktree`] created at `head`,

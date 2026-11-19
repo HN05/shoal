@@ -37,6 +37,7 @@ pub mod status;
 pub mod unmerge;
 mod version;
 pub mod worktree;
+mod worktree_add;
 
 use crate::tools::Tool;
 use std::{

@@ -10,7 +10,7 @@ use shoal_refs::CommitId;
 
 use crate::{
     fsutil::{self, off_runtime},
-    git::{self, run_isolated as git_run},
+    git,
 };
 
 /// The scratch worktree of one command.
@@ -50,21 +50,16 @@ impl Scratch {
             .with_context(|| format!("create {}", directory.display()))?;
         self.ensure_own(&directory).await?;
         let worktree = directory.join("replay");
-        let path = worktree.to_string_lossy();
         // `--force` replaces the registration of a scratch worktree whose
         // directory is gone, and no other worktree's.
-        git_run(
-            repo,
-            &[
-                "worktree",
-                "add",
-                "--quiet",
-                "--detach",
-                "--force",
-                &path,
-                commit.as_str(),
-            ],
-        )
+        git::worktree_add::run(|| {
+            let mut command = git::isolated_command(repo);
+            command
+                .args(["worktree", "add", "--quiet", "--detach", "--force"])
+                .arg(&worktree)
+                .arg(commit.as_str());
+            command
+        })
         .await
         .with_context(|| format!("create the worktree shoal {} runs in", self.command))?;
         Ok(worktree)

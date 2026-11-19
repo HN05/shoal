@@ -17,13 +17,16 @@ pub async fn branch_commit(repo: &Path, branch: &BranchName) -> Result<CommitId>
 }
 
 pub async fn add_worktree(repo: &Path, path: &Path, commit: &str, reason: &str) -> Result<()> {
-    let path = path.to_string_lossy();
-    run_without_submodules(
-        repo,
-        &[
-            "worktree", "add", "--detach", "--lock", "--reason", reason, "--", &path, commit,
-        ],
-    )
+    super::worktree_add::run(|| {
+        let mut command = super::isolated_command_without_submodules(repo);
+        command
+            .args([
+                "worktree", "add", "--detach", "--lock", "--reason", reason, "--",
+            ])
+            .arg(path)
+            .arg(commit);
+        command
+    })
     .await
     .map(drop)
 }

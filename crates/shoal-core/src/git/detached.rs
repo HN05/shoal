@@ -33,17 +33,19 @@ pub async fn move_to(worktree: &Path, rev: &str) -> Result<()> {
 }
 
 async fn worktree_add(repo: &Path, path: &Path, rev: &str, options: &[&str]) -> Result<()> {
-    let mut command = super::isolated_command_without_submodules(repo);
-    command
-        .args(["worktree", "add", "--detach"])
-        .args(options)
-        .arg("--")
-        .arg(path)
-        .arg(rev);
-    super::output(command)
-        .await
-        .with_context(|| format!("check out {rev} at {}", path.display()))
-        .map(drop)
+    super::worktree_add::run(|| {
+        let mut command = super::isolated_command_without_submodules(repo);
+        command
+            .args(["worktree", "add", "--detach"])
+            .args(options)
+            .arg("--")
+            .arg(path)
+            .arg(rev);
+        command
+    })
+    .await
+    .with_context(|| format!("check out {rev} at {}", path.display()))
+    .map(drop)
 }
 
 /// Remove the detached checkout at `path`, whatever it holds, and forget it

@@ -19,19 +19,21 @@ pub mod left;
 /// revision `base` when given, otherwise the existing branch, which Git
 /// refuses when another worktree has it checked out.
 pub async fn add(repo: &Path, path: &Path, branch: &BranchName, base: Option<&str>) -> Result<()> {
-    let mut command = super::isolated_command_without_submodules(repo);
-    command.args(["worktree", "add"]);
-    match base {
-        Some(base) => command
-            .args(["-b", branch.as_str(), "--"])
+    let context = || format!("create a worktree on {branch} at {}", path.display());
+    if let Some(base) = base {
+        (super::branch::create(repo, branch, base).await).with_context(context)?;
+    }
+    super::worktree_add::run(|| {
+        let mut command = super::isolated_command_without_submodules(repo);
+        command
+            .args(["worktree", "add", "--"])
             .arg(path)
-            .arg(base),
-        None => command.arg("--").arg(path).arg(branch.as_str()),
-    };
-    super::output(command)
-        .await
-        .with_context(|| format!("create a worktree on {branch} at {}", path.display()))
-        .map(drop)
+            .arg(branch.as_str());
+        command
+    })
+    .await
+    .with_context(context)
+    .map(drop)
 }
 
 /// Whether removal may delete files Git would keep the worktree for.
