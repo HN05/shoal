@@ -9,6 +9,7 @@ pub mod copy;
 pub mod default_branch;
 pub mod detached;
 pub mod diff;
+pub mod display;
 pub mod existing_branch;
 pub mod fetch;
 pub mod files;

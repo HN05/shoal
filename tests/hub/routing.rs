@@ -1,6 +1,8 @@
 //! Requests for a space another joined machine owns, which the caller's
 //! daemon forwards there through the hub, and the events a space passes up
 //! to a coordinator on another machine.
+use std::path::PathBuf;
+
 use serde_json::{Value, json};
 
 use super::{
@@ -9,7 +11,7 @@ use super::{
     support::{
         daemon_client,
         fixture::{Base, home},
-        printed, shoal_binary,
+        git, printed, pty, shoal_binary,
         wait::{try_wait_for, wait_for},
     },
 };
@@ -147,6 +149,70 @@ fn a_command_that_needs_the_space_s_files_names_its_machine() {
     assert!(!output.status.success(), "{}", printed(&output));
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(error.contains("laptop"), "{error}");
+}
+
+#[test]
+fn the_diff_of_a_space_on_another_machine_takes_the_caller_s_colours() {
+    let (hub, laptop, there) = laptop_space();
+    let status = laptop.ok(&["status", &there]);
+    let path = PathBuf::from(status["workspace"]["path"].as_str().unwrap());
+    // Longer than a frame of the stream carries.
+    let lines: String = (0..4000)
+        .map(|line| format!("from the laptop {line}\n"))
+        .collect();
+    std::fs::write(path.join("added.txt"), &lines).unwrap();
+    git(&path, &["add", "added.txt"]);
+    let plain = hub.run(&["diff", &there]);
+    assert!(plain.status.success(), "{}", printed(&plain));
+    let text = String::from_utf8_lossy(&plain.stdout);
+    let added = text
+        .lines()
+        .filter(|line| line.starts_with("+from the laptop "));
+    assert_eq!(added.count(), 4000, "{}", printed(&plain));
+    assert!(!text.contains('\x1b'), "{text}");
+    let mut coloured = hub.command();
+    coloured
+        .env("GIT_CONFIG_COUNT", "1")
+        .env("GIT_CONFIG_KEY_0", "color.diff")
+        .env("GIT_CONFIG_VALUE_0", "always")
+        .args(["diff", &there]);
+    let coloured = hub.output(&mut coloured);
+    assert!(coloured.status.success(), "{}", printed(&coloured));
+    let text = String::from_utf8_lossy(&coloured.stdout);
+    assert!(text.contains("\x1b["), "{text}");
+}
+
+#[test]
+fn the_diff_of_a_space_on_another_machine_goes_to_the_caller_s_pager_on_a_terminal() {
+    let (hub, laptop, there) = laptop_space();
+    let status = laptop.ok(&["status", &there]);
+    let path = PathBuf::from(status["workspace"]["path"].as_str().unwrap());
+    std::fs::write(path.join("added.txt"), "from the laptop\n").unwrap();
+    git(&path, &["add", "added.txt"]);
+    let paged = hub.root.path().join("paged");
+    let pager = format!(
+        "printf '%s\\n' \"$LESS\" > {0}; cat >> {0}",
+        paged.display()
+    );
+    let (_master, slave) = pty::open();
+    // On a terminal of its own, which `Base::output` would replace.
+    // The diff's own pager, which `pager.diff` names.
+    let mut diff = (hub.command())
+        .env_remove("GIT_PAGER")
+        .env("GIT_CONFIG_COUNT", "1")
+        .env("GIT_CONFIG_KEY_0", "pager.diff")
+        .env("GIT_CONFIG_VALUE_0", &pager)
+        .env_remove("LESS")
+        .stdin(std::process::Stdio::null())
+        .stdout(slave)
+        .args(["diff", &there])
+        .spawn()
+        .unwrap();
+    let status = wait_for("the diff to end", || diff.try_wait().unwrap());
+    assert!(status.success(), "{status}");
+    let paged = std::fs::read_to_string(&paged).unwrap();
+    assert!(paged.starts_with("FRX\n"), "{paged}");
+    assert!(paged.contains("from the laptop"), "{paged}");
 }
 
 #[test]

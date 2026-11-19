@@ -1,10 +1,13 @@
 //! A workspace's diff and conflicts against its base.
+mod elsewhere;
+
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result};
 
 use crate::{
     cli::{
+        commands::machines,
         context::Context,
         ui::{self, Fallback},
     },
@@ -16,6 +19,11 @@ pub(in crate::cli::commands) async fn diff(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
+    if let Some(selector) = &workspace
+        && let Some((remote, _)) = machines::space_elsewhere(ctx, selector).await?
+    {
+        return elsewhere::diff(ctx, SpaceSelector::id(&remote.space.id)).await;
+    }
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let base = crate::client::workspaces::diff_base(&ctx.paths, workspace.clone()).await?;
     let command = git::diff_command(base.commit.as_str());

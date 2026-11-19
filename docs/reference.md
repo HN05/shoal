@@ -916,12 +916,12 @@ below its own on every machine and is refused the rest, and a device's go as
 yours. An action a space's permission sets to `propose` is refused from another
 machine, since its approval request would belong to that space's machine. This covers `status`, `log`, `questions`, `approvals`, `messages send`,
 `stop`, `resume`, `rename`, `done`, `rm`, `priority`,
-`progress`, `sleep`, `conflicts`, holds, the issue, PR and CI commands that
-act on a space, and following an agent's session, whose bytes come back as its machine
+`progress`, `sleep`, `conflicts`, `diff`, holds, the issue, PR and CI
+commands that act on a space, and following an agent's session, whose bytes come back as its machine
 reads them. The link to the hub carries such answers as byte streams beside
 its other traffic, each held to what its reader has taken, so a reader that
 falls behind holds up nothing else. `restart` acts on the agents of its own machine. Commands that need the
-space's files or processes, such as `diff`, `setup`, leases, demos,
+space's files or processes, such as `setup`, leases, demos,
 `stop --interrupt`, `--leftovers` and `--processes`, `files` and an agent's
 hooks, run only
 on its machine and are refused elsewhere, naming it, as is a command that
@@ -3850,6 +3850,15 @@ Fixed-commit bases use that commit; older workspaces without base metadata use
 follow Git. A missing or unrelated base is an error. A chat's agent runs it as a
 plain process in the worktree rather than a tracked execution of the
 workspace, which its scope may read but not run in.
+
+`shoal diff` of a workspace on another machine of the hub, by its number or
+ID, runs `git diff` there as a plain read, under that machine's Git config for
+the repository, such as `diff.algorithm`, `diff.external` and textconv, and
+exits with Git's exit code. This machine's Git decides how it shows: on a
+terminal, colour as `color.diff` says and the pager Git starts for `git diff`,
+as `pager.diff` and `GIT_PAGER` choose it, with Git's `LESS` and `LV` defaults; otherwise the bytes unchanged. An external
+diff tool that checks for a terminal itself sees a pipe, as under
+`git diff | less`.
 
 ### Conflicts
 
