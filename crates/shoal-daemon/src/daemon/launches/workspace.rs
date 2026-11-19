@@ -46,7 +46,7 @@ impl Manager {
             return Ok(Placed::Worker(on_branch(launch, workspace, &creation)?));
         }
         let mut blockers = (self.named_blockers(&target.repo.id, &launch.blockers, caller)).await?;
-        let agent = self.planned_agent(launch, &target, &creation).await?;
+        let agent = self.planned_agent(launch, &target).await?;
         let issue = match &target.issue {
             Some(issue) => {
                 let read = self.launch_issue(issue, (&target.repo.id, false), caller);

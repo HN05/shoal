@@ -107,14 +107,12 @@ impl Manager {
     }
 
     /// The HEAD a completion of `space` records, of where its agent works:
-    /// a workspace's verified worktree on its own branch, or the worktree
-    /// or checkout a chat runs in. A chat without a repository records an
-    /// empty one, since its `root_dir` is no repository. Only a workspace
-    /// is `integrated`: that records that another branch has its commits.
+    /// a workspace's verified worktree, or the worktree or checkout a chat
+    /// runs in. A chat without a repository records an empty one, since its
+    /// `root_dir` is no repository. Only a workspace is `integrated`: that
+    /// records that another branch has its commits.
     async fn completion_head(&self, space: &Space, integrated: bool) -> Result<CommitId> {
         if let Some(workspace) = space.to_workspace() {
-            // A workspace at a commit holds no assignment of its own.
-            workspace.require_branch("shoal done")?;
             self.verify_worktree(&workspace).await?;
             return current_head(&workspace).await;
         }

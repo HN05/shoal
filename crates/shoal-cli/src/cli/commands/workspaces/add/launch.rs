@@ -192,18 +192,16 @@ fn starting_agent(launch: &Launch, settings: &Effective) -> Option<crate::agent:
 
 /// Pick on a terminal what the `resolved` start `launch` leaves to a
 /// picker: what it starts from and its agent. A start that begins as a chat
-/// picks its agent there, and a fork PR's head holds none.
+/// picks its agent there.
 async fn pick_missing(ctx: &Context, launch: &mut Launch, resolved: &Resolved<'_>) -> Result<()> {
-    let mut fork_head = resolved.fork_head;
     let mut picked_issue = false;
     if names_nothing(launch) {
         let mut creation = Creation::default();
         let picked = pick_add_source(ctx, &resolved.target, &mut creation).await?;
-        fork_head |= creation.pull_head.is_some();
         picked_issue = picked.is_some();
         picked_source(launch, creation, picked);
     }
-    if begins_as_chat(launch) || fork_head {
+    if begins_as_chat(launch) {
         return Ok(());
     }
     let settings = &resolved.settings;

@@ -2367,7 +2367,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
             .to_owned()
     };
     let fixture = Fixture::with_config(Some(
-        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', 'exit 1', '{prompt}', '{schema}']\n[commands]\nreview = ['printf', '%s\\n', '{diff_base}']\n",
+        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', 'exit 1', '{prompt}', '{schema}']\n[agents.worker]\ncommand = ['sh', '-c', 'git rev-parse HEAD > \"$HOME/agent-head\"', 'worker']\n[commands]\nreview = ['printf', '%s\\n', '{diff_base}']\n",
     ));
     let author = forge_origin(&fixture);
     let remote = fixture.root.path().join("origin.git");
@@ -2406,43 +2406,6 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     };
     let first = push_fork_head("first");
     script(&first);
-    // An app's request for the head with an agent that can run is refused
-    // before anything is created, since the head holds no agent of its own.
-    let before = fixture.ok(&["list"]);
-    let start = shoal_protocol::protocol::OperationMethod::StartWorkspace {
-        repository: fixture.repo.to_str().unwrap().into(),
-        start: shoal_protocol::protocol::operations::WorkspaceStart::PullHead {
-            url: url.parse().unwrap(),
-            head: shoal_protocol::protocol::PullHead {
-                number: shoal_client::forge::numbers::PullNumber::new(8),
-                reference: "refs/pull/8/head".into(),
-                commit: first.clone().into(),
-                base: None,
-            },
-        },
-        base: None,
-        path: None,
-        git_profile: None,
-        parent: None,
-        options: Default::default(),
-        issue: None,
-        pr: Some(url.parse().unwrap()),
-        agent: Some(Box::new(
-            shoal_protocol::protocol::operations::LaunchRequest::new(Some("reviewer".into())),
-        )),
-        waiting: None,
-        blockers: Vec::new(),
-        env: None,
-        queue_entry: None,
-    };
-    let refused =
-        tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(shoal_client::connection::request::<
-                shoal_protocol::protocol::operations::StartedWorkspace,
-            >(&fixture.connector(), start));
-    assert!(refused.is_err(), "expected a refusal: {refused:?}");
-    assert_eq!(fixture.ok(&["list"]), before);
     let output = run(&["review", "run", "--pr", "8", "--agent", "reviewer"]);
     assert!(output.status.success(), "{}", printed(&output));
     let ended = fixture.ok(&["watch", "review", "1"]);
@@ -2461,13 +2424,24 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     let pr = serde_json::json!({"kind": "pr", "url": url, "title": "PR 8"});
     assert_eq!(workspace["links"]["prs"], serde_json::json!([pr]));
 
-    // Adding the PR reuses its workspace; it holds no agent.
+    // Adding the PR reuses its workspace, where an agent of its own starts
+    // at the PR's head.
     let output = run(&["--json", "start", "--wait", url]);
     assert!(output.status.success(), "{}", printed(&output));
     let added: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(added["id"], workspace["id"]);
-    let output = run(&["start", "--wait", url, "--agent", "reviewer"]);
-    assert!(!output.status.success());
+    let output = fixture
+        .command()
+        .args(["start", url, "--agent", "worker", "--here"])
+        .current_dir(&fixture.repo)
+        .env("PATH", &path)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", printed(&output));
+    let agent_head = fs::read_to_string(fixture.root.path().join("agent-head")).unwrap();
+    assert_eq!(agent_head.trim(), first);
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
     // On a terminal too, the PR settles what the addition opens.
     let (output, transcript) = fixture.interactive_command(
         fixture

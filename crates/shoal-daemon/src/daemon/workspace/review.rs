@@ -143,7 +143,6 @@ impl Manager {
             return Ok(None);
         };
         let workspace = &workspace;
-        workspace.require_branch("shoal ready")?;
         self.verify_worktree(workspace).await?;
         let head = current_head(workspace).await?;
         self.require_review(workspace, Gate::Ready, &head, caller)

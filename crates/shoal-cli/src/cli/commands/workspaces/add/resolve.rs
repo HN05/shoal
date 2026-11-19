@@ -23,13 +23,11 @@ use shoal_protocol::launches::{IssueChoice, Launch, StartTarget};
 
 /// What a start that runs in this caller settled: where it starts, the
 /// settings of the repository, or of the workspace whose branch it names,
-/// whether that workspace's own issue prompts its agent, and whether it
-/// opens a fork PR's head, which holds no agent.
+/// and whether that workspace's own issue prompts its agent.
 pub(super) struct Resolved<'a> {
     pub target: AddTarget,
     pub settings: AddSettings<'a>,
     pub issue_linked: bool,
-    pub fork_head: bool,
 }
 
 /// Settle `launch` as [`Resolved`] says, naming its repository by ID,
@@ -55,7 +53,6 @@ pub(super) async fn resolve<'a>(ctx: &'a Context, launch: &mut Launch) -> Result
         target,
         settings,
         issue_linked,
-        fork_head: pull.is_some_and(|pull| pull.fork),
     })
 }
 
@@ -120,8 +117,7 @@ async fn read_start_issue(
 }
 
 /// Read the PR `launch` starts on in `target`'s repository, so that one
-/// that cannot be read ends the start before a picker asks, refusing a
-/// named agent for a fork PR's head, which holds none.
+/// that cannot be read ends the start before a picker asks.
 async fn read_start_pull(
     ctx: &Context,
     target: &AddTarget,
@@ -131,12 +127,7 @@ async fn read_start_pull(
         return Ok(None);
     };
     let context = issues::read_context(ctx, target.repository(ctx).await?).await?;
-    let pull = client::pull_request(&ctx.paths, context, pull.clone().into()).await?;
-    anyhow::ensure!(
-        !pull.fork || launch.agent.is_none(),
-        "the PR comes from a fork, so its head opens in a workspace at a commit, which holds no agent of its own"
-    );
-    Ok(Some(pull))
+    (client::pull_request(&ctx.paths, context, pull.clone().into()).await).map(Some)
 }
 
 /// The issue `launch` starts on, by `--issue` or the positional argument.

@@ -118,8 +118,8 @@ shoal split --copy                    # A copy of this workspace's files
 one `--space` names, with its own worktree, branch and setup, without an
 agent, and returns its `path`. Shoal commands run in the
 child's directory act on the child. The child's issue and PR activity reaches
-the parent's agent, each update naming the child. `--no-branch` has no branch,
-PR or agent of its own. `--copy` gives the child the committed, uncommitted,
+the parent's agent, each update naming the child. `--no-branch` has no branch
+or PR of its own; an agent `shoal start --in` starts there cannot push. `--copy` gives the child the committed, uncommitted,
 untracked and ignored files, and `--checkpoint <number>` one of the
 checkpoints' files instead; an untouched copy goes with cleanup. `shoal start
 --copy [--fork] -- "<task>"` starts an agent in such a copy, and

@@ -4,26 +4,13 @@ use anyhow::{Result, ensure};
 use shoal_protocol::launches::Launch;
 
 use super::target::Target;
-use crate::{daemon::workspace::Manager, start_plan::Creation};
+use crate::daemon::workspace::Manager;
 
 impl Manager {
-    /// Whether `launch` starts an agent on `target` with `creation`: the
-    /// one it names, else for a start on a positional issue
-    /// `agent.default`, else none, as no terminal picks one; never one for
-    /// a PR from a fork, whose head opens in a workspace at a commit.
-    pub(super) async fn planned_agent(
-        &self,
-        launch: &Launch,
-        target: &Target,
-        creation: &Creation,
-    ) -> Result<bool> {
-        if creation.pull_head.is_some() {
-            ensure!(
-                launch.agent.is_none(),
-                "the PR comes from a fork, so its head opens in a workspace at a commit, which holds no agent of its own"
-            );
-            return Ok(false);
-        }
+    /// Whether `launch` starts an agent on `target`: the one it names, else
+    /// for a start on a positional issue `agent.default`, else none, as no
+    /// terminal picks one.
+    pub(super) async fn planned_agent(&self, launch: &Launch, target: &Target) -> Result<bool> {
         if launch.agent.is_some() {
             return Ok(true);
         }

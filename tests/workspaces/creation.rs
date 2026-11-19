@@ -2589,8 +2589,6 @@ fn branch_only_commands_refuse_a_workspace_at_a_commit() {
     };
     for args in [
         &["pr", "open"][..],
-        &["ready"],
-        &["done"],
         &["merge"],
         &["branch", "rename", "renamed"],
     ] {
@@ -2599,8 +2597,51 @@ fn branch_only_commands_refuse_a_workspace_at_a_commit() {
         assert!(!output.status.success(), "{args:?}");
         assert!(stderr.contains("is at a commit"), "{args:?}: {stderr}");
     }
-    // What needs no branch works there.
-    let output = run(&["run", "--", "git", "rev-parse", "HEAD"]);
-    assert!(output.status.success(), "{}", printed(&output));
+    // What needs no branch works there, its agent's ready mark and
+    // completion included.
+    let head = git(&path, &["rev-parse", "HEAD"]).trim().to_owned();
+    for args in [
+        &["run", "--", "git", "rev-parse", "HEAD"][..],
+        &["ready"],
+        &["done"],
+    ] {
+        let output = run(args);
+        assert!(output.status.success(), "{args:?}: {}", printed(&output));
+    }
     assert!(fixture.run(&["diff", &fixture.id(&name)]).status.success());
+    let status = fixture.ok(&["status", &fixture.id(&name)]);
+    assert_eq!(status["completion"]["head"], head, "{status}");
+}
+
+#[test]
+fn a_workspace_at_a_commit_runs_its_own_agent_whose_commits_keep_it() {
+    let fixture = Fixture::with_config(Some(
+        "[agents.worker]\ncommand = ['sh', '-c', 'echo agent > agent && git add agent && git -c user.name=A -c user.email=a@example.com commit -qm agent && git rev-parse HEAD > \"$HOME/agent-head\"', 'worker']\n",
+    ));
+    let created = fixture
+        .command()
+        .current_dir(&fixture.repo)
+        .args(["--json", "split", "--no-branch"])
+        .output()
+        .unwrap();
+    assert!(created.status.success(), "{}", printed(&created));
+    let created: Value = serde_json::from_slice(&created.stdout).unwrap();
+    let id = created["id"].as_str().unwrap();
+    let output = fixture
+        .command()
+        .args(["start", "--in", id, "--here", "--agent", "worker"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", printed(&output));
+    // The agent committed on top of the starting commit, in its worktree.
+    let path = Path::new(created["path"].as_str().unwrap());
+    let agent_head = fs::read_to_string(fixture.root.path().join("agent-head")).unwrap();
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), agent_head);
+    assert_ne!(agent_head.trim(), created["at"]["commit"]);
+    // Its commit is unsaved work, which keeps the workspace from cleanup.
+    let preview = fixture.ok(&["cleanup", "--dry-run"]);
+    assert_eq!(preview["removed"], serde_json::json!([]), "{preview}");
+    let kept = &preview["kept"][0];
+    assert_eq!(kept["reason"]["reason"], "unpushed", "{preview}");
 }

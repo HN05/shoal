@@ -100,10 +100,6 @@ impl Manager {
     ) -> Result<Effective> {
         match (home, repository) {
             (Home::Opening(_, opening), _) => {
-                ensure!(
-                    !matches!(opening.start, WorkspaceStart::PullHead { .. }),
-                    "a PR's head opens in a workspace at a commit, which holds no agent of its own"
-                );
                 if let WorkspaceStart::Workspace(workspace) = &opening.start {
                     let workspace = self.workspace(workspace).await?;
                     return self.workspace_settings_with_templates(&workspace).await;

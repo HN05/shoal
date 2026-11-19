@@ -90,9 +90,6 @@ pub(super) async fn register(
         return Err(Box::new(Body::error(exiting.code(), &exiting)));
     }
     let tracks_agent = kind == ExecutionKind::Command && agent.is_some();
-    if let (true, Some(workspace)) = (tracks_agent, target.to_workspace()) {
-        Manager::ensure_holds_agents(&workspace).map_err(refused)?;
-    }
     let giver = caller.as_ref().map(|caller| &caller.space_id);
     if let Some(agent) = &agent {
         (manager.ensure_agent_held(giver, &space, &agent.mode, &agent.narrowing))

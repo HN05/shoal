@@ -1031,12 +1031,12 @@ depth, and adopts the copy on an available branch derived from the source branch
 A workspace may sit at a commit instead of on a branch: a worktree at a detached
 HEAD with no branch of its own, created from a commit, tag, branch or PR head, a
 fork's included, so comparing with another commit, researching older code or
-reviewing a fork's PR never disturbs another worktree. It holds no agent of its
-own, so no session, ready marks, completion or the hooks that follow them: whoever
-created it owns it and runs things in it, a CI job, a reviewer, the parent's agent
-or the user's shell, `shoal run` and `shoal demo`, and an agent that should work at
-a commit gets a branch workspace from it instead. Everything else goes through the
-workspace paths: the seed clone, executions, leases, scope tokens, children, holds,
+reviewing a fork's PR never disturbs another worktree. It takes an agent of its
+own as a branch workspace does, through the same launch, queue, ready, completion
+and cleanup paths; that agent's opening says the workspace has no branch, so it
+cannot push or open a PR from there. Without an agent, whoever created it runs
+things in it: a CI job, a reviewer, the parent's agent or the user's shell, with
+`shoal run` and `shoal demo`. Everything else goes through the workspace paths: the seed clone, executions, leases, scope tokens, children, holds,
 checkpoints and removal. `split --no-branch` creates one, below the caller's
 space or as the user's top-level one, and a fork PR's head opens in one, placed
 the same way, that is reused per PR and moved to its new head while it has nothing of its own. Its
@@ -2402,8 +2402,8 @@ PR links open their head against the refreshed remote base and link the PR once
 the workspace is ready, as issue links associate their issue; branch links open
 an origin branch. Both use existing-branch ownership checks and retain an owned
 workspace's diff base. A fork PR has no origin branch, so its head opens in the
-PR's workspace at a commit instead, with the PR's base as its diff base, and
-`--agent`, `--path`, `--git-profile` and `--base` are refused. Interactive `start`
+PR's workspace at a commit instead, with the PR's base as its diff base, where
+`--agent` starts its agent, and `--path`, `--git-profile` and `--base` are refused. Interactive `start`
 without a branch, base or issue also offers the repository's open issues and PRs,
 which open as their links do.
 Interactive `start` uses an agent picker when no agent is named; non-interactive

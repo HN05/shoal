@@ -929,8 +929,9 @@ below the space running `shoal start` or else top-level, named after the PR's ti
 directory `pr-<number>`, fetched from the ref the forge serves it under
 (`refs/pull/<number>/head`, or `refs/merge-requests/<number>/head` on GitLab), with
 setup and its diff, `{diff_base}` included, compared with the PR's
-`origin/<base>`; a forge without such a ref refuses it, as does `--agent`, since no agent
-runs there. The workspace made for or linked to the PR is reused, so there is at
+`origin/<base>`; a forge without such a ref refuses it. `--agent` starts the
+workspace's own agent there, which without a branch cannot push or open a PR.
+The workspace made for or linked to the PR is reused, so there is at
 most one per PR: when the PR's head moved, it moves to the new head, unless it has
 commits or changes of its own, which is refused. A workspace's or chat's agent
 reuses it only when it is below that space. Branch URLs use
@@ -3044,7 +3045,7 @@ agent's session, which stays unchanged, with the arguments after `--` as its
 task.
 
 `--no-branch` creates a workspace at a commit instead: a worktree at a detached
-HEAD with no branch, nothing to push and no agent of its own, for comparing with
+HEAD with no branch and nothing to push, for comparing with
 another commit or reading and running older code without touching the parent's
 worktree. `--base` resolves as for a branch and defaults to the refreshed default
 branch; a tag or commit that does not resolve makes Shoal fetch origin with its
@@ -3058,11 +3059,14 @@ process it is a child of the caller's space, or of `--space` when that names
 one below it; run by the user it is a child of `--space`
 or the current space, and outside one a top-level workspace of the current
 repository that the user owns. It does not take a branch name, `--issue`,
-`--agent` or `--fork`, and no agent runs there: its owner, a CI job, a reviewer
-or the user runs things in it with `shoal run`, `shoal demo` or a shell.
-Commands that need a branch, `pr open`, `merge`, `ready`, `done`, `branch rename`
+`--agent` or `--fork`, as `split` starts no agent: its owner, a CI job, a
+reviewer or the user runs things in it with `shoal run`, `shoal demo` or a
+shell, and `shoal start --in` starts an agent of its own there, whose opening
+says that without a branch it cannot push or open a PR.
+Commands that need a branch, `pr open`, `merge`, `branch rename`
 and CI runs on its branch, refuse it, saying it is at a commit; diffs, demos,
-ports, simulators, checkpoints, reviews and CI and PR views work as anywhere. `status` shows `At:` with its commit and what it was made
+ports, simulators, checkpoints, reviews, ready marks, `done` and CI and PR views
+work as anywhere. `status` shows `At:` with its commit and what it was made
 for where a branch workspace shows `Branch:`; `list --json` and `status --json`
 give `at`, with `commit` and `made_for` (`{"ref": name}` or `{"pr": number}`),
 in place of `branch`. `{branch}` is empty for it in configured commands and agent

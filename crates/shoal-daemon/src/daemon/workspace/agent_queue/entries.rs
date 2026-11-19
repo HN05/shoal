@@ -45,7 +45,7 @@ impl Manager {
             !request.now || request.blockers.is_empty(),
             "a launch that starts now cannot be blocked"
         );
-        let space = self.launch_target(&request.space).await?;
+        let space = self.space(&request.space).await?;
         let repository = space.repository_id.clone();
         let priority = match &repository {
             Some(repository) => self.launch_priority(&request, repository).await?,
@@ -120,17 +120,6 @@ impl Manager {
                 .count(),
             entry: entries.into_iter().find(|entry| entry.id == *id),
         })
-    }
-
-    /// The recorded space `space` names, which a launch starts its agent
-    /// in: a chat, or a workspace on a branch, which the insertion requires
-    /// ready.
-    async fn launch_target(&self, space: &SpaceSelector) -> Result<crate::model::Space> {
-        let space = self.space(space).await?;
-        if let Ok(workspace) = space.clone().into_workspace() {
-            Self::ensure_holds_agents(&workspace)?;
-        }
-        Ok(space)
     }
 
     /// What blocks the space of the restore `entry` of an agent Shoal
