@@ -233,6 +233,14 @@ impl Action {
         }
     }
 
+    /// Have a merge that names no method merge by `configured`; other
+    /// actions stay as they are.
+    pub fn default_merge_method(&mut self, configured: MergeMethod) {
+        if let Self::Merge { method, .. } | Self::AutoMerge { method, .. } = self {
+            method.get_or_insert(configured);
+        }
+    }
+
     /// The files the action attaches.
     pub fn attachments(&self) -> &[Attachment] {
         match self {

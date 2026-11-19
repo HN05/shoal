@@ -258,3 +258,44 @@ fn a_scoped_verdict_is_the_space_s_own_post_and_the_user_s_is_not() {
     assert_eq!(own_posts(&approval, Some(&scoped), posted()), posted());
     assert!(own_posts(&approval, None, posted()).is_empty());
 }
+
+#[tokio::test]
+async fn a_merge_naming_no_method_takes_the_configured_one() {
+    use crate::{
+        daemon::test_support::{commit, configure, manager, repository},
+        forge::items::action::MergeMethod,
+    };
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    std::fs::write(path.join(".shoal.toml"), "[merge]\nmethod = \"rebase\"\n").unwrap();
+    commit(&path, ".shoal.toml");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    configure(&manager, "[merge]\nmethod = \"squash\"\n").await;
+    let merge = |method| Action::Merge {
+        method,
+        delete_branch: false,
+        head: None,
+    };
+    let method = async |place: Option<&Place>, action| match manager
+        .configured_merge(place, action)
+        .await
+        .unwrap()
+    {
+        Action::Merge { method, .. } => method,
+        other => panic!("not a merge: {other:?}"),
+    };
+    let checkout = Place::Checkout(repo);
+    assert_eq!(
+        method(Some(&checkout), merge(None)).await,
+        Some(MergeMethod::Rebase)
+    );
+    // Another repository than the request's own takes the global config's.
+    assert_eq!(method(None, merge(None)).await, Some(MergeMethod::Squash));
+    assert_eq!(
+        method(Some(&checkout), merge(Some(MergeMethod::Merge))).await,
+        Some(MergeMethod::Merge)
+    );
+}

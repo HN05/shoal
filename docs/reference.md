@@ -4819,8 +4819,10 @@ rebasing onto it; workspace processes may update, and then pull the branch
 before pushing again. GitHub refuses the update when the head moved since Shoal
 read it, GitLab only rebases and does so after answering, and Bitbucket cannot
 update a branch.
-`shoal merge` merges a PR with `-X`/`--method merge|rebase|squash`, and
-without it by the repository's default: Forgejo's and Gitea's default merge
+`shoal merge` merges a PR with `-X`/`--method merge|rebase|squash`, without
+it by [`[merge] method`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#merges)
+of the repository it acts in, or of the global config for another repository,
+and without that by the repository's default: Forgejo's and Gitea's default merge
 style, GitLab's merge method and squash setting, Bitbucket's default strategy,
 or on GitHub, which has none, the first of merge, squash and rebase that the
 repository allows. `--delete-branch` deletes the

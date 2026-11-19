@@ -1037,7 +1037,11 @@ See [local reviews](../../../../../../docs/reference.md#local-reviews).
 enabled = true    # false turns local merges off; PRs still merge
 confirm = true    # Ask before a local merge that pushes
 push = false      # Push the default branch after a local merge
+method = "squash" # "merge", "rebase" or "squash"; no default
 ```
+
+`method` sets how both a local merge and a PR merge merge, unless `-X` says;
+without it, a PR merges by the forge's default.
 
 See [merge into the default branch](../../../../../../docs/reference.md#merge-into-the-default-branch).
 

@@ -29,8 +29,8 @@ pub struct MergeArgs {
     pub space: Option<SpaceSelector>,
     #[command(flatten)]
     pub repo: TargetRepo,
-    /// How a PR merges, by the repository's default on the forge when left
-    /// out; a local merge takes only merge.
+    /// How a PR merges, by [merge] method or else the repository's default
+    /// on the forge when left out; a local merge takes only merge.
     #[arg(short = 'X', long, value_enum)]
     pub method: Option<MergeMethod>,
     /// Delete the PR's branch on the forge after merging.

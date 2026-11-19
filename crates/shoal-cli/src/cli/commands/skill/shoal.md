@@ -692,8 +692,8 @@ PR, the watch reports a `merge_conflict` when the check newly fails.
 on the forge, else a workspace's committed branch into the default branch,
 locally; several open PRs, or a chat without one, are refused, and closing the
 PR lets a workspace merge locally. A number, a PR URL or `pr` merges that PR,
-or with `pr` alone the assigned one. A PR merges by `-X`, else by the
-repository's default; `--auto` merges it once its checks pass and
+or with `pr` alone the assigned one. A PR merges by `-X`, else by
+`[merge] method`, else by the repository's default; `--auto` merges it once its checks pass and
 `--cancel-auto` withdraws that. A local merge takes `--push` or `--no-push`
 and only `-X merge`; a flag of the other path is refused. `unmerge` undoes a
 workspace's latest local merge while the default branch is unpushed. A

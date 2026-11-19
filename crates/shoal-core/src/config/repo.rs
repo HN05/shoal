@@ -2,6 +2,7 @@ use crate::agent::Agent;
 use crate::config::hooks::HookCommand;
 use crate::config::{modes, options::Options};
 use crate::sessions::HostName;
+use shoal_forge_types::items::action::MergeMethod;
 use shoal_schedule::priority::Priority;
 use shoal_states::states;
 
@@ -853,8 +854,8 @@ impl PrioritySettings {
 }
 
 /// Whether `shoal merge` merges a branch locally into the default branch,
-/// asks before it pushes, and pushes the default branch to its upstream
-/// afterwards.
+/// by which method it merges, whether it asks before it pushes, and whether
+/// it pushes the default branch to its upstream afterwards.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Merge)]
@@ -868,6 +869,10 @@ pub struct MergeConfig {
     pub confirm: Option<bool>,
     #[option(default = false)]
     pub push: Option<bool>,
+    /// How a local merge and a PR merge merge, unless `--method` says;
+    /// without it, a PR merges by the forge's default and a local merge
+    /// fast-forwards or creates a merge commit.
+    pub method: Option<MergeMethod>,
 }
 
 /// Files that hold a number each change picks for itself, such as a schema
