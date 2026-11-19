@@ -4,7 +4,7 @@
 //! unless forced, and the branch of an active space outside the caller's
 //! scope. A scoped caller deletes as its `push` permission allows, each
 //! branch at the commit it was read at, which an approval binds.
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use shoal_refs::BranchName;
 
 use super::ReadBranches;
@@ -29,6 +29,7 @@ impl Manager {
     ) -> Result<Vec<DeletedBranch>> {
         let read = self.read_branches(target, Access::Change, caller).await?;
         let doomed = self.deletable(&read, names, force, caller).await?;
+        ensure_unmoved(&read, &doomed).await?;
         self.authorize_deletions(&read, &doomed, caller).await?;
         let mut deleted = Vec::new();
         for branch in doomed {
@@ -141,6 +142,17 @@ impl Manager {
             .collect();
         self.authorize_actions(Some(caller), actions).await
     }
+}
+
+/// Refuse every one of `doomed` before any is deleted, or any approval used,
+/// once one of them no longer points to the commit `read` read it at.
+async fn ensure_unmoved(read: &ReadBranches, doomed: &[&ListedBranch]) -> Result<()> {
+    for branch in doomed {
+        let (name, head) = (&branch.branch.name, &branch.branch.head);
+        let unmoved = read.forge.ensure_branch_at(&read.account, name, head).await;
+        unmoved.context("deleted no branch")?;
+    }
+    Ok(())
 }
 
 /// Deleting `branch` of `read` at the commit it points to, as the `push`

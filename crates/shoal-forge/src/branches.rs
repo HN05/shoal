@@ -33,9 +33,9 @@ impl ForgeRepo {
             .collect()
     }
 
-    /// Delete `branch` while it still points to `head`, the commit it was
-    /// read at, so the deletion removes no commit its caller did not see.
-    pub async fn delete_branch(
+    /// Refuse `branch` once it no longer points to `head`, the commit it
+    /// was read at.
+    pub async fn ensure_branch_at(
         &self,
         account: &Account,
         branch: &BranchName,
@@ -46,6 +46,18 @@ impl ForgeRepo {
             &tip == head,
             "branch {branch} moved from {head} to {tip} since it was read; list the branches again"
         );
+        Ok(())
+    }
+
+    /// Delete `branch` while it still points to `head`, the commit it was
+    /// read at, so the deletion removes no commit its caller did not see.
+    pub async fn delete_branch(
+        &self,
+        account: &Account,
+        branch: &BranchName,
+        head: &CommitId,
+    ) -> Result<()> {
+        self.ensure_branch_at(account, branch, head).await?;
         let request = self.kind().branch_delete(self, branch.as_str());
         self.send(account, &request).await?;
         Ok(())

@@ -248,7 +248,8 @@ fn branch_delete_deletes_none_while_one_cannot_go() {
     responses["GET repos/team/project/branches/rebased"] =
         json!({"body": {"commit": {"id": branches.heads["main"]}}});
     branches.fixture.respond(responses);
-    let moved = branches.delete(&["rebased"]);
+    // Nor is one named before it.
+    let moved = branches.delete(&["squashed", "rebased"]);
     assert!(!moved.status.success(), "{}", printed(&moved));
     assert_eq!(branches.deleted(), Vec::<String>::new());
 }
