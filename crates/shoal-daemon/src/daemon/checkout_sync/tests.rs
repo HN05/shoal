@@ -154,7 +154,7 @@ async fn a_lasting_failure_shows_in_status_then_the_inbox_and_one_notification()
     assert_eq!(failing[0].repository_id, f.repo_id);
     f.manager.notify_failing_syncs().await;
     f.manager.notify_failing_syncs().await;
-    let notifications = f.manager.notifications(false, 100).await.unwrap();
+    let notifications = f.manager.notifications.list(false, 100).await.unwrap();
     let told: Vec<_> = notifications
         .iter()
         .filter(|n| n.kind == NotificationKind::SyncFailed)

@@ -179,7 +179,7 @@ impl Fixture {
 
     /// The user's approval notifications.
     async fn asked_user(&self) -> Vec<String> {
-        let notifications = self.manager.notifications(false, 100).await.unwrap();
+        let notifications = self.manager.notifications.list(false, 100).await.unwrap();
         (notifications.into_iter())
             .filter(|notification| notification.kind == NotificationKind::ApprovalRequested)
             .map(|notification| notification.message)
@@ -296,7 +296,12 @@ async fn a_gate_that_cannot_be_set_up_denies_and_tells_the_user() {
     fixture.push_branch().await;
     let denied = fixture.message().await;
     assert!(denied.contains("could not decide"), "{denied}");
-    let notifications = fixture.manager.notifications(false, 100).await.unwrap();
+    let notifications = fixture
+        .manager
+        .notifications
+        .list(false, 100)
+        .await
+        .unwrap();
     let unavailable = (notifications.iter())
         .filter(|notification| notification.kind == NotificationKind::GateUnavailable)
         .count();
@@ -311,7 +316,12 @@ async fn a_tool_without_a_gate_template_cannot_be_the_gate() {
     let fixture = fixture_deciding_by("reviewer").await;
     fixture.push_branch().await;
     fixture.message().await;
-    let notifications = fixture.manager.notifications(false, 100).await.unwrap();
+    let notifications = fixture
+        .manager
+        .notifications
+        .list(false, 100)
+        .await
+        .unwrap();
     assert!(
         (notifications.iter())
             .any(|notification| notification.kind == NotificationKind::GateUnavailable)

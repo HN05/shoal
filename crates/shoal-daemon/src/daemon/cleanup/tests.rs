@@ -280,7 +280,7 @@ async fn invalid_pr_record_does_not_block_other_workspace_cleanup() {
         .unwrap();
     assert_eq!(stored, record);
     sweep(&manager, &mut timers).await.unwrap_err();
-    let notifications = manager.notifications(true, 100).await.unwrap();
+    let notifications = manager.notifications.list(true, 100).await.unwrap();
     let failures: Vec<_> = notifications
         .iter()
         .filter(|notification| notification.workspace.as_deref() == Some(&invalid.name))
@@ -998,7 +998,8 @@ async fn a_sweep_skips_workspaces_where_file_access_stalled_and_cleans_up_the_ot
     );
     // Skipped rather than failed, so no cleanup failure is reported.
     let failures: Vec<_> = manager
-        .notifications(true, 100)
+        .notifications
+        .list(true, 100)
         .await
         .unwrap()
         .into_iter()
@@ -1085,7 +1086,8 @@ async fn completion_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
     sweep(&manager, &mut Timers::default()).await.unwrap();
 
     let failures: Vec<_> = manager
-        .notifications(true, 100)
+        .notifications
+        .list(true, 100)
         .await
         .unwrap()
         .into_iter()

@@ -531,7 +531,7 @@ async fn a_job_whose_checkout_fails_is_passed_over_and_its_workspace_removed() {
     std::fs::remove_file(checkout.join(objects.trim()).join(fan_out).join(rest)).unwrap();
 
     admit_and_claim(manager).await;
-    let notifications = manager.notifications(false, 50).await.unwrap();
+    let notifications = manager.notifications.list(false, 50).await.unwrap();
     let checkout_failed = format!("check out {}", fixture.head);
     assert!(
         notifications.iter().any(|notification| {
@@ -704,7 +704,7 @@ async fn turning_the_runner_off_withdraws_its_jobs_without_claiming_them() {
     manager.claim_job(&admitted[0]).await;
     assert!(job_entries(manager).await.is_empty());
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
-    let notifications = manager.notifications(false, 50).await.unwrap();
+    let notifications = manager.notifications.list(false, 50).await.unwrap();
     assert!(
         notifications
             .iter()
@@ -982,7 +982,8 @@ async fn the_daemon_exiting_stops_a_jobs_runner_when_the_forge_refuses_to_cancel
     let fixture = daemon_exit_with_runner(job("h1", 4, 1), Cancelling::DaemonStop).await;
     let failures: Vec<_> = fixture
         .manager
-        .notifications(true, 10)
+        .notifications
+        .list(true, 10)
         .await
         .unwrap()
         .into_iter()

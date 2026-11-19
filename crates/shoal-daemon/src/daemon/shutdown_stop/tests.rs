@@ -137,7 +137,7 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
     bounded(executing).await.unwrap().unwrap();
     bounded(stopping).await.unwrap();
 
-    let notifications = manager.notifications(true, 10).await.unwrap();
+    let notifications = manager.notifications.list(true, 10).await.unwrap();
     let stopped: Vec<_> = notifications
         .iter()
         .filter(|n| n.kind == NotificationKind::SystemShutdown)

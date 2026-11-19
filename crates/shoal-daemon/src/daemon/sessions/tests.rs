@@ -224,7 +224,8 @@ async fn failed_session_close_does_not_block_removal_or_other_sessions_and_is_re
     assert!(manager.find_workspace(&workspace.id).await?.is_none());
     assert!(
         manager
-            .notifications(true, 100)
+            .notifications
+            .list(true, 100)
             .await?
             .iter()
             .any(|n| n.message.contains("close failed"))

@@ -135,7 +135,8 @@ async fn completion_persists_and_cleanup_overrides_the_repository_default() {
     assert_eq!(completion.head, kept.head);
     assert!(
         reopened
-            .notifications(true, 100)
+            .notifications
+            .list(true, 100)
             .await
             .unwrap()
             .iter()

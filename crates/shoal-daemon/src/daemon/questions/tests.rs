@@ -67,7 +67,7 @@ async fn asking_notifies_once_and_repeats_return_the_same_question() {
     assert!(first.is_open());
     assert_eq!(first.space, "asker");
 
-    let notifications = manager.notifications(true, 50).await.unwrap();
+    let notifications = manager.notifications.list(true, 50).await.unwrap();
     let asked: Vec<_> = notifications
         .iter()
         .filter(|n| n.kind == NotificationKind::QuestionAsked)
@@ -628,7 +628,7 @@ async fn notifications_of_maximal_questions_fit_one_response() {
             .unwrap();
         first.get_or_insert(question);
     }
-    let notifications = manager.notifications(true, 50).await.unwrap();
+    let notifications = manager.notifications.list(true, 50).await.unwrap();
     assert_eq!(notifications.len(), 50);
     let first = first.unwrap();
     let message = &notifications[0].message;
@@ -741,7 +741,7 @@ async fn done_closes_open_questions_for_good() {
             .await,
         CleanupReason::Question
     );
-    let notifications = manager.notifications(true, 50).await.unwrap();
+    let notifications = manager.notifications.list(true, 50).await.unwrap();
     assert!(
         notifications
             .iter()
@@ -891,7 +891,14 @@ async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() 
         CleanupReason::Question
     );
     // The user was never shown it, so nothing tells them about it.
-    assert!(manager.notifications(true, 50).await.unwrap().is_empty());
+    assert!(
+        manager
+            .notifications
+            .list(true, 50)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     assert!(waiter.await.unwrap().is_err());
     assert!(
         manager
@@ -939,7 +946,14 @@ async fn withdrawing_after_a_rename_still_takes_back_the_notification() {
         .withdraw_question(&SpaceSelector::id(&workspace.id), question.number, None)
         .await
         .unwrap();
-    assert!(manager.notifications(true, 50).await.unwrap().is_empty());
+    assert!(
+        manager
+            .notifications
+            .list(true, 50)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -954,16 +968,17 @@ async fn withdrawing_a_shown_question_tells_the_user() {
         )
         .await
         .unwrap();
-    let shown = manager.notifications(true, 50).await.unwrap();
+    let shown = manager.notifications.list(true, 50).await.unwrap();
     manager
-        .mark_notifications_read(shown.iter().map(|n| n.id).collect())
+        .notifications
+        .mark_read(shown.iter().map(|n| n.id).collect())
         .await
         .unwrap();
     manager
         .withdraw_question(&SpaceSelector::id(&workspace.id), question.number, None)
         .await
         .unwrap();
-    let unread = manager.notifications(true, 50).await.unwrap();
+    let unread = manager.notifications.list(true, 50).await.unwrap();
     assert_eq!(unread.len(), 1);
     assert_eq!(unread[0].kind, NotificationKind::QuestionWithdrawn);
 }
@@ -986,7 +1001,14 @@ async fn a_withdrawn_question_is_never_announced_afterwards() {
         .unwrap();
     // An announcement that lost the race to the withdrawal comes too late.
     manager.announce_question(&question).await;
-    assert!(manager.notifications(true, 50).await.unwrap().is_empty());
+    assert!(
+        manager
+            .notifications
+            .list(true, 50)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -1026,7 +1048,7 @@ async fn files_sent_with_a_question_are_listed_with_it_and_its_notification() {
             .all(|file| file.source == FileSource::Question),
         "{attached:?}"
     );
-    let notifications = manager.notifications(true, 50).await.unwrap();
+    let notifications = manager.notifications.list(true, 50).await.unwrap();
     let [notification] = notifications.as_slice() else {
         panic!("{notifications:?}");
     };

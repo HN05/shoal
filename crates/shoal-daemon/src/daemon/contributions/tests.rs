@@ -201,7 +201,7 @@ async fn a_contribution_goes_once_its_workspaces_and_checkpoints_are_gone() {
     let config = std::fs::read_to_string(&claude).unwrap();
     let kept = config.contains(trusted.to_str().unwrap());
     assert_eq!(kept, !crate::build::changes_user_files(), "{config}");
-    let notifications = manager.notifications(false, 10).await.unwrap();
+    let notifications = manager.notifications.list(false, 10).await.unwrap();
     assert!(
         notifications
             .iter()
@@ -294,7 +294,7 @@ async fn a_removed_contribution_names_the_fork_it_leaves() {
     git(&repo.path, &["remote", "add", "fork", fork]);
     manager.sweep_contributions().await.unwrap();
     assert!(!registered(&manager, &repo).await);
-    let notifications = manager.notifications(false, 10).await.unwrap();
+    let notifications = manager.notifications.list(false, 10).await.unwrap();
     let removed = notifications
         .iter()
         .find(|notification| notification.kind == NotificationKind::RepositoryRemoved)

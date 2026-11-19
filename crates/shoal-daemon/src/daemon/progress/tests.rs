@@ -488,7 +488,7 @@ async fn becoming_blocked_notifies_once_until_the_space_clears() {
         reason: "Needs it".into(),
     };
     let notified = || async {
-        (manager.notifications(false, 20).await.unwrap().iter())
+        (manager.notifications.list(false, 20).await.unwrap().iter())
             .filter(|notification| notification.kind == NotificationKind::SpaceBlocked)
             .count()
     };

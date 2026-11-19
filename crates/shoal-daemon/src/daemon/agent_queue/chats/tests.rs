@@ -216,7 +216,7 @@ async fn an_unattached_chat_launch_fails_while_other_chats_exist() {
 
     let entries = manager.queue_entries().await.unwrap();
     assert!(entries.iter().all(|queued| queued.id != entry.id));
-    let notifications = manager.notifications(true, 20).await.unwrap();
+    let notifications = manager.notifications.list(true, 20).await.unwrap();
     assert!(notifications.iter().any(|notification| {
         notification.kind == crate::daemon::notifications::NotificationKind::QueueFailed
             && notification.message.contains("no place")

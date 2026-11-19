@@ -122,7 +122,7 @@ impl Manager {
             None,
             ready_notice(&ready.marks),
             Vec::new(),
-            super::tree::Source::Agent,
+            super::notifications::Source::Agent,
         )
         .await;
         undrafted.context("marked ready for review, but a PR is still a draft")?;

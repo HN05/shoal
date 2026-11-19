@@ -279,7 +279,14 @@ async fn a_restart_answers_once_the_agent_runs_again_or_with_why_not() {
     // It answers with the place of the wrapper that runs the agent.
     assert_eq!(restarting.await.unwrap().unwrap(), Some(place));
     assert!(!manager.restart_requested(&id).await);
-    assert!(manager.notifications(false, 10).await.unwrap().is_empty());
+    assert!(
+        manager
+            .notifications
+            .list(false, 10)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 
     let restarting = tokio::spawn({
         let manager = manager.clone();

@@ -8,6 +8,7 @@ pub(crate) mod agent_queue;
 pub(crate) mod agent_state;
 mod agent_turns;
 pub(crate) mod agents;
+mod alerts;
 pub mod allocation;
 mod answer;
 pub mod approvals;

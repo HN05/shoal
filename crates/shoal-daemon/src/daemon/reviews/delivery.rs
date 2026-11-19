@@ -5,7 +5,7 @@ use std::fmt::Write as _;
 
 use super::store;
 use crate::{
-    daemon::{log, manager::Manager, tree::Source},
+    daemon::{log, manager::Manager, notifications::Source},
     reviews::{AUTOMATED_NOTE, Review, ReviewId, ReviewState, severity_counts},
     validate::MAX_AGENT_MESSAGE_LEN,
 };

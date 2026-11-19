@@ -5,8 +5,6 @@ use tokio::sync::{Notify, futures::Notified, watch};
 
 #[derive(Default)]
 pub(crate) struct Signals {
-    /// The newest recorded notification ID.
-    notifications: watch::Sender<i64>,
     messages: Counter,
     questions: Counter,
     item_updates: Counter,
@@ -22,15 +20,6 @@ pub(crate) struct Signals {
 }
 
 impl Signals {
-    /// Wake `shoal alerts --follow` for the notification `id`.
-    pub(crate) fn notification_recorded(&self, id: i64) {
-        self.notifications.send_replace(id);
-    }
-
-    pub(crate) fn watch_notifications(&self) -> watch::Receiver<i64> {
-        self.notifications.subscribe()
-    }
-
     /// Wake the waits for a space's messages.
     pub(crate) fn message_queued(&self) {
         self.messages.advance();

@@ -20,7 +20,7 @@ fn received(fixture: &Fixture, line: &str) -> usize {
 
 /// Whether the user heard that cancelling a superseded run failed.
 async fn cancel_failed(fixture: &Fixture) -> bool {
-    let notifications = fixture.manager.notifications(false, 50).await.unwrap();
+    let notifications = fixture.manager.notifications.list(false, 50).await.unwrap();
     notifications
         .iter()
         .any(|notification| notification.kind == NotificationKind::RunnerFailed)
@@ -94,7 +94,7 @@ async fn a_queued_job_whose_run_the_forge_does_not_cancel_is_passed_over_with_a_
 
     manager.refresh_waiting_jobs().await.unwrap();
     assert!(job_entries(manager).await.is_empty());
-    let notifications = manager.notifications(false, 50).await.unwrap();
+    let notifications = manager.notifications.list(false, 50).await.unwrap();
     let run = format!("http://{}/team/repo/actions/runs/8", fixture.server.host);
     assert!(
         notifications.iter().any(|notification| {

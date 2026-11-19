@@ -143,7 +143,7 @@ async fn a_full_machine_queues_until_a_start_ends() {
     let entries = live(&manager).await;
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].state, QueueState::Starting);
-    let failure = manager.notifications(true, 10).await.unwrap();
+    let failure = manager.notifications.list(true, 10).await.unwrap();
     assert!(failure.iter().any(|notification| {
         notification.kind == NotificationKind::StartFailed
             && notification.message.contains("setup failed")
@@ -256,7 +256,8 @@ async fn abandoned_starts_expire_after_the_grace_period_unless_held() {
     assert_eq!(remaining, std::slice::from_ref(&held.id));
     assert!(
         manager
-            .notifications(true, 10)
+            .notifications
+            .list(true, 10)
             .await
             .unwrap()
             .iter()
@@ -286,7 +287,7 @@ async fn failing_an_ended_entry_frees_nothing_and_says_nothing() {
         .fail_queue_entry(&starting.id, "second")
         .await
         .unwrap();
-    let failures = manager.notifications(true, 10).await.unwrap();
+    let failures = manager.notifications.list(true, 10).await.unwrap();
     assert_eq!(
         failures
             .iter()
@@ -1116,7 +1117,7 @@ async fn an_expired_launch_in_an_existing_workspace_reports_its_failure() {
         .unwrap();
     manager.dispatch_queue().await.unwrap();
     assert!(live(&manager).await.is_empty());
-    let notifications = manager.notifications(true, 10).await.unwrap();
+    let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert!(
         notifications.iter().any(|notification| {
             notification.kind == NotificationKind::StartFailed

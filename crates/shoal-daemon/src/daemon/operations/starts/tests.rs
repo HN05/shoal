@@ -270,7 +270,7 @@ async fn reported_for(
     worker.exit(0);
     let notification = tokio::time::timeout(HANG, async {
         loop {
-            let notifications = manager.notifications(false, 10).await.unwrap();
+            let notifications = manager.notifications.list(false, 10).await.unwrap();
             let found = (notifications.into_iter())
                 .find(|notification| notification.kind == NotificationKind::PreparationFailed);
             match found {

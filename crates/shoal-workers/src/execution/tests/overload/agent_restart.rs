@@ -129,7 +129,8 @@ async fn waiting_launch(manager: &Manager, workspace: &crate::model::Workspace) 
 /// The messages of the agent exits the user was told about.
 async fn exit_notifications(manager: &Manager) -> Vec<String> {
     manager
-        .notifications(false, 10)
+        .notifications
+        .list(false, 10)
         .await
         .unwrap()
         .into_iter()

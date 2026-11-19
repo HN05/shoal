@@ -489,7 +489,7 @@ async fn a_restore_whose_agent_never_starts_expires_and_says_so() {
 
     manager.dispatch_queue().await.unwrap();
     assert!(queue(&manager).await.is_empty());
-    let notifications = manager.notifications(true, 10).await.unwrap();
+    let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert!(notifications.iter().any(|notification| {
         notification.kind == crate::daemon::notifications::NotificationKind::QueueFailed
     }));

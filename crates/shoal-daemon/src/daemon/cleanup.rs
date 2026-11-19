@@ -264,7 +264,10 @@ async fn observe_branches(manager: &Manager) -> Result<()> {
 
 impl Manager {
     /// Observe external checkouts without changing the branch Shoal owns.
-    pub(crate) async fn observe_workspace_branch(&self, workspace: &crate::model::Workspace) -> Result<()> {
+    pub(crate) async fn observe_workspace_branch(
+        &self,
+        workspace: &crate::model::Workspace,
+    ) -> Result<()> {
         self.verify_worktree(workspace).await?;
         let branch = crate::git::checked_out_branch(&workspace.path).await?;
         let id = workspace.id.clone();

@@ -141,7 +141,9 @@ impl Manager {
             None => {
                 let kind = NotificationKind::QuestionAsked;
                 let (name, id) = (&question.space, &question.space_id);
-                (self.notify_user_of_space(name, id, kind, question.notification())).await;
+                let about = crate::daemon::notifications::About::space(name, id);
+                let message = question.notification();
+                self.notifications.notify_user(about, kind, message).await;
             }
         }
         let question = question.clone();

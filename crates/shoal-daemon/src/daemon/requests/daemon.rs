@@ -77,7 +77,7 @@ async fn status(server: &Server) -> Result<DaemonStatus> {
         version: env!("CARGO_PKG_VERSION").into(),
         uptime_secs: server.started.elapsed().as_secs(),
         managed: server.managed,
-        unread_notifications: server.manager.unread_notifications().await?,
+        unread_notifications: server.manager.notifications.unread().await?,
         access_stalls: server.manager.file_access.stalls(),
         cleanup_error: server.manager.cleanup_problem(),
         hub: server.manager.hub_role().await?,

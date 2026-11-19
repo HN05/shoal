@@ -169,7 +169,9 @@ impl Manager {
             }
             (None, Some(about)) => {
                 if let Some(kind) = told.kind {
-                    (self.notify_user_of_space(&about.name, &about.space, kind, message)).await;
+                    let about =
+                        crate::daemon::notifications::About::space(&about.name, &about.space);
+                    self.notifications.notify_user(about, kind, message).await;
                 }
                 Ok(())
             }

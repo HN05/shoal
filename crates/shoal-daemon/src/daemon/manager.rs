@@ -30,6 +30,7 @@ pub struct Manager {
     /// The spaces whose issues wait for the agent account to be settled.
     pub(crate) agent_settles: super::links::issue::agent_settles::AgentSettles,
     pub config_state: super::config_state::ConfigState,
+    pub notifications: super::notifications::Notifications,
     pub paths: Paths,
     /// Arrival order of queued resource and simulator requests.
     pub(crate) queues: super::queue::Queues,
@@ -98,8 +99,10 @@ impl Manager {
         paths.prepare()?;
         let config = Config::load(&paths)?;
         super::forge_hosts::learn_forge_pins(&Default::default(), &config.machine.forges);
+        let store = open_store(&paths).await?;
         Ok(Arc::new(Self {
             config_state: super::config_state::ConfigState::new(config),
+            notifications: super::notifications::Notifications::new(store.clone()),
             waits: Default::default(),
             watch_starts: Default::default(),
             cleanup_health: Default::default(),
@@ -109,7 +112,7 @@ impl Manager {
             triggers: Default::default(),
             publications: Default::default(),
             agent_settles: Default::default(),
-            store: open_store(&paths).await?,
+            store,
             // Tests inject hosts and never discover or close the user's
             // sessions.
             session_hosts: if crate::daemon::fake_workers::faked() {

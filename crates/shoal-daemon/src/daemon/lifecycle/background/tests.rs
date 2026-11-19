@@ -75,7 +75,7 @@ async fn a_failure_retains_the_workspace_and_tells_the_user() {
     let retained = manager.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(retained.state, WorkspaceState::Ready);
     assert!(workspace.path.exists());
-    let notifications = manager.notifications(true, 10).await.unwrap();
+    let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert!(
         notifications
             .iter()
@@ -110,7 +110,7 @@ async fn a_failure_reaches_the_requesting_agent() {
             .iter()
             .any(|message| message.message.contains(workspace.name.as_str()))
     );
-    let notifications = manager.notifications(true, 10).await.unwrap();
+    let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert!(
         notifications
             .iter()
@@ -149,7 +149,8 @@ async fn a_failure_outlives_the_requesting_chat() {
     };
     assert!(
         !manager
-            .notifications(true, 10)
+            .notifications
+            .list(true, 10)
             .await
             .unwrap()
             .iter()
@@ -167,7 +168,8 @@ async fn a_failure_outlives_the_requesting_chat() {
         .unwrap();
     assert!(
         manager
-            .notifications(true, 10)
+            .notifications
+            .list(true, 10)
             .await
             .unwrap()
             .iter()

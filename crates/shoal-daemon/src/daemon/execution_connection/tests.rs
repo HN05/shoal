@@ -59,7 +59,7 @@ async fn scoped_merge_answers_with_its_approval_request() {
         panic!("merge was not held for approval: {:?}", response.body);
     };
     assert_eq!(request.target, crate::daemon::approvals::Target::Merge);
-    let notifications = manager.notifications(true, 10).await.unwrap();
+    let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert!(
         notifications
             .iter()

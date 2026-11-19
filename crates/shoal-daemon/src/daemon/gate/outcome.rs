@@ -14,7 +14,7 @@ use crate::daemon::{
     approvals::{ApprovalRequest, gated, proposals::ProposalDecision},
     events, log,
     manager::Manager,
-    tree::Source,
+    notifications::Source,
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::{approvals::GateVerdict, events::GateEvent, time::UnixTime};

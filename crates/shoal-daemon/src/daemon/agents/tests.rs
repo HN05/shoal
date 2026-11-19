@@ -86,7 +86,7 @@ async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
         fs::read_to_string(workspace.path.join("exits")).unwrap(),
         "helper||false\n"
     );
-    let events = manager.notifications(false, 10).await.unwrap();
+    let events = manager.notifications.list(false, 10).await.unwrap();
     assert_eq!(events.len(), 2);
     assert!(
         events
@@ -234,7 +234,7 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
             })
         );
         std::fs::remove_file(&record).unwrap();
-        let events = manager.notifications(false, 1).await.unwrap();
+        let events = manager.notifications.list(false, 1).await.unwrap();
         assert!(
             events[0].message.contains(expected),
             "{}",
@@ -258,7 +258,7 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
                 Some((id, "critical memory pressure")),
             )
             .await;
-        let events = manager.notifications(false, 1).await.unwrap();
+        let events = manager.notifications.list(false, 1).await.unwrap();
         assert!(events[0].message.contains("critical memory pressure"));
         assert!(events[0].message.contains("recovery record unavailable"));
         manager
@@ -395,7 +395,7 @@ async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
         std::fs::read_to_string(workspace.path.join("unfinished")).unwrap(),
         "work in progress"
     );
-    let notifications = manager.notifications(false, 10).await.unwrap();
+    let notifications = manager.notifications.list(false, 10).await.unwrap();
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].kind, NotificationKind::AgentStopped);
     assert!(

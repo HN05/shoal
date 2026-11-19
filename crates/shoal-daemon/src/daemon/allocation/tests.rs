@@ -49,7 +49,7 @@ async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals
             )
             .await;
     }
-    assert_eq!(manager.unread_notifications().await.unwrap(), 0);
+    assert_eq!(manager.notifications.unread().await.unwrap(), 0);
 
     let request = manager
         .request_approval(port("web"))
@@ -74,7 +74,7 @@ async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals
             )
             .await;
     }
-    let notifications = manager.notifications(true, 10).await.unwrap();
+    let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert_eq!(notifications.len(), 3);
     assert!(
         notifications

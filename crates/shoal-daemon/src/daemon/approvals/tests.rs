@@ -379,7 +379,14 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
         .unwrap();
     assert_eq!(withdrawn.status, DecisionStatus::Withdrawn);
     assert!(!withdrawn.active);
-    assert!(manager.notifications(true, 50).await.unwrap().is_empty());
+    assert!(
+        manager
+            .notifications
+            .list(true, 50)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     let default = proposals::ProposalDecision::default;
     let decided = manager.decide_approval(unseen.number, true, None, default(), None);
     assert!(decided.await.is_err());
@@ -391,16 +398,17 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
     // that one, withdrawing it tells them.
     let shown = request().await;
     assert_ne!(shown.number, unseen.number);
-    let notifications = manager.notifications(true, 50).await.unwrap();
+    let notifications = manager.notifications.list(true, 50).await.unwrap();
     manager
-        .mark_notifications_read(notifications.iter().map(|n| n.id).collect())
+        .notifications
+        .mark_read(notifications.iter().map(|n| n.id).collect())
         .await
         .unwrap();
     manager
         .withdraw_approval(&SpaceSelector::id(&workspace.id), shown.number)
         .await
         .unwrap();
-    let unread = manager.notifications(true, 50).await.unwrap();
+    let unread = manager.notifications.list(true, 50).await.unwrap();
     assert_eq!(unread.len(), 1);
     assert_eq!(unread[0].kind, NotificationKind::ApprovalWithdrawn);
 
@@ -485,7 +493,7 @@ async fn a_withdrawn_request_is_never_announced_afterwards() {
         .unwrap();
     // The allocation announces the request it recorded only now.
     manager.notify_approval(&request).await;
-    let unread = manager.notifications(true, 50).await.unwrap();
+    let unread = manager.notifications.list(true, 50).await.unwrap();
     assert!(
         unread
             .iter()

@@ -342,7 +342,7 @@ async fn a_deferred_restart_that_fails_reaches_the_user() {
     let (root, manager) = manager().await;
     let (workspace, execution) = working(root.path(), &manager).await;
     fail_after_the_turn(&manager, &workspace, &execution, None).await;
-    let notifications = manager.notifications(false, 10).await.unwrap();
+    let notifications = manager.notifications.list(false, 10).await.unwrap();
     assert!(
         notifications.iter().any(|notice| notice.kind
             == crate::daemon::notifications::NotificationKind::RecoveryBlocked

@@ -69,7 +69,7 @@ async fn an_assignee_a_removal_cannot_take_back_notifies_the_user() {
         .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
         .await
         .unwrap();
-    let notifications = fixture.manager.notifications(true, 10).await.unwrap();
+    let notifications = fixture.manager.notifications.list(true, 10).await.unwrap();
     let kept = (notifications.iter())
         .find(|notification| notification.kind == NotificationKind::UnassignFailed)
         .unwrap();

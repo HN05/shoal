@@ -31,7 +31,7 @@ pub(super) async fn handle(
         NotificationMethod::ListNotifications { unread_only, limit } => {
             // A listing of the most notifications a client asks for need not
             // fit one frame.
-            let listed = manager.notifications(unread_only, limit).await;
+            let listed = manager.notifications.list(unread_only, limit).await;
             return Ok(Answer::pages(listed, Body::Notifications));
         }
         NotificationMethod::SendMessage {
@@ -47,11 +47,11 @@ pub(super) async fn handle(
             Body::Notification(manager.withdraw_message(&space, id).await?)
         }
         NotificationMethod::MarkNotificationsRead { ids } => {
-            manager.mark_notifications_read(ids).await?;
+            manager.notifications.mark_read(ids).await?;
             Body::Ok
         }
         NotificationMethod::ClearNotifications => {
-            Body::Cleared(manager.clear_notifications().await?)
+            Body::Cleared(manager.notifications.clear().await?)
         }
     }))
 }
@@ -89,20 +89,20 @@ async fn watch_notifications(
     after: i64,
     startup: OperationGuard,
 ) -> Result<()> {
-    let mut changed = manager.signals.watch_notifications();
+    let mut changed = manager.notifications.watch();
     protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
     drop(startup);
     let (mut reader, mut writer) = stream.split();
     let mut delivered = after;
     loop {
         let operation = manager.gates.operation().await;
-        let batch = manager.notifications_after(delivered, 100).await?;
+        let batch = manager.notifications.after(delivered, 100).await?;
         for notification in batch {
             delivered = notification.id;
             let response = Response::new(request_id, Body::Notification(notification));
             protocol::write(&mut writer, &response).await?;
             if !keep_unread {
-                manager.mark_notifications_read(vec![delivered]).await?;
+                manager.notifications.mark_read(vec![delivered]).await?;
             }
         }
         drop(operation);

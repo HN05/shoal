@@ -289,7 +289,7 @@ impl Manager {
             .await?;
         self.ask_user_about(&deleted.released).await;
         if let Some(id) = deleted.notification {
-            self.signals.notification_recorded(id);
+            self.notifications.recorded(id);
         }
         (self.release_removed_assignees(space, deleted.assignees, &deleted.issues)).await;
         Ok(())

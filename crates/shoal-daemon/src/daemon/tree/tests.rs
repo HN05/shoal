@@ -634,7 +634,7 @@ async fn children_never_keep_their_parent_and_go_with_it() {
         assert!(!workspace.path.exists());
     }
     // The user hears of the child an unattended removal took.
-    let notifications = manager.notifications(true, 50).await.unwrap();
+    let notifications = manager.notifications.list(true, 50).await.unwrap();
     assert!(
         notifications
             .iter()
@@ -849,7 +849,8 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
         .unwrap();
     let user = || async {
         manager
-            .notifications(false, 100)
+            .notifications
+            .list(false, 100)
             .await
             .unwrap()
             .into_iter()
@@ -1113,7 +1114,14 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
         received[0].message,
         format!("{} child: done with the API", child.number)
     );
-    assert!(manager.notifications(false, 10).await.unwrap().is_empty());
+    assert!(
+        manager
+            .notifications
+            .list(false, 10)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     // The child's own agent receives its activity instead of the parent's.
     assert!(
         manager
@@ -1457,7 +1465,8 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
     assert_eq!(messages(&parent).await.len(), 1);
     let user = || async {
         manager
-            .notifications(false, 10)
+            .notifications
+            .list(false, 10)
             .await
             .unwrap()
             .into_iter()
@@ -1698,7 +1707,8 @@ async fn a_request_withdrawn_once_given_back_notifies_nobody() {
         .ask_user_about(std::slice::from_ref(&requested))
         .await;
     let asked = manager
-        .notifications(false, 10)
+        .notifications
+        .list(false, 10)
         .await
         .unwrap()
         .into_iter()
@@ -1844,7 +1854,8 @@ async fn a_chat_whose_agent_stops_gives_the_requests_it_decides_back_to_the_user
         .unwrap();
     assert_eq!(given_back.decider, None);
     let asked = manager
-        .notifications(false, 10)
+        .notifications
+        .list(false, 10)
         .await
         .unwrap()
         .into_iter()
@@ -1975,7 +1986,8 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .unwrap();
     assert_eq!(passed.decider, None);
     let asked = manager
-        .notifications(false, 10)
+        .notifications
+        .list(false, 10)
         .await
         .unwrap()
         .into_iter()
@@ -2040,7 +2052,8 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
     };
     let user_requests = || async {
         manager
-            .notifications(false, 20)
+            .notifications
+            .list(false, 20)
             .await
             .unwrap()
             .into_iter()

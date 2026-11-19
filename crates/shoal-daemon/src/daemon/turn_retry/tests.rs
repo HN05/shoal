@@ -346,10 +346,11 @@ async fn a_full_message_queue_defers_only_its_own_retry() {
 /// The messages of the turn failures Shoal told the user of since the last
 /// look, marking them read.
 async fn turn_failures(manager: &Manager) -> Vec<String> {
-    let notifications = manager.notifications(true, 10).await.unwrap();
+    let notifications = manager.notifications.list(true, 10).await.unwrap();
     let ids = notifications.iter().map(|notification| notification.id);
     manager
-        .mark_notifications_read(ids.collect())
+        .notifications
+        .mark_read(ids.collect())
         .await
         .unwrap();
     notifications
@@ -460,7 +461,14 @@ async fn an_outage_is_retried_until_it_ends_without_a_cap() {
         pending.due_at.duration_since(now()) <= secs(900 * 6 / 5),
         "{pending:?}"
     );
-    assert!(manager.notifications(false, 10).await.unwrap().is_empty());
+    assert!(
+        manager
+            .notifications
+            .list(false, 10)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -669,7 +677,7 @@ async fn usage_limits_keep_retrying_beyond_a_week_and_survive_reopen() -> Result
         messages(&manager, &workspace).await,
         [continuation(TurnFailure::RateLimited, pending.attempt)]
     );
-    assert!(manager.notifications(false, 10).await?.is_empty());
+    assert!(manager.notifications.list(false, 10).await?.is_empty());
 
     // A transient failure after a long usage limit starts its own backoff.
     fail(

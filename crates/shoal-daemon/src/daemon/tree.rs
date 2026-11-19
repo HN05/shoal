@@ -13,7 +13,7 @@ use std::{
 use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::manager::Manager;
+use super::{manager::Manager, notifications::Source};
 use crate::{
     daemon::notifications::NotificationKind,
     model::{RefPart, Repository, Space, SpaceKind, SpaceRef, Workspace},
@@ -647,15 +647,6 @@ fn delegation_paths(
             .collect())
     })
     .collect()
-}
-
-/// What caused an event a coordinator may receive.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Source {
-    /// The daemon, about the workspace's agent, such as its exit.
-    Daemon,
-    /// A process acting in the workspace, such as `shoal alerts send`.
-    Agent,
 }
 
 /// The spaces that decide the requests of the space `id`, nearest first:

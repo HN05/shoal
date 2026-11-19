@@ -289,7 +289,7 @@ async fn a_blocked_child_tells_its_coordinator_rather_than_the_user() {
             .any(|message| message.message.contains("is blocked by PR")),
         "{messages:?}"
     );
-    let notifications = manager.notifications(false, 20).await.unwrap();
+    let notifications = manager.notifications.list(false, 20).await.unwrap();
     assert!(
         !notifications
             .iter()

@@ -300,7 +300,7 @@ async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
         .await
         .unwrap();
     manager.notify_approval(&proposed).await;
-    assert_eq!(manager.notifications(true, 50).await.unwrap().len(), 1);
+    assert_eq!(manager.notifications.list(true, 50).await.unwrap().len(), 1);
     // An approval that failed to open it kept the user's edited title.
     let mut edited = proposed.clone();
     edited.edit(&ProposalDecision {
@@ -316,7 +316,14 @@ async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
     assert_eq!(withdrawn.status, DecisionStatus::Withdrawn);
     // It would outlive the workspace, so it goes as a decided one does.
     assert!(manager.approval_requests(None).await.unwrap().is_empty());
-    assert!(manager.notifications(true, 50).await.unwrap().is_empty());
+    assert!(
+        manager
+            .notifications
+            .list(true, 50)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     assert!(manager.pending_proposal(proposed).await.is_err());
 }
 
@@ -577,7 +584,8 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         (DecisionStatus::Pending, None)
     );
     let asked = manager
-        .notifications(false, 50)
+        .notifications
+        .list(false, 50)
         .await
         .unwrap()
         .into_iter()

@@ -155,7 +155,7 @@ impl Running {
     }
 
     async fn notifications(&self, kind: NotificationKind) -> Vec<String> {
-        let notifications = self.manager.notifications(true, 10).await.unwrap();
+        let notifications = self.manager.notifications.list(true, 10).await.unwrap();
         notifications
             .into_iter()
             .filter(|notification| notification.kind == kind)

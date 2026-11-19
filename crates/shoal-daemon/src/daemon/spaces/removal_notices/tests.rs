@@ -19,7 +19,7 @@ async fn retentions(manager: &Manager) -> Vec<Option<EventCause>> {
 }
 
 async fn notices(manager: &Manager) -> Vec<(NotificationKind, Option<String>)> {
-    let notifications = manager.notifications(false, 100).await.unwrap();
+    let notifications = manager.notifications.list(false, 100).await.unwrap();
     notifications
         .into_iter()
         .map(|notification| (notification.kind, notification.workspace.map(String::from)))

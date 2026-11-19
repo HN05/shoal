@@ -23,7 +23,7 @@ const NO_PRESSURE: &str =
 /// never copied.
 async fn assert_clone_refused(manager: &Manager, layout: &Layout) {
     assert!(Snapshot::open(layout).unwrap().is_none());
-    let notifications = manager.notifications(true, 10).await.unwrap();
+    let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert!(
         notifications
             .iter()
@@ -162,7 +162,7 @@ async fn a_failed_build_is_reported_once_per_commit() {
     .unwrap();
     manager.refresh_seeds().await;
     assert!(layout.log().exists(), "a revisited failure is retried");
-    let notifications = manager.notifications(true, 10).await.unwrap();
+    let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert!(
         notifications
             .iter()
@@ -267,7 +267,7 @@ async fn fake_tools(
 
 /// The messages of the unread seed failures.
 async fn seed_failures(manager: &Manager) -> Vec<String> {
-    let notifications = manager.notifications(true, 10).await.unwrap();
+    let notifications = manager.notifications.list(true, 10).await.unwrap();
     (notifications.into_iter())
         .filter(|notification| notification.kind == NotificationKind::SeedFailed)
         .map(|notification| notification.message)

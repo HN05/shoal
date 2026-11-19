@@ -95,7 +95,7 @@ impl Manager {
 
     /// What awaits the user about `space`.
     async fn attention(&self, space: &SpaceDetail) -> Result<Attention> {
-        let unread_notifications = self.unread_space_notifications(space.id()).await?;
+        let unread_notifications = self.notifications.unread_of_space(space.id()).await?;
         let id = space.id().to_owned();
         self.store
             .run(move |db| {

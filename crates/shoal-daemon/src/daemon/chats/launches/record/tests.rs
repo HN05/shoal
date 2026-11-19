@@ -60,7 +60,7 @@ fn start(repository: Option<&Repository>, name: &str, issues: &[&str]) -> ChatSt
 
 /// The user's notifications of `kind`.
 async fn notified(manager: &Manager, kind: NotificationKind) -> Vec<Notification> {
-    let notifications = manager.notifications(true, 50).await.unwrap();
+    let notifications = manager.notifications.list(true, 50).await.unwrap();
     (notifications.into_iter())
         .filter(|notification| notification.kind == kind)
         .collect()

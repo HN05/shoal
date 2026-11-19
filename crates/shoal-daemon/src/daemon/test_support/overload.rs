@@ -302,7 +302,8 @@ pub fn record(
 /// The messages of the notifications that a recovery is blocked.
 pub async fn blocked(manager: &Manager) -> Vec<String> {
     manager
-        .notifications(false, 50)
+        .notifications
+        .list(false, 50)
         .await
         .unwrap()
         .into_iter()

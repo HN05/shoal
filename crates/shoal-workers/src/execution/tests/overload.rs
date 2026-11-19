@@ -720,7 +720,8 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
     );
     assert!(
         manager
-            .notifications(false, 10)
+            .notifications
+            .list(false, 10)
             .await
             .unwrap()
             .iter()
@@ -803,7 +804,8 @@ async fn a_restore_its_wrapper_fails_to_start_waits_in_the_agent_queue() {
     assert!(record_path(&manager.paths, &workspace.id, &execution).is_file());
     assert_eq!(LastSession::all(&manager.paths, &workspace.id).unwrap(), []);
     let messages: Vec<_> = manager
-        .notifications(false, 10)
+        .notifications
+        .list(false, 10)
         .await
         .unwrap()
         .into_iter()
@@ -871,7 +873,8 @@ async fn an_idle_agent_waiting_for_an_update_lets_a_daemon_update_through() {
     );
     assert!(
         manager
-            .notifications(false, 10)
+            .notifications
+            .list(false, 10)
             .await
             .unwrap()
             .iter()
@@ -1038,7 +1041,8 @@ async fn unproven_stop_keeps_the_agent_waiting_until_proof_then_restores_it() {
     );
     bounded(async {
         while !manager
-            .notifications(false, 10)
+            .notifications
+            .list(false, 10)
             .await
             .unwrap()
             .iter()
@@ -1576,7 +1580,8 @@ async fn critical_disk_space_stops_commands_and_restores_agents_once_space_recov
     let reason = record["stop_reason"].as_str().unwrap();
     assert!(reason.contains("0.0 GiB free"), "{reason}");
     let messages = manager
-        .notifications(false, 10)
+        .notifications
+        .list(false, 10)
         .await
         .unwrap()
         .into_iter()

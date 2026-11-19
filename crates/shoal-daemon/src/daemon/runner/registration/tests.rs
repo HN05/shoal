@@ -51,7 +51,7 @@ fn settings(host: &str, enabled: bool) -> String {
 }
 
 async fn runner_notifications(manager: &Manager) -> Vec<Notification> {
-    let notifications = manager.notifications(false, 50).await.unwrap();
+    let notifications = manager.notifications.list(false, 50).await.unwrap();
     notifications
         .into_iter()
         .filter(|notification| notification.kind == NotificationKind::RunnerFailed)

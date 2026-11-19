@@ -99,7 +99,7 @@ async fn a_marked_turn_asks_its_final_message_until_the_user_replies_in_the_chat
         asked[0].ask.question,
         "Which database should the cache use?\n\nI recommend SQLite."
     );
-    let notification = &manager.notifications(true, 50).await.unwrap()[0].message;
+    let notification = &manager.notifications.list(true, 50).await.unwrap()[0].message;
     assert!(
         notification.contains(&asked[0].number.to_string()),
         "{notification}"
@@ -115,7 +115,14 @@ async fn a_marked_turn_asks_its_final_message_until_the_user_replies_in_the_chat
     assert_eq!(closed, [asked[0].number]);
     assert!(manager.questions(None).await.unwrap().questions.is_empty());
     // The user had not read it, so the notification goes with it.
-    assert!(manager.notifications(true, 50).await.unwrap().is_empty());
+    assert!(
+        manager
+            .notifications
+            .list(true, 50)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -140,7 +147,7 @@ async fn asking_the_same_in_the_chat_again_consumes_the_mark() {
     ask_in_chat("Which database should the cache use?").await;
     let asked = manager.questions(None).await.unwrap().questions;
     assert_eq!(asked.len(), 1);
-    assert_eq!(manager.notifications(true, 50).await.unwrap().len(), 1);
+    assert_eq!(manager.notifications.list(true, 50).await.unwrap().len(), 1);
 
     // The repeat consumed the mark, so the next turn asks nothing.
     manager
@@ -339,7 +346,14 @@ async fn a_coordinator_that_received_the_question_hears_a_reply_closed_it() {
     assert_eq!(received.len(), 2, "{received:?}");
     let number = question.number.to_string();
     assert!(received.iter().all(|message| message.contains(&number)));
-    assert!(manager.notifications(true, 50).await.unwrap().is_empty());
+    assert!(
+        manager
+            .notifications
+            .list(true, 50)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]

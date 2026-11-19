@@ -125,7 +125,7 @@ async fn an_idle_agent_the_user_is_away_from_sleeps_seconds_after_its_turn() {
         crate::execution::recovery::record_path(&manager.paths, &workspace.id, &execution.plan.id);
     let record = Record::load(&path).unwrap().unwrap();
     assert_eq!(record.turn, Some(AgentState::Idle));
-    let notifications = manager.notifications(false, 10).await.unwrap();
+    let notifications = manager.notifications.list(false, 10).await.unwrap();
     let stopped: Vec<_> = notifications
         .iter()
         .filter(|event| event.kind == NotificationKind::AgentStopped)
@@ -413,7 +413,7 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
             .any(|message| message.message == crate::daemon::blockers::STOPPED_BLOCKED)
     );
     // Its stop notifies no one: the space's blocking does.
-    let notifications = manager.notifications(false, 10).await.unwrap();
+    let notifications = manager.notifications.list(false, 10).await.unwrap();
     assert!(
         !notifications
             .iter()

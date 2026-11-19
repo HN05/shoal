@@ -468,7 +468,7 @@ async fn post_ready_hook_receives_marks_and_its_failure_keeps_them() {
             .len(),
         1
     );
-    let notifications = manager.notifications(true, 10).await.unwrap();
+    let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert!(
         notifications
             .iter()

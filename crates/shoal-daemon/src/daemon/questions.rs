@@ -638,7 +638,9 @@ impl Manager {
         }
         let about = About::space(&question.space, &question.space_id);
         let kind = NotificationKind::QuestionAsked;
-        (self.notify_with_files(about, kind, question.notification(), &question.files)).await;
+        (self.notifications)
+            .notify(self, about, kind, question.notification(), &question.files)
+            .await;
     }
 
     /// The newest open questions that fit one response, oldest first, of

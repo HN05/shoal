@@ -225,7 +225,7 @@ impl Manager {
     /// The messages of the completion notices the user received, oldest
     /// first.
     pub async fn done_notices(&self) -> Vec<String> {
-        let notifications = self.notifications(false, 100).await.unwrap();
+        let notifications = self.notifications.list(false, 100).await.unwrap();
         notifications
             .into_iter()
             .filter(|notification| {

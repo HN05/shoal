@@ -122,7 +122,7 @@ async fn failing_passes_notify_once_and_show_where_they_belong() {
     for _ in 0..2 {
         manager.record_sweep(pass()).await;
     }
-    let notifications = manager.notifications(true, 100).await.unwrap();
+    let notifications = manager.notifications.list(true, 100).await.unwrap();
     let cleanup: Vec<_> = (notifications.iter())
         .filter(|notification| notification.kind == NotificationKind::CleanupFailed)
         .map(|notification| notification.workspace.as_deref())
@@ -162,7 +162,7 @@ async fn idle_sleep_reports_its_failures_as_cleanup_does_under_its_own_name() {
         .await;
     let problem = manager.cleanup_problem().unwrap();
     assert!(problem.starts_with("Idle sleep failed"), "{problem}");
-    let notifications = manager.notifications(true, 100).await.unwrap();
+    let notifications = manager.notifications.list(true, 100).await.unwrap();
     assert!(
         notifications.iter().any(|notification| notification.kind
             == NotificationKind::CleanupFailed

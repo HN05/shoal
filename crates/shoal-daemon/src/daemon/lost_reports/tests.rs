@@ -78,7 +78,8 @@ async fn state(manager: &Manager, workspace: &Workspace) -> Option<AgentStatus> 
 
 async fn failures(manager: &Manager) -> Vec<(Option<String>, String)> {
     manager
-        .notifications(true, 50)
+        .notifications
+        .list(true, 50)
         .await
         .unwrap()
         .into_iter()

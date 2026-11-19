@@ -131,7 +131,7 @@ async fn a_renumbered_space_takes_its_questions_and_their_waits_along() -> Resul
         .answer_question(renumbered, "Postgres".into(), None)
         .await?;
     assert_eq!(waiter.await??.status.answer(), Some("Postgres"));
-    let notifications = manager.notifications(false, 50).await?;
+    let notifications = manager.notifications.list(false, 50).await?;
     let notice = (notifications.iter())
         .find(|notification| notification.kind == NotificationKind::SpaceRenumbered)
         .context("no notice of the renumbering")?;

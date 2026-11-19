@@ -3,8 +3,8 @@ use crate::{
     daemon::{
         manager::Manager,
         notifications::NotificationKind,
+        notifications::Source,
         test_support::{manager, repository},
-        tree::Source,
         workspace_files::Attacher,
     },
     model::{Chat, Workspace},
@@ -47,7 +47,7 @@ async fn received(manager: &Manager, chat: &Chat) -> Vec<String> {
 }
 
 async fn user(manager: &Manager) -> Vec<(Option<String>, NotificationKind, String)> {
-    let notifications = manager.notifications(false, 100).await.unwrap();
+    let notifications = manager.notifications.list(false, 100).await.unwrap();
     notifications
         .into_iter()
         .map(|n| (n.workspace.map(String::from), n.kind, n.message))
@@ -513,7 +513,7 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
         )
         .await
         .unwrap();
-    let handed = manager.notifications(true, 50).await.unwrap();
+    let handed = manager.notifications.list(true, 50).await.unwrap();
     assert_eq!(handed.len(), 1);
     let id = handed[0].id;
     assert!(
@@ -614,7 +614,7 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
         )
         .await
         .unwrap();
-    let notifications = manager.notifications(false, 100).await.unwrap();
+    let notifications = manager.notifications.list(false, 100).await.unwrap();
     let [notification] = notifications.as_slice() else {
         panic!("{notifications:?}");
     };

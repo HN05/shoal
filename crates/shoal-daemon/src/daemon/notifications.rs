@@ -7,12 +7,17 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
 
+use futures_util::future::BoxFuture;
+use tokio::sync::watch;
+
 use crate::daemon::log;
-use crate::daemon::store::sent_files::{sent_files, sent_ids};
-use crate::daemon::workspace_files::{self, Attacher, FileSource, NewFile, SentFile};
-use crate::daemon::{manager::Manager, tree::Source};
+use crate::daemon::store::{
+    Store,
+    sent_files::{sent_files, sent_ids},
+};
+use shoal_protocol::files::SentFile;
 pub(crate) use shoal_protocol::notifications::{Cleared, Notification, NotificationKind, Sent};
-use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_protocol::space_names::SpaceName;
 
 /// Rows kept before older read notifications are pruned; unread ones stay.
 const RETAINED: usize = 500;
@@ -85,7 +90,7 @@ pub(crate) struct About {
 impl About {
     /// A space named `name` whose identity the caller does not know, such
     /// as a launch that opened no workspace; names repeat, so it has none.
-    fn named(name: Option<&SpaceName>) -> Self {
+    pub(crate) fn named(name: Option<&SpaceName>) -> Self {
         Self {
             name: name.cloned(),
             ..Self::default()
@@ -220,131 +225,82 @@ const COLUMNS: &str = concat!(
     sent_files!("notifications.files")
 );
 
-impl Manager {
-    /// Record an event and wake watchers. Failures are logged, never returned:
-    /// a notification must not fail the operation it describes.
-    pub async fn notify(
-        &self,
-        workspace: Option<&SpaceName>,
+/// What tells a space's coordinator, the agent of the nearest space above
+/// it with one, about an event that would otherwise reach the user.
+pub(crate) trait Coordinators: Send + Sync {
+    /// Tell the coordinator of the space `id`, named `name`, about an event
+    /// of `kind` that `source` caused, with the files at `files`. Returns
+    /// whether one received it.
+    fn tell<'a>(
+        &'a self,
+        name: &'a SpaceName,
+        id: Option<&'a SpaceId>,
         kind: NotificationKind,
-        message: impl Into<String>,
-    ) {
-        self.notify_about(About::named(workspace), kind, message.into())
-            .await;
+        message: String,
+        files: Vec<PathBuf>,
+        source: Source,
+    ) -> BoxFuture<'a, bool>;
+}
+
+/// What caused an event a coordinator may receive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Source {
+    /// The daemon, about the workspace's agent, such as its exit.
+    Daemon,
+    /// A process acting in the workspace, such as `shoal alerts send`.
+    Agent,
+}
+
+/// The notifications recorded for the user, and the watchers waiting for
+/// new ones.
+pub struct Notifications {
+    store: Store,
+    /// The newest recorded notification ID.
+    recorded: watch::Sender<i64>,
+}
+
+impl Notifications {
+    pub(crate) fn new(store: Store) -> Self {
+        Self {
+            store,
+            recorded: watch::channel(0).0,
+        }
     }
 
-    /// [`Manager::notify`] about the space `id`, which has `name`: names
-    /// repeat, so only its identity says which space the event is about.
-    pub async fn notify_space(
+    /// Wake `shoal alerts --follow` for the notification `id`, recorded in a
+    /// transaction of another change.
+    pub(crate) fn recorded(&self, id: i64) {
+        self.recorded.send_replace(id);
+    }
+
+    /// Follow the newest recorded notification ID.
+    pub(crate) fn watch(&self) -> watch::Receiver<i64> {
+        self.recorded.subscribe()
+    }
+
+    /// Tell the agent coordinating the space `about` names about an event,
+    /// or record it for the user with the files the space sent. Failures are
+    /// logged, never returned: a notification must not fail the operation it
+    /// describes.
+    pub(crate) async fn notify(
         &self,
-        name: &SpaceName,
-        id: &SpaceId,
-        kind: NotificationKind,
-        message: impl Into<String>,
-    ) {
-        (self.notify_about(About::space(name, id), kind, message.into())).await;
-    }
-
-    /// [`Manager::notify`] about a workspace whose identity the caller holds,
-    /// so a rename meanwhile cannot attribute the event to another one.
-    pub(crate) async fn notify_about(&self, about: About, kind: NotificationKind, message: String) {
-        self.notify_with_files(about, kind, message, &[]).await;
-    }
-
-    /// [`Manager::notify_about`] with the files the space sent the user.
-    pub(crate) async fn notify_with_files(
-        &self,
+        coordinators: &dyn Coordinators,
         about: About,
         kind: NotificationKind,
         message: String,
         files: &[SentFile],
     ) {
-        if let Err(error) = self.record_sent(about, kind, message, files).await {
+        if let Err(error) = self.record(coordinators, about, kind, message, files).await {
             log!("notification not recorded: {error:#}");
         }
     }
 
-    /// Record a message a space's agent sends the user, naming the space,
-    /// with copies of the files `attachments`, which the space's attached
-    /// files keep as attached by `attacher` for as long as its results.
-    /// Unlike daemon events, the message is the whole operation, so failures
-    /// are returned.
-    pub async fn send_message(
+    /// Tell the agent coordinating the space `about` names about an event,
+    /// or record it for the user and return its ID. A coordinating agent
+    /// receives the files the space sent as the message's attached files.
+    pub(crate) async fn record(
         &self,
-        selector: &SpaceSelector,
-        message: String,
-        attachments: Vec<NewFile>,
-        attacher: &Attacher,
-    ) -> Result<Sent> {
-        crate::validate::message(&message)?;
-        workspace_files::check_sent(&attachments)?;
-        let space = self.space(selector).await?;
-        let about = About::space(&space.name, &space.id);
-        let id = space.id.clone();
-        let (kind, text) = (NotificationKind::AgentMessage, message.clone());
-        let notification = (self.send_with_files(
-            &space.into(),
-            FileSource::Alert,
-            &text,
-            attachments,
-            attacher,
-            |files| async move { self.record_sent(about, kind, message, &files).await },
-        ))
-        .await?;
-        crate::daemon::events::record_alert(&self.store, &id, text).await;
-        Ok(Sent { notification })
-    }
-
-    /// The workspace or running chat `selector` names, as its messages to
-    /// the user name their sender.
-    async fn space_about(&self, selector: &SpaceSelector) -> Result<About> {
-        let space = self.space(selector).await?;
-        Ok(About::space(&space.name, &space.id))
-    }
-
-    /// Tell the user that a turn-state report of the space's agent failed
-    /// with `error`, so the state shown for the agent may be out of date.
-    pub async fn report_state_failure(&self, selector: &SpaceSelector, error: &str) -> Result<()> {
-        let about = self.space_about(selector).await?;
-        let error = error.replace(char::is_control, " ");
-        let message = crate::validate::shorten(
-            format!("agent state report failed; {error}"),
-            crate::validate::MAX_MESSAGE_LEN,
-        );
-        self.record_notification(about, NotificationKind::StateReportFailed, message)
-            .await?;
-        Ok(())
-    }
-
-    /// Delete the message `id` the space sent the user, which the user need
-    /// not see after all. A shown message stays; a correction follows it.
-    pub async fn withdraw_message(
-        &self,
-        selector: &SpaceSelector,
-        id: i64,
-    ) -> Result<Notification> {
-        let space = self.space_about(selector).await?;
-        self.store
-            .write(move |tx| withdraw_message(tx, &space, id))
-            .await
-    }
-
-    /// Tell the agent coordinating the workspace's work about an event, or
-    /// record it for the user and return its ID.
-    pub(super) async fn record_notification(
-        &self,
-        about: About,
-        kind: NotificationKind,
-        message: impl Into<String>,
-    ) -> Result<Option<i64>> {
-        self.record_sent(about, kind, message.into(), &[]).await
-    }
-
-    /// [`Manager::record_notification`] with the files the space sent the
-    /// user, which a coordinating agent receives as the message's attached
-    /// files.
-    async fn record_sent(
-        &self,
+        coordinators: &dyn Coordinators,
         about: About,
         kind: NotificationKind,
         message: String,
@@ -353,40 +309,32 @@ impl Manager {
         if let (Some(source), Some(name)) = (kind.coordination(), &about.name) {
             let paths: Vec<PathBuf> = files.iter().map(|file| file.path.clone()).collect();
             let (id, message) = (about.id.as_ref(), message.clone());
-            if self
-                .tell_coordinator(name, id, Some(kind), message, paths, source)
+            if coordinators
+                .tell(name, id, kind, message, paths, source)
                 .await
             {
                 return Ok(None);
             }
         }
         let files = sent_ids(files)?;
-        let id = self
-            .record_user_notification(about, kind, message, files)
-            .await?;
+        let id = self.record_for_user(about, kind, message, files).await?;
         Ok(Some(id))
     }
 
-    /// Record an event about the space `id`, which has `name`, for the user
-    /// whatever space above it has an agent, as when its coordinator's
-    /// machine stays offline.
-    pub(crate) async fn notify_user_of_space(
-        &self,
-        name: &SpaceName,
-        id: &SpaceId,
-        kind: NotificationKind,
-        message: String,
-    ) {
-        let about = About::space(name, id);
-        let recorded = self.record_user_notification(about, kind, message, "[]".into());
+    /// Record an event about the space `about` names for the user whatever
+    /// space above it has an agent, as when its coordinator's machine stays
+    /// offline. A failure is logged.
+    pub(crate) async fn notify_user(&self, about: About, kind: NotificationKind, message: String) {
+        let recorded = self.record_for_user(about, kind, message, "[]".into());
         if let Err(error) = recorded.await {
             log!("notification not recorded: {error:#}");
         }
     }
 
-    /// Record an event for the user with the files whose record IDs the JSON
-    /// array `files` lists, wake watchers when it is new, and return its ID.
-    async fn record_user_notification(
+    /// Record an event for the user with the files whose record IDs the
+    /// JSON array `files` lists, wake watchers when it is new, and return
+    /// its ID.
+    async fn record_for_user(
         &self,
         about: About,
         kind: NotificationKind,
@@ -398,14 +346,23 @@ impl Manager {
             .write(move |tx| insert(tx, &about, kind, &message, &files))
             .await?;
         if recorded.new {
-            self.signals.notification_recorded(recorded.id);
+            self.recorded(recorded.id);
         }
         Ok(recorded.id)
     }
 
+    /// Delete the message `id` the space `about` names sent the user, which
+    /// the user need not see after all. A shown message stays; a correction
+    /// follows it.
+    pub(crate) async fn withdraw_message(&self, about: About, id: i64) -> Result<Notification> {
+        self.store
+            .write(move |tx| withdraw_message(tx, &about, id))
+            .await
+    }
+
     /// Oldest first. `unread_only` gives the oldest unread notifications, so a
     /// backlog is shown in order across calls; otherwise the newest `limit`.
-    pub async fn notifications(&self, unread_only: bool, limit: u32) -> Result<Vec<Notification>> {
+    pub async fn list(&self, unread_only: bool, limit: u32) -> Result<Vec<Notification>> {
         self.store
             .run(move |db| {
                 if unread_only {
@@ -429,7 +386,7 @@ impl Manager {
     }
 
     /// Notifications after `after`, unread only, oldest first.
-    pub async fn notifications_after(&self, after: i64, limit: u32) -> Result<Vec<Notification>> {
+    pub(crate) async fn after(&self, after: i64, limit: u32) -> Result<Vec<Notification>> {
         self.store
             .run(move |db| {
                 Ok(db
@@ -442,7 +399,7 @@ impl Manager {
             .await
     }
 
-    pub async fn unread_notifications(&self) -> Result<u64> {
+    pub(crate) async fn unread(&self) -> Result<u64> {
         self.store
             .run(|db| {
                 let count: i64 = db.query_row(
@@ -456,7 +413,7 @@ impl Manager {
     }
 
     /// Unread notifications about the workspace or chat `space_id`.
-    pub async fn unread_space_notifications(&self, space_id: &SpaceId) -> Result<u64> {
+    pub(crate) async fn unread_of_space(&self, space_id: &SpaceId) -> Result<u64> {
         let space_id = space_id.to_owned();
         self.store
             .run(move |db| {
@@ -471,7 +428,7 @@ impl Manager {
     }
 
     /// Mark exactly these notifications as shown.
-    pub async fn mark_notifications_read(&self, ids: Vec<i64>) -> Result<()> {
+    pub(crate) async fn mark_read(&self, ids: Vec<i64>) -> Result<()> {
         self.store
             .write(move |tx| {
                 for id in ids {
@@ -484,7 +441,7 @@ impl Manager {
 
     /// Delete every notification, read or not. Ids keep increasing, so a
     /// following stream's cursor still sees later ones.
-    pub async fn clear_notifications(&self) -> Result<Cleared> {
+    pub(crate) async fn clear(&self) -> Result<Cleared> {
         self.store
             .run(|db| {
                 let cleared = db.execute("DELETE FROM notifications", [])?;

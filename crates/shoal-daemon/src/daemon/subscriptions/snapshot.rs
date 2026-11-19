@@ -298,7 +298,8 @@ async fn messages(
     if caller.is_none() {
         messages.extend(
             manager
-                .notifications(false, u32::MAX)
+                .notifications
+                .list(false, u32::MAX)
                 .await?
                 .iter()
                 .filter(|notification| notification.kind == NotificationKind::AgentMessage)
@@ -336,7 +337,8 @@ fn user_message(notification: &Notification) -> Message {
 
 async fn notifications(manager: &Manager) -> Result<Vec<Record>> {
     Ok(manager
-        .notifications(false, u32::MAX)
+        .notifications
+        .list(false, u32::MAX)
         .await?
         .into_iter()
         .map(Record::Notification)

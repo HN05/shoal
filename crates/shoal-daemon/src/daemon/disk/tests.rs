@@ -237,7 +237,7 @@ async fn cleanup_empties_unused_caches_after_removing_workspaces() {
         .unwrap();
     assert!(!go.exists());
     assert_eq!(manager.list_workspaces().await.unwrap().len(), 1);
-    let notifications = manager.notifications(true, 10).await.unwrap();
+    let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert!(
         notifications
             .iter()
@@ -293,7 +293,7 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
         .await
         .unwrap();
     assert!(!result.exists());
-    let notifications = manager.notifications(true, 10).await.unwrap();
+    let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert!(
         notifications
             .iter()
@@ -388,7 +388,8 @@ async fn failed_cleanup_still_stops_executions_on_critical_space() {
     let remaining = || async { manager.list_workspaces().await.unwrap().len() };
     let stops = || async {
         manager
-            .notifications(true, 10)
+            .notifications
+            .list(true, 10)
             .await
             .unwrap()
             .into_iter()

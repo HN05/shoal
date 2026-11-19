@@ -136,19 +136,24 @@ async fn a_workspace_in_a_stalled_directory_refuses_its_layers_without_reading_t
 
 /// The unread notifications that a workspace's config file is ignored.
 async fn ignored_configs(manager: &super::Manager) -> Vec<String> {
-    (manager.notifications(true, 50).await.unwrap().into_iter())
-        .filter(|notification| notification.kind == NotificationKind::ConfigIgnored)
-        .map(|notification| notification.message)
-        .collect()
+    (manager
+        .notifications
+        .list(true, 50)
+        .await
+        .unwrap()
+        .into_iter())
+    .filter(|notification| notification.kind == NotificationKind::ConfigIgnored)
+    .map(|notification| notification.message)
+    .collect()
 }
 
 async fn mark_all_read(manager: &super::Manager) {
-    let unread = manager.notifications(true, 50).await.unwrap();
+    let unread = manager.notifications.list(true, 50).await.unwrap();
     let ids = unread
         .into_iter()
         .map(|notification| notification.id)
         .collect();
-    manager.mark_notifications_read(ids).await.unwrap();
+    manager.notifications.mark_read(ids).await.unwrap();
 }
 
 #[tokio::test]

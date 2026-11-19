@@ -105,7 +105,7 @@ async fn a_refused_lock_is_reported_and_shutdowns_still_stop_work() {
     harness.announce.send(true).unwrap();
     harness.end().await;
     assert!(manager.agent_queue.suspended());
-    let notifications = manager.notifications(true, 10).await.unwrap();
+    let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert!(
         notifications
             .iter()

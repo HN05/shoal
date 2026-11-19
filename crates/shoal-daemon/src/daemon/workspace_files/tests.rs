@@ -642,7 +642,8 @@ async fn results_outlive_removal_as_long_as_its_record() {
     assert_eq!(std::fs::read_to_string(&result).unwrap(), "No leaks");
     assert!(
         manager
-            .notifications(true, 50)
+            .notifications
+            .list(true, 50)
             .await
             .unwrap()
             .iter()

@@ -52,7 +52,7 @@ async fn a_failed_launch_stays_on_its_space_with_its_error() {
         .workspace_by_id(entry.space().unwrap())
         .await
         .unwrap();
-    let notifications = manager.notifications(true, 10).await.unwrap();
+    let notifications = manager.notifications.list(true, 10).await.unwrap();
     let told = (notifications.iter())
         .find(|notification| notification.kind == NotificationKind::StartFailed)
         .unwrap();

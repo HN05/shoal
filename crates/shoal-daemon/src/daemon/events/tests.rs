@@ -105,7 +105,7 @@ async fn replay_drains_multiple_batches_and_live_readers_do_not_consume_notifica
         };
         assert_eq!(event.id.id(), 206);
     }
-    assert_eq!(manager.unread_notifications().await.unwrap(), 1);
+    assert_eq!(manager.notifications.unread().await.unwrap(), 1);
     drop(first);
     drop(second);
     first_task.await.unwrap().unwrap();
@@ -296,9 +296,10 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
-    let notifications = manager.notifications(true, 100).await.unwrap();
+    let notifications = manager.notifications.list(true, 100).await.unwrap();
     manager
-        .mark_notifications_read(notifications.iter().map(|n| n.id).collect())
+        .notifications
+        .mark_read(notifications.iter().map(|n| n.id).collect())
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();

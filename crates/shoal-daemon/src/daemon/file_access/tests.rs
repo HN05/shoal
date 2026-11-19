@@ -169,7 +169,7 @@ async fn the_daemon_alerts_once_while_a_directory_stays_stalled() {
     }
     tokio::time::resume();
 
-    let alerts = manager.notifications(false, 10).await.unwrap();
+    let alerts = manager.notifications.list(false, 10).await.unwrap();
     let [alert] = alerts.as_slice() else {
         panic!("expected one alert: {alerts:?}");
     };

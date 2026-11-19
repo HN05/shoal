@@ -240,7 +240,7 @@ async fn a_failing_release_hook_keeps_the_permit_as_the_users_and_tells_the_user
         .unwrap();
 
     assert_eq!(fixture.permits().await, [permit("agent", &Acquirer::User)]);
-    let notices = fixture.manager.notifications(false, 10).await.unwrap();
+    let notices = fixture.manager.notifications.list(false, 10).await.unwrap();
     let failed: Vec<_> = (notices.iter())
         .filter(|notice| notice.kind == NotificationKind::ReleaseFailed)
         .collect();
@@ -436,7 +436,7 @@ async fn a_release_a_busy_resource_operation_holds_off_waits_for_the_next_pass()
     drop(hook);
     manager.release_leases_of_ended_executions().await.unwrap();
     assert_eq!(fixture.permits().await, []);
-    let notices = manager.notifications(false, 10).await.unwrap();
+    let notices = manager.notifications.list(false, 10).await.unwrap();
     assert!(
         (notices.iter()).all(|notice| notice.kind != NotificationKind::ReleaseFailed),
         "no release failed"
