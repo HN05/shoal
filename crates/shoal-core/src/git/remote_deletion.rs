@@ -25,18 +25,34 @@ pub async fn delete_at(
     head: &CommitId,
     login: &GitLogin,
 ) -> Result<()> {
-    let pushed = from_empty_repository(|empty| deletion(empty, url, branch, head, login)).await?;
+    let pushed = from_empty_repository(object_format(head), |empty| {
+        deletion(empty, url, branch, head, login)
+    })
+    .await?;
     concluded(pushed, branch, head)
 }
 
 /// Run the push `push` builds for an empty repository, in one made for it
-/// and removed after, since Git pushes only from a repository.
-async fn from_empty_repository(push: impl FnOnce(&Path) -> Command) -> Result<io::Result<Output>> {
+/// in the object format `format` and removed after, since Git pushes only
+/// from a repository of the remote's format.
+async fn from_empty_repository(
+    format: &str,
+    push: impl FnOnce(&Path) -> Command,
+) -> Result<io::Result<Output>> {
     let empty = off_runtime::run(|| Ok(tempfile::tempdir()?)).await?;
-    git::run_isolated(empty.path(), &["init", "--quiet", "--bare"]).await?;
+    let format = format!("--object-format={format}");
+    git::run_isolated(empty.path(), &["init", "--quiet", "--bare", &format]).await?;
     let pushed = git::bounded(push(empty.path())).capture().await;
     off_runtime::run(move || Ok(empty.close()?)).await?;
     Ok(pushed)
+}
+
+/// Git's name for the object format `head` is an ID in.
+fn object_format(head: &CommitId) -> &'static str {
+    match head.as_str().len() {
+        64 => "sha256",
+        _ => "sha1",
+    }
 }
 
 /// The outcome of the deletion of `branch` at `head` that `pushed` ran.
