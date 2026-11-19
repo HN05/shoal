@@ -63,6 +63,43 @@ fn git_fixtures_ignore_inherited_git_variables_child() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn a_repository_above_the_temporary_directory_holds_no_test() -> Result<()> {
+    let root = tempfile::tempdir()?;
+    let above = repository(root.path(), "above");
+    let tmp = above.join("tmp");
+    fs::create_dir(&tmp)?;
+    let output = isolated_test(
+        &tmp,
+        "test_support::tests::a_repository_above_the_temporary_directory_holds_no_test_child",
+    )
+    .env("TMPDIR", &tmp)
+    .output()
+    .await?;
+    assert!(output.status.success(), "{}", printed(&output));
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "run by a_repository_above_the_temporary_directory_holds_no_test"]
+async fn a_repository_above_the_temporary_directory_holds_no_test_child() -> Result<()> {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return Ok(());
+    }
+    let dir = tempfile::tempdir()?;
+    let mut inherited = std::process::Command::new("git");
+    inherited.current_dir(dir.path());
+    let mut isolated = std::process::Command::new("git");
+    super::isolate(&mut isolated, dir.path());
+    for command in [&mut inherited, &mut isolated] {
+        let found = command.args(["rev-parse", "--absolute-git-dir"]).output()?;
+        assert!(!found.status.success(), "{}", printed(&found));
+    }
+    let read = crate::git::head_and_branch(dir.path()).await;
+    assert!(read.is_err(), "{read:?}");
+    Ok(())
+}
+
 /// Every file below `dir` with its contents.
 fn snapshot(dir: &Path) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
     let mut files = BTreeMap::new();

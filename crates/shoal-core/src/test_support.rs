@@ -49,8 +49,8 @@ const RUNNER_VARIABLES: [&str; 5] = [
 ];
 
 /// Run `command` from `root`, its home, without the runner's Shoal, terminal,
-/// agent or Git variables, Git configuration beyond the repository's,
-/// or stdin: a command that read an open pipe or socket to its end would
+/// agent or Git variables, Git configuration beyond the repository's, a
+/// repository above the [`git_ceilings`], or stdin: a command that read an open pipe or socket to its end would
 /// wait forever. The rest of the environment, such as `PATH` and `TMPDIR`,
 /// stays.
 pub fn isolate<'a>(command: &'a mut Command, root: &Path) -> &'a mut Command {
@@ -70,7 +70,40 @@ pub fn isolate<'a>(command: &'a mut Command, root: &Path) -> &'a mut Command {
         .env("ZDOTDIR", root)
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env(GIT_CEILING, git_ceilings())
         .stdin(std::process::Stdio::null())
+}
+
+/// The variable naming the directories Git looks for a repository no
+/// further up than.
+const GIT_CEILING: &str = "GIT_CEILING_DIRECTORIES";
+
+/// This process's [`GIT_CEILING`] with the temporary directories tests make
+/// their repositories in, `TMPDIR` and `/tmp`, so that a repository a stray
+/// command made above them, such as in the repository directory that holds
+/// a Shoal runner's `TMPDIR`, never takes in a test's directory.
+fn git_ceilings() -> OsString {
+    let inherited = std::env::var_os(GIT_CEILING).unwrap_or_default();
+    // An empty entry would stop Git resolving the symlinks of those after it.
+    let mut ceilings: Vec<_> = std::env::split_paths(&inherited)
+        .filter(|ceiling| !ceiling.as_os_str().is_empty())
+        .collect();
+    for temporary in [std::env::temp_dir(), PathBuf::from("/tmp")] {
+        if !ceilings.contains(&temporary) {
+            ceilings.push(temporary);
+        }
+    }
+    std::env::join_paths(ceilings).unwrap()
+}
+
+/// Stop Git, run by this process or what it starts, and Shoal's reads from
+/// looking for a repository above the [`git_ceilings`].
+///
+/// # Safety
+/// Call before any other thread exists.
+pub unsafe fn stop_git_at_temporary_directories() {
+    // SAFETY: the caller guarantees no other thread reads the environment.
+    unsafe { std::env::set_var(GIT_CEILING, git_ceilings()) };
 }
 
 /// On macOS, the directory of the programs that `/usr/bin`'s developer
@@ -532,7 +565,8 @@ macro_rules! helper_tests {
 /// repository variables a Git hook or `git rebase --exec` running it
 /// exports, since the code under test starts Git, and scripts that run Git,
 /// which would otherwise work in that repository instead of the fixtures';
-/// and [`run_developer_tools_directly`]. Each crate whose tests start such
+/// [`stop_git_at_temporary_directories`]; and
+/// [`run_developer_tools_directly`]. Each crate whose tests start such
 /// processes expands it at its root.
 #[macro_export]
 macro_rules! prepare_test_process {
@@ -548,6 +582,7 @@ macro_rules! prepare_test_process {
                 // SAFETY: constructors run before `main` starts any thread.
                 unsafe {
                     $crate::git::forget_inherited_repository();
+                    $crate::test_support::stop_git_at_temporary_directories();
                     $crate::test_support::run_developer_tools_directly();
                 }
             }
