@@ -52,7 +52,7 @@ enum Registration {
 
 /// The worktree a removal takes, as the removal found it once it reserved
 /// the workspace.
-pub(in crate::daemon::workspace) struct WorktreeStage {
+pub(in crate::daemon) struct WorktreeStage {
     workspace: Workspace,
     /// Whether its directory existed; a missing one is forgotten instead.
     present: bool,
@@ -103,7 +103,7 @@ impl From<RemovalResult> for WorktreeRemoval {
 impl WorktreeStage {
     /// What the journal records as the removal's cause: `removal`'s, or the
     /// deleted directory's, which a worktree yet to be created never had.
-    pub(in crate::daemon::workspace) fn cause(&self, removal: Removal<'_>) -> EventCause {
+    pub(in crate::daemon) fn cause(&self, removal: Removal<'_>) -> EventCause {
         if self.present || self.workspace.unborn() {
             removal.cause()
         } else {
@@ -113,7 +113,7 @@ impl WorktreeStage {
 
     /// What ties processes to the workspace as `removal` stops them: nothing
     /// for a deleted directory.
-    pub(in crate::daemon::workspace) fn ties(&self, removal: Removal<'_>) -> WorktreeTies {
+    pub(in crate::daemon) fn ties(&self, removal: Removal<'_>) -> WorktreeTies {
         match self.present {
             true => removal.worktree_ties(),
             false => WorktreeTies::None,
@@ -122,13 +122,13 @@ impl WorktreeStage {
 
     /// The shared Git directory of the repository of an existing worktree,
     /// as the removal read it.
-    pub(in crate::daemon::workspace) fn common_dir(&self) -> Option<&CommonDir> {
+    pub(in crate::daemon) fn common_dir(&self) -> Option<&CommonDir> {
         self.baseline.as_ref().map(Baseline::common_dir)
     }
 
     /// How the removal stops the workspace's commands: those of a deleted
     /// directory cannot be restored there.
-    pub(in crate::daemon::workspace) fn stop_request(&self) -> StopRequest {
+    pub(in crate::daemon) fn stop_request(&self) -> StopRequest {
         if self.present {
             StopRequest::restorable_removal()
         } else {
@@ -141,7 +141,7 @@ impl Manager {
     /// What removing the worktree of `workspace` at a request would discard,
     /// with its changed files and whether removal archives them when
     /// `include_changes` is set and it has any.
-    pub(in crate::daemon::workspace) async fn check_manual_worktree(
+    pub(in crate::daemon) async fn check_manual_worktree(
         &self,
         workspace: &Workspace,
         include_changes: bool,
@@ -175,7 +175,7 @@ impl Manager {
     /// which was `replaced` before: settle an earlier removal that stopped
     /// partway, then resolve the post-remove hook and Xcode data while its
     /// record exists.
-    pub(in crate::daemon::workspace) async fn begin_worktree_removal(
+    pub(in crate::daemon) async fn begin_worktree_removal(
         &self,
         workspace: &Workspace,
         replaced: WorkspaceState,
@@ -213,7 +213,7 @@ impl Manager {
     /// failed otherwise since has its marker dropped instead: the deletions
     /// there may be its agent's. Only the recorded admin directory, marked
     /// as this workspace's, says that a removal began.
-    pub(in crate::daemon::workspace) async fn settle_interrupted_removal(
+    pub(in crate::daemon) async fn settle_interrupted_removal(
         &self,
         workspace: &Workspace,
         state: WorkspaceState,
@@ -244,7 +244,7 @@ impl Manager {
     /// back, which its error says: this removal's `worktree remove`, stopped
     /// partway and unable to restore, or an earlier one whose marker this
     /// removal failed before settling.
-    pub(in crate::daemon::workspace) async fn failed_worktree_removal(
+    pub(in crate::daemon) async fn failed_worktree_removal(
         &self,
         workspace: &Workspace,
         replaced: WorkspaceState,
@@ -265,7 +265,7 @@ impl Manager {
     /// at `stage`, after stopping the `cancelled` restores, returning the
     /// inspection removal proceeds with; none for a deleted directory, whose
     /// checks come before the removal stops anything.
-    pub(in crate::daemon::workspace::lifecycle) async fn check_worktree_removal(
+    pub(in crate::daemon::lifecycle) async fn check_worktree_removal(
         &self,
         worktree: &WorktreeStage,
         removal: Removal<'_>,
@@ -288,7 +288,7 @@ impl Manager {
     /// every check `removal` needs of it at `stage`, after stopping
     /// the `cancelled` restores. A deleted directory inspects as clean,
     /// while its HEAD cannot be read.
-    pub(in crate::daemon::workspace::lifecycle) async fn check_worktree(
+    pub(in crate::daemon::lifecycle) async fn check_worktree(
         &self,
         workspace: &Workspace,
         removal: Removal<'_>,
@@ -354,14 +354,14 @@ impl Manager {
     /// End what the worktree runs that its commands' stop leaves alone: its
     /// review goes with its record, and a CI job ends through its forge
     /// before its runner is stopped.
-    pub(in crate::daemon::workspace) async fn stop_worktree_work(&self, worktree: &WorktreeStage) {
+    pub(in crate::daemon) async fn stop_worktree_work(&self, worktree: &WorktreeStage) {
         self.stop_workspace_review(&worktree.workspace.id).await;
         self.cancel_job_before_stopping(&worktree.workspace.id, JobStop::Removal)
             .await;
     }
 
     /// Run the worktree's removal hooks, which a deleted directory does not.
-    pub(in crate::daemon::workspace) async fn run_removal_hooks(
+    pub(in crate::daemon) async fn run_removal_hooks(
         &self,
         worktree: &WorktreeStage,
     ) -> Result<()> {
@@ -377,7 +377,7 @@ impl Manager {
     /// promises to keep, or forget a deleted one, retaining its branch since
     /// its contents cannot be inspected. Its containers, simulators and Xcode
     /// data go with it.
-    pub(in crate::daemon::workspace) async fn delete_worktree(
+    pub(in crate::daemon) async fn delete_worktree(
         &self,
         worktree: &WorktreeStage,
         removal: Removal<'_>,
@@ -417,7 +417,7 @@ impl Manager {
     /// What only a removed worktree leaves behind once the record is gone:
     /// the branch it kept, and its post-remove hook, which runs with the
     /// workspace's identity.
-    pub(in crate::daemon::workspace) async fn complete_worktree_removal(
+    pub(in crate::daemon) async fn complete_worktree_removal(
         &self,
         worktree: WorktreeStage,
         mut outcome: WorktreeRemoval,
@@ -626,10 +626,7 @@ impl Manager {
     /// while the worktree of `workspace`, below the space it removes, is in a
     /// directory whose file access stalled. The sweep's own pass of that
     /// workspace rechecks it.
-    pub(in crate::daemon::workspace) fn ensure_worktree_answers(
-        &self,
-        workspace: &Workspace,
-    ) -> Result<()> {
+    pub(in crate::daemon) fn ensure_worktree_answers(&self, workspace: &Workspace) -> Result<()> {
         ensure!(
             self.file_access.stalled(&workspace.path).is_none(),
             "file access stalled in the directory of {}, below it; retaining it",
@@ -687,7 +684,7 @@ fn ensure_checkpoint_keeps_files(
 /// whichever its worktree is on. A disposable workspace's branch counts as
 /// preserved while the worktree is still on it, and its files always go by
 /// force.
-pub(in crate::daemon::workspace) fn removal_options(
+pub(in crate::daemon) fn removal_options(
     check: &Inspection,
     removal: Removal<'_>,
     built_on: bool,

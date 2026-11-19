@@ -1,7 +1,7 @@
 //! The removal of a workspace's worktree when the workspace becomes a chat:
 //! it takes the path every removal takes, and commits the chat in place of
 //! the workspace's record instead of deleting it.
-use super::super::Manager;
+use super::super::workspace::Manager;
 use super::Removal;
 use crate::{
     daemon::{approvals::ApprovalRequest, conversions::record::ConvertedChat},
@@ -34,7 +34,7 @@ impl Manager {
         let (id, chat) = (id.to_owned(), chat.clone());
         self.store
             .write(move |tx| {
-                super::super::restore::rekey_converted(tx, &id)?;
+                super::super::workspace::restore::rekey_converted(tx, &id)?;
                 crate::daemon::conversions::record::replace_workspace(tx, &id, &chat)
             })
             .await

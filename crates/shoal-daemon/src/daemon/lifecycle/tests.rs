@@ -1,4 +1,4 @@
-use super::super::Manager;
+use super::super::workspace::Manager;
 use super::worktree::removal_options;
 use super::*;
 use crate::model::EventCause;
@@ -1432,7 +1432,7 @@ async fn idle_cleanup_takes_a_disposable_workspace_whatever_it_holds() {
         .register_repository(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let new = |disposable| super::super::NewWorkspace {
+    let new = |disposable| super::super::workspace::NewWorkspace {
         options: crate::protocol::CreationOptions {
             disposable,
             ..Default::default()
@@ -1473,7 +1473,7 @@ async fn a_disposable_workspace_deletes_only_its_own_new_branch() {
         .register_repository(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let disposable = || super::super::NewWorkspace {
+    let disposable = || super::super::workspace::NewWorkspace {
         options: crate::protocol::CreationOptions {
             disposable: true,
             ..Default::default()
@@ -1533,7 +1533,7 @@ async fn workspace_of_kind(disposable: bool) -> (tempfile::TempDir, Arc<Manager>
         .register_repository(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let new = super::super::NewWorkspace {
+    let new = super::super::workspace::NewWorkspace {
         options: crate::protocol::CreationOptions {
             disposable,
             ..Default::default()
@@ -1789,7 +1789,7 @@ fn a_runners_repository_variables_reach_no_git_of_the_tests() {
     let output = crate::test_support::unmarked(program.to_str().unwrap())
         .args([
             "--exact",
-            "daemon::workspace::lifecycle::tests::workspace_life_with_git_in_a_hook",
+            "daemon::lifecycle::tests::workspace_life_with_git_in_a_hook",
             "--ignored",
         ])
         .env("GIT_DIR", &git_dir)

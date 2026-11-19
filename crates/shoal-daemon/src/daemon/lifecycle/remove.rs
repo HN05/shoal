@@ -5,7 +5,8 @@ use super::worktree::{WorktreeRemoval, WorktreeStage};
 use super::{Removal, Stage};
 use crate::daemon::{
     executions::StopRequest,
-    workspace::{Manager, completion_cleanup::CompletedAncestor, space_removal::AgentState},
+    space_removal::AgentState,
+    workspace::{Manager, completion_cleanup::CompletedAncestor},
 };
 use crate::model::EventCause;
 use crate::{
@@ -114,7 +115,7 @@ impl Manager {
     /// Remove the workspace `id` and its unsaved work for its repository's
     /// removal, which holds the repository's Git gate and waited for the
     /// creations under way to end.
-    pub(in crate::daemon::workspace) async fn remove_for_repository(
+    pub(in crate::daemon) async fn remove_for_repository(
         &self,
         id: &SpaceId,
     ) -> Result<RemovalResult> {
@@ -227,7 +228,7 @@ impl Manager {
 
     /// Remove `space` for its `completion` with cleanup, which `cause`
     /// recorded, once its grace period ends; `Ok(false)` while it runs.
-    pub(in crate::daemon::workspace) async fn remove_completed(
+    pub(in crate::daemon) async fn remove_completed(
         &self,
         space: &Space,
         completion: &Completion,
@@ -243,7 +244,7 @@ impl Manager {
 
     /// Remove `space` below `ancestor`, whose completion with cleanup
     /// stands, once its grace period ends; `Ok(false)` while it runs.
-    pub(in crate::daemon::workspace) async fn remove_under_completed(
+    pub(in crate::daemon) async fn remove_under_completed(
         &self,
         space: &Space,
         ancestor: &CompletedAncestor,
@@ -295,7 +296,7 @@ impl Manager {
     /// Remove the space `id` for `removal`: reserve it, so nothing restores
     /// or changes it meanwhile, carry the removal out, and on failure give
     /// the reservation up.
-    pub(in crate::daemon::workspace) async fn remove_space(
+    pub(in crate::daemon) async fn remove_space(
         &self,
         id: &SpaceId,
         removal: Removal<'_>,

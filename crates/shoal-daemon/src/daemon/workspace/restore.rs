@@ -389,7 +389,7 @@ mod worktree;
 #[cfg(test)]
 use records::RESTORE_CLAIM;
 pub(in crate::daemon) use records::rehome_removed_chat;
-pub(super) use records::rekey_converted;
+pub(in crate::daemon) use records::rekey_converted;
 pub(super) use worktree::{RestoredFiles, write_files};
 
 #[cfg(test)]

@@ -29,7 +29,7 @@ impl Manager {
     /// its worktree's own config is there to read. A missing worktree's
     /// settings come from its repository. Failing to read them keeps Xcode's
     /// data rather than the workspace.
-    pub(super) async fn xcode_settings(
+    pub(in crate::daemon) async fn xcode_settings(
         &self,
         workspace: &Workspace,
         present: bool,
@@ -54,7 +54,11 @@ impl Manager {
     /// Delete what Xcode kept outside the removed worktree: the DerivedData
     /// of every project inside it, which Xcode rebuilds on demand, and
     /// package checkouts nothing pins any more.
-    pub(super) async fn delete_xcode_data(&self, workspace: &Workspace, settings: &Effective) {
+    pub(in crate::daemon) async fn delete_xcode_data(
+        &self,
+        workspace: &Workspace,
+        settings: &Effective,
+    ) {
         if let Some(location) = derived_data::location(&self.paths.home) {
             let worktree = workspace.path.clone();
             delete_derived_data(&workspace.name, location, move |project| {

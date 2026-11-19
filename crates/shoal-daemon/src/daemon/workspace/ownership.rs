@@ -453,7 +453,10 @@ impl Manager {
 /// Refuse the admin directory `git_dir`, which `workspace` recorded, unless
 /// its owner marker makes it the workspace's own, whatever its worktree
 /// holds.
-pub(super) async fn verify_admin_dir_owner(workspace: &Workspace, git_dir: &Path) -> Result<()> {
+pub(in crate::daemon) async fn verify_admin_dir_owner(
+    workspace: &Workspace,
+    git_dir: &Path,
+) -> Result<()> {
     let (git_dir, id) = (git_dir.to_owned(), workspace.id.clone());
     off_runtime::run(move || verify_owner(&git_dir, &id)).await
 }

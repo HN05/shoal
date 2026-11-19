@@ -65,7 +65,7 @@ impl Store {
                     WHERE json_extract(record, '$.status')=?2",
                 [CleanRequestStatus::Interrupted, CleanRequestStatus::Requested],
             )?;
-            crate::daemon::workspace::fail_interrupted_removals(tx)?;
+            crate::daemon::lifecycle::fail_interrupted_removals(tx)?;
             tx.execute(
                 "UPDATE executions SET state=?1 WHERE state=?2",
                 [ExecutionState::Unknown, ExecutionState::Running],

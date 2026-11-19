@@ -57,7 +57,11 @@ impl Manager {
         let Some(space) = self.find_space(&listed.id).await? else {
             return Ok(());
         };
-        if space.worktree().and_then(super::not_ready).is_some() {
+        if space
+            .worktree()
+            .and_then(super::super::lifecycle::not_ready)
+            .is_some()
+        {
             return Ok(());
         }
         if let Some(ancestor) = self.completed_ancestor(&space.id).await? {

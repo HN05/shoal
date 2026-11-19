@@ -19,7 +19,7 @@ use shoal_protocol::{
     space_names::{SpaceName, SpaceSelector},
 };
 
-use crate::daemon::workspace::{BelowElsewhere, Manager};
+use crate::daemon::{lifecycle::BelowElsewhere, workspace::Manager};
 
 impl Manager {
     /// Remove the spaces directly below the space `id` that other machines

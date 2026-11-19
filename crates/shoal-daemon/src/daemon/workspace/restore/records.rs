@@ -55,7 +55,7 @@ impl Manager {
     /// in the chat the workspace becomes, which takes the record an ID of its
     /// own once it commits. Records of spaces that still exist are not
     /// listed.
-    pub(in crate::daemon::workspace) async fn save_removal_record(
+    pub(in crate::daemon) async fn save_removal_record(
         &self,
         workspace: &Workspace,
         cause: EventCause,
@@ -102,7 +102,7 @@ impl Manager {
     /// removes, before its state is deleted: how and where its agent ran,
     /// with the stopped agent and last session it saved, until the
     /// retention its files have too.
-    pub(in crate::daemon::workspace) async fn save_chat_removal_record(
+    pub(in crate::daemon) async fn save_chat_removal_record(
         &self,
         id: &SpaceId,
         cause: EventCause,
@@ -211,7 +211,7 @@ impl Manager {
     /// Whether merged cleanup may archive the workspace's unsaved files: the
     /// branch has commits of its own, so they are left over from merged work
     /// rather than work never committed, and a checkpoint keeps them.
-    pub(in crate::daemon::workspace) async fn unsaved_files_are_leftovers(
+    pub(in crate::daemon) async fn unsaved_files_are_leftovers(
         &self,
         workspace: &Workspace,
     ) -> Result<bool> {
@@ -270,7 +270,7 @@ impl Manager {
 /// restore opens it under beside the chat; a disposable workspace has none.
 /// It runs in the transaction that commits the conversion, so a conversion
 /// that fails leaves the record and checkpoints the workspace's.
-pub(in crate::daemon::workspace) fn rekey_converted(
+pub(in crate::daemon) fn rekey_converted(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
 ) -> Result<()> {

@@ -9,14 +9,11 @@ use rusqlite::params;
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use std::borrow::Cow;
 
-use super::super::{
+use super::{
     executions::{StopPolicy, StopRequest},
     gates::GuardMode,
-    workspace::{
-        Manager,
-        lifecycle::{Removal, Underway},
-        reservation::RemovalRules,
-    },
+    lifecycle::{Removal, Underway},
+    workspace::{Manager, reservation::RemovalRules},
 };
 use crate::{
     daemon::{
@@ -165,7 +162,7 @@ impl Manager {
 
     /// Stop the agent of `space` and its commands for a removal, as `policy`
     /// and `request` say, and refuse while any of them runs on.
-    pub(in crate::daemon::workspace) async fn stop_space_agent(
+    pub(in crate::daemon) async fn stop_space_agent(
         &self,
         space: &Space,
         policy: StopPolicy,
@@ -376,7 +373,7 @@ fn delete_record(
 ) -> Result<Deleted> {
     // Children go first; none may outlive its parent.
     ensure!(
-        super::super::tree::children(tx, id)?.is_empty(),
+        super::tree::children(tx, id)?.is_empty(),
         "spaces were opened below it during removal; retaining it"
     );
     events::record(tx, id, events::EventKind::Removed, cause, None)?;

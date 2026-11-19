@@ -66,7 +66,7 @@ impl Manager {
         Ok(())
     }
 
-    pub(super) async fn reserve_lifecycle_for_removal(
+    pub(in crate::daemon) async fn reserve_lifecycle_for_removal(
         &self,
         id: &SpaceId,
         rules: RemovalRules,
@@ -135,11 +135,11 @@ impl Manager {
 /// What reserving a workspace for removal accepts besides a ready or failed
 /// workspace, and what it refuses.
 #[derive(Clone, Copy, Default)]
-pub(super) struct RemovalRules {
+pub(in crate::daemon) struct RemovalRules {
     /// A pending rename, which removing a deleted worktree releases.
-    pub(super) allow_pending_rename: bool,
+    pub(in crate::daemon) allow_pending_rename: bool,
     /// A preparing workspace whose setup never started; the caller waited
     /// for its creation to end and holds the repository's Git gate, under
     /// which setup starts.
-    pub(super) awaiting_setup: bool,
+    pub(in crate::daemon) awaiting_setup: bool,
 }

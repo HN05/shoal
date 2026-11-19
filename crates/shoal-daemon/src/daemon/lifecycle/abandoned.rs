@@ -28,14 +28,14 @@ pub(in crate::daemon) const STOPPED_REMOVAL: &str = "removal stopped";
 /// A removal under way from its reservation. Dropped before
 /// [`Self::finish`], as when its work panics or is dropped, it fails the
 /// workspace, so none stays in `removing` with no removal running.
-pub(in crate::daemon::workspace) struct Underway {
+pub(in crate::daemon) struct Underway {
     store: Store,
     id: SpaceId,
     finished: AtomicBool,
 }
 
 impl Underway {
-    pub(in crate::daemon::workspace) fn new(store: Store, id: SpaceId) -> Self {
+    pub(in crate::daemon) fn new(store: Store, id: SpaceId) -> Self {
         Self {
             store,
             id,
@@ -44,7 +44,7 @@ impl Underway {
     }
 
     /// The removal removed the workspace or retained it.
-    pub(in crate::daemon::workspace) fn finish(&self) {
+    pub(in crate::daemon) fn finish(&self) {
         self.finished.store(true, Ordering::Relaxed);
     }
 }

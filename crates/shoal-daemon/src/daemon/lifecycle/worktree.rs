@@ -7,6 +7,6 @@ mod removal;
 
 pub(crate) use candidacy::not_ready;
 pub(crate) use removal::WorktreeRemoval;
-pub(in crate::daemon::workspace) use removal::WorktreeStage;
+pub(in crate::daemon) use removal::WorktreeStage;
 #[cfg(test)]
-pub(in crate::daemon::workspace) use removal::removal_options;
+pub(in crate::daemon) use removal::removal_options;

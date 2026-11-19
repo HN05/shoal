@@ -279,7 +279,7 @@ impl<'a> Removal<'a> {
 
     /// A workspace process's manual removal leaves the user's holds in
     /// place, below the space too.
-    pub(in crate::daemon::workspace) fn refuses_holds(self) -> bool {
+    pub(in crate::daemon) fn refuses_holds(self) -> bool {
         match self {
             Removal::Manual { release_holds, .. } => !release_holds,
             Removal::Parent { refuse_holds, .. } => refuse_holds,

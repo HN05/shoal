@@ -58,10 +58,10 @@ enum Status {
 impl Manager {
     /// Remember a branch the removal of `workspace` kept, unless it is the
     /// default branch, which Shoal never deletes.
-    pub(super) async fn remember_kept_branch(
+    pub(in crate::daemon) async fn remember_kept_branch(
         &self,
         workspace: &Workspace,
-        outcome: &super::lifecycle::WorktreeRemoval,
+        outcome: &super::super::lifecycle::WorktreeRemoval,
     ) -> Result<()> {
         // Only the workspace's own branch is its to delete later; a worktree
         // switched onto another leaves that one alone.

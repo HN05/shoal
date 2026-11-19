@@ -14,10 +14,11 @@ use crate::{
     daemon::{
         daemon_exit::Ending,
         executions::{ExecutionKind, StartedExecution},
+        lifecycle::STOPPED_REMOVAL,
         notifications::NotificationKind,
         runner::JobStop,
         test_support::{configure, git, manager, repository},
-        workspace::{Manager, lifecycle::STOPPED_REMOVAL},
+        workspace::Manager,
     },
     forge::backends::ForgeKind,
     model::{QueueEntry, Workspace},

@@ -1,6 +1,6 @@
 //! The worktree's part of cleanup candidacy: its commands and leases, its
 //! Git state and files, and the processes working in it.
-use super::super::super::Manager;
+use crate::daemon::workspace::Manager;
 use crate::{
     daemon::{
         cleanup::{Rule, Tree},
@@ -65,19 +65,19 @@ async fn directory_in_use(
 /// Git directory, and the default branch, `None` while that does not
 /// resolve. A removal, which inspects its worktree several times, reads
 /// them once.
-pub(in crate::daemon::workspace) struct Baseline {
+pub(in crate::daemon) struct Baseline {
     common_dir: CommonDir,
     default_branch: Option<DefaultBranch>,
 }
 
 impl Baseline {
-    pub(in crate::daemon::workspace) fn common_dir(&self) -> &CommonDir {
+    pub(in crate::daemon) fn common_dir(&self) -> &CommonDir {
         &self.common_dir
     }
 }
 
 /// The workspace's executions as cleanup sees them.
-pub(in crate::daemon::workspace) struct CleanupExecutions {
+pub(in crate::daemon) struct CleanupExecutions {
     /// Those other than the idle restores, which keep the workspace.
     running: usize,
     /// The restores of idle agents, with those a removal stopped.
@@ -90,7 +90,7 @@ async fn head(path: &Path) -> Result<String> {
 }
 
 impl Manager {
-    pub(in crate::daemon::workspace) async fn inspect_removal(
+    pub(in crate::daemon) async fn inspect_removal(
         &self,
         workspace: Workspace,
         policy: InspectionPolicy,
@@ -101,7 +101,7 @@ impl Manager {
     }
 
     /// What inspections of `workspace` compare it with.
-    pub(in crate::daemon::workspace) async fn inspection_baseline(
+    pub(in crate::daemon) async fn inspection_baseline(
         &self,
         workspace: &Workspace,
     ) -> Result<Baseline> {
@@ -118,7 +118,7 @@ impl Manager {
 
     /// Inspect `workspace` as [`Self::inspect_removal`] does, comparing it
     /// with `baseline`.
-    pub(in crate::daemon::workspace) async fn inspect_removal_against(
+    pub(in crate::daemon) async fn inspect_removal_against(
         &self,
         workspace: Workspace,
         policy: InspectionPolicy,
@@ -146,7 +146,7 @@ impl Manager {
     /// keep it from no cleanup, from the others. `cancelled` are the idle
     /// restores a removal stopped, whose records and exiting wrappers it
     /// still disregards.
-    pub(in crate::daemon::workspace) async fn cleanup_executions(
+    pub(in crate::daemon) async fn cleanup_executions(
         &self,
         id: &SpaceId,
         cancelled: &[IdleRestore],
@@ -184,7 +184,7 @@ impl Manager {
     /// [`Manager::check_access`]: commands and leases, its Git state, then
     /// the processes in it, read from `users`, since Git state rules out
     /// most worktrees. `cancelled` are the restores a removal stopped.
-    pub(in crate::daemon::workspace) async fn idle_worktree(
+    pub(in crate::daemon) async fn idle_worktree(
         &self,
         workspace: Workspace,
         cancelled: &[IdleRestore],
@@ -216,7 +216,7 @@ impl Manager {
     /// under way, no workspace stacked on it and any unsaved files left over
     /// from merged work. `cancelled` are the restores a removal stopped, and
     /// the processes in the worktree are read from `users`.
-    pub(in crate::daemon::workspace) async fn merged_worktree(
+    pub(in crate::daemon) async fn merged_worktree(
         &self,
         workspace: Workspace,
         cancelled: &[IdleRestore],
@@ -253,7 +253,7 @@ impl Manager {
     /// HEAD of `worktree`, of the workspace `id`, whose idle timer runs,
     /// inspected under [`Manager::check_access`], or `None` when its
     /// commands, leases or a process `users` finds in it keep it.
-    pub(in crate::daemon::workspace) async fn idle_timer_worktree(
+    pub(in crate::daemon) async fn idle_timer_worktree(
         &self,
         id: &SpaceId,
         worktree: &Worktree,
@@ -274,10 +274,7 @@ impl Manager {
     }
 
     /// One walk of the files in `worktree`.
-    pub(in crate::daemon::workspace) async fn walk_worktree(
-        &self,
-        worktree: &Worktree,
-    ) -> Result<Tree> {
+    pub(in crate::daemon) async fn walk_worktree(&self, worktree: &Worktree) -> Result<Tree> {
         let path = worktree.path.clone();
         tokio::task::spawn_blocking(move || crate::daemon::cleanup::walk(&path)).await?
     }

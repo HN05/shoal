@@ -1,6 +1,6 @@
 //! Cleanup and removal of the space an ID or selector names, as tests drive
 //! them.
-use super::super::Manager;
+use super::super::workspace::Manager;
 use super::Removal;
 use crate::model::EventCause;
 use crate::{

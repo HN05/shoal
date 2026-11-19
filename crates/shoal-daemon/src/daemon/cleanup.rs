@@ -20,10 +20,8 @@ use tokio::time::{Instant, sleep};
 
 use crate::{
     daemon::{
-        caches::Emptying,
-        file_access, log,
-        spaces::removal_notices::Cleanup,
-        workspace::{Manager, not_ready},
+        caches::Emptying, file_access, lifecycle::not_ready, log, spaces::removal_notices::Cleanup,
+        workspace::Manager,
     },
     fsutil::off_runtime,
     model::{CleanupReason, Space, Workspace},
