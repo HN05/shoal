@@ -7,9 +7,14 @@ use serde_json::json;
 use super::{Fixture, Forge};
 use crate::support::{forge::Server, git, printed};
 
+/// The first Git release that asks a credential helper before its first
+/// request, ahead of libcurl's `.netrc` lookup.
+const PROACTIVE_AUTH: (u32, u32) = (2, 46);
+
 /// An agent's push to a host with an agent token signs in with the token,
 /// though the user's `.netrc` holds a login of their own for the host,
-/// which libcurl would send before Git asks a credential helper.
+/// which libcurl would send before Git asks a credential helper; Git older
+/// than [`PROACTIVE_AUTH`] still sends it.
 #[test]
 fn an_agent_pushes_with_its_token_over_the_users_netrc_login() {
     let fixture = Fixture::new(Forge::Forgejo, "");
@@ -56,5 +61,20 @@ fn an_agent_pushes_with_its_token_over_the_users_netrc_login() {
         .filter(|request| request[0] == "PUSH team/project")
         .map(|request| request[2].clone())
         .collect();
-    assert_eq!(logins, [json!("token:agenttoken")]);
+    let expected = if installed_git(root) >= PROACTIVE_AUTH {
+        "token:agenttoken"
+    } else {
+        "netrc:usernetrc"
+    };
+    assert_eq!(logins, [json!(expected)]);
+}
+
+/// The major and minor version of the installed Git.
+fn installed_git(root: &std::path::Path) -> (u32, u32) {
+    let version = git(root, &["--version"]);
+    let mut parts = (version.trim().strip_prefix("git version "))
+        .unwrap_or_else(|| panic!("unexpected Git version {version:?}"))
+        .split('.')
+        .map(|part| part.parse().unwrap_or(0));
+    (parts.next().unwrap_or(0), parts.next().unwrap_or(0))
 }
