@@ -94,3 +94,39 @@ async fn a_trigger_or_scoped_start_leaves_the_user_unengaged() {
         assert!(!engaged(&manager, &launched.space.id).await);
     }
 }
+
+/// A scoped caller on another machine, which this one has no space of,
+/// reads a launch's items through the repository's checkout.
+#[tokio::test]
+async fn another_machine_s_caller_reads_a_launch_s_items_through_the_checkout() {
+    use shoal_protocol::hub::routing::VouchedSpace;
+
+    let daemon = crate::daemon::test_daemon::TestDaemon::start().await;
+    let manager = &daemon.manager;
+    let workspace = daemon.workspace("here").await;
+    let repository = &daemon.repository.id;
+    let permissions = manager.space_permissions(&workspace.id, Some(repository));
+    let space = SpaceId::generate();
+    let vouched = VouchedSpace {
+        space: space.clone(),
+        everywhere: false,
+        permissions: permissions.await.unwrap(),
+        granted: None,
+        read_only: false,
+        priority: shoal_schedule::priority::Priority::NORMAL,
+        chat_modes: Vec::new(),
+    };
+    let caller = Caller {
+        space_id: space,
+        execution: None,
+        granted: None,
+        read_only: false,
+        vouched: Some(std::sync::Arc::new(vouched)),
+    };
+    let context = manager.launch_read_context(repository, Some(&caller));
+    let context = context.await.unwrap();
+    assert!(
+        matches!(&context, crate::protocol::ItemContext::Checkout(id) if id == repository),
+        "{context:?}"
+    );
+}

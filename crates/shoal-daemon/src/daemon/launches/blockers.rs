@@ -92,9 +92,12 @@ impl Manager {
         let Some(caller) = caller else {
             return Ok(ItemContext::Checkout(repository.clone()));
         };
-        let own = SpaceSelector::id(&caller.space_id);
-        Ok(match self.space(&own).await?.repository_id {
-            Some(own_repository) if own_repository == *repository => ItemContext::space(own),
+        // Another machine's space reads through the checkout here.
+        let own = self.find_space(&caller.space_id).await?;
+        Ok(match own.and_then(|space| space.repository_id) {
+            Some(own_repository) if own_repository == *repository => {
+                ItemContext::space(SpaceSelector::id(&caller.space_id))
+            }
             _ => ItemContext::Checkout(repository.clone()),
         })
     }
