@@ -1,6 +1,8 @@
 //! Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
 use std::time::Duration;
 
+use crate::executions::ExecutionKind;
+
 /// Release a daemon connection slot if the client never sends its request.
 pub const REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(5);
 /// Status and shutdown should fail promptly when the daemon is unresponsive.
@@ -38,6 +40,18 @@ pub const EXECUTION_START_TIMEOUT: Duration = Duration::from_secs(30);
 /// gates, hooks and upstream refreshes, for a daemon that may fall behind
 /// on its keepalives while it does.
 pub const PREPARED_EXECUTION_START_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// How long a wrapper waits for the daemon to register an execution of
+/// `kind`.
+pub fn execution_start_timeout(kind: ExecutionKind) -> Duration {
+    match kind {
+        ExecutionKind::Command => EXECUTION_START_TIMEOUT,
+        ExecutionKind::Merge | ExecutionKind::Unmerge | ExecutionKind::Setup => {
+            PREPARED_EXECUTION_START_TIMEOUT
+        }
+    }
+}
+
 /// Wait for the daemon to persist the spawned child's process group.
 pub const START_ACK_TIMEOUT: Duration = Duration::from_secs(10);
 /// Cover stopping an exited agent's survivors and the completion scan,

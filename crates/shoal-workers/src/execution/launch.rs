@@ -28,7 +28,7 @@ use crate::{
     model::ExecutionPlan,
     paths::Paths,
     process::{self, identity::Identity},
-    protocol::{Body, ExecutionMethod, Reattach},
+    protocol::{Body, ExecutionMethod, Reattach, timing},
     sessions::Origin,
     workers::{Worker, internal_command},
 };
@@ -552,7 +552,7 @@ async fn open_execution(
         },
     };
     let kind = mode.kind();
-    let (mut link, body) = Link::open(paths, method, kind.start_timeout()).await?;
+    let (mut link, body) = Link::open(paths, method, timing::execution_start_timeout(kind)).await?;
     let plan = match body {
         Body::ApprovalRequest(request) => {
             return Err(Undecided(request).into());

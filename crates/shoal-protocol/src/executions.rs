@@ -11,7 +11,6 @@ use shoal_states::states;
 use crate::{
     agent::ModelChoice,
     processes::Identity,
-    protocol::timing,
     sessions::Origin,
     state::{AgentState, TurnFailure},
 };
@@ -31,17 +30,6 @@ states!(
         Setup => "setup",
     }
 );
-
-impl ExecutionKind {
-    /// How long its wrapper waits for the daemon to register an execution
-    /// of this kind.
-    pub fn start_timeout(self) -> Duration {
-        match self {
-            Self::Command => timing::EXECUTION_START_TIMEOUT,
-            Self::Merge | Self::Unmerge | Self::Setup => timing::PREPARED_EXECUTION_START_TIMEOUT,
-        }
-    }
-}
 
 /// The least time between dynamic starts, so their first reads do not collide.
 pub const STAGGER: Duration = Duration::from_secs(10);
