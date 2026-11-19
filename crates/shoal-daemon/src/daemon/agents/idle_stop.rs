@@ -4,7 +4,7 @@
 //! work, and any whose space is blocked, once its turn ends, so that its
 //! restore waits until nothing blocks the space. Stopping and restoring an
 //! agent costs no more prompt cache than keeping it running would save.
-use crate::daemon::workspace::agents::ProtectionExt;
+use crate::daemon::agents::ProtectionExt;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;

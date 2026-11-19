@@ -213,7 +213,7 @@ impl Manager {
     /// `workspace_id`, is due: once nothing blocks the space for an agent
     /// stopped because it was blocked, else once an update waits for it,
     /// and while free disk space allows restoring it.
-    pub(in crate::daemon::workspace) async fn restore_due(
+    pub(in crate::daemon) async fn restore_due(
         &self,
         workspace_id: &SpaceId,
         execution: &ExecutionId,
@@ -246,8 +246,7 @@ impl Manager {
             .ok()
             .flatten()
             .is_some_and(|record| {
-                record.stop_reason.as_deref()
-                    == Some(crate::daemon::workspace::agents::BLOCKED_REASON)
+                record.stop_reason.as_deref() == Some(crate::daemon::agents::BLOCKED_REASON)
             })
     }
 

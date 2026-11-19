@@ -1,5 +1,5 @@
 use super::*;
-use crate::daemon::workspace::agents::ProtectionExt;
+use crate::daemon::agents::ProtectionExt;
 use crate::execution::recovery::RecordExt;
 use crate::{
     daemon::{

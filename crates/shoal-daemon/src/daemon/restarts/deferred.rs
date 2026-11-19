@@ -12,9 +12,10 @@ use super::{Waiter, answer_all, record::Recorded};
 use crate::{
     agent::Agent,
     daemon::{
+        agents::{Requested, restarted},
         log,
         notifications::{About, NotificationKind},
-        workspace::{Manager, Requested, restarted},
+        workspace::Manager,
     },
     model::{RestartOutcome, RunningAgent},
     sessions::Origin,

@@ -6,9 +6,10 @@ use std::time::Duration;
 use crate::{
     config::permissions::PermissionChange,
     daemon::{
-        executions::ExecutionKind::{self},
+        agents::{Requested, RestartWaits},
+        executions::ExecutionKind,
         test_support::{manager, repository},
-        workspace::{Manager, Requested, RestartWaits},
+        workspace::Manager,
     },
     execution::recovery,
     model::{RunningAgent, Workspace},

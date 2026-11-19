@@ -2,7 +2,7 @@
 //! starts again at once and outside the agent queue, since the agent keeps its
 //! slot: in a new wrapper, which the agent queue starts once the old one
 //! finished, or in place, where the old wrapper starts it.
-use crate::daemon::workspace::agents::ProtectionExt;
+use crate::daemon::agents::ProtectionExt;
 use anyhow::{Context, Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 use tokio::sync::oneshot;

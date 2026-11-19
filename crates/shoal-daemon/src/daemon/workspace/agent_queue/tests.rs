@@ -8,7 +8,7 @@ use anyhow::Result;
 use rusqlite::params;
 
 use super::{Grant, OneShotStop, dispatch::START_GRACE, slots::Slot};
-use crate::daemon::workspace::agents::ProtectionExt;
+use crate::daemon::agents::ProtectionExt;
 use crate::protocol::operations::{Ended, Failure, OperationSpec, Preparation, Report, Step};
 use crate::{
     config::permissions::{PermissionChange, PermissionsConfig},
@@ -1170,7 +1170,7 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
         asleep.map(|asleep| (asleep.reason, asleep.wakes_when)),
         Some((
             "critical memory pressure".into(),
-            crate::daemon::workspace::agents::WAKES_ON_UPDATE.into()
+            crate::daemon::agents::WAKES_ON_UPDATE.into()
         ))
     );
 

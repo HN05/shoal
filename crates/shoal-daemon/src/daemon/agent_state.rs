@@ -681,7 +681,7 @@ fn save(tx: &rusqlite::Transaction<'_>, report: &Report) -> Result<Option<(Agent
 /// then waits for its restore.
 fn stopped(db: &Connection, report: &Report) -> Result<bool> {
     match &report.execution {
-        Some(execution) => super::workspace::agents::stop_recorded(db, execution),
+        Some(execution) => super::agents::stop_recorded(db, execution),
         None => Ok(false),
     }
 }

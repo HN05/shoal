@@ -581,7 +581,7 @@ async fn a_recorded_restart_goes_with_its_agent_rather_than_restart_the_next() {
 
 #[tokio::test]
 async fn a_wrapper_that_reattaches_continues_the_begun_restart_with_its_options() {
-    use crate::daemon::workspace::agents::ProtectionExt as _;
+    use crate::daemon::agents::ProtectionExt as _;
     let (root, manager) = manager().await;
     let (workspace, execution) = working(root.path(), &manager).await;
     let space = SpaceSelector::id(&workspace.id);

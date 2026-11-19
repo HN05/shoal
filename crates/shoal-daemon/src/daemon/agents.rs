@@ -12,7 +12,7 @@ use std::{
 };
 use tokio::sync::{OwnedRwLockReadGuard, watch};
 
-use super::super::{
+use super::{
     agent_turns::Turn,
     capacity::Activity,
     gates::GuardMode,
@@ -1112,7 +1112,7 @@ impl Manager {
     ) -> Option<StoppedAgent> {
         let (name, reason) = (&stopped.name, &stopped.protection.reason);
         log!("{name} stops for {reason} without automatic restore: {error:#}");
-        let request = super::super::executions::StopRequest::unrecorded(reason);
+        let request = super::executions::StopRequest::unrecorded(reason);
         let connections = self.executions.connections().await;
         match connections.stop(&stopped.id, &request).await {
             Ok(true) => {

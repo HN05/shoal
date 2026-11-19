@@ -3,7 +3,7 @@
 //! stopped it, and finishes normally when recovery is cancelled or a restart
 //! leaves the agent to a new wrapper. Failed ownership checks never authorize
 //! a replacement process.
-use crate::daemon::workspace::agents::ProtectionExt;
+use crate::daemon::agents::ProtectionExt;
 use anyhow::{Context, Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
@@ -14,8 +14,9 @@ use tokio::{
 };
 
 use super::{
+    agents::{Pause, Protection},
     executions::StopRequest,
-    workspace::{Grant, Manager, Pause, Protection},
+    workspace::{Grant, Manager},
 };
 use crate::daemon::log;
 use crate::{

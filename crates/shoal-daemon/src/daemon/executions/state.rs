@@ -24,8 +24,8 @@ use tokio::sync::{Mutex, MutexGuard, watch};
 
 use super::{ExecutionKind, StopRequest};
 use crate::daemon::{
+    agents::{Agent, Renewals, forget_ended_renewals},
     scope::{Caller, ScopedExecution},
-    workspace::agents::{Agent, Renewals, forget_ended_renewals},
 };
 
 /// Launches that ended unrun the daemon remembers; a start asks about its

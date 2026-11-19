@@ -2,7 +2,7 @@
 //! Once [`registration`] registers the execution, the wrapper reports its
 //! child and completion; the daemon relays stop and recovery controls and
 //! records the outcome.
-use crate::daemon::workspace::agents::ProtectionExt;
+use crate::daemon::agents::ProtectionExt;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::launches::LaunchSource;

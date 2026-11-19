@@ -18,11 +18,12 @@ use std::{
 use tokio::time::Instant;
 
 use super::{
+    agents::Protection,
     caches::Emptying,
     notifications::NotificationKind,
     spaces::removal_notices::Cleanup,
     warnings::{self, Signal, Warnings},
-    workspace::{Manager, Protection, agent_queue::OneShotStop},
+    workspace::{Manager, agent_queue::OneShotStop},
 };
 use crate::daemon::log;
 use crate::{

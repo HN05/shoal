@@ -5,7 +5,6 @@ use crate::paths::StateFiles;
 use shoal_ids::execution_ids::ExecutionId;
 mod adoption;
 pub(crate) mod agent_queue;
-pub(crate) mod agents;
 mod branch_rename;
 mod branches;
 mod checkpoints;
@@ -51,8 +50,6 @@ mod usage;
 mod xcode;
 
 pub(crate) use agent_queue::Grant;
-pub(crate) use agents::{Pause, Protection};
-pub(crate) use agents::{Requested, RestartWaits, restarted};
 pub(crate) use branches::NewWorktreeOptions;
 pub(crate) use contributions::holds::{
     ContributionHold, RESUME_WINDOW as CONTRIBUTION_RESUME_WINDOW,

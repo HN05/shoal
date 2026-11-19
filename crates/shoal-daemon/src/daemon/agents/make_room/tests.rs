@@ -1,5 +1,5 @@
 use super::*;
-use crate::{daemon::workspace::agents::Turn, state::AgentState, time::UnixTime};
+use crate::{daemon::agents::Turn, state::AgentState, time::UnixTime};
 
 fn candidate() -> Candidate {
     Candidate {

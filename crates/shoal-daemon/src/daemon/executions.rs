@@ -682,8 +682,8 @@ impl Manager {
             .pause_agent_execution(id, space, timing::PROCESS_PROOF_TIMEOUT)
             .await?
         {
-            super::workspace::agents::Pause::Paused => {}
-            super::workspace::agents::Pause::Unproven(issue) => {
+            super::agents::Pause::Paused => {}
+            super::agents::Pause::Unproven(issue) => {
                 bail!("the previous run left processes Shoal cannot prove stopped: {issue}")
             }
         }
