@@ -85,11 +85,18 @@ impl Manager {
         Ok(state.is_some_and(WorkspaceState::passes))
     }
 
-    /// Wait until no lifecycle operation that passes holds the workspace.
-    pub(crate) async fn await_reservation_end(&self, id: &SpaceId) -> Result<()> {
+    /// Wait until no lifecycle operation that passes holds the workspace,
+    /// giving up with the error `wanted` returns, which it asks each time
+    /// it looks.
+    pub(crate) async fn await_reservation_end(
+        &self,
+        id: &SpaceId,
+        wanted: impl Fn() -> Result<()>,
+    ) -> Result<()> {
         // Subscribe before reading, so a change in between still wakes.
         let mut changed = self.store.watch_changes();
         loop {
+            wanted()?;
             let workspace = id.to_owned();
             match self.store.run(move |db| state(db, &workspace)).await? {
                 None => bail!("workspace no longer exists"),

@@ -420,8 +420,15 @@ impl Manager {
             }
             // The operation may need the gates the preparation holds.
             drop(preparation);
-            self.await_reservation_end(&space_id).await?;
+            self.await_unreserved(&space_id).await?;
         }
+    }
+
+    /// Wait until no lifecycle operation that passes holds the workspace
+    /// `id`, while the daemon accepts registrations: its own stop holds
+    /// workspaces until the work it stops ends.
+    async fn await_unreserved(&self, id: &SpaceId) -> Result<()> {
+        (self.await_reservation_end(id, || self.executions.ensure_accepting())).await
     }
 
     /// Whether a lifecycle operation that passes refused the registration
@@ -585,7 +592,7 @@ impl Manager {
                 // the worktree unverifiable until it ends; registration
                 // checks again in its transaction.
                 if record.waits_out_reservations() {
-                    self.await_reservation_end(&workspace.id).await?;
+                    self.await_unreserved(&workspace.id).await?;
                 }
                 let preparation = self
                     .prepare_execution_kind(&workspace, record.kind, caller, merge)

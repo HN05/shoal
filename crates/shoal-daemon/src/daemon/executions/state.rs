@@ -81,6 +81,15 @@ pub struct Executions {
 }
 
 impl Executions {
+    /// Refuse a registration once the daemon closed registrations.
+    pub(crate) fn ensure_accepting(&self) -> Result<()> {
+        ensure!(
+            !self.closed.load(Ordering::Relaxed),
+            "the daemon is shutting down; retry once it restarts"
+        );
+        Ok(())
+    }
+
     /// Take the connections lock. Registration and stops hold it across their
     /// store work, so an execution registers either before a stop lists it or
     /// after the stop's request reached it; external commands and agent
@@ -269,11 +278,7 @@ pub struct Connections<'a> {
 impl Connections<'_> {
     /// Refuse a registration once the daemon closed registrations.
     pub(crate) fn ensure_accepting(&self) -> Result<()> {
-        ensure!(
-            !self.executions.closed.load(Ordering::Relaxed),
-            "the daemon is shutting down; retry once it restarts"
-        );
-        Ok(())
+        self.executions.ensure_accepting()
     }
 
     /// Whether the wrapper of `id` is connected and listening.
