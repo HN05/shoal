@@ -157,6 +157,7 @@ const REQUESTS: &[&str] = &[
     r#"{"list_demos":{"workspace":null}}"#,
     r#"{"demo_progress":{"workspace":"fix","launch":"l1"}}"#,
     r#"{"stop_demos":{"workspace":"fix","name":"web"}}"#,
+    r#"{"open_demo_stream":{"workspace":"fix","name":"web"}}"#,
     // Triggers.
     r#"{"list_triggers":{"context":{"checkout":"r1"}}}"#,
     r#"{"pause_trigger":{"context":null,"name":"triage","paused":true}}"#,
