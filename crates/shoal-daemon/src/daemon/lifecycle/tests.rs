@@ -422,6 +422,7 @@ async fn unattended_removal_refuses_retention_its_sweep_missed() {
         release_holds: true,
         taking: None,
         for_repository: false,
+        moved: None,
     };
     manager
         .remove(&SpaceSelector::id(&workspace.id), removal)
@@ -454,6 +455,7 @@ git --git-dir="$common" worktree add "$SHOAL_WORKSPACE_PATH" "$branch""#;
                 release_holds: true,
                 taking: None,
                 for_repository: false,
+                moved: None,
             },
         };
         assert!(
@@ -644,6 +646,7 @@ async fn directory_activity_distinguishes_inspection_from_removal_checks() {
                 release_holds: true,
                 taking: None,
                 for_repository: false,
+                moved: None,
             },
             false,
         ),
@@ -654,6 +657,7 @@ async fn directory_activity_distinguishes_inspection_from_removal_checks() {
                 release_holds: true,
                 taking: None,
                 for_repository: false,
+                moved: None,
             },
             true,
         ),
@@ -719,6 +723,7 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
                 release_holds: true,
                 taking: None,
                 for_repository: false,
+                moved: None,
             },
             Removal::Automatic {
                 snapshot: Snapshot {
@@ -955,6 +960,7 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
                 release_holds: true,
                 taking: None,
                 for_repository: false,
+                moved: None,
             }
         };
         manager
@@ -1412,6 +1418,7 @@ async fn a_clean_confirmation_naming_children_removes_clean_only() {
         release_holds: true,
         taking: None,
         for_repository: false,
+        moved: None,
     };
     let (files, _) = removal_options(&check, manual(&confirmed), false);
     assert!(matches!(files, FileRemoval::CleanOnly));
@@ -1902,6 +1909,7 @@ fn removals_below_elsewhere_keep_the_cause_of_the_removal_they_are_part_of() {
         cause: EventCause::Idle,
         refuse_holds: false,
         confirmed: None,
+        moved: None,
     };
     assert_eq!(cause(idle_child), EventCause::Idle);
     assert_eq!(cause(idle_child.of_child()), EventCause::Idle);
@@ -1911,6 +1919,7 @@ fn removals_below_elsewhere_keep_the_cause_of_the_removal_they_are_part_of() {
         release_holds: true,
         taking: None,
         for_repository: false,
+        moved: None,
     };
     assert_eq!(cause(asked.of_child()), EventCause::Manual);
 }

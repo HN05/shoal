@@ -56,6 +56,7 @@ async fn a_removal_whose_work_ends_early_fails_its_workspace() {
         release_holds: true,
         taking: None,
         for_repository: false,
+        moved: None,
     };
     // Its work ends, as a panic ends it, before it removes or retains it.
     drop(manager.reserve_space(&workspace.id, removal).await.unwrap());

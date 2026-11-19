@@ -306,6 +306,11 @@ impl Manager {
             )
             .await?;
         removal.verify(&check, stage)?;
+        // What the removal hooks changed only this machine has.
+        if let (Some(moved), Stage::Final) = (removal.moved(), stage) {
+            self.ensure_moved_workspace_unchanged(workspace, moved)
+                .await?;
+        }
         if let Removal::Merged { head } | Removal::Completed { head, .. } = removal {
             ensure!(
                 crate::daemon::links::pr::current_head(workspace).await? == head,

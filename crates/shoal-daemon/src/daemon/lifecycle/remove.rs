@@ -19,9 +19,11 @@ use crate::{
     state::WorkspaceState,
 };
 use anyhow::{Context, Result, bail, ensure};
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_refs::CommitId;
+use std::collections::BTreeMap;
 
 /// Refuse to remove any of `children`, those the removal of the space named
 /// `parent` takes first, when the user confirmed `removal` without one of
@@ -87,19 +89,23 @@ impl Manager {
             release_holds: true,
             taking: None,
             for_repository: false,
+            moved: None,
         };
         self.remove_requested(selector, removal).await
     }
 
     /// Remove the space as [`Self::remove_selected`] does, taking only the
     /// spaces `taking` names before it: one that appears in it or below it
-    /// meanwhile retains them all.
+    /// meanwhile retains them all. Ending a move, it refuses at its last
+    /// check, after the removal hooks, once a workspace differs from its
+    /// checkpoint in `moved`, which the other machine imported.
     pub(crate) async fn remove_selected_taking(
         &self,
         selector: &SpaceSelector,
         unsaved: UnsavedWork,
         inspection: InspectionPolicy,
         taking: &[SpaceId],
+        moved: Option<&BTreeMap<SpaceId, CheckpointNumber>>,
     ) -> Result<RemovalResult> {
         let removal = Removal::Manual {
             unsaved: &unsaved,
@@ -107,6 +113,7 @@ impl Manager {
             release_holds: true,
             taking: Some(taking),
             for_repository: false,
+            moved,
         };
         self.remove_requested(selector, removal).await
     }
@@ -124,6 +131,7 @@ impl Manager {
             release_holds: true,
             taking: None,
             for_repository: true,
+            moved: None,
         };
         Ok(self.remove_space(id, removal).await?.result())
     }
@@ -142,6 +150,7 @@ impl Manager {
             release_holds: false,
             taking: None,
             for_repository: false,
+            moved: None,
         };
         self.remove_requested(selector, removal).await
     }
@@ -205,6 +214,7 @@ impl Manager {
             cause,
             refuse_holds,
             confirmed,
+            moved: None,
         };
         self.remove_requested(selector, removal).await
     }

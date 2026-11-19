@@ -92,12 +92,25 @@ impl Manager {
         space: &Space,
         exported: &BTreeMap<SpaceId, CheckpointNumber>,
     ) -> Result<()> {
-        let Some(workspace) = space.to_workspace() else {
-            return Ok(());
-        };
+        match space.to_workspace() {
+            Some(workspace) => {
+                self.ensure_moved_workspace_unchanged(&workspace, exported)
+                    .await
+            }
+            None => Ok(()),
+        }
+    }
+
+    /// Refuse to end the moved `workspace` once it changed since its
+    /// checkpoint in `exported`, which the other machine now has.
+    pub(in crate::daemon) async fn ensure_moved_workspace_unchanged(
+        &self,
+        workspace: &Workspace,
+        exported: &BTreeMap<SpaceId, CheckpointNumber>,
+    ) -> Result<()> {
         let exported = (exported.get(&workspace.id).copied())
             .with_context(|| format!("the package of {} holds no checkpoint", workspace.name))?;
-        self.ensure_unchanged_since_export(&workspace, exported)
+        self.ensure_unchanged_since_export(workspace, exported)
             .await?;
         Ok(())
     }

@@ -6,7 +6,7 @@ use crate::refusal::Reason;
 use crate::{
     daemon::{
         manager::Manager,
-        test_support::{self, commit},
+        test_support::{self, commit, install_test_script},
     },
     execution::recovery,
     model::Workspace,
@@ -14,8 +14,11 @@ use crate::{
     removal::UnsavedWork,
     transfer::{Carrying, ExportedSpace, Import, ManifestExt, SpaceImport},
 };
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 use std::collections::BTreeMap;
+use std::path::Path;
 
 /// Export `space` for a move into a new file in `directory` and read it
 /// back.
@@ -51,6 +54,26 @@ async fn stopped_workspace(manager: &Manager, repo: &crate::model::Repository) -
     )
     .unwrap();
     workspace
+}
+
+/// The checkpoint of each workspace the package of `exported` holds.
+fn exported_checkpoints(exported: &ExportedSpace) -> BTreeMap<SpaceId, CheckpointNumber> {
+    (exported.manifest.packaged())
+        .map(|packaged| {
+            let kept = packaged.record.kept_workspace().unwrap();
+            (packaged.record.space_id.clone(), kept.checkpoint.number)
+        })
+        .collect()
+}
+
+/// Have the removal hook of `repo`'s workspaces write a file into each.
+async fn write_on_removal(manager: &Manager, repo: &crate::model::Repository, root: &Path) {
+    let hook = root.join("write-on-removal");
+    install_test_script(&hook, "#!/bin/sh\nprintf 'hooked' > hooked\n");
+    let config = format!("hooks.pre_remove = '{}'\n", hook.display());
+    (manager.write_local_config(&repo.id, Some(config)))
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -142,6 +165,51 @@ async fn a_workspace_that_changed_after_its_export_stays() {
 }
 
 #[tokio::test]
+async fn a_moved_workspace_whose_removal_hook_writes_a_file_stays() {
+    let (source, exporting, source_repo, _origin) = exporter().await;
+    let workspace = stopped_workspace(&exporting, &source_repo).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    // Its package holds unsaved files, which the end may then delete.
+    fs::write(workspace.path.join("notes"), "notes\n").unwrap();
+    let (exported, _) = export_moving(&exporting, &selector, source.path()).await;
+    write_on_removal(&exporting, &source_repo, source.path()).await;
+
+    let checkpoints = exported_checkpoints(&exported);
+    let end = exporting.end_moved_space(
+        &selector,
+        UnsavedWork::default(),
+        &checkpoints,
+        &Carrying::Subtree,
+    );
+    let error = end.await.unwrap_err();
+    assert!(format!("{error:#}").contains("changed here after its export"));
+    assert!(exporting.workspace_by_id(&workspace.id).await.is_ok());
+    assert!(workspace.path.join("hooked").exists());
+}
+
+#[tokio::test]
+async fn a_carried_workspace_whose_removal_hook_writes_a_file_keeps_the_move_here() {
+    let (source, exporting, source_repo, _origin) = exporter().await;
+    let workspace = stopped_workspace(&exporting, &source_repo).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    let child = (exporting.create_child(&selector, "child".into(), None, Default::default()))
+        .await
+        .unwrap();
+    let (exported, _) = export_moving(&exporting, &selector, source.path()).await;
+    write_on_removal(&exporting, &source_repo, source.path()).await;
+
+    let checkpoints = exported_checkpoints(&exported);
+    let taking = UnsavedWork::taking(vec![child.id.clone()]);
+    let end = exporting.end_moved_space(&selector, taking, &checkpoints, &Carrying::Subtree);
+    let error = end.await.unwrap_err();
+    assert!(format!("{error:#}").contains("changed here after its export"));
+    for kept in [&workspace, &child] {
+        assert!(exporting.workspace_by_id(&kept.id).await.is_ok());
+    }
+    assert!(child.path.join("hooked").exists());
+}
+
+#[tokio::test]
 async fn a_moving_chat_stops_its_agent_and_stays_until_its_end() {
     let (root, manager, pid) = super::chat("plan-cache").await;
     let chat = manager.chats().await.unwrap().remove(0);
@@ -229,12 +297,7 @@ async fn a_moving_workspace_takes_the_workspace_below_it_at_its_end() {
 
     let (exported, _) = export_moving(&exporting, &selector, source.path()).await;
     assert!(child.path.exists());
-    let checkpoints: BTreeMap<_, _> = (exported.manifest.packaged())
-        .map(|packaged| {
-            let kept = packaged.record.kept_workspace().unwrap();
-            (packaged.record.space_id.clone(), kept.checkpoint.number)
-        })
-        .collect();
+    let checkpoints = exported_checkpoints(&exported);
     assert_eq!(checkpoints.len(), 2);
     // A child that changed after its export keeps both here.
     fs::write(child.path.join("newer"), "newer\n").unwrap();

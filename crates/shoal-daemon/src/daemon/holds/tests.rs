@@ -453,6 +453,7 @@ async fn a_hold_keeps_a_chat_until_it_is_released() {
         cause: crate::model::EventCause::Parent,
         refuse_holds: true,
         confirmed: None,
+        moved: None,
     };
     let Err(refused) = manager.reserve_space(&chat.id, parent).await else {
         panic!("the user's hold keeps the chat");

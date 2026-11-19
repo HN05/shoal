@@ -4107,7 +4107,8 @@ go with it, saving their sessions, exports it while they stay, and queues their 
 once the import there failed before recording anything; an import that may have
 recorded the space there leaves them stopped, so its agents never run on both
 machines. A space that cannot end here after its import, such as a workspace
-that changed since its export, stays, existing on both machines, rather than
+that changed since its export, checked again once its removal hooks ran,
+stays, existing on both machines, rather than
 losing the newer work. Shoal keeps no
 registry of machines, and
 deciding when and where to move work belongs to a caller outside the core.

@@ -4725,7 +4725,8 @@ it here once it arrived there and the `shoal restore` that continues it here
 otherwise. A workspace with a space below it
 that stayed is not exported and stays here. When the import succeeds but the
 space cannot end here, as for a workspace whose HEAD or unsaved files changed
-since its export or a failing `hooks.pre_remove`, it stays here too, and the
+since its export, its own `hooks.pre_remove` changing them included, or whose
+`hooks.pre_remove` fails, it stays here too, and the
 report says it now exists on both machines and names the `shoal rm` that
 removes it here.
 `--keep`, with `--checkpoint N` for one workspace, copies the spaces instead, as

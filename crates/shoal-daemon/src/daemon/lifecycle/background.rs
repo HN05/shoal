@@ -116,6 +116,7 @@ fn manual(unsaved: &UnsavedWork, release_holds: bool) -> Removal<'_> {
         release_holds,
         taking: None,
         for_repository: false,
+        moved: None,
     }
 }
 

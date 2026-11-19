@@ -6,7 +6,9 @@
 //! its worktree step.
 use crate::transfer::ManifestExt;
 use anyhow::{Context, Result};
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_ids::space_ids::SpaceId;
+use std::collections::BTreeMap;
 
 use crate::{
     config::Effective,
@@ -110,7 +112,7 @@ impl Manager {
             .agent_settings_of(std::iter::once(&space).chain(&carried))
             .await;
         self.leave_uncarried(&space, &carried, carrying).await?;
-        let removal = (self.remove_packaged(&space, &carried, unsaved, inspection)).await?;
+        let removal = (self.remove_packaged(&space, &carried, unsaved, inspection, None)).await?;
         let removed = self.removal_record(&space.id).await?;
         let carried = self.removal_records(&carried).await?;
         let mut prepared = self.prepare_removed(removed, carried, settings).await?;
@@ -172,19 +174,22 @@ impl Manager {
     /// Remove `space` for its package through the removal path, deleting
     /// the `unsaved` work the caller confirmed and taking only the spaces
     /// `carried` with it among the spaces below that it confirms: a space
-    /// that joins it meanwhile retains it.
+    /// that joins it meanwhile retains it. For a move another machine
+    /// imported, `moved` holds each workspace's checkpoint in its package,
+    /// from which none may differ once its removal hooks ran.
     async fn remove_packaged(
         &self,
         space: &Space,
         carried: &[Space],
         unsaved: UnsavedWork,
         inspection: InspectionPolicy,
+        moved: Option<&BTreeMap<SpaceId, CheckpointNumber>>,
     ) -> Result<RemovalResult> {
         let confirmed = |id: &&SpaceId| unsaved.children().is_none_or(|ids| ids.contains(id));
         let carried = carried.iter().map(|space| &space.id);
         let taking: Vec<SpaceId> = carried.filter(confirmed).cloned().collect();
         let selector = SpaceSelector::id(&space.id);
-        (self.remove_selected_taking(&selector, unsaved, inspection, &taking)).await
+        (self.remove_selected_taking(&selector, unsaved, inspection, &taking, moved)).await
     }
 
     /// The repositories the spaces `records` belong to, each once.

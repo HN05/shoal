@@ -10,7 +10,9 @@ use crate::{
     removal::{InspectionPolicy, NOTHING, RemovalCheck, UnsavedWork},
 };
 use anyhow::{Result, ensure};
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_ids::space_ids::SpaceId;
+use std::collections::BTreeMap;
 
 /// What keeps a space from every unattended removal. Sweeps report it as a
 /// cleanup reason, and removal refuses with it at every stage. A space that
@@ -92,6 +94,9 @@ pub(in crate::daemon) enum Removal<'a> {
         /// repository's Git gate, under which no creation or setup starts,
         /// and waited for the creations under way to end.
         for_repository: bool,
+        /// The checkpoints of a move's package, by workspace, when the
+        /// removal ends a space another machine imported.
+        moved: Option<&'a BTreeMap<SpaceId, CheckpointNumber>>,
     },
     /// Idle, merged or disk-space cleanup, or the user's request to clean up;
     /// only safe, unchanged spaces may go.
@@ -108,12 +113,14 @@ pub(in crate::daemon) enum Removal<'a> {
     UnderCompleted { ancestor: &'a CompletedAncestor },
     /// The space's parent is being removed, which nothing about the space
     /// keeps: a worktree goes with its unsaved files once a checkpoint keeps
-    /// them. `cause`, `refuse_holds` and the `confirmed` IDs of the spaces
-    /// it may take below it are the parent removal's.
+    /// them. `cause`, `refuse_holds`, the `confirmed` IDs of the spaces it
+    /// may take below it and the checkpoints of the move it ends, `moved`,
+    /// are the parent removal's.
     Parent {
         cause: EventCause,
         refuse_holds: bool,
         confirmed: Option<&'a [SpaceId]>,
+        moved: Option<&'a BTreeMap<SpaceId, CheckpointNumber>>,
     },
     /// The workspace becomes the chat `chat`: its worktree goes once a
     /// checkpoint keeps its unsaved files, while its branch, its record
@@ -305,6 +312,17 @@ impl<'a> Removal<'a> {
             },
             refuse_holds: self.refuses_holds(),
             confirmed: self.confirmed_children(),
+            moved: self.moved(),
+        }
+    }
+
+    /// The checkpoints of the package of the move this removal ends, by
+    /// workspace: its last check refuses a workspace that no longer has
+    /// what its own keeps, which only the other machine has.
+    pub(super) fn moved(self) -> Option<&'a BTreeMap<SpaceId, CheckpointNumber>> {
+        match self {
+            Removal::Manual { moved, .. } | Removal::Parent { moved, .. } => moved,
+            _ => None,
         }
     }
 

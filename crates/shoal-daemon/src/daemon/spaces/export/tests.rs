@@ -370,6 +370,7 @@ async fn a_chat_that_starts_after_the_export_checked_keeps_everything() {
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
             &taking,
+            None,
         )
         .await;
     assert!(removed.is_err());
