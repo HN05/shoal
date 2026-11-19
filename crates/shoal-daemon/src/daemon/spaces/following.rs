@@ -49,7 +49,7 @@ pub(crate) struct Following {
     store: &'static dyn Store,
     environments: Arc<Environments>,
     /// Where the client read each of its files to.
-    offsets: HashMap<PathBuf, u64>,
+    read: HashMap<PathBuf, FileRead>,
 }
 
 impl Manager {
@@ -96,7 +96,17 @@ impl Manager {
             },
             store,
             environments: Arc::new(Environments::new(&self.paths.home, &sessions.environments)),
-            offsets: from.into_iter().collect(),
+            read: (from.into_iter())
+                .map(|(file, offset)| {
+                    (
+                        file,
+                        FileRead {
+                            offset,
+                            size: offset,
+                        },
+                    )
+                })
+                .collect(),
         })
     }
 
@@ -262,7 +272,7 @@ async fn send_gained(client: &mut Client<'_>, following: &mut Following) -> Resu
     };
     for file in found.files.files {
         let path = found.directory.join(&file);
-        send_file_gained(client, &path, file, &mut following.offsets).await?;
+        send_file_gained(client, &path, file, &mut following.read).await?;
     }
     Ok(())
 }
@@ -279,40 +289,54 @@ async fn locate(following: &Following) -> Result<Option<transcripts::Found>> {
     .context("look for the session's files")?
 }
 
-/// Send what the session's file `file`, at `path`, gained since its offset
-/// in `offsets`, keeping where it now ends, checking the follow's scope
-/// token before each read. A file that is gone, as one its tool replaced,
-/// may come back, so it waits; one that cannot be read otherwise ends the
-/// follow.
+/// How far a follow read a file, and how long the file was then.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct FileRead {
+    offset: u64,
+    size: u64,
+}
+
+/// Send what the session's file `file`, at `path`, gained since `read`
+/// says the follow read it to, keeping where it now ends, checking the
+/// follow's scope token before each read. A file that is gone, as one its
+/// tool replaced, may come back, so it waits; one that cannot be read
+/// otherwise ends the follow. A file written anew, shorter, comes again
+/// from offset 0, as an empty chunk when it is empty.
 async fn send_file_gained(
     client: &mut Client<'_>,
     path: &Path,
     file: PathBuf,
-    offsets: &mut HashMap<PathBuf, u64>,
+    read: &mut HashMap<PathBuf, FileRead>,
 ) -> Result<()> {
     loop {
         client.ensure_scoped().await?;
-        let offset = offsets.get(&file).copied().unwrap_or(0);
+        let seen = read.get(&file).copied().unwrap_or_default();
         let path = path.to_owned();
-        let read = tokio::task::spawn_blocking(move || read_from(&path, offset));
-        let Gained {
-            offset,
-            size,
-            bytes,
-        } = match read.await.context("read a session file")? {
-            Ok(read) => read,
+        let reading = tokio::task::spawn_blocking(move || read_from(&path, seen));
+        let gained = match reading.await.context("read a session file")? {
+            Ok(gained) => gained,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
             Err(error) => {
                 let error = anyhow::Error::from(error).context(format!("read {}", file.display()));
                 return Err(Stopped::Unreadable(error).into());
             }
         };
-        offsets.insert(file.clone(), offset + bytes.len() as u64);
-        if bytes.is_empty() {
+        let end = gained.offset + gained.bytes.len() as u64;
+        read.insert(
+            file.clone(),
+            FileRead {
+                offset: end,
+                size: gained.size,
+            },
+        );
+        if gained.bytes.is_empty() && !gained.rewritten {
             return Ok(());
         }
-        let gained = SessionBytes::new(file.clone(), offset, size, &bytes);
-        client.send(Body::SessionBytes(gained)).await?;
+        let bytes = SessionBytes::new(file.clone(), gained.offset, gained.size, &gained.bytes);
+        client.send(Body::SessionBytes(bytes)).await?;
+        if gained.bytes.is_empty() {
+            return Ok(());
+        }
     }
 }
 
@@ -324,16 +348,21 @@ struct Gained {
     /// The file's length when they were read.
     size: u64,
     bytes: Vec<u8>,
+    /// Whether the file was written anew, shorter than `seen` says it was
+    /// read, so that it comes again from 0.
+    rewritten: bool,
 }
 
-/// Up to [`CHUNK`] bytes of `path` from `offset`, or from 0 where the file
-/// shrank below it, as one its tool wrote again.
-fn read_from(path: &Path, offset: u64) -> std::io::Result<Gained> {
+/// Up to [`CHUNK`] bytes of `path` from where `seen` says it was read to,
+/// or from 0 where it is now shorter than it was then, as a file its tool
+/// wrote again.
+fn read_from(path: &Path, seen: FileRead) -> std::io::Result<Gained> {
     let mut file = std::fs::File::open(path)?;
     let size = file.metadata()?.len();
-    let offset = match size < offset {
+    let rewritten = size < seen.offset.max(seen.size);
+    let offset = match rewritten {
         true => 0,
-        false => offset,
+        false => seen.offset,
     };
     file.seek(SeekFrom::Start(offset))?;
     let mut bytes = Vec::with_capacity(CHUNK);
@@ -342,6 +371,7 @@ fn read_from(path: &Path, offset: u64) -> std::io::Result<Gained> {
         offset,
         size,
         bytes,
+        rewritten,
     })
 }
 

@@ -71,3 +71,16 @@ fn a_file_left_out_that_its_tool_wrote_again_shorter_comes_whole() {
         Some((50, vec![6]))
     );
 }
+
+#[test]
+fn a_file_left_out_that_was_emptied_comes_again_as_an_empty_reset() {
+    let mut cursor = read(2_000);
+    let from = cursor.resume();
+    let emptied = file(99);
+    assert!(!from.contains_key(&emptied));
+    assert_eq!(
+        cursor.take(&emptied, 0, 0, Vec::new()),
+        Some((0, Vec::new()))
+    );
+    assert_eq!(cursor.take(&emptied, 0, 1, vec![1]), Some((0, vec![1])));
+}

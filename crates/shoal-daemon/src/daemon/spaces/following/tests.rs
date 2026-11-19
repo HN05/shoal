@@ -1,10 +1,18 @@
 use std::fs;
 
-use super::{Client, Stopped, read_from, send_file_gained};
+use super::{Client, FileRead, Stopped, read_from, send_file_gained};
 
-/// Where a read of `path` from `offset` starts and the bytes it gains.
+/// Where a read of `path` from `offset`, where it was read to then, starts
+/// and the bytes it gains.
 fn read(path: &std::path::Path, offset: u64) -> (u64, Vec<u8>) {
-    let gained = read_from(path, offset).unwrap();
+    let gained = read_from(
+        path,
+        FileRead {
+            offset,
+            size: offset,
+        },
+    )
+    .unwrap();
     (gained.offset, gained.bytes)
 }
 
@@ -24,8 +32,27 @@ fn a_file_that_shrank_is_read_again_from_its_start() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("session.jsonl");
     fs::write(&path, "new\n").unwrap();
-    let gained = read_from(&path, 13).unwrap();
-    assert_eq!((gained.offset, gained.size), (0, 4));
+    let seen = FileRead {
+        offset: 13,
+        size: 13,
+    };
+    let gained = read_from(&path, seen).unwrap();
+    assert_eq!((gained.offset, gained.size, gained.rewritten), (0, 4, true));
+}
+
+#[test]
+fn a_file_shorter_than_it_was_though_not_than_its_offset_is_read_again_from_its_start() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("session.jsonl");
+    fs::write(&path, "rewritten\n").unwrap();
+    // Read to 4 when it was 20 bytes long.
+    let seen = FileRead {
+        offset: 4,
+        size: 20,
+    };
+    let gained = read_from(&path, seen).unwrap();
+    assert_eq!((gained.offset, gained.rewritten), (0, true));
+    assert_eq!(gained.bytes, b"rewritten\n");
 }
 
 #[test]
@@ -96,4 +123,31 @@ async fn a_session_file_that_is_gone_waits_and_one_that_cannot_be_read_ends_the_
     let failed = send_file_gained(&mut client, &unreadable, file, &mut offsets).await;
     let stopped = failed.unwrap_err().downcast::<Stopped>().unwrap();
     assert!(matches!(stopped, Stopped::Unreadable(_)), "{stopped}");
+}
+
+#[tokio::test]
+async fn a_file_emptied_since_it_was_read_comes_again_as_an_empty_chunk() {
+    let (root, manager) = crate::daemon::test_support::manager().await;
+    let (mut client, theirs) = client(&manager);
+    let emptied = root.path().join("emptied.jsonl");
+    fs::write(&emptied, "").unwrap();
+    let file: std::path::PathBuf = "emptied.jsonl".into();
+    let mut read =
+        std::collections::HashMap::from([(file.clone(), FileRead { offset: 5, size: 5 })]);
+    send_file_gained(&mut client, &emptied, file, &mut read)
+        .await
+        .unwrap();
+    let mut line = String::new();
+    let mut theirs = tokio::io::BufReader::new(theirs);
+    tokio::io::AsyncBufReadExt::read_line(&mut theirs, &mut line)
+        .await
+        .unwrap();
+    let frame: serde_json::Value = serde_json::from_str(&line).unwrap();
+    assert_eq!(frame["type"], "session_bytes", "{frame}");
+    let chunk = &frame["data"];
+    assert_eq!(
+        (&chunk["offset"], &chunk["size"], &chunk["data"]),
+        (&0.into(), &0.into(), &"".into()),
+        "{frame}"
+    );
 }
