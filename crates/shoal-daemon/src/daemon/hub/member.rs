@@ -12,6 +12,7 @@ use anyhow::{Result, anyhow};
 use shoal_ids::member_ids::MemberId;
 use shoal_protocol::hub::{
     HubRole, Membership, Route,
+    availability::Classified,
     link::{Call, Intent, Refusal, RefusalReason, Reply},
 };
 use tokio::sync::Notify;
@@ -51,6 +52,9 @@ pub(super) struct Link {
     changes: tokio::sync::Mutex<()>,
     /// When the user last heard of a refusal that came unsealed.
     unsealed_alert: UnsealedAlert,
+    /// The availability the hub last told this machine it has, which
+    /// stays while the link is down.
+    availability: Mutex<Option<Classified>>,
 }
 
 /// How often the user hears of a refusal that came unsealed, which anyone
@@ -86,6 +90,11 @@ struct State {
 impl Link {
     pub(super) fn calls(&self) -> Option<Arc<Calls>> {
         self.state.lock().unwrap().calls.clone()
+    }
+
+    /// Keep the availability the hub told this machine it has.
+    pub(super) fn told(&self, availability: Classified) {
+        *self.availability.lock().unwrap() = Some(availability);
     }
 
     /// Keep the link's `calls` and its `problem`, which may quote what the
@@ -404,12 +413,14 @@ impl Manager {
         };
         let connect = self.config().machine.hub.connect.clone();
         let route = route(connect, &joined.membership);
+        let availability = *self.hub.member.availability.lock().unwrap();
         let state = self.hub.member.state.lock().unwrap();
         Ok(Some(HubRole::Member {
             membership: joined.membership,
             route,
             connected: state.calls.is_some(),
             problem: state.problem.clone(),
+            availability,
         }))
     }
 }

@@ -141,6 +141,7 @@ impl Manager {
         if self.is_hub() {
             return Ok(Some(HubRole::Hub {
                 listener: self.hub_listener(),
+                availability: self.own_availability().await?,
             }));
         }
         self.membership_role().await

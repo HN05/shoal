@@ -41,6 +41,7 @@ fn status_names_why_the_link_to_the_hub_is_down() {
             route: shoal_protocol::hub::Route::Command(vec!["ssh".into(), "desk".into()]),
             connected: false,
             problem: Some("the hub revoked this machine's credential".into()),
+            availability: None,
         }),
     };
     let message = status_message(&status);

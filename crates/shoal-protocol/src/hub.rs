@@ -293,7 +293,10 @@ pub struct Membership {
 #[serde(tag = "role", rename_all = "snake_case")]
 pub enum HubRole {
     /// It is the hub.
-    Hub { listener: Listener },
+    Hub {
+        listener: Listener,
+        availability: availability::Classified,
+    },
     /// It joined a hub, which it reaches by `route`: `[machine.hub]
     /// connect` when set, else what it joined through.
     Member {
@@ -303,6 +306,10 @@ pub enum HubRole {
         /// Why its link is down, or why it no longer tries to open one.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         problem: Option<String>,
+        /// The availability the hub last told this machine it has, none
+        /// before it did.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        availability: Option<availability::Classified>,
     },
 }
 

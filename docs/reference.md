@@ -830,7 +830,7 @@ on the hub when it cannot reach it. Only your own terminal pairs, joins, leaves
 and revokes; anyone lists.
 
 Each machine is `always_on` or `intermittent`, which `hub ls` shows with the
-reason.
+reason and `shoal status` shows for this machine.
 [`[machine] availability`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine)
 sets it (`set`); under `auto`, the default, the hub guesses from how reachable
 the machine was, never from what powers it. A machine whose link was open less
@@ -840,7 +840,8 @@ network blip or a daemon restart, counts as connected, and the hub's own
 machine counts as connected while its daemon runs with the machine awake. For
 the first day the hub knows a machine, it goes by the battery instead: a
 machine with one is `intermittent` (`new, battery`) and one without
-`always_on` (`new, no battery`).
+`always_on` (`new, no battery`). The hub tells each machine its availability
+when its link opens and whenever it changes.
 
 A machine can also reach the hub through a command, whose standard input and
 output its daemon uses as the link, restarting it with backoff and logging its

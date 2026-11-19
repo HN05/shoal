@@ -1,10 +1,12 @@
-//! Each machine's availability, which the hub works out: a machine
-//! describes itself when its link opens and when its setting changes. `[machine] availability` sets it; under `auto` a machine the
+//! Each machine's availability, which the hub works out and tells the
+//! machine: a machine describes itself when its link opens and when its
+//! setting changes, and hears back what it is then and whenever it
+//! changes. `[machine] availability` sets it; under `auto` a machine the
 //! hub has seen there for less than [`NEW_FOR`] is intermittent when it has
 //! a battery, so a new portable machine takes no lasting work before the
 //! hub has seen it behave, and any other machine is intermittent when it
 //! was there less than [`ALWAYS_ON_PERCENT`] of the last week.
-use std::{collections::HashMap, convert::Infallible, time::Duration};
+use std::{collections::HashMap, convert::Infallible, sync::Arc, time::Duration};
 
 use anyhow::{Result, anyhow};
 use rusqlite::Transaction;
@@ -34,7 +36,8 @@ const NEW_FOR: Duration = Duration::from_secs(24 * 60 * 60);
 /// there at least.
 const ALWAYS_ON_PERCENT: u64 = 95;
 
-/// How often the hub marks the machines that are there.
+/// How often the hub marks the machines that are there, and tells those
+/// whose availability changed.
 const MARK_EVERY: Duration = Duration::from_secs(60);
 
 /// How long a machine waits to describe itself again after it failed to.
@@ -129,8 +132,9 @@ pub(super) fn of_machines(
 
 impl Manager {
     /// Mark the hub's own machine there, with the machines whose links are
-    /// open, every [`MARK_EVERY`] while this daemon is the hub. A reload
-    /// marks at once, so a changed `[machine] availability` applies.
+    /// open, every [`MARK_EVERY`] while this daemon is the hub, and tell
+    /// each connected machine whose availability changed. A reload marks
+    /// at once, so a changed `[machine] availability` applies.
     pub(super) async fn keep_marking_presence(&self) {
         let mut every = tokio::time::interval(MARK_EVERY);
         every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -150,6 +154,7 @@ impl Manager {
             if let Err(error) = self.mark_presence().await {
                 log!("hub: could not record which machines are there: {error:#}");
             }
+            self.tell_changed_availability().await;
         }
     }
 
@@ -176,18 +181,58 @@ impl Manager {
     }
 
     /// Record what the machine `member` says of itself, and the
-    /// availability it then has.
+    /// availability it then has, which its link remembers as told.
     pub(super) async fn describe_member(
         &self,
         member: &MemberId,
         description: Description,
     ) -> Result<Classified> {
         let id = member.clone();
-        self.store
+        let classified = self
+            .store
             .write(move |tx| {
                 members::describe(tx, &id, description)?;
                 of_member(tx, &id, UnixTime::now())
             })
+            .await?;
+        self.hub.links.told(member, classified);
+        Ok(classified)
+    }
+
+    /// Tell each connected machine that described itself, whose
+    /// availability is no longer what its link was told, what it is now.
+    async fn tell_changed_availability(&self) {
+        let described = self.hub.links.described();
+        if described.is_empty() {
+            return;
+        }
+        let machines: Vec<MemberId> = described.keys().cloned().collect();
+        let now = self
+            .store
+            .read(move |tx| of_machines(tx, machines, UnixTime::now()));
+        let now = match now.await {
+            Ok(now) => now,
+            Err(error) => {
+                log!("hub: could not work out the machines' availability: {error:#}");
+                return;
+            }
+        };
+        for (member, (calls, told)) in described {
+            let Some(&classified) = now.get(&member).filter(|now| **now != told) else {
+                continue;
+            };
+            match tell(&calls, classified).await {
+                Ok(()) => self.hub.links.told(&member, classified),
+                Err(error) => log!("hub: could not tell a machine its availability: {error:#}"),
+            }
+        }
+    }
+
+    /// The hub's own machine's availability.
+    pub(super) async fn own_availability(&self) -> Result<Classified> {
+        let own = self.own_member().await?;
+        (self.store)
+            .read(move |tx| of_member(tx, &own, UnixTime::now()))
             .await
     }
 
@@ -211,9 +256,9 @@ impl Manager {
 }
 
 impl Manager {
-    /// Describe this machine to the hub over its link, and again whenever
-    /// `[machine] availability` changes, for as long as the link stays
-    /// open.
+    /// Describe this machine to the hub over its link, keeping the
+    /// availability the hub answers, and again whenever `[machine]
+    /// availability` changes, for as long as the link stays open.
     pub(super) async fn keep_describing(&self, calls: &Calls) -> Infallible {
         let mut reloaded = self.config_state.watch();
         loop {
@@ -231,16 +276,28 @@ impl Manager {
         }
     }
 
-    /// Describe this machine, set to `setting`, to the hub.
+    /// Describe this machine, set to `setting`, to the hub, keeping the
+    /// availability it answers.
     async fn describe(&self, calls: &Calls, setting: AvailabilitySetting) -> Result<()> {
         let description = Description {
             battery: battery::present(),
             availability: setting,
         };
         match calls.call(Call::Describe { description }).await? {
-            Reply::Availability(_) => Ok(()),
+            Reply::Availability(availability) => {
+                self.hub.member.told(availability);
+                Ok(())
+            }
             reply => Err(anyhow!("the hub answered with an unexpected {reply:?}")),
         }
+    }
+}
+
+/// Tell the machine at the other end of `calls` its availability.
+async fn tell(calls: &Arc<Calls>, availability: Classified) -> Result<()> {
+    match calls.call(Call::Availability { availability }).await? {
+        Reply::Delivered => Ok(()),
+        reply => Err(anyhow!("the machine answered with an unexpected {reply:?}")),
     }
 }
 

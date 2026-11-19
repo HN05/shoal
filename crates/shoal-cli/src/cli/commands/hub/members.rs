@@ -88,20 +88,27 @@ pub(super) async fn revoke(ctx: &Context, member: String) -> Result<i32> {
 /// What `shoal status` says of the hub role the daemon takes.
 pub(in crate::cli::commands) fn role_line(role: &HubRole) -> String {
     match role {
-        HubRole::Hub { listener } => listener_line(listener),
+        HubRole::Hub {
+            listener,
+            availability,
+        } => format!("{}; availability {availability}", listener_line(listener)),
         HubRole::Member {
             membership,
             route,
             connected,
             problem,
+            availability,
         } => {
             let state = match (connected, problem) {
                 (true, _) => "connected".to_owned(),
                 (false, Some(problem)) => format!("not connected: {problem}"),
                 (false, None) => "not connected".to_owned(),
             };
+            let availability = (availability.as_ref())
+                .map(|availability| format!("; availability {availability}"))
+                .unwrap_or_default();
             format!(
-                "Member of the hub as {} ({}) through {route}, {state}",
+                "Member of the hub as {} ({}) through {route}, {state}{availability}",
                 membership.name, membership.member
             )
         }

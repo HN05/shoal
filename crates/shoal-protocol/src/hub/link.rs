@@ -276,6 +276,9 @@ pub enum Call {
     /// What a machine says of itself, when its link opens and when its
     /// setting changes. Answered with [`Reply::Availability`].
     Describe { description: Description },
+    /// The hub's call to a machine whose availability changed. Answered
+    /// with [`Reply::Delivered`].
+    Availability { availability: Classified },
     /// The directory of every machine's spaces. Answered with
     /// [`Reply::Directory`].
     Directory,

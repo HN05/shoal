@@ -139,7 +139,8 @@ impl Manager {
 
     /// This machine's answer to `call`, which the hub passes it, or which
     /// the hub's own machine answers itself: a forwarded request for one of
-    /// its spaces, an event for one, or the expiry of what it sent.
+    /// its spaces, an event for one, the expiry of what it sent, or its
+    /// availability.
     pub(super) async fn answer_hub_call(&self, call: Call) -> Result<Reply> {
         match call {
             Call::Serve { request } => Ok(Reply::Answered(self.serve_forwarded(request).await?)),
@@ -150,6 +151,10 @@ impl Manager {
             }
             Call::Expired { expired } => {
                 self.hear_expired(expired).await;
+                Ok(Reply::Delivered)
+            }
+            Call::Availability { availability } => {
+                self.hub.member.told(availability);
                 Ok(Reply::Delivered)
             }
             _ => bail!("a machine answers only what the hub passes it from other machines"),

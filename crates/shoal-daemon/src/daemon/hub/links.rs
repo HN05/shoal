@@ -12,6 +12,7 @@ use std::{
 };
 
 use shoal_ids::member_ids::MemberId;
+use shoal_protocol::hub::availability::Classified;
 use tokio::sync::Notify;
 
 use super::session::Calls;
@@ -29,6 +30,9 @@ struct Open {
     stop: Arc<Notify>,
     /// The hub's calls to the member, once its session serves the link.
     calls: Option<Arc<Calls>>,
+    /// The availability the hub last told the member it has, once it
+    /// described itself.
+    told: Option<Classified>,
 }
 
 /// A member's open link, which leaves [`Links`] when dropped.
@@ -86,6 +90,7 @@ impl Links {
             token,
             stop: stop.clone(),
             calls: None,
+            told: None,
         };
         open.insert(member.clone(), registered);
         Some(Registration {
@@ -120,6 +125,22 @@ impl Links {
     /// The members whose links are open.
     pub(super) fn connected(&self) -> HashSet<MemberId> {
         self.open.lock().unwrap().keys().cloned().collect()
+    }
+
+    /// Remember that `member`'s open link was told `availability`.
+    pub(super) fn told(&self, member: &MemberId, availability: Classified) {
+        if let Some(open) = self.open.lock().unwrap().get_mut(member) {
+            open.told = Some(availability);
+        }
+    }
+
+    /// The machines whose links are open and that described themselves,
+    /// with the hub's calls to each and the availability it was told.
+    pub(super) fn described(&self) -> HashMap<MemberId, (Arc<Calls>, Classified)> {
+        let open = self.open.lock().unwrap();
+        (open.iter())
+            .filter_map(|(member, open)| Some((member.clone(), (open.calls.clone()?, open.told?))))
+            .collect()
     }
 }
 

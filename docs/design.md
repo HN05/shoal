@@ -237,8 +237,9 @@ from its link history alone, never from what powers the machine:
 `intermittent` below 95% of the last 7 days connected, gaps under 5 minutes
 not counting, and for its first day by whether it reports a battery, so a new
 portable machine takes no lasting work before the hub has seen it behave. The
-hub keeps that history in its own state and counts its own machine from when
-its daemon ran with the machine awake. The
+hub keeps that history in its own state, counts its own machine from when its
+daemon ran with the machine awake, and tells each machine its availability
+when its link opens and when it changes, since a machine acts on it. The
 numbers are fixed, not settings. Browser sessions are a later step.
 The minimum Rust version follows current stable so the code can use its newest
 features; the manifest and CI toolchain advance together, with locked dependencies.

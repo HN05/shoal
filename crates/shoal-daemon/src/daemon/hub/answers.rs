@@ -130,8 +130,11 @@ impl Manager {
                 self.serve_app_request(member, method, data, out)?;
                 Reply::Streaming
             }
-            Call::Serve { .. } | Call::ServeStream { .. } | Call::Expired { .. } => {
-                anyhow::bail!("only the hub passes requests and expiries to machines")
+            Call::Serve { .. }
+            | Call::ServeStream { .. }
+            | Call::Expired { .. }
+            | Call::Availability { .. } => {
+                anyhow::bail!("only the hub passes requests, expiries and availability to machines")
             }
         })
     }
