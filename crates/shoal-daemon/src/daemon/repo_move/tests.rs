@@ -861,8 +861,8 @@ async fn a_root_move_takes_the_session_files_kept_for_chats_without_a_repository
     let record = manager.removed_spaces().await?.remove(0);
     let contents = temp.path().join("carried");
     fs::write(&contents, "{}\n")?;
-    let carried = crate::transfer::CarriedSessionFile {
-        file: crate::transfer::SessionFile {
+    let carried = shoal_protocol::transcripts::CarriedSessionFile {
+        file: shoal_protocol::transcripts::SessionFile {
             agent: "claude".into(),
             session: "s1".into(),
             path: "project/s1.jsonl".into(),

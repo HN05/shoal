@@ -19,6 +19,25 @@ use serde::{Deserialize, Serialize};
 use crate::integrations::IntegrationKind;
 use shoal_ids::agent_session_ids::AgentSessionId;
 
+/// A file of an agent's session, copied unread.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionFile {
+    /// The agent whose session it belongs to.
+    pub agent: crate::agent::Agent,
+    pub session: AgentSessionId,
+    /// Its path in the directory the agent keeps its sessions in.
+    pub path: PathBuf,
+    /// The length of its contents in the export.
+    pub size: u64,
+}
+
+/// A session file with its contents at `contents`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CarriedSessionFile {
+    pub file: SessionFile,
+    pub contents: PathBuf,
+}
+
 /// A session an agent of a space reported. Sessions its hooks never
 /// reported, such as those before a `/clear`, stay unknown.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -136,8 +136,8 @@ async fn a_chat_without_a_repository_gets_back_the_session_files_its_root_dir_ke
     let record = manager.removed_spaces().await.unwrap().remove(0);
     let contents = root.path().join("carried");
     std::fs::write(&contents, "{}\n").unwrap();
-    let carried = crate::transfer::CarriedSessionFile {
-        file: crate::transfer::SessionFile {
+    let carried = shoal_protocol::transcripts::CarriedSessionFile {
+        file: shoal_protocol::transcripts::SessionFile {
             agent: "claude".into(),
             session: "s1".into(),
             path: "project/s1.jsonl".into(),

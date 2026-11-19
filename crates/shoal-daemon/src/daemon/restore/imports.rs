@@ -1,6 +1,7 @@
 //! Importing a space another Shoal exported: recording its removal record
 //! here as its kind needs, then restoring it as `shoal restore` does.
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::transcripts::CarriedSessionFile;
 use shoal_refs::CommitId;
 use std::path::Path;
 
@@ -12,7 +13,7 @@ use crate::{
     git,
     model::{Head, RemovedKind, RemovedSpace, Repository, RestoredSpace, SpaceRef, WorkspaceRef},
     time::UnixTime,
-    transfer::{CarriedSessionFile, ImportTarget, SpaceImport},
+    transfer::{ImportTarget, SpaceImport},
 };
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;

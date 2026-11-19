@@ -17,6 +17,7 @@ use crate::{
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::transcripts::{CarriedSessionFile, SessionFile};
 
 pub(super) async fn exporter() -> (
     tempfile::TempDir,

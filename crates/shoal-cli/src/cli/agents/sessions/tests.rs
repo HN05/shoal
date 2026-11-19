@@ -7,7 +7,7 @@ fn imported(path: &str, contents: &str) -> ImportedSessionFile {
     let file = tempfile::NamedTempFile::new().unwrap();
     fs::write(file.path(), contents).unwrap();
     ImportedSessionFile {
-        file: crate::transfer::SessionFile {
+        file: shoal_protocol::transcripts::SessionFile {
             agent: "claude".into(),
             session: "s1".into(),
             path: path.into(),

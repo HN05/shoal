@@ -1,5 +1,6 @@
 //! Agents' session files that `shoal move import` puts where the agents
 //! look for them.
+use shoal_protocol::transcripts::CarriedSessionFile;
 use std::{
     collections::BTreeMap,
     ffi::OsString,
@@ -15,7 +16,6 @@ use crate::{
     config::Effective,
     model::{Chat, RemovedSpace, Workspace},
     protocol::ConfigTarget,
-    transfer::CarriedSessionFile,
 };
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::transcripts::{self, AgentEnvironment};

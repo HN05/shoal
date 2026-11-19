@@ -8,6 +8,8 @@ use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;
+use shoal_protocol::transcripts::CarriedSessionFile;
+use shoal_protocol::transcripts::SessionFile;
 use std::{
     collections::{BTreeMap, BTreeSet},
     io::{BufRead, Read, Write},
@@ -18,8 +20,8 @@ use anyhow::{Context, Result, ensure};
 
 pub use carried::{CarriedSpaceExt, Placed, carried_spaces};
 pub use shoal_protocol::transfer::{
-    CarriedSessionFile, CarriedSpace, Carrying, ExportedSpace, ImportTarget, Manifest,
-    PackagedSpace, SessionFile, Sessions, SpaceImport,
+    CarriedSpace, Carrying, ExportedSpace, ImportTarget, Manifest, PackagedSpace, Sessions,
+    SpaceImport,
 };
 
 mod carried;

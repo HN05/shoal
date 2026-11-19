@@ -5,6 +5,8 @@
 //! a directory per space named by its ID, holding each file under its place
 //! in the list beside them. Files a restore hands over but its caller does
 //! not put in place stay listed there for the space's next removal record.
+use shoal_protocol::transcripts::CarriedSessionFile;
+use shoal_protocol::transcripts::SessionFile;
 use std::{
     collections::HashSet,
     io::ErrorKind,
@@ -19,7 +21,7 @@ use crate::{
     daemon::workspace_files::HomeKey,
     model::{RemovedSpace, Repository, Space},
     shoal_dirs::{Contents, ShoalDir, remove_dir},
-    transfer::{CarriedSessionFile, SessionFile, SessionSource},
+    transfer::SessionSource,
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;

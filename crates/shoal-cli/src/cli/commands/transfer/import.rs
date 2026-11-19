@@ -4,6 +4,7 @@
 use crate::cli::commands::restore::reopen::ReopenedExt;
 use crate::transfer::ManifestExt;
 use crate::transfer::PackagedSpaceExt;
+use shoal_protocol::transcripts::CarriedSessionFile;
 use std::{
     collections::{BTreeMap, BTreeSet},
     io::BufReader,
@@ -25,10 +26,7 @@ use crate::{
     },
     model::RestoredSpace,
     refusal::{Reason, Refusal},
-    transfer::{
-        CarriedSessionFile, Import, ImportedSessionFile, Manifest, PackagedSpace, Sessions,
-        SpaceImport,
-    },
+    transfer::{Import, ImportedSessionFile, Manifest, PackagedSpace, Sessions, SpaceImport},
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::space_ids::SpaceId;

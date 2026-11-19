@@ -94,7 +94,7 @@ pub struct RemovedSpace {
     /// until the restore that opens the space puts them in place with its
     /// settings.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub session_files: Vec<crate::transfer::SessionFile>,
+    pub session_files: Vec<crate::transcripts::SessionFile>,
     pub cause: EventCause,
     pub removed_at: crate::time::UnixTime,
     pub expires_at: crate::time::UnixTime,
@@ -242,7 +242,7 @@ pub struct RestoredChat {
     /// The session files the daemon kept with the removal record, which
     /// the caller puts in place and then deletes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub session_files: Vec<crate::transfer::CarriedSessionFile>,
+    pub session_files: Vec<crate::transcripts::CarriedSessionFile>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
 }
@@ -256,7 +256,7 @@ pub struct RestoredWorkspace {
     /// The session files the daemon kept with the removal record, which
     /// the caller puts in place and then deletes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub session_files: Vec<crate::transfer::CarriedSessionFile>,
+    pub session_files: Vec<crate::transcripts::CarriedSessionFile>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
 }

@@ -8,6 +8,7 @@ use crate::{
     model::RemovedSpace,
     removal::RemovalResult,
     repository::Selector,
+    transcripts::{CarriedSessionFile, SessionFile},
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::space_ids::SpaceId;
@@ -85,25 +86,6 @@ pub struct PackagedSpace {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bundle: Option<u64>,
     pub record: RemovedSpace,
-}
-
-/// A file of an agent's session, copied unread.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SessionFile {
-    /// The agent whose session it belongs to.
-    pub agent: crate::agent::Agent,
-    pub session: AgentSessionId,
-    /// Its path in the directory the agent keeps its sessions in.
-    pub path: PathBuf,
-    /// The length of its contents in the export.
-    pub size: u64,
-}
-
-/// A session file with its contents at `contents`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CarriedSessionFile {
-    pub file: SessionFile,
-    pub contents: PathBuf,
 }
 
 /// A package's stopped agents and last sessions as the exporting machine

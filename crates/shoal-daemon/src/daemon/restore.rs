@@ -5,16 +5,14 @@ use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::{Copied, LastSession, StoppedAgent};
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::transcripts::CarriedSessionFile;
 use std::collections::HashMap;
 
 use anyhow::{Context, Result, bail};
 
 use super::manager::Manager;
 use crate::daemon::scope::Caller;
-use crate::{
-    model::{OpenedWorkspace, RemovedSpace, RestoredChat, RestoredSpace, RestoredWorkspace},
-    transfer::CarriedSessionFile,
-};
+use crate::model::{OpenedWorkspace, RemovedSpace, RestoredChat, RestoredSpace, RestoredWorkspace};
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
 
