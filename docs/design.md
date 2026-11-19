@@ -3497,8 +3497,9 @@ governs it as it governs a pushed deletion, with one `"propose"` request per
 branch bound to the commit the branch points to. The daemon deletes each with
 a Git push over HTTPS as the caller's account, leased at that commit, since
 the forges' APIs delete a branch by name: the forge keeps a branch that a push
-moved after the checks. It checks every named branch before deleting
-any, and refuses the default and protected branches, the head or base of an
+moved after the checks. Its token reaches Git on standard input, held by Git's
+credential cache for that host alone, never in a file, the environment or argv.
+It checks every named branch before deleting any, and refuses the default and protected branches, the head or base of an
 open PR, a branch whose changes the default branch lacks unless `--force`, and
 an active space's branch outside the caller's scope whatever `--force` says; a
 space's branch is active while the space exists without a recorded completion
