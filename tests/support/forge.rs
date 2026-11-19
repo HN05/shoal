@@ -13,6 +13,11 @@ pub fn install(root: &Path) {
     respond(root, &Value::Object(Default::default()));
     support::install_test_script(root.join("forge.py"), include_str!("../fixtures/forge.py"));
     support::install_test_script(root.join("bin/curl"), include_str!("../fixtures/curl"));
+    fs::write(
+        root.join("forge/tls.pem"),
+        include_str!("../fixtures/forge-tls.pem"),
+    )
+    .unwrap();
 }
 
 /// Answer later forge requests in `root` with `responses`, replacing the
@@ -31,10 +36,28 @@ pub struct Server {
 impl Server {
     /// Start the server installed in `root`.
     pub fn start(root: &Path) -> Self {
-        let port_file = root.join("forge/port");
+        Self::serve(root, "port", &[])
+    }
+
+    /// Start the server installed in `root` over HTTPS, with a certificate
+    /// for `127.0.0.1`, the one [`Server::certificate`] names.
+    pub fn start_tls(root: &Path) -> Self {
+        Self::serve(root, "tls-port", &[Self::certificate(root)])
+    }
+
+    /// The certificate the HTTPS server presents, to trust.
+    pub fn certificate(root: &Path) -> String {
+        root.join("forge/tls.pem").to_str().unwrap().to_owned()
+    }
+
+    /// Start the server, writing its port to `forge/<port>`, with `args`
+    /// after the port file.
+    fn serve(root: &Path, port: &str, args: &[String]) -> Self {
+        let port_file = root.join("forge").join(port);
         let child = support::isolated(root, "python3")
             .arg(root.join("forge.py"))
             .args(["serve", port_file.to_str().unwrap()])
+            .args(args)
             .spawn()
             .unwrap();
         // A hang guard only: the server writes its port once it listens.

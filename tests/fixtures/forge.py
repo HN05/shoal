@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """A scripted forge for tests: `curl`, which the scripted `curl` of
 `fixtures/curl` runs for every request but those to the loopback server, or
-a Forgejo API server with `serve <port-file>`.
+a Forgejo API server with `serve <port-file>`, over HTTPS with
+`serve <port-file> <pem>`, `pem` holding its key and certificate.
 
 Responses come from $HOME/forge/responses.json, keyed by "METHOD endpoint",
 the endpoint relative to the forge's API root, or the whole URL outside one.
@@ -205,9 +206,10 @@ def ref_updates(data):
     return updates
 
 
-def serve(port_file):
+def serve(port_file, pem=None):
     """Serve the scripted Forgejo API on a loopback port, written to
-    `port_file` once it listens."""
+    `port_file` once it listens, over HTTPS with the key and certificate in
+    `pem` when given."""
     # Only the server needs http.server, whose import takes longer than the
     # rest of a scripted curl's run.
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -255,6 +257,12 @@ def serve(port_file):
             pass
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    if pem is not None:
+        import ssl
+
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(pem)
+        server.socket = context.wrap_socket(server.socket, server_side=True)
     with open(port_file + ".tmp", "w") as f:
         f.write(str(server.server_address[1]))
     os.rename(port_file + ".tmp", port_file)
@@ -263,6 +271,6 @@ def serve(port_file):
 
 if __name__ == "__main__":
     if sys.argv[1:2] == ["serve"]:
-        serve(sys.argv[2])
+        serve(*sys.argv[2:4])
     else:
         curl(sys.argv[1:])
