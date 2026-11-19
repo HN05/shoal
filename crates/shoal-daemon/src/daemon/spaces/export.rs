@@ -2,8 +2,9 @@
 //! for a move that ends it once its destination has the package, copies
 //! one that keeps running, or writes a removed one's record, each with the
 //! spaces below it that the package carries, and writes what continues
-//! them on another machine. Each runs one path for a space of either kind;
-//! what a workspace's worktree adds is its worktree step.
+//! them on another machine; and the hub's packages of an intermittent
+//! machine's spaces, which keep running. Each runs one path for a space of
+//! either kind; what a workspace's worktree adds is its worktree step.
 use crate::transfer::ManifestExt;
 use anyhow::{Context, Result};
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
@@ -22,6 +23,7 @@ use shoal_protocol::transcripts::Environments;
 
 mod carried;
 mod copy;
+mod kept;
 mod moving;
 pub(crate) use moving::MovePacking;
 mod records;

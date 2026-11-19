@@ -59,7 +59,7 @@ impl Manager {
     }
 
     /// A copy of `space` with copies of the spaces below it that
-    /// `carrying` carries, as [`Self::copy_record_of`] records each: the
+    /// `carrying` carries, as [`Self::record_now`] records each: the
     /// space at its checkpoint `number`, or at a new one, and those below
     /// at new ones. An earlier checkpoint marks the sessions as newer than
     /// its files.
@@ -70,10 +70,10 @@ impl Manager {
         carrying: &Carrying,
     ) -> Result<Prepared> {
         let carried = self.carried_by(&space.id, carrying).await?;
-        let copied = self.copy_record_of(&space, number).await?;
+        let copied = self.record_now(&space, number).await?;
         let mut records = Vec::new();
         for below in &carried {
-            records.push(self.copy_record_of(below, None).await?);
+            records.push(self.record_now(below, None).await?);
         }
         // Each one's own config may describe its agents, and goes with it.
         let settings = self
@@ -87,29 +87,28 @@ impl Manager {
         Ok(prepared)
     }
 
-    /// A copy of `space`, as its removal would record it now, with its
-    /// agents, which start from forks of the sessions they reported: a
+    /// The record of `space`, which keeps running, as its removal would
+    /// record it now, with its agents and the sessions they reported: a
     /// workspace at its checkpoint `number`, or at a new one.
-    async fn copy_record_of(
+    pub(super) async fn record_now(
         &self,
         space: &Space,
         number: Option<CheckpointNumber>,
     ) -> Result<RemovedSpace> {
         let checkpoint = self.copy_checkpoint(space, number).await?;
-        let mut copied = self
+        let mut record = self
             .present_removal_record(&space.id, checkpoint, EventCause::Manual)
             .await?;
-        copied.agents = self.copied_agents(&space.id).await?;
-        // Its sessions' files are the original's, which the package carries
-        // from where they are.
-        copied.session_files = Vec::new();
-        Ok(copied)
+        record.agents = self.agents_now(&space.id).await?;
+        // Its sessions' files are where its agents keep them, which the
+        // package carries from there.
+        record.session_files = Vec::new();
+        Ok(record)
     }
 
-    /// The agents of the space `id` a copy starts again, each with the
-    /// session it reported last: those stopped, then those its executions
-    /// run.
-    async fn copied_agents(&self, id: &SpaceId) -> Result<Vec<StoppedAgent>> {
+    /// The agents of the space `id`, each with the session it reported
+    /// last: those stopped, then those its executions run.
+    pub(super) async fn agents_now(&self, id: &SpaceId) -> Result<Vec<StoppedAgent>> {
         let mut agents = recovery::stopped_agents(&self.paths, id)?;
         let now = UnixTime::now();
         for execution in self.workspace_executions(id).await? {
@@ -130,8 +129,8 @@ impl Manager {
     }
 }
 
-/// The record a copy keeps of the agent `execution` runs, with the `session`
-/// it reported; `None` for an execution without an agent.
+/// The record a package keeps of the agent `execution` runs, with the
+/// `session` it reported; `None` for an execution without an agent.
 fn running_record(
     execution: &Execution,
     session: Option<shoal_ids::agent_session_ids::AgentSessionId>,

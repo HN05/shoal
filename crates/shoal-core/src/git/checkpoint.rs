@@ -124,6 +124,14 @@ pub async fn snapshot(worktree: &Path, message: &str, files: bool) -> Result<Sna
     })
 }
 
+/// The commit HEAD names and the tree of the files a snapshot taken now
+/// would keep, which change together with what a snapshot holds.
+pub async fn files_state(worktree: &Path) -> Result<(CommitId, String)> {
+    let (_, head) = head_state(worktree).await?;
+    let tree = TemporaryIndex::copy_of(worktree).await?.tree().await?;
+    Ok((head, tree))
+}
+
 /// The branch checked out, `None` when detached, and the commit HEAD names.
 async fn head_state(worktree: &Path) -> Result<(Option<BranchName>, CommitId)> {
     let head = super::queries::head(worktree).await?;
