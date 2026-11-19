@@ -192,7 +192,7 @@ async fn a_failed_launch_takes_a_permission_change() {
     (manager.fail_queue_entry(&entry.id, "gone")).await.unwrap();
     let change = crate::config::permissions::PermissionChange::assigned("merge=direct").unwrap();
     let launches = [SpaceSelector::id(entry.space().unwrap())];
-    let targets = crate::daemon::workspace::PermissionTargets {
+    let targets = crate::daemon::stopped_work::PermissionTargets {
         agents: &[],
         launches: &launches,
     };

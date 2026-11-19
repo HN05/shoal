@@ -43,7 +43,6 @@ mod space_removal;
 pub(crate) mod spotlight;
 mod stack;
 mod status;
-mod stopped_work;
 mod tree;
 mod usage;
 mod xcode;
@@ -61,7 +60,6 @@ pub(crate) use merge::RecordChange;
 pub(crate) use ownership::VerifiedWorktree;
 pub(crate) use shutdown_stop::StoppedSpaces;
 pub(crate) use stack::record_base_changed;
-pub use stopped_work::PermissionTargets;
 
 pub(crate) use tree::{
     Receiver, Source, TrackedAgents, below_elsewhere, children, coordinator_of, deciders,

@@ -86,6 +86,7 @@ pub(crate) mod space_processes;
 pub(crate) mod spaces;
 mod startup;
 mod startup_audit;
+pub(crate) mod stopped_work;
 pub mod store;
 pub(crate) mod subagents;
 mod subscriptions;

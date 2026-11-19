@@ -32,8 +32,7 @@ pub mod test_daemon {
     pub use crate::daemon::test_daemon::{HANG, TestDaemon};
     pub use crate::daemon::test_support::{chat_launches, configure, overload};
     pub use crate::daemon::{
-        executions::StopRequest,
-        workspace::{Manager, PermissionTargets},
+        executions::StopRequest, stopped_work::PermissionTargets, workspace::Manager,
     };
 }
 

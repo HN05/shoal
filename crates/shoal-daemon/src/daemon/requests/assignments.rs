@@ -6,7 +6,8 @@ use anyhow::Result;
 use super::super::{
     answer::Answer,
     scope::{Caller, Scoped},
-    workspace::{Manager, PermissionTargets},
+    stopped_work::PermissionTargets,
+    workspace::Manager,
 };
 use crate::protocol::{AssignmentMethod, Body};
 use shoal_protocol::space_names::SpaceSelector;

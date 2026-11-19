@@ -2,8 +2,8 @@ use crate::paths::StateFiles;
 use crate::{
     config::permissions::{PermissionChange, PermissionsConfig},
     daemon::{
+        stopped_work::PermissionTargets,
         test_support::{chat, manager, repository},
-        workspace::PermissionTargets,
     },
     execution::{
         TrackedAgent,
