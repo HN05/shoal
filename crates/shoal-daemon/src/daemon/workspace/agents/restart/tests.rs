@@ -4,9 +4,10 @@ use shoal_ids::execution_ids::ExecutionId;
 use std::time::Duration;
 
 use crate::{
+    config::permissions::PermissionChange,
     daemon::{
         test_support::{manager, repository},
-        workspace::{ExecutionKind, Manager, RestartWaits},
+        workspace::{ExecutionKind, Manager, Requested, RestartWaits},
     },
     execution::recovery,
     model::{RunningAgent, Workspace},
@@ -337,7 +338,12 @@ async fn a_second_request_joins_the_restart_in_progress() {
     let mut stop = execution.stop.clone();
     stop.wait_for(|stopping| *stopping).await.unwrap();
     // Registered before the agent starts again, which answers it.
-    let second = manager.begin_restart(&id, true, None).await.unwrap();
+    let second = manager
+        .begin_restart(&id, true, None)
+        .await
+        .unwrap()
+        .answers()
+        .unwrap();
     // The agent's start answers both, and leaves it running.
     assert!(manager.resume_agent_execution(&id, None).await.unwrap());
     manager.agent_started(&id).await;
@@ -356,7 +362,12 @@ async fn a_failed_restart_answers_with_why() {
         .unwrap();
     let id = execution.plan.id.clone();
     track(&manager, &workspace, &id, "claude", true).await;
-    let failed = manager.begin_restart(&id, true, None).await.unwrap();
+    let failed = manager
+        .begin_restart(&id, true, None)
+        .await
+        .unwrap()
+        .answers()
+        .unwrap();
     manager
         .fail_restart(&id, "automatic restore failed".into())
         .await;
@@ -375,7 +386,12 @@ async fn a_cancelled_restart_answers_that_it_was() {
         .unwrap();
     let id = execution.plan.id.clone();
     track(&manager, &workspace, &id, "claude", true).await;
-    let cancelled = manager.begin_restart(&id, true, None).await.unwrap();
+    let cancelled = manager
+        .begin_restart(&id, true, None)
+        .await
+        .unwrap()
+        .answers()
+        .unwrap();
     manager
         .executions
         .with_agent(&id, |agent| agent.cancel_recovery())
@@ -511,7 +527,7 @@ async fn a_stop_cancels_a_restart_between_its_wrappers() {
 }
 
 #[tokio::test]
-async fn a_restart_making_a_permission_change_is_joined_only_with_the_same_change() {
+async fn a_newer_request_joins_the_restart_until_it_settles_merging_its_change() {
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
     let execution = manager
@@ -520,20 +536,23 @@ async fn a_restart_making_a_permission_change_is_joined_only_with_the_same_chang
         .unwrap();
     let id = execution.plan.id.clone();
     track(&manager, &workspace, &id, "claude", true).await;
-    let narrowing = |assignment: &str| {
-        Some(crate::config::permissions::PermissionChange::assigned(assignment).unwrap())
+    let change = |assignments: &[&str]| {
+        let changes: Vec<_> = (assignments.iter())
+            .map(|assignment| PermissionChange::assigned(assignment).unwrap())
+            .collect();
+        Some(PermissionChange::combined(&changes))
     };
-    let _first = manager
-        .begin_restart(&id, false, narrowing("push=propose"))
-        .await
-        .unwrap();
-    // Another request joins it with the same --permission, or without one,
-    // but not with another.
-    let other = manager
-        .begin_restart(&id, false, narrowing("push=deny"))
-        .await;
-    assert!(other.is_err());
-    for same in [None, narrowing("push=propose")] {
-        manager.begin_restart(&id, false, same).await.unwrap();
-    }
+    let first = change(&["push=propose", "issue_open=propose"]);
+    manager.begin_restart(&id, false, first).await.unwrap();
+    // The newer request wins on a key both set, and on how it restarts.
+    let joined = manager.begin_restart(&id, true, change(&["push=direct"]));
+    assert!(matches!(joined.await.unwrap(), Requested::Answers(_)));
+    assert_eq!(
+        manager.restart_change(&id).await,
+        change(&["issue_open=propose", "push=direct"])
+    );
+    // Once the wrapper settled it, a newer request waits for the agent to run.
+    assert!(manager.settle_restart(&id).await);
+    let later = manager.begin_restart(&id, false, None).await.unwrap();
+    assert!(matches!(later, Requested::Settled));
 }

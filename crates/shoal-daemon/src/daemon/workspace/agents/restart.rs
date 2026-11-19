@@ -85,19 +85,19 @@ impl Manager {
         change: Option<PermissionChange>,
     ) -> Result<Option<Origin>> {
         let answer = (self.begin_restart(execution, in_place, change)).await?;
-        restarted(answer).await
+        restarted(answer.answers()?).await
     }
 
-    /// Ask the agent's wrapper to stop it for a restart, or join the
-    /// restart that starts it in a new wrapper, returning what answers once
-    /// the agent runs again, which [`restarted`] reads. `id` may name an
-    /// execution the agent ran as before such a restart.
+    /// Ask the agent's wrapper to stop it for a restart, or join the restart
+    /// under way, unless that settled how it starts the agent already. `id`
+    /// may name an execution the agent ran as before a restart started it
+    /// in a new wrapper.
     pub(crate) async fn begin_restart(
         &self,
         id: &ExecutionId,
         in_place: bool,
         change: Option<PermissionChange>,
-    ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
+    ) -> Result<Requested> {
         let current = (self.executions)
             .with_restarts(|_, renewals| renewal::current(renewals, id))
             .await;
@@ -106,8 +106,8 @@ impl Manager {
         self.executions
             .with_restarts(|agents, renewals| {
                 let id = renewal::current(renewals, id);
-                if let Some(Renewal::Starting(handover)) = renewals.get_mut(&id) {
-                    return handover.answer_changing(change.as_ref());
+                if let Some(Renewal::Starting(_)) = renewals.get(&id) {
+                    return Ok(Requested::Settled);
                 }
                 // A stop of an agent that runs again meanwhile shows only on
                 // its stop channel, and its turn is unknown.
@@ -124,20 +124,22 @@ impl Manager {
     /// Save the handoff of `agent`, the agent of `id` with the protection
     /// stop that stopped it if any and the turn state it reported, then stop
     /// it for a restart, `in_place` or in a new wrapper, starting it with
-    /// `change` made when given, or join the restart already in progress as
-    /// it was asked.
+    /// `change` made when given, or join the restart under way, which then
+    /// does so, unless it settled already.
     fn stop_for_restart(
         &self,
         id: &ExecutionId,
         agent: Option<(&mut Agent, Option<Protection>, Option<AgentState>)>,
         in_place: bool,
         change: Option<PermissionChange>,
-    ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
+    ) -> Result<Requested> {
         let (agent, stopped, turn) =
             agent.with_context(|| format!("no connected agent runs execution {id}"))?;
         if let Some(restart) = &mut agent.restarts.current {
-            restart.ensure_changes(agent.name.name(), change.as_ref())?;
-            return Ok(restart.answer());
+            return Ok(match restart.merge(in_place, change) {
+                true => Requested::Answers(restart.answer()),
+                false => Requested::Settled,
+            });
         }
         ensure!(
             agent.recover,
@@ -164,7 +166,7 @@ impl Manager {
             recovery::consume(&handoff)?;
             anyhow::bail!("{} disconnected", agent.name);
         }
-        Ok(answer)
+        Ok(Requested::Answers(answer))
     }
 
     /// Whether a restart of `id` has not resumed its agent yet; after the
@@ -198,19 +200,33 @@ impl Manager {
             .unwrap_or(false)
     }
 
-    /// Whether the restart of `id` was asked to start the agent again in its
-    /// wrapper.
-    pub(crate) async fn restart_in_place(&self, id: &ExecutionId) -> bool {
+    /// Settle how the restart of `id` starts the agent again, which a newer
+    /// request no longer changes, returning whether in its wrapper.
+    pub(crate) async fn settle_restart(&self, id: &ExecutionId) -> bool {
         self.executions
             .with_agent(id, |agent| {
-                agent
-                    .restarts
-                    .current
-                    .as_ref()
-                    .is_some_and(Restart::in_place)
+                agent.restarts.current.as_mut().is_some_and(Restart::settle)
             })
             .await
             .unwrap_or(false)
+    }
+
+    /// What the restart under way of the agent of `id` changes in the
+    /// permissions it was given.
+    #[cfg(test)]
+    pub(crate) async fn restart_change(&self, id: &ExecutionId) -> Option<PermissionChange> {
+        (self.executions)
+            .with_agent(id, |agent| {
+                agent.restarts.current.as_ref()?.change().cloned()
+            })
+            .await
+            .flatten()
+    }
+
+    /// Whether a restart of the agent of `id` is under way, in its wrapper
+    /// or for a new one.
+    pub(crate) async fn restarting(&self, id: &ExecutionId) -> bool {
+        self.restart_requested(id).await || self.restart_continues_elsewhere(id).await
     }
 
     /// Leave the restart of `id`, whose agent's processes stopped, to a new
@@ -340,6 +356,28 @@ impl Manager {
         self.executions
             .with_agent(id, |agent| agent.restarts.finish_if(ends, &outcome))
             .await;
+    }
+}
+
+/// What a request for an agent's restart began.
+pub(crate) enum Requested {
+    /// The agent restarts, alone or with the restart under way, answering
+    /// once it runs again, which [`restarted`] reads.
+    Answers(oneshot::Receiver<Result<Option<Origin>>>),
+    /// The restart under way settled how it starts the agent already, which
+    /// runs again before another restart can begin.
+    Settled,
+}
+
+impl Requested {
+    /// What answers once the agent runs again, refusing a restart that has
+    /// to wait for the one under way.
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn answers(self) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
+        match self {
+            Self::Answers(answer) => Ok(answer),
+            Self::Settled => anyhow::bail!("the restart under way started the agent already"),
+        }
     }
 }
 

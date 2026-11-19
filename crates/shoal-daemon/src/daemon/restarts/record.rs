@@ -48,7 +48,8 @@ pub(super) fn all(db: &Connection) -> Result<Vec<Recorded>> {
     rows.into_iter().map(recorded).collect()
 }
 
-fn find(db: &Connection, id: &SpaceId) -> Result<Option<Recorded>> {
+/// The restart recorded for the space `id`, if it has one.
+pub(super) fn find(db: &Connection, id: &SpaceId) -> Result<Option<Recorded>> {
     let query = format!("SELECT {COLUMNS} FROM agent_restarts WHERE space_id=?1");
     let found = db.query_row(&query, [id], row).optional()?;
     found.map(recorded).transpose()

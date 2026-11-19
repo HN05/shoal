@@ -38,8 +38,8 @@ mod make_room;
 mod restart;
 mod stops;
 pub use restart::RestartWaits;
-pub(crate) use restart::restarted;
 pub(crate) use restart::{Renewals, forget_ended_renewals};
+pub(crate) use restart::{Requested, restarted};
 pub(crate) use stops::recorded as stop_recorded;
 
 /// Operations on the client type [`Protection`] that only the `shoal` command uses.

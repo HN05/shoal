@@ -11,7 +11,11 @@ use tokio::sync::oneshot;
 
 use crate::{
     agent::Agent,
-    daemon::{scope::Caller, workspace::Manager, workspace::restarted},
+    config::permissions::PermissionChange,
+    daemon::{
+        scope::Caller,
+        workspace::{Manager, Requested, restarted},
+    },
     model::{AgentRestart, RestartOutcome, RestartWait, Space},
     sessions::Origin,
 };
@@ -86,9 +90,10 @@ impl Manager {
     }
 
     /// Decide, holding the decisions, what becomes of `restart` of the agent
-    /// of `space`, which `asked_by` asks for and which replaces the restart
-    /// recorded for it: skip it, record it until the agent's turn ends,
-    /// record it in the line, or begin it now.
+    /// of `space`, which `asked_by` asks for and which supersedes the
+    /// restart recorded for it: skip it, record it until the agent's turn
+    /// ends, record it in the line, begin it now or with the restart under
+    /// way, or record it until the agent that restart started runs.
     async fn decide_restart(
         &self,
         space: &Space,
@@ -97,33 +102,41 @@ impl Manager {
     ) -> Result<Decision> {
         let mut waiters = self.restarts.decisions.lock().await;
         let waiting = waiters.remove(&space.id).unwrap_or_default();
-        self.forget_restart(&space.id).await?;
+        let earlier = self.forget_restart(&space.id).await?;
         let (agent, execution) = match self.restartable_agent(space).await? {
             Ok(found) => found,
             Err(skipped) => return Ok(answered(waiting, skipped)),
         };
         let recorded = Recorded {
             space_id: space.id.clone(),
-            restart,
+            restart: superseding(earlier, restart),
             asked_by,
         };
-        if recorded.restart.wait && !self.agent_turn_ended(&space.id).await? {
-            self.record_restart(&recorded).await?;
-            let waits = RestartWait::Turn;
-            return Ok(answered(waiting, RestartOutcome::Waits { agent, waits }));
+        // A restart under way stopped the agent, whose turn is over.
+        if !self.restarting(&execution).await {
+            if recorded.restart.wait && !self.agent_turn_ended(&space.id).await? {
+                self.record_restart(&recorded).await?;
+                return Ok(answered(waiting, waits_for_turn(agent)));
+            }
+            if recorded.restart.sequential {
+                self.line_up(recorded).await?;
+                return Ok(wait_for_recorded(&mut waiters, &space.id, waiting));
+            }
         }
-        if recorded.restart.sequential {
-            let (waiter, answer) = oneshot::channel();
-            let waiting = waiting.into_iter().chain([waiter]);
-            waiters.entry(space.id.clone()).or_default().extend(waiting);
-            self.line_up(recorded).await?;
-            return Ok(Decision::Recorded(answer));
+        match self.restart_now(&execution, &recorded).await? {
+            Requested::Answers(answer) => Ok(Decision::Restarting {
+                agent,
+                answer,
+                waiting,
+            }),
+            Requested::Settled => {
+                self.record_restart(&recorded).await?;
+                Ok(match recorded.restart.wait {
+                    true => answered(waiting, waits_for_turn(agent)),
+                    false => wait_for_recorded(&mut waiters, &space.id, waiting),
+                })
+            }
         }
-        Ok(Decision::Restarting {
-            answer: self.restart_now(&execution, recorded).await?,
-            agent,
-            waiting,
-        })
     }
 
     /// Whether the agent of the space `id` ended its turn.
@@ -150,15 +163,11 @@ impl Manager {
 
     /// Begin `recorded`, the restart of the agent of its space, which runs
     /// as `execution`; the user's restart is their interaction with it.
-    async fn restart_now(
-        &self,
-        execution: &ExecutionId,
-        recorded: Recorded,
-    ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
+    async fn restart_now(&self, execution: &ExecutionId, recorded: &Recorded) -> Result<Requested> {
         if recorded.asked_by.is_none() {
             self.record_agent_interaction(execution).await;
         }
-        let restart = recorded.restart;
+        let restart = recorded.restart.clone();
         (self.begin_restart(execution, restart.in_place, restart.change)).await
     }
 
@@ -177,6 +186,32 @@ impl Manager {
         let id = id.to_owned();
         self.store.write(move |tx| record::take(tx, &id)).await
     }
+}
+
+/// `restart`, which supersedes `earlier`: when and how come from it, and
+/// the permission changes of both merge, its own winning on a key both set.
+fn superseding(earlier: Option<Recorded>, restart: AgentRestart) -> AgentRestart {
+    let earlier = earlier.and_then(|earlier| earlier.restart.change);
+    let change = PermissionChange::then(earlier, restart.change.clone());
+    AgentRestart { change, ..restart }
+}
+
+fn waits_for_turn(agent: Agent) -> RestartOutcome {
+    let waits = RestartWait::Turn;
+    RestartOutcome::Waits { agent, waits }
+}
+
+/// Have the request wait for the restart recorded for the space `id`, with
+/// `waiting`, those that waited for the one it superseded.
+fn wait_for_recorded(
+    waiters: &mut HashMap<SpaceId, Vec<Waiter>>,
+    id: &SpaceId,
+    waiting: Vec<Waiter>,
+) -> Decision {
+    let (waiter, answer) = oneshot::channel();
+    let waiting = waiting.into_iter().chain([waiter]);
+    waiters.entry(id.clone()).or_default().extend(waiting);
+    Decision::Recorded(answer)
 }
 
 /// Answer `waiting` and the request with `outcome`.

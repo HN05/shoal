@@ -5,6 +5,7 @@ use shoal_protocol::space_names::SpaceSelector;
 
 use super::record::{self, Recorded};
 use crate::{
+    config::permissions::PermissionChange,
     daemon::{
         scope::Caller,
         test_support::{manager, repository},
@@ -201,7 +202,7 @@ async fn a_restart_waiting_for_the_turn_is_recorded_until_the_turn_ends() {
     manager.restart_finished_turns().await.unwrap();
     let mut stop = execution.stop.clone();
     stop.wait_for(|stopping| *stopping).await.unwrap();
-    assert!(manager.restart_in_place(&execution.plan.id).await);
+    assert!(manager.settle_restart(&execution.plan.id).await);
     assert!(recorded(&manager).await.is_empty());
 }
 
@@ -321,4 +322,85 @@ async fn a_sequential_restart_answers_once_the_line_restarted_its_agent() {
     );
     assert!(recorded(&manager).await.is_empty());
     line.abort();
+}
+
+/// Start the restarted agent of `id` again, as its wrapper does once it
+/// stopped.
+async fn run_again(manager: &Manager, id: &ExecutionId) {
+    manager.settle_restart(id).await;
+    assert!(manager.resume_agent_execution(id, None).await.unwrap());
+    manager.agent_started(id).await;
+}
+
+#[tokio::test]
+async fn a_newer_request_restarts_now_with_the_permission_change_of_the_one_it_supersedes() {
+    let (root, manager) = manager().await;
+    let (workspace, execution) = working(root.path(), &manager).await;
+    let space = SpaceSelector::id(&workspace.id);
+    let push = PermissionChange::assigned("push=direct").unwrap();
+    let waiting = AgentRestart {
+        change: Some(push.clone()),
+        ..waiting()
+    };
+    (manager.restart_space(None, &space, waiting))
+        .await
+        .unwrap();
+    let restarting = tokio::spawn({
+        let (manager, space) = (manager.clone(), space.clone());
+        async move {
+            manager
+                .restart_space(None, &space, AgentRestart::default())
+                .await
+        }
+    });
+    let mut stop = execution.stop.clone();
+    stop.wait_for(|stopping| *stopping).await.unwrap();
+    let id = execution.plan.id.clone();
+    assert_eq!(manager.restart_change(&id).await, Some(push));
+    assert!(recorded(&manager).await.is_empty());
+    run_again(&manager, &id).await;
+    let outcome = restarting.await.unwrap().unwrap();
+    assert!(
+        matches!(outcome, RestartOutcome::Restarted { .. }),
+        "{outcome:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_request_after_the_restart_settled_restarts_the_agent_again_once_it_runs() {
+    let (root, manager) = manager().await;
+    let (workspace, execution) = working(root.path(), &manager).await;
+    let space = SpaceSelector::id(&workspace.id);
+    let in_place = AgentRestart {
+        in_place: true,
+        ..Default::default()
+    };
+    let request = |restart: AgentRestart| {
+        let (manager, space) = (manager.clone(), space.clone());
+        tokio::spawn(async move { manager.restart_space(None, &space, restart).await })
+    };
+    let first = request(in_place.clone());
+    let mut stop = execution.stop.clone();
+    stop.wait_for(|stopping| *stopping).await.unwrap();
+    let id = execution.plan.id.clone();
+    assert!(manager.settle_restart(&id).await);
+    let second = request(in_place.clone());
+    // The second waits for the agent the first starts.
+    while recorded(&manager).await.is_empty() {
+        tokio::task::yield_now().await;
+    }
+    run_again(&manager, &id).await;
+    first.await.unwrap().unwrap();
+    assert!(!manager.restarting(&id).await);
+
+    manager.restart_finished_turns().await.unwrap();
+    while !manager.restarting(&id).await {
+        tokio::task::yield_now().await;
+    }
+    run_again(&manager, &id).await;
+    let outcome = second.await.unwrap().unwrap();
+    assert!(
+        matches!(outcome, RestartOutcome::Restarted { .. }),
+        "{outcome:?}"
+    );
 }

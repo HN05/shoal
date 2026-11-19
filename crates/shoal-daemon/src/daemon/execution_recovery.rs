@@ -209,7 +209,7 @@ async fn restart_once_stopped(
     let resume = async {
         ready?;
         manager.verify_restore_space(workspace_id).await?;
-        if manager.restart_in_place(execution_id).await {
+        if manager.settle_restart(execution_id).await {
             manager.give_restart_change(execution_id).await?;
             resumes.resume(None).await
         } else {

@@ -1,6 +1,6 @@
 //! The restart of one agent, a workspace's or a chat's, in progress, which
 //! answers each request for it.
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Result, anyhow};
 use tokio::sync::oneshot;
 
 use super::RestartWaits;
@@ -20,6 +20,9 @@ pub(crate) struct Restart {
     in_place: bool,
     /// What the restart changes in the permissions the agent was given.
     change: Option<PermissionChange>,
+    /// The wrapper took how the restart starts the agent again and with
+    /// what permissions, which a newer request no longer changes.
+    settled: bool,
     /// The stopped agent was resumed, in its wrapper or a new one, so that
     /// wrapper's next start is the restarted agent rather than the first one.
     pub(super) resumed: bool,
@@ -37,6 +40,7 @@ impl Restart {
             answers: Vec::new(),
             in_place,
             change,
+            settled: false,
             resumed: false,
             waits: None,
         }
@@ -48,19 +52,23 @@ impl Restart {
         self.change.as_ref()
     }
 
-    /// Refuse a request for a restart making `change` that this one, in
-    /// progress for the agent `name`, does not make; a request without one
-    /// takes this restart as it is.
-    pub(crate) fn ensure_changes(
-        &self,
-        name: &str,
-        change: Option<&PermissionChange>,
-    ) -> Result<()> {
-        ensure!(
-            change.is_none() || change == self.change.as_ref(),
-            "{name} restarts already with another --permission; restart it again once it runs"
-        );
-        Ok(())
+    /// Take a newer request for a restart `in_place` or not, making
+    /// `change`, which wins over this one's on a key both set, unless the
+    /// wrapper settled this one already; whether it did.
+    pub(crate) fn merge(&mut self, in_place: bool, change: Option<PermissionChange>) -> bool {
+        if self.settled {
+            return false;
+        }
+        self.in_place = in_place;
+        self.change = PermissionChange::then(self.change.take(), change);
+        true
+    }
+
+    /// Settle how the restart starts the agent again and with what
+    /// permissions, returning whether in its wrapper.
+    pub(super) fn settle(&mut self) -> bool {
+        self.settled = true;
+        self.in_place
     }
 
     /// Answer one more request: at once while the restart waits for the
@@ -77,13 +85,9 @@ impl Restart {
     }
 
     pub(crate) fn resume(&mut self) {
+        self.settled = true;
         self.resumed = true;
         self.waits = None;
-    }
-
-    /// Whether the wrapper starts the agent again itself.
-    pub(super) fn in_place(&self) -> bool {
-        self.in_place
     }
 
     /// Whether the agent was resumed.

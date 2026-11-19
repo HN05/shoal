@@ -14,7 +14,7 @@ use crate::{
     daemon::{
         log,
         notifications::{About, NotificationKind},
-        workspace::{Manager, restarted},
+        workspace::{Manager, Requested, restarted},
     },
     model::{RestartOutcome, RunningAgent},
     sessions::Origin,
@@ -66,14 +66,16 @@ impl Manager {
         let theirs: Vec<&RunningAgent> = (agents.iter())
             .filter(|agent| agent.space_id == *id)
             .collect();
+        for agent in &theirs {
+            if self.restarting(&agent.execution).await {
+                return Ok(Standing::Waits);
+            }
+        }
         if theirs.is_empty() || theirs.iter().any(|agent| agent.stopped.is_some()) {
             return Ok(Standing::Gone);
         }
         // A wrapper reconnecting to a restarted daemon brings its agent back.
-        let Some(agent) = theirs.iter().find(|agent| agent.agent.is_some()) else {
-            return Ok(Standing::Waits);
-        };
-        if self.restart_requested(&agent.execution).await {
+        if theirs.iter().all(|agent| agent.agent.is_none()) {
             return Ok(Standing::Waits);
         }
         let ended =
@@ -113,20 +115,20 @@ impl Manager {
         ran
     }
 
-    /// Take the restart recorded for the space `id`, with the requests that
-    /// wait for it, and begin it, holding the decisions so no request
-    /// decides on the space meanwhile; none once nothing is recorded.
+    /// Begin the restart recorded for the space `id`, taking it with the
+    /// requests that wait for it, holding the decisions so no request
+    /// decides on the space meanwhile; none once nothing is recorded, or
+    /// while the agent is still to run after the restart under way.
     async fn begin_recorded_restart(
         &self,
         id: &SpaceId,
     ) -> Result<Option<(Recorded, Vec<Waiter>, Begun)>> {
         let mut waiters = self.restarts.decisions.lock().await;
         let space = id.to_owned();
-        let taken = self.store.write(move |tx| super::record::take(tx, &space));
-        let Some(recorded) = taken.await? else {
+        let found = self.store.read(move |tx| super::record::find(tx, &space));
+        let Some(recorded) = found.await? else {
             return Ok(None);
         };
-        let waiting = waiters.remove(id).unwrap_or_default();
         let space = self.space(&SpaceSelector::id(id)).await?;
         let begun = match self.restartable_agent(&space).await? {
             Err(skipped) => Begun::Ended(Ok(skipped)),
@@ -136,11 +138,14 @@ impl Manager {
                     .begin_restart(&execution, restart.in_place, restart.change)
                     .await
                 {
-                    Ok(answer) => Begun::Restarting(agent, answer),
+                    Ok(Requested::Answers(answer)) => Begun::Restarting(agent, answer),
+                    Ok(Requested::Settled) => return Ok(None),
                     Err(error) => Begun::Ended(Err(error)),
                 }
             }
         };
+        self.forget_restart(id).await?;
+        let waiting = waiters.remove(id).unwrap_or_default();
         Ok(Some((recorded, waiting, begun)))
     }
 

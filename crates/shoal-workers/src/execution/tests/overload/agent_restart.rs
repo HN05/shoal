@@ -253,10 +253,11 @@ async fn a_restart_whose_new_wrapper_fails_to_start_leaves_the_agent_for_shoal_r
 }
 
 /// A request for the agent while no wrapper runs it finds it by the
-/// execution it ran as and joins its restart, and the agent the new wrapper
-/// runs is listed as having run as it.
+/// execution it ran as, and since the restart settled how it starts the
+/// agent, it cannot join it; the agent the new wrapper runs is listed as
+/// having run as it.
 #[tokio::test]
-async fn a_restart_in_a_new_wrapper_is_joined_by_the_execution_the_agent_ran_as() {
+async fn a_restart_in_a_new_wrapper_follows_the_agent_from_the_execution_it_ran_as() {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
@@ -272,10 +273,8 @@ async fn a_restart_in_a_new_wrapper_is_joined_by_the_execution_the_agent_ran_as(
         panic!("expected the restarting agent: {agents:?}");
     };
     assert_eq!(agent.execution, execution);
-    let joined = tokio::spawn({
-        let (manager, execution) = (manager.clone(), execution.clone());
-        async move { manager.restart_agent(&execution, false, None).await }
-    });
+    let later = manager.restart_agent(&execution, false, None);
+    bounded(later).await.unwrap_err();
     let mut renewed = child_command(
         &manager,
         &workspace,
@@ -284,7 +283,6 @@ async fn a_restart_in_a_new_wrapper_is_joined_by_the_execution_the_agent_ran_as(
     renewed.env("SHOAL_TEST_QUEUE_ENTRY", &restore.id);
     let renewed = run_child(renewed);
     bounded(restarted).await.unwrap().unwrap();
-    bounded(joined).await.unwrap().unwrap();
     let agents = manager.running_agents().await.unwrap();
     let [agent] = agents.as_slice() else {
         panic!("expected the restarted agent: {agents:?}");

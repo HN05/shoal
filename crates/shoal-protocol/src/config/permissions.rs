@@ -380,6 +380,13 @@ impl PermissionChange {
         combined
     }
 
+    /// `later` made after `earlier`, either of which may change nothing: a
+    /// key both set takes `later`'s value.
+    pub fn then(earlier: Option<Self>, later: Option<Self>) -> Option<Self> {
+        let changes: Vec<Self> = earlier.into_iter().chain(later).collect();
+        (!changes.is_empty()).then(|| Self::combined(&changes))
+    }
+
     /// Refuse a key this change sets wider than `held`, a scoped giver's
     /// own permissions, or drops to a wider value of `fallback`, those the
     /// agent has without what it was given.

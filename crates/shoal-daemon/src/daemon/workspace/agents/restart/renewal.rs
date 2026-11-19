@@ -7,14 +7,11 @@ use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, anyhow};
-use tokio::sync::oneshot;
 
 use super::{Agent, Manager, Restarts};
 use crate::{
-    config::permissions::PermissionChange,
     daemon::workspace::agent_queue::Start,
     model::{RunningAgent, Space},
-    sessions::Origin,
 };
 
 /// A restart whose agent starts again in a new wrapper, kept by the
@@ -58,32 +55,6 @@ impl Agent {
 /// has not registered it yet.
 pub(super) fn starting(renewals: &Renewals, id: &ExecutionId) -> bool {
     matches!(renewals.get(id), Some(Renewal::Starting(_)))
-}
-
-impl Handover {
-    /// Answer one more request for the restart in progress, refusing one
-    /// making another `change` than it makes.
-    pub(super) fn answer_changing(
-        &mut self,
-        change: Option<&PermissionChange>,
-    ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
-        if let Some(restart) = &self.restarts.current {
-            restart.ensure_changes(self.name.name(), change)?;
-        }
-        Ok(self.answer())
-    }
-
-    /// Answer one more request for the restart in progress.
-    pub(super) fn answer(&mut self) -> oneshot::Receiver<Result<Option<Origin>>> {
-        match &mut self.restarts.current {
-            Some(restart) => restart.answer(),
-            None => {
-                let (done, answer) = oneshot::channel();
-                let _ = done.send(Err(anyhow!("the restart was cancelled")));
-                answer
-            }
-        }
-    }
 }
 
 /// The agents whose restart starts them in a new wrapper, each as the
