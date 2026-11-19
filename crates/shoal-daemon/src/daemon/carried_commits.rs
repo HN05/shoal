@@ -5,7 +5,11 @@
 //! fetches it into the repository the start goes in, registering it as a
 //! URL clone where it has none, under a ref of Shoal's own, and the start
 //! then names the commit by its full ID.
-use std::{path::Path, sync::Arc};
+use std::{
+    io::{Read as _, Write as _},
+    path::Path,
+    sync::Arc,
+};
 
 use anyhow::{Context as _, Result, bail};
 use shoal_protocol::{
@@ -25,6 +29,9 @@ use crate::model::Repository;
 
 /// The name of a carried bundle in the temporary directory that holds it.
 const BUNDLE: &str = "carried.bundle";
+
+/// The most bytes of a bundle read or written at once.
+const CHUNK: usize = 64 << 10;
 
 impl Manager {
     /// Carry `commit` of `repository`, whose origin's URL is `origin`, to
@@ -96,11 +103,48 @@ impl Manager {
     }
 }
 
-/// Write the file `file` on `outgoing`.
+/// Write the file `file` on `outgoing`, a chunk at a time.
 async fn send_file(file: &Path, outgoing: &mut Outgoing) -> Result<()> {
-    let file = file.to_owned();
-    let bytes = tokio::task::spawn_blocking(move || std::fs::read(file)).await??;
-    outgoing.write(&bytes).await
+    let path = file.to_owned();
+    let mut input = blocking(move || std::fs::File::open(path)).await?;
+    loop {
+        let (file, chunk) = blocking(move || {
+            let mut chunk = vec![0; CHUNK];
+            let read = input.read(&mut chunk)?;
+            chunk.truncate(read);
+            Ok((input, chunk))
+        })
+        .await?;
+        if chunk.is_empty() {
+            return Ok(());
+        }
+        input = file;
+        outgoing.write(&chunk).await?;
+    }
+}
+
+/// Write what `stream` reads until the caller ends its side to the new
+/// file `file`, a chunk at a time.
+async fn receive_file(stream: &mut UnixStream, file: &Path) -> Result<()> {
+    let path = file.to_owned();
+    let mut output = blocking(move || std::fs::File::create(path)).await?;
+    let mut chunk = vec![0; CHUNK];
+    loop {
+        let read = stream.read(&mut chunk).await?;
+        if read == 0 {
+            return Ok(());
+        }
+        let written = chunk[..read].to_vec();
+        output = blocking(move || output.write_all(&written).map(|()| output)).await?;
+    }
+}
+
+/// What `work`, which blocks on the file system, returns, run on the
+/// blocking pool.
+async fn blocking<T: Send + 'static>(
+    work: impl FnOnce() -> std::io::Result<T> + Send + 'static,
+) -> Result<T> {
+    Ok(tokio::task::spawn_blocking(work).await??)
 }
 
 /// Fetch `commit` into `repo`, after the origin's `branch`, from the bundle
@@ -110,12 +154,9 @@ async fn take_bundle(
     repo: &Path,
     carried: (&CommitId, &str),
 ) -> Result<()> {
-    let mut bytes = Vec::new();
-    stream.read_to_end(&mut bytes).await?;
     let directory = tempfile::tempdir()?;
     let file = directory.path().join(BUNDLE);
-    let written = file.clone();
-    tokio::task::spawn_blocking(move || std::fs::write(written, bytes)).await??;
+    receive_file(stream, &file).await?;
     crate::git::clone_base::fetch_carried(repo, &file, carried).await
 }
 
