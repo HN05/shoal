@@ -615,8 +615,8 @@ keep it, and its conflict watch stops. `--undo` withdraws a recorded
 completion; associations and watches stay, closed questions stay closed, and
 cleanup proceeds as if `done` had not run.
 
-A merged workspace nobody has used for hours goes with merged cleanup whether
-or not `done` ran.
+Where `[cleanup.merged]` is on, a merged workspace nobody has used for hours
+goes with merged cleanup whether or not `done` ran.
 
 ```sh
 shoal acquire hold --name <name> --reason <why> [--space <space>]

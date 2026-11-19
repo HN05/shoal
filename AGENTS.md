@@ -259,7 +259,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   chat below it whose agent stopped, whose work is left to it. A chat's
   agent exiting stops the chat, which ends only by removal.
 - `[cleanup.auto]` has `enabled` (default true) and `idle_minutes` (default
-  10), resolved per workspace on each sweep. `[cleanup.merged]` (default true,
+  10), resolved per workspace on each sweep. `[cleanup.merged]` (default false,
   240 idle minutes, persisted across restarts) removes merged, unused workspaces
   whatever their assignment state, archiving unsaved files left over on a branch
   with commits; only holds, open questions and pending PR proposals and push requests keep them. Automatic removal is only for idle,

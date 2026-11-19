@@ -292,7 +292,7 @@ enabled = true
 
 [cleanup.merged]
 # Remove workspaces merged into the default branch once idle, done or not.
-enabled = true
+enabled = false
 idle_minutes = 240
 
 [cleanup.restore]

@@ -15,6 +15,9 @@ use shoal_protocol::space_names::SpaceSelector;
 
 const HOUR: Duration = Duration::from_secs(3600);
 
+/// Local repository config that turns merged cleanup on.
+const ENABLED: &str = "[cleanup.merged]\nenabled = true\n";
+
 struct Fixture {
     _root: tempfile::TempDir,
     manager: Arc<Manager>,
@@ -24,12 +27,22 @@ struct Fixture {
 
 impl Fixture {
     /// A workspace with two commits and a linked issue, which keeps it from
-    /// idle cleanup.
+    /// idle cleanup, in a repository with merged cleanup on.
     async fn new() -> Self {
+        let fixture = Self::with_config(ENABLED).await;
+        fixture.link_issue().await;
+        fixture
+    }
+
+    /// A workspace with two commits in a repository with local `config`.
+    async fn with_config(config: &str) -> Self {
         let (root, manager) = manager().await;
         let checkout = repository(root.path(), "repo");
         let repo = manager
             .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        (manager.write_local_config(&repo.id, Some(config.into())))
             .await
             .unwrap();
         let workspace = manager
@@ -40,8 +53,17 @@ impl Fixture {
             fs::write(workspace.path.join(file), format!("{file}\n")).unwrap();
             commit(&workspace.path, file);
         }
-        let id = workspace.id.clone();
-        manager
+        Self {
+            _root: root,
+            manager,
+            checkout,
+            workspace,
+        }
+    }
+
+    async fn link_issue(&self) {
+        let id = self.workspace.id.clone();
+        self.manager
             .store
             .run(move |db| {
                 db.execute(
@@ -52,12 +74,6 @@ impl Fixture {
             })
             .await
             .unwrap();
-        Self {
-            _root: root,
-            manager,
-            checkout,
-            workspace,
-        }
     }
 
     /// Squash the branch onto the default branch, as a forge merge would.
@@ -142,6 +158,13 @@ async fn merged_workspace_is_removed_once_idle_whatever_its_assignment() {
 }
 
 #[tokio::test]
+async fn merged_cleanup_is_off_by_default() {
+    let f = Fixture::with_config("").await;
+    f.squash_merge();
+    assert!(f.kept_after(24).await);
+}
+
+#[tokio::test]
 async fn a_saved_command_keeps_idle_and_unmerged_workspaces_only() {
     saved_work_keeps_idle_and_unmerged_workspaces_only(
         "saved.command.json",
@@ -201,7 +224,7 @@ async fn merged_cleanup_waits_for_grace_and_keeps_saved_agents_for_restore() {
     f.manager
         .write_local_config(
             f.workspace.repository(),
-            Some("[cleanup]\ngrace_minutes = 600\n".into()),
+            Some(format!("{ENABLED}[cleanup]\ngrace_minutes = 600\n")),
         )
         .await
         .unwrap();
@@ -343,7 +366,7 @@ async fn unsaved_files_of_a_merged_workspace_go_into_its_checkpoint() {
     (f.manager)
         .write_local_config(
             &repo,
-            Some("[cleanup.restore]\narchive_max_mb = 0\n".into()),
+            Some(format!("{ENABLED}[cleanup.restore]\narchive_max_mb = 0\n")),
         )
         .await
         .unwrap();
@@ -463,7 +486,7 @@ async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspac
         .unwrap();
     assert!(f.kept_after(5).await);
     manager
-        .write_local_config(&repo, Some("[cleanup.merged]\nidle_minutes = 600\n".into()))
+        .write_local_config(&repo, Some(format!("{ENABLED}idle_minutes = 600\n")))
         .await
         .unwrap();
     assert!(f.kept_after(5).await);
@@ -591,6 +614,9 @@ async fn merged_cleanup_removes_a_chat_stopped_for_its_idle_period() {
     let checkout = repository(root.path(), "repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    (manager.write_local_config(&repo.id, Some(ENABLED.into())))
         .await
         .unwrap();
     let chat = manager

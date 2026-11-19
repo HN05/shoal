@@ -4559,9 +4559,9 @@ a disposable workspace's, is reversible with [`shoal restore`](#checkpoints-and-
 question asked afterwards or a [PR proposal](#approval-for-agent-issues-and-prs)
 remains.
 
-Only `done` completes an assignment; issue closure and merged PRs do not. A
-merged workspace nobody uses is removed by [merged cleanup](#merged-workspaces)
-whether or not its agent ran `done`.
+Only `done` completes an assignment; issue closure and merged PRs do not. Where
+it is on, [merged cleanup](#merged-workspaces) removes a merged workspace nobody
+uses whether or not its agent ran `done`.
 
 A [chat](#chats), named or the one this runs in, records that its work is
 finished at the HEAD of where it works, the worktree it runs in or its
@@ -5972,7 +5972,8 @@ time survives restarts, except that idle cleanup starts over with its timers. `s
 
 #### Merged workspaces
 
-A workspace whose branch merged into the default branch is removed once nothing
+Where [`[cleanup.merged] enabled`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup)
+turns it on, a workspace whose branch merged into the default branch is removed once nothing
 has used it for [`[cleanup.merged] idle_minutes`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup), whether or not its agent ran `shoal done` or it
 has linked issues and PRs. Merged has the meaning [removal](#remove-a-space)
 gives it, against the default branch's remote-tracking branch as the

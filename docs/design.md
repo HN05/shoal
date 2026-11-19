@@ -3971,7 +3971,7 @@ it again while some rule still removes the workspace, and the pass ends periods
 no attempt claimed, so they restart instead of carrying over to a later eligibility.
 Idle cleanup keeps its timers in memory, so a restart starts its grace period over
 too: resuming would need the pre-restart snapshot to prove nothing changed. User requests and disk pressure remove at once. Merged cleanup
-(`[cleanup.merged]`, default 240 idle minutes) decides from the workspace's state
+(`[cleanup.merged]`, off by default, 240 idle minutes) decides from the workspace's state
 instead of its assignment: a merged branch, unsaved files only as leftovers the
 removal's checkpoint keeps (the branch has commits of its own), no Git operation under
 way, no open question, nothing running, no leases, permits, directory users,

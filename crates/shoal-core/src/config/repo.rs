@@ -602,7 +602,7 @@ pub struct AutoCleanupConfig {
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = MergedCleanup)]
 pub struct MergedCleanupConfig {
-    #[option(default = true)]
+    #[option(default = false)]
     pub enabled: Option<bool>,
     #[option(default = 240)]
     pub idle_minutes: Option<u64>,

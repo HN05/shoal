@@ -1079,7 +1079,7 @@ enabled = true       # Remove idle, clean, pushed or merged workspaces
 idle_minutes = 10
 
 [cleanup.merged]
-enabled = true       # Remove merged workspaces once unused, done or not
+enabled = false      # Remove merged workspaces once unused, done or not
 idle_minutes = 240
 
 [cleanup.pr]
