@@ -53,7 +53,6 @@ pub(crate) mod spotlight;
 mod stack;
 mod status;
 mod stopped_work;
-pub(crate) mod subagents;
 mod tree;
 mod usage;
 mod xcode;

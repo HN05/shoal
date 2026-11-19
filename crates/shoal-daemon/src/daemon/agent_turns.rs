@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::Result;
 use rusqlite::Connection;
 
-use super::workspace::{Manager, subagents};
+use super::{subagents, workspace::Manager};
 use crate::{
     daemon::store,
     model::Execution,

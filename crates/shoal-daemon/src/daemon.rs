@@ -78,6 +78,7 @@ pub(crate) mod spaces;
 mod startup;
 mod startup_audit;
 pub mod store;
+pub(crate) mod subagents;
 mod subscriptions;
 #[cfg(any(test, feature = "test-support"))]
 // Other crates' tests read most of it.

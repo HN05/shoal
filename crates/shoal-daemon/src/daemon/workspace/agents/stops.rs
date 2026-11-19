@@ -90,7 +90,7 @@ pub(crate) struct Interacted(pub Option<UnixTime>);
 /// with it where that keeps it, keeps it.
 fn still_between(db: &Connection, id: &ExecutionId, between: Between) -> Result<bool> {
     Ok(idle_in_turn(db, id, between)?
-        && !crate::daemon::workspace::subagents::runs_one(db, id, UnixTime::now())?
+        && !crate::daemon::subagents::runs_one(db, id, UnixTime::now())?
         && match between.interacted {
             Some(interacted) => interacted_with(db, id)? == interacted,
             None => true,

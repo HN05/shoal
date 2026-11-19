@@ -193,7 +193,7 @@ fn reported_by(db: &Connection, id: &ExecutionId) -> Result<Option<StoppedTurn>>
         workspace,
         state,
         execution: crate::daemon::store::find_execution(db, id)?,
-        subagent: super::workspace::subagents::runs_one(db, id, UnixTime::now())?,
+        subagent: super::subagents::runs_one(db, id, UnixTime::now())?,
     }))
 }
 
