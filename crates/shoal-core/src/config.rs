@@ -1,6 +1,7 @@
 //! Shoal's configuration: the global file, the repository schema its
 //! repository layers share, and the settings they resolve to.
 pub mod agents;
+pub mod apps;
 pub mod edit;
 pub mod forges;
 pub mod gate;

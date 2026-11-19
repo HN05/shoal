@@ -1176,3 +1176,20 @@ request. `approval_lifetime = "lease"`, the default, ends the approval on
 release; `"workspace"` permits later acquisitions of the same member and
 settings until the workspace is removed. A protected machine profile cannot be
 relaxed by repository defaults. See [resource approvals](../../../../../../docs/reference.md#resource-approvals).
+
+## Apps
+
+```toml
+[apps.quay]
+board = "main"
+[apps.quay.columns]
+todo = "grey"
+```
+
+`[apps.<name>]` holds the settings of an app built on Shoal, such as Quay, in
+any file: per repository in its tracked file or local config, or for every
+repository in the global config. Shoal checks only that it is a TOML table: it
+layers each one as it layers its own options, a table merging key by key with
+the one below it and any other value replacing what is below, and hands the
+result to the app, which reads it for a space, a repository or the global
+config alone. See [apps](../../../../../../docs/reference.md#apps).

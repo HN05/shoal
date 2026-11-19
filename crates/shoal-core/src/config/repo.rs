@@ -55,6 +55,9 @@ pub struct RepoConfig {
     pub agent: AgentConfig,
     #[option(section)]
     pub app: AppConfig,
+    /// Each app's own settings, which Shoal hands it unread.
+    #[option(named_sections)]
+    pub apps: BTreeMap<String, crate::config::apps::AppTable>,
     /// What agents are told and the kind of space they start in, by mode.
     #[option(named_sections, default = crate::config::modes::built_in_modes())]
     pub modes: BTreeMap<String, crate::config::modes::ModeConfig>,
