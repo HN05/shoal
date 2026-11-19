@@ -69,8 +69,8 @@ impl Manager {
         let agents = self.tracked_agents().await;
         let (parents, with_agents) = (self.store)
             .run(move |db| {
-                let parents = crate::daemon::workspace::parent_ids(db)?;
-                Ok((parents, crate::daemon::workspace::with_agents(db, &agents)?))
+                let parents = crate::daemon::tree::parent_ids(db)?;
+                Ok((parents, crate::daemon::tree::with_agents(db, &agents)?))
             })
             .await?;
         let around = Around {

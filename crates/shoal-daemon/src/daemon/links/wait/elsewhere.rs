@@ -31,7 +31,7 @@ impl Manager {
         }
         let agents = self.tracked_agents().await;
         let groups = (self.store)
-            .run(move |db| crate::daemon::workspace::delegated_elsewhere(db, &agents))
+            .run(move |db| crate::daemon::tree::delegated_elsewhere(db, &agents))
             .await?;
         for (above, spaces) in groups {
             self.pass_up_group(&above, &spaces).await;

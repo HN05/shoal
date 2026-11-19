@@ -21,11 +21,7 @@ use shoal_protocol::{
 
 use super::{membership, session::Calls};
 use crate::{
-    daemon::{
-        agent_messages::About,
-        log,
-        workspace::{Manager, Receiver},
-    },
+    daemon::{agent_messages::About, log, tree::Receiver, workspace::Manager},
     time::UnixTime,
 };
 
@@ -151,7 +147,7 @@ impl Manager {
         let agents = self.tracked_agents().await;
         let above = told.above.clone();
         let receiver = (self.store)
-            .run(move |db| crate::daemon::workspace::receiver_from(db, &above, &agents))
+            .run(move |db| crate::daemon::tree::receiver_from(db, &above, &agents))
             .await?;
         let message = with_files(&told);
         match (receiver, told.about) {

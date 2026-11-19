@@ -131,7 +131,7 @@ pub(super) fn route(
 fn pass_on(
     tx: &Transaction<'_>,
     leaving: &[SpaceId],
-    agents: &crate::daemon::workspace::TrackedAgents,
+    agents: &crate::daemon::tree::TrackedAgents,
 ) -> Result<Vec<ApprovalRequest>> {
     let mut routed = Vec::new();
     for decider in leaving {
@@ -139,7 +139,7 @@ fn pass_on(
             if request.status != DecisionStatus::Pending || leaving.contains(&request.space_id) {
                 continue;
             }
-            let above = crate::daemon::workspace::spaces_above(tx, &request.space_id, agents)?;
+            let above = crate::daemon::tree::spaces_above(tx, &request.space_id, agents)?;
             routed.push(route(tx, &request.key, &above, Some(decider))?);
         }
     }
@@ -586,11 +586,11 @@ impl Manager {
                 // of the requester's agent since it was routed.
                 let candidates = match &above {
                     Some(above) => {
-                        let mut here = crate::daemon::workspace::spaces_above(tx, above, &agents)?;
+                        let mut here = crate::daemon::tree::spaces_above(tx, above, &agents)?;
                         here.extend(elsewhere);
                         here
                     }
-                    None => crate::daemon::workspace::deciders(tx, &workspace, &agents, elsewhere)?,
+                    None => crate::daemon::tree::deciders(tx, &workspace, &agents, elsewhere)?,
                 };
                 let routed = route(tx, &key, &candidates, above.as_ref())?;
                 Ok(routed)

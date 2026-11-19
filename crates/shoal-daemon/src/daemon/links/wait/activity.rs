@@ -101,7 +101,7 @@ impl Manager {
                 require_ready_space(&tx, &id)?;
                 // The agent also received the updates of the spaces below it
                 // that it works on.
-                let delivered = crate::daemon::workspace::receiving_paths(&tx, &id, &agents)?;
+                let delivered = crate::daemon::tree::receiving_paths(&tx, &id, &agents)?;
                 // A delivering wait has ended, so a wait running in one of
                 // these spaces, or in one receiving their activity above them,
                 // whatever its kind, started after it and must report their
@@ -142,7 +142,7 @@ fn record_observations(
     id: &SpaceId,
     observations: Vec<(String, Snapshot)>,
     poll: &Poll,
-    agents: &crate::daemon::workspace::TrackedAgents,
+    agents: &crate::daemon::tree::TrackedAgents,
 ) -> Result<Vec<Update>> {
     let observed_at = poll.observed_at;
     require_ready_space(tx, id)?;
@@ -177,7 +177,7 @@ fn recorded_urls(
     db: &rusqlite::Connection,
     id: &SpaceId,
     poll: &Poll,
-    agents: &crate::daemon::workspace::TrackedAgents,
+    agents: &crate::daemon::tree::TrackedAgents,
 ) -> Result<Option<Vec<String>>> {
     let selection = &poll.selection;
     if selection.input.is_some() {
@@ -274,9 +274,9 @@ pub(in crate::daemon::links) fn record_received_change(
     db: &rusqlite::Connection,
     id: &SpaceId,
     change: OwnChange<'_>,
-    agents: &crate::daemon::workspace::TrackedAgents,
+    agents: &crate::daemon::tree::TrackedAgents,
 ) -> Result<()> {
-    for child in crate::daemon::workspace::delegated(db, id, agents)? {
+    for child in crate::daemon::tree::delegated(db, id, agents)? {
         if follows(db, &child.id, change.url)? {
             record_own_change(db, &child.id, change.clone())?;
         }

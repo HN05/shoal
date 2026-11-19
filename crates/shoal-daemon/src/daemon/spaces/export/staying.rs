@@ -45,7 +45,7 @@ fn move_up(
     let reserved = |id: &SpaceId| held.iter().any(|removing| removing.reserved(id));
     let mut staying = Vec::new();
     for id in leaving {
-        let children = crate::daemon::workspace::children(tx, id)?;
+        let children = crate::daemon::tree::children(tx, id)?;
         staying.extend((children.into_iter()).filter(|child| !leaving.contains(&child.id)));
     }
     let involved = (leaving.iter())
@@ -67,10 +67,9 @@ fn move_up(
             .optional()?
             .flatten();
         let takes = |above: &&SpaceId| {
-            crate::daemon::workspace::ensure_parent(tx, repository.as_ref(), &space.id, above)
-                .is_ok()
+            crate::daemon::tree::ensure_parent(tx, repository.as_ref(), &space.id, above).is_ok()
         };
-        crate::daemon::workspace::set_parent(tx, &space.id, above.filter(takes))?;
+        crate::daemon::tree::set_parent(tx, &space.id, above.filter(takes))?;
     }
     Ok(())
 }

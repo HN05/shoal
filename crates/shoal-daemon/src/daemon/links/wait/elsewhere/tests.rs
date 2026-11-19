@@ -47,7 +47,7 @@ async fn below_elsewhere(manager: &Manager, root: &std::path::Path) -> (Workspac
     let id = child.id.clone();
     (manager.store)
         .write(move |tx| {
-            crate::daemon::workspace::set_parent(tx, &id, Some(&SpaceId::from("away")))?;
+            crate::daemon::tree::set_parent(tx, &id, Some(&SpaceId::from("away")))?;
             tx.execute(
                 "INSERT INTO hub_members(id, kind, name, public_key, joined_at)
                     VALUES ('desk', 'machine', 'desk', ?1, 0)",

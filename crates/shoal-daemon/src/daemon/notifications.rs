@@ -8,8 +8,8 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
 
 use crate::daemon::log;
-use crate::daemon::workspace::{Manager, Source};
 use crate::daemon::workspace_files::{self, Attacher, FileSource, NewFile, SentFile, sent_files};
+use crate::daemon::{tree::Source, workspace::Manager};
 pub(crate) use shoal_protocol::notifications::{Cleared, Notification, NotificationKind, Sent};
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 

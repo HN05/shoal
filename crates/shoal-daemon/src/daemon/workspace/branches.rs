@@ -108,7 +108,7 @@ pub(super) enum UpstreamPolicy {
 impl Manager {
     /// The requested branch name, or the nearest free `-2`, `-3`, ... variant.
     /// Called while holding the repository's Git gate, through worktree creation.
-    pub(super) async fn available_branch(
+    pub(in crate::daemon) async fn available_branch(
         &self,
         repo: &Repository,
         name: &str,

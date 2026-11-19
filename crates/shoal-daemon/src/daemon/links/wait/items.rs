@@ -174,12 +174,12 @@ pub(super) fn links_kind(
     db: &rusqlite::Connection,
     id: &SpaceId,
     kind: Option<LinkKind>,
-    agents: &crate::daemon::workspace::TrackedAgents,
+    agents: &crate::daemon::tree::TrackedAgents,
 ) -> Result<bool> {
     if kind.is_none() || !followed_items(db, id, kind)?.is_empty() {
         return Ok(true);
     }
-    for child in crate::daemon::workspace::delegated(db, id, agents)? {
+    for child in crate::daemon::tree::delegated(db, id, agents)? {
         if !followed_items(db, &child.id, kind)?.is_empty() {
             return Ok(true);
         }

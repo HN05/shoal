@@ -1,9 +1,11 @@
 //! Worktree creation: recording a new workspace and creating, configuring
 //! and settling its worktree.
 
-use super::{
-    Manager, NewWorktreeOptions, branches, identity, ownership::claims_git_dir, restore, stack,
+use super::super::{
     tree,
+    workspace::{
+        Manager, NewWorktreeOptions, branches, identity, ownership::claims_git_dir, restore, stack,
+    },
 };
 use crate::{
     config::Config,
@@ -55,7 +57,7 @@ pub(super) struct Configured {
     pub seed: Option<crate::config::Effective>,
 }
 
-pub(super) enum WorkspaceSource {
+pub(in crate::daemon) enum WorkspaceSource {
     /// A new branch from an optional base ref, split from an optional parent
     /// workspace.
     New {
@@ -148,7 +150,7 @@ impl Manager {
     /// Create the workspace `name` on `branch` from `source`, where and as
     /// `new` says, under the repository's Git gate `git`, which settling
     /// releases.
-    pub(super) async fn create_branch_workspace(
+    pub(in crate::daemon) async fn create_branch_workspace(
         &self,
         repo: &crate::model::Repository,
         name: String,

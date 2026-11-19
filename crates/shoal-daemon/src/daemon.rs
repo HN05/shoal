@@ -106,6 +106,7 @@ pub(crate) mod test_daemon;
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod test_support;
 mod tmp_dirs;
+mod tree;
 pub(crate) mod triggers;
 mod turn_ends;
 pub(crate) mod turn_retry;

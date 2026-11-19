@@ -17,7 +17,8 @@ use super::{
     links::wait::watches_open_pr,
     log,
     notifications::NotificationKind,
-    workspace::{Manager, TrackedAgents, delegated},
+    tree::{TrackedAgents, delegated},
+    workspace::Manager,
 };
 use crate::{config::Config, state::AgentState};
 

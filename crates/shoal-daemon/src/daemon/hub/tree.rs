@@ -39,7 +39,7 @@ impl Manager {
     pub(crate) async fn reached_through_elsewhere(&self, root: &SpaceId) -> Vec<SpaceId> {
         let found = async {
             let pairs = (self.store)
-                .run(|db| crate::daemon::workspace::below_elsewhere(db))
+                .run(|db| crate::daemon::tree::below_elsewhere(db))
                 .await?;
             if pairs.is_empty() {
                 return anyhow::Ok(Vec::new());
@@ -129,7 +129,7 @@ impl Manager {
     pub(crate) async fn parent_elsewhere(&self, id: &SpaceId) -> Result<Option<SpaceRef>> {
         let owned = id.clone();
         let parent = (self.store)
-            .run(move |db| crate::daemon::workspace::parent_id(db, &owned))
+            .run(move |db| crate::daemon::tree::parent_id(db, &owned))
             .await?;
         let Some(parent) = parent else {
             return Ok(None);
@@ -231,7 +231,7 @@ impl Manager {
     pub(crate) async fn reported_above(&self, id: &SpaceId) -> Result<Option<Reported>> {
         let owned = id.clone();
         let first = (self.store)
-            .run(move |db| crate::daemon::workspace::first_absent_above(db, &owned))
+            .run(move |db| crate::daemon::tree::first_absent_above(db, &owned))
             .await?;
         let Some(first) = first else {
             return Ok(None);
@@ -294,7 +294,7 @@ impl Manager {
             Some(_) => {
                 let owned = id.clone();
                 let first = (self.store)
-                    .run(move |db| crate::daemon::workspace::first_absent_above(db, &owned))
+                    .run(move |db| crate::daemon::tree::first_absent_above(db, &owned))
                     .await?;
                 let Some(first) = first else {
                     return Ok(None);

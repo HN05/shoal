@@ -3,7 +3,8 @@ use crate::{
     daemon::{
         notifications::NotificationKind,
         test_support::{manager, repository},
-        workspace::{Manager, Source},
+        tree::Source,
+        workspace::Manager,
         workspace_files::Attacher,
     },
     model::{Chat, Workspace},

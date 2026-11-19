@@ -112,7 +112,7 @@ impl Manager {
         let owned = id.clone();
         let agents = self.tracked_agents().await;
         let here = (self.store)
-            .run(move |db| crate::daemon::workspace::coordinator_of(db, &owned, &agents))
+            .run(move |db| crate::daemon::tree::coordinator_of(db, &owned, &agents))
             .await;
         match here {
             Ok(None) => self.deciders_elsewhere(id, false).await.into_iter().next(),

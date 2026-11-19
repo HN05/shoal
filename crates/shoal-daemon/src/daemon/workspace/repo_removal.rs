@@ -390,7 +390,7 @@ impl Manager {
             .read(move |tx| {
                 let mut ordered = store::repository_spaces(tx, &id)?
                     .into_iter()
-                    .map(|space| Ok((super::tree::removal_depth(tx, &space)?, space)))
+                    .map(|space| Ok((super::super::tree::removal_depth(tx, &space)?, space)))
                     .collect::<Result<Vec<_>>>()?;
                 ordered.sort_by_key(|(depth, _)| std::cmp::Reverse(*depth));
                 Ok(ordered.into_iter().map(|(_, space)| space).collect())

@@ -326,7 +326,7 @@ impl Manager {
                 let id = parent.id.clone();
                 (self.store)
                     .read(move |tx| {
-                        Ok(super::tree::ensure_parent(
+                        Ok(super::super::tree::ensure_parent(
                             tx,
                             repository.as_ref(),
                             &space,

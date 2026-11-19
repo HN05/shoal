@@ -14,12 +14,7 @@ use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
-    daemon::{
-        events,
-        scope::Caller,
-        spaces, store,
-        workspace::{self, Manager},
-    },
+    daemon::{events, scope::Caller, spaces, store, workspace::Manager},
     fsutil::off_runtime,
     model::{
         Chat, ChatPart, RefPart, Repository, SpaceKind, SpaceLinks, SpaceRef, Workdir, Workspace,
@@ -594,7 +589,7 @@ fn insert(
     // so the chat's start names it.
     if let Some((parent, removing)) = &parent {
         ensure!(!removing.reserved(parent), "{parent} is being removed");
-        workspace::place_below(tx, chat.repository_id.as_ref(), &chat.id, parent)?;
+        super::tree::place_below(tx, chat.repository_id.as_ref(), &chat.id, parent)?;
     }
     tx.execute(
         "INSERT INTO chats(id,workspace_id,root_dir) VALUES (?1,?2,?3)",
@@ -619,7 +614,7 @@ fn insert(
     )?;
     crate::daemon::scope::tokens::issue_agent(tx, &chat.id)?;
     if parent.is_some() {
-        chat.parent = workspace::parent(tx, &chat.id)?;
+        chat.parent = super::tree::parent(tx, &chat.id)?;
     }
     Ok(chat)
 }
@@ -681,7 +676,9 @@ pub(crate) fn recorded_within(
 /// daemon's state directory, without their agents, which
 /// [`Manager::agent_of`] reads.
 fn recorded(db: &Connection, owner: &Path, root: Option<&SpaceId>) -> Result<Vec<Chat>> {
-    let reached = root.map(|root| workspace::subtree(db, root)).transpose()?;
+    let reached = root
+        .map(|root| super::tree::subtree(db, root))
+        .transpose()?;
     db.prepare(
         "SELECT chats.id,space.repository_id,space.name,
                     EXISTS (SELECT 1 FROM executions e WHERE e.space_id=chats.id) AS running,
@@ -747,8 +744,8 @@ fn recorded(db: &Connection, owner: &Path, root: Option<&SpaceId>) -> Result<Vec
         chat.links = store::space_links(db, &chat.id)?;
         chat.review = crate::daemon::workspace::review::list(db, &chat.id)?;
         chat.holds = crate::daemon::workspace::holds::list(db, &chat.id)?;
-        chat.parent = workspace::parent(db, &chat.id)?;
-        chat.children = workspace::children(db, &chat.id)?;
+        chat.parent = super::tree::parent(db, &chat.id)?;
+        chat.children = super::tree::children(db, &chat.id)?;
         chat.agent_state = super::agent_state::current(db, &chat.id)?;
         chat.progress = crate::daemon::progress::current(db, &chat.id)?;
         chat.sleep = crate::daemon::idle_wakes::sleep::current(db, &chat.id)?;

@@ -28,7 +28,7 @@ impl Manager {
             within_reach(&mut directory, &reached);
         }
         let mut below_elsewhere = (self.store)
-            .run(|db| crate::daemon::workspace::below_elsewhere(db))
+            .run(|db| crate::daemon::tree::below_elsewhere(db))
             .await?;
         // A scoped caller sees those below the other machines' spaces it sees.
         below_elsewhere.retain(|(_, parent)| {

@@ -376,7 +376,7 @@ fn delete_record(
 ) -> Result<Deleted> {
     // Children go first; none may outlive its parent.
     ensure!(
-        super::tree::children(tx, id)?.is_empty(),
+        super::super::tree::children(tx, id)?.is_empty(),
         "spaces were opened below it during removal; retaining it"
     );
     events::record(tx, id, events::EventKind::Removed, cause, None)?;

@@ -172,7 +172,7 @@ impl Manager {
 }
 
 /// The unsaved files of a removal's checkpoint, written into the new worktree.
-pub(in crate::daemon::workspace) struct RestoredFiles {
+pub(in crate::daemon) struct RestoredFiles {
     pub head: CommitId,
     pub snapshot: CommitId,
 }

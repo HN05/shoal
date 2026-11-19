@@ -14,7 +14,7 @@ mod contributions;
 mod converted;
 mod coordinated;
 mod copies;
-mod creation;
+pub(super) mod creation;
 mod diff;
 mod disowned;
 mod fast_forward;
@@ -35,7 +35,6 @@ pub(crate) mod review;
 mod space_removal;
 mod stack;
 mod status;
-mod tree;
 mod usage;
 mod xcode;
 
@@ -50,13 +49,6 @@ pub(crate) use lifecycle::not_ready;
 pub(crate) use merge::RecordChange;
 pub(crate) use ownership::VerifiedWorktree;
 pub(crate) use stack::record_base_changed;
-
-pub(crate) use tree::{
-    Receiver, Source, TrackedAgents, below_elsewhere, children, coordinator_of, deciders,
-    delegated, delegated_elsewhere, ensure_parent, first_absent_above, parent, parent_id,
-    parent_ids, place_below, receiver_from, receiving_paths, set_parent, spaces_above, subtree,
-    with_agents,
-};
 
 use crate::{
     config::Config,
@@ -432,7 +424,7 @@ pub(crate) fn workspaces_within(
     root: Option<&SpaceId>,
 ) -> Result<Vec<Workspace>> {
     let mut workspaces = db
-        .prepare(&tree::subtree_query(store::WORKSPACE_COLUMNS))?
+        .prepare(&super::tree::subtree_query(store::WORKSPACE_COLUMNS))?
         .query_map([root], store::workspace)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     for workspace in &mut workspaces {
@@ -467,7 +459,7 @@ fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<
     workspace.restart = crate::daemon::restarts::record::current(db, &workspace.id)?;
     stack::load(db, workspace)?;
     copies::load(db, workspace)?;
-    tree::load(db, workspace)?;
+    super::tree::load(db, workspace)?;
     workspace.links = store::space_links(db, &workspace.id)?;
     workspace.running = store::exists(
         db,

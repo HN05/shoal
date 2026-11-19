@@ -13,7 +13,8 @@ use crate::agent::Agent;
 use crate::daemon::{
     approvals::{ApprovalRequest, gated, proposals::ProposalDecision},
     events, log,
-    workspace::{Manager, Source},
+    tree::Source,
+    workspace::Manager,
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::{approvals::GateVerdict, events::GateEvent, time::UnixTime};

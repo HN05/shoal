@@ -13,7 +13,7 @@ use std::{
 use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::Manager;
+use super::workspace::Manager;
 use crate::{
     daemon::notifications::NotificationKind,
     model::{RefPart, Repository, Space, SpaceKind, SpaceRef, Workspace},
@@ -47,11 +47,11 @@ impl Manager {
             &repo,
             name,
             branch,
-            super::creation::WorkspaceSource::New {
+            super::workspace::creation::WorkspaceSource::New {
                 base,
                 parent: Some(parent.id),
             },
-            super::NewWorkspace {
+            super::workspace::NewWorkspace {
                 options,
                 ..Default::default()
             },

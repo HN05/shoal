@@ -1090,7 +1090,7 @@ async fn a_scoped_caller_restores_only_below_a_parent_in_its_scope() {
     let id = child.id.clone();
     let below = manager
         .store
-        .read(move |tx| crate::daemon::workspace::tree::parent_id(tx, &id))
+        .read(move |tx| crate::daemon::tree::parent_id(tx, &id))
         .await
         .unwrap();
     assert_eq!(below, Some(parent.id));
@@ -1130,7 +1130,7 @@ async fn a_restored_workspace_goes_below_its_parent_while_that_exists() {
         let manager = std::sync::Arc::clone(&manager);
         async move {
             (manager.store)
-                .read(move |tx| crate::daemon::workspace::tree::parent_id(tx, &id))
+                .read(move |tx| crate::daemon::tree::parent_id(tx, &id))
                 .await
                 .unwrap()
         }
@@ -1224,7 +1224,7 @@ async fn a_scoped_caller_cannot_restore_a_chat_into_a_worktree_outside_its_scope
     let (id, parent) = (chat.id.clone(), own.id.clone());
     manager
         .store
-        .write(move |tx| crate::daemon::workspace::tree::set_parent(tx, &id, Some(&parent)))
+        .write(move |tx| crate::daemon::tree::set_parent(tx, &id, Some(&parent)))
         .await
         .unwrap();
     let selector = SpaceSelector::id(&chat.id);
