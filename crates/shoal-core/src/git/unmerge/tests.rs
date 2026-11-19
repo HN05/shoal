@@ -234,3 +234,27 @@ async fn a_rebase_merge_is_the_chain_that_replays_the_branch_s_commits() {
     }
     assert_eq!(result(&repo, &previous, MergeMethod::Rebase).await, None);
 }
+
+#[tokio::test]
+async fn a_rebase_merge_is_found_past_the_commits_it_dropped_as_empty() {
+    use crate::forge::items::action::MergeMethod;
+    let root = tempfile::tempdir().unwrap();
+    let (repo, _) = diverged(root.path());
+    // main squashes both of side's commits, and side goes on with a third.
+    git(&repo, &["merge", "-q", "--squash", "side"]);
+    git(&repo, &["commit", "-q", "--no-edit"]);
+    let previous: CommitId = rev(&repo, "main").as_str().into();
+    git(&repo, &["switch", "-q", "side"]);
+    fs::write(repo.join("third"), "third\n").unwrap();
+    commit(&repo, "third");
+    git(&repo, &["switch", "-q", "--detach", "side"]);
+    git(&repo, &["rebase", "-q", "main"]);
+    let rebased = rev(&repo, "HEAD");
+    git(&repo, &["switch", "-q", "main"]);
+    git(&repo, &["merge", "-q", "--ff-only", &rebased]);
+    assert_eq!(rev(&repo, &format!("{rebased}~1")), previous.as_str());
+    assert_eq!(
+        result(&repo, &previous, MergeMethod::Rebase).await,
+        Some(rebased)
+    );
+}

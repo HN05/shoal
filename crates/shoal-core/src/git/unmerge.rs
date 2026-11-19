@@ -144,30 +144,34 @@ async fn squashed(
 }
 
 /// The last commit a rebase merge of `source` onto `previous` left in
-/// `tip`'s first-parent history: the chain on `previous` whose commits
-/// replay the branch's own, in order, as [`replay_identity`] tells them.
+/// `tip`'s first-parent history: the end of the chain on `previous` whose
+/// commits replay the branch's own in order, as [`replay_identity`] tells
+/// them. A commit of the branch with no copy there is one the rebase
+/// dropped once it became empty, as when the default branch had its change
+/// in a squash of several.
 async fn rebased(
     repo: &Path,
     tip: &str,
     previous: &CommitId,
     source: &CommitId,
 ) -> Result<Option<CommitId>> {
-    let branch = rebased_commits(repo, previous, source).await?;
     let Some(mut chain) = first_parent_chain(repo, tip, previous.as_str()).await? else {
         return Ok(None);
     };
     chain.reverse();
-    if branch.is_empty() || chain.len() < branch.len() {
-        return Ok(None);
-    }
-    for (copy, original) in chain.iter().zip(&branch) {
+    let mut copies = chain.iter().peekable();
+    let mut last = None;
+    for original in rebased_commits(repo, previous, source).await? {
+        let Some(copy) = copies.peek() else {
+            break;
+        };
         if replay_identity(repo, copy.as_str()).await?
-            != replay_identity(repo, original.as_str()).await?
+            == replay_identity(repo, original.as_str()).await?
         {
-            return Ok(None);
+            last = copies.next().cloned();
         }
     }
-    Ok(Some(chain[branch.len() - 1].clone()))
+    Ok(last)
 }
 
 /// The commits of `source` a rebase onto `previous` copies, oldest first:
