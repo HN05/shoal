@@ -1042,6 +1042,7 @@ async fn a_signal_to_a_jobs_wrapper_cancels_its_run_before_the_runner_stops() {
         }),
         granted: None,
         read_only: false,
+        vouched: None,
     };
     // A step's command, which inherits the job's scope, neither reports
     // signals nor cancels the run with one.

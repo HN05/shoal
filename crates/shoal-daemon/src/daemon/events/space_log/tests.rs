@@ -46,6 +46,7 @@ fn caller(space: &str) -> Caller {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     }
 }
 

@@ -390,6 +390,7 @@ async fn scoped_callers_mark_only_their_own_workspace() {
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;

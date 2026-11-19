@@ -69,8 +69,8 @@ impl Manager {
         let Some(root) = self.reach_root(caller).await? else {
             return Ok(priority);
         };
-        // Another machine vouches for its own space's.
-        let own = match self.vouched_space(&root) {
+        // Another machine vouches for its own space's, the root.
+        let own = match caller.and_then(|caller| caller.vouched.as_ref()) {
             Some(vouched) => vouched.priority,
             None => self.space_priority(&root).await?,
         };

@@ -445,6 +445,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;
@@ -564,6 +565,7 @@ async fn a_scoped_process_restarts_only_the_chats_below_its_space() {
             execution: None,
             granted: None,
             read_only: false,
+            vouched: None,
         };
         manager.executions.issue_scope(token.clone(), scope).await;
         let mut restart = crate::protocol::AgentMethod::RestartAgent {

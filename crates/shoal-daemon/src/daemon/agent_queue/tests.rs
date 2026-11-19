@@ -964,6 +964,7 @@ async fn a_scoped_caller_holds_reads_and_fails_only_the_launches_it_reaches() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     let child = manager
         .create_child(
@@ -1040,6 +1041,7 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;

@@ -542,6 +542,7 @@ async fn agents_copy_only_live_workspaces_of_their_own_tree() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     for (workspace, allowed) in [(&f.source, true), (&child, true), (&other, false)] {
         let mut source = CopySource {

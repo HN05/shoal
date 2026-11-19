@@ -22,7 +22,7 @@ impl Manager {
         let Some(caller) = caller else {
             return Ok(None);
         };
-        if let Some(vouched) = self.vouched_space(&caller.space_id) {
+        if let Some(vouched) = &caller.vouched {
             return Ok((!vouched.everywhere).then(|| caller.space_id.clone()));
         }
         let id = caller.space_id.clone();

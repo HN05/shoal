@@ -73,6 +73,7 @@ async fn setup() -> (tempfile::TempDir, std::sync::Arc<Manager>, Caller) {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     (temp, manager, caller)
 }

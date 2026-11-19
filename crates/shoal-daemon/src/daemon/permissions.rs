@@ -23,7 +23,8 @@ use shoal_protocol::{
 
 impl Manager {
     /// The permissions `caller` acts under for an action in the registered
-    /// repository `repository`: its own space's, whichever space it acts on.
+    /// repository `repository`: its own space's, whichever space it acts on,
+    /// or those its machine vouched for with the request it forwarded.
     pub(crate) async fn caller_permissions(
         &self,
         caller: &Caller,
@@ -41,7 +42,7 @@ impl Manager {
         caller: &Caller,
         repository: Option<&RepositoryId>,
     ) -> Result<Permissions> {
-        if let Some(vouched) = self.vouched_space(&caller.space_id) {
+        if let Some(vouched) = &caller.vouched {
             return self.vouched_permissions(vouched, repository).await;
         }
         let space = self.space_by_id(&caller.space_id).await?;
@@ -49,18 +50,15 @@ impl Manager {
         (self.permissions_below_parent(config, &space, agent, repository)).await
     }
 
-    /// The effective permissions of the space `id` for an action in the
-    /// registered repository `repository`, in whose config a chat without a
-    /// repository resolves its mode; without one, such a chat resolves it
-    /// in the global config.
+    /// The effective permissions of the space `id`, one of this machine's,
+    /// for an action in the registered repository `repository`, in whose
+    /// config a chat without a repository resolves its mode; without one,
+    /// such a chat resolves it in the global config.
     pub(crate) async fn space_permissions(
         &self,
         id: &SpaceId,
         repository: Option<&RepositoryId>,
     ) -> Result<Permissions> {
-        if let Some(vouched) = self.vouched_space(id) {
-            return self.vouched_permissions(vouched, repository).await;
-        }
         let space = self.space_by_id(id).await?;
         let agent = recorded_agent(&space);
         (self.permissions_below_parent(&self.config(), &space, agent, repository)).await
@@ -72,7 +70,7 @@ impl Manager {
     /// any other's are those its machine computed.
     async fn vouched_permissions(
         &self,
-        vouched: VouchedSpace,
+        vouched: &VouchedSpace,
         repository: Option<&RepositoryId>,
     ) -> Result<Permissions> {
         match repository {

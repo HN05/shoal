@@ -12,6 +12,7 @@ fn caller(space: &SpaceId, read_only: bool) -> Caller {
         execution: None,
         granted: None,
         read_only,
+        vouched: None,
     }
 }
 

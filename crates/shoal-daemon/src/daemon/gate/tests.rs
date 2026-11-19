@@ -73,6 +73,7 @@ async fn fixture_deciding_by(gate: &str) -> Fixture {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     Fixture {
         root,

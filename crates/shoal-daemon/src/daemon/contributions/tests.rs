@@ -336,6 +336,7 @@ async fn a_scoped_caller_resumes_a_hold_only_where_it_administers_directly() {
             execution: None,
             granted: None,
             read_only: false,
+            vouched: None,
         };
         let token = format!("scope-{mode}");
         manager

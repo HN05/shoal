@@ -126,6 +126,7 @@ async fn agents_approve_prs_as_the_review_account_as_pr_review_allows() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     let approve = async |id, number| {
         let mut method = approval(id, number);

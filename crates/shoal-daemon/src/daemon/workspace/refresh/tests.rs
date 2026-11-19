@@ -383,6 +383,7 @@ fn caller(space: &SpaceId, execution: &str) -> Caller {
         }),
         granted: None,
         read_only: false,
+        vouched: None,
     }
 }
 

@@ -39,12 +39,7 @@ impl Manager {
         }
         let token = token.to_owned();
         let space = self.store.run(move |db| space(db, &token)).await?;
-        Ok(space.map(|space_id| Caller {
-            space_id,
-            execution: None,
-            granted: None,
-            read_only: false,
-        }))
+        Ok(space.map(Caller::of_space))
     }
 }
 

@@ -126,6 +126,7 @@ async fn a_coordinators_request_is_not_the_users_interaction() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     let space = SpaceSelector::id(&id);
     (manager.record_user_interaction(Some(&coordinator), &space)).await;

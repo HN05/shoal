@@ -17,10 +17,8 @@ impl Manager {
     /// A read-only scope of `space` for one gate run.
     pub(super) fn gate_scope(&self, space: &SpaceId) -> RunScope<'_> {
         let caller = Caller {
-            space_id: space.clone(),
-            execution: None,
-            granted: None,
             read_only: true,
+            ..Caller::of_space(space.clone())
         };
         RunScope {
             operations: &self.operations,

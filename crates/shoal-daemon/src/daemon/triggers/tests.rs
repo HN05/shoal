@@ -474,6 +474,7 @@ async fn a_scoped_run_follows_the_triggers_permission() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
 
     // The built-in modes propose it: an approval request, and no run.

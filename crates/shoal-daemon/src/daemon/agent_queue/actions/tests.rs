@@ -295,6 +295,7 @@ async fn workspace_processes_see_the_whole_queue_and_act_only_below_theirs() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     let mut children = Vec::new();
     for name in ["one", "two"] {
@@ -352,6 +353,7 @@ async fn workspace_processes_see_the_whole_queue_and_act_only_below_theirs() {
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;

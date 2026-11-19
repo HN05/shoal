@@ -364,6 +364,7 @@ async fn a_deferred_restart_that_fails_reaches_the_coordinator_that_asked() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     fail_after_the_turn(&manager, &workspace, &execution, Some(&caller)).await;
     let coordinator = SpaceSelector::id(&coordinator.id);

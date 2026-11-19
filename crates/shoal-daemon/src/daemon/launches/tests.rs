@@ -81,6 +81,7 @@ async fn a_trigger_or_scoped_start_leaves_the_user_unengaged() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     let trigger = LaunchSource::Trigger {
         name: "nightly".into(),

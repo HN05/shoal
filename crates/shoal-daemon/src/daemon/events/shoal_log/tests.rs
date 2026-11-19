@@ -94,6 +94,7 @@ async fn a_scoped_caller_cannot_read_shoal_s_log() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     assert!(manager.narrow_to_log(&caller, &mut None).await.is_err());
 }

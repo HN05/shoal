@@ -29,6 +29,7 @@ async fn a_scoped_chat_start_now_asks_the_limits_permission() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     let limits = |result: Result<()>| match result.unwrap_err().downcast::<Undecided>() {
         Ok(Undecided(request)) => request.target,
@@ -83,6 +84,7 @@ async fn a_scoped_chat_start_now_elsewhere_is_refused_without_asking() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
 
     let mut launch = LaunchMethod::Launch {
@@ -183,6 +185,7 @@ async fn a_scoped_chat_start_cannot_take_a_launch_outside_its_scope() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     let mut method = ChatMethod::LaunchChat {
         start: Box::new(start),
@@ -218,6 +221,7 @@ async fn a_scoped_setup_chat_it_runs_itself_asks_the_admin_permission() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     let mut queued = ChatQueueRequest {
         source: None,

@@ -482,6 +482,7 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;

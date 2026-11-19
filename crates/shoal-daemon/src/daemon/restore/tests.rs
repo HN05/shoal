@@ -1068,6 +1068,7 @@ async fn a_scoped_caller_restores_only_below_a_parent_in_its_scope() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
 
     // It sees and restores only the child, whose parent its scope reaches.
@@ -1237,6 +1238,7 @@ async fn a_scoped_caller_cannot_restore_a_chat_into_a_worktree_outside_its_scope
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
 
     let refused = (manager.ensure_restorable_by(&selector, &caller))

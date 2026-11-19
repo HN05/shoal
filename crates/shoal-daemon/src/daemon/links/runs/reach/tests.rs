@@ -25,6 +25,7 @@ async fn a_scope_reaches_the_default_branch_and_its_workspaces_branches() {
             execution: None,
             granted: None,
             read_only: false,
+            vouched: None,
         };
         manager
             .branch_in_reach(&caller, &repo.id, branch)

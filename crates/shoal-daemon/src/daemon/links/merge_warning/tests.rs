@@ -339,6 +339,7 @@ async fn a_merge_binds_the_head_the_pr_has_unless_it_names_one() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     let merge = |head| Action::AutoMerge {
         method: Some(crate::forge::items::action::MergeMethod::Merge),

@@ -729,6 +729,7 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     manager
         .executions

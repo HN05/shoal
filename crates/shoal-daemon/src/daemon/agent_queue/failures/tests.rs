@@ -295,6 +295,7 @@ async fn a_coordinator_changes_the_permissions_of_a_failed_chat_below_it() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     let mut method = crate::protocol::AssignmentMethod::ChangeStoppedPermissions {
         agents: Vec::new(),

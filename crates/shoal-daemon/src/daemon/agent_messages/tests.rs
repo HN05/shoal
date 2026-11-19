@@ -176,6 +176,7 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;
@@ -399,6 +400,7 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;
