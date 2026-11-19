@@ -667,9 +667,13 @@ pub(super) fn find(
 }
 
 /// Whether a checkpoint is kept: it has not expired, or it is its
-/// workspace's starting checkpoint, which lasts as long as the workspace.
+/// workspace's starting checkpoint, which lasts as long as the workspace,
+/// or the removal checkpoint its restore still creates the worktree from.
 const KEPT: &str = "(expires_at > unixepoch() OR EXISTS (SELECT 1 FROM workspaces
-    WHERE id=checkpoints.workspace_id AND starting_checkpoint=checkpoints.number))";
+    WHERE id=checkpoints.workspace_id AND starting_checkpoint=checkpoints.number)
+    OR EXISTS (SELECT 1 FROM pending_worktrees WHERE workspace_id=checkpoints.workspace_id
+        AND json_extract(plan,'$.source.kind')='restore'
+        AND json_extract(plan,'$.source.checkpoint')=checkpoints.number))";
 
 /// The record bytes of one listing page, leaving room in a protocol frame
 /// for the envelope; [`NAME_LIMIT`] keeps one record well below it.

@@ -1,7 +1,6 @@
 //! Explicitly transfer a linked worktree into Shoal's normal lifecycle.
 use super::super::manager::Manager;
-use super::creation::{existing_base, recorded_base};
-use crate::daemon::log;
+use super::creation::{Configured, PendingWorktree, creates_branch, existing_base, recorded_base};
 use crate::{
     fsutil::off_runtime,
     git,
@@ -10,8 +9,9 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 use shoal_protocol::space_names::SpaceName;
-use shoal_refs::{BranchName, CommitId};
+use shoal_refs::BranchName;
 use std::path::{Path, PathBuf};
+use tokio::sync::OwnedMutexGuard;
 
 impl Manager {
     /// Take the linked worktree at `path` into Shoal's lifecycle, or with
@@ -22,7 +22,7 @@ impl Manager {
         path: &Path,
         copy: bool,
     ) -> Result<Workspace> {
-        let (repo, _guard) = self.lock_repository(repository).await?;
+        let (repo, git) = self.lock_repository(repository).await?;
         let path = self.workspace_location(&repo, path).await?;
         let trees = git::worktrees(&repo.path, git::run).await?;
         let tree = trees
@@ -39,7 +39,7 @@ impl Manager {
             .and_then(git::strip_local)
             .context("cannot adopt a detached worktree; check out a branch first")?;
         if copy {
-            return self.copy_and_adopt(&repo, &path, branch).await;
+            return self.copy_and_adopt(&repo, (&path, branch), git).await;
         }
         self.adopt_linked_worktree(&repo, path, &branch.into())
             .await
@@ -93,11 +93,14 @@ impl Manager {
             .await
     }
 
+    /// Record a workspace on a new branch named after `source_branch` that
+    /// copies the linked worktree at `source`, outside Shoal, and create
+    /// its worktree as a pending one's is.
     async fn copy_and_adopt(
         &self,
         repo: &crate::model::Repository,
-        source: &Path,
-        source_branch: &str,
+        (source, source_branch): (&Path, &str),
+        git: OwnedMutexGuard<()>,
     ) -> Result<Workspace> {
         let branch = self.available_branch(repo, source_branch).await?;
         // A branch's suffix leaves the name and directory, which take the
@@ -116,59 +119,70 @@ impl Manager {
             WorkspaceState::Preparing,
         );
         // Reserve the branch and destination before Git creates the worktree.
+        let pending = PendingWorktree::outside(source.to_owned());
         let workspace = self
-            .insert_workspace(workspace, None, None, None, true)
+            .insert_workspace(workspace, None, None, Some(pending), true)
             .await?;
-        let result = self.materialize_copy(repo, source, &workspace).await;
-        match result {
-            Ok(()) => self.workspace_by_id(&workspace.id).await,
-            Err(error) => {
-                // Creation can fail after Git has created the worktree.
-                // Capture its identity before retaining the failure.
-                if let Err(identity_error) = self.record_copy_identity_if_present(&workspace).await
-                {
-                    log!(
-                        "could not record failed copied workspace {}: {identity_error:#}",
-                        workspace.name
-                    );
-                }
-                // Keep the record and any linked worktree for inspection and
-                // removal. Startup quarantine applies the same transition if
-                // the daemon stops while the copy is in progress.
-                let message = format!("{error:#}");
-                self.set_state(&workspace.id, WorkspaceState::Failed, Some(message))
-                    .await?;
-                Err(error).context(format!(
-                    "workspace {} failed; inspect or remove it with Shoal",
-                    workspace.name
-                ))
-            }
-        }
+        self.create_recorded_worktree(repo, &workspace, git).await
     }
 
-    /// Create and own the destination before copying user files into it.
-    async fn materialize_copy(
+    /// Give the recorded `workspace` its worktree on its new branch at the
+    /// HEAD of the linked worktree at `source`, outside Shoal, or verify the
+    /// one an earlier try created, copy the source's files into it and
+    /// record its base. It takes no seed build and needs no setup, whose
+    /// outputs the copied files hold.
+    pub(super) async fn create_outside_copy(
         &self,
         repo: &crate::model::Repository,
-        source: &Path,
         workspace: &Workspace,
+        source: &Path,
+    ) -> Result<Configured> {
+        ensure!(
+            off_runtime::exists(source).await?,
+            "the worktree {} that {} copies is gone; `shoal rm {}` removes the workspace",
+            source.display(),
+            workspace.name,
+            workspace.number
+        );
+        let branch = workspace.require_branch("copying a worktree")?;
+        match workspace.git_dir {
+            Some(_) => {
+                self.verify_checkout(workspace, Some(branch.as_str()))
+                    .await?
+            }
+            None => self.add_copied_worktree(repo, workspace, source).await?,
+        }
+        crate::fsutil::copy::copy_worktree(source, &workspace.path)
+            .context("copy worktree files")?;
+        let base = existing_base(repo, branch).await?;
+        self.record_worktree_base(repo, workspace, &base).await?;
+        Ok(Configured {
+            needs_setup: false,
+            seed: None,
+        })
+    }
+
+    /// Create the worktree of `workspace` on its new branch at the HEAD of
+    /// the worktree at `source`, and own it before its files are copied.
+    async fn add_copied_worktree(
+        &self,
+        repo: &crate::model::Repository,
+        workspace: &Workspace,
+        source: &Path,
     ) -> Result<()> {
         let commit = git::resolve_commit(source, "HEAD", git::run_isolated).await?;
+        let new_branch = creates_branch(repo, workspace).await?;
         git::worktree::add(
             &repo.path,
             &workspace.path,
             workspace.require_branch("copying a worktree")?,
-            Some(commit.as_str()),
+            new_branch.then_some(commit.as_str()),
         )
         .await
         .context("create copied workspace")?;
-
         // Mark and persist the Git admin directory before the potentially long
         // file copy. A restart can therefore verify and remove the worktree.
-        self.record_copy_identity(workspace).await?;
-        crate::fsutil::copy::copy_worktree(source, &workspace.path)
-            .context("copy worktree files")?;
-        self.finish_copy_adoption(repo, workspace).await
+        self.record_copy_identity(workspace).await
     }
 
     /// Mark and persist the Git admin directory for a copied worktree.
@@ -177,55 +191,5 @@ impl Manager {
         self.release_stale_owner(&git_dir, &workspace.id).await?;
         self.record_git_dir(workspace, git_dir).await?;
         Ok(())
-    }
-
-    /// Best-effort identity capture when creation failed after making Git data.
-    async fn record_copy_identity_if_present(&self, workspace: &Workspace) -> Result<()> {
-        if !off_runtime::exists(&workspace.path).await? {
-            return Ok(());
-        }
-        if git::git_dir(&workspace.path).await.is_err() {
-            return Ok(());
-        }
-        self.record_copy_identity(workspace).await
-    }
-
-    /// Record the copied worktree's base and readiness after its files arrive.
-    async fn finish_copy_adoption(
-        &self,
-        repo: &crate::model::Repository,
-        workspace: &Workspace,
-    ) -> Result<()> {
-        let base = existing_base(repo, workspace.require_branch("adoption")?).await?;
-        let (commit, reference) = recorded_base(repo, &base).await?;
-        let git_dir = git::git_dir(&workspace.path).await?;
-        self.record_copy_ready(workspace, git_dir, commit.into(), reference)
-            .await
-    }
-
-    /// Persist the copied worktree's admin directory, base, and readiness.
-    async fn record_copy_ready(
-        &self,
-        workspace: &Workspace,
-        git_dir: PathBuf,
-        commit: CommitId,
-        reference: Option<String>,
-    ) -> Result<()> {
-        let id = workspace.id.clone();
-        self.store
-            .run(move |db| {
-                db.execute(
-                    "UPDATE workspaces SET state=?2,error=NULL,git_dir=?3,base_commit=?4,base_ref=?5,setup_finished=1 WHERE id=?1",
-                    rusqlite::params![
-                        id,
-                        WorkspaceState::Ready,
-                        git_dir.to_str(),
-                        commit,
-                        reference,
-                    ],
-                )?;
-                Ok(())
-            })
-            .await
     }
 }

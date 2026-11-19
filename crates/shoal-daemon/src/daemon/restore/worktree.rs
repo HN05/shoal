@@ -27,34 +27,26 @@ impl Manager {
         let new = NewRecord {
             id: Some(removed.space_id.clone()),
             parent,
-            pending: None,
         };
-        let kept = removed.kept_workspace()?;
-        let checkpoint = &kept.checkpoint;
-        let files = (checkpoint.commit != checkpoint.head).then(|| RestoredFiles {
-            head: checkpoint.head.to_string().into(),
-            snapshot: checkpoint.commit.to_string().into(),
-        });
-        match kept.head.clone() {
+        match removed.kept_workspace()?.head.clone() {
             Head::Commit(at) => Ok(OpenedWorkspace {
-                workspace: (self.restore_commit_workspace(removed, new, at, files)).await?,
+                workspace: (self.restore_commit_workspace(removed, new, at)).await?,
                 reused: false,
             }),
             Head::Branch(branch) => {
-                (self.restore_branch_workspace(removed, branch, new, files, warnings)).await
+                (self.restore_branch_workspace(removed, branch, new, warnings)).await
             }
         }
     }
 
     /// Open the removed workspace `removed` again as `new` places it, on its
-    /// `branch` at the removed HEAD, with `files` from its checkpoint, adding
-    /// to `warnings` when another branch has to take it.
+    /// `branch` at the removed HEAD, with the unsaved files its checkpoint
+    /// keeps, adding to `warnings` when another branch has to take it.
     async fn restore_branch_workspace(
         &self,
         removed: &RemovedSpace,
         branch: BranchName,
         new: NewRecord,
-        files: Option<RestoredFiles>,
         warnings: &mut Vec<String>,
     ) -> Result<OpenedWorkspace> {
         let branch = self.restore_branch(removed, branch, warnings).await?;
@@ -69,8 +61,15 @@ impl Manager {
             parent: new.parent,
             ..Default::default()
         };
+        let checkpoint = removed.kept_workspace()?.checkpoint.number;
         let opened = self
-            .open_branch_restoring(removed.repository()?, branch.as_str(), base, new, files)
+            .open_branch_restoring(
+                removed.repository()?,
+                branch.as_str(),
+                base,
+                new,
+                Some(checkpoint),
+            )
             .await?;
         // The branch check released the repository gate, so another request
         // may have opened the branch meanwhile; that workspace got no files.
@@ -175,6 +174,17 @@ impl Manager {
 pub(in crate::daemon) struct RestoredFiles {
     pub head: CommitId,
     pub snapshot: CommitId,
+}
+
+impl RestoredFiles {
+    /// The unsaved files `checkpoint` keeps at its HEAD; none when it kept
+    /// none.
+    pub(in crate::daemon) fn of(checkpoint: &Checkpoint) -> Option<Self> {
+        (checkpoint.commit != checkpoint.head).then(|| Self {
+            head: checkpoint.head.clone(),
+            snapshot: checkpoint.commit.clone(),
+        })
+    }
 }
 
 /// Write a removal checkpoint's files into a new worktree still at the removed

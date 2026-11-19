@@ -19,7 +19,7 @@ use anyhow::{Context, Result, bail, ensure};
 pub(super) use pending::PendingWorktree;
 pub(crate) use pending::build_pending_in;
 use rusqlite::params;
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::{checkpoint_numbers::CheckpointNumber, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceName;
 use shoal_refs::BranchName;
 use tokio::sync::OwnedMutexGuard;
@@ -43,7 +43,7 @@ pub(crate) struct NewWorkspace<'a> {
     pub id: Option<SpaceId>,
     /// Its worktree is left to its preparation, which creates it through
     /// [`Manager::create_pending_worktree`], so the record returns before
-    /// Git runs.
+    /// Git runs; otherwise the creation creates it as a preparation would.
     pub pending: bool,
 }
 
@@ -64,11 +64,12 @@ pub(in crate::daemon) enum WorkspaceSource {
         parent: Option<SpaceId>,
     },
     /// An existing branch, with an optional base ref overriding the default
-    /// branch, and the unsaved files a restore writes into it.
+    /// branch, and the removal checkpoint a restore opens it at, whose
+    /// unsaved files it writes into it.
     Existing {
         branch: crate::git::existing_branch::Branch,
         base: Option<String>,
-        files: Option<restore::RestoredFiles>,
+        restores: Option<CheckpointNumber>,
     },
 }
 
@@ -205,37 +206,23 @@ impl Manager {
         );
         workspace.setup_skipped = options.skip_setup;
         workspace.disposable = options.disposable;
-        let converted_mode = converts.as_ref().map(|converting| converting.mode.clone());
+        let mode = converts.as_ref().map(|converting| converting.mode.clone());
         let placement = match converts {
             Some(converting) => Placement::Replacing(Box::new(converting)),
             None => Placement::Below(parent),
         };
-        // A pending worktree's source waits in its record for its preparation.
-        let (source, pending) = match pending {
-            true => (None, Some(PendingWorktree::of(source, git_profile)?)),
-            false => (Some(source), None),
-        };
         let record = Inserted {
             placement,
             chosen,
-            pending,
+            pending: Some(PendingWorktree::of(source, git_profile, mode)),
         };
         let workspace = self
             .insert_workspace_as(workspace, base_branch, record)
             .await?;
-        let Some(source) = source else {
+        if pending {
             return self.workspace_by_id(&workspace.id).await;
-        };
-        let mut result = self
-            .materialize_worktree(repo, &workspace, source, git_profile)
-            .await;
-        // Before the workspace is ready, so nothing uses one that goes.
-        if let (Ok(_), Some(mode)) = (&result, &converted_mode)
-            && let Err(error) = self.ensure_worktree_mode(&workspace, mode).await
-        {
-            result = Err(error);
         }
-        self.settle_creation(repo, &workspace, result, git).await
+        self.create_recorded_worktree(repo, &workspace, git).await
     }
 
     /// Settle the creation of the recorded `workspace`, whose worktree was
@@ -302,19 +289,17 @@ impl Manager {
                 )
                 .await?;
                 let (name, number) = (&workspace.name, workspace.number);
-                if workspace.pending_worktree {
-                    bail!(
-                        "creating the worktree of {name} failed: {error:#}; `shoal restore {number}` retries it, and `shoal rm {number}` removes the workspace"
-                    );
-                }
-                bail!("workspace {name} failed; inspect or remove it with Shoal: {error:#}");
+                bail!(
+                    "creating the worktree of {name} failed: {error:#}; `shoal restore {number}` retries it, and `shoal rm {number}` removes the workspace"
+                );
             }
         }
         self.workspace_by_id(&workspace.id).await
     }
 
     /// Record a new workspace, stacked on the workspace that owns `base_branch`
-    /// and below `parent`, with the `pending` worktree it is still to get,
+    /// and below `parent`, with the `pending` worktree it is still to get, or
+    /// none for a worktree it adopts,
     /// refusing a parent chat being removed, which takes no new workspace,
     /// and a directory Shoal chose, when `chosen`, whose name another
     /// workspace took meanwhile. Returns the record with the number it took.
@@ -447,13 +432,14 @@ impl Manager {
             .await
     }
 
-    /// Create and configure the worktree. A restore's files go in before the
-    /// workspace can be used.
-    async fn materialize_worktree(
+    /// Create and configure the worktree. A restore's `files` go in before
+    /// the workspace can be used.
+    pub(super) async fn materialize_worktree(
         &self,
         repo: &crate::model::Repository,
         workspace: &Workspace,
         source: WorkspaceSource,
+        files: Option<&restore::RestoredFiles>,
         git_profile: Option<&str>,
     ) -> Result<Configured> {
         if let WorkspaceSource::Existing { branch, .. } = &source {
@@ -470,10 +456,6 @@ impl Manager {
             new_branch.then_some(commit.as_str()),
         )
         .await?;
-        let files = match &source {
-            WorkspaceSource::Existing { files, .. } => files.as_ref(),
-            WorkspaceSource::New { .. } => None,
-        };
         self.configure_worktree(workspace, files, git_profile).await
     }
 
@@ -571,7 +553,7 @@ impl Manager {
     }
 
     /// Record the base before Git creates the worktree.
-    async fn record_worktree_base(
+    pub(super) async fn record_worktree_base(
         &self,
         repo: &Repository,
         workspace: &Workspace,

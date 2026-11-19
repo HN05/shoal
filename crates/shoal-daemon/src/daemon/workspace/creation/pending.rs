@@ -1,16 +1,24 @@
 //! Pending worktrees: how a recorded workspace that has no worktree yet
-//! gets one, which its preparation creates.
+//! gets one, which its preparation, or the creation that recorded it,
+//! creates.
 
 use super::{Configured, WorkspaceSource, stack};
+use crate::daemon::restore::RestoredFiles;
 use crate::model::EventCause;
 use crate::{
-    daemon::manager::Manager, model::Workspace, protocol::CopySource, state::WorkspaceState,
+    config::modes::ModeName,
+    daemon::manager::Manager,
+    model::{Head, Repository, Workspace},
+    protocol::CopySource,
+    state::WorkspaceState,
 };
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, params};
 use shoal_ids::{checkpoint_numbers::CheckpointNumber, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::{BranchName, CommitId};
+use std::path::PathBuf;
+use tokio::sync::OwnedMutexGuard;
 
 /// How the worktree of a recorded workspace that has none yet is created,
 /// as `pending_worktrees` keeps it until it is.
@@ -19,11 +27,15 @@ pub(in crate::daemon) struct PendingWorktree {
     source: PendingSource,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     git_profile: Option<String>,
+    /// The mode the converted chat's agent runs in, which the settings of
+    /// its new worktree must define before the workspace is ready.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    mode: Option<ModeName>,
 }
 
 /// What a pending worktree checks out: a branch, as [`WorkspaceSource`]
-/// names it without what only a restore writes into it, a commit, or a
-/// copy's files.
+/// names it, a commit, a copy's files, a removed workspace's checkpoint or
+/// the files of a worktree outside Shoal.
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum PendingSource {
@@ -45,66 +57,77 @@ enum PendingSource {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         checkpoint: Option<CheckpointNumber>,
     },
+    /// The restored workspace's own branch, or a detached HEAD for one at a
+    /// commit, at the HEAD of its removal checkpoint `checkpoint`, which
+    /// keeps the restored workspace's ID, with the unsaved files it keeps;
+    /// a branch's diff compares with `base`.
+    Restore {
+        checkpoint: CheckpointNumber,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        base: Option<String>,
+    },
+    /// A new branch at the HEAD of the linked worktree at `path`, which
+    /// Shoal does not own, with a copy of its files, as `shoal adopt
+    /// --copy` makes it.
+    Outside { path: PathBuf },
 }
 
 /// How a pending worktree is created: checked out on a branch or at a
-/// commit, or as a copy of another workspace's files.
+/// commit, with the unsaved files a restore writes into it, or as a copy of
+/// another workspace's or an outside worktree's files.
 enum Creation {
-    Branch(WorkspaceSource),
-    Commit(CommitId),
+    Branch(WorkspaceSource, Option<RestoredFiles>),
+    Commit(CommitId, Option<RestoredFiles>),
     Copy(CopySource),
-}
-
-impl PendingSource {
-    /// How the worktree it checks out is created.
-    fn creation(self) -> Creation {
-        match self {
-            Self::New { base } => Creation::Branch(WorkspaceSource::New { base, parent: None }),
-            Self::Existing { branch, base } => Creation::Branch(WorkspaceSource::Existing {
-                branch,
-                base,
-                files: None,
-            }),
-            Self::Commit { head } => Creation::Commit(head),
-            Self::Copy {
-                workspace,
-                checkpoint,
-            } => Creation::Copy(CopySource {
-                workspace: SpaceSelector::Id(workspace),
-                checkpoint,
-            }),
-        }
-    }
+    Outside(PathBuf),
 }
 
 impl PendingWorktree {
-    /// The worktree `source` creates with `git_profile`, refusing a
-    /// restore's files, which go in before anything can use the workspace.
-    pub(super) fn of(source: WorkspaceSource, git_profile: Option<&str>) -> Result<Self> {
+    /// The worktree `source` creates with `git_profile`, for an agent in
+    /// `mode` when it converts a chat.
+    pub(super) fn of(
+        source: WorkspaceSource,
+        git_profile: Option<&str>,
+        mode: Option<ModeName>,
+    ) -> Self {
         let source = match source {
             WorkspaceSource::New { base, .. } => PendingSource::New { base },
             WorkspaceSource::Existing {
                 branch,
                 base,
-                files: None,
+                restores: None,
             } => PendingSource::Existing { branch, base },
-            WorkspaceSource::Existing { files: Some(_), .. } => {
-                bail!("a restore's worktree is created with its record")
-            }
+            WorkspaceSource::Existing {
+                base,
+                restores: Some(checkpoint),
+                ..
+            } => PendingSource::Restore { checkpoint, base },
         };
         let git_profile = git_profile.map(str::to_owned);
-        Ok(Self {
+        Self {
             source,
             git_profile,
-        })
+            mode,
+        }
     }
 
     /// The worktree of a workspace at a commit, detached at `head`.
     pub(in crate::daemon::workspace) fn commit(head: CommitId) -> Self {
-        Self {
-            source: PendingSource::Commit { head },
-            git_profile: None,
-        }
+        Self::from_source(PendingSource::Commit { head })
+    }
+
+    /// The worktree of a restored workspace at a commit, at the HEAD of its
+    /// removal checkpoint `checkpoint` with the unsaved files it keeps.
+    pub(in crate::daemon::workspace) fn restore(checkpoint: CheckpointNumber) -> Self {
+        Self::from_source(PendingSource::Restore {
+            checkpoint,
+            base: None,
+        })
+    }
+
+    /// A copy of the files of the linked worktree at `path`.
+    pub(in crate::daemon::workspace) fn outside(path: PathBuf) -> Self {
+        Self::from_source(PendingSource::Outside { path })
     }
 
     /// A copy of the files the workspace `workspace` has, or its
@@ -122,6 +145,15 @@ impl PendingWorktree {
         Self {
             source,
             git_profile,
+            mode: None,
+        }
+    }
+
+    fn from_source(source: PendingSource) -> Self {
+        Self {
+            source,
+            git_profile: None,
+            mode: None,
         }
     }
 }
@@ -142,9 +174,7 @@ impl Manager {
     }
 
     /// Create the worktree the recorded `workspace` is still to get, as its
-    /// preparation does first, and record how creation went as a creation
-    /// with its record does. One that fails leaves the workspace failed
-    /// with its pending worktree, which a retried preparation creates.
+    /// preparation does first, and record how creation went.
     pub(crate) async fn create_pending_worktree(
         &self,
         workspace: &SpaceSelector,
@@ -153,41 +183,151 @@ impl Manager {
         let (repo, git) = self.lock_repository(workspace.repository()).await?;
         // Read again under the Git gate, which a removal takes first.
         let workspace = self.workspace_by_id(&workspace.id).await?;
+        self.create_recorded_worktree(&repo, &workspace, git).await
+    }
+
+    /// Create the worktree of the recorded `workspace` of `repo` as its
+    /// pending worktree says, under the repository's Git gate `git`, which
+    /// settling releases, and record how creation went. One that fails
+    /// leaves the workspace failed with its pending worktree, which a
+    /// retried preparation creates.
+    pub(in crate::daemon::workspace) async fn create_recorded_worktree(
+        &self,
+        repo: &Repository,
+        workspace: &Workspace,
+        git: OwnedMutexGuard<()>,
+    ) -> Result<Workspace> {
         let PendingWorktree {
             source,
             git_profile,
-        } = self.claim_pending_worktree(&workspace).await?;
+            mode,
+        } = self.claim_pending_worktree(workspace).await?;
         let git_profile = git_profile.as_deref();
-        let result = match source.creation() {
+        let creation = match self.creation(workspace, source).await {
+            Ok(creation) => creation,
+            Err(error) => return self.record_creation(workspace, Err(error)).await,
+        };
+        let result = match creation {
             Creation::Copy(copied) => {
-                return (self.create_pending_copy(&repo, &workspace, &copied, git_profile, git))
+                return (self.create_pending_copy(repo, workspace, &copied, git_profile, git))
                     .await;
             }
+            Creation::Outside(path) => (self.create_outside_copy(repo, workspace, &path)).await,
             // An earlier try created it, then failed to configure it.
-            _ if workspace.git_dir.is_some() => {
-                self.reconfigure_worktree(&workspace, git_profile).await
+            Creation::Branch(_, files) | Creation::Commit(_, files)
+                if workspace.git_dir.is_some() =>
+            {
+                (self.reconfigure_worktree(workspace, files.as_ref(), git_profile)).await
             }
-            Creation::Branch(source) => {
-                (self.materialize_worktree(&repo, &workspace, source, git_profile)).await
+            Creation::Branch(source, files) => {
+                (self.materialize_worktree(repo, workspace, source, files.as_ref(), git_profile))
+                    .await
             }
-            Creation::Commit(head) => {
-                (self.materialize_commit_worktree(&repo, &workspace, &head, None)).await
+            Creation::Commit(head, files) => {
+                (self.materialize_commit_worktree(repo, workspace, &head, files.as_ref())).await
             }
         };
-        self.settle_creation(&repo, &workspace, result, git).await
+        let result = self.with_mode(workspace, mode.as_ref(), result).await;
+        self.settle_creation(repo, workspace, result, git).await
+    }
+
+    /// The `configured` worktree of `workspace` once its settings define the
+    /// `mode` of a converted chat's agent, which a workspace that is not
+    /// ready yet refuses before anything uses it.
+    async fn with_mode(
+        &self,
+        workspace: &Workspace,
+        mode: Option<&ModeName>,
+        configured: Result<Configured>,
+    ) -> Result<Configured> {
+        match (configured, mode) {
+            (Ok(configured), Some(mode)) => {
+                (self.ensure_worktree_mode(workspace, mode).await).map(|()| configured)
+            }
+            (configured, _) => configured,
+        }
+    }
+
+    /// How the worktree of `workspace` that `source` describes is created,
+    /// reading a restore's checkpoint again.
+    async fn creation(&self, workspace: &Workspace, source: PendingSource) -> Result<Creation> {
+        Ok(match source {
+            PendingSource::New { base } => {
+                Creation::Branch(WorkspaceSource::New { base, parent: None }, None)
+            }
+            PendingSource::Existing { branch, base } => Creation::Branch(
+                WorkspaceSource::Existing {
+                    branch,
+                    base,
+                    restores: None,
+                },
+                None,
+            ),
+            PendingSource::Commit { head } => Creation::Commit(head, None),
+            PendingSource::Copy {
+                workspace,
+                checkpoint,
+            } => Creation::Copy(CopySource {
+                workspace: SpaceSelector::Id(workspace),
+                checkpoint,
+            }),
+            PendingSource::Restore { checkpoint, base } => {
+                self.restore_creation(workspace, checkpoint, base).await?
+            }
+            PendingSource::Outside { path } => Creation::Outside(path),
+        })
+    }
+
+    /// How the restored `workspace` is created at the HEAD of its removal
+    /// checkpoint `number`, with the unsaved files it keeps: on its own
+    /// branch, which its restore readied, with its diff comparing with
+    /// `base`, or detached.
+    async fn restore_creation(
+        &self,
+        workspace: &Workspace,
+        number: CheckpointNumber,
+        base: Option<String>,
+    ) -> Result<Creation> {
+        let id = workspace.id.clone();
+        let checkpoint = (self.store)
+            .run(move |db| super::super::checkpoints::find(db, &id, number))
+            .await?
+            .with_context(|| {
+                format!(
+                    "checkpoint {number} of {}, which its restore opens, is gone",
+                    workspace.name
+                )
+            })?;
+        let files = RestoredFiles::of(&checkpoint);
+        Ok(match &workspace.head {
+            Head::Branch(name) => {
+                let branch = crate::git::existing_branch::Branch {
+                    name: name.clone(),
+                    remote: None,
+                };
+                let source = WorkspaceSource::Existing {
+                    branch,
+                    base,
+                    restores: None,
+                };
+                Creation::Branch(source, files)
+            }
+            Head::Commit(_) => Creation::Commit(checkpoint.head, files),
+        })
     }
 
     /// Configure the worktree an earlier creation of `workspace` left once
     /// it verifies as the one Git created for it, still on its recorded
-    /// branch or detached.
+    /// branch or detached, writing a restore's `files` into it again.
     async fn reconfigure_worktree(
         &self,
         workspace: &Workspace,
+        files: Option<&RestoredFiles>,
         git_profile: Option<&str>,
     ) -> Result<Configured> {
         let branch = workspace.branch().map(shoal_refs::BranchName::as_str);
         self.verify_checkout(workspace, branch).await?;
-        self.configure_worktree(workspace, None, git_profile).await
+        self.configure_worktree(workspace, files, git_profile).await
     }
 
     /// The pending worktree of `workspace`, which goes back to preparing

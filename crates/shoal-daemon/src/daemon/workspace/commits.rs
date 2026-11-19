@@ -40,11 +40,10 @@ pub(super) struct Start {
 }
 
 /// The workspace of a CI job, recorded before its worktree is checked out
-/// at `commit`, with its repository's Git gate.
+/// at the job's commit, with its repository's Git gate.
 pub(crate) struct RecordedJobWorkspace {
     repo: Repository,
     workspace: Workspace,
-    commit: CommitId,
     git: OwnedMutexGuard<()>,
 }
 
@@ -55,13 +54,11 @@ impl RecordedJobWorkspace {
 }
 
 /// The ID a new workspace's record takes, a new one unless a restore keeps
-/// its own, the space it goes below, or none at the top, and the worktree
-/// its preparation is still to create, if any.
+/// its own, and the space it goes below, or none at the top.
 #[derive(Default)]
 pub(in crate::daemon) struct NewRecord {
     pub id: Option<SpaceId>,
     pub parent: Option<SpaceId>,
-    pub pending: Option<PendingWorktree>,
 }
 
 impl Manager {
@@ -175,28 +172,20 @@ impl Manager {
             Some(given) => given.checked()?,
             None => start.name,
         };
-        let new = NewRecord {
-            id: None,
-            parent,
-            pending: pending.then(|| PendingWorktree::commit(head.clone())),
-        };
+        let new = NewRecord { id: None, parent };
         let workspace = self
             .record_commit_workspace(
                 repo,
                 (&start.directory, name),
-                start.at,
-                start.diff_ref,
-                new,
+                (start.at, start.diff_ref),
+                (new, PendingWorktree::commit(head)),
                 options,
             )
             .await?;
         if pending {
             return self.workspace_by_id(&workspace.id).await;
         }
-        let result = self
-            .materialize_commit_worktree(repo, &workspace, &head, None)
-            .await;
-        self.settle_creation(repo, &workspace, result, git).await
+        self.create_recorded_worktree(repo, &workspace, git).await
     }
 
     /// Record the workspace a CI job runs in, in `directory` and named
@@ -227,16 +216,17 @@ impl Manager {
             .record_commit_workspace(
                 &repo,
                 (directory, name),
-                at,
-                None,
-                NewRecord::default(),
+                (at, None),
+                (
+                    NewRecord::default(),
+                    PendingWorktree::commit(commit.to_owned()),
+                ),
                 options,
             )
             .await?;
         Ok(RecordedJobWorkspace {
             repo,
             workspace,
-            commit: commit.to_owned(),
             git,
         })
     }
@@ -250,13 +240,9 @@ impl Manager {
         let RecordedJobWorkspace {
             repo,
             workspace,
-            commit,
             git,
         } = recorded;
-        let result = self
-            .materialize_commit_worktree(&repo, &workspace, &commit, None)
-            .await;
-        self.settle_creation(&repo, &workspace, result, git).await
+        self.create_recorded_worktree(&repo, &workspace, git).await
     }
 
     /// The workspace at a commit of `repository_id` made for PR `number` or
@@ -415,50 +401,46 @@ impl Manager {
     }
 
     /// Open the removed workspace at a commit `removed` again, without a
-    /// branch, at its removed HEAD with `files` from its checkpoint; it keeps
-    /// the commit it started `at`.
+    /// branch, at its removed HEAD with the unsaved files its checkpoint
+    /// keeps; it keeps the commit it started `at`.
     pub(in crate::daemon) async fn restore_commit_workspace(
         &self,
         removed: &RemovedSpace,
         new: NewRecord,
         at: StartingCommit,
-        files: Option<RestoredFiles>,
     ) -> Result<Workspace> {
         let (repo, git) = self.lock_repository(removed.repository()?).await?;
         let diff_ref = surviving_ref(&repo, removed.kept_workspace()?.base_ref.as_deref()).await?;
         // Its directory comes from where it started, never its name.
         let directory = at.directory_seed();
+        let kept = removed.kept_workspace()?;
+        let plan = PendingWorktree::restore(kept.checkpoint.number);
         let workspace = self
             .record_commit_workspace(
                 &repo,
                 (&directory, removed.name.clone()),
-                at,
-                diff_ref,
-                new,
+                (at, diff_ref),
+                (new, plan),
                 CreationOptions {
-                    skip_setup: removed.kept_workspace()?.setup_skipped,
+                    skip_setup: kept.setup_skipped,
                     ..Default::default()
                 },
             )
             .await?;
-        let head = removed.kept_workspace()?.checkpoint.head.as_str();
-        let result = self
-            .materialize_commit_worktree(&repo, &workspace, &head.into(), files.as_ref())
-            .await;
-        self.settle_creation(&repo, &workspace, result, git).await
+        self.create_recorded_worktree(&repo, &workspace, git).await
     }
 
     /// Record a new workspace at a commit in a directory named after
-    /// `directory`, with `name`, which started `at`, as `new` places it,
-    /// whose diff compares with `diff_ref`, else with `at`. The caller holds
-    /// the repository's Git gate.
+    /// `directory`, with `name`, which started `at`, whose diff compares
+    /// with `diff_ref`, else with `at`, as `new` places it, with the
+    /// `pending` worktree its creation creates. The caller holds the
+    /// repository's Git gate.
     async fn record_commit_workspace(
         &self,
         repo: &Repository,
         (directory, name): (&str, SpaceName),
-        at: StartingCommit,
-        diff_ref: Option<String>,
-        new: NewRecord,
+        (at, diff_ref): (StartingCommit, Option<String>),
+        (new, pending): (NewRecord, PendingWorktree),
         options: CreationOptions,
     ) -> Result<Workspace> {
         let path = self.new_workspace_path(repo, directory, None).await?;
@@ -471,12 +453,12 @@ impl Manager {
         workspace.base_ref = diff_ref;
         workspace.setup_skipped = options.skip_setup;
         workspace.disposable = options.disposable;
-        self.insert_workspace(workspace, None, new.parent, new.pending, true)
+        self.insert_workspace(workspace, None, new.parent, Some(pending), true)
             .await
     }
 
-    /// Check out `head` and configure the worktree with `files` written into
-    /// it.
+    /// Check out `head` and configure the worktree with a restore's `files`
+    /// written into it.
     pub(super) async fn materialize_commit_worktree(
         &self,
         repo: &Repository,

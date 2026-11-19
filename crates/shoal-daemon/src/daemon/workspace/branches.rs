@@ -413,15 +413,16 @@ impl Manager {
             .await
     }
 
-    /// [`Self::open_branch_with`], writing a restore's files into a new
-    /// worktree before it can be used; a reopened workspace gets none.
+    /// [`Self::open_branch_with`], opening a new worktree at the removal
+    /// checkpoint a restore `restores`, with the unsaved files it keeps,
+    /// before it can be used; a reopened workspace gets none.
     pub(in crate::daemon) async fn open_branch_restoring(
         &self,
         repository: impl Into<crate::repository::Selector>,
         selector: &str,
         base: Option<String>,
         new: super::NewWorkspace<'_>,
-        files: Option<super::super::restore::RestoredFiles>,
+        restores: Option<shoal_ids::checkpoint_numbers::CheckpointNumber>,
     ) -> Result<OpenedWorkspace> {
         let (repo, git) = self.lock_repository(repository).await?;
         let options = NewWorktreeOptions {
@@ -449,7 +450,7 @@ impl Manager {
                 super::creation::WorkspaceSource::Existing {
                     branch,
                     base,
-                    files,
+                    restores,
                 },
                 new,
                 git,

@@ -172,8 +172,8 @@ impl Manager {
     /// Create a copy of `source` in `repository` where `place` says, below
     /// the space `new` names, and take its starting checkpoint; a pending
     /// one's worktree waits in its record for its preparation, which checks
-    /// the files it copies then. It runs setup like any workspace unless
-    /// the caller skips it.
+    /// the files it copies then, as creating one now checks them again. It
+    /// runs setup like any workspace unless the caller skips it.
     pub(crate) async fn create_copy(
         &self,
         repository: crate::repository::Selector,
@@ -199,11 +199,7 @@ impl Manager {
         if new.pending {
             return self.workspace_by_id(&workspace.id).await;
         }
-        let result = self
-            .materialize_copy_worktree(&repo, &workspace, &source, new.git_profile)
-            .await;
-        self.settle_copy(&repo, &workspace, &source, result, git)
-            .await
+        self.create_recorded_worktree(&repo, &workspace, git).await
     }
 
     /// Create the worktree of the recorded copy `workspace` with the files
@@ -374,8 +370,8 @@ impl Manager {
     }
 
     /// Record the copy of `source` where `place` says, with the source's
-    /// diff base and, when `new` leaves it pending, how its worktree is
-    /// created. The caller holds the repository's Git gate.
+    /// diff base and how its worktree is created. The caller holds the
+    /// repository's Git gate.
     async fn record_copy(
         &self,
         repo: &Repository,
@@ -420,12 +416,10 @@ impl Manager {
         record.base_ref = source.base_ref.clone();
         record.setup_skipped = new.options.skip_setup;
         record.disposable = new.options.disposable;
-        let pending = new.pending.then(|| {
-            let id = source.workspace_id.clone();
-            PendingWorktree::copy(id, source.checkpoint(), new.git_profile)
-        });
+        let id = source.workspace_id.clone();
+        let pending = PendingWorktree::copy(id, source.checkpoint(), new.git_profile);
         let parent = new.parent.clone();
-        self.insert_workspace(record, base_branch, parent, pending, chosen)
+        self.insert_workspace(record, base_branch, parent, Some(pending), chosen)
             .await
     }
 

@@ -1253,3 +1253,37 @@ async fn a_scoped_caller_cannot_restore_a_chat_into_a_worktree_outside_its_scope
             .is_empty()
     );
 }
+
+#[tokio::test]
+async fn a_failed_restore_is_retried_with_its_unsaved_files() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    fs::write(workspace.path.join("unsaved"), "kept").unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    manager
+        .remove_selected(&selector, UnsavedWork::All, InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+    let blocked = crate::daemon::test_support::block_worktrees(&checkout);
+    let failed = manager.restore_workspace(&selector).await;
+    assert!(failed.is_err(), "{failed:?}");
+    drop(blocked);
+    let restored = manager.workspace(&selector).await.unwrap();
+    assert!(restored.pending_worktree);
+    let created = manager.create_pending_worktree(&selector).await.unwrap();
+    let kept = fs::read_to_string(created.path.join("unsaved")).unwrap();
+    assert_eq!(kept, "kept");
+    assert_eq!(
+        git(&created.path, &["branch", "--show-current"]).trim(),
+        "topic"
+    );
+    manager.store.shutdown().await;
+}

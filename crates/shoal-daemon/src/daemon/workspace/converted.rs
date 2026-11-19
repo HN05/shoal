@@ -104,7 +104,7 @@ impl Manager {
             OpenTarget::Create(branch) => Ok(WorkspaceSource::Existing {
                 branch,
                 base,
-                files: None,
+                restores: None,
             }),
             OpenTarget::Reopen(workspace) => {
                 bail!(
