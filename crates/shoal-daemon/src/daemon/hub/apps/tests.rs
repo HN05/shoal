@@ -24,6 +24,7 @@ fn device(name: &str) -> Member {
         connected: true,
         hub: false,
         availability: None,
+        agents: Vec::new(),
     }
 }
 

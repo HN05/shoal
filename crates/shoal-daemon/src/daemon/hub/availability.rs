@@ -11,6 +11,7 @@ use std::{collections::HashMap, convert::Infallible, sync::Arc, time::Duration};
 use anyhow::{Result, anyhow};
 use rusqlite::Transaction;
 use shoal_ids::member_ids::MemberId;
+use shoal_protocol::agent::Agent;
 use shoal_protocol::hub::{
     MemberKind,
     availability::{
@@ -163,10 +164,7 @@ impl Manager {
     /// what the hub keeps.
     async fn mark_presence(&self) -> Result<()> {
         let own = self.own_member().await?;
-        let description = Description {
-            battery: battery::present(),
-            availability: self.config().machine.availability,
-        };
+        let description = self.own_description().await?;
         let connected = self.hub.links.connected();
         self.store
             .write(move |tx| {
@@ -188,6 +186,9 @@ impl Manager {
         description: Description,
     ) -> Result<Classified> {
         let id = member.clone();
+        self.hub
+            .links
+            .describe_agents(member, description.agents.clone());
         let classified = self
             .store
             .write(move |tx| {
@@ -236,6 +237,21 @@ impl Manager {
             .await
     }
 
+    /// Give each connected machine among `members` the agent tools it said
+    /// it has, which the hub's own machine reads here.
+    pub(super) async fn with_agent_tools(
+        &self,
+        members: &mut [shoal_protocol::hub::Member],
+    ) -> Result<()> {
+        for member in members {
+            member.agents = match member.hub {
+                true => self.installed_agents().await?,
+                false => self.hub.links.agents(&member.id),
+            };
+        }
+        Ok(())
+    }
+
     /// Give each machine among `members` its availability.
     pub(super) async fn with_availability(
         &self,
@@ -257,18 +273,26 @@ impl Manager {
 
 impl Manager {
     /// Describe this machine to the hub over its link, keeping the
-    /// availability the hub answers, and again whenever `[machine]
-    /// availability` changes, for as long as the link stays open.
+    /// availability the hub answers, and again whenever what it says of
+    /// itself changes as its config does, for as long as the link stays
+    /// open.
     pub(super) async fn keep_describing(&self, calls: &Calls) -> Infallible {
         let mut reloaded = self.config_state.watch();
         loop {
-            let setting = self.config().machine.availability;
-            if let Err(error) = self.describe(calls, setting).await {
-                log!("hub: could not describe this machine to the hub: {error:#}");
-                tokio::time::sleep(RETRY).await;
-                continue;
-            }
-            while self.config().machine.availability == setting {
+            let described = async {
+                let description = self.own_description().await?;
+                self.describe(calls, description.clone()).await?;
+                anyhow::Ok(description)
+            };
+            let description = match described.await {
+                Ok(description) => description,
+                Err(error) => {
+                    log!("hub: could not describe this machine to the hub: {error:#}");
+                    tokio::time::sleep(RETRY).await;
+                    continue;
+                }
+            };
+            while self.own_description().await.ok().as_ref() == Some(&description) {
                 if reloaded.changed().await.is_err() {
                     std::future::pending::<()>().await;
                 }
@@ -276,13 +300,29 @@ impl Manager {
         }
     }
 
-    /// Describe this machine, set to `setting`, to the hub, keeping the
-    /// availability it answers.
-    async fn describe(&self, calls: &Calls, setting: AvailabilitySetting) -> Result<()> {
-        let description = Description {
+    /// What this machine says of itself: whether it has a battery, its
+    /// `[machine] availability` and the agent tools it has installed.
+    pub(super) async fn own_description(&self) -> Result<Description> {
+        Ok(Description {
             battery: battery::present(),
-            availability: setting,
-        };
+            availability: self.config().machine.availability,
+            agents: self.installed_agents().await?,
+        })
+    }
+
+    /// The agent tools this machine has installed, as the global config
+    /// names them and its daemon's `PATH` finds their programs.
+    async fn installed_agents(&self) -> Result<Vec<Agent>> {
+        let layers = crate::config::repo::ConfigLayers::default();
+        let settings = (self.config()).resolve_with_template_files(&layers, &self.paths)?;
+        let path = std::env::var_os("PATH").unwrap_or_default();
+        let found = move || crate::agents::installed_agents(&settings, &path);
+        Ok(tokio::task::spawn_blocking(found).await?)
+    }
+
+    /// Describe this machine to the hub as `description` says, keeping the
+    /// availability it answers.
+    async fn describe(&self, calls: &Calls, description: Description) -> Result<()> {
         match calls.call(Call::Describe { description }).await? {
             Reply::Availability(availability) => {
                 self.hub.member.told(availability);

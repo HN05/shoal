@@ -826,8 +826,9 @@ admits one join within ten minutes. It warns when the URL is `http://` to
 another machine. `shoal hub join <code>` joins this machine under the host's
 name, or `--name`; an app joins as a device with the same code. The hub gives
 each machine or device an ID at pairing, and `hub ls` lists them with kind,
-name, Shoal version, when each was last seen and each machine's availability,
-by which `hub revoke` names one. `hub leave` revokes this machine's own credential, or names what to revoke
+name, Shoal version, when each was last seen, each machine's availability
+and, for a connected machine, the agent tools it has installed (`agents` in
+`--json`), by which `hub revoke` names one. `hub leave` revokes this machine's own credential, or names what to revoke
 on the hub when it cannot reach it. Only your own terminal pairs, joins, leaves
 and revokes; anyone lists.
 

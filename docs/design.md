@@ -254,7 +254,10 @@ portable machine takes no lasting work before the hub has seen it behave. The
 hub keeps that history in its own state, counts its own machine from when its
 daemon ran with the machine awake, and tells each machine its availability
 when its link opens and when it changes, since a machine acts on it. The
-numbers are fixed, not settings. Browser sessions are a later step.
+numbers are fixed, not settings. A machine also tells the hub which agent
+tools it has installed, when its link opens and as its config changes them,
+which the hub keeps for its open link alone, since only a connected machine
+starts work. Browser sessions are a later step.
 The minimum Rust version follows current stable so the code can use its newest
 features; the manifest and CI toolchain advance together, with locked dependencies.
 The daemon raises its open file limit at startup and accepts every connection,

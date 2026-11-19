@@ -84,11 +84,14 @@ impl fmt::Display for Classified {
 }
 
 /// What a machine tells the hub of itself when its link opens, and again
-/// when its setting changes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// when its setting or its agent tools change.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Description {
     pub battery: bool,
     pub availability: AvailabilitySetting,
+    /// The agent tools it has installed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub agents: Vec<crate::agent::Agent>,
 }
 
 #[cfg(test)]

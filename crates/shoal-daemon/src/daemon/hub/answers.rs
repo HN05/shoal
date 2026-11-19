@@ -171,6 +171,7 @@ impl Manager {
             }
         }
         self.with_availability(&mut members).await?;
+        self.with_agent_tools(&mut members).await?;
         Ok(Overview {
             listener: self.hub_listener(),
             members,

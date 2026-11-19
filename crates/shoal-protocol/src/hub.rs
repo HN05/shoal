@@ -236,6 +236,10 @@ pub struct Member {
     /// A machine's availability and why; none for a device.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub availability: Option<availability::Classified>,
+    /// The agent tools a connected machine has installed, which a start
+    /// there can run, as it last described itself.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub agents: Vec<crate::agent::Agent>,
 }
 
 /// The hub's listener: where it listens, which Shoal never encrypts, and the
