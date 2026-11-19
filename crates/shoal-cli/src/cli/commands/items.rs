@@ -86,7 +86,6 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
         PrCommand::Update { item, method } => {
             (item, Action::Update { method }, "PR branch updated")
         }
-        PrCommand::DeleteBranch { item } => (item, Action::DeleteBranch, "PR branch deleted"),
     };
     act(ctx, item, ItemKind::Pr, action, outcome).await
 }

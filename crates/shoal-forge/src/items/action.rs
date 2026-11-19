@@ -7,13 +7,12 @@ use shoal_refs::CommitId;
 
 use crate::{
     account::Account,
-    backends::{Branches, Conventions, Items, Merging},
+    backends::{Conventions, Items, Merging},
     capability::CapabilityRequests,
     conventions::labels::LabelRequests,
     items::{
         attach::{AttachRequests, AttachSteps, Holder, Pending},
         comment::CommentRequests,
-        create::CreateRequests,
         item::ItemRequests,
         milestone::MilestoneRequests,
         reaction::{ReactionRequests, Subject},
@@ -358,11 +357,6 @@ impl ForgeRepo {
                     .await?;
                 self.plan(&current, action)
             }
-            Action::DeleteBranch => {
-                let requests = self.plan(&current, action)?;
-                self.ensure_branch_unmoved(account, &current).await?;
-                Ok(requests)
-            }
             _ => self.plan(&current, action),
         }
     }
@@ -438,7 +432,6 @@ impl ForgeRepo {
                 ensure_open(item)?;
                 self.kind().cancel_auto_merge(self, current)?
             }
-            Action::DeleteBranch => vec![self.branch_deletion(current)?],
             Action::Update { method } => {
                 ensure_open(item)?;
                 self.kind().update_branch(self, current, *method)?
@@ -450,53 +443,6 @@ impl ForgeRepo {
             }
             Action::EditComment(_) => anyhow::bail!("a comment's edit is planned from the comment"),
         })
-    }
-
-    /// The request that deletes the head branch of `current`, refused while
-    /// the PR is open or when the branch is a fork's.
-    fn branch_deletion(&self, current: &Current) -> Result<Request> {
-        let item = &current.item;
-        let pr = item
-            .pr
-            .as_ref()
-            .context("only PRs have a branch to delete")?;
-        ensure!(
-            item.state != ItemState::Open,
-            "#{} is open; merge or close it before deleting its branch",
-            item.number
-        );
-        ensure!(
-            current.head_in(self),
-            "the branch of #{} is in a fork, not in {}",
-            item.number,
-            self.path
-        );
-        Ok(self.kind().branch_delete(self, pr.head.as_str()))
-    }
-
-    /// Refuse to delete a PR's branch that no longer points to the PR's
-    /// head, such as one pushed to again after it merged, whose other
-    /// commits are in no PR.
-    async fn ensure_branch_unmoved(&self, account: &Account, current: &Current) -> Result<()> {
-        let item = &current.item;
-        let pr = item
-            .pr
-            .as_ref()
-            .context("only PRs have a branch to delete")?;
-        let head = current
-            .head_sha
-            .as_ref()
-            .context("the forge did not report the PR's head commit")?;
-        let tip = self.branch_commit(account, &pr.head).await?;
-        // Bitbucket reports a PR's head as an abbreviated hash.
-        ensure!(
-            tip.as_str().starts_with(head.as_str()),
-            "branch {} moved to {tip} after #{} was {}; it holds commits the PR does not have",
-            pr.head,
-            item.number,
-            item.state.as_str()
-        );
-        Ok(())
     }
 }
 

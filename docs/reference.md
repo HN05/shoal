@@ -4722,7 +4722,6 @@ shoal pr reviewers 12               # users and teams who can review PR 12
 shoal pr update --method rebase    # take in the base's commits on the forge
 shoal merge 12 -X rebase --delete-branch  # merge PR 12 on the forge
 shoal merge pr --auto               # merge the linked PR once checks pass; --cancel-auto withdraws it
-shoal pr delete-branch 12           # delete a merged or closed PR's branch on the forge
 shoal pr revert 42                  # open a PR that reverts merged PR 42
 shoal pr comment 12 --repo shoal --body-file notes.md  # in a registered repository, without a workspace
 shoal issue ls --label bug flaky  # search by text; --state, --author and --limit too
@@ -4874,16 +4873,14 @@ They read only that record, so a PR without one, a record of another head or
 base branch, or a PR no workspace links merges without a question. A merge is
 refused when its warning changed while the question was open, including a
 warning that appeared where none was. A scoped process merges, sets or
-withdraws an automatic merge and deletes a PR's branch as the agent account,
+withdraws an automatic merge as the agent account,
 as its space's [`merge` permission](#mode-permissions) allows: the request binds the PR
 at its head commit, which the merge names to the forge, and the method, `-X` or
 `[merge] method`, and a squash's message, so with `"propose"` a later commit,
 another method or another message needs another approval. A merge that its [review gate](#local-reviews)
 refuses goes no further.
-`delete-branch` deletes the branch of a merged or closed PR on the forge, such
-as one merged on the forge's website, never a local branch, with your own
-login or a scoped process's agent account. It refuses an open PR, a branch in a fork,
-and a branch that no longer points to the PR's head commit.
+[`shoal branch delete`](#branches-on-the-forge) deletes a PR's branch on the
+forge once it has merged or closed.
 `revert` opens a PR that undoes a merged PR into its base branch and refuses
 one that has not merged. It takes `pr open`'s options except `--base`; its
 title defaults to `Revert "<title>"`, its description to `Reverts #<number>`,
@@ -5215,7 +5212,7 @@ fails is left out.
 
 The daemon sends each change through the forge's REST API as the workspace's
 [agent account](#agent-accounts), except that a [merge](#merge-into-the-default-branch)
-of a PR, its automatic merge and `delete-branch` run by you use your login. Each change records an
+of a PR and its automatic merge run by you use your login. Each change records an
 `item_changed` [space event](#space-events). `--json` returns the item
 as the forge then reports it: `kind`, `number`, `url`, `title`, `state` (`open`,
 `closed` or `merged`), `labels`, and for a PR, `pr` with `head`, `base` and

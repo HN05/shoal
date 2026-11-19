@@ -437,53 +437,6 @@ fn branch_updates_use_each_forges_way_and_its_methods() -> Result<()> {
 }
 
 #[test]
-fn branch_deletions_need_an_ended_pr_whose_branch_is_the_repositorys() -> Result<()> {
-    for (remote, endpoint) in [
-        (
-            "git@github.com:team/repo.git",
-            "repos/team/repo/git/refs/heads/fix/a",
-        ),
-        (
-            "https://forge.example/team/repo",
-            "repos/team/repo/branches/fix%2Fa",
-        ),
-        (
-            "git@gitlab.com:team/repo.git",
-            "projects/team%2Frepo/repository/branches/fix%2Fa",
-        ),
-        (
-            "git@bitbucket.org:team/repo.git",
-            "repositories/team/repo/refs/branches/fix%2Fa",
-        ),
-    ] {
-        let forge = ForgeRepo::parse(remote)?;
-        let mut merged = pr(&forge, false, &[]);
-        merged.item.state = ItemState::Merged;
-        merged.item.pr.as_mut().unwrap().head = "fix/a".into();
-        assert_eq!(
-            requests(&forge, &merged, Action::DeleteBranch),
-            [("DELETE".into(), endpoint.into(), Value::Null)]
-        );
-    }
-    let [github, _] = forges();
-    let mut closed = pr(&github, false, &[]);
-    closed.item.state = ItemState::Closed;
-    closed.head_repository = Some("Team/Repo".into());
-    assert_eq!(requests(&github, &closed, Action::DeleteBranch).len(), 1);
-    assert!(
-        github
-            .plan(&pr(&github, false, &[]), &Action::DeleteBranch)
-            .is_err()
-    );
-    for fork in [Some("someone/repo"), None] {
-        closed.head_repository = fork.map(str::to_owned);
-        assert!(github.plan(&closed, &Action::DeleteBranch).is_err());
-    }
-    assert!(Action::DeleteBranch.validate(ItemKind::Issue).is_err());
-    Ok(())
-}
-
-#[test]
 fn gitlab_changes_merge_requests_in_one_update_by_user_id() {
     let gitlab = ForgeRepo::parse("git@gitlab.com:group/sub/repo.git").unwrap();
     let mut current = pr(&gitlab, false, &["bug"]);

@@ -151,3 +151,32 @@ async fn a_branch_is_deleted_only_at_the_commit_it_was_read_at() {
     repo.delete_branch(&account, &topic, &read).await.unwrap();
     assert_eq!(deletes(&server), 1);
 }
+
+#[test]
+fn each_forge_deletes_a_branch_at_its_encoded_name() {
+    for (remote, endpoint) in [
+        (
+            "git@github.com:team/repo.git",
+            "repos/team/repo/git/refs/heads/fix/a",
+        ),
+        (
+            "https://forge.example/team/repo",
+            "repos/team/repo/branches/fix%2Fa",
+        ),
+        (
+            "git@gitlab.com:team/repo.git",
+            "projects/team%2Frepo/repository/branches/fix%2Fa",
+        ),
+        (
+            "git@bitbucket.org:team/repo.git",
+            "repositories/team/repo/refs/branches/fix%2Fa",
+        ),
+    ] {
+        let repo = ForgeRepo::parse(remote).unwrap();
+        let request = repo.kind().branch_delete(&repo, "fix/a");
+        assert_eq!(
+            (request.method.as_str(), request.endpoint.as_str()),
+            ("DELETE", endpoint)
+        );
+    }
+}

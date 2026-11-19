@@ -247,17 +247,14 @@ impl Scoped for ItemMethod {
                     .await?;
                 Some(workspace)
             }
-            // Merging a PR and deleting its branch are the `merge`
-            // permission's, and the merge then names the head its request
-            // binds, once its review gate passes for that head.
+            // Merging a PR is the `merge` permission's, and the merge then
+            // names the head its request binds, once its review gate passes
+            // for that head.
             ItemMethod::ItemAction {
                 target,
                 item,
                 action:
-                    action @ (Action::Merge { .. }
-                    | Action::AutoMerge { .. }
-                    | Action::CancelAutoMerge
-                    | Action::DeleteBranch),
+                    action @ (Action::Merge { .. } | Action::AutoMerge { .. } | Action::CancelAutoMerge),
                 ..
             } => {
                 let context = own_context(caller, target);

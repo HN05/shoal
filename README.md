@@ -265,7 +265,6 @@ shoal pr review 42 --comment --line src/a.rs:7 'Why?' # Review with line comment
 shoal pr update --method rebase # Update the linked PR's branch from its base on the forge
 shoal merge 42 -X rebase      # Merge a PR yourself; without -X, by the repository's default
 shoal merge 42 --auto         # Merge it once checks pass; --cancel-auto withdraws it
-shoal pr delete-branch 42     # Delete the branch of a merged or closed PR on the forge; agents cannot
 shoal branch ls --unmerged    # The forge's branches the default branch lacks the changes of
 shoal branch delete old-fix   # Delete a branch on the forge whose changes are on the default branch
 shoal pr revert 42            # Open a PR that reverts merged PR 42

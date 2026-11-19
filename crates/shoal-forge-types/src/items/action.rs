@@ -57,8 +57,6 @@ pub enum Action {
         head: Option<CommitId>,
     },
     CancelAutoMerge,
-    /// Delete the head branch of a merged or closed PR from the repository.
-    DeleteBranch,
     /// Bring a PR's branch up to date with its base on the forge.
     Update {
         method: UpdateMethod,
@@ -200,7 +198,6 @@ impl Action {
             Self::Merge { .. } => "merge",
             Self::AutoMerge { .. } => "auto_merge",
             Self::CancelAutoMerge => "cancel_auto_merge",
-            Self::DeleteBranch => "delete_branch",
             Self::Update { .. } => "update",
             Self::Thread(change) => match change.resolve {
                 Some(true) => "resolve",
@@ -331,7 +328,6 @@ impl Action {
                 }
             }
             Self::CancelAutoMerge => pr_only("merge")?,
-            Self::DeleteBranch => pr_only("branch to delete")?,
             Self::Update { .. } => pr_only("branch to update")?,
             Self::Thread(change) => {
                 pr_only("review threads")?;

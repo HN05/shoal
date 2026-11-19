@@ -308,36 +308,6 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
     assert!(!manager.decides_as_user(&mastering, &own).await.unwrap());
 }
 
-#[tokio::test]
-async fn deleting_a_pr_s_branch_follows_the_merge_permission() {
-    use crate::{
-        daemon::scope::Scoped,
-        forge::items::{action::Action as ItemAction, link::ItemKind},
-        protocol::{ItemContext, ItemMethod},
-    };
-    use shoal_protocol::space_names::SpaceSelector;
-
-    let (temp, manager) = manager().await;
-    let checkout = repository(temp.path(), "repo");
-    crate::daemon::test_support::git(
-        &checkout,
-        &["remote", "add", "origin", "https://github.com/team/repo"],
-    );
-    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
-    let chat = chat(&manager, "chat", "chat", Some(&repo), None).await;
-    let mut delete = ItemMethod::ItemAction {
-        target: ItemContext::space(SpaceSelector::id(&chat.id)).into(),
-        kind: ItemKind::Pr,
-        item: Some("12".parse().unwrap()),
-        action: ItemAction::DeleteBranch,
-        confirmed: None,
-    };
-    let request = undecided(delete.scope(&manager, &caller(&chat.id)).await.map(drop));
-    assert_eq!(request.target, Target::Action(PermissionKey::Merge));
-}
-
 #[test]
 fn a_long_request_names_its_start_and_a_digest_of_all_of_it() {
     use crate::forge::raw::{HttpMethod, RawRequest};

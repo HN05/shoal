@@ -124,10 +124,10 @@ fn shoal_s_and_the_forge_s_changes_name_the_item_and_change() {
     assert_eq!((label.as_str(), details.as_str()), ("PR opened", "#7"));
     let (label, details) = describe(&event(serde_json::json!({"kind": "item_changed",
         "item": {"kind": "pr", "url": "https://forge.example/team/repo/pulls/7",
-            "action": "delete_branch"}})));
+            "action": "cancel_auto_merge"}})));
     assert_eq!(
         (label.as_str(), details.as_str()),
-        ("PR changed", "#7 delete branch")
+        ("PR changed", "#7 cancel auto merge")
     );
     let (label, details) = describe(&event(serde_json::json!({"kind": "item_changed",
         "item": {"kind": "pr", "url": "https://forge.example/team/repo/pulls/7",

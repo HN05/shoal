@@ -531,7 +531,7 @@ Permissions say what agents may do: `"direct"` at once, `"gate"` after the
 that order from widest to narrowest; no built-in mode sets `"gate"`.
 `issue_open` and `pr_open` cover issues and PRs in the space's repository,
 `issue_other_repositories` issues in other repositories, `merge` `shoal merge`
-of a PR or a branch, its automatic merge, `unmerge` and deleting a PR's branch, `push` pushes to the repository's remotes by `shoal pr open` or
+of a PR or a branch, its automatic merge and `unmerge`, `push` pushes to the repository's remotes by `shoal pr open` or
 `git push` and deleting branches on the forge with `shoal branch delete`, `api_writes` `shoal forge api` requests other than reads,
 `daemon` installing, starting, stopping and restarting the daemon and
 `shoal update` while a daemon of the same Shoal answers to decide it, `limits` starting agents regardless of `max_heavy_agents` and

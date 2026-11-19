@@ -2753,9 +2753,9 @@ half done. Which commits the merge added is established from their trees and
 patches, never assumed, since reverting a guess can undo someone else's work. Actions run in the
 daemon, where scope applies: they act as the workspace's agent account, except
 the user's own login among an issue's assignees, while
-merging, deleting a PR's branch and a review's verdict stay the user's
+merging and a review's verdict stay the user's
 decisions unless a permission gives them to a scoped caller: `merge` its
-merges and branch deletions, as the agent account, and `pr_review` its
+merges, as the agent account, and `pr_review` its
 verdicts, as the host's `review_token`, a login of its own, since agents open
 their PRs as the agent account and forges take no verdict from a PR's
 author; the user's own act as the user's login.
