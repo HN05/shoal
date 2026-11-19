@@ -343,11 +343,75 @@ pub(crate) async fn own_admin_dir(path: &Path) -> Result<Option<PathBuf>> {
 }
 
 /// The admin directory, among those of the repository whose shared Git
-/// directory is `common_dir`, that records the directory at `path` as its
-/// worktree; `None` when none does, as when Git never created one there.
-/// It reads Git's record, not the worktree's `.git` link, which a `worktree
-/// add` cut short may not have written yet.
+/// directory is `common_dir`, that records the directory at `path` as the
+/// worktree an add finished; `None` when none does, as when Git never
+/// created one there. It reads Git's record, not the worktree's `.git`
+/// link, which an add cut short may not have written yet.
 pub async fn admin_dir_at(common_dir: &Path, path: &Path) -> Result<Option<PathBuf>> {
+    Ok(match registered_admin_dir(common_dir, path).await? {
+        Some(admin_dir) if !adding(&admin_dir).await? => Some(admin_dir),
+        _ => None,
+    })
+}
+
+/// Delete what a `git worktree add` at `path` that was cut short left, its
+/// admin directory among those of the repository whose shared Git
+/// directory is `common_dir` and the directory, while that holds nothing
+/// but the `.git` link the add wrote; whether there was any. A directory
+/// with files in it is refused: its checkout may have begun, and anyone
+/// may have worked there since.
+pub async fn discard_unfinished_add(common_dir: &Path, path: &Path) -> Result<bool> {
+    let Some(admin_dir) = registered_admin_dir(common_dir, path).await? else {
+        return Ok(false);
+    };
+    if !adding(&admin_dir).await? {
+        return Ok(false);
+    }
+    ensure!(
+        holds_only_link(path).await?,
+        "a worktree add that was cut short left files in {}; move or delete them",
+        path.display()
+    );
+    delete_with_admin_dir(path, Some(admin_dir)).await?;
+    Ok(true)
+}
+
+/// Whether the directory at `path` is missing or holds nothing but a
+/// worktree's `.git` link.
+async fn holds_only_link(path: &Path) -> Result<bool> {
+    let path = path.to_owned();
+    off_runtime::run(move || match std::fs::read_dir(&path) {
+        Ok(entries) => {
+            for entry in entries {
+                if entry?.file_name() != ".git" {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(true),
+        Err(error) => Err(error).with_context(|| format!("read {}", path.display())),
+    })
+    .await
+}
+
+/// The branch the worktree whose admin directory is `admin_dir` has
+/// checked out, as its `HEAD` names it; `None` at a detached HEAD.
+pub async fn admin_dir_branch(admin_dir: &Path) -> Result<Option<BranchName>> {
+    let head = admin_dir.join("HEAD");
+    let text = off_runtime::run(move || {
+        std::fs::read_to_string(&head).with_context(|| format!("read {}", head.display()))
+    })
+    .await?;
+    Ok((text.trim_end().strip_prefix("ref: "))
+        .and_then(super::strip_local)
+        .map(BranchName::from))
+}
+
+/// The admin directory among those of the repository whose shared Git
+/// directory is `common_dir` that records the directory at `path`, whether
+/// its add finished or not.
+async fn registered_admin_dir(common_dir: &Path, path: &Path) -> Result<Option<PathBuf>> {
     let worktrees = common_dir.join("worktrees");
     let entries = off_runtime::run(move || match std::fs::read_dir(&worktrees) {
         Ok(entries) => (entries.map(|entry| Ok(entry?.path())))
@@ -365,17 +429,11 @@ pub async fn admin_dir_at(common_dir: &Path, path: &Path) -> Result<Option<PathB
     Ok(None)
 }
 
-/// The branch the worktree whose admin directory is `admin_dir` has
-/// checked out, as its `HEAD` names it; `None` at a detached HEAD.
-pub async fn admin_dir_branch(admin_dir: &Path) -> Result<Option<BranchName>> {
-    let head = admin_dir.join("HEAD");
-    let text = off_runtime::run(move || {
-        std::fs::read_to_string(&head).with_context(|| format!("read {}", head.display()))
-    })
-    .await?;
-    Ok((text.trim_end().strip_prefix("ref: "))
-        .and_then(super::strip_local)
-        .map(BranchName::from))
+/// Whether the add that made the admin directory `admin_dir` is still
+/// under way or was cut short: Git keeps it locked until its checkout
+/// finishes, and Shoal never adds a worktree that stays locked.
+async fn adding(admin_dir: &Path) -> Result<bool> {
+    off_runtime::try_exists(&admin_dir.join("locked")).await
 }
 
 /// Whether the admin directory `admin_dir` records the directory at `path`

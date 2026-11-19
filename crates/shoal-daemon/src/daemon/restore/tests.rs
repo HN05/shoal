@@ -1255,7 +1255,7 @@ async fn a_scoped_caller_cannot_restore_a_chat_into_a_worktree_outside_its_scope
 }
 
 #[tokio::test]
-async fn a_failed_restore_is_retried_with_its_unsaved_files() {
+async fn a_restore_whose_worktree_fails_finishes_and_retries_it_with_its_unsaved_files() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
@@ -1273,10 +1273,14 @@ async fn a_failed_restore_is_retried_with_its_unsaved_files() {
         .await
         .unwrap();
     let blocked = crate::daemon::test_support::block_worktrees(&checkout);
-    let failed = manager.restore_workspace(&selector).await;
-    assert!(failed.is_err(), "{failed:?}");
+    // The restore goes on without its worktree, which a warning names, and
+    // takes its removal record.
+    let restored = manager.restore_workspace(&selector).await.unwrap();
     drop(blocked);
+    assert_eq!(restored.warnings.len(), 1, "{:?}", restored.warnings);
+    assert!(record(&manager, workspace.id.as_str()).await.is_none());
     let restored = manager.workspace(&selector).await.unwrap();
+    assert_eq!(restored.state, crate::state::WorkspaceState::Failed);
     assert!(restored.checkout.is_pending());
     let created = manager.create_pending_worktree(&selector).await.unwrap();
     let kept = fs::read_to_string(created.path.join("unsaved")).unwrap();

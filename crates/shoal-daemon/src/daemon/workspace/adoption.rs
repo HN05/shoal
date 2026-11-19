@@ -150,10 +150,7 @@ impl Manager {
         );
         let branch = workspace.require_branch("copying a worktree")?;
         match workspace.checkout.git_dir() {
-            Some(_) => {
-                self.verify_checkout(workspace, Some(branch.as_str()))
-                    .await?
-            }
+            Some(_) => self.keep_before_retry(workspace).await?,
             None => self.add_copied_worktree(repo, workspace, source).await?,
         }
         crate::fsutil::copy::copy_worktree(source, &workspace.path)

@@ -175,3 +175,38 @@ async fn removal_takes_the_worktree_a_cut_short_creation_left() -> Result<()> {
     assert!(manager.find_workspace(&workspace.id).await?.is_none());
     Ok(())
 }
+
+#[tokio::test]
+async fn a_retried_creation_adds_again_what_a_cut_short_add_left() -> Result<()> {
+    let (_temp, manager, workspace) = cut_short("topic").await?;
+    // Git keeps an add's admin directory locked until its checkout ends.
+    let repo = manager.repository(workspace.repository()).await?;
+    crate::daemon::test_support::git(
+        &repo.path,
+        &["worktree", "lock", workspace.path.to_str().unwrap()],
+    );
+    fs::write(workspace.path.join("edited"), "by hand")?;
+    let common_dir = CommonDir::of(&repo.path);
+    let recovered = manager.recover_git_dir(&workspace, &common_dir).await?;
+    assert!(recovered.checkout.unborn());
+    // Files there may be someone's work, which a retry keeps.
+    let selector = SpaceSelector::id(&workspace.id);
+    let refused = manager.create_pending_worktree(&selector).await;
+    assert!(refused.is_err(), "{refused:?}");
+    assert!(workspace.path.join("edited").exists());
+    // Once only the `.git` link the add wrote is left, it adds it again.
+    for entry in fs::read_dir(&workspace.path)? {
+        let entry = entry?;
+        match entry.file_name() == ".git" {
+            true => {}
+            false if entry.file_type()?.is_dir() => fs::remove_dir_all(entry.path())?,
+            false => fs::remove_file(entry.path())?,
+        }
+    }
+    let created = manager.create_pending_worktree(&selector).await?;
+    assert_eq!(created.state, WorkspaceState::Ready);
+    assert!(!created.path.join("edited").exists());
+    let admin_dir = git::git_dir(&created.path).await?;
+    assert!(!admin_dir.join("locked").exists());
+    Ok(())
+}

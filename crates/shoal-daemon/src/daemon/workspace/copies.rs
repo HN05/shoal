@@ -462,22 +462,7 @@ impl Manager {
         source: &Source,
         git_profile: Option<&str>,
     ) -> Result<Configured> {
-        let branch = workspace.branch().map(BranchName::as_str);
-        self.verify_checkout(workspace, branch).await?;
-        ensure!(
-            !git::status::operation_in_progress(&workspace.path).await?,
-            "a Git operation is under way in workspace {}; finish or abort it first",
-            workspace.name
-        );
-        let kept = self
-            .checkpoint(workspace, CheckpointCause::Refresh, None)
-            .await?;
-        ensure!(
-            !kept.files_omitted,
-            "checkpoint {} could not keep {}'s unsaved files; commit or remove them first",
-            kept.number,
-            workspace.name
-        );
+        self.keep_before_retry(workspace).await?;
         match &source.files {
             SourceFiles::Worktree(path) => {
                 git::copy::refill(path, &workspace.path, &source.head).await?;

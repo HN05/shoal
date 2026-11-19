@@ -251,8 +251,8 @@ impl Manager {
     }
 
     /// The `workspace` of `repo` with the admin directory of the worktree an
-    /// earlier try left recorded, and how its worktree is created from
-    /// `source`.
+    /// earlier try left recorded, once what an add it cut short left is
+    /// gone, and how its worktree is created from `source`.
     async fn prepared_creation(
         &self,
         repo: &Repository,
@@ -260,6 +260,7 @@ impl Manager {
         source: PendingSource,
     ) -> Result<(Workspace, Creation)> {
         let common_dir = CommonDir::of(&repo.path);
+        self.discard_unfinished_add(workspace, &common_dir).await?;
         let workspace = self.recover_git_dir(workspace, &common_dir).await?;
         let creation = self.creation(&workspace, source).await?;
         Ok((workspace, creation))
@@ -335,16 +336,50 @@ impl Manager {
 
     /// Configure the worktree an earlier creation of `workspace` left once
     /// it verifies as the one Git created for it, still on its recorded
-    /// branch or detached, writing a restore's `files` into it again.
+    /// branch or detached, writing a restore's `files` into it again once a
+    /// checkpoint keeps what it holds.
     async fn reconfigure_worktree(
         &self,
         workspace: &Workspace,
         files: Option<&RestoredFiles>,
         git_profile: Option<&str>,
     ) -> Result<Configured> {
+        match files {
+            Some(_) => self.keep_before_retry(workspace).await?,
+            None => {
+                let branch = workspace.branch().map(shoal_refs::BranchName::as_str);
+                self.verify_checkout(workspace, branch).await?
+            }
+        }
+        self.configure_worktree(workspace, files, git_profile).await
+    }
+
+    /// Verify the worktree an earlier creation of `workspace` left as the
+    /// one Git created for it, still on its recorded branch or detached,
+    /// and keep what it holds in a checkpoint before a retry writes files
+    /// into it again, refusing a Git operation under way there and what a
+    /// checkpoint cannot keep.
+    pub(in crate::daemon::workspace) async fn keep_before_retry(
+        &self,
+        workspace: &Workspace,
+    ) -> Result<()> {
         let branch = workspace.branch().map(shoal_refs::BranchName::as_str);
         self.verify_checkout(workspace, branch).await?;
-        self.configure_worktree(workspace, files, git_profile).await
+        ensure!(
+            !crate::git::status::operation_in_progress(&workspace.path).await?,
+            "a Git operation is under way in workspace {}; finish or abort it first",
+            workspace.name
+        );
+        let kept = self
+            .checkpoint(workspace, crate::model::CheckpointCause::Refresh, None)
+            .await?;
+        ensure!(
+            !kept.files_omitted,
+            "checkpoint {} could not keep {}'s unsaved files; commit or remove them first",
+            kept.number,
+            workspace.name
+        );
+        Ok(())
     }
 
     /// The pending worktree of `workspace`, which goes back to preparing

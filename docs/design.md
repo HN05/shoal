@@ -338,7 +338,13 @@ and the store refuses a created one without its base and admin directory.
 Git creates a worktree before Shoal records its admin directory, so a retry or
 removal of a pending workspace without one takes the admin directory whose
 `gitdir` names its path, unless another workspace marked it; one without has
-no worktree. Only a created worktree is checked for a move when it goes
+no worktree. An add Git still marks as under way was cut short before its
+checkout finished, so a retry deletes it and adds the worktree again while its
+directory holds only the `.git` link the add wrote, and refuses while it holds
+files, which may be someone's work; a retry that writes files into a
+worktree an earlier try left keeps what it holds in a checkpoint first. A
+restore whose worktree fails still opens the space with its links and agents,
+the workspace failed, so the retry needs nothing of the removal record. Only a created worktree is checked for a move when it goes
 missing, so after a `git worktree move` during a cut-short creation `shoal rm`
 forgets the record, keeping the branch and the moved files. The request names an agent, mode or
 model only where the caller chose one; the daemon resolves the rest under the

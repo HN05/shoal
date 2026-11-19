@@ -115,3 +115,41 @@ async fn a_failed_outside_copy_is_retried_from_its_source() {
     assert_eq!(copied, "copied");
     manager.store.shutdown().await;
 }
+
+#[tokio::test]
+async fn a_retried_outside_copy_keeps_what_the_earlier_try_left() {
+    use crate::daemon::test_support::{git, manager, repository};
+    use std::os::unix::fs::PermissionsExt;
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let source = root.path().join("outside");
+    git(
+        &path,
+        &["worktree", "add", "-b", "outside", source.to_str().unwrap()],
+    );
+    let source = fs::canonicalize(source).unwrap();
+    // A file it cannot read fails the copy once Git created the worktree.
+    let unreadable = source.join("unreadable");
+    fs::write(&unreadable, "secret").unwrap();
+    fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o000)).unwrap();
+    let failed = manager.adopt_workspace(&repo.id, &source, true).await;
+    assert!(failed.is_err(), "{failed:?}");
+    fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o644)).unwrap();
+    let workspace = (manager.list_workspaces().await.unwrap().into_iter())
+        .find(|workspace| workspace.path != source)
+        .unwrap();
+    assert!(workspace.checkout.git_dir().is_some(), "{workspace:?}");
+    fs::write(workspace.path.join("edited"), "by hand").unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    manager.create_pending_worktree(&selector).await.unwrap();
+    let checkpoints = manager.checkpoints(&selector, None).await.unwrap().unwrap();
+    let kept = checkpoints.iter().any(|checkpoint| {
+        git(&path, &["show", &format!("{}:edited", checkpoint.commit)]) == "by hand"
+    });
+    assert!(kept, "{checkpoints:?}");
+    manager.store.shutdown().await;
+}

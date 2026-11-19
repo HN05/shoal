@@ -49,8 +49,8 @@ async fn reopen(ctx: &Context, removed: &RemovedSpace) -> Result<Reopened> {
     Ok(opened)
 }
 
-/// [`prepare_restored`], refusing a workspace whose setup did not finish
-/// with the command that retries it.
+/// [`prepare_restored`], refusing a workspace whose preparation did not
+/// finish with the command that retries it.
 pub(in crate::cli::commands) async fn prepare_set_up(
     ctx: &Context,
     restored: RestoredSpace,
@@ -63,13 +63,13 @@ pub(in crate::cli::commands) async fn prepare_set_up(
         RestoredSpace::Chat(restored) => (restored.chat.name.clone(), restored.chat.number),
     };
     (prepare_restored(ctx, restored).await?).with_context(|| {
-        format!("the setup of {name} did not finish; shoal restore {number} retries it")
+        format!("the preparation of {name} did not finish; shoal restore {number} retries it")
     })
 }
 
 /// Prepare the space `restored` opened again: a workspace as
 /// [`prepare_reopened`] does, a chat as [`reopened_chat`] does; `None` when
-/// a workspace's setup did not finish.
+/// a workspace's worktree or setup did not finish.
 async fn prepare_restored(ctx: &Context, restored: RestoredSpace) -> Result<Option<Reopened>> {
     match restored {
         RestoredSpace::Workspace(restored) => prepare_reopened(ctx, *restored).await,
@@ -246,7 +246,7 @@ fn saved_executions(removed: &RemovedSpace) -> BTreeSet<ExecutionId> {
 
 /// Print the reopening's warnings, trust its path for the agents that resume
 /// there and put their session files in place, set the workspace up and
-/// link its PRs again; `None` when its setup did not finish.
+/// link its PRs again; `None` when its worktree or setup did not finish.
 pub(in crate::cli::commands) async fn prepare_reopened(
     ctx: &Context,
     restored: RestoredWorkspace,
@@ -274,6 +274,10 @@ pub(in crate::cli::commands) async fn prepare_reopened(
     }
     for pr in &removed.links.prs {
         workspace = crate::opened_pull::link(&ctx.paths, workspace, pr.clone()).await?;
+    }
+    // Its worktree failed, as a warning said; its preparation retries it.
+    if workspace.checkout.is_pending() {
+        return Ok(None);
     }
     Ok(Some(Reopened {
         agents_saved: !(removed.agents.is_empty() && removed.last_sessions.is_empty()),

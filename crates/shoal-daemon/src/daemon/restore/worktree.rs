@@ -17,7 +17,10 @@ impl Manager {
     /// Open the worktree of the workspace `removed` records again, below
     /// `parent`, on its branch at the removed HEAD, or at that commit for a
     /// workspace without a branch, with its unsaved files, adding to
-    /// `warnings` when another branch has to take it.
+    /// `warnings` when another branch has to take it. One recorded whose
+    /// worktree failed is reopened too, failed, with the failure among
+    /// `warnings`, so the restore goes on and its preparation retries the
+    /// worktree.
     pub(super) async fn reopen_worktree(
         &self,
         removed: &RemovedSpace,
@@ -28,15 +31,45 @@ impl Manager {
             id: Some(removed.space_id.clone()),
             parent,
         };
-        match removed.kept_workspace()?.head.clone() {
-            Head::Commit(at) => Ok(OpenedWorkspace {
-                workspace: (self.restore_commit_workspace(removed, new, at)).await?,
-                reused: false,
-            }),
+        let opened = match removed.kept_workspace()?.head.clone() {
+            Head::Commit(at) => {
+                (self.restore_commit_workspace(removed, new, at).await).map(|workspace| {
+                    OpenedWorkspace {
+                        workspace,
+                        reused: false,
+                    }
+                })
+            }
             Head::Branch(branch) => {
                 (self.restore_branch_workspace(removed, branch, new, warnings)).await
             }
+        };
+        match opened {
+            Ok(opened) => Ok(opened),
+            Err(error) => (self.failed_reopening(removed, error, warnings)).await,
         }
+    }
+
+    /// The workspace `removed` records, reopened with the pending worktree
+    /// whose creation failed with `error`, which joins `warnings`; `error`
+    /// itself when the restore recorded no workspace.
+    async fn failed_reopening(
+        &self,
+        removed: &RemovedSpace,
+        error: anyhow::Error,
+        warnings: &mut Vec<String>,
+    ) -> Result<OpenedWorkspace> {
+        let Some(workspace) = self.find_workspace(&removed.space_id).await? else {
+            return Err(error);
+        };
+        if !workspace.checkout.is_pending() {
+            return Err(error);
+        }
+        warnings.push(format!("{error:#}"));
+        Ok(OpenedWorkspace {
+            workspace,
+            reused: false,
+        })
     }
 
     /// Open the removed workspace `removed` again as `new` places it, on its

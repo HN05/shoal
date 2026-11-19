@@ -246,6 +246,29 @@ impl Manager {
         }
     }
 
+    /// Delete what a `git worktree add` for the pending `workspace`, without
+    /// an admin directory recorded, left when it was cut short, as Git
+    /// marks it until its checkout finishes, so that its creation adds the
+    /// worktree again. `common_dir` is the repository's shared Git
+    /// directory.
+    pub(crate) async fn discard_unfinished_add(
+        &self,
+        workspace: &Workspace,
+        common_dir: &CommonDir,
+    ) -> Result<()> {
+        if !workspace.checkout.unborn() {
+            return Ok(());
+        }
+        let common_dir = common_dir.path().await?;
+        if git::worktree::discard_unfinished_add(common_dir, &workspace.path).await? {
+            crate::daemon::log!(
+                "deleted what a cut-short worktree add left for {}",
+                workspace.name
+            );
+        }
+        Ok(())
+    }
+
     /// Record the admin directory of the worktree Git created for the
     /// pending `workspace` that its creation, failed or cut short, did not
     /// record: the one among those of the repository, whose shared Git
