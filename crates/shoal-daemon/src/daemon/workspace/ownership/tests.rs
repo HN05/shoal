@@ -25,7 +25,10 @@ fn a_marker_or_a_recorded_path_claims_an_admin_directory() -> Result<()> {
     let different = temp.path().join("different");
     fs::create_dir(&different)?;
     let mut other = workspace();
-    other.git_dir = Some(temp.path().join("admin/../admin"));
+    other.checkout = crate::model::Checkout::Pending {
+        base: None,
+        git_dir: Some(temp.path().join("admin/../admin")),
+    };
     assert!(claims_git_dir(&other, &git_dir, None));
     assert!(!claims_git_dir(&other, &different, None));
     assert!(claims_git_dir(&other, &different, Some(other.id.as_str())));
@@ -142,14 +145,14 @@ async fn cut_short(name: &str) -> Result<(tempfile::TempDir, std::sync::Arc<Mana
 #[tokio::test]
 async fn a_retried_creation_records_the_admin_directory_a_cut_short_one_left() -> Result<()> {
     let (_temp, manager, workspace) = cut_short("topic").await?;
-    assert!(workspace.unborn());
+    assert!(workspace.checkout.unborn());
     // A worktree whose creation is pending was never ready to be moved.
     assert_eq!(manager.missing_worktree(&workspace).await?, None);
     let selector = SpaceSelector::id(&workspace.id);
     let created = manager.create_pending_worktree(&selector).await?;
     assert_eq!(created.state, WorkspaceState::Ready);
     let admin_dir = git::git_dir(&created.path).await?;
-    assert_eq!(created.git_dir.as_deref(), Some(admin_dir.as_path()));
+    assert_eq!(created.checkout.git_dir(), Some(admin_dir.as_path()));
     assert_eq!(
         marked_owner(&admin_dir)?.as_deref(),
         Some(created.id.as_str())

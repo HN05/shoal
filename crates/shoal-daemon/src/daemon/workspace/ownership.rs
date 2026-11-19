@@ -7,7 +7,12 @@ use super::super::{
     },
 };
 use crate::refusal::{Reason, Refusal};
-use crate::{fsutil::off_runtime, git, model::Workspace, state::WorkspaceState};
+use crate::{
+    fsutil::off_runtime,
+    git,
+    model::{Checkout, Workspace},
+    state::WorkspaceState,
+};
 use anyhow::{Context, Result, ensure};
 use rusqlite::params;
 use shoal_ids::space_ids::SpaceId;
@@ -31,7 +36,7 @@ pub(super) fn claims_git_dir(workspace: &Workspace, git_dir: &Path, marker: Opti
 /// comparing real paths where both exist.
 fn records_git_dir(workspace: &Workspace, git_dir: &Path) -> bool {
     let real = fs::canonicalize(git_dir).ok();
-    workspace.git_dir.as_ref().is_some_and(|recorded| {
+    workspace.checkout.git_dir().is_some_and(|recorded| {
         match (real.as_ref(), fs::canonicalize(recorded).ok()) {
             (Some(real), Some(recorded)) => recorded == *real,
             _ => recorded == git_dir,
@@ -185,7 +190,7 @@ impl Manager {
         workspace: &Workspace,
         common_dir: &CommonDir,
     ) -> Result<PathBuf> {
-        if workspace.unborn() {
+        if workspace.checkout.unborn() {
             let name = &workspace.name;
             let message =
                 format!("workspace {name} has no worktree yet; its preparation creates it");
@@ -212,7 +217,7 @@ impl Manager {
         }
         let workspace = &self.recover_git_dir(workspace, common_dir).await?;
         let verified = (self.verify_worktree_against(workspace, common_dir).await).map(drop);
-        if workspace.git_dir.is_some() {
+        if workspace.checkout.git_dir().is_some() {
             return verified;
         }
         verified.with_context(|| {
@@ -257,7 +262,7 @@ impl Manager {
         workspace: &Workspace,
         common_dir: &CommonDir,
     ) -> Result<Workspace> {
-        if !workspace.unborn() {
+        if !workspace.checkout.unborn() {
             return Ok(workspace.clone());
         }
         let common_dir = common_dir.path().await?;
@@ -420,7 +425,7 @@ impl Manager {
             let (git_dir, id) = (git_dir.clone(), workspace.id.clone());
             off_runtime::run(move || mark_git_dir(&git_dir, &id)).await?
         };
-        if workspace.git_dir.as_ref() == Some(&git_dir) {
+        if workspace.checkout.git_dir() == Some(git_dir.as_path()) {
             return Ok(!marked);
         }
         let id = workspace.id.clone();
@@ -456,10 +461,10 @@ impl Manager {
     /// link to another existing path needs proof that the directory is ours.
     /// A worktree whose creation is pending was never ready to be moved.
     pub(crate) async fn missing_worktree(&self, workspace: &Workspace) -> Result<Option<PathBuf>> {
-        let directory = match &workspace.git_dir {
-            Some(directory) if !workspace.pending_worktree => directory.clone(),
-            _ => return Ok(None),
+        let Checkout::Created { git_dir, .. } = &workspace.checkout else {
+            return Ok(None);
         };
+        let directory = git_dir.clone();
         let workspace = workspace.clone();
         off_runtime::run(move || moved_worktree(&workspace, &directory)).await
     }
@@ -480,7 +485,7 @@ pub(in crate::daemon) async fn verify_admin_dir_owner(
 /// it recorded.
 fn verify_git_dir(workspace: &Workspace, git_dir: &Path) -> Result<()> {
     verify_owner(git_dir, &workspace.id)?;
-    if let Some(expected) = &workspace.git_dir {
+    if let Some(expected) = workspace.checkout.git_dir() {
         ensure!(
             fs::canonicalize(expected)? == git_dir,
             "workspace path now refers to a different Git worktree"

@@ -217,7 +217,7 @@ impl Manager {
             Creation::Outside(path) => (self.create_outside_copy(repo, workspace, &path)).await,
             // An earlier try created it, then failed to configure it.
             Creation::Branch(_, files) | Creation::Commit(_, files)
-                if workspace.git_dir.is_some() =>
+                if workspace.checkout.git_dir().is_some() =>
             {
                 (self.reconfigure_worktree(workspace, files.as_ref(), git_profile)).await
             }

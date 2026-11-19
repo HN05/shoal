@@ -114,7 +114,7 @@ async fn a_workspace_moves_with_its_subtree_which_opens_below_it_again() {
     assert_eq!(opened, [worker.clone(), child.clone(), notes.clone()]);
     let (below, parent) = placed(&importing, &child).await;
     assert_eq!(parent.as_ref(), Some(&worker));
-    assert_eq!(below.base_ref.as_deref(), Some("refs/heads/worker"));
+    assert_eq!(below.checkout.base_ref(), Some("refs/heads/worker"));
     let base = below.part.base_workspace.as_ref().map(|base| &base.id);
     assert_eq!(base, Some(&worker));
     assert_eq!(
@@ -194,7 +194,7 @@ async fn a_copied_subtree_opens_as_copies_below_the_copies() {
     let branch = worker_copy.branch().unwrap();
     assert_ne!(branch.as_str(), "worker");
     let base = format!("refs/heads/{branch}");
-    assert_eq!(copy.base_ref.as_deref(), Some(base.as_str()));
+    assert_eq!(copy.checkout.base_ref(), Some(base.as_str()));
     assert_eq!(
         fs::read_to_string(copy.path.join("scratch")).unwrap(),
         "notes\n"
@@ -338,7 +338,7 @@ async fn a_selection_leaves_the_other_spaces_below_one_level_up() {
     assert_eq!(placed(&manager, &child.id).await.1.as_ref(), Some(&top.id));
     let (stacked, parent) = placed(&manager, &stacked.id).await;
     assert_eq!(parent.as_ref(), Some(&top.id));
-    assert_eq!(stacked.base_ref.as_deref(), Some("refs/heads/worker"));
+    assert_eq!(stacked.checkout.base_ref(), Some("refs/heads/worker"));
     // Neither the removal nor a later sweep of kept branches deletes it.
     (manager.delete_kept_branches_kept_elsewhere(&repo.id, &[]))
         .await

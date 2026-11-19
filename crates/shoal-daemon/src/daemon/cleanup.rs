@@ -383,7 +383,7 @@ async fn deleted(workspace: &crate::model::Worktree) -> Result<bool> {
     Ok(matches!(
         workspace.state,
         WorkspaceState::Ready | WorkspaceState::Failed
-    ) && workspace.git_dir.is_some()
+    ) && workspace.checkout.git_dir().is_some()
         && !off_runtime::try_exists(&workspace.path).await?)
 }
 

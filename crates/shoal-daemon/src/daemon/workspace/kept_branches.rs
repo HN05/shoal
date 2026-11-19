@@ -321,7 +321,7 @@ impl Manager {
         let mut branches = WorkspaceBranches::default();
         for workspace in workspaces {
             branches.own.extend(workspace.part.branch().cloned());
-            let base = (workspace.base_ref.as_deref()).and_then(git::strip_local);
+            let base = (workspace.checkout.base_ref()).and_then(git::strip_local);
             branches.bases.extend(base.map(BranchName::from));
         }
         Ok(branches)

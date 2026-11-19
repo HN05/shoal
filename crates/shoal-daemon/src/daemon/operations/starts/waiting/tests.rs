@@ -398,7 +398,7 @@ async fn a_blocked_copy_takes_its_source_as_it_is_once_its_blockers_clear() {
     // Named by its number, which the wait may free and give another.
     let selector = SpaceSelector::parse(&source.number.to_string()).unwrap();
     let copy = start_copy(&manager, &repo, (selector, &api), None).await;
-    assert!(copy.pending_worktree && !copy.path.exists());
+    assert!(copy.checkout.is_pending() && !copy.path.exists());
     let id = copy.id.clone();
     let plan: String = (manager.store)
         .run(move |db| {
@@ -416,7 +416,7 @@ async fn a_blocked_copy_takes_its_source_as_it_is_once_its_blockers_clear() {
     let selector = SpaceSelector::id(&copy.id);
     let created = manager.create_pending_worktree(&selector).await.unwrap();
     assert!(created.path.join("later").exists());
-    assert!(!created.pending_worktree);
+    assert!(!created.checkout.is_pending());
     assert!(created.copied_from.is_some());
 }
 

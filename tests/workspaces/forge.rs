@@ -448,7 +448,10 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     ]);
     assert_eq!(branch["id"], added["id"]);
     let workspace = &fixture.ok(&["status", &fixture.id("Top change")])["workspace"];
-    assert_eq!(workspace["base_ref"], "refs/remotes/origin/stack/base");
+    assert_eq!(
+        workspace["checkout"]["base"]["reference"],
+        "refs/remotes/origin/stack/base"
+    );
     let path_in = Path::new(workspace["path"].as_str().unwrap());
     assert_eq!(
         git(
@@ -2414,7 +2417,10 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     assert_eq!(workspace["at"]["made_for"], serde_json::json!({"pr": 8}));
     assert_eq!(workspace["setup_skipped"], true);
     // Its diff, and a manual review's {diff_base}, compare with the PR's base.
-    assert_eq!(workspace["base_ref"], "refs/remotes/origin/main");
+    assert_eq!(
+        workspace["checkout"]["base"]["reference"],
+        "refs/remotes/origin/main"
+    );
     let pr = serde_json::json!({"kind": "pr", "url": url, "title": "PR 8"});
     assert_eq!(workspace["links"]["prs"], serde_json::json!([pr]));
 

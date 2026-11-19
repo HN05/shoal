@@ -195,9 +195,9 @@ async fn branch_target(
         return Ok(Target::Base(base.into()));
     }
     let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await;
-    Ok(match (&workspace.base_ref, default) {
-        (Some(base), Ok(default)) if *base != git::local_ref(&default) => {
-            Target::Base(base.clone())
+    Ok(match (workspace.checkout.base_ref(), default) {
+        (Some(base), Ok(default)) if base != git::local_ref(&default) => {
+            Target::Base(base.to_owned())
         }
         _ => Target::DefaultBranch,
     })

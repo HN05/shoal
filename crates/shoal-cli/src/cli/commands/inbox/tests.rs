@@ -167,6 +167,7 @@ fn marks_wait_in_the_inbox_only_while_their_agent_is_not_working() {
             "workdir": {"kind": "worktree", "path": "/w", "workspace": {"id": id, "name": id, "branch": id}},
             "id": id, "repository_id": "r1", "name": id, "path": "/w", "branch": id,
             "state": "ready", "agent_state": agent(state),
+            "checkout": {"state": "created", "base": {"commit": "abc"}, "git_dir": "/admin"},
         }))
         .unwrap();
         workspace.review = vec![mark.clone()];

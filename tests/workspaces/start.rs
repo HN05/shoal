@@ -293,7 +293,7 @@ fn a_detached_start_returns_once_its_workspace_is_recorded() {
         panic!("expected the workspace, then the entry: {values:?}");
     };
     assert_eq!(workspace["state"], "preparing", "{workspace}");
-    assert_eq!(workspace["pending_worktree"], true, "{workspace}");
+    assert_eq!(workspace["checkout"]["state"], "pending", "{workspace}");
     assert_eq!(entry["state"], "queued", "{entry}");
     assert_eq!(
         entry["blockers"],

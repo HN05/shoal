@@ -93,7 +93,7 @@ impl Preparing {
     /// the new worktree: for what its agent waits for, or, with nothing
     /// following it, for disk space.
     pub(super) fn may_wait(&self, workspace: &Workspace) -> bool {
-        workspace.pending_worktree && (!self.blockers.is_empty() || self.unfollowed)
+        workspace.checkout.is_pending() && (!self.blockers.is_empty() || self.unfollowed)
     }
 
     /// Queue its agent on the start's `issue`, which prompts it, with the

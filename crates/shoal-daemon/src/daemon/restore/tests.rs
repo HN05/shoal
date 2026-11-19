@@ -854,7 +854,7 @@ async fn restore_keeps_the_recorded_base_and_its_stack() {
         .create_workspace(&repo.id, "upper".into(), Some("lower".into()), None, None)
         .await
         .unwrap();
-    assert_eq!(upper.base_ref.as_deref(), Some("refs/heads/lower"));
+    assert_eq!(upper.checkout.base_ref(), Some("refs/heads/lower"));
     manager
         .remove_selected(
             &SpaceSelector::id(&upper.id),
@@ -871,7 +871,7 @@ async fn restore_keeps_the_recorded_base_and_its_stack() {
         .workspace(&manager.named("upper").await)
         .await
         .unwrap();
-    assert_eq!(restored.base_ref.as_deref(), Some("refs/heads/lower"));
+    assert_eq!(restored.checkout.base_ref(), Some("refs/heads/lower"));
     assert_eq!(
         restored
             .part
@@ -1277,7 +1277,7 @@ async fn a_failed_restore_is_retried_with_its_unsaved_files() {
     assert!(failed.is_err(), "{failed:?}");
     drop(blocked);
     let restored = manager.workspace(&selector).await.unwrap();
-    assert!(restored.pending_worktree);
+    assert!(restored.checkout.is_pending());
     let created = manager.create_pending_worktree(&selector).await.unwrap();
     let kept = fs::read_to_string(created.path.join("unsaved")).unwrap();
     assert_eq!(kept, "kept");

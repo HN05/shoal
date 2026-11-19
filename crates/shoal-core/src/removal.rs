@@ -244,7 +244,7 @@ async fn inspect_worktree(
 /// out at `repo`, is Git's for this workspace; a directory without one is
 /// only once its identity proves it.
 pub async fn disowned(workspace: &Workspace, repo: &Path) -> Result<Option<Leftover>> {
-    match &workspace.git_dir {
+    match workspace.checkout.git_dir() {
         Some(admin_dir) => git::worktree::disowned(&workspace.path, admin_dir).await,
         None if workspace.disposable => {
             Ok(
@@ -342,8 +342,8 @@ fn start_branch(workspace: &Workspace) -> Option<&str> {
     let branch = match &workspace.base_workspace {
         Some(base) => base.branch.as_ref().map(BranchName::as_str)?,
         None => workspace
-            .base_ref
-            .as_deref()?
+            .checkout
+            .base_ref()?
             .strip_prefix(git::LOCAL_REFS)?,
     };
     (workspace.branch().map(BranchName::as_str) != Some(branch)).then_some(branch)

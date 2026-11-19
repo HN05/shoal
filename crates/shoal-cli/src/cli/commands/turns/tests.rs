@@ -27,6 +27,7 @@ fn workspace() -> Space {
             "path": "/work/fix",
             "branch": "fix",
             "state": "ready",
+            "checkout": {"state": "created", "base": {"commit": "abc"}, "git_dir": "/admin"},
         }))
         .unwrap(),
     )

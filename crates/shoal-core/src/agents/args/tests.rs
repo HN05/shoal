@@ -70,6 +70,7 @@ fn workspace() -> crate::model::Workspace {
         "workdir": {"kind": "worktree", "path": "/work/topic", "workspace": {"id": "id", "name": "topic", "branch": "topic"}},
         "id": "id", "repository_id": "repo", "name": "topic", "branch": "topic",
         "path": "/work/topic", "state": "ready", "created_at": 0, "updated_at": 0,
+        "checkout": {"state": "created", "base": {"commit": "abc"}, "git_dir": "/admin"},
     }))
     .unwrap()
 }

@@ -14,6 +14,7 @@ fn workspace(index: usize) -> Value {
         "id": index.to_string(), "kind": "workspace", "repository_id": "repo",
         "name": format!("workspace-{index:02}"), "path": "/unused",
         "branch": "branch", "state": "ready",
+        "checkout": {"state": "created", "base": {"commit": "abc"}, "git_dir": "/admin"},
         "workdir": {"kind": "worktree", "path": "/unused", "workspace": {
             "id": index.to_string(), "name": format!("workspace-{index:02}"), "branch": "branch",
         }},

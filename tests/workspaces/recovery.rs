@@ -316,7 +316,10 @@ fn daemon_startup_quarantines_operations_and_retains_claims_across_restarts() {
                 saved["state"],
                 if *state == "ready" { "ready" } else { "failed" }
             );
-            assert_eq!(saved["git_dir"], workspace["git_dir"]);
+            assert_eq!(
+                saved["checkout"]["git_dir"],
+                workspace["checkout"]["git_dir"]
+            );
             let error = saved["error"].as_str().unwrap();
             match *state {
                 "ready" | "failed" => assert_eq!(error, "original error"),
@@ -452,7 +455,10 @@ pub(crate) const OWNER_MARKER: &str = "shoal-workspace";
 
 /// Make a workspace look like one recorded before owner markers existed.
 fn unmark_owner(workspace: &Value) {
-    fs::remove_file(Path::new(workspace["git_dir"].as_str().unwrap()).join(OWNER_MARKER)).unwrap();
+    fs::remove_file(
+        Path::new(workspace["checkout"]["git_dir"].as_str().unwrap()).join(OWNER_MARKER),
+    )
+    .unwrap();
 }
 
 #[test]
@@ -460,7 +466,7 @@ fn the_owner_marker_keeps_a_workspace_verified_across_restarts() {
     let mut fixture = Fixture::with_config(Some("[resources.lock]\n"));
     let workspace = fixture.add("marked");
     let path = Path::new(workspace["path"].as_str().unwrap());
-    let marker = Path::new(workspace["git_dir"].as_str().unwrap()).join(OWNER_MARKER);
+    let marker = Path::new(workspace["checkout"]["git_dir"].as_str().unwrap()).join(OWNER_MARKER);
     assert_eq!(
         fs::read_to_string(&marker).unwrap().trim_end(),
         workspace["id"].as_str().unwrap()
@@ -509,7 +515,7 @@ fn adopting_a_workspace_path_again_reclaims_its_unverifiable_worktree() {
     let other = fixture.add("other");
     let path = Path::new(workspace["path"].as_str().unwrap());
     let path_arg = path.to_str().unwrap();
-    let marker = Path::new(workspace["git_dir"].as_str().unwrap()).join(OWNER_MARKER);
+    let marker = Path::new(workspace["checkout"]["git_dir"].as_str().unwrap()).join(OWNER_MARKER);
     fs::write(path.join("dirty"), "preserve me").unwrap();
     let lease = fixture.ok(&[
         "acquire",
@@ -577,7 +583,7 @@ fn reconcile_reclaims_unverifiable_worktrees_only_on_explicit_request() {
     let workspace = fixture.add("reclaimed");
     let other = fixture.add("other");
     let path = Path::new(workspace["path"].as_str().unwrap());
-    let marker = Path::new(workspace["git_dir"].as_str().unwrap()).join(OWNER_MARKER);
+    let marker = Path::new(workspace["checkout"]["git_dir"].as_str().unwrap()).join(OWNER_MARKER);
     fs::write(path.join("dirty"), "preserve me").unwrap();
     let lease = fixture.ok(&[
         "acquire",
@@ -717,7 +723,7 @@ fn reconcile_detects_moved_and_replaced_worktrees_without_deleting_data() {
     repaired_workspaces(&fixture, &["original", "--repair"]);
     // Replace the admin directory at its SAME path, proving pathname checks alone
     // are insufficient. Git re-creates it without Shoal's owner marker.
-    let admin = Path::new(workspace["git_dir"].as_str().unwrap());
+    let admin = Path::new(workspace["checkout"]["git_dir"].as_str().unwrap());
     let old = fixture.root.path().join("old-admin");
     fs::rename(admin, &old).unwrap();
     fs::create_dir(admin).unwrap();

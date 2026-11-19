@@ -474,7 +474,7 @@ impl Manager {
         // A new branch exists only once its pending worktree is created.
         let local = git::strip_local(selector).unwrap_or(selector);
         let pending = (workspaces.iter()).find(|w| {
-            w.pending_worktree
+            w.checkout.is_pending()
                 && w.repository() == &repo.id
                 && w.branch().is_some_and(|branch| branch.as_str() == local)
         });

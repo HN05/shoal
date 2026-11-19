@@ -123,7 +123,7 @@ impl Manager {
     /// `space` acting in its own repository, reading its `origin` in the
     /// registered checkout while its worktree is still to be created.
     pub(crate) async fn own_link_space(&self, space: Space) -> Result<LinkSpace> {
-        let pending = (space.worktree()).is_some_and(|worktree| worktree.pending_worktree);
+        let pending = (space.worktree()).is_some_and(|worktree| worktree.checkout.is_pending());
         let mut linked = LinkSpace::own(space)?;
         if pending {
             linked.origin_in = Some(self.repository(linked.repository_id()).await?.path);
@@ -201,7 +201,9 @@ impl Manager {
     /// is still to be created, which reads its forge in the checkout.
     pub(crate) async fn verify_space(&self, space: &Space) -> Result<()> {
         match space.to_workspace() {
-            Some(workspace) if !workspace.unborn() => self.verify_worktree(&workspace).await,
+            Some(workspace) if !workspace.checkout.unborn() => {
+                self.verify_worktree(&workspace).await
+            }
             _ => Ok(()),
         }
     }

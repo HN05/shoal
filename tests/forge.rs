@@ -3153,7 +3153,8 @@ fn pr_open_refuses_unverified_or_switched_worktrees_before_pushing() {
         assert!(!pushed.status.success());
         assert!(fixture.requests().is_empty());
     };
-    let marker = Path::new(workspace["git_dir"].as_str().unwrap()).join("shoal-workspace");
+    let marker =
+        Path::new(workspace["checkout"]["git_dir"].as_str().unwrap()).join("shoal-workspace");
     let owner = fs::read_to_string(&marker).unwrap();
     fs::write(&marker, "another-workspace\n").unwrap();
     refused();
@@ -5644,7 +5645,8 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
     // A worktree replaced while the proposal waits is refused before
     // anything is sent, and the proposal stays.
     let workspace = fixture.ok(&["status", &fixture.id("topic")])["workspace"].clone();
-    let marker = Path::new(workspace["git_dir"].as_str().unwrap()).join("shoal-workspace");
+    let marker =
+        Path::new(workspace["checkout"]["git_dir"].as_str().unwrap()).join("shoal-workspace");
     let owner = fs::read_to_string(&marker).unwrap();
     fs::write(&marker, "another-workspace\n").unwrap();
     let id = proposed["number"].as_str().unwrap().to_owned();

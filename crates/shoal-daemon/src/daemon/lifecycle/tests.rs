@@ -299,8 +299,8 @@ async fn the_users_removal_takes_a_workspace_whose_setup_never_started() {
 #[tokio::test]
 async fn removal_waiting_for_creation_keeps_what_creation_recorded() {
     let (_root, manager, workspace) = fixture().await;
-    let base = (workspace.base_ref.clone(), workspace.base_commit.clone());
-    assert!(base.0.is_some() && base.1.is_some());
+    let base = workspace.checkout.base().cloned();
+    assert!(base.as_ref().is_some_and(|base| base.reference.is_some()));
     // Creation holds the Git gate and has yet to record the base.
     let creating = manager.gates.lock_git(workspace.repository()).await;
     let gate = manager.gates.git_gate(workspace.repository());
@@ -338,13 +338,13 @@ async fn removal_waiting_for_creation_keeps_what_creation_recorded() {
     })
     .await
     .expect("the removal reaches the Git gate");
-    let (id, recorded) = (workspace.id.clone(), base.clone());
+    let (id, recorded) = (workspace.id.clone(), base.clone().unwrap());
     manager
         .store
         .run(move |db| {
             db.execute(
                 "UPDATE workspaces SET base_ref=?2,base_commit=?3 WHERE id=?1",
-                rusqlite::params![id, recorded.0, recorded.1],
+                rusqlite::params![id, recorded.reference, recorded.commit],
             )?;
             Ok(())
         })
@@ -358,13 +358,7 @@ async fn removal_waiting_for_creation_keeps_what_creation_recorded() {
         .iter()
         .find(|removed| removed.space_id == workspace.id)
         .unwrap();
-    assert_eq!(
-        (
-            removed.kept_workspace().unwrap().base_ref.clone(),
-            removed.kept_workspace().unwrap().base_commit.clone()
-        ),
-        base
-    );
+    assert_eq!(removed.kept_workspace().unwrap().base, base);
 }
 
 #[tokio::test]
@@ -1658,7 +1652,7 @@ async fn cut_short_removal(
     failure: Option<&str>,
 ) -> PathBuf {
     let link = fs::read_to_string(workspace.path.join(".git")).unwrap();
-    let admin_dir = workspace.git_dir.clone().unwrap();
+    let admin_dir = workspace.checkout.git_dir().unwrap().to_owned();
     let marker = serde_json::json!({"link": link, "deleted_before": []});
     fs::write(admin_dir.join("shoal-removal"), marker.to_string()).unwrap();
     fs::remove_file(workspace.path.join("tracked")).unwrap();

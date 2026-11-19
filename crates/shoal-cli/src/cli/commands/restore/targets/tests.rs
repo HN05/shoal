@@ -13,6 +13,7 @@ fn spaces() -> Spaces {
         "path": "/worker",
         "branch": "worker",
         "state": "ready",
+        "checkout": {"state": "created", "base": {"commit": "abc"}, "git_dir": "/admin"},
     }))
     .unwrap();
     let chat = |id: &str, number: u32, name: &str, running| Chat {

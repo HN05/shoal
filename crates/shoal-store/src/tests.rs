@@ -724,6 +724,9 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
         pending_plans(&db)?;
         db.execute_batch("PRAGMA foreign_keys=ON;")?;
     }
+    if version >= 246 {
+        db.execute_batch(record_shapes::KEPT_BASES)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -2741,8 +2744,9 @@ fn mappers_use_named_columns() -> Result<()> {
             "workdir": {"kind": "worktree", "path": "/work",
                         "workspace": {"id": "workspace", "name": "worker", "branch": "feature"}},
             "branch": "feature", "state": "failed", "error": "setup error",
-            "base_commit": "abc", "base_ref": "refs/heads/main",
-            "git_dir": "/git/worktrees/worker",
+            "checkout": {"state": "created",
+                         "base": {"commit": "abc", "reference": "refs/heads/main"},
+                         "git_dir": "/git/worktrees/worker"},
             "base_workspace": null, "parent": null, "links": {"issues": [], "prs": [], "opened": [], "related": []}, "running": false, "done": false,
             "setup_skipped": false, "disposable": false
         }),

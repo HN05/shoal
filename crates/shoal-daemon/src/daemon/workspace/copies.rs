@@ -20,8 +20,8 @@ use super::super::{
 use crate::{
     git,
     model::{
-        Checkpoint, CheckpointCause, CopiedFrom, Head, Repository, StartingCommit, Workspace,
-        WorkspaceRef,
+        Base, Checkout, Checkpoint, CheckpointCause, CopiedFrom, Head, Repository, StartingCommit,
+        Workspace, WorkspaceRef,
     },
     protocol::CopySource,
     state::WorkspaceState,
@@ -48,8 +48,7 @@ pub(super) struct Source {
     repository_id: RepositoryId,
     name: String,
     branch: Option<BranchName>,
-    base_ref: Option<String>,
-    base_commit: Option<CommitId>,
+    base: Option<Base>,
     /// The branch of the workspace it builds on, which the copy builds on
     /// too.
     base_branch: Option<BranchName>,
@@ -218,7 +217,7 @@ impl Manager {
             Ok(source) => source,
             Err(error) => return self.record_creation(workspace, Err(error)).await,
         };
-        let result = match workspace.git_dir {
+        let result = match workspace.checkout.git_dir() {
             // An earlier try created it, then failed to fill or configure it.
             Some(_) => {
                 self.refill_copy_worktree(workspace, &source, git_profile)
@@ -325,7 +324,8 @@ impl Manager {
             .await?;
         let repository_id = removed.repository()?.clone();
         let kept = removed.kept_workspace()?.clone();
-        let base_branch = (kept.base_ref.as_deref())
+        let base_branch = (kept.base.as_ref())
+            .and_then(|base| base.reference.as_deref())
             .and_then(git::strip_local)
             .map(str::to_owned);
         Ok(Source {
@@ -333,8 +333,7 @@ impl Manager {
             repository_id,
             name: removed.name.into(),
             branch: checkpoint.branch,
-            base_ref: kept.base_ref,
-            base_commit: kept.base_commit,
+            base: kept.base,
             base_branch: base_branch.map(BranchName::from),
             head: checkpoint.head,
             files: SourceFiles::Checkpoint {
@@ -412,8 +411,16 @@ impl Manager {
         let base_branch = head.branch().and(source.base_branch.clone());
         let mut record =
             Workspace::new_record(repo.id.clone(), name, path, head, WorkspaceState::Preparing);
-        record.base_commit = (source.base_commit.clone()).or_else(|| Some(source.head.clone()));
-        record.base_ref = source.base_ref.clone();
+        // A copy of a workspace whose creation recorded no base starts at
+        // its source's HEAD.
+        let base = (source.base.clone()).unwrap_or_else(|| Base {
+            commit: source.head.clone(),
+            reference: None,
+        });
+        record.checkout = Checkout::Pending {
+            base: Some(base),
+            git_dir: None,
+        };
         record.setup_skipped = new.options.skip_setup;
         record.disposable = new.options.disposable;
         let id = source.workspace_id.clone();
@@ -657,8 +664,7 @@ fn live_source(workspace: Workspace, head: CommitId, files: SourceFiles) -> Sour
         workspace_id: workspace.id,
         name: workspace.name.into(),
         branch: workspace.part.branch().cloned(),
-        base_ref: workspace.part.base_ref,
-        base_commit: workspace.part.base_commit,
+        base: workspace.part.checkout.base().cloned(),
         base_branch: (workspace.part.base_workspace.and_then(|base| base.branch)),
         head,
         files,

@@ -90,7 +90,7 @@ async fn a_start_records_the_workspace_and_leaves_its_worktree_to_its_preparatio
     let repository = registered(root.path(), &manager).await;
     let started = start(&manager, &repository, "child", "HEAD").await;
     let workspace = *started.workspace;
-    assert!(workspace.pending_worktree);
+    assert!(workspace.checkout.is_pending());
     assert_eq!(workspace.state, WorkspaceState::Preparing);
     assert!(!workspace.path.exists());
     let worker = fake::take(started.operation.as_deref().unwrap());
@@ -101,7 +101,7 @@ async fn a_start_records_the_workspace_and_leaves_its_worktree_to_its_preparatio
     // The preparation creates it first.
     let selector = SpaceSelector::id(&workspace.id);
     let created = manager.create_pending_worktree(&selector).await.unwrap();
-    assert!(!created.pending_worktree);
+    assert!(!created.checkout.is_pending());
     assert!(created.path.join("tracked").exists());
     assert_eq!(
         git(&created.path, &["branch", "--show-current"]).trim(),
@@ -132,7 +132,7 @@ async fn a_copy_start_leaves_its_worktree_to_its_preparation() {
     };
     let started = start_opening(&manager, &repository, opening).await;
     let workspace = *started.workspace;
-    assert!(workspace.pending_worktree);
+    assert!(workspace.checkout.is_pending());
     assert!(!workspace.path.exists());
     let _worker = fake::take(started.operation.as_deref().unwrap());
     let selector = SpaceSelector::id(&workspace.id);
@@ -181,12 +181,12 @@ async fn a_start_at_a_prs_head_leaves_its_worktree_to_its_preparation() {
     };
     let started = start_opening(&manager, &repository, opening).await;
     let workspace = *started.workspace;
-    assert!(workspace.pending_worktree);
+    assert!(workspace.checkout.is_pending());
     assert!(!workspace.path.exists());
     let _worker = fake::take(started.operation.as_deref().unwrap());
     let selector = SpaceSelector::id(&workspace.id);
     let created = manager.create_pending_worktree(&selector).await.unwrap();
-    assert!(!created.pending_worktree);
+    assert!(!created.checkout.is_pending());
     assert_eq!(git(&created.path, &["rev-parse", "HEAD"]).trim(), head);
     let branch = git(&created.path, &["branch", "--show-current"]);
     assert_eq!(branch.trim(), "");
@@ -203,11 +203,11 @@ async fn a_failed_worktree_stays_pending_for_a_retried_preparation() {
     assert!(failed.is_err(), "{failed:?}");
     let workspace = read(&manager, &started.workspace).await;
     assert_eq!(workspace.state, WorkspaceState::Failed);
-    assert!(workspace.pending_worktree);
+    assert!(workspace.checkout.is_pending());
     // Once its base exists, a retry creates it.
     git(&repository.path, &["branch", "later"]);
     let created = manager.create_pending_worktree(&selector).await.unwrap();
-    assert!(!created.pending_worktree);
+    assert!(!created.checkout.is_pending());
     assert!(created.path.exists());
     let again = manager.create_pending_worktree(&selector).await;
     assert!(again.is_err(), "a second creation ran: {again:?}");
@@ -442,12 +442,12 @@ async fn a_retry_configures_the_worktree_an_earlier_creation_left() {
     let failed = manager.create_pending_worktree(&selector).await;
     assert!(failed.is_err(), "{failed:?}");
     let workspace = read(&manager, &started.workspace).await;
-    assert!(workspace.pending_worktree && workspace.path.exists());
+    assert!(workspace.checkout.is_pending() && workspace.path.exists());
     manager.publish_config(global_config(
         "[machine.git_profiles.work]\nuser.email = 'work@example.invalid'\n",
     ));
     let created = manager.create_pending_worktree(&selector).await.unwrap();
-    assert!(!created.pending_worktree);
+    assert!(!created.checkout.is_pending());
     let email = git(&created.path, &["config", "user.email"]);
     assert_eq!(email.trim(), "work@example.invalid");
 }

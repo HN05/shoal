@@ -1,9 +1,11 @@
 //! Fork-point resolution for `shoal diff`.
-use anyhow::{Context, Result, ensure};
-use shoal_refs::CommitId;
+use anyhow::{Context, Result, bail, ensure};
 
 use super::super::manager::Manager;
-use crate::{git, model::DiffBase};
+use crate::{
+    git,
+    model::{Checkout, DiffBase},
+};
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
@@ -15,7 +17,13 @@ impl Manager {
         // Git reads the recorded path only while the workspace's own
         // worktree is there, not a checkout that replaced it.
         self.verify_worktree(&workspace).await?;
-        let commit = if let Some(reference) = workspace.base_ref.as_deref() {
+        let Checkout::Created { base, .. } = &workspace.checkout else {
+            bail!(
+                "workspace {} has no worktree yet; its preparation creates it",
+                workspace.name
+            );
+        };
+        let commit = if let Some(reference) = base.reference.as_deref() {
             match git::diff::fork_point(&workspace.path, reference).await
             {
                 Ok(commit) => commit,
@@ -24,12 +32,7 @@ impl Manager {
                     .context("cannot determine the fork point; the base branch may have been deleted or have unrelated history")?,
             }
         } else {
-            let base = workspace
-                .base_commit
-                .as_ref()
-                .map(CommitId::as_str)
-                .context("workspace base is unknown")?;
-            git::diff::merge_base(&workspace.path, base).await?
+            git::diff::merge_base(&workspace.path, base.commit.as_str()).await?
         };
         ensure!(
             !commit.as_str().is_empty() && !commit.as_str().contains('\n'),

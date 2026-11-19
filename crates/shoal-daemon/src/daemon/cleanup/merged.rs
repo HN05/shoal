@@ -189,7 +189,8 @@ async fn walk(space: &Space) -> Result<Tree> {
     let Some(workspace) = space.worktree() else {
         return Ok(Tree::EMPTY);
     };
-    let (path, git_dir) = (workspace.path.clone(), workspace.git_dir.clone());
+    let path = workspace.path.clone();
+    let git_dir = workspace.checkout.git_dir().map(Path::to_owned);
     tokio::task::spawn_blocking(move || walk_with_git_state(&path, git_dir.as_deref())).await?
 }
 

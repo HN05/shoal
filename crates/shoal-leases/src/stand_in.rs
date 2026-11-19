@@ -119,6 +119,7 @@ fn workspace(path: PathBuf) -> Workspace {
         "path": path,
         "branch": "worker",
         "state": "ready",
+        "checkout": {"state": "created", "base": {"commit": "abc"}, "git_dir": "/admin"},
         "error": null,
         "base_commit": null,
         "base_ref": null,

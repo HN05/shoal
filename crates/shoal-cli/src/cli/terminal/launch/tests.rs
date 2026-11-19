@@ -33,6 +33,7 @@ fn a_workspace_agent_runs_in_its_worktree_in_a_session_named_after_it() {
         "path": "/work/fix-login",
         "branch": "fix-login",
         "state": "ready",
+        "checkout": {"state": "created", "base": {"commit": "abc"}, "git_dir": "/admin"},
     }));
     let placed = AgentSpace::of(&workspace);
     assert!(matches!(placed.repo, groups::Repo::Id("repo")));

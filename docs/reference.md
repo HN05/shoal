@@ -2451,6 +2451,11 @@ asked for that, otherwise when a slot is free, and otherwise leaves it to the
 queue; `--json` then emits the workspace record, or the entry when the agent
 waits. Until its worktree exists, commands that read it refuse
 the workspace, and `shoal rm` removes only its record and leases. A
+workspace created at once, by `shoal create`, `convert`, a restore, a copy or
+`adopt --copy`, whose worktree fails stays `failed` the same way, and
+`shoal restore <space>` creates it again from what it was made from: a
+restore's checkpoint, or the outside worktree `adopt --copy` copies, which
+the retry names when it is gone. A
 preparation that fails, creating the worktree or in setup or the post-setup
 hook, leaves the workspace failed and its agent waiting, and records a
 `preparation_failed` notification, which reaches the agent of the nearest

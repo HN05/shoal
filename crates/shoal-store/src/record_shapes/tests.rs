@@ -315,3 +315,26 @@ fn files_a_chat_attached_become_the_users() -> Result<()> {
     assert_eq!(added("b.md")?["file"]["attached_by"], agent);
     Ok(())
 }
+
+#[test]
+fn removed_workspaces_keep_their_base_as_one() -> Result<()> {
+    let mut db = before(246)?;
+    db.execute_batch(
+        r#"INSERT INTO removed_spaces(space_id,repository_id,chat,name,expires_at,record)
+             VALUES ('ref',NULL,0,'ref',9,'{"base_commit":"abc","base_ref":"refs/heads/main"}'),
+                 ('commit',NULL,0,'commit',9,'{"base_commit":"abc","base_ref":null}'),
+                 ('none',NULL,0,'none',9,'{"base_commit":null,"base_ref":null}');"#,
+    )?;
+    migrate(&mut db)?;
+    let base = |key: &str| record(&db, "removed_spaces", key);
+    assert_eq!(
+        base("space_id='ref'")?,
+        json!({"base": {"commit": "abc", "reference": "refs/heads/main"}})
+    );
+    assert_eq!(
+        base("space_id='commit'")?,
+        json!({"base": {"commit": "abc"}})
+    );
+    assert_eq!(base("space_id='none'")?, json!({}));
+    Ok(())
+}

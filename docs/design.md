@@ -328,7 +328,19 @@ setup; until its worktree exists, what reads it refuses the workspace, and
 removal takes only its record and leases. The way the start's caller hears
 other news it does not wait for, a failed preparation reaches the agent of
 the nearest space above the workspace with one, or else the user, naming
-the restore that retries it and the removal. The request names an agent, mode or
+the restore that retries it and the removal. Every other creation, a split, a
+conversion, a restore, a copy, a commit or CI job's workspace and `adopt
+--copy`, also records the plan of its worktree with the workspace and creates
+it through the same path, only at once, so a failure at any step leaves a
+workspace the restore retries. A workspace's record says whether Git created
+its worktree: a pending one keeps its plan and what an earlier try recorded,
+and the store refuses a created one without its base and admin directory.
+Git creates a worktree before Shoal records its admin directory, so a retry or
+removal of a pending workspace without one takes the admin directory whose
+`gitdir` names its path, unless another workspace marked it; one without has
+no worktree. Only a created worktree is checked for a move when it goes
+missing, so after a `git worktree move` during a cut-short creation `shoal rm`
+forgets the record, keeping the branch and the moved files. The request names an agent, mode or
 model only where the caller chose one; the daemon resolves the rest under the
 workspace's settings, `agent.default` for the agent, and the agent works on the
 start's issue unless the request gives it an issue or a task, so an app needs
@@ -1116,7 +1128,7 @@ replaced only by reclaiming it at its recorded path. Never adopt a main checkout
 `adopt --copy` records a preparing workspace before creating a fresh worktree
 under the repository's Shoal directory, copies the source worktree's files while
 leaving the source in place, removes checkout files the source deleted at any
-depth, and adopts the copy on an available branch derived from the source branch; failures retain a failed record for normal removal.
+depth, and adopts the copy on an available branch derived from the source branch; a failure keeps its plan, whose retry copies the source again and fails naming it once it is gone.
 
 A workspace may sit at a commit instead of on a branch: a worktree at a detached
 HEAD with no branch of its own, created from a commit, tag, branch or PR head, a

@@ -19,8 +19,8 @@ use crate::{
     daemon::scope::Caller,
     git,
     model::{
-        Head, MadeFor, OpenedWorkspace, RemovedSpace, Repository, SpaceKind, StartingCommit,
-        Workspace,
+        Base, Checkout, Head, MadeFor, OpenedWorkspace, RemovedSpace, Repository, SpaceKind,
+        StartingCommit, Workspace,
     },
     protocol::{CommitStart, CreationOptions, PullHead},
     state::WorkspaceState,
@@ -410,7 +410,9 @@ impl Manager {
         at: StartingCommit,
     ) -> Result<Workspace> {
         let (repo, git) = self.lock_repository(removed.repository()?).await?;
-        let diff_ref = surviving_ref(&repo, removed.kept_workspace()?.base_ref.as_deref()).await?;
+        let base = removed.kept_workspace()?.base.as_ref();
+        let diff_ref = base.and_then(|base| base.reference.as_deref());
+        let diff_ref = surviving_ref(&repo, diff_ref).await?;
         // Its directory comes from where it started, never its name.
         let directory = at.directory_seed();
         let kept = removed.kept_workspace()?;
@@ -446,11 +448,16 @@ impl Manager {
         let path = self.new_workspace_path(repo, directory, None).await?;
         let id = new.id.unwrap_or_else(SpaceId::generate);
         let state = WorkspaceState::Preparing;
-        let base_commit = Some(at.commit.clone());
+        let base = Base {
+            commit: at.commit.clone(),
+            reference: diff_ref,
+        };
         let head = Head::Commit(at);
         let mut workspace = Workspace::record(id, repo.id.clone(), name, path, head, state);
-        workspace.base_commit = base_commit;
-        workspace.base_ref = diff_ref;
+        workspace.checkout = Checkout::Pending {
+            base: Some(base),
+            git_dir: None,
+        };
         workspace.setup_skipped = options.skip_setup;
         workspace.disposable = options.disposable;
         self.insert_workspace(workspace, None, new.parent, Some(pending), true)

@@ -11,6 +11,7 @@ fn workspace(id: &str) -> Workspace {
         "path": format!("/{id}"),
         "branch": id,
         "state": "ready",
+        "checkout": {"state": "created", "base": {"commit": "abc"}, "git_dir": format!("/admin/{id}")},
         "workdir": {"kind": "worktree", "path": format!("/{id}"),
                     "workspace": {"id": id, "name": id, "branch": id}},
     }))

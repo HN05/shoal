@@ -130,9 +130,8 @@ fn workspace(path: PathBuf) -> Workspace {
         "branch": "fix-login",
         "state": "ready",
         "error": null,
-        "base_commit": null,
-        "base_ref": "refs/heads/main",
-        "git_dir": null,
+        "checkout": {"state": "created", "base": {"commit": "abc", "reference": "refs/heads/main"},
+                     "git_dir": "/admin"},
     }))
     .unwrap()
 }

@@ -417,7 +417,7 @@ impl Manager {
             let common_dir = self.common_dir(workspace).await?;
             let workspace = self.recover_git_dir(workspace, &common_dir).await?;
             self.verify_worktree(&workspace).await?;
-        } else if !workspace.unborn() {
+        } else if !workspace.checkout.unborn() {
             ensure!(
                 workspace.state == WorkspaceState::Failed,
                 "workspace {} is missing; reconcile it before repository removal",

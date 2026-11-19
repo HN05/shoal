@@ -495,7 +495,7 @@ async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspac
         .await
         .unwrap();
 
-    let git_dir = f.workspace.git_dir.clone().unwrap();
+    let git_dir = f.workspace.checkout.git_dir().unwrap().to_owned();
     fs::write(git_dir.join("MERGE_HEAD"), "").unwrap();
     assert!(f.kept_after(5).await, "a merge under way");
     fs::remove_file(git_dir.join("MERGE_HEAD")).unwrap();

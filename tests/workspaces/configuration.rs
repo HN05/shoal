@@ -530,7 +530,7 @@ fn git_profiles_leave_unselected_repositories_alone_and_retain_failed_workspaces
     let fixture = Fixture::new();
     let plain = fixture.add("plain");
     assert!(
-        !Path::new(plain["git_dir"].as_str().unwrap())
+        !Path::new(plain["checkout"]["git_dir"].as_str().unwrap())
             .join("config.worktree")
             .exists()
     );

@@ -1,7 +1,7 @@
 use crate::git::existing_branch::BranchExt;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::space_names::SpaceName;
-use shoal_refs::{BranchName, CommitId};
+use shoal_refs::BranchName;
 use std::{fs, path::PathBuf, sync::Arc};
 
 use crate::{
@@ -182,9 +182,10 @@ async fn remote_default_controls_creation_diff_and_removal() {
         let expected = git(&author, &["rev-parse", "HEAD"]);
         f.sync().await.unwrap();
         let workspace = f.add("henrik/topic").await;
-        assert_eq!(workspace.base_ref, Some(format!("refs/heads/{branch}")));
+        let base = format!("refs/heads/{branch}");
+        assert_eq!(workspace.checkout.base_ref(), Some(base.as_str()));
         assert_eq!(
-            workspace.base_commit.as_ref().map(CommitId::as_str),
+            workspace.checkout.base().map(|base| base.commit.as_str()),
             Some(expected.trim())
         );
         assert_eq!(git(&workspace.path, &["rev-parse", "HEAD"]), expected);
@@ -259,7 +260,7 @@ async fn local_defaults_and_unavailable_or_ambiguous_remote_defaults() {
     let f = Fixture::new().await;
     git(&f.repo, &["branch", "-m", "trunk"]);
     assert_eq!(
-        f.add("local").await.base_ref.as_deref(),
+        f.add("local").await.checkout.base_ref(),
         Some("refs/heads/trunk")
     );
     git(&f.repo, &["checkout", "--detach"]);
@@ -383,10 +384,10 @@ async fn creation_starts_from_the_synced_main_instead_of_checkout_head() {
         );
         assert_eq!(git(&f.repo, &["rev-parse", "HEAD"]), original);
         assert_eq!(
-            workspace.base_commit.as_ref().map(CommitId::as_str),
+            workspace.checkout.base().map(|base| base.commit.as_str()),
             Some(expected.trim())
         );
-        assert_eq!(workspace.base_ref.as_deref(), Some("refs/heads/main"));
+        assert_eq!(workspace.checkout.base_ref(), Some("refs/heads/main"));
         assert_eq!(
             fs::read_to_string(&fetch_head).unwrap(),
             "unrelated fetch sentinel\n"
@@ -648,7 +649,7 @@ async fn existing_branch_opens_without_suffix_and_reuses_owned_workspace() {
     assert_eq!(opened.workspace.name, "coworker/topic");
     assert_eq!(opened.workspace.directory_name(), "coworker-topic");
     assert_eq!(
-        opened.workspace.base_ref.as_deref(),
+        opened.workspace.checkout.base_ref(),
         Some("refs/heads/main")
     );
     assert_eq!(
@@ -694,7 +695,7 @@ async fn existing_branch_records_an_explicit_base_for_new_worktrees() {
         .await
         .unwrap();
     assert_eq!(
-        opened.workspace.base_ref.as_deref(),
+        opened.workspace.checkout.base_ref(),
         Some("refs/heads/stack/base")
     );
     assert_eq!(
@@ -1071,7 +1072,7 @@ async fn existing_default_branch_survives_normal_workspace_removal() {
         .await
         .unwrap();
     let opening = git(&f.repo, &["rev-parse", "main"]);
-    assert!(opened.workspace.base_ref.is_none());
+    assert!(opened.workspace.checkout.base_ref().is_none());
     fs::write(
         opened.workspace.path.join("new-work"),
         "workspace changes\n",
@@ -2326,7 +2327,7 @@ async fn copy_adoption_records_ownership_and_finishes_ready() {
         fs::read_to_string(copied.path.join("copied")).unwrap(),
         "copied files\n"
     );
-    assert!(copied.git_dir.is_some());
+    assert!(copied.checkout.git_dir().is_some());
     assert_eq!(
         git(&f.repo, &["worktree", "list", "--porcelain"])
             .matches("worktree ")
@@ -2401,10 +2402,10 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
         .unwrap();
     assert_eq!(w.name, "adopt/topic");
     assert_eq!(w.state, crate::state::WorkspaceState::Ready);
-    assert_eq!(w.base_ref.as_deref(), Some("refs/heads/main"));
-    assert!(w.git_dir.is_some());
+    assert_eq!(w.checkout.base_ref(), Some("refs/heads/main"));
+    assert!(w.checkout.git_dir().is_some());
     assert_eq!(
-        fs::read_to_string(w.git_dir.as_ref().unwrap().join("shoal-workspace")).unwrap(),
+        fs::read_to_string(w.checkout.git_dir().unwrap().join("shoal-workspace")).unwrap(),
         format!("{}\n", w.id)
     );
     assert_eq!(git(&path, &["status", "--porcelain"]), before);
@@ -2419,8 +2420,13 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
     assert_eq!(f.manager.usage.activity(&w.id), 1);
     let restored = Manager::open(Paths::for_test(f.root.path())).await.unwrap();
     assert_eq!(
-        restored.workspace_by_id(&w.id).await.unwrap().git_dir,
-        w.git_dir
+        restored
+            .workspace_by_id(&w.id)
+            .await
+            .unwrap()
+            .checkout
+            .git_dir(),
+        w.checkout.git_dir()
     );
     assert!(restored.verify_worktree(&w).await.is_ok());
     assert!(f.manager.verify_worktree(&w).await.is_ok());
@@ -2546,9 +2552,9 @@ async fn adoption_of_default_branch_uses_opening_commit_and_retains_branch() {
         .adopt_workspace(&f.repo_id, &path, false)
         .await
         .unwrap();
-    assert!(w.base_ref.is_none());
+    assert!(w.checkout.base_ref().is_none());
     assert_eq!(
-        w.base_commit.as_ref().map(CommitId::as_str),
+        w.checkout.base().map(|base| base.commit.as_str()),
         Some(git(&path, &["rev-parse", "HEAD"]).trim())
     );
     f.manager

@@ -345,10 +345,11 @@ impl Manager {
 /// `parent`, build on the branch of the parent's `copy` instead.
 fn on_copied_base(removed: &mut RemovedSpace, parent: &SpaceRef, copy: &SpaceRef) {
     if let RemovedKind::Workspace(kept) = &mut removed.kind
+        && let Some(base) = &mut kept.base
         && let (Some(original), Some(branch)) = (parent.branch(), copy.branch())
-        && kept.base_ref.as_deref() == Some(git::local_ref(original).as_str())
+        && base.reference.as_deref() == Some(git::local_ref(original).as_str())
     {
-        kept.base_ref = Some(git::local_ref(branch));
+        base.reference = Some(git::local_ref(branch));
     }
 }
 

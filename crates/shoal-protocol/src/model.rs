@@ -55,6 +55,6 @@ pub use spaces::{
 };
 pub use sync::{CheckoutSync, SyncedRepository};
 pub use workspaces::{
-    Branch, CopiedFrom, Head, MadeFor, OpenedWorkspace, PreparationWait, Refreshed, StartingCommit,
-    Workspace, WorkspaceRef, WorkspaceUsage, Worktree, no_branch,
+    Base, Branch, Checkout, CopiedFrom, Head, MadeFor, OpenedWorkspace, PreparationWait, Refreshed,
+    StartingCommit, Workspace, WorkspaceRef, WorkspaceUsage, Worktree, no_branch,
 };

@@ -83,14 +83,14 @@ impl Fixture {
         let copy = (self.manager.create_copy(repository, &source, place, new))
             .await
             .unwrap();
-        assert!(copy.pending_worktree);
+        assert!(copy.checkout.is_pending());
         assert!(!copy.path.exists());
         let selector = SpaceSelector::id(&copy.id);
         let failed = self.manager.create_pending_worktree(&selector).await;
         assert!(failed.is_err(), "{failed:?}");
         let copy = self.manager.workspace_by_id(&copy.id).await.unwrap();
         assert_eq!(copy.state, WorkspaceState::Failed);
-        assert!(copy.pending_worktree && copy.path.exists());
+        assert!(copy.checkout.is_pending() && copy.path.exists());
         // Work done in the failed copy before its retry.
         fs::write(copy.path.join("mine"), "mine\n").unwrap();
         self.manager.publish_config(global_config(
@@ -142,10 +142,7 @@ async fn a_copy_takes_the_files_and_diff_base_of_its_source() {
         fs::read_to_string(copy.path.join("build/output")).unwrap(),
         "ignored\n"
     );
-    assert_eq!(
-        (&copy.base_commit, &copy.base_ref),
-        (&f.source.base_commit, &f.source.base_ref)
-    );
+    assert_eq!(copy.checkout.base(), f.source.checkout.base());
     let copied = copy.part.copied_from.unwrap();
     assert_eq!(copied.workspace.unwrap().id, f.source.id);
     assert_eq!(
@@ -168,7 +165,7 @@ async fn a_retried_copy_takes_its_sources_files_as_they_are_then() {
     fs::write(path.join("untracked"), "changed later\n").unwrap();
     let selector = SpaceSelector::id(&copy.id);
     let copy = f.manager.create_pending_worktree(&selector).await.unwrap();
-    assert!(!copy.pending_worktree);
+    assert!(!copy.checkout.is_pending());
     let head = git(path, &["rev-parse", "HEAD"]);
     assert_eq!(git(&copy.path, &["rev-parse", "HEAD"]), head);
     assert_eq!(git(&copy.path, STATUS), git(path, STATUS));
@@ -197,7 +194,7 @@ async fn a_retry_that_could_not_keep_the_failed_copys_files_is_refused() {
     assert!(nested.join("file").exists());
     assert!(copy.path.join("mine").exists());
     let copy = f.manager.workspace_by_id(&copy.id).await.unwrap();
-    assert!(copy.pending_worktree);
+    assert!(copy.checkout.is_pending());
 }
 
 #[tokio::test]
@@ -249,7 +246,7 @@ async fn a_retried_copy_of_a_checkpoint_writes_its_files_again() {
     let copy = f.failed_pending_copy(Some(checkpoint.number)).await;
     let selector = SpaceSelector::id(&copy.id);
     let copy = f.manager.create_pending_worktree(&selector).await.unwrap();
-    assert!(!copy.pending_worktree);
+    assert!(!copy.checkout.is_pending());
     assert_eq!(git(&copy.path, &["diff", "HEAD"]), kept);
     assert!(!copy.path.join("mine").exists());
     let email = git(&copy.path, &["config", "user.email"]);
@@ -382,7 +379,7 @@ async fn a_pending_copy_refuses_a_source_in_a_git_operation_when_it_copies_it() 
     let error = error.expect_err("a source in a Git operation must not be copied");
     assert!(format!("{error:#}").contains("Git operation"), "{error:#}");
     let copy = f.manager.workspace_by_id(&copy.id).await.unwrap();
-    assert!(copy.pending_worktree && !copy.path.exists());
+    assert!(copy.checkout.is_pending() && !copy.path.exists());
 }
 
 #[tokio::test]
@@ -431,7 +428,7 @@ async fn a_copy_starts_from_a_checkpoint_of_a_live_or_removed_workspace() {
     let copied = removed.copied_from.clone().unwrap();
     assert_eq!(copied.workspace, None, "the source is removed");
     assert_eq!(copied.checkpoint, Some(checkpoint.number));
-    assert_eq!(removed.base_ref, f.source.base_ref);
+    assert_eq!(removed.checkout.base_ref(), f.source.checkout.base_ref());
     // A removed workspace's current files are gone.
     assert!(f.copy(None, CopyPlace::Branch(None)).await.is_err());
 }

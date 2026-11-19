@@ -61,6 +61,19 @@ pub(super) const USER_CHAT_ATTACHERS: &str = r#"
         WHERE json_valid(record)
             AND json_extract(record,'$.file.attached_by.kind')='chat';"#;
 
+/// A workspace's removal record keeps what it was created from as one
+/// `base`, where earlier ones held its commit and ref apart; one removed
+/// before its creation recorded a commit keeps none.
+pub(super) const KEPT_BASES: &str = "
+    UPDATE removed_spaces SET record=json_remove(
+        CASE WHEN json_type(record,'$.base_commit')='text'
+            THEN json_set(record,'$.base',json_patch(
+                json_object('commit',json_extract(record,'$.base_commit')),
+                json_object('reference',json_extract(record,'$.base_ref'))))
+            ELSE record END,
+        '$.base_ref','$.base_commit')
+    WHERE NOT chat AND json_valid(record);";
+
 /// Link events without a relation were assignments.
 const ASSIGNED_LINK_EVENTS: &str = "
     UPDATE space_events SET record=json_set(record,'$.link.relation','assigned')

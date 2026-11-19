@@ -62,14 +62,14 @@ async fn a_creation_that_fails_after_its_branch_stays_retryable() {
     assert!(failed.is_err(), "{failed:?}");
     let workspace = only_workspace(&manager).await;
     assert_eq!(workspace.state, WorkspaceState::Failed);
-    assert!(workspace.pending_worktree);
+    assert!(workspace.checkout.is_pending());
     // The branch Git created before the worktree failed is the one a retry
     // checks out.
     assert!(!git(&path, &["branch", "--list", "topic"]).trim().is_empty());
     drop(blocked);
     let selector = SpaceSelector::id(&workspace.id);
     let created = manager.create_pending_worktree(&selector).await.unwrap();
-    assert!(!created.pending_worktree);
+    assert!(!created.checkout.is_pending());
     let branch = git(&created.path, &["branch", "--show-current"]);
     assert_eq!(branch.trim(), "topic");
     manager.store.shutdown().await;
@@ -98,7 +98,7 @@ async fn a_failed_outside_copy_is_retried_from_its_source() {
     let workspace = (manager.list_workspaces().await.unwrap().into_iter())
         .find(|workspace| workspace.path != source)
         .unwrap();
-    assert!(workspace.pending_worktree);
+    assert!(workspace.checkout.is_pending());
     let selector = SpaceSelector::id(&workspace.id);
     // A retry while the source is gone names it.
     let moved = root.path().join("moved");

@@ -112,9 +112,9 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
     let w: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(w["name"], "adopt/topic");
     assert_eq!(w["state"], "ready");
-    assert_eq!(w["base_ref"], "refs/heads/main");
+    assert_eq!(w["checkout"]["base"]["reference"], "refs/heads/main");
     assert_eq!(
-        w["base_commit"],
+        w["checkout"]["base"]["commit"],
         git(&fixture.repo, &["rev-parse", "main"]).trim()
     );
     fixture.restart();

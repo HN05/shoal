@@ -161,7 +161,7 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     assert!(String::from_utf8_lossy(&diff.stdout).contains("changed after rename"));
     fixture.ok(&["done", "--undo", &fixture.id("original")]);
     fixture.ok(&["done", &fixture.id("original")]);
-    for field in ["id", "path", "git_dir", "base_ref", "base_commit"] {
+    for field in ["id", "path", "checkout"] {
         assert_eq!(renamed[field], workspace[field]);
     }
     assert_eq!(
@@ -180,7 +180,7 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
         "preserve\n"
     );
     assert_eq!(
-        fixture.ok(&["status", &fixture.id("dependent")])["workspace"]["base_ref"],
+        fixture.ok(&["status", &fixture.id("dependent")])["workspace"]["checkout"]["base"]["reference"],
         "refs/heads/feature/topic"
     );
     fixture.restart();
@@ -311,8 +311,10 @@ fn interrupted_workspace_rename_requires_explicit_repair() {
             git(path, &["branch", "-m", branch]);
         }
         if branch == "new/topic" {
-            fs::remove_file(Path::new(workspace["git_dir"].as_str().unwrap()).join(OWNER_MARKER))
-                .unwrap();
+            fs::remove_file(
+                Path::new(workspace["checkout"]["git_dir"].as_str().unwrap()).join(OWNER_MARKER),
+            )
+            .unwrap();
         }
         fixture.restart();
         assert_eq!(fixture.ok(&["status", id])["workspace"]["state"], "failed");

@@ -338,7 +338,11 @@ impl Manager {
             Placement::Replacing(converting) => converting.workspace(record),
             Placement::Below(_) => record,
         };
-        let marker = match record.git_dir.clone() {
+        ensure!(
+            pending.is_some() == record.checkout.is_pending(),
+            "a workspace records the plan of its worktree exactly while it is pending"
+        );
+        let marker = match record.checkout.git_dir().map(std::path::Path::to_owned) {
             Some(git_dir) => off_runtime::run(move || identity::marked_owner(&git_dir)).await?,
             None => None,
         };
@@ -364,7 +368,7 @@ impl Manager {
                     .query_map([], store::workspace)?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
                 for workspace in workspaces {
-                    let claimed = record.git_dir.as_ref().is_some_and(|git_dir| {
+                    let claimed = record.checkout.git_dir().is_some_and(|git_dir| {
                         claims_git_dir(&workspace, git_dir, marker.as_deref())
                     });
                     ensure!(!claimed,
@@ -383,6 +387,7 @@ impl Manager {
                     tree::place_below(tx, record.repository_id.as_ref(), &record.id, parent)?;
                 }
                 let (branch, start_commit, made_for) = store::head_columns(&record.head)?;
+                let (base_commit, base_ref, git_dir) = store::checkout_columns(&record.checkout);
                 tx.execute(
                     "INSERT INTO workspaces (id,path,branch,state,git_dir,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,start_commit,made_for,setup_skipped,disposable,pending_plan) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?3,?9,?10,?11,?12,?13,?14)",
                     params![
@@ -390,9 +395,9 @@ impl Manager {
                         record.path.to_str(),
                         branch,
                         record.state,
-                        record.git_dir.as_ref().and_then(|p| p.to_str().map(str::to_owned)),
-                        record.base_commit,
-                        record.base_ref,
+                        git_dir,
+                        base_commit,
+                        base_ref,
                         record.state == WorkspaceState::Ready,
                         base_workspace,
                         start_commit,

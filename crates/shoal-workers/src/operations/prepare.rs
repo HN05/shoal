@@ -80,7 +80,7 @@ async fn ready(
     (setup, for_agent): (bool, bool),
     reporter: &Reporter<'_>,
 ) -> Result<Workspace> {
-    let pending = workspace.pending_worktree;
+    let pending = workspace.checkout.is_pending();
     let workspace = match pending {
         true => create_worktree(paths, &workspace, reporter).await?,
         false => workspace,

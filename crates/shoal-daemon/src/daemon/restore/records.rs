@@ -13,8 +13,8 @@ use crate::daemon::manager::Manager;
 use crate::{
     git,
     model::{
-        Checkpoint, CheckpointCause, KeptChat, KeptWorkspace, RemovedKind, RemovedSpace, Space,
-        Workspace, Worktree,
+        Checkout, Checkpoint, CheckpointCause, KeptChat, KeptWorkspace, RemovedKind, RemovedSpace,
+        Space, Workspace, Worktree,
     },
     time::UnixTime,
 };
@@ -25,8 +25,7 @@ use shoal_protocol::space_names::SpaceSelector;
 fn kept_workspace(worktree: &Worktree, checkpoint: Checkpoint) -> RemovedKind {
     RemovedKind::Workspace(Box::new(KeptWorkspace {
         checkpoint,
-        base_ref: worktree.base_ref.clone(),
-        base_commit: worktree.base_commit.clone(),
+        base: worktree.checkout.base().cloned(),
         head: worktree.head.clone(),
         setup_skipped: worktree.setup_skipped,
     }))
@@ -215,11 +214,11 @@ impl Manager {
         &self,
         workspace: &Workspace,
     ) -> Result<bool> {
-        let Some(base) = &workspace.base_commit else {
+        let Checkout::Created { base, .. } = &workspace.checkout else {
             return Ok(false);
         };
         Ok(
-            git::status::commits_since(&workspace.path, base.as_str()).await? > 0
+            git::status::commits_since(&workspace.path, base.commit.as_str()).await? > 0
                 && (self.checkpoint_keeps_unsaved_files(workspace, CheckpointCause::Removal))
                     .await?,
         )

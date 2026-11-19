@@ -104,7 +104,7 @@ impl WorktreeStage {
     /// What the journal records as the removal's cause: `removal`'s, or the
     /// deleted directory's, which a worktree yet to be created never had.
     pub(in crate::daemon) fn cause(&self, removal: Removal<'_>) -> EventCause {
-        if self.present || self.workspace.unborn() {
+        if self.present || self.workspace.checkout.unborn() {
             removal.cause()
         } else {
             EventCause::MissingDirectory
@@ -218,7 +218,7 @@ impl Manager {
         workspace: &Workspace,
         state: WorkspaceState,
     ) -> Result<()> {
-        let Some(admin_dir) = &workspace.git_dir else {
+        let Some(admin_dir) = workspace.checkout.git_dir() else {
             return Ok(());
         };
         if !interrupted::began(admin_dir).await? {
@@ -644,7 +644,7 @@ impl Manager {
 /// files a stopped removal deleted: that removal left it, and its marker
 /// stays. A marker that cannot be read counts too.
 async fn stopped_removal_pending(workspace: &Workspace, state: WorkspaceState) -> bool {
-    let Some(admin_dir) = &workspace.git_dir else {
+    let Some(admin_dir) = workspace.checkout.git_dir() else {
         return false;
     };
     left_by_stopped_removal(workspace, state)

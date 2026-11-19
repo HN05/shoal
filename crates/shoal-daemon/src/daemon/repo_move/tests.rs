@@ -70,8 +70,8 @@ async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
     assert_eq!(workspace.state, WorkspaceState::Ready);
     assert!(
         workspace
-            .git_dir
-            .as_ref()
+            .checkout
+            .git_dir()
             .is_some_and(|dir| dir.starts_with(&directory))
     );
     manager.verify_worktree(&workspace).await?;
@@ -186,8 +186,8 @@ async fn a_copied_move_reconnects_worktrees_before_deleting_the_original() -> Re
     assert_eq!(workspace.path, destination.join("feature"));
     assert!(
         workspace
-            .git_dir
-            .as_ref()
+            .checkout
+            .git_dir()
             .is_some_and(|dir| dir.starts_with(&destination))
     );
     manager.verify_worktree(&workspace).await?;

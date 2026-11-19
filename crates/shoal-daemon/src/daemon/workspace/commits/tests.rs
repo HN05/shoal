@@ -2,7 +2,6 @@ use crate::forge::numbers::PullNumber;
 use crate::time::UnixTime;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
-use shoal_refs::CommitId;
 use std::path::Path;
 
 use super::NewWorkspace;
@@ -456,7 +455,11 @@ async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work(
     assert_eq!(moved.workspace.id, opened.workspace.id);
     assert_eq!(moved.workspace.at().cloned().unwrap().commit, second);
     assert_eq!(
-        moved.workspace.base_commit.as_ref().map(CommitId::as_str),
+        moved
+            .workspace
+            .checkout
+            .base()
+            .map(|base| base.commit.as_str()),
         Some(second.as_str())
     );
     assert_eq!(head(&moved.workspace.path), (second, String::new()));
@@ -589,11 +592,11 @@ async fn reopening_a_prs_workspace_records_the_prs_base() {
         )
     };
     let opened = open(None).await.unwrap();
-    assert_eq!(opened.workspace.base_ref, None);
+    assert_eq!(opened.workspace.checkout.base_ref(), None);
     let reopened = open(Some("refs/remotes/origin/main")).await.unwrap();
     assert!(reopened.reused);
     assert_eq!(
-        reopened.workspace.base_ref.as_deref(),
+        reopened.workspace.checkout.base_ref(),
         Some("refs/remotes/origin/main")
     );
     let main = git(&repo.path, &["rev-parse", "origin/main"])
@@ -660,7 +663,7 @@ async fn a_restored_prs_workspace_drops_a_base_that_is_gone() {
         .unwrap()
         .opened
         .workspace;
-    assert_eq!(restored.base_ref, None);
+    assert_eq!(restored.checkout.base_ref(), None);
     assert_eq!(
         manager
             .diff_base(&SpaceSelector::id(&restored.id))

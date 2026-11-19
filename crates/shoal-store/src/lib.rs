@@ -19,7 +19,7 @@ use shoal_refs::{BranchName, CommitId};
 use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use crate::{
-    model::{Execution, Head, PortReservation, Repository, Workspace},
+    model::{Base, Checkout, Execution, Head, PortReservation, Repository, Workspace},
     state::{ExecutionState, WorkspaceState},
 };
 use shoal_protocol::space_names::SpaceName;
@@ -413,10 +413,7 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
     workspace.mode = row.get("mode")?;
     workspace.narrowing = json_column(row, "narrowing")?.unwrap_or_default();
     workspace.error = row.get("error")?;
-    workspace.base_commit = row.get("base_commit")?;
-    workspace.base_ref = row.get("base_ref")?;
-    workspace.git_dir = row.get::<_, Option<String>>("git_dir")?.map(PathBuf::from);
-    workspace.pending_worktree = row.get::<_, Option<String>>("pending_plan")?.is_some();
+    workspace.checkout = checkout(row)?;
     workspace.setup_skipped = row.get("setup_skipped")?;
     workspace.disposable = row.get("disposable")?;
     Ok(workspace)
@@ -445,6 +442,40 @@ fn head(row: &Row<'_>) -> rusqlite::Result<Head> {
             "a workspace row holds exactly one of a branch and a starting commit".into(),
         )),
     }
+}
+
+/// What a workspace's row records of its worktree: pending while it holds
+/// the plan of its creation, else created, which the table refuses without
+/// a base and admin directory.
+fn checkout(row: &Row<'_>) -> rusqlite::Result<Checkout> {
+    let base = match row.get::<_, Option<CommitId>>("base_commit")? {
+        Some(commit) => Some(Base {
+            commit,
+            reference: row.get("base_ref")?,
+        }),
+        None => None,
+    };
+    let git_dir = row.get::<_, Option<String>>("git_dir")?.map(PathBuf::from);
+    match (row.get::<_, Option<String>>("pending_plan")?, base, git_dir) {
+        (Some(_), base, git_dir) => Ok(Checkout::Pending { base, git_dir }),
+        (None, Some(base), Some(git_dir)) => Ok(Checkout::Created { base, git_dir }),
+        (None, ..) => Err(rusqlite::Error::FromSqlConversionFailure(
+            0,
+            rusqlite::types::Type::Null,
+            "a created workspace's row holds its base and admin directory".into(),
+        )),
+    }
+}
+
+/// The `base_commit`, `base_ref` and `git_dir` columns that hold what
+/// `checkout` records.
+pub fn checkout_columns(checkout: &Checkout) -> (Option<&CommitId>, Option<&str>, Option<String>) {
+    let base = checkout.base();
+    (
+        base.map(|base| &base.commit),
+        base.and_then(|base| base.reference.as_deref()),
+        (checkout.git_dir()).and_then(|path| path.to_str().map(str::to_owned)),
+    )
 }
 
 /// The `branch`, `start_commit` and `made_for` columns that hold `head`.

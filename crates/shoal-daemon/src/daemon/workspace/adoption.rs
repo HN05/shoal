@@ -4,7 +4,7 @@ use super::creation::{Configured, PendingWorktree, creates_branch, existing_base
 use crate::{
     fsutil::off_runtime,
     git,
-    model::{Head, Workspace},
+    model::{Base, Checkout, Head, Workspace},
     state::WorkspaceState,
 };
 use anyhow::{Context, Result, ensure};
@@ -76,9 +76,13 @@ impl Manager {
             Head::Branch(branch.clone()),
             WorkspaceState::Ready,
         );
-        workspace.base_commit = Some(commit.into());
-        workspace.base_ref = reference;
-        workspace.git_dir = Some(git_dir.clone());
+        workspace.checkout = Checkout::Created {
+            base: Base {
+                commit: commit.into(),
+                reference,
+            },
+            git_dir: git_dir.clone(),
+        };
         // A marker naming no recorded workspace outlived its record or a reset
         // state directory; one naming a recorded workspace refuses adoption.
         self.release_stale_owner(&git_dir, &workspace.id).await?;
@@ -145,7 +149,7 @@ impl Manager {
             workspace.number
         );
         let branch = workspace.require_branch("copying a worktree")?;
-        match workspace.git_dir {
+        match workspace.checkout.git_dir() {
             Some(_) => {
                 self.verify_checkout(workspace, Some(branch.as_str()))
                     .await?

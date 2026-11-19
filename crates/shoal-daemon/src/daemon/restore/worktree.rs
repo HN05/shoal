@@ -150,15 +150,15 @@ impl Manager {
     /// while it exists, otherwise its commit; `None` when neither remains.
     async fn restore_base(&self, removed: &RemovedSpace) -> Result<Option<String>> {
         let repo = self.repository(removed.repository()?).await?;
-        let kept = removed.kept_workspace()?;
-        if let Some(reference) = &kept.base_ref
+        let Some(base) = &removed.kept_workspace()?.base else {
+            return Ok(None);
+        };
+        if let Some(reference) = &base.reference
             && git::ref_exists(&repo.path, reference).await?
         {
             return Ok(Some(reference.clone()));
         }
-        let Some(commit) = &kept.base_commit else {
-            return Ok(None);
-        };
+        let commit = &base.commit;
         let exists = git::verify_revision(
             &repo.path,
             &format!("{commit}^{{commit}}"),

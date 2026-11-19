@@ -25,17 +25,8 @@ pub struct Worktree {
     pub copied_from: Option<CopiedFrom>,
     pub state: WorkspaceState,
     pub error: Option<String>,
-    /// The commit it was created from, and the ref that named it, if any,
-    /// which `shoal diff` compares against. Creation records them before
-    /// Git creates the worktree: `None` while it is preparing, or once it
-    /// failed before that.
-    pub base_commit: Option<CommitId>,
-    pub base_ref: Option<String>,
-    /// Git's per-worktree admin directory, whose owner marker verifies the
-    /// worktree was not moved or replaced. Recorded once Git has created the
-    /// worktree: `None` while it is preparing, or when creation failed or was
-    /// cut short before then.
-    pub git_dir: Option<PathBuf>,
+    /// Whether Git created its worktree, with what its creation recorded.
+    pub checkout: Checkout,
     /// Its newest local review.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_review: Option<crate::reviews::ReviewStatus>,
@@ -49,10 +40,6 @@ pub struct Worktree {
     /// Whether it was created without setup, which `shoal setup` runs.
     #[serde(default)]
     pub setup_skipped: bool,
-    /// Whether its worktree is still to be created, which its preparation
-    /// does before its setup; until then nothing exists at `path`.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub pending_worktree: bool,
     /// What its preparation waits for before it creates the worktree.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preparation_waits: Option<PreparationWait>,
@@ -90,12 +77,80 @@ impl Worktree {
     pub fn at(&self) -> Option<&StartingCommit> {
         self.head.at()
     }
+}
 
-    /// Whether it has no worktree yet: its creation is pending, and Git has
-    /// not created one that recorded its identity.
-    pub fn unborn(&self) -> bool {
-        self.pending_worktree && self.git_dir.is_none()
+/// Whether Git created a workspace's worktree, with what its creation
+/// recorded.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum Checkout {
+    /// Its preparation still creates the worktree, from the plan its record
+    /// keeps; what an earlier try recorded before it failed or was cut
+    /// short.
+    Pending {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        base: Option<Base>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        git_dir: Option<PathBuf>,
+    },
+    /// Git created it.
+    Created {
+        base: Base,
+        /// Git's per-worktree admin directory, whose owner marker verifies
+        /// the worktree was not moved or replaced.
+        git_dir: PathBuf,
+    },
+}
+
+impl Checkout {
+    /// A worktree still to be created, of which nothing is recorded yet.
+    pub const UNRECORDED: Self = Self::Pending {
+        base: None,
+        git_dir: None,
+    };
+
+    /// Whether its worktree is still to be created, which its preparation
+    /// does before its setup.
+    pub fn is_pending(&self) -> bool {
+        matches!(self, Self::Pending { .. })
     }
+
+    /// Whether it has no worktree: its creation is pending, and Git has not
+    /// created one whose admin directory it recorded.
+    pub fn unborn(&self) -> bool {
+        matches!(self, Self::Pending { git_dir: None, .. })
+    }
+
+    /// The base its creation recorded, which a pending one may lack.
+    pub fn base(&self) -> Option<&Base> {
+        match self {
+            Self::Pending { base, .. } => base.as_ref(),
+            Self::Created { base, .. } => Some(base),
+        }
+    }
+
+    /// The ref that named its base, if its creation recorded one.
+    pub fn base_ref(&self) -> Option<&str> {
+        self.base()?.reference.as_deref()
+    }
+
+    /// The admin directory its creation recorded, which a pending one may
+    /// lack.
+    pub fn git_dir(&self) -> Option<&Path> {
+        match self {
+            Self::Pending { git_dir, .. } => git_dir.as_deref(),
+            Self::Created { git_dir, .. } => Some(git_dir),
+        }
+    }
+}
+
+/// The commit a workspace was created from, and the ref that named it, if
+/// any, which `shoal diff` compares against.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Base {
+    pub commit: CommitId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<String>,
 }
 
 /// What a workspace's preparation waits for before it creates the worktree.
@@ -306,14 +361,11 @@ impl Workspace {
                 copied_from: None,
                 state,
                 error: None,
-                base_commit: None,
-                base_ref: None,
-                git_dir: None,
+                checkout: Checkout::UNRECORDED,
                 latest_review: None,
                 coordinator_state: None,
                 done: false,
                 setup_skipped: false,
-                pending_worktree: false,
                 preparation_waits: None,
                 disposable: false,
                 base_workspace: None,

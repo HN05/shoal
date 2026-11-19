@@ -427,8 +427,11 @@ fn add_uses_develop_as_the_repository_default() {
     let expected = git(&author, &["rev-parse", "HEAD"]);
     fixture.ok(&["repo", "sync", fixture.repo.to_str().unwrap()]);
     let workspace = fixture.add("henrik/8374-set-league-season-player-profile");
-    assert_eq!(workspace["base_ref"], "refs/heads/develop");
-    assert_eq!(workspace["base_commit"], expected.trim());
+    assert_eq!(
+        workspace["checkout"]["base"]["reference"],
+        "refs/heads/develop"
+    );
+    assert_eq!(workspace["checkout"]["base"]["commit"], expected.trim());
     let name = workspace["name"].as_str().unwrap();
     assert_eq!(
         fixture.ok(&["rm", "--wait", &fixture.id(name)])["branch_deleted"],
@@ -493,8 +496,11 @@ fn add_base_accepts_branches_tags_commits_and_revision_expressions() {
         ]);
         let path = Path::new(workspace["path"].as_str().unwrap());
         assert_eq!(git(path, &["rev-parse", "HEAD"]).trim(), expected);
-        assert_eq!(workspace["base_commit"], expected);
-        assert_eq!(workspace["base_ref"], serde_json::json!(reference));
+        assert_eq!(workspace["checkout"]["base"]["commit"], expected);
+        assert_eq!(
+            workspace["checkout"]["base"]["reference"],
+            serde_json::json!(reference)
+        );
         fs::write(path.join("tracked"), "workspace change\n").unwrap();
         let output = fixture.run(&["diff", &fixture.id(&name)]);
         assert!(output.status.success(), "{}", printed(&output));
@@ -544,8 +550,11 @@ fn add_fetches_a_remote_branch_base_before_creating_the_worktree() {
         ]);
         let path = Path::new(workspace["path"].as_str().unwrap());
         assert_eq!(git(path, &["rev-parse", "HEAD"]), expected);
-        assert_eq!(workspace["base_ref"], "refs/remotes/origin/feature/api");
-        assert_eq!(workspace["base_commit"], expected.trim());
+        assert_eq!(
+            workspace["checkout"]["base"]["reference"],
+            "refs/remotes/origin/feature/api"
+        );
+        assert_eq!(workspace["checkout"]["base"]["commit"], expected.trim());
     }
     // Only the named branch is fetched; the default branch stays as it was.
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), main);
@@ -2371,7 +2380,7 @@ fn an_app_follows_the_setup_of_a_workspace_it_creates() {
 
     let started = start("api");
     // The start answers once the workspace is recorded, before its worktree.
-    assert!(started.workspace.pending_worktree);
+    assert!(started.workspace.checkout.is_pending());
     assert_eq!(started.workspace.state, WorkspaceState::Preparing);
     let (events, ended) = follow(&started);
     let Ended::Succeeded(outcome) = ended else {
@@ -2398,7 +2407,7 @@ fn an_app_follows_the_setup_of_a_workspace_it_creates() {
             Step::PostSetupEnded
         ]
     );
-    assert!(!prepared.workspace.pending_worktree);
+    assert!(!prepared.workspace.checkout.is_pending());
     let lines = lines(&events);
     for line in ["setting up", "set up", "post-setup ran"] {
         assert!(lines.iter().any(|shown| shown == line), "{line}: {lines:?}");

@@ -144,8 +144,10 @@ pub struct KeptChat {
 pub struct KeptWorkspace {
     /// The checkpoint taken at removal.
     pub checkpoint: Checkpoint,
-    pub base_ref: Option<String>,
-    pub base_commit: Option<CommitId>,
+    /// What it was created from; none when it was removed before its
+    /// creation recorded it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<super::Base>,
     /// Its branch, which restore opens whatever HEAD the checkpoint found,
     /// or where a workspace at a commit started, which restore opens
     /// without a branch.
