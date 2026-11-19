@@ -15,6 +15,7 @@ mod alerts;
 pub mod allocation;
 mod answer;
 pub mod approvals;
+mod apps;
 mod auto_update;
 pub(crate) mod blockers;
 pub(crate) mod busy_cpu;

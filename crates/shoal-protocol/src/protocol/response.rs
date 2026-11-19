@@ -220,6 +220,7 @@ response_bodies! {
     HubMember(crate::hub::Member),
     HubView(Vec<crate::hub::directory::ViewPart>),
     Queued(crate::hub::routing::Queued),
+    AppConfig(Option<toml::Table>),
     ScopeToken(crate::scope_tokens::ScopeToken),
     Granted(Option<crate::scope_tokens::ScopeToken>),
     Branches(Vec<crate::model::Branch>),

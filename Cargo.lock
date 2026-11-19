@@ -2448,6 +2448,7 @@ dependencies = [
  "shoal-states",
  "tempfile",
  "tokio",
+ "toml",
  "uuid",
 ]
 

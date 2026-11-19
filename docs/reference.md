@@ -753,8 +753,12 @@ A demo of another kind, or outside a scoped caller's scope, is refused.
 Following an agent, though not following it again on
 its own, and messaging it are your [interaction](#sleep) with it, so an agent you watch and talk to from an app
 stays awake as one in your terminal does.
-Without a scope token the caller is the user; with one, it is
-that workspace's agent, under the rules of its `shoal` commands. The library
+`apps::config` reads the app's own settings, its
+[`[apps.<name>]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#apps)
+table, as every layer resolves it for a space, a repository or the global
+config alone; Shoal never reads it. Without a scope token the caller is the user; with one, it is
+that workspace's agent, under the rules of its `shoal` commands, reading the
+config of its own repository and of the spaces its scope reaches. The library
 speaks only its own release's protocol: a daemon of another release refuses
 it with `protocol_mismatch` naming both versions, and the app updates with
 Shoal.

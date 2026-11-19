@@ -2,10 +2,10 @@
 //! hangs up. Cancelling one that changes state could leave it half done, so
 //! those finish instead, including reads that first finish or record work.
 use super::{
-    AgentMethod, ApprovalMethod, BranchMethod, ChatMethod, CiMethod, ContainerMethod, DaemonMethod,
-    DemoMethod, ExecutionMethod, FileMethod, HoldMethod, HubMethod, ItemMethod, NotificationMethod,
-    Operation, PortMethod, QuestionMethod, QueueMethod, RecoveryMethod, RemovalMethod,
-    RepositoryMethod, ResourceMethod, SecretMethod, SimulatorMethod, TriggerMethod,
+    AgentMethod, AppMethod, ApprovalMethod, BranchMethod, ChatMethod, CiMethod, ContainerMethod,
+    DaemonMethod, DemoMethod, ExecutionMethod, FileMethod, HoldMethod, HubMethod, ItemMethod,
+    NotificationMethod, Operation, PortMethod, QuestionMethod, QueueMethod, RecoveryMethod,
+    RemovalMethod, RepositoryMethod, ResourceMethod, SecretMethod, SimulatorMethod, TriggerMethod,
     WorkspaceMethod,
 };
 
@@ -86,6 +86,7 @@ impl Operation {
                 | Self::Secret(SecretMethod::SecretCatalog { .. })
                 | Self::Trigger(TriggerMethod::ListTriggers { .. })
                 | Self::Hub(HubMethod::HubMembers | HubMethod::HubDirectory)
+                | Self::App(AppMethod::ReadAppConfig { .. })
                 | Self::Container(
                     ContainerMethod::ContainerCatalog { .. }
                         | ContainerMethod::ContainerOverview { .. }

@@ -1,6 +1,6 @@
 //! The request envelope and the method each request carries.
 use super::{
-    AgentMethod, ApprovalMethod, AssignmentMethod, BranchMethod, ChatMethod, CiMethod,
+    AgentMethod, AppMethod, ApprovalMethod, AssignmentMethod, BranchMethod, ChatMethod, CiMethod,
     ContainerMethod, DaemonMethod, DemoMethod, ExecutionMethod, ExitRequest, FileMethod,
     HoldMethod, HubMethod, ItemMethod, LaunchMethod, NotificationMethod, OperationMethod,
     PortMethod, QuestionMethod, QueueMethod, Reattach, RecoveryMethod, RemovalMethod,
@@ -88,6 +88,7 @@ pub enum Operation {
     Subscription(SubscriptionMethod),
     Trigger(TriggerMethod),
     Hub(HubMethod),
+    App(AppMethod),
 }
 
 impl Method {
@@ -162,6 +163,7 @@ impl Operation {
             Self::Review(method) => method.lifetime(),
             Self::Subscription(method) => method.lifetime(),
             Self::Demo(method) => method.lifetime(),
+            Self::App(method) => method.lifetime(),
             Self::Daemon(_)
             | Self::Chat(_)
             | Self::Removal(_)
@@ -243,6 +245,7 @@ from_domains!(
     Subscription(SubscriptionMethod),
     Trigger(TriggerMethod),
     Hub(HubMethod),
+    App(AppMethod),
 );
 
 /// How long a request keeps its connection.

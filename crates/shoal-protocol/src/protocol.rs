@@ -2,6 +2,7 @@
 //! whenever a request, response, or event changes shape or spelling.
 mod agents;
 mod approvals;
+mod apps;
 mod assignments;
 mod branches;
 mod chats;
@@ -43,6 +44,7 @@ mod wrapper;
 
 pub use agents::{AgentMethod, SubagentChange, TurnEnd, WakeEnd, WokenTurn};
 pub use approvals::ApprovalMethod;
+pub use apps::AppMethod;
 pub use assignments::{AssignmentMethod, SavedAgent};
 pub use branches::BranchMethod;
 pub use chats::{ChatMethod, ChatRoot, ChatStart};

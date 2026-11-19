@@ -1,6 +1,7 @@
 //! Every request routed to the handler of its domain.
 mod agents;
 mod approvals;
+mod apps;
 mod assignments;
 mod branches;
 mod chats;
@@ -96,5 +97,6 @@ pub(super) async fn handle(
         }
         Operation::Trigger(method) => triggers::handle(&server.manager, method, caller).await,
         Operation::Hub(method) => hub::handle(&server.manager, method, caller).await,
+        Operation::App(method) => apps::handle(&server.manager, method).await,
     }
 }
