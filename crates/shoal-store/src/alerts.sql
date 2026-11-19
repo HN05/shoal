@@ -92,6 +92,20 @@ UPDATE hub_queue SET call=json_set(call,
             ELSE 'ready_marked' END)
     WHERE json_type(call,'$.tell.told') IS NOT NULL;
 
+-- A request to message a space's agent that waits at the hub for the
+-- space's machine becomes the alert to that space.
+UPDATE hub_queue SET call=json_set(
+        json_remove(call,'$.serve.request.method.send_agent_message'),
+        '$.serve.request.method.send_alert',
+        json_object(
+            'to', json_object('space', json_object('space',
+                json_extract(call,'$.serve.request.method.send_agent_message.space'))),
+            'message', json_extract(call,'$.serve.request.method.send_agent_message.message'),
+            'attachments', json(COALESCE(
+                json_extract(call,'$.serve.request.method.send_agent_message.attachments'),
+                '[]'))))
+    WHERE json_type(call,'$.serve.request.method.send_agent_message') IS NOT NULL;
+
 -- A space's alerts go with it; those about it stay.
 DROP TRIGGER space_removed;
 CREATE TRIGGER space_removed AFTER DELETE ON spaces BEGIN

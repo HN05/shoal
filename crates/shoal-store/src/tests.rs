@@ -3737,6 +3737,11 @@ fn notifications_and_space_messages_become_alerts_with_their_sender() -> Result<
          INSERT INTO questions(space_id,created_at,question,recommendation,choices,answer,
                  answered_at,message_id,number)
              VALUES ('chat',1,'Which?','A','[]','A',2,3,1);
+         INSERT INTO hub_members(id,kind,name,public_key,joined_at)
+             VALUES ('desk','machine','desk','key',1);
+         INSERT INTO hub_queue(member_id,sender_id,call,summary,queued_at,expires_at) VALUES
+             ('desk','laptop','{"serve":{"request":{"method":{"send_agent_message":
+                 {"space":"s","message":"rebase"}},"summary":"a message"}}}','a message',1,9);
          INSERT INTO hub_outbox(call,queued_at) VALUES
              ('{"tell":{"told":{"above":"x","about":{"space":"s","name":"n"},"message":"m"}}}',1),
              ('{"tell":{"told":{"above":"x","kind":"agent_message","message":"m"}}}',2);"#,
@@ -3876,6 +3881,17 @@ fn notifications_and_space_messages_become_alerts_with_their_sender() -> Result<
             (serde_json::json!("ready_marked"), serde_json::json!(false)),
             (serde_json::json!("message"), serde_json::json!(true)),
         ]
+    );
+    let queued: String = db.query_row(
+        "SELECT json_extract(call,'$.serve.request.method') FROM hub_queue",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&queued)?,
+        serde_json::json!({"send_alert": {
+            "to": {"space": {"space": "s"}}, "message": "rebase", "attachments": []
+        }})
     );
     // A space's alerts go with its row; those naming it stay.
     db.execute("DELETE FROM spaces WHERE id='chat'", [])?;

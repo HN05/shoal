@@ -406,6 +406,13 @@ fn bind_space(
         {
             bind_fields(context, &named, &bound);
         }
+        // An alert's target, `{"to": {"space": {"space": ...}}}`.
+        if let Some(target) = (fields.get_mut("to"))
+            .and_then(|to| to.get_mut("space"))
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            bind_fields(target, &named, &bound);
+        }
     }
     Ok(())
 }
