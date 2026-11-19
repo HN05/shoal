@@ -258,3 +258,52 @@ async fn a_rebase_merge_is_found_past_the_commits_it_dropped_as_empty() {
         Some(rebased)
     );
 }
+
+/// Commit `file` in `repo` with author and committer dates at `seconds`.
+fn commit_at(repo: &std::path::Path, file: &str, seconds: u64) {
+    fs::write(repo.join(file), format!("{file}\n")).unwrap();
+    git(repo, &["add", file]);
+    let date = format!("@{seconds} +0000");
+    let mut command = std::process::Command::new("git");
+    crate::test_support::isolate(&mut command, repo);
+    let status = command
+        .args(["commit", "-q", "-m", file])
+        .env("GIT_AUTHOR_DATE", &date)
+        .env("GIT_COMMITTER_DATE", &date)
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
+#[tokio::test]
+async fn a_rebase_merge_of_a_branch_with_merges_is_found_whatever_its_dates() {
+    use crate::forge::items::action::MergeMethod;
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let start = rev(&repo, "main");
+    // side's commit is older than the branch's own, so Git's default order
+    // lists it first, while the rebase copies the branch's first commit
+    // first.
+    git(&repo, &["switch", "-q", "-c", "side"]);
+    commit_at(&repo, "side", 1_000_000_000);
+    git(&repo, &["switch", "-q", "-c", "topic", &start]);
+    commit_at(&repo, "first", 2_000_000_000);
+    git(&repo, &["merge", "-q", "--no-edit", "side"]);
+    commit_at(&repo, "last", 3_000_000_000);
+    git(&repo, &["switch", "-q", "main"]);
+    fs::write(repo.join("main"), "main\n").unwrap();
+    commit(&repo, "main");
+    let previous: CommitId = rev(&repo, "main").as_str().into();
+    git(&repo, &["switch", "-q", "--detach", "topic"]);
+    git(&repo, &["rebase", "-q", "main"]);
+    let rebased = rev(&repo, "HEAD");
+    git(&repo, &["switch", "-q", "main"]);
+    git(&repo, &["merge", "-q", "--ff-only", &rebased]);
+    assert_eq!(rev(&repo, &format!("{rebased}~3")), previous.as_str());
+    let source = rev(&repo, "topic").as_str().into();
+    let found = super::merge_result(&repo, "main", &previous, &source, MergeMethod::Rebase);
+    assert_eq!(
+        found.await.unwrap().map(|commit| commit.to_string()),
+        Some(rebased)
+    );
+}

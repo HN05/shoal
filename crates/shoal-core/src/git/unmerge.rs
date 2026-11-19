@@ -1,6 +1,6 @@
 //! Undoing a local merge into the default branch: the history queries the
 //! daemon checks an undo against, and the moves the unmerge worker makes.
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 use anyhow::{Context, Result, bail, ensure};
 use shoal_refs::{BranchName, CommitId};
@@ -145,9 +145,9 @@ async fn squashed(
 
 /// The last commit a rebase merge of `source` onto `previous` left in
 /// `tip`'s first-parent history: the end of the chain on `previous` whose
-/// commits copy the branch's own in order, as [`authored_identity`] tells
-/// them, since a copy's patch differs where the rebase moved a change to a
-/// renamed file. A commit of the branch with no copy there is one the
+/// commits each copy one of the branch's own, as [`authored_identity`]
+/// tells them, since a copy's patch differs where the rebase moved a change
+/// to a renamed file. A commit of the branch with no copy there is one the
 /// rebase dropped once it became empty, as when the default branch had its
 /// change in a squash of several.
 async fn rebased(
@@ -156,28 +156,29 @@ async fn rebased(
     previous: &CommitId,
     source: &CommitId,
 ) -> Result<Option<CommitId>> {
-    let Some(mut chain) = first_parent_chain(repo, tip, previous.as_str()).await? else {
+    let Some(chain) = first_parent_chain(repo, tip, previous.as_str()).await? else {
         return Ok(None);
     };
-    chain.reverse();
-    let mut copies = chain.iter().peekable();
-    let mut last = None;
+    let mut originals: HashMap<String, usize> = HashMap::new();
     for original in rebased_commits(repo, previous, source).await? {
-        let Some(copy) = copies.peek() else {
-            break;
-        };
-        if authored_identity(repo, copy.as_str()).await?
-            == authored_identity(repo, original.as_str()).await?
-        {
-            last = copies.next().cloned();
+        *originals
+            .entry(authored_identity(repo, original.as_str()).await?)
+            .or_default() += 1;
+    }
+    let mut last = None;
+    for copy in chain.into_iter().rev() {
+        match originals.get_mut(&authored_identity(repo, copy.as_str()).await?) {
+            Some(left @ 1..) => *left -= 1,
+            _ => break,
         }
+        last = Some(copy);
     }
     Ok(last)
 }
 
-/// The commits of `source` a rebase onto `previous` copies, oldest first:
-/// those `previous` lacks, but merges and those whose change `previous`
-/// already has.
+/// The commits of `source` a rebase onto `previous` copies, in the order
+/// it copies them: those `previous` lacks, but merges and those whose
+/// change `previous` already has.
 async fn rebased_commits(
     repo: &Path,
     previous: &CommitId,
@@ -189,6 +190,7 @@ async fn rebased_commits(
         &[
             "rev-list",
             "--reverse",
+            "--topo-order",
             "--no-merges",
             "--cherry-pick",
             "--right-only",
