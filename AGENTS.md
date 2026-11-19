@@ -163,8 +163,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `shoal-forge-types`, `shoal-ids`, `shoal-protocol` and `shoal-store`.
 - A subsystem moved out of the daemon is a crate of its own, such as
   `crates/shoal-leases` for ports, resource permits, simulators, containers
-  and secrets, and `crates/shoal-reviews` for local reviews and the one-shot
-  agent runs they start. Its service, a field of `Manager`, holds what the subsystem
+  and secrets, and `crates/shoal-reviews` for local reviews, the gate agent
+  and the one-shot agent runs they start. Its service, a field of `Manager`, holds what the subsystem
   keeps in memory and offers its operations; what it needs of other
   subsystems is an interface it declares, as the base does, which the daemon
   implements and passes each operation, except what runs in the subsystem's
