@@ -68,6 +68,7 @@ async fn picked_creation(
     let mut launch = args.launch(args.parent.clone());
     // What the arguments refuse fails before a picker opens.
     super::workspaces::check_start_arguments(&launch)?;
+    check_registered(ctx, launch_repository(&launch)?).await?;
     if let Some(copied) = super::copies::source(ctx, args.copy.clone()).await? {
         copied.copy_into(&mut launch)?;
     }
@@ -99,6 +100,7 @@ async fn parent_space(
 /// they name, else the copied one's or the current one.
 async fn at_commit(ctx: &Context, parent: Option<SpaceSelector>, args: &CreateArgs) -> Result<i32> {
     let named = commit_named_repository(args)?;
+    check_registered(ctx, named.clone()).await?;
     let copy = super::copies::source(ctx, args.copy.clone()).await?;
     let copied = copy.as_ref().map(|copy| copy.repository.clone());
     let repository = match named {
@@ -135,6 +137,33 @@ async fn at_commit(ctx: &Context, parent: Option<SpaceSelector>, args: &CreateAr
     }
     report(ctx, &child)?;
     Ok(0)
+}
+
+/// The repository `launch` names, positionally or with `--repo`, as a
+/// selector.
+fn launch_repository(
+    launch: &shoal_protocol::launches::Launch,
+) -> Result<Option<crate::repository::Selector>> {
+    use shoal_protocol::launches::StartTarget;
+    let named = match crate::launches::decided_target(launch)? {
+        Some(StartTarget::Repository(named)) => Some(named),
+        _ => launch.repository.clone(),
+    };
+    named.map(crate::repository::named).transpose()
+}
+
+/// Refuse a repository a creation names that is not registered, before a
+/// copy's picker opens.
+async fn check_registered(
+    ctx: &Context,
+    repository: Option<crate::repository::Selector>,
+) -> Result<()> {
+    let Some(repository) = repository else {
+        return Ok(());
+    };
+    let repos = crate::client::repositories::list(&ctx.paths).await?;
+    crate::repository::select(&repos, repository).await?;
+    Ok(())
 }
 
 /// The repository a creation at a commit names, positionally or with

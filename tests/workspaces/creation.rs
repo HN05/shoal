@@ -2719,3 +2719,16 @@ fn create_takes_a_numeric_repository_beside_a_branch() {
 
     assert_eq!(created["branch"], "fix");
 }
+
+/// A create naming a repository that is not registered is refused before
+/// a copy's workspace picker asks anything, at a commit as on a branch.
+#[test]
+fn create_refuses_an_unknown_repository_before_its_copy_picker() {
+    let fixture = Fixture::new();
+    for args in [
+        &["create", "--repo", "missing", "--copy"][..],
+        &["create", "--repo", "missing", "--copy", "--no-branch"],
+    ] {
+        fixture.assert_refused_before_prompting(args, "missing");
+    }
+}
