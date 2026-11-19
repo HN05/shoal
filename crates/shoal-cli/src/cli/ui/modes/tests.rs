@@ -30,7 +30,7 @@ fn the_mode_picker_lists_the_usual_mode_first_with_the_space_it_starts() {
         [
             pair("worker", "workspace"),
             pair("chat", "chat"),
-            pair("orchestrate", "chat without a repository"),
+            pair("orchestrate", "master"),
             pair("plan", "chat")
         ]
     );

@@ -64,6 +64,9 @@ impl ModeChoice {
     }
 }
 
+/// What the picker calls the space of a mode without a repository.
+const MASTER: &str = "master";
+
 /// The picker's entries for the `modes` that start in the spaces `fit`
 /// allows: the usual mode of that kind first, so Enter keeps it, then the
 /// rest by name, each with the space it starts.
@@ -83,9 +86,10 @@ fn mode_entries(modes: &BTreeMap<String, Mode>, fit: ModeFit, palette: Palette) 
     let rows = modes
         .iter()
         .map(|(name, kind, repository)| {
+            // Only a chat goes without a repository: a master session.
             let space = match repository {
                 true => kind.to_string(),
-                false => format!("{kind} without a repository"),
+                false => MASTER.to_owned(),
             };
             [((*name).clone(), None), (space, Some(Style::Muted))]
         })
