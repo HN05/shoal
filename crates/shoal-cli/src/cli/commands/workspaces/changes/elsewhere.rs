@@ -61,7 +61,7 @@ async fn display(here: &Path, terminal: bool) -> Result<DiffDisplay> {
 /// Where the diff goes: standard output, or the pager Git would start.
 enum Output {
     Stdout(std::io::Stdout),
-    Pager(Child, ChildStdin),
+    Pager(Box<Child>, ChildStdin),
 }
 
 impl Output {
@@ -80,7 +80,7 @@ impl Output {
         }
         let mut child = (command.spawn()).with_context(|| format!("start the pager {pager}"))?;
         let input = child.stdin.take().context("the pager's input")?;
-        Ok(Self::Pager(child, input))
+        Ok(Self::Pager(Box::new(child), input))
     }
 
     /// Write `bytes`; `false` once a pager quit.
