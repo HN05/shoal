@@ -284,15 +284,14 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
 }
 
 #[test]
-fn background_add_without_an_agent_opens_the_workspace_shell_in_its_session() {
+fn background_create_opens_the_workspace_shell_in_its_session() {
     let fixture = Fixture::with_config(Some("terminal.focus = false\n"));
     let home = fixture.root.path();
     let shell = home.join("bin/test-shell");
     install_test_script(&shell, "#!/bin/sh\npwd > \"$HOME/shell-cwd\"\n");
     let (output, transcript) = fixture.terminal_command(
         fixture.command().env("SHELL", &shell).args([
-            "start",
-            "--wait",
+            "create",
             fixture.repo.to_str().unwrap(),
             "--branch",
             "shell-only",

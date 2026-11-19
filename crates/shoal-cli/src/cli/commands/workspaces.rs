@@ -15,8 +15,8 @@ mod waiting;
 
 pub(in crate::cli) use add::execute_add;
 pub(super) use add::{
-    AddOptions, DaemonReads, StartsAsChat, check_start_arguments, check_target, launch_args,
-    launch_workspace, leaves_caller, open_here, pick_start_source, start_worker,
+    AddOptions, DaemonReads, StartsAsChat, check_start_arguments, check_target, enter_created,
+    launch_args, launch_workspace, leaves_caller, open_here, pick_start_source, start_worker,
 };
 pub(super) use adopt::adopt;
 pub(super) use branch_rename::rename_branch;

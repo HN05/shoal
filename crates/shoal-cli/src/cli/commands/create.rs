@@ -39,8 +39,15 @@ pub(super) async fn run(ctx: &Context, args: CreateArgs) -> Result<i32> {
         return at_commit(ctx, parent, &args).await;
     }
     let creation = picked_creation(ctx, &args, parent).await?;
+    let launch = creation.launch.clone();
     let env = crate::env::without_secrets();
-    let preparing = preparation::create(&ctx.paths, creation, env).await?;
+    let started = preparation::start(&ctx.paths, creation, env).await?;
+    // From the user's terminal it enters the workspace as a start without
+    // an agent does; an agent's creation follows it and reports it.
+    if let Some(code) = super::workspaces::enter_created(ctx, &launch, &started).await? {
+        return Ok(code);
+    }
+    let preparing = Preparing::follow(&ctx.paths, started).await?;
     let Some(created) = set_up(ctx, preparing).await? else {
         return Ok(1);
     };

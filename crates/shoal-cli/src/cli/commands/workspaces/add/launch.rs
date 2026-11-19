@@ -234,6 +234,32 @@ fn without_agent(launch: &mut Launch) -> Result<()> {
     Ok(())
 }
 
+/// Enter the workspace a creation `started` without an agent where a start
+/// without one enters it from the user's terminal: here, or in a place
+/// beside it, its shell opened once its preparation ends. `None` where the
+/// caller follows the preparation itself, as an agent's creation does.
+pub(in crate::cli::commands) async fn enter_created(
+    ctx: &Context,
+    launch: &Launch,
+    started: &StartedWorkspace,
+) -> Result<Option<i32>> {
+    let settings = AddSettings::workspace(ctx, &started.workspace.id);
+    let settings = settings.get().await?;
+    let options = AddOptions::default();
+    let Some(attach) = Attach::of(ctx, (launch, false), None, settings, &options) else {
+        return Ok(None);
+    };
+    links::print_warnings(&started.warnings);
+    let started = started.clone();
+    let code = match attach {
+        Attach::Here => Box::pin(attach::run(ctx, started)).await?,
+        Attach::Beside { focused } => {
+            Box::pin(attach::run_beside(ctx, started, settings, focused)).await?
+        }
+    };
+    Ok(Some(code))
+}
+
 /// Settle on a terminal what the new workspace `launch` starts in and
 /// from, as a start's pickers do: its repository, picked when nothing names
 /// one, and, when it names nothing its branch comes from, its source;
