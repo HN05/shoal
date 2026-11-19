@@ -146,6 +146,10 @@ pub struct Carried {
     /// machine registers as a URL clone where it has none of it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,
+    /// The origin's branch that holds the launch's base, which this machine
+    /// fetches before it starts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_branch: Option<String>,
 }
 
 /// What a setup launch sets up, which decides the space its agent starts in.

@@ -30,10 +30,15 @@ fn pushed_and_not(root: &Path) -> std::path::PathBuf {
 async fn a_pushed_branch_goes_by_its_origin_branch_and_an_unpushed_one_by_none() {
     let temp = tempfile::tempdir().unwrap();
     let repo = pushed_and_not(temp.path());
-    let pushed = for_clone(&repo, "pushed").await.unwrap();
-    assert_eq!(pushed.as_deref(), Some("origin/pushed"));
+    let pushed = for_clone(&repo, "pushed").await.unwrap().unwrap();
+    assert_eq!(
+        (pushed.base.as_str(), pushed.branch.as_str()),
+        ("origin/pushed", "pushed")
+    );
     assert_eq!(for_clone(&repo, "unpushed").await.unwrap(), None);
-    // The pushed commit, named as a commit, goes by its ID.
-    let commit = for_clone(&repo, "unpushed~1").await.unwrap();
-    assert_eq!(commit, Some(rev(&repo, "unpushed~1")));
+    // The pushed commit, named as a commit, goes by its ID, which the
+    // origin's branch holds.
+    let commit = for_clone(&repo, "unpushed~1").await.unwrap().unwrap();
+    assert_eq!(commit.base, rev(&repo, "unpushed~1"));
+    assert_eq!(commit.branch, "pushed");
 }

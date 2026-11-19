@@ -128,8 +128,18 @@ fn a_start_on_another_machine_refuses_a_repository_this_machine_has_not_register
 #[test]
 fn a_start_on_another_machine_bases_on_a_pushed_commit_its_clone_never_fetched() {
     let machines = machines();
-    machines.laptop.ok(&["repo", "add", &machines.origin]);
-    // A commit the origin gets only after the laptop cloned it.
+    // A clone that fetches `main` alone.
+    let clone = machines.laptop.root.path().join("single");
+    let single = ["clone", "-q", "--single-branch", &machines.origin];
+    git(
+        machines.laptop.root.path(),
+        &[&single[..], &[clone.to_str().unwrap()]].concat(),
+    );
+    machines
+        .laptop
+        .ok(&["repo", "add", clone.to_str().unwrap()]);
+    // A commit the origin gets on another branch after the laptop cloned
+    // it.
     let tree = ["commit-tree", "HEAD^{tree}", "-p", "HEAD", "-m", "later"];
     let commit = git_with_identity(&machines.hub.repo, &tree);
     let commit = commit.trim();
