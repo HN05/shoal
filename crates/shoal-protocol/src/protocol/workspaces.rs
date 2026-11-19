@@ -212,6 +212,17 @@ pub enum WorkspaceMethod {
         #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
         from: std::collections::BTreeMap<std::path::PathBuf, crate::transcripts::ReadTo>,
     },
+    /// Attach the terminal `viewer` describes, on another machine or a
+    /// device, to an agent's session of a workspace or chat as
+    /// `shoal attach` does on the space's machine, which runs it on a
+    /// terminal of the viewer's size: answered with [`super::Body::Ok`],
+    /// after which the connection carries [`crate::attaching`] frames both
+    /// ways until the attach ends. Refused for a space's process.
+    AttachSession {
+        space: SpaceSelector,
+        #[serde(default)]
+        viewer: crate::attaching::Viewer,
+    },
     /// Write a copy of a workspace or chat, with copies of the spaces below
     /// it that `carrying` carries, for another Shoal to the new file
     /// `file`, leaving them running: a workspace at its checkpoint
@@ -376,9 +387,10 @@ pub struct PullHead {
 impl WorkspaceMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
-            Self::WatchSpaceEvents { .. } | Self::FollowSession { .. } | Self::Diff { .. } => {
-                Lifetime::Open
-            }
+            Self::WatchSpaceEvents { .. }
+            | Self::FollowSession { .. }
+            | Self::AttachSession { .. }
+            | Self::Diff { .. } => Lifetime::Open,
             _ => Lifetime::Reply,
         }
     }

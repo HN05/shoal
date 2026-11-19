@@ -61,6 +61,7 @@ const REQUESTS: &[&str] = &[
     r#"{"space_status":{"space":"fix"}}"#,
     r#"{"space_sessions":{"space":"fix"}}"#,
     r#"{"follow_session":{"space":"fix","session":"abc","from":{"p/abc.jsonl":{"offset":12,"size":20}}}}"#,
+    r#"{"attach_session":{"space":"fix","viewer":{"session":"shoal-7","again":{"host":"zmx","place":"shoal-7","owned":true},"size":{"rows":40,"columns":120},"term":"xterm-256color","apps":[{"host":"rex","label":"desk"}]}}}"#,
     r#"{"copy_space":{"space":"fix","checkpoint":3,"file":"/work/fix.shoal","carrying":"subtree"}}"#,
     r#"{"diff_base":{"workspace":"fix"}}"#,
     r#"{"conflicts":{"workspace":"fix","target":null}}"#,

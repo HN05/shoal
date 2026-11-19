@@ -161,6 +161,16 @@ impl Manager {
     }
 
     /// The hub's own machine, recording it the first time.
+    /// The name this machine goes by in its hub, else its host name.
+    pub(crate) async fn machine_name(&self) -> String {
+        let named = match self.hub_role().await {
+            Ok(Some(HubRole::Hub { .. })) => self.own_machine().await.ok().map(|own| own.name),
+            Ok(Some(HubRole::Member { membership, .. })) => Some(membership.name),
+            _ => None,
+        };
+        named.unwrap_or_else(crate::process::machine::hostname)
+    }
+
     async fn own_machine(&self) -> Result<shoal_protocol::hub::Member> {
         let own = self.own_member().await?;
         let members = self.local_hub_overview().await?.members;

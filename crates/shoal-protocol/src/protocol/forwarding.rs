@@ -109,6 +109,7 @@ impl Operation {
             self,
             Self::Demo(DemoMethod::OpenDemoStream { .. })
                 | Self::Repository(RepositoryMethod::ReceiveCommits { .. })
+                | Self::Workspace(WorkspaceMethod::AttachSession { .. })
         ) {
             Forwarding::Duplex
         } else if self.forwards() {

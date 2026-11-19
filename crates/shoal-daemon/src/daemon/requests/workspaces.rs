@@ -271,6 +271,13 @@ pub(super) async fn handle(
                 manager.follow_session(stream, request_id, (following, scope), guard)
             }));
         }
+        WorkspaceMethod::AttachSession { space, viewer } => {
+            let terminal = manager.open_viewer_terminal(&space, &viewer).await?;
+            let manager = manager.clone();
+            return Ok(Answer::connection(move |stream, request_id, guard| {
+                manager.relay_viewer_terminal(stream, request_id, terminal, guard)
+            }));
+        }
         WorkspaceMethod::CopySpace {
             space,
             checkpoint,
@@ -472,6 +479,10 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::CopySpace { .. } => administer(manager, caller, self).await?,
             WorkspaceMethod::OwnedPlaces | WorkspaceMethod::WatchSpaceEvents { .. } => {
                 return Err(denied());
+            }
+            // As `shoal attach` is in a scoped execution.
+            WorkspaceMethod::AttachSession { .. } => {
+                anyhow::bail!("attach to sessions outside scoped executions")
             }
         })
     }

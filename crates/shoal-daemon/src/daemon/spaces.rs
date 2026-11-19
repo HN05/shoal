@@ -55,6 +55,7 @@ mod scopes;
 pub(crate) use removing::{Removing, Reservation};
 mod selection;
 pub(crate) use selection::selected;
+mod attaching;
 mod following;
 pub(crate) mod sessions;
 pub(crate) mod status;
