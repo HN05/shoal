@@ -175,7 +175,7 @@ impl Manager {
     /// Whether the narrowest of the requesting space's permissions that
     /// govern `request` is `gate`, in the repository of its action.
     async fn is_gated(&self, request: &ApprovalRequest) -> Result<bool> {
-        let governing = crate::daemon::approvals::governing(request);
+        let governing = request.governing();
         if governing.is_empty() {
             return Ok(false);
         }

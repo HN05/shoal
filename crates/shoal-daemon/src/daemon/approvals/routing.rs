@@ -5,7 +5,7 @@ use rusqlite::{Connection, Transaction, params};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 
 use super::{
-    ApprovalRequest, ApprovalRequestExt, DecisionStatus, Specification, Target, proposals,
+    ApprovalRequest, ApprovalRequestExt, DecisionStatus, Specification, proposals,
     store::{CANDIDATES, by_key, decode_record, record_row, write_record},
 };
 use crate::{
@@ -21,30 +21,6 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The permissions that govern `request`, each of which a coordinator needs
-/// as `direct` to approve it instead of a grant, and whose narrowest value
-/// sends it to the gate when it is `gate`; none for a request a grant
-/// governs. They are those whose value made the space ask instead of act: an
-/// issue in another repository is governed by `issue_other_repositories`
-/// alone, what pushes by `push` too, and an action by its own key.
-pub(crate) fn governing(request: &ApprovalRequest) -> Vec<PermissionKey> {
-    use PermissionKey::{IssueOpen, IssueOtherRepositories, Merge, PrOpen, Push};
-    match request.target {
-        Target::IssueOpen
-            if (request.proposed_issue()).is_some_and(|issue| issue.repository.is_some()) =>
-        {
-            vec![IssueOtherRepositories]
-        }
-        Target::IssueOpen => vec![IssueOpen],
-        Target::PrOpen if request.pending_push().is_some() => vec![PrOpen, Push],
-        Target::PrOpen => vec![PrOpen],
-        Target::Push => vec![Push],
-        Target::Merge | Target::Unmerge => vec![Merge, Push],
-        Target::Action(key) => vec![key],
-        _ => Vec::new(),
-    }
-}
-
 /// The permissions a coordinator needs as `direct` to decide `request` so:
 /// to approve it, those that govern it; to deny an issue proposal for
 /// another repository as a duplicate of an issue there, which comments on
@@ -55,7 +31,7 @@ fn needed(
     details: &proposals::ProposalDecision,
 ) -> Vec<PermissionKey> {
     if approve {
-        return governing(request);
+        return request.governing();
     }
     let elsewhere = (request.proposed_issue()).is_some_and(|issue| issue.repository.is_some());
     match &details.duplicate_of {
@@ -87,7 +63,7 @@ fn holds_grant(db: &Connection, workspace: &SpaceId, request: &ApprovalRequest) 
 /// instead, or one it holds a grant for.
 fn may_decide(db: &Connection, workspace: &SpaceId, request: &ApprovalRequest) -> Result<bool> {
     Ok(!request.target.needs_grant()
-        || !governing(request).is_empty()
+        || !request.governing().is_empty()
         || holds_grant(db, workspace, request)?)
 }
 

@@ -12,7 +12,7 @@ use crate::{
     agent::Agent,
     config::{Effective, gate::GateRules},
     daemon::{
-        approvals::{ApprovalRequest, Specification, governing},
+        approvals::{ApprovalRequest, Specification},
         log,
         manager::Manager,
     },
@@ -80,7 +80,7 @@ impl Manager {
             .map_err(|error| error.context(Unavailable))?;
         let (agent, fallback) =
             gate_agents(&settings).map_err(|error| error.context(Unavailable))?;
-        let rules = settings.gate.rules(&governing(request));
+        let rules = settings.gate.rules(&request.governing());
         let opened_with = serde_json::json!([agent.name(), rules.instructions, rules.escalate]);
         let workspace = space.worktree();
         let branch = workspace.and_then(|workspace| workspace.branch());

@@ -394,6 +394,31 @@ pub enum GateStep {
 }
 
 impl ApprovalRequest {
+    /// The permissions that govern the request, each of which a coordinator
+    /// needs as `direct` to approve it instead of a grant, and whose
+    /// narrowest value sends it to the gate when it is `gate`; none for a
+    /// request a grant governs. They are those whose value made the space ask
+    /// instead of act: an issue in another repository is governed by
+    /// `issue_other_repositories` alone, what pushes by `push` too, and an
+    /// action by its own key.
+    pub fn governing(&self) -> Vec<PermissionKey> {
+        use PermissionKey::{IssueOpen, IssueOtherRepositories, Merge, PrOpen, Push};
+        match self.target {
+            Target::IssueOpen
+                if (self.proposed_issue()).is_some_and(|issue| issue.repository.is_some()) =>
+            {
+                vec![IssueOtherRepositories]
+            }
+            Target::IssueOpen => vec![IssueOpen],
+            Target::PrOpen if self.pending_push().is_some() => vec![PrOpen, Push],
+            Target::PrOpen => vec![PrOpen],
+            Target::Push => vec![Push],
+            Target::Merge | Target::Unmerge => vec![Merge, Push],
+            Target::Action(key) => vec![key],
+            _ => Vec::new(),
+        }
+    }
+
     /// The proposed issue, for an issue proposal.
     pub fn proposed_issue(&self) -> Option<&IssueSpecification> {
         match &self.specification {

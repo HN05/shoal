@@ -8,7 +8,6 @@ mod routing;
 mod store;
 mod text;
 
-pub(crate) use routing::governing;
 pub use shoal_daemon_base::approval_requests::{ApprovalRequestExt, ReasonRequired};
 pub(crate) use shoal_protocol::approvals::{
     ActionSpecification, ApprovalRequest, DecisionStatus, GateStep, HoldSpecification, MERGE,
