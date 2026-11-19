@@ -37,26 +37,7 @@ pub(super) async fn run(ctx: &Context, args: CreateArgs) -> Result<i32> {
     if args.no_branch {
         return at_commit(ctx, parent, &args).await;
     }
-    let mut launch = args.launch(args.parent.clone());
-    launch.directory = ui::current_directory()?;
-    launch.path = (launch.path.take())
-        .map(|path| super::repositories::absolute(ctx, path))
-        .transpose()?;
-    // A child is in its parent's repository unless the start names one.
-    let names_repository = launch.repository.is_some() || launch.target.is_some();
-    if let Some(parent) = parent
-        .as_ref()
-        .filter(|_| !names_repository && launch.copy.is_none())
-    {
-        launch.repository = space_repository(ctx, parent)
-            .await?
-            .map(|id| id.to_string());
-    }
-    super::workspaces::pick_start_source(ctx, &mut launch).await?;
-    // Only a parent named with --parent keeps the start out of the
-    // existing workspace of the branch it names.
-    let below = parent.filter(|_| args.parent.is_none());
-    let creation = NewCreation { launch, below };
+    let creation = picked_creation(ctx, &args, parent).await?;
     let env = crate::env::without_secrets();
     let preparing = preparation::create(&ctx.paths, creation, env).await?;
     let Some(created) = set_up(ctx, preparing).await? else {
@@ -64,6 +45,45 @@ pub(super) async fn run(ctx: &Context, args: CreateArgs) -> Result<i32> {
     };
     report(ctx, &created)?;
     Ok(0)
+}
+
+/// The creation `args` ask for, below `parent`, which the current space
+/// is unless they name it: made in this process's directory, with a
+/// relative path resolved there, and with what a terminal's pickers pick.
+/// Only a parent named with `--parent` keeps the creation out of the
+/// existing workspace of the branch it names.
+async fn picked_creation(
+    ctx: &Context,
+    args: &CreateArgs,
+    parent: Option<SpaceSelector>,
+) -> Result<NewCreation> {
+    let mut launch = args.launch(args.parent.clone());
+    launch.directory = ui::current_directory()?;
+    launch.path = (launch.path.take())
+        .map(|path| super::repositories::absolute(ctx, path))
+        .transpose()?;
+    if ctx.interactive() {
+        picked_repository(ctx, &mut launch, parent.as_ref()).await?;
+    }
+    super::workspaces::pick_start_source(ctx, &mut launch).await?;
+    let below = parent.filter(|_| args.parent.is_none());
+    Ok(NewCreation { launch, below })
+}
+
+/// Have a terminal's pickers offer what the repository of `parent` holds
+/// when `launch` names no repository, link or copy, as the daemon then
+/// places the child there.
+async fn picked_repository(
+    ctx: &Context,
+    launch: &mut shoal_protocol::launches::Launch,
+    parent: Option<&SpaceSelector>,
+) -> Result<()> {
+    let names = launch.repository.is_some() || launch.target.is_some() || launch.copy.is_some();
+    let Some(parent) = parent.filter(|_| !names) else {
+        return Ok(());
+    };
+    launch.repository = (space_repository(ctx, parent).await?).map(|id| id.to_string());
+    Ok(())
 }
 
 /// The space a new workspace goes below: the one `named`, else the
