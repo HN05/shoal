@@ -45,9 +45,10 @@ pub(super) async fn handle(
             commit,
             branch,
         } => {
-            let repository = (manager.register_repository(origin.into(), None, None)).await?;
+            let source = origin.clone().into();
+            let repository = (manager.register_repository(source, None, None)).await?;
             let manager = manager.clone();
-            let carried = (repository, commit, branch);
+            let carried = (repository, origin, commit, branch);
             return Ok(Answer::connection(move |stream, request_id, guard| {
                 manager.receive_commits(stream, request_id, carried, guard)
             }));

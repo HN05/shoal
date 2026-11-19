@@ -27,29 +27,38 @@ pub(crate) struct CarriedHolds {
     releasing: tokio::sync::Mutex<()>,
 }
 
-/// A carried commit of a repository that a launch is to start from.
+/// A carried commit that a launch is to start from, in the repository the
+/// origin it names registers here.
 struct Hold {
+    origin: String,
     repository: RepositoryId,
     commit: CommitId,
     since: Instant,
 }
 
+/// A launch's carried commit, by the URL of the origin its repository is
+/// registered from.
+pub(crate) type Carried<'a> = (&'a str, &'a CommitId);
+
 impl CarriedHolds {
-    /// Hold `commit` of `repository` for the launch it is carried for.
-    pub(super) async fn take(&self, repository: &RepositoryId, commit: &CommitId) {
+    /// Hold the `carried` commit of `repository` for the launch it is
+    /// carried for.
+    pub(super) async fn take(&self, repository: &RepositoryId, (origin, commit): Carried<'_>) {
         let _releasing = self.releasing.lock().await;
         self.held.lock().unwrap().push(Hold {
+            origin: origin.to_owned(),
             repository: repository.clone(),
             commit: commit.clone(),
             since: Instant::now(),
         });
     }
 
-    /// Give up a hold of `commit`, returning the repository it is in; none
-    /// where nothing holds it.
-    fn give_up(&self, commit: &CommitId) -> Option<RepositoryId> {
+    /// Give up a hold of the `carried` commit, returning the repository it
+    /// is in; none where nothing holds it.
+    fn give_up(&self, (origin, commit): Carried<'_>) -> Option<RepositoryId> {
         let mut held = self.held.lock().unwrap();
-        let position = held.iter().position(|hold| hold.commit == *commit)?;
+        let position =
+            (held.iter()).position(|hold| hold.origin == origin && hold.commit == *commit)?;
         Some(held.remove(position).repository)
     }
 
@@ -91,10 +100,10 @@ impl Needs {
 }
 
 impl Manager {
-    /// Give up a hold of `commit` for its launch, which ended or will never
-    /// come, and release the carried refs of its repository.
-    pub(crate) async fn release_carried_hold(&self, commit: &CommitId) {
-        if let Some(repository) = self.carried_holds.give_up(commit) {
+    /// Give up a hold of the `carried` commit for its launch, which ended
+    /// or will never come, and release the carried refs of its repository.
+    pub(crate) async fn release_carried_hold(&self, carried: Carried<'_>) {
+        if let Some(repository) = self.carried_holds.give_up(carried) {
             self.release_carried(&repository).await;
         }
     }

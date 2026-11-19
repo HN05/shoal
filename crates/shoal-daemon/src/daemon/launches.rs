@@ -87,10 +87,11 @@ impl Manager {
         if let Some(launched) = self.launch_on_machine(&mut launch, caller).await? {
             return Ok(launched);
         }
-        let carried = (launch.forwarded.as_ref()).and_then(|carried| carried.commit.clone());
+        let carried = (launch.forwarded.as_ref())
+            .and_then(|carried| Some((carried.origin.clone()?, carried.commit.clone()?)));
         let launched = self.launch_here(launch, source, caller).await;
-        if let Some(commit) = carried {
-            self.release_carried_hold(&commit).await;
+        if let Some((origin, commit)) = carried {
+            self.release_carried_hold((&origin, &commit)).await;
         }
         launched
     }
