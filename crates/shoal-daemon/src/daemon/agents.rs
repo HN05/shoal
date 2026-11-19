@@ -1085,6 +1085,7 @@ impl Manager {
         let handoff = stops::Handoff {
             reason: &protection.reason,
             turn,
+            for_load: protection.follows_overload_recovery(),
             required: protection.is_idle(),
         };
         match (self.decide_stop(id, &stopped.protection, between, handoff)).await {

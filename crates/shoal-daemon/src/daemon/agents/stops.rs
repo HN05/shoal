@@ -52,11 +52,12 @@ impl std::fmt::Display for Unrecorded {
 }
 
 /// What a stop saves for the agent's restore before it is delivered: the
-/// reason and turn its recovery record keeps, and whether the stop goes only
-/// with it saved.
+/// reason and turn its recovery record keeps, whether load or free disk
+/// space stops it, and whether the stop goes only with it saved.
 pub(crate) struct Handoff<'a> {
     pub reason: &'a str,
     pub turn: Option<AgentState>,
+    pub for_load: bool,
     pub required: bool,
 }
 
@@ -303,7 +304,11 @@ impl Manager {
         agent: &Agent,
         handoff: &Handoff<'_>,
     ) -> Result<Option<PathBuf>> {
-        let saved = crate::execution::recovery::save_record(
+        let save = match handoff.for_load {
+            true => crate::execution::recovery::save_load_record,
+            false => crate::execution::recovery::save_record,
+        };
+        let saved = save(
             &self.paths,
             &agent.workspace_id,
             id,

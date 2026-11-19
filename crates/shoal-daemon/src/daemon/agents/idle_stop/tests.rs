@@ -293,6 +293,10 @@ async fn a_wake_after_an_idle_stop_leaves_its_update_for_the_restore() {
     let id = execution.plan.id.clone();
     manager.stop_idle_agents(later()).await.unwrap();
     assert!(*execution.stop.borrow());
+    // An update restores it, not recovery.
+    let path = crate::execution::recovery::record_path(&manager.paths, &workspace.id, &id);
+    let record = crate::execution::recovery::Record::load(&path);
+    assert!(!record.unwrap().unwrap().for_load);
     let woken = manager
         .start_woken_turn(&SpaceSelector::id(&workspace.id), Some(id))
         .await

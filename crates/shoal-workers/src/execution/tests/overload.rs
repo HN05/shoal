@@ -1116,6 +1116,7 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
             "stop_reason": "test memory pressure",
             "stage": "stopped",
             "mode": "worker",
+            "for_load": true,
         })
     );
     assert!(

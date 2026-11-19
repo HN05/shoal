@@ -68,6 +68,30 @@ fn pressure_handoffs_are_private() {
 }
 
 #[test]
+fn the_wrappers_save_keeps_a_load_stops_mark() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    let (space, execution) = (SpaceId::from("workspace"), ExecutionId::from("execution"));
+    let agent = shoal_protocol::executions::TrackedAgent::named("codex");
+    let reason = Some("critical memory pressure");
+    let path = save_load_record(&paths, &space, &execution, &agent, reason, None).unwrap();
+    let recovery = Recovery {
+        narrowing: Default::default(),
+        mode: "worker".into(),
+        model: Default::default(),
+        agent: "codex".into(),
+        command: vec![],
+        automatic: true,
+        handoff_delivered: true,
+        proxy: None,
+    };
+    recovery
+        .save(&paths, &space, &execution, reason, None, Restorer::User)
+        .unwrap();
+    assert!(Record::load(&path).unwrap().unwrap().for_load);
+}
+
+#[test]
 fn only_a_daemon_saved_stop_counts_as_undelivered() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());

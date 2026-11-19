@@ -243,6 +243,7 @@ impl RecordExt for Record {
             model: agent.model.clone(),
             mode: agent.mode.clone(),
             narrowing: agent.narrowing,
+            for_load: false,
         }
     }
 
@@ -304,11 +305,33 @@ pub fn save_record(
     reason: Option<&str>,
     turn: Option<AgentState>,
 ) -> Result<PathBuf> {
+    let record = stopping_record(agent, reason, turn);
+    write_record(paths, space_id, id, record)
+}
+
+/// Save the agent identity as [`save_record`] does before a stop for load or
+/// free disk space is delivered, marking the record [`Record::for_load`].
+pub fn save_load_record(
+    paths: &Paths,
+    space_id: &SpaceId,
+    id: &ExecutionId,
+    agent: &TrackedAgent,
+    reason: Option<&str>,
+    turn: Option<AgentState>,
+) -> Result<PathBuf> {
     let record = Record {
-        turn,
-        ..Record::new(agent, reason, Stage::Stopping, None)
+        for_load: true,
+        ..stopping_record(agent, reason, turn)
     };
     write_record(paths, space_id, id, record)
+}
+
+/// The record of `agent`, which a stop for `reason` reaches in `turn`.
+fn stopping_record(agent: &TrackedAgent, reason: Option<&str>, turn: Option<AgentState>) -> Record {
+    Record {
+        turn,
+        ..Record::new(agent, reason, Stage::Stopping, None)
+    }
 }
 
 /// Keep `turn`, the state execution `id` last reported, in the recovery
@@ -354,6 +377,7 @@ fn write_record(
         record.waiting = record.waiting.or(saved.waiting);
         record.session = record.session.or(saved.session);
         record.turn = record.turn.or(saved.turn);
+        record.for_load |= saved.for_load;
         if saved.stage == Some(Stage::Stopped) {
             record.stage = saved.stage;
         }

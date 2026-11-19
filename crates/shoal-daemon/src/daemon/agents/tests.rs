@@ -231,6 +231,7 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
                 "stop_reason": "critical memory pressure",
                 "stage": "stopping",
                 "mode": "worker",
+                "for_load": true,
             })
         );
         std::fs::remove_file(&record).unwrap();

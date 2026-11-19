@@ -154,6 +154,11 @@ pub struct Record {
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
     )]
     pub narrowing: crate::config::permissions::PermissionsConfig,
+    /// Load or free disk space stopped the agent, so the healthy readings of
+    /// `[machine.overload.recovery]` decide its restore, whatever carries it
+    /// out.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub for_load: bool,
 }
 
 /// How an agent of a copied workspace starts: from a fork of the session
