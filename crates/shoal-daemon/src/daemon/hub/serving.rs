@@ -266,15 +266,19 @@ async fn pass_down(
 
 /// Write what the caller sends `up` a duplex stream to `socket`, closing
 /// its side for writing once the caller ends; with nothing sent up, as on
-/// a stream that is not duplex, never resolves.
+/// a stream that is not duplex, never resolves. A socket that no longer
+/// takes what comes up, as once the daemon's answer ended, takes nothing
+/// more, and what the daemon still writes goes down.
 async fn pass_up(up: Option<Incoming>, mut socket: OwnedWriteHalf) -> Result<()> {
     let Some(mut up) = up else {
         return std::future::pending().await;
     };
     while let Some(bytes) = up.next().await? {
-        socket.write_all(&bytes).await?;
+        if socket.write_all(&bytes).await.is_err() {
+            return std::future::pending().await;
+        }
     }
-    socket.shutdown().await?;
+    let _ = socket.shutdown().await;
     std::future::pending().await
 }
 

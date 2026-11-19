@@ -119,18 +119,22 @@ async fn pass_down(
 }
 
 /// Write what the caller sends to `outgoing`, ending it once the caller
-/// ends its side; then never resolves.
+/// ends its side; then never resolves. Once the other machine stops
+/// reading, as when its side of the connection ended, it passes nothing
+/// more up and leaves what still comes down to end the connection.
 async fn pass_up(mut reader: OwnedReadHalf, mut outgoing: Outgoing) -> Result<()> {
     let mut bytes = vec![0; READ_BYTES];
     loop {
         let read = tokio::select! {
             read = reader.read(&mut bytes) => read?,
-            () = outgoing.closed() => bail!("the other machine stopped reading"),
+            () = outgoing.closed() => return std::future::pending().await,
         };
         if read == 0 {
             break;
         }
-        outgoing.write(&bytes[..read]).await?;
+        if outgoing.write(&bytes[..read]).await.is_err() {
+            return std::future::pending().await;
+        }
     }
     outgoing.end(None).await;
     std::future::pending().await
