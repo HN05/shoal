@@ -15,10 +15,7 @@ use super::{
     store::{ENTRY_COLUMNS, entry as queue_entry},
 };
 use crate::{
-    daemon::{
-        scope::Caller,
-        workspace::{Manager, StopRequest},
-    },
+    daemon::{executions::StopRequest, scope::Caller, workspace::Manager},
     model::{QueueEntry, QueuedJob},
     state::{QueueKind, QueueState},
 };
@@ -260,9 +257,7 @@ impl Manager {
 
     /// The workspaces a waiting launch opens. Requires the queue gate, which
     /// keeps them waiting until it is released.
-    pub(in crate::daemon::workspace) async fn waiting_launch_workspaces(
-        &self,
-    ) -> Result<HashSet<SpaceId>> {
+    pub(in crate::daemon) async fn waiting_launch_workspaces(&self) -> Result<HashSet<SpaceId>> {
         self.store
             .run(|db| {
                 Ok(db

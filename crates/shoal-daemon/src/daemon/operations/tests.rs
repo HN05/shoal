@@ -211,7 +211,7 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
         space_id: own.id.clone(),
         execution: Some(crate::daemon::scope::ScopedExecution {
             id: "ended".into(),
-            kind: crate::daemon::workspace::ExecutionKind::Command,
+            kind: crate::daemon::executions::ExecutionKind::Command,
             agent_execution: Some("agent".into()),
         }),
         granted: None,

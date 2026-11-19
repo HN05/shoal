@@ -289,7 +289,7 @@ impl Manager {
             last.write(&self.paths, id)?;
         }
         // The workspace runs nothing else before the agent moves there.
-        let request = crate::daemon::workspace::StopRequest::conversion();
+        let request = crate::daemon::executions::StopRequest::conversion();
         (self.stop_space_agent_executions(id, &request)).await?;
         let (space, token) = (id.to_owned(), row.scope_token.clone());
         self.store

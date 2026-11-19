@@ -4,9 +4,9 @@ use super::*;
 use crate::{
     daemon::{
         events::{EventItem, EventKind},
+        executions::ExecutionKind,
         scope::{self, Caller, ScopedExecution},
         test_support::{manager, repository},
-        workspace::ExecutionKind,
         workspace_files::Attacher,
     },
     model::Workspace,

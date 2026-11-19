@@ -121,7 +121,10 @@ pub(super) fn refusal(error: &anyhow::Error) -> Body {
 /// The code of an operation's failure: specific where the caller can act on
 /// it, otherwise `operation_failed`.
 fn error_code(error: &anyhow::Error) -> ErrorCode {
-    if error.downcast_ref::<workspace::UnprovenStop>().is_some() {
+    if error
+        .downcast_ref::<super::executions::UnprovenStop>()
+        .is_some()
+    {
         ErrorCode::UnprovenStop
     } else if let Some(exiting) = error.downcast_ref::<super::gates::Exiting>() {
         exiting.code()

@@ -9,7 +9,7 @@ use anyhow::Result;
 
 use super::{Prepared, carried};
 use crate::{
-    daemon::workspace::{Manager, StopRequest},
+    daemon::{executions::StopRequest, workspace::Manager},
     model::Space,
     removal::{InspectionPolicy, RemovalResult, UnsavedWork},
     transfer::{Carrying, ExportedSpace},

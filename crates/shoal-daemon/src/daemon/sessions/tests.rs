@@ -237,7 +237,7 @@ async fn failed_session_close_does_not_block_removal_or_other_sessions_and_is_re
 
 #[tokio::test]
 async fn demos_close_their_session_after_completion_or_verified_forgetting() -> Result<()> {
-    use crate::{daemon::workspace::ExecutionKind, demos::Launch};
+    use crate::{daemon::executions::ExecutionKind, demos::Launch};
 
     for host_name in ["zmx", "rex"] {
         let (_root, manager, workspace, host) = fixture_for(host_name).await?;
@@ -301,7 +301,7 @@ async fn demos_close_their_session_after_completion_or_verified_forgetting() -> 
 
 #[tokio::test]
 async fn finishing_an_old_demo_does_not_close_a_replacement_in_the_same_workspace() -> Result<()> {
-    use crate::{daemon::workspace::ExecutionKind, demos::Launch};
+    use crate::{daemon::executions::ExecutionKind, demos::Launch};
 
     let (_root, manager, workspace, host) = fixture().await?;
     host.add("reused", workspace.id.as_str())?;
@@ -333,7 +333,7 @@ async fn finishing_an_old_demo_does_not_close_a_replacement_in_the_same_workspac
 #[tokio::test]
 async fn failed_demo_closes_survive_restart_and_retry_without_removing_the_workspace() -> Result<()>
 {
-    use crate::{daemon::workspace::ExecutionKind, demos::Launch};
+    use crate::{daemon::executions::ExecutionKind, demos::Launch};
 
     for replacement in [false, true] {
         let (_root, manager, workspace, host) = fixture().await?;
@@ -421,7 +421,7 @@ async fn failed_demo_closes_survive_restart_and_retry_without_removing_the_works
 
 #[tokio::test]
 async fn failed_execution_deletion_does_not_commit_a_pending_close() -> Result<()> {
-    use crate::{daemon::workspace::ExecutionKind, demos::Launch};
+    use crate::{daemon::executions::ExecutionKind, demos::Launch};
 
     let (_root, manager, workspace, _host) = fixture().await?;
     let demo = Launch {
@@ -549,7 +549,7 @@ async fn places_of_hosts_without_cleanup_are_forgotten_with_their_workspace() ->
 
 #[tokio::test]
 async fn an_agent_of_another_workspace_takes_over_a_block_shoal_created() -> Result<()> {
-    use crate::{daemon::workspace::ExecutionKind, sessions::PlaceClose};
+    use crate::{daemon::executions::ExecutionKind, sessions::PlaceClose};
 
     let (_root, manager, workspace, host) = rex_fixture(&["shared"]).await?;
     let taker = manager
@@ -562,8 +562,8 @@ async fn an_agent_of_another_workspace_takes_over_a_block_shoal_created() -> Res
             None,
             ExecutionKind::Command,
             None,
-            crate::daemon::workspace::ExecutionRequest {
-                place: Some(crate::daemon::workspace::places::ExecutionPlace {
+            crate::daemon::executions::ExecutionRequest {
+                place: Some(crate::daemon::places::ExecutionPlace {
                     origin: Origin::created(HostName::Rex, "shared".into()),
                     agent: true,
                 }),
@@ -634,7 +634,7 @@ async fn a_recorded_place_the_daemon_cannot_close_is_left_to_its_host() -> Resul
 
 #[tokio::test]
 async fn a_nested_command_or_a_chat_leaves_the_owner_of_a_block() -> Result<()> {
-    use crate::{daemon::workspace::ExecutionKind, sessions::PlaceClose};
+    use crate::{daemon::executions::ExecutionKind, sessions::PlaceClose};
 
     let (_root, manager, workspace, host) = rex_fixture(&["parent", "chatted"]).await?;
     let child = manager
@@ -649,8 +649,8 @@ async fn a_nested_command_or_a_chat_leaves_the_owner_of_a_block() -> Result<()> 
             None,
             ExecutionKind::Command,
             None,
-            crate::daemon::workspace::ExecutionRequest {
-                place: Some(crate::daemon::workspace::places::ExecutionPlace {
+            crate::daemon::executions::ExecutionRequest {
+                place: Some(crate::daemon::places::ExecutionPlace {
                     origin: Origin::created(HostName::Rex, "parent".into()),
                     agent: false,
                 }),
@@ -739,7 +739,7 @@ async fn a_session_closes_with_the_workspace_its_host_labels_it_for() -> Result<
 
 #[tokio::test]
 async fn panes_of_different_servers_under_one_id_are_different_places() -> Result<()> {
-    use crate::daemon::workspace::ExecutionKind;
+    use crate::daemon::executions::ExecutionKind;
 
     let (_root, manager, workspace, host) = fixture_for("herdr").await?;
     let taker = manager
@@ -764,8 +764,8 @@ async fn panes_of_different_servers_under_one_id_are_different_places() -> Resul
             None,
             ExecutionKind::Command,
             None,
-            crate::daemon::workspace::ExecutionRequest {
-                place: Some(crate::daemon::workspace::places::ExecutionPlace {
+            crate::daemon::executions::ExecutionRequest {
+                place: Some(crate::daemon::places::ExecutionPlace {
                     origin: users.clone(),
                     agent: true,
                 }),

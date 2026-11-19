@@ -3,8 +3,9 @@ use std::time::Duration;
 
 use crate::{
     daemon::{
+        executions::ExecutionKind,
         test_support::{chat, manager, report_session, repository},
-        workspace::{ExecutionKind, Manager},
+        workspace::Manager,
     },
     execution::recovery,
     model::{AgentSession, Workspace},

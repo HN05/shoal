@@ -378,7 +378,7 @@ fn caller(space: &SpaceId, execution: &str) -> Caller {
         space_id: space.clone(),
         execution: Some(ScopedExecution {
             id: execution.into(),
-            kind: crate::daemon::workspace::ExecutionKind::Command,
+            kind: crate::daemon::executions::ExecutionKind::Command,
             agent_execution: None,
         }),
         granted: None,

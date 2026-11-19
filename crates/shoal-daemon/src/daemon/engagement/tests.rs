@@ -1,8 +1,9 @@
 use super::*;
 use crate::daemon::{
+    executions::ExecutionKind,
     scope::Caller,
     test_support::{manager, repository},
-    workspace::{ExecutionKind, Manager},
+    workspace::Manager,
 };
 
 /// A workspace's ID, with the execution its agent runs in.

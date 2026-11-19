@@ -2,12 +2,12 @@
 //! state, the processes and hooks it stops and runs there, and deleting the
 //! worktree once a checkpoint keeps its work, or forgetting one that was
 //! deleted.
-use super::super::super::{Manager, StopRequest};
 use super::super::{Removal, STOPPED_REMOVAL, Stage};
 use super::candidacy::Baseline;
 use crate::daemon::space_processes::WorktreeTies;
 use crate::daemon::workspace::ownership::{CommonDir, verify_admin_dir_owner};
 use crate::daemon::workspace::runner::JobStop;
+use crate::daemon::{executions::StopRequest, workspace::Manager};
 use crate::model::EventCause;
 use crate::{
     fsutil::off_runtime,

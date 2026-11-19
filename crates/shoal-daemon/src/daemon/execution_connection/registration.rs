@@ -14,11 +14,10 @@ use super::{Connected, ExecutionContext};
 use crate::{
     daemon::{
         approvals::Undecided,
+        executions::{ExecutionKind, ExecutionRequest, StartedExecution},
         log,
-        workspace::{
-            ExecutionKind, ExecutionRequest, Manager, RecordChange, StartedExecution,
-            places::ExecutionPlace,
-        },
+        places::ExecutionPlace,
+        workspace::{Manager, RecordChange},
     },
     model::ExecutionPlan,
     protocol::{self, Body, ErrorCode, Response, timing},

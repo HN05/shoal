@@ -1,6 +1,6 @@
 //! Stopping executions: the stop policy and requests, and the operations
 //! that stop a workspace's executions, connected or disconnected.
-use super::super::Manager;
+use super::super::workspace::Manager;
 use super::Connections;
 use crate::daemon::log;
 use crate::daemon::operations::starts::preparation_waits;
@@ -74,7 +74,7 @@ fn converting_workspaces(db: &rusqlite::Connection) -> Result<HashSet<SpaceId>> 
 /// The proof required after stopping a disconnected execution. Both policies
 /// signal only native identity-verified processes and reject owned survivors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(in crate::daemon::workspace) enum StopPolicy {
+pub(in crate::daemon) enum StopPolicy {
     /// Retain uncertain records; only clear executions proven fully stopped.
     RequireCompleteProof,
     /// As `RequireCompleteProof`, but the user confirmed that executions
@@ -198,7 +198,7 @@ impl StopRequest {
     }
 
     /// Removal of a missing worktree, which keeps no checkpoint or record.
-    pub(in crate::daemon::workspace) fn removal() -> Self {
+    pub(in crate::daemon) fn removal() -> Self {
         Self {
             reason: "the workspace is being removed".into(),
             save: Save::Nothing,
@@ -207,7 +207,7 @@ impl StopRequest {
 
     /// Removal of a chat or an existing worktree, whose removal record keeps
     /// its agents.
-    pub(in crate::daemon::workspace) fn restorable_removal() -> Self {
+    pub(in crate::daemon) fn restorable_removal() -> Self {
         Self {
             save: Save::RemovedAgents,
             ..Self::removal()
@@ -367,7 +367,7 @@ impl Manager {
     /// Stop executions other than agents that protection already stopped
     /// for `request`, keeping their restores and those the stopped agents
     /// request.
-    pub(in crate::daemon::workspace) async fn stop_keeping_restores(
+    pub(in crate::daemon) async fn stop_keeping_restores(
         &self,
         selector: &SpaceSelector,
         request: StopRequest,
@@ -545,7 +545,7 @@ impl Manager {
         stopping
     }
 
-    pub(in crate::daemon::workspace) async fn stop_disconnected(
+    pub(in crate::daemon) async fn stop_disconnected(
         &self,
         execution: &Execution,
         policy: StopPolicy,
@@ -623,7 +623,7 @@ impl Manager {
     /// `ties` says once the directory is verified to be its worktree still,
     /// of the repository whose shared Git directory is `common_dir` when
     /// the removal read it.
-    pub(in crate::daemon::workspace) async fn stop_removed_processes(
+    pub(in crate::daemon) async fn stop_removed_processes(
         &self,
         space: &Space,
         ties: WorktreeTies,
@@ -642,7 +642,7 @@ impl Manager {
     }
 
     /// Ask connected wrappers to stop and signal disconnected survivors.
-    pub(in crate::daemon::workspace) async fn stop_executions(
+    pub(in crate::daemon) async fn stop_executions(
         &self,
         id: &SpaceId,
         policy: StopPolicy,

@@ -18,11 +18,10 @@ use tokio::{
 use super::{
     events::{AgentEvent, EventKind},
     execution_recovery,
+    executions::{Completing, ExecutionKind, ReattachedExecution, StopRequest},
+    places::ExecutionPlace,
     scope::Caller,
-    workspace::{
-        Completing, ExecutionKind, Manager, ReattachedExecution, RecordChange, StopRequest,
-        places::ExecutionPlace,
-    },
+    workspace::{Manager, RecordChange},
 };
 use crate::{
     execution::TrackedAgent,

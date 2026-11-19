@@ -1,8 +1,8 @@
 use super::*;
 use crate::daemon::{
+    executions::ExecutionKind,
     ports::PortRequest,
     test_support::{install_test_script, manager, repository},
-    workspace::ExecutionKind,
     workspace_files::Attacher,
 };
 use crate::execution::recovery::LastSessionExt;
@@ -694,7 +694,7 @@ async fn chat_agent(
     manager: &std::sync::Arc<Manager>,
     root: &std::path::Path,
     mode: &str,
-) -> crate::daemon::workspace::StartedExecution {
+) -> crate::daemon::executions::StartedExecution {
     let repo = repository(root, "repo");
     let repo = manager
         .register_repository(repo.to_str().unwrap().into(), None, None)

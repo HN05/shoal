@@ -1,6 +1,6 @@
 use super::*;
 use crate::daemon::links::issue::test_support::{AGENT_TOKEN, Fixture, run_agent};
-use crate::daemon::{workspace::ExecutionKind, workspace_files::Attacher};
+use crate::daemon::{executions::ExecutionKind, workspace_files::Attacher};
 use crate::execution::recovery::RecordExt;
 use crate::paths::StateFiles;
 use crate::removal::{InspectionPolicy, UnsavedWork};
@@ -322,7 +322,7 @@ async fn stopping_an_asleep_agent_takes_the_agent_account_off() {
     let execution = run_agent(manager, workspace).await;
     save_stop(manager, workspace, &execution, true);
     finish(manager, execution).await;
-    let stop = crate::daemon::workspace::StopRequest::manual();
+    let stop = crate::daemon::executions::StopRequest::manual();
     (manager.stop_space(&SpaceSelector::id(&workspace.id), stop))
         .await
         .unwrap();

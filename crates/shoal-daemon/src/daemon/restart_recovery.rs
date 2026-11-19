@@ -369,7 +369,7 @@ fn forget_unknown_execution(
     tx: &rusqlite::Transaction<'_>,
     id: &ExecutionId,
 ) -> Result<Option<Option<shoal_ids::space_ids::SpaceId>>> {
-    let space = crate::daemon::workspace::executions::agent_execution_space(tx, id)?;
+    let space = crate::daemon::executions::agent_execution_space(tx, id)?;
     let deleted = tx.execute(
         "DELETE FROM executions WHERE id=?1 AND state=?2",
         rusqlite::params![id, ExecutionState::Unknown],

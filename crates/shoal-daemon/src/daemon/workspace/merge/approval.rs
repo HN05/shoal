@@ -26,7 +26,7 @@ impl Manager {
     /// "direct" and its `push` permission lets the merge push the default
     /// branch without it. The caller holds the repository Git gate, so the
     /// approved commit is the one that merges.
-    pub(in crate::daemon::workspace) async fn authorize_scoped_merge(
+    pub(in crate::daemon) async fn authorize_scoped_merge(
         &self,
         plan: &MergePlan,
         caller: &Caller,
@@ -40,7 +40,7 @@ impl Manager {
 
     /// A scoped unmerge needs the user's approval for undoing the merge
     /// `plan` names under the same settings a scoped merge does.
-    pub(in crate::daemon::workspace) async fn authorize_scoped_unmerge(
+    pub(in crate::daemon) async fn authorize_scoped_unmerge(
         &self,
         plan: &UnmergePlan,
         caller: &Caller,

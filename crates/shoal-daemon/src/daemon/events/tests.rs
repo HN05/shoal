@@ -1,9 +1,9 @@
 use super::*;
 use crate::{
     daemon::{
+        executions::ExecutionKind,
         notifications::NotificationKind,
         test_support::{git, manager, repository},
-        workspace::ExecutionKind,
         workspace_files::Attacher,
     },
     protocol::{self, Body, Response, WorkspaceMethod},

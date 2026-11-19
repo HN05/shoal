@@ -1,6 +1,9 @@
 use super::super::tests::rex_fixture;
 use crate::{
-    daemon::workspace::{ExecutionKind, ExecutionRequest, places::ExecutionPlace},
+    daemon::{
+        executions::{ExecutionKind, ExecutionRequest},
+        places::ExecutionPlace,
+    },
     execution::{
         TrackedAgent,
         recovery::{self, Record, RecordExt as _},

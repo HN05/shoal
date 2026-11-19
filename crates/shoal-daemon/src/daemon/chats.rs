@@ -89,17 +89,17 @@ impl Manager {
         chat: Chat,
         origin: Option<crate::sessions::Origin>,
     ) -> Result<Chat> {
-        let place = origin.map(|origin| workspace::places::ExecutionPlace {
+        let place = origin.map(|origin| super::places::ExecutionPlace {
             origin,
             agent: true,
         });
-        let request = workspace::ExecutionRequest {
+        let request = super::executions::ExecutionRequest {
             place,
             agent: true,
             ..Default::default()
         };
         let selector = SpaceSelector::id(&chat.id);
-        let kind = workspace::ExecutionKind::Command;
+        let kind = super::executions::ExecutionKind::Command;
         let mut started =
             (self.begin_execution_placed(&selector, None, kind, None, request)).await?;
         let agent = crate::execution::TrackedAgent {

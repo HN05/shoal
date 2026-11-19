@@ -3,8 +3,8 @@ use std::os::unix::fs::PermissionsExt;
 
 use crate::{
     daemon::{
+        executions::ExecutionKind,
         test_support::{manager, repository},
-        workspace::ExecutionKind,
     },
     env,
     removal::{InspectionPolicy, UnsavedWork},

@@ -1,9 +1,7 @@
 use super::*;
 use crate::daemon::{
-    links::proposals::tests as proposals,
-    test_support,
-    workspace::{ExecutionKind, identity},
-    workspace_files::Attacher,
+    executions::ExecutionKind, links::proposals::tests as proposals, test_support,
+    workspace::identity, workspace_files::Attacher,
 };
 use crate::removal::{InspectionPolicy, UnsavedWork};
 use crate::time::UnixTime;

@@ -2,8 +2,8 @@ use super::*;
 use crate::sessions::PlaceOwnership;
 use crate::{
     daemon::{
+        executions::ExecutionKind,
         test_support::{manager, repository},
-        workspace::ExecutionKind,
     },
     sessions::HostName,
 };
@@ -30,8 +30,8 @@ async fn an_execution_reports_where_it_runs() -> Result<()> {
             None,
             ExecutionKind::Command,
             None,
-            crate::daemon::workspace::ExecutionRequest {
-                place: Some(crate::daemon::workspace::places::ExecutionPlace {
+            crate::daemon::executions::ExecutionRequest {
+                place: Some(crate::daemon::places::ExecutionPlace {
                     origin: origin.clone(),
                     agent: true,
                 }),

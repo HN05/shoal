@@ -1,7 +1,7 @@
 use super::*;
 use crate::daemon::{
+    executions::{ExecutionKind, StartedExecution, StopRequest},
     test_support::{manager, repository},
-    workspace::{ExecutionKind, StartedExecution, StopRequest},
 };
 use crate::state::AgentState;
 use shoal_protocol::space_names::SpaceSelector;
@@ -143,10 +143,7 @@ async fn a_load_stop_the_store_cannot_record_still_stops_the_agent() {
     assert!(manager.stop_agent_for_overload("memory pressure").await);
     assert!(*execution.stop.borrow());
     let request = manager.executions.stop_request(id).await.unwrap();
-    assert_eq!(
-        request.save,
-        crate::daemon::workspace::executions::Save::Everything
-    );
+    assert_eq!(request.save, crate::daemon::executions::Save::Everything);
 }
 
 #[tokio::test]

@@ -760,13 +760,13 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
             let error = manager
                 .stop_space(
                     &SpaceSelector::id(&workspace.id),
-                    crate::daemon::workspace::StopRequest::manual(),
+                    crate::daemon::executions::StopRequest::manual(),
                 )
                 .await
                 .unwrap_err();
             assert!(
                 error
-                    .downcast_ref::<crate::daemon::workspace::UnprovenStop>()
+                    .downcast_ref::<crate::daemon::executions::UnprovenStop>()
                     .is_some(),
                 "{error:#}"
             );
@@ -778,7 +778,7 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
                 .stop_executions(
                     &workspace.id,
                     removal.stop_policy(),
-                    &crate::daemon::workspace::StopRequest::removal(),
+                    &crate::daemon::executions::StopRequest::removal(),
                 )
                 .await;
             assert_eq!(stopped.is_err(), retained);
@@ -846,13 +846,13 @@ async fn acknowledged_stop_forgets_an_execution_without_launch_identity() {
     let unproven = manager
         .stop_space(
             &SpaceSelector::id(&workspace.id),
-            crate::daemon::workspace::StopRequest::manual(),
+            crate::daemon::executions::StopRequest::manual(),
         )
         .await
         .unwrap_err();
     assert!(
         unproven
-            .downcast_ref::<crate::daemon::workspace::UnprovenStop>()
+            .downcast_ref::<crate::daemon::executions::UnprovenStop>()
             .is_some()
     );
     assert_eq!(
@@ -927,7 +927,7 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
         let stopped = manager
             .stop_space(
                 &SpaceSelector::id(&workspace.id),
-                crate::daemon::workspace::StopRequest::manual(),
+                crate::daemon::executions::StopRequest::manual(),
             )
             .await;
         assert!(stopped.is_err());

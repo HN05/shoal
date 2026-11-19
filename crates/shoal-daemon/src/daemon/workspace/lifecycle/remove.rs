@@ -1,11 +1,12 @@
 //! Removing a space, whichever removes it: reserving it, checking it again
 //! at each step, stopping its agent, removing the spaces below it, then its
 //! worktree where it has one, and deleting its record.
-use super::super::{
-    Manager, StopRequest, completion_cleanup::CompletedAncestor, space_removal::AgentState,
-};
 use super::worktree::{WorktreeRemoval, WorktreeStage};
 use super::{Removal, Stage};
+use crate::daemon::{
+    executions::StopRequest,
+    workspace::{Manager, completion_cleanup::CompletedAncestor, space_removal::AgentState},
+};
 use crate::model::EventCause;
 use crate::{
     daemon::{cleanup::Snapshot, space_processes::WorktreeTies},

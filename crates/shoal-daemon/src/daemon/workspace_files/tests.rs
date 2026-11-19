@@ -6,9 +6,10 @@ use std::time::Duration;
 use super::{Attacher, FileSource};
 use crate::{
     daemon::{
+        executions::ExecutionKind,
         scope::Caller,
         test_support::{manager, repository},
-        workspace::{ExecutionKind, Manager},
+        workspace::Manager,
     },
     execution::recovery,
     model::Workspace,

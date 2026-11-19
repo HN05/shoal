@@ -7,9 +7,10 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::scope_tokens::ScopeToken;
 
-use super::{
-    super::{Manager, places::ExecutionPlace},
-    homes::{Home, Provisions},
+use super::super::{
+    executions::homes::{Home, Provisions},
+    places::ExecutionPlace,
+    workspace::Manager,
 };
 use crate::model::ExecutionPlan;
 

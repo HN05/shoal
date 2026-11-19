@@ -509,7 +509,7 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
         .begin_execution(
             workspace.id.as_str(),
             None,
-            crate::daemon::workspace::ExecutionKind::Command,
+            crate::daemon::executions::ExecutionKind::Command,
             None,
         )
         .await
@@ -518,7 +518,7 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
     manager
         .finish_execution(
             started.plan.id,
-            crate::daemon::workspace::ExecutionKind::Command,
+            crate::daemon::executions::ExecutionKind::Command,
             Some(0),
         )
         .await

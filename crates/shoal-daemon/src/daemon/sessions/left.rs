@@ -9,7 +9,7 @@ use anyhow::Result;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
-use super::super::{Manager, places};
+use super::super::{places, workspace::Manager};
 use crate::{
     daemon::log,
     execution::recovery::{Saved, SavedExt as _},

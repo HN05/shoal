@@ -216,7 +216,7 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
                 space_id: child.id.clone(),
                 execution: Some(ScopedExecution {
                     id: "execution".into(),
-                    kind: super::super::ExecutionKind::Command,
+                    kind: crate::daemon::executions::ExecutionKind::Command,
                     agent_execution: None,
                 }),
                 granted: None,
@@ -1073,7 +1073,7 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
             .begin_execution(
                 workspace.id.as_str(),
                 None,
-                super::super::ExecutionKind::Command,
+                crate::daemon::executions::ExecutionKind::Command,
                 None,
             )
             .await
@@ -1143,7 +1143,7 @@ async fn an_agent_waiting_for_its_restore_keeps_its_workspaces_activity() {
         .begin_execution(
             child.id.as_str(),
             None,
-            super::super::ExecutionKind::Command,
+            crate::daemon::executions::ExecutionKind::Command,
             None,
         )
         .await

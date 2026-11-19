@@ -6,9 +6,10 @@ use std::{fs, path::PathBuf, sync::Arc};
 
 use crate::{
     daemon::{
+        executions::ExecutionKind,
         scope,
         test_support::{commit, git, install_test_script, manager, repository},
-        workspace::{ExecutionKind, Manager, NewWorktreeOptions},
+        workspace::{Manager, NewWorktreeOptions},
     },
     paths::Paths,
     protocol::{DaemonMethod, ExecutionMethod, Operation, RemovalMethod, WorkspaceMethod},
@@ -1518,7 +1519,7 @@ async fn merge_refuses_dirty_checkouts_and_other_branches() {
 async fn merge_as_agent(
     f: &Fixture,
     workspace: &crate::model::Workspace,
-) -> anyhow::Result<crate::daemon::workspace::StartedExecution> {
+) -> anyhow::Result<crate::daemon::executions::StartedExecution> {
     begin_merge_as_agent(f, workspace, false).await
 }
 
@@ -1528,7 +1529,7 @@ async fn begin_merge_as_agent(
     f: &Fixture,
     workspace: &crate::model::Workspace,
     push: bool,
-) -> anyhow::Result<crate::daemon::workspace::StartedExecution> {
+) -> anyhow::Result<crate::daemon::executions::StartedExecution> {
     let options = crate::model::MergeOptions {
         push,
         ..Default::default()
@@ -1541,14 +1542,14 @@ async fn begin_merge_by_agent(
     f: &Fixture,
     workspace: &crate::model::Workspace,
     options: crate::model::MergeOptions,
-) -> anyhow::Result<crate::daemon::workspace::StartedExecution> {
+) -> anyhow::Result<crate::daemon::executions::StartedExecution> {
     let caller = scope::Caller {
         execution: None,
         space_id: workspace.id.clone(),
         granted: None,
         read_only: false,
     };
-    let request = crate::daemon::workspace::ExecutionRequest {
+    let request = crate::daemon::executions::ExecutionRequest {
         merge: Some(options),
         ..Default::default()
     };
@@ -1573,7 +1574,7 @@ async fn undecided_merge(
 
 /// The approval request `begun` waits for or was refused.
 fn undecided(
-    begun: anyhow::Result<crate::daemon::workspace::StartedExecution>,
+    begun: anyhow::Result<crate::daemon::executions::StartedExecution>,
 ) -> crate::daemon::approvals::ApprovalRequest {
     let error = begun.expect_err("merge needs a decision");
     *error

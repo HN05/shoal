@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::super::{ExecutionKind, Manager};
+use crate::daemon::{executions::ExecutionKind, workspace::Manager};
 use crate::{
     daemon::test_support::{manager, repository},
     execution::TrackedAgent,
@@ -34,7 +34,10 @@ async fn split_child(manager: &Manager, root: &std::path::Path) -> (Workspace, W
 
 /// Run an agent the daemon tracks in `workspace` until the returned
 /// execution finishes.
-async fn start_agent(manager: &Manager, workspace: &Workspace) -> super::super::StartedExecution {
+async fn start_agent(
+    manager: &Manager,
+    workspace: &Workspace,
+) -> crate::daemon::executions::StartedExecution {
     let started = manager
         .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
@@ -53,7 +56,7 @@ async fn start_agent(manager: &Manager, workspace: &Workspace) -> super::super::
 }
 
 /// End the agent `started` runs.
-async fn finish(manager: &Manager, started: super::super::StartedExecution) {
+async fn finish(manager: &Manager, started: crate::daemon::executions::StartedExecution) {
     manager
         .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(0))
         .await

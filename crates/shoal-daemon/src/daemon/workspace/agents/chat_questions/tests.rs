@@ -4,8 +4,9 @@ use std::{sync::Arc, time::Duration};
 
 use crate::{
     daemon::{
+        executions::ExecutionKind,
         test_support::{manager, repository},
-        workspace::{ExecutionKind, Manager},
+        workspace::Manager,
         workspace_files::Attacher,
     },
     model::Workspace,

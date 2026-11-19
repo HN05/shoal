@@ -1,8 +1,8 @@
 use super::*;
 use crate::{
     daemon::{
+        executions::ExecutionKind,
         test_support::{manager, repository},
-        workspace::ExecutionKind,
     },
     model::Workspace,
     state::AgentState,

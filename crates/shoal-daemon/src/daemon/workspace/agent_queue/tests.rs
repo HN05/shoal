@@ -456,7 +456,7 @@ pub(super) async fn connected_agent(
         .begin_execution(
             workspace.id.as_str(),
             None,
-            crate::daemon::workspace::ExecutionKind::Command,
+            crate::daemon::executions::ExecutionKind::Command,
             None,
         )
         .await
@@ -615,7 +615,7 @@ async fn forget(manager: &Manager, workspace: &crate::model::Workspace, executio
     manager
         .finish_execution_after_scan(
             execution.to_owned(),
-            crate::daemon::workspace::ExecutionKind::Command,
+            crate::daemon::executions::ExecutionKind::Command,
             Some(0),
             Some(Ok(crate::process::identity::Scan::default())),
         )
@@ -774,7 +774,7 @@ async fn lowered_limits_hold_restores_until_a_stopped_agent_is_forgotten() {
     manager
         .finish_execution(
             agents[1].0.clone(),
-            crate::daemon::workspace::ExecutionKind::Command,
+            crate::daemon::executions::ExecutionKind::Command,
             Some(0),
         )
         .await

@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::daemon::test_support::{configure, git, manager, repository};
 use crate::{
-    daemon::workspace::{ExecutionKind, Manager},
+    daemon::{executions::ExecutionKind, workspace::Manager},
     execution::TrackedAgent,
     model::{Assigner, Workspace},
 };

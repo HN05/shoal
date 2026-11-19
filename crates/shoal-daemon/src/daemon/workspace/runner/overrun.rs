@@ -12,8 +12,9 @@ use super::JobStop;
 use super::ends::ClaimedJob;
 use crate::daemon::{
     events::{JobEndedEvent, StoppedProcess},
+    executions::{Save, StopRequest},
     space_processes::Selection,
-    workspace::{Manager, StopRequest, executions::Save},
+    workspace::Manager,
 };
 use shoal_forge::ci::{run_view::RunViewRequests, runner::took_job};
 use shoal_protocol::space_names::SpaceSelector;

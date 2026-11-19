@@ -31,7 +31,10 @@ pub mod test_daemon {
     pub use crate::daemon::scope::Caller;
     pub use crate::daemon::test_daemon::{HANG, TestDaemon};
     pub use crate::daemon::test_support::{chat_launches, configure, overload};
-    pub use crate::daemon::workspace::{Manager, PermissionTargets, StopRequest};
+    pub use crate::daemon::{
+        executions::StopRequest,
+        workspace::{Manager, PermissionTargets},
+    };
 }
 
 /// Run the daemon in this process, given its state, whether its service

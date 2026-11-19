@@ -3,9 +3,9 @@ use crate::daemon::workspace::agents::ProtectionExt;
 use crate::execution::recovery::RecordExt;
 use crate::{
     daemon::{
+        executions::{ExecutionKind, StartedExecution},
         notifications::NotificationKind,
         test_support::{manager, repository},
-        workspace::{ExecutionKind, StartedExecution},
     },
     execution::recovery::Record,
     model::Workspace,
@@ -487,7 +487,7 @@ async fn idle_chat(
     mode: &str,
 ) -> (
     crate::model::Chat,
-    crate::daemon::workspace::StartedExecution,
+    crate::daemon::executions::StartedExecution,
 ) {
     let repo = repository(root, "repo");
     let repo = manager

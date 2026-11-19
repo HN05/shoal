@@ -8,9 +8,9 @@ use super::*;
 use crate::{
     daemon::{
         execution_connection::{ExecutionContext, execute},
+        executions::ExecutionKind,
         notifications::NotificationKind,
         test_support::{manager, repository},
-        workspace::ExecutionKind,
     },
     execution::recovery,
     model::Workspace,

@@ -255,7 +255,7 @@ async fn workspace_processes_create_workspaces_at_a_commit_only_below_their_own(
                 space_id: own.id.clone(),
                 execution: Some(ScopedExecution {
                     id: "execution".into(),
-                    kind: super::super::ExecutionKind::Command,
+                    kind: crate::daemon::executions::ExecutionKind::Command,
                     agent_execution: None,
                 }),
                 granted: None,

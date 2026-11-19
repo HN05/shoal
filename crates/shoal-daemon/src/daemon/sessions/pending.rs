@@ -13,7 +13,7 @@ pub(super) struct Close {
 
 /// Queue only hosts that supply session cleanup. The unique launch ID binds
 /// retries to this demo even if its host has since reused the session's name.
-pub(in crate::daemon::workspace) fn record_demo(
+pub(in crate::daemon) fn record_demo(
     tx: &Transaction<'_>,
     execution: &ExecutionId,
     hosts: &[crate::sessions::HostName],

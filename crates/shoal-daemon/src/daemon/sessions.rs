@@ -12,7 +12,7 @@ use anyhow::{Context as _, Result};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;
 
-use super::Manager;
+use super::workspace::Manager;
 use crate::{
     daemon::notifications::NotificationKind,
     sessions::{HostName, Origin, Owner, PlaceClose},

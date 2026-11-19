@@ -375,7 +375,7 @@ async fn failed_cleanup_still_stops_executions_on_critical_space() {
         .begin_execution(
             busy.id.as_str(),
             None,
-            crate::daemon::workspace::ExecutionKind::Command,
+            crate::daemon::executions::ExecutionKind::Command,
             None,
         )
         .await
@@ -449,7 +449,7 @@ async fn low_space_warns_running_agents_before_cleanup_starts() {
         .begin_execution(
             workspace.id.as_str(),
             None,
-            crate::daemon::workspace::ExecutionKind::Command,
+            crate::daemon::executions::ExecutionKind::Command,
             None,
         )
         .await

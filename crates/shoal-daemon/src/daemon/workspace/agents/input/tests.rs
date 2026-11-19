@@ -2,8 +2,9 @@ use std::time::Duration;
 
 use super::*;
 use crate::daemon::{
+    executions::ExecutionKind,
     test_support::{manager, repository},
-    workspace::{ExecutionKind, Manager},
+    workspace::Manager,
 };
 use crate::model::Workspace;
 

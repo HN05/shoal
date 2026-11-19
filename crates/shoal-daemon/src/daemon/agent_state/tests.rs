@@ -489,7 +489,7 @@ async fn the_agents_ai_tool_decides_its_prompt_cache_lifetime() {
         .begin_execution(
             workspace.id.as_str(),
             None,
-            super::super::workspace::ExecutionKind::Command,
+            super::super::executions::ExecutionKind::Command,
             None,
         )
         .await

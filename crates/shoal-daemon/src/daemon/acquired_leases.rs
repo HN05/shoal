@@ -83,7 +83,7 @@ impl Manager {
         let id = execution.to_owned();
         let demo = self
             .store
-            .read(move |db| super::workspace::demos::runs_demo(db, &id))
+            .read(move |db| super::demos::runs_demo(db, &id))
             .await;
         demo.unwrap_or_else(|error| {
             log!("demo of execution {execution} unreadable: {error:#}");

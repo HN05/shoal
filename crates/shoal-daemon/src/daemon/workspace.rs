@@ -18,10 +18,8 @@ mod coordinated;
 mod copies;
 mod creation;
 mod daemon_exit;
-pub(crate) mod demos;
 mod diff;
 mod disowned;
-pub(crate) mod executions;
 mod fast_forward;
 pub(crate) mod holds;
 pub(in crate::daemon) mod identity;
@@ -31,9 +29,8 @@ mod lifecycle;
 pub(crate) use lifecycle::{BelowElsewhere, fail_interrupted_removals};
 mod location;
 mod merge;
-mod ownership;
+pub(super) mod ownership;
 pub(crate) mod paths;
-pub(crate) mod places;
 mod refresh;
 mod registry;
 mod repo_configuration;
@@ -43,7 +40,6 @@ mod reservation;
 mod restore;
 pub(crate) mod review;
 pub(crate) mod runner;
-mod sessions;
 mod shutdown_stop;
 mod space_removal;
 pub(crate) mod spotlight;
@@ -64,8 +60,6 @@ pub(crate) use contributions::holds::{
 pub(crate) use copies::CopyPlace;
 pub(crate) use creation::{NewWorkspace, build_pending_in};
 pub(crate) use daemon_exit::Ending;
-pub(crate) use executions::{Completing, ExecutionRequest, ReattachedExecution, StartedExecution};
-pub use executions::{ExecutionKind, StopRequest, UnprovenStop};
 pub(crate) use holds::place_approved as place_approved_hold;
 pub(crate) use lifecycle::not_ready;
 pub(crate) use merge::RecordChange;
@@ -122,7 +116,7 @@ pub struct Manager {
     pub paths: Paths,
     /// Arrival order of queued resource and simulator requests.
     pub(crate) queues: super::queue::Queues,
-    pub executions: executions::Executions,
+    pub executions: super::executions::Executions,
     pub overload_recovery: super::overload_recovery::OverloadRecovery,
     /// The busy CPU the overload monitor reads for job admission.
     pub(crate) busy_cpu: super::busy_cpu::BusyCpu,
@@ -383,7 +377,7 @@ impl Manager {
                     completion,
                     pr_cleanup,
                     executions: store::executions(db, &workspace.id)?,
-                    places: places::owned(db, Some(&workspace.id))?
+                    places: super::places::owned(db, Some(&workspace.id))?
                         .into_iter()
                         .map(|(_, place)| place)
                         .collect(),

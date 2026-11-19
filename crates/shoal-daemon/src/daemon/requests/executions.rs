@@ -6,8 +6,9 @@ use anyhow::{Result, ensure};
 use super::super::{
     answer::Answer,
     execution_connection,
+    executions::ExecutionKind,
     scope::{Caller, Scoped},
-    workspace::{ExecutionKind, Manager},
+    workspace::Manager,
 };
 use crate::protocol::{Body, ExecutionMethod};
 use shoal_protocol::space_names::SpaceSelector;

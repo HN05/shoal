@@ -3,9 +3,10 @@ use crate::execution::recovery::LastSessionExt;
 use crate::paths::StateFiles;
 use crate::{
     daemon::{
+        executions::ExecutionKind,
         scope::{self, Caller},
         test_support::{manager, names, repository},
-        workspace::{ExecutionKind, Manager},
+        workspace::Manager,
         workspace_files::Attacher,
     },
     protocol::AgentMethod,
@@ -213,7 +214,7 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
 async fn run_agent(
     manager: &Manager,
     workspace: &crate::model::Workspace,
-) -> crate::daemon::workspace::StartedExecution {
+) -> crate::daemon::executions::StartedExecution {
     let execution = manager
         .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await

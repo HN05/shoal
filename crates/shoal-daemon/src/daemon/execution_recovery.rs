@@ -13,7 +13,10 @@ use tokio::{
     sync::{OwnedRwLockReadGuard, mpsc, watch},
 };
 
-use super::workspace::{Grant, Manager, Pause, Protection, StopRequest};
+use super::{
+    executions::StopRequest,
+    workspace::{Grant, Manager, Pause, Protection},
+};
 use crate::daemon::log;
 use crate::{
     config::permissions::PermissionsConfig,

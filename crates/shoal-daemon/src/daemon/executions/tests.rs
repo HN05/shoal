@@ -155,7 +155,7 @@ async fn registration_publishes_atomically_and_preserves_stop_during_pre_setup()
                 .stop_executions(
                     &id,
                     StopPolicy::RequireCompleteProof,
-                    &crate::daemon::workspace::StopRequest::removal(),
+                    &crate::daemon::executions::StopRequest::removal(),
                 )
                 .await
         })

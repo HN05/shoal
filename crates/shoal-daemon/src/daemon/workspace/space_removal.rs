@@ -10,10 +10,10 @@ use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use std::borrow::Cow;
 
 use super::super::{
+    executions::{StopPolicy, StopRequest},
     gates::GuardMode,
     workspace::{
-        Manager, StopRequest,
-        executions::StopPolicy,
+        Manager,
         lifecycle::{Removal, Underway},
         reservation::RemovalRules,
     },

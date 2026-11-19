@@ -9,8 +9,8 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use super::{
-    Manager,
     executions::{Save, StopPolicy, StopRequest},
+    workspace::Manager,
 };
 use crate::{
     demos::{Launch, Progress, Running},

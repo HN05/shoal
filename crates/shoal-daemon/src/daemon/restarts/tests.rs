@@ -7,9 +7,10 @@ use super::record::{self, Recorded};
 use crate::{
     config::permissions::PermissionChange,
     daemon::{
+        executions::ExecutionKind,
         scope::Caller,
         test_support::{manager, repository},
-        workspace::{ExecutionKind, Manager},
+        workspace::Manager,
     },
     model::{AgentRestart, RestartOutcome, RestartWait, Workspace},
     state::AgentState,
@@ -148,7 +149,7 @@ async fn a_restart_waiting_for_processes_answers_what_it_waits_for() {
 async fn working(
     root: &std::path::Path,
     manager: &Manager,
-) -> (Workspace, crate::daemon::workspace::StartedExecution) {
+) -> (Workspace, crate::daemon::executions::StartedExecution) {
     let workspace = workspace(root, manager).await;
     let execution = manager
         .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
@@ -283,7 +284,7 @@ async fn a_recorded_restart_goes_when_its_agent_exits_first() {
 async fn fail_after_the_turn(
     manager: &std::sync::Arc<Manager>,
     workspace: &Workspace,
-    execution: &crate::daemon::workspace::StartedExecution,
+    execution: &crate::daemon::executions::StartedExecution,
     caller: Option<&Caller>,
 ) {
     let space = SpaceSelector::id(&workspace.id);

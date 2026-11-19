@@ -264,7 +264,7 @@ async fn leases_of_ended_and_stopped_agents_are_released_and_running_ones_kept()
     let demo = fixture.manager.begin_execution(
         fixture.workspace.id.as_str(),
         None,
-        crate::daemon::workspace::ExecutionKind::Command,
+        crate::daemon::executions::ExecutionKind::Command,
         None,
     );
     let demo = demo.await.unwrap().plan.id;
@@ -322,7 +322,7 @@ impl Fixture {
             environment: [(SIM_UDID.to_owned(), udid.to_owned())].into(),
             origin: Origin::created(HostName::Zmx, name.into()),
         };
-        let kind = crate::daemon::workspace::ExecutionKind::Command;
+        let kind = crate::daemon::executions::ExecutionKind::Command;
         let started = self.manager.begin_execution_running(
             self.workspace.id.as_str(),
             None,

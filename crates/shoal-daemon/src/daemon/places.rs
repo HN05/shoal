@@ -7,7 +7,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
-use super::Manager;
+use super::workspace::Manager;
 use crate::{
     model::SpacePlaces,
     sessions::{Origin, PlaceOwnership},

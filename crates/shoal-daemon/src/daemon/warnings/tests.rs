@@ -1,7 +1,7 @@
 use super::*;
 use crate::daemon::{
+    executions::ExecutionKind,
     test_support::{manager, repository},
-    workspace::ExecutionKind,
 };
 use shoal_protocol::space_names::SpaceSelector;
 

@@ -4,7 +4,7 @@ use shoal_ids::execution_ids::ExecutionId;
 use std::collections::HashSet;
 
 use crate::{
-    daemon::workspace::{Manager, StopRequest},
+    daemon::{executions::StopRequest, workspace::Manager},
     fsutil::off_runtime,
     model::Workspace,
     process::{execution::Processes, identity as process},

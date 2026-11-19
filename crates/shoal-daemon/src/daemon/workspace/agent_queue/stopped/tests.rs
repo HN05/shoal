@@ -450,7 +450,7 @@ async fn restores_leave_the_queue_once_resolved_or_cancelled() {
     manager
         .stop_space(
             &manager.named("work").await,
-            crate::daemon::workspace::StopRequest::manual(),
+            crate::daemon::executions::StopRequest::manual(),
         )
         .await
         .unwrap();
@@ -510,7 +510,7 @@ async fn a_stop_or_completion_keeps_stopped_agents_down() {
     manager
         .stop_space(
             &manager.named("signalled").await,
-            crate::daemon::workspace::StopRequest::manual(),
+            crate::daemon::executions::StopRequest::manual(),
         )
         .await
         .unwrap();
@@ -642,7 +642,7 @@ async fn a_stop_cancels_an_admitted_restore_before_its_agent_registers() {
     manager
         .stop_space(
             &manager.named("work").await,
-            crate::daemon::workspace::StopRequest::manual(),
+            crate::daemon::executions::StopRequest::manual(),
         )
         .await
         .unwrap();
@@ -690,7 +690,7 @@ async fn a_stop_forgets_a_request_while_a_resume_holds_its_record() {
     manager
         .stop_space(
             &manager.named("work").await,
-            crate::daemon::workspace::StopRequest::manual(),
+            crate::daemon::executions::StopRequest::manual(),
         )
         .await
         .unwrap();

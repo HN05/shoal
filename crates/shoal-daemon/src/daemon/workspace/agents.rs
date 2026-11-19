@@ -212,7 +212,7 @@ impl Agent {
 
     /// Cancel what the agent's connection keeps for its restore; the
     /// caller forgets its recorded stop.
-    pub(super) fn cancel_recovery(&mut self) {
+    pub(in crate::daemon) fn cancel_recovery(&mut self) {
         self.update_hold = None;
         self.restarts.cancel();
     }
@@ -1112,7 +1112,7 @@ impl Manager {
     ) -> Option<StoppedAgent> {
         let (name, reason) = (&stopped.name, &stopped.protection.reason);
         log!("{name} stops for {reason} without automatic restore: {error:#}");
-        let request = super::StopRequest::unrecorded(reason);
+        let request = super::super::executions::StopRequest::unrecorded(reason);
         let connections = self.executions.connections().await;
         match connections.stop(&stopped.id, &request).await {
             Ok(true) => {

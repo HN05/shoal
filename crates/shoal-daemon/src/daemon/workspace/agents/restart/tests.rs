@@ -6,8 +6,9 @@ use std::time::Duration;
 use crate::{
     config::permissions::PermissionChange,
     daemon::{
+        executions::ExecutionKind::{self},
         test_support::{manager, repository},
-        workspace::{ExecutionKind, Manager, Requested, RestartWaits},
+        workspace::{Manager, Requested, RestartWaits},
     },
     execution::recovery,
     model::{RunningAgent, Workspace},
@@ -234,8 +235,8 @@ async fn a_restart_answers_once_the_agent_runs_again_or_with_why_not() {
             None,
             ExecutionKind::Command,
             None,
-            crate::daemon::workspace::ExecutionRequest {
-                place: Some(crate::daemon::workspace::places::ExecutionPlace {
+            crate::daemon::executions::ExecutionRequest {
+                place: Some(crate::daemon::places::ExecutionPlace {
                     origin: place.clone(),
                     agent: true,
                 }),
@@ -434,7 +435,7 @@ async fn a_request_joining_a_waiting_restart_is_answered_with_what_it_waits_for_
 async fn hand_over(
     manager: &std::sync::Arc<Manager>,
     workspace: &Workspace,
-    execution: &crate::daemon::workspace::StartedExecution,
+    execution: &crate::daemon::executions::StartedExecution,
 ) -> tokio::task::JoinHandle<anyhow::Result<Option<Origin>>> {
     let id = &execution.plan.id;
     track(manager, workspace, id, "claude", true).await;

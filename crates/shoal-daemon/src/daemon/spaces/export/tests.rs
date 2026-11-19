@@ -77,7 +77,7 @@ fn chat_import(repository: Option<&crate::model::Repository>, chat: RemovedSpace
 
 /// Stop the agent of `chat`, as `shoal stop` does.
 async fn stop(manager: &Manager, chat: &crate::model::Chat) {
-    let request = crate::daemon::workspace::StopRequest::manual();
+    let request = crate::daemon::executions::StopRequest::manual();
     manager
         .stop_space(&SpaceSelector::id(&chat.id), request)
         .await

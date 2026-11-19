@@ -198,7 +198,7 @@ async fn a_stop_ends_a_new_sessions_wait_for_its_spaces_watches() {
         tokio::task::yield_now().await;
     };
     let connections = manager.executions.connections().await;
-    let request = crate::daemon::workspace::StopRequest::repair();
+    let request = crate::daemon::executions::StopRequest::repair();
     assert!(connections.stop(&id, &request).await.unwrap());
     drop(connections);
     assert!(bounded(registering).await.unwrap());

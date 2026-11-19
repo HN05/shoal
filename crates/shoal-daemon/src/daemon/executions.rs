@@ -6,9 +6,10 @@ mod homes;
 mod reregistration;
 mod stopping;
 
-use super::super::{
+use super::{
     gates::{GuardMode, ResourceGuard},
-    workspace::{Manager, places::ExecutionPlace},
+    places::ExecutionPlace,
+    workspace::Manager,
 };
 use crate::daemon::log;
 use crate::{
@@ -681,8 +682,8 @@ impl Manager {
             .pause_agent_execution(id, space, timing::PROCESS_PROOF_TIMEOUT)
             .await?
         {
-            super::agents::Pause::Paused => {}
-            super::agents::Pause::Unproven(issue) => {
+            super::workspace::agents::Pause::Paused => {}
+            super::workspace::agents::Pause::Unproven(issue) => {
                 bail!("the previous run left processes Shoal cannot prove stopped: {issue}")
             }
         }

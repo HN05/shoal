@@ -3,9 +3,9 @@ use std::time::Duration;
 use shoal_protocol::hub::routing::{Forwarded, Vouched, VouchedSpace};
 
 use crate::daemon::{
+    executions::ExecutionKind,
     hub::streams::tests::linked,
     test_daemon::{HANG, TestDaemon},
-    workspace::ExecutionKind,
 };
 
 #[tokio::test]

@@ -546,7 +546,7 @@ async fn a_failed_turn_lost_before_a_later_idle_report_is_still_retried() {
         .begin_execution(
             workspace.id.as_str(),
             None,
-            crate::daemon::workspace::ExecutionKind::Command,
+            crate::daemon::executions::ExecutionKind::Command,
             None,
         )
         .await

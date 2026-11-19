@@ -538,9 +538,7 @@ impl Manager {
     /// the queue, or that a restart starts in a new wrapper. Requires the
     /// queue gate, which keeps restores in the queue, and a restart from
     /// recording its own, until it is released.
-    pub(in crate::daemon::workspace) async fn pending_restore_workspaces(
-        &self,
-    ) -> Result<HashSet<SpaceId>> {
+    pub(in crate::daemon) async fn pending_restore_workspaces(&self) -> Result<HashSet<SpaceId>> {
         let (spaces, queued) = self
             .store
             .run(|db| Ok((all_spaces(db)?, restoring_workspaces(db)?)))

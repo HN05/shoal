@@ -772,7 +772,7 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
                 space_id: parent.id.clone(),
                 execution: Some(ScopedExecution {
                     id: "execution".into(),
-                    kind: crate::daemon::workspace::ExecutionKind::Command,
+                    kind: crate::daemon::executions::ExecutionKind::Command,
                     agent_execution: None,
                 }),
                 granted: None,
