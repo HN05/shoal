@@ -3,7 +3,8 @@
 //! the space it is for, each answered by the hub's own machine for its own
 //! spaces and passed down the link of any other, and the stream a streamed
 //! request's answer comes on is relayed from that machine's link to the
-//! caller's; while that machine is offline the hub holds what can wait and
+//! caller's, and on a duplex stream what the caller writes the other way;
+//! while that machine is offline the hub holds what can wait and
 //! refuses the rest, naming the machine and when it last saw it.
 use std::sync::Arc;
 
@@ -16,7 +17,7 @@ use shoal_protocol::hub::{
 };
 use tokio::sync::OwnedRwLockReadGuard;
 
-use super::{queue::Held, session::Calls, streams::Outgoing};
+use super::{queue::Held, session::Calls, streams::Streams};
 use crate::{
     daemon::manager::Manager,
     refusal::{Reason, Refusal},
@@ -53,29 +54,30 @@ impl Manager {
     }
 
     /// Answer `request`, which the member `from` forwards to the machine
-    /// `machine` and whose answer goes on, on `out`: the hub's own
-    /// machine writes it there, and any other's comes from its link and is
-    /// relayed. A device's goes as the user's, whatever it vouches.
+    /// `machine` and whose answer goes on, on `from`'s stream `stream` of
+    /// `streams`: the hub's own machine writes it there, and any other's
+    /// comes from its link and is relayed, with what `from` writes on a
+    /// duplex stream relayed the other way. A device's goes as the user's,
+    /// whatever it vouches.
     pub(super) async fn route_stream(
         self: &Arc<Self>,
         from: &Member,
         machine: &MemberId,
         mut request: Forwarded,
-        out: Outgoing,
+        (streams, stream): (&Streams, u64),
     ) -> Result<Reply> {
         if from.kind == MemberKind::Device {
             request.caller = Vouched::User;
         }
         let machine = self.hub_machine(machine).await?;
         if machine.hub {
-            self.serve_streamed(request, out)?;
+            self.serve_streamed(request, (streams, stream))?;
             return Ok(Reply::Streaming);
         }
         let Some(calls) = self.hub.links.calls(&machine.id) else {
             return Err(offline(&machine).into());
         };
-        let incoming = (calls.stream(|stream| Call::ServeStream { request, stream })).await?;
-        tokio::spawn(super::streams::relay(incoming, out));
+        relay_stream(&calls, request, (streams, stream)).await?;
         Ok(Reply::Streaming)
     }
 
@@ -173,13 +175,35 @@ impl Manager {
         let answered = match call {
             // Written on the hub's stream, whose number only its link knows.
             Call::ServeStream { request, stream } => {
-                let out = calls.streams().writer(stream);
-                (self.serve_streamed(request, out)).map(|()| Reply::Streaming)
+                let answering = (calls.streams(), stream);
+                (self.serve_streamed(request, answering)).map(|()| Reply::Streaming)
             }
             call => self.answer_hub_call(call).await,
         };
         (super::session::reply(answered), Some(operation))
     }
+}
+
+/// Ask the machine whose link `calls` serves for the stream that answers
+/// `request`, and relay it to the caller's stream `stream` of `streams`,
+/// with what the caller writes on a duplex one relayed back.
+async fn relay_stream(
+    calls: &Calls,
+    request: Forwarded,
+    (streams, stream): (&Streams, u64),
+) -> Result<()> {
+    let duplex = super::serving::duplex(&request)?;
+    let call = |stream| Call::ServeStream { request, stream };
+    let (incoming, up) = match duplex {
+        true => (calls.duplex(call).await).map(|(incoming, up)| (incoming, Some(up)))?,
+        false => (calls.stream(call).await?, None),
+    };
+    let (out, from_caller) = streams.answering(stream, duplex);
+    tokio::spawn(super::streams::relay(incoming, out));
+    if let (Some(from_caller), Some(up)) = (from_caller, up) {
+        tokio::spawn(super::streams::relay(from_caller, up));
+    }
+    Ok(())
 }
 
 /// The refusal of a request for an offline machine's space, naming the

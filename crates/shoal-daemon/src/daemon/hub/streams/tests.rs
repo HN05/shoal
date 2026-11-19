@@ -43,8 +43,15 @@ impl Linked {
     /// A new stream the opener reads and the writer writes.
     pub(in crate::daemon::hub) fn stream(&self) -> (Incoming, Outgoing) {
         let incoming = self.opener.streams().open();
-        let outgoing = self.writer.streams().writer(incoming.number());
+        let (outgoing, _) = self.writer.streams().answering(incoming.number(), false);
         (incoming, outgoing)
+    }
+
+    /// A new duplex stream: the opener's ends, then the other side's.
+    fn duplex(&self) -> ((Incoming, Outgoing), (Incoming, Outgoing)) {
+        let (down, up) = self.opener.streams().open_duplex();
+        let (to_opener, from_opener) = self.writer.streams().answering(down.number(), true);
+        ((down, up), (from_opener.unwrap(), to_opener))
     }
 }
 
@@ -88,6 +95,51 @@ async fn a_stalled_stream_holds_up_neither_calls_nor_other_streams() {
 }
 
 #[tokio::test]
+async fn a_duplex_stream_carries_each_side_s_bytes_under_its_own_credit() {
+    let link = linked();
+    let ((mut down, mut up), (mut from_opener, mut to_opener)) = link.duplex();
+    // The other side stalls on what the opener sends past its credit,
+    // while its own bytes still reach the opener.
+    let more_than_its_credit = vec![1; STREAM_WINDOW as usize * 2];
+    let sending = tokio::spawn(async move {
+        up.write(&more_than_its_credit).await.unwrap();
+        up.end(None).await;
+    });
+    to_opener.write(b"from the demo").await.unwrap();
+    to_opener.end(None).await;
+    assert_eq!(read_all(&mut down).await, b"from the demo");
+    assert!(matches!(
+        link.writer.call(Call::Members).await.unwrap(),
+        Reply::Left
+    ));
+    assert!(!sending.is_finished());
+    assert_eq!(
+        read_all(&mut from_opener).await.len(),
+        STREAM_WINDOW as usize * 2
+    );
+    sending.await.unwrap();
+}
+
+#[tokio::test]
+async fn a_duplex_stream_s_numbers_name_no_stream_the_other_side_opened() {
+    let link = linked();
+    // Both sides open their first stream, each numbered 1.
+    let ((down, mut up), (mut from_opener, _to_opener)) = link.duplex();
+    let mut theirs = link.writer.streams().open();
+    let (mut writing_theirs, _) = link.opener.streams().answering(theirs.number(), false);
+    assert_eq!(down.number(), theirs.number());
+    up.write(b"up").await.unwrap();
+    writing_theirs.write(b"theirs").await.unwrap();
+    assert_eq!(from_opener.next().await.unwrap().unwrap(), b"up");
+    assert_eq!(theirs.next().await.unwrap().unwrap(), b"theirs");
+    // Closing the other side's stream leaves the opener's writing.
+    drop(theirs);
+    writing_theirs.closed().await;
+    up.write(b"still read").await.unwrap();
+    assert_eq!(from_opener.next().await.unwrap().unwrap(), b"still read");
+}
+
+#[tokio::test]
 async fn a_reader_that_stops_stops_its_writer() {
     let link = linked();
     let (incoming, mut outgoing) = link.stream();
@@ -119,6 +171,7 @@ async fn bytes_past_a_stream_s_credit_fail_the_link() {
             &base64::engine::general_purpose::URL_SAFE_NO_PAD,
             vec![0; STREAM_WINDOW as usize + 1],
         ),
+        up: false,
     };
     assert!(link.opener.streams().take(&past).is_err());
 }
@@ -140,6 +193,7 @@ fn data(stream: u64, bytes: &[u8]) -> Frame {
     Frame::Data {
         stream,
         data: base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, bytes),
+        up: false,
     }
 }
 
@@ -177,7 +231,7 @@ async fn a_reader_dropped_while_the_link_is_saturated_still_closes_its_stream() 
     saturate(&channel, &mut theirs).await;
     drop(incoming);
     let mut lines = tokio::io::AsyncBufReadExt::lines(BufReader::new(theirs));
-    let close = serde_json::to_string(&Frame::Close { stream }).unwrap();
+    let close = serde_json::to_string(&Frame::Close { stream, up: false }).unwrap();
     while let Some(line) = lines.next_line().await.unwrap() {
         if line == close {
             return;

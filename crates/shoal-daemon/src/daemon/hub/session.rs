@@ -16,7 +16,7 @@ use shoal_protocol::hub::link::{Call, Frame, Reply, SILENCE};
 use tokio::{sync::oneshot, time::Instant};
 
 use super::{
-    streams::{Incoming, Streams},
+    streams::{Incoming, Outgoing, Streams},
     transport::{Channel, Sender},
 };
 
@@ -89,6 +89,23 @@ impl Calls {
         let incoming = self.streams.open();
         match self.call(call(incoming.number())).await? {
             Reply::Streaming => Ok(incoming),
+            reply => bail!(
+                "{} answered a stream with an unexpected {reply:?}",
+                self.peer
+            ),
+        }
+    }
+
+    /// The duplex stream the other side writes in answer to the call
+    /// `call` makes of the new stream's number, once it replies that it
+    /// does, with this side's writer of it, which writes nothing before.
+    pub(crate) async fn duplex(
+        &self,
+        call: impl FnOnce(u64) -> Call,
+    ) -> Result<(Incoming, Outgoing)> {
+        let (incoming, outgoing) = self.streams.open_duplex();
+        match self.call(call(incoming.number())).await? {
+            Reply::Streaming => Ok((incoming, outgoing)),
             reply => bail!(
                 "{} answered a stream with an unexpected {reply:?}",
                 self.peer

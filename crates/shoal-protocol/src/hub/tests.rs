@@ -127,20 +127,41 @@ fn a_stream_s_frames_and_call_keep_their_json() {
         Frame::Data {
             stream: 3,
             data: "AQI".into(),
+            up: false,
+        },
+        Frame::Data {
+            stream: 3,
+            data: "AQI".into(),
+            up: true,
         },
         Frame::End {
             stream: 3,
             error: None,
+            up: false,
         },
         Frame::End {
             stream: 3,
             error: Some("lost".into()),
+            up: true,
         },
         Frame::Credit {
             stream: 3,
             bytes: 131072,
+            up: false,
         },
-        Frame::Close { stream: 3 },
+        Frame::Credit {
+            stream: 3,
+            bytes: 131072,
+            up: true,
+        },
+        Frame::Close {
+            stream: 3,
+            up: false,
+        },
+        Frame::Close {
+            stream: 3,
+            up: true,
+        },
         Frame::Call {
             id: 7,
             call: Call::Stream {
@@ -161,10 +182,13 @@ fn a_stream_s_frames_and_call_keep_their_json() {
         json,
         [
             r#"{"data":{"stream":3,"data":"AQI"}}"#,
+            r#"{"data":{"stream":3,"data":"AQI","up":true}}"#,
             r#"{"end":{"stream":3}}"#,
-            r#"{"end":{"stream":3,"error":"lost"}}"#,
+            r#"{"end":{"stream":3,"error":"lost","up":true}}"#,
             r#"{"credit":{"stream":3,"bytes":131072}}"#,
+            r#"{"credit":{"stream":3,"bytes":131072,"up":true}}"#,
             r#"{"close":{"stream":3}}"#,
+            r#"{"close":{"stream":3,"up":true}}"#,
             r#"{"call":{"id":7,"call":{"stream":{"machine":"laptop","request":{"caller":"user","method":{"follow_session":{"space":"s"}},"summary":"follow_session for space s"},"stream":3}}}}"#,
         ]
     );

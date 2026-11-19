@@ -3,7 +3,8 @@
 //! side to write it. Each stream has credit of its own: the writer sends
 //! no more than the reader granted, and the reader grants more only as
 //! whoever reads it takes what came, so a stream whose reader stalls holds
-//! up neither the link's calls nor its other streams.
+//! up neither the link's calls nor its other streams. A duplex stream also
+//! carries the opener's bytes the other way, under credit of their own.
 use std::{
     collections::HashMap,
     sync::{
@@ -33,10 +34,79 @@ pub(crate) struct Streams {
 struct State {
     /// Whether the link ended, which ends every stream.
     ended: bool,
-    /// The streams this side opened and reads, by number.
-    reading: HashMap<u64, Reading>,
-    /// The streams the other side opened, which this side writes.
-    writing: HashMap<u64, Arc<Credit>>,
+    /// The directions of streams this side reads: those it opened, and
+    /// the opener's bytes of the duplex ones the other side opened.
+    reading: HashMap<Key, Reading>,
+    /// The directions of streams this side writes: those the other side
+    /// opened, and its own bytes of the duplex ones it opened.
+    writing: HashMap<Key, Arc<Credit>>,
+}
+
+/// Which side opened a stream, whose number names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Opener {
+    Here,
+    There,
+}
+
+/// A stream as this side knows it: its number, and which side opened it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct Key {
+    stream: u64,
+    opener: Opener,
+}
+
+impl Key {
+    /// Whether frames about this side's direction of the stream, the one
+    /// it writes when `writes`, concern the bytes its opener sends.
+    fn up(self, writes: bool) -> bool {
+        (self.opener == Opener::Here) == writes
+    }
+
+    /// The stream a frame from the other side names, sent by the writer of
+    /// the direction it concerns when `from_writer`.
+    fn named(stream: u64, up: bool, from_writer: bool) -> Self {
+        let opener = match up == from_writer {
+            true => Opener::There,
+            false => Opener::Here,
+        };
+        Self { stream, opener }
+    }
+
+    /// The data frame of `bytes`, as this side writes them.
+    fn data(self, bytes: &[u8]) -> Frame {
+        Frame::Data {
+            stream: self.stream,
+            data: URL_SAFE_NO_PAD.encode(bytes),
+            up: self.up(true),
+        }
+    }
+
+    /// The end of what this side writes, with `error` when it failed.
+    fn end(self, error: Option<String>) -> Frame {
+        Frame::End {
+            stream: self.stream,
+            error,
+            up: self.up(true),
+        }
+    }
+
+    /// The credit of `bytes` more of what this side reads.
+    fn credit(self, bytes: u64) -> Frame {
+        Frame::Credit {
+            stream: self.stream,
+            bytes,
+            up: self.up(false),
+        }
+    }
+
+    /// That this side stopped reading.
+    fn close(self) -> Frame {
+        Frame::Close {
+            stream: self.stream,
+            up: self.up(false),
+        }
+    }
 }
 
 /// The credit a stream this side writes has left, closed once its reader
@@ -85,7 +155,38 @@ impl Streams {
     /// A new stream this side reads, with the number the call that asks
     /// for it names.
     pub(super) fn open(&self) -> Incoming {
-        let stream = self.next.fetch_add(1, Ordering::Relaxed);
+        self.incoming(self.opened())
+    }
+
+    /// A new duplex stream, which this side reads and also writes, with
+    /// the number the call that asks for it names.
+    pub(super) fn open_duplex(&self) -> (Incoming, Outgoing) {
+        let key = self.opened();
+        (self.incoming(key), self.outgoing(key))
+    }
+
+    /// This side's ends of the stream `stream` the other side opened and
+    /// named in its call: its writer, and for a duplex one the reader of
+    /// what the other side writes, taken before this side answers the
+    /// call, which is when the other side starts writing.
+    pub(crate) fn answering(&self, stream: u64, duplex: bool) -> (Outgoing, Option<Incoming>) {
+        let key = Key {
+            stream,
+            opener: Opener::There,
+        };
+        (self.outgoing(key), duplex.then(|| self.incoming(key)))
+    }
+
+    /// The key of a new stream this side opens.
+    fn opened(&self) -> Key {
+        Key {
+            stream: self.next.fetch_add(1, Ordering::Relaxed),
+            opener: Opener::Here,
+        }
+    }
+
+    /// The reader of `key`'s direction toward this side.
+    fn incoming(&self, key: Key) -> Incoming {
         let (received, bytes) = mpsc::unbounded_channel();
         let reading = Reading {
             received: received.clone(),
@@ -94,10 +195,10 @@ impl Streams {
         let mut state = lock(&self.state);
         match state.ended {
             true => drop(received.send(Received::End(Some("the link closed".into())))),
-            false => drop(state.reading.insert(stream, reading)),
+            false => drop(state.reading.insert(key, reading)),
         }
         Incoming {
-            stream,
+            key,
             bytes,
             state: self.state.clone(),
             sender: self.sender.clone(),
@@ -107,9 +208,8 @@ impl Streams {
         }
     }
 
-    /// The writer of the stream `stream` the other side opened and named
-    /// in its call.
-    pub(crate) fn writer(&self, stream: u64) -> Outgoing {
+    /// The writer of `key`'s direction from this side.
+    fn outgoing(&self, key: Key) -> Outgoing {
         let credit = Arc::new(Credit {
             bytes: Semaphore::new(STREAM_WINDOW as usize),
             closed: tokio::sync::Notify::new(),
@@ -117,10 +217,10 @@ impl Streams {
         let mut state = lock(&self.state);
         match state.ended {
             true => credit.close(),
-            false => drop(state.writing.insert(stream, credit.clone())),
+            false => drop(state.writing.insert(key, credit.clone())),
         }
         Outgoing {
-            stream,
+            key,
             credit,
             state: self.state.clone(),
             sender: self.sender.clone(),
@@ -133,25 +233,32 @@ impl Streams {
     /// no stream.
     pub(super) fn take(&self, frame: &Frame) -> Result<bool> {
         match frame {
-            Frame::Data { stream, data } => self.received(*stream, data)?,
-            Frame::End { stream, error } => self.ended(*stream, error.clone()),
-            Frame::Credit { stream, bytes } => self.credited(*stream, *bytes),
-            Frame::Close { stream } => self.closed(*stream),
+            Frame::Data { stream, data, up } => {
+                self.received(Key::named(*stream, *up, true), data)?
+            }
+            Frame::End { stream, error, up } => {
+                self.ended(Key::named(*stream, *up, true), error.clone())
+            }
+            Frame::Credit { stream, bytes, up } => {
+                self.credited(Key::named(*stream, *up, false), *bytes)
+            }
+            Frame::Close { stream, up } => self.closed(Key::named(*stream, *up, false)),
             _ => return Ok(false),
         }
         Ok(true)
     }
 
-    /// Pass the bytes `data` of the stream `stream` to its reader, or
-    /// tell the writer that no one reads it any longer.
-    fn received(&self, stream: u64, data: &str) -> Result<()> {
+    /// Pass the bytes `data` of the stream `key` to its reader, or tell
+    /// the writer that no one reads it any longer.
+    fn received(&self, key: Key, data: &str) -> Result<()> {
+        let stream = key.stream;
         let bytes = URL_SAFE_NO_PAD
             .decode(data)
             .map_err(|error| anyhow!("unreadable bytes of stream {stream}: {error}"))?;
         let mut state = lock(&self.state);
-        let Some(reading) = state.reading.get_mut(&stream) else {
+        let Some(reading) = state.reading.get_mut(&key) else {
             drop(state);
-            send_soon(&self.sender, Frame::Close { stream });
+            send_soon(&self.sender, key.close());
             return Ok(());
         };
         let Some(allowed) = reading.allowed.checked_sub(bytes.len() as u64) else {
@@ -162,25 +269,25 @@ impl Streams {
         Ok(())
     }
 
-    /// End the stream `stream` this side reads, with `error`.
-    fn ended(&self, stream: u64, error: Option<String>) {
-        if let Some(reading) = lock(&self.state).reading.remove(&stream) {
+    /// End the stream `key` this side reads, with `error`.
+    fn ended(&self, key: Key, error: Option<String>) {
+        if let Some(reading) = lock(&self.state).reading.remove(&key) {
             let _ = reading.received.send(Received::End(error));
         }
     }
 
-    /// Let the writer of the stream `stream` send `bytes` more.
-    fn credited(&self, stream: u64, bytes: u64) {
-        if let Some(credit) = lock(&self.state).writing.get(&stream) {
+    /// Let the writer of the stream `key` send `bytes` more.
+    fn credited(&self, key: Key, bytes: u64) {
+        if let Some(credit) = lock(&self.state).writing.get(&key) {
             let bytes = usize::try_from(bytes).unwrap_or(usize::MAX);
             let room = Semaphore::MAX_PERMITS - credit.bytes.available_permits();
             credit.bytes.add_permits(bytes.min(room));
         }
     }
 
-    /// Stop writing the stream `stream`, whose reader stopped.
-    fn closed(&self, stream: u64) {
-        if let Some(credit) = lock(&self.state).writing.remove(&stream) {
+    /// Stop writing the stream `key`, whose reader stopped.
+    fn closed(&self, key: Key) {
+        if let Some(credit) = lock(&self.state).writing.remove(&key) {
             credit.close();
         }
     }
@@ -200,7 +307,7 @@ impl Streams {
 
 /// A stream this side reads.
 pub(crate) struct Incoming {
-    stream: u64,
+    key: Key,
     bytes: mpsc::UnboundedReceiver<Received>,
     state: Arc<Mutex<State>>,
     sender: Sender,
@@ -215,7 +322,7 @@ pub(crate) struct Incoming {
 impl Incoming {
     /// The number the call that asks for it names.
     pub(super) fn number(&self) -> u64 {
-        self.stream
+        self.key.stream
     }
 
     /// The stream's next bytes, none once it ended; an error once its
@@ -258,16 +365,12 @@ impl Incoming {
         // Allowed first, so bytes the credit lets through never count as
         // past it.
         if !self.allowed_owed {
-            if let Some(reading) = lock(&self.state).reading.get_mut(&self.stream) {
+            if let Some(reading) = lock(&self.state).reading.get_mut(&self.key) {
                 reading.allowed += self.taken;
             }
             self.allowed_owed = true;
         }
-        let credit = Frame::Credit {
-            stream: self.stream,
-            bytes: self.taken,
-        };
-        self.sender.send(&credit).await?;
+        self.sender.send(&self.key.credit(self.taken)).await?;
         (self.taken, self.allowed_owed) = (0, false);
         Ok(())
     }
@@ -276,18 +379,16 @@ impl Incoming {
 impl Drop for Incoming {
     /// Tell the writer of a stream this side stops reading before its end.
     fn drop(&mut self) {
-        if lock(&self.state).reading.remove(&self.stream).is_some() {
-            let close = Frame::Close {
-                stream: self.stream,
-            };
-            send_soon(&self.sender, close);
+        if lock(&self.state).reading.remove(&self.key).is_some() {
+            send_soon(&self.sender, self.key.close());
         }
     }
 }
 
-/// A stream the other side opened, which this side writes.
+/// A stream this side writes: one the other side opened, or its own
+/// bytes of a duplex one it opened.
 pub(crate) struct Outgoing {
-    stream: u64,
+    key: Key,
     credit: Arc<Credit>,
     state: Arc<Mutex<State>>,
     sender: Sender,
@@ -301,11 +402,7 @@ impl Outgoing {
         while !bytes.is_empty() {
             let size = self.take_credit(bytes.len().min(CHUNK)).await?;
             let (chunk, rest) = bytes.split_at(size);
-            let data = Frame::Data {
-                stream: self.stream,
-                data: URL_SAFE_NO_PAD.encode(chunk),
-            };
-            self.sender.send(&data).await?;
+            self.sender.send(&self.key.data(chunk)).await?;
             bytes = rest;
         }
         Ok(())
@@ -339,12 +436,8 @@ impl Outgoing {
     /// End the stream, with `error` when it failed.
     pub(crate) async fn end(mut self, error: Option<String>) {
         self.ended = true;
-        lock(&self.state).writing.remove(&self.stream);
-        let end = Frame::End {
-            stream: self.stream,
-            error,
-        };
-        let _ = self.sender.send(&end).await;
+        lock(&self.state).writing.remove(&self.key);
+        let _ = self.sender.send(&self.key.end(error)).await;
     }
 }
 
@@ -354,13 +447,10 @@ impl Drop for Outgoing {
         if self.ended {
             return;
         }
-        lock(&self.state).writing.remove(&self.stream);
+        lock(&self.state).writing.remove(&self.key);
         send_soon(
             &self.sender,
-            Frame::End {
-                stream: self.stream,
-                error: Some("its writer stopped".into()),
-            },
+            self.key.end(Some("its writer stopped".into())),
         );
     }
 }

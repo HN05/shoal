@@ -110,8 +110,8 @@ impl Manager {
                 request,
                 stream,
             } => {
-                let out = calls.streams().writer(stream);
-                (self.route_stream(member, &machine, request, out)).await?
+                let answering = (calls.streams(), stream);
+                (self.route_stream(member, &machine, request, answering)).await?
             }
             Call::Tell { told } => {
                 ensure_machine(member)?;

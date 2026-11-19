@@ -1,13 +1,15 @@
 //! Which requests a daemon forwards through the hub when the space they act
 //! on belongs to another joined machine. One that reads or changes Shoal's
 //! state goes to the space's machine, which decides it as its own caller's,
-//! and one whose answer goes on, as a follow's, comes back on a stream; one
-//! that needs the space's files or processes stays on that machine.
+//! and one whose answer goes on, as a follow's, comes back on a stream, and
+//! one whose connection carries bytes both ways, as a demo's, on a duplex
+//! stream; one that needs the space's files or processes stays on that
+//! machine.
 use crate::{approvals::ApprovalRequest, item_numbers::ItemNumber, questions::Question};
 
 use super::{
-    AgentMethod, ApprovalMethod, AssignmentMethod, BranchMethod, CiMethod, HoldMethod, ItemMethod,
-    Operation, QuestionMethod, QueueMethod, RemovalMethod, WorkspaceMethod,
+    AgentMethod, ApprovalMethod, AssignmentMethod, BranchMethod, CiMethod, DemoMethod, HoldMethod,
+    ItemMethod, Operation, QuestionMethod, QueueMethod, RemovalMethod, WorkspaceMethod,
 };
 
 /// What a daemon does with a request for another machine's space.
@@ -26,6 +28,11 @@ pub enum Forwarding {
     /// as that machine writes it, as a follow's does; it fails at once while
     /// that machine is offline.
     Streamed,
+    /// It goes to the space's machine, whose answer comes back on a stream
+    /// as for [`Self::Streamed`], and after the answer's first frame the
+    /// caller's bytes go there on the same stream, as a demo's do; it fails
+    /// at once while that machine is offline.
+    Duplex,
 }
 
 impl Operation {
@@ -84,6 +91,8 @@ impl Operation {
             Forwarding::Queued
         } else if matches!(self, Self::Workspace(WorkspaceMethod::FollowSession { .. })) {
             Forwarding::Streamed
+        } else if matches!(self, Self::Demo(DemoMethod::OpenDemoStream { .. })) {
+            Forwarding::Duplex
         } else if self.forwards() {
             Forwarding::Online
         } else {

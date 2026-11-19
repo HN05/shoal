@@ -26,7 +26,10 @@
 //! the reader's first [`Frame::Credit`], and from then on no more than the
 //! credit the reader granted in all; a reader that stops reading sends
 //! [`Frame::Close`]. So a stream whose reader stalls holds up neither the
-//! calls nor the other streams.
+//! calls nor the other streams. A duplex stream, as a demo's, also carries
+//! the opener's bytes to the other side under the same rules, each
+//! direction with credit of its own: the frames about those bytes say
+//! `up`, and still name the stream by the opener's number.
 //! Whatever ends TLS between them can then neither pose as a side, read a
 //! frame, such as a pairing code the hub issues, nor change, add, drop or
 //! replay one unnoticed; only a refusal the hub sends before it can seal
@@ -180,25 +183,37 @@ pub enum Frame {
         more: bool,
     },
     /// The next bytes of the stream `stream`, in unpadded base64url, for
-    /// the side that opened it, no more than its credit allows.
+    /// the side that opened it, or `up` from it, no more than its credit
+    /// allows.
     Data {
         stream: u64,
         data: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        up: bool,
     },
-    /// The end of the stream `stream`, with why it failed, if it did.
+    /// The end of the stream `stream`, or of the bytes its opener sends
+    /// `up`, with why it failed, if it did.
     End {
         stream: u64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<String>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        up: bool,
     },
-    /// The side that opened the stream `stream` takes `bytes` more of it.
+    /// The side that opened the stream `stream` takes `bytes` more of it,
+    /// or the other side of what its opener sends `up`.
     Credit {
         stream: u64,
         bytes: u64,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        up: bool,
     },
-    /// The side that opened the stream `stream` stopped reading it.
+    /// The side that opened the stream `stream` stopped reading it, or the
+    /// other side reading what its opener sends `up`.
     Close {
         stream: u64,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        up: bool,
     },
     Ping,
     Pong,

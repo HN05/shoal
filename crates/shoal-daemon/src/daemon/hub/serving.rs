@@ -5,7 +5,9 @@
 //! space's go under that space's scope, which reaches what that space's
 //! reaches on every machine, with the permissions its machine vouches it
 //! holds. One whose answer goes on, as a follow's, goes on a stream as the
-//! daemon writes it. A forwarded request is never forwarded again.
+//! daemon writes it, and one whose connection carries bytes both ways, as a
+//! demo's, also takes the caller's from the stream. A forwarded request is
+//! never forwarded again.
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, PoisonError},
@@ -19,9 +21,12 @@ use shoal_protocol::{
     scope_tokens::ScopeToken,
     space_names::SpaceSelector,
 };
-use tokio::io::{AsyncBufReadExt as _, AsyncReadExt as _, BufReader};
+use tokio::{
+    io::{AsyncBufReadExt as _, AsyncReadExt as _, AsyncWriteExt as _, BufReader},
+    net::unix::{OwnedReadHalf, OwnedWriteHalf},
+};
 
-use super::streams::Outgoing;
+use super::streams::{Incoming, Outgoing, Streams};
 use crate::daemon::{manager::Manager, scope::Caller};
 
 /// The most bytes of a streamed answer read at once.
@@ -83,7 +88,12 @@ impl Manager {
                     operation.forwarding(),
                     Forwarding::Online | Forwarding::Queued
                 ) => {}
-            Method::Operation(operation) if operation.forwarding() == Forwarding::Streamed => {
+            Method::Operation(operation)
+                if matches!(
+                    operation.forwarding(),
+                    Forwarding::Streamed | Forwarding::Duplex
+                ) =>
+            {
                 bail!("this request's answer goes on, so it comes only on a stream")
             }
             _ => bail!("this request runs only on the machine of the space it acts on"),
@@ -99,55 +109,53 @@ impl Manager {
     }
 
     /// Answer `request`, another machine's request whose answer goes on,
-    /// as this daemon answers its own callers, writing it to `out` as the
-    /// daemon writes it until either side ends; refused for any other
-    /// request.
+    /// as this daemon answers its own callers, writing it on the stream
+    /// `stream` of `streams` as the daemon writes it until either side
+    /// ends, and on a duplex one passing on what the caller writes there;
+    /// refused for any other request.
     pub(super) fn serve_streamed(
         self: &Arc<Self>,
         request: Forwarded,
-        out: Outgoing,
+        (streams, stream): (&Streams, u64),
     ) -> Result<()> {
         let Forwarded { caller, method, .. } = request;
         let method: Method =
             serde_json::from_value(method).context("unreadable forwarded request")?;
-        match &method {
-            Method::Operation(operation) if operation.forwarding() == Forwarding::Streamed => {}
-            _ => bail!("only a request whose answer goes on is answered on a stream"),
-        }
+        let ends = streams.answering(stream, duplex_method(&method)?);
         let manager = self.clone();
-        tokio::spawn(async move { manager.stream_from_socket(caller, method, out).await });
+        tokio::spawn(async move { manager.stream_from_socket(caller, method, ends).await });
         Ok(())
     }
 
     /// Write what this daemon answers `method` from `caller` with on its
     /// own socket to `out`, ending it as the answer ends, until no one
-    /// reads `out` any longer. The token stands for `caller` only until
-    /// the answer starts, once the request was decided: what its machine
-    /// vouched then would otherwise outlast what that machine vouches for
-    /// its later requests, which it checks against the scope as the answer
-    /// goes on.
-    async fn stream_from_socket(&self, caller: Vouched, method: Method, mut out: Outgoing) {
+    /// reads `out` any longer, and pass what comes `up` to the socket. The
+    /// token stands for `caller` only until the answer starts, once the
+    /// request was decided: what its machine vouched then would otherwise
+    /// outlast what that machine vouches for its later requests, which it
+    /// checks against the scope as the answer goes on.
+    async fn stream_from_socket(
+        &self,
+        caller: Vouched,
+        method: Method,
+        (mut out, up): (Outgoing, Option<Incoming>),
+    ) {
         let mut held = Some(self.hub.vouches.hold(caller));
         let request = Request {
             scope: held.as_ref().map(|held| held.token.clone()),
             ..Request::new(method)
         };
         let streamed = async {
-            let mut stream = tokio::net::UnixStream::connect(&self.paths.socket)
+            let stream = tokio::net::UnixStream::connect(&self.paths.socket)
                 .await
                 .context("could not reach this machine's daemon socket")?;
-            protocol::write(&mut stream, &request).await?;
-            let mut bytes = vec![0; READ_BYTES];
-            loop {
-                let read = tokio::select! {
-                    read = stream.read(&mut bytes) => read?,
-                    () = out.closed() => return Ok(()),
-                };
-                if read == 0 {
-                    return Ok(());
-                }
-                held = None;
-                out.write(&bytes[..read]).await?;
+            let (reader, mut writer) = stream.into_split();
+            protocol::write(&mut writer, &request).await?;
+            // The answer decides when the stream ends; what the caller
+            // writes ends it only by failing.
+            tokio::select! {
+                answered = pass_down(reader, &mut out, &mut held) => answered,
+                Err(error) = pass_up(up, writer) => Err(error),
             }
         };
         let streamed: Result<()> = streamed.await;
@@ -211,6 +219,63 @@ impl Manager {
             }),
         })
     }
+}
+
+/// Whether the forwarded `request` goes on a duplex stream; refused for
+/// one whose answer comes on no stream.
+pub(super) fn duplex(request: &Forwarded) -> Result<bool> {
+    let method: Method =
+        serde_json::from_value(request.method.clone()).context("unreadable forwarded request")?;
+    duplex_method(&method)
+}
+
+/// Whether `method` goes on a duplex stream; refused for one whose answer
+/// comes on no stream.
+fn duplex_method(method: &Method) -> Result<bool> {
+    let forwarding = match method {
+        Method::Operation(operation) => operation.forwarding(),
+        _ => Forwarding::Never,
+    };
+    match forwarding {
+        Forwarding::Streamed => Ok(false),
+        Forwarding::Duplex => Ok(true),
+        _ => bail!("only a request whose answer goes on is answered on a stream"),
+    }
+}
+
+/// Write what the daemon answers on `socket` to `out`, until either ends,
+/// letting go of the vouch `held` once the answer starts.
+async fn pass_down(
+    mut socket: OwnedReadHalf,
+    out: &mut Outgoing,
+    held: &mut Option<Held<'_>>,
+) -> Result<()> {
+    let mut bytes = vec![0; READ_BYTES];
+    loop {
+        let read = tokio::select! {
+            read = socket.read(&mut bytes) => read?,
+            () = out.closed() => return Ok(()),
+        };
+        if read == 0 {
+            return Ok(());
+        }
+        *held = None;
+        out.write(&bytes[..read]).await?;
+    }
+}
+
+/// Write what the caller sends `up` a duplex stream to `socket`, closing
+/// its side for writing once the caller ends; with nothing sent up, as on
+/// a stream that is not duplex, never resolves.
+async fn pass_up(up: Option<Incoming>, mut socket: OwnedWriteHalf) -> Result<()> {
+    let Some(mut up) = up else {
+        return std::future::pending().await;
+    };
+    while let Some(bytes) = up.next().await? {
+        socket.write_all(&bytes).await?;
+    }
+    socket.shutdown().await?;
+    std::future::pending().await
 }
 
 #[cfg(test)]

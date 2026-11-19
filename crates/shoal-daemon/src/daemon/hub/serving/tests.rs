@@ -96,8 +96,9 @@ async fn a_streamed_request_s_vouch_stands_for_its_caller_only_until_its_answer_
         summary: "follow".into(),
     };
     let link = linked();
-    let (mut incoming, out) = link.stream();
-    manager.serve_streamed(request, out).unwrap();
+    let mut incoming = link.opener.streams().open();
+    let answering = (link.writer.streams(), incoming.number());
+    manager.serve_streamed(request, answering).unwrap();
     let started = tokio::time::timeout(HANG, incoming.next()).await.unwrap();
     let started = String::from_utf8(started.unwrap().unwrap()).unwrap();
     assert!(started.contains("followed_session"), "{started}");
