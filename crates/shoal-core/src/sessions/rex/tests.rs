@@ -88,6 +88,38 @@ fn only_a_connected_mac_app_shows_selections() {
     assert_eq!(none.mac_app(), None);
 }
 
+#[tokio::test]
+async fn an_app_on_another_machine_is_found_by_the_label_it_reports() {
+    let (root, rex) = fake(
+        r#"{('client', 'ls'): (0, '{"clients":[{"client_id":"client:gone","info":{"kind":"app","platform":"macos","label":"desk"},"connection_state":"disconnected"},{"client_id":"client:cli","info":{"kind":"cli","label":"desk"},"connection_state":"connected"},{"client_id":"client:desk","info":{"kind":"app","platform":"macos","label":"desk"},"connection_state":"connected"},{"client_id":"client:here","info":{"kind":"app","platform":"macos","label":"mini"},"connection_state":"connected"}]}'), ('-C',): (0, '')}"#,
+    );
+    let block = Block {
+        session: "session:a".into(),
+        window: Some("window:b".into()),
+    };
+    assert!(rex.show_in_app_labelled("desk", &block).await.unwrap());
+    let selected = calls(&root)
+        .into_iter()
+        .find(|call| call.contains(&"-C".into()));
+    let selected = selected.unwrap();
+    assert!(selected.contains(&"client:desk".into()), "{selected:?}");
+    assert!(!rex.show_in_app_labelled("laptop", &block).await.unwrap());
+}
+
+#[tokio::test]
+async fn this_machine_s_app_reports_its_label_and_the_server_its_address() {
+    let (_root, rex) = fake(
+        r#"{('client', 'ls'): (0, '{"clients":[{"client_id":"client:phone","info":{"kind":"app","platform":"ios","label":"phone"},"connection_state":"connected"},{"client_id":"client:mac","info":{"kind":"app","platform":"macos","label":"mini"},"connection_state":"connected"}]}'), ('whoami',): (0, '{"tailscale":{"state":"running","dns_name":"mini-rex.tail.ts.net"}}')}"#,
+    );
+    assert_eq!(rex.mac_app_label().await.unwrap().as_deref(), Some("mini"));
+    assert_eq!(
+        rex.address().await.unwrap().as_deref(),
+        Some("mini-rex.tail.ts.net")
+    );
+    let (_root, alone) = fake(r#"{('whoami',): (0, '{"account":"me"}')}"#);
+    assert_eq!(alone.address().await.unwrap(), None);
+}
+
 #[test]
 fn connected_apps_with_a_session_open_show_it() {
     let clients: Clients = serde_json::from_str(

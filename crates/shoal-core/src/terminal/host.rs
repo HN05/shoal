@@ -68,6 +68,13 @@ pub trait Host: Sync {
     fn types(&self) -> Option<&dyn Types> {
         None
     }
+
+    /// The label this machine's app for this host reports to each server
+    /// it connects to, for a host whose app shows the sessions of servers
+    /// on several machines; none without such an app here.
+    fn viewer_app(&self) -> BoxFuture<'_, Option<String>> {
+        Box::pin(async { None })
+    }
 }
 
 /// A host that opens places, such as tabs, windows or sessions, beside the
@@ -140,6 +147,19 @@ pub trait Places: Sync {
     /// or by showing it where the host shows its places.
     fn show<'a>(&'a self, place: &'a Origin, name: &'a str) -> BoxFuture<'a, Result<()>>;
 
+    /// Bring `place`, one this host opened, called `name`, before a user on
+    /// another machine, whose terminal is the one Shoal made here for this
+    /// process: by default as [`Self::show`] shows it to a terminal this
+    /// host does not serve, attaching that terminal to it.
+    fn show_elsewhere<'a>(
+        &'a self,
+        place: &'a Origin,
+        name: &'a str,
+        _viewer: &'a Elsewhere<'a>,
+    ) -> BoxFuture<'a, Result<()>> {
+        self.show(place, name)
+    }
+
     /// Whether the places this host opens show a name.
     fn names_places(&self) -> bool {
         false
@@ -169,6 +189,15 @@ pub trait Places: Sync {
     fn opens_beside_own(&self) -> bool {
         true
     }
+}
+
+/// The user on another machine a place is shown to, as a host reads them.
+pub struct Elsewhere<'a> {
+    /// The machine the place runs on, this one.
+    pub machine: &'a str,
+    /// The label the user's app for this host reports, which
+    /// [`Host::viewer_app`] read on the user's machine.
+    pub app: Option<&'a str>,
 }
 
 /// What a host shows of a place it opened.

@@ -5,11 +5,11 @@
 //! place in their block and outlive the Mac app or the phone.
 use std::{ffi::OsString, path::Path};
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use futures_util::future::BoxFuture;
 
 use super::{
-    Demo, Host, PlaceState, Session, Start, Watched,
+    Demo, Elsewhere, Host, PlaceState, Session, Start, Watched,
     host::{Demos, Places, Sessions, Types, Watches},
     typed::{self, Typed},
 };
@@ -55,6 +55,13 @@ impl Host for Rex {
         Some(self)
     }
 
+    fn viewer_app(&self) -> BoxFuture<'_, Option<String>> {
+        Box::pin(async {
+            let server = Server::here().ok()?;
+            server.mac_app_label().await.ok().flatten()
+        })
+    }
+
     fn types(&self) -> Option<&dyn Types> {
         Some(self)
     }
@@ -95,6 +102,15 @@ impl Places for Rex {
                 .context("the Rex block is gone")?;
             reveal(&server, &block, place.id(), name).await
         })
+    }
+
+    fn show_elsewhere<'a>(
+        &'a self,
+        place: &'a Origin,
+        name: &'a str,
+        viewer: &'a Elsewhere<'a>,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(reveal_elsewhere(place, name, viewer))
     }
 
     fn background_places(&self) -> &'static str {
@@ -282,6 +298,34 @@ async fn reveal(server: &Server, block: &Block, id: &str, name: &str) -> Result<
         outln!("Opened {name} in a Rex window; open Rex to see it");
     }
     Ok(())
+}
+
+/// Bring `place`, `name`'s block, forward in the Rex app of a user on
+/// another machine, which connects to this machine's server as a client
+/// of its own: refused where that user has no Rex app, or one that does not
+/// connect here, naming the address to add.
+async fn reveal_elsewhere(place: &Origin, name: &str, viewer: &Elsewhere<'_>) -> Result<()> {
+    let machine = viewer.machine;
+    let Some(label) = viewer.app else {
+        bail!(
+            "{name} runs in a Rex block on machine {machine}; open Rex on your machine, connected to that machine's Rex, to see it"
+        );
+    };
+    let server = Server::recorded(&place.data)?;
+    let block = (server.block(place.id()).await?).context("the Rex block is gone")?;
+    server.focus(&block.session, place.id()).await?;
+    if server.show_in_app_labelled(label, &block).await? {
+        outln!("Opened {name} in the Rex app on {label}");
+        return Ok(());
+    }
+    match server.address().await? {
+        Some(address) => bail!(
+            "the Rex app on {label} is not connected to machine {machine}'s Rex; add {address} in Rex, then attach again"
+        ),
+        None => bail!(
+            "the Rex app on {label} is not connected to machine {machine}'s Rex, which serves no address other machines reach; set up Tailscale in Rex on {machine}"
+        ),
+    }
 }
 
 /// Type `argv` into the block of `place` once its shell is back at its

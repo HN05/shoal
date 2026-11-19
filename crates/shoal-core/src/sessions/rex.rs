@@ -313,6 +313,33 @@ impl Rex {
         Ok(true)
     }
 
+    /// Show `block`'s window in the connected app labelled `label`, as an
+    /// app on another machine connected to this server is; whether one
+    /// was connected.
+    pub(crate) async fn show_in_app_labelled(&self, label: &str, block: &Block) -> Result<bool> {
+        let clients = self.clients().await?;
+        let Some(app) = clients.app_labelled(label) else {
+            return Ok(false);
+        };
+        self.select(app, block).await?;
+        Ok(true)
+    }
+
+    /// The label the connected Mac app reports, which it reports to every
+    /// server it connects to; none without one.
+    pub(crate) async fn mac_app_label(&self) -> Result<Option<String>> {
+        let clients = self.clients().await?;
+        Ok(clients.mac_app_label().map(str::to_owned))
+    }
+
+    /// The address apps on other machines reach this server at, its
+    /// Tailscale name; none where it serves none.
+    pub(crate) async fn address(&self) -> Result<Option<String>> {
+        let output = self.run(&["whoami", "--json"]).await?;
+        let identity: Identity = serde_json::from_slice(&output).context("invalid Rex identity")?;
+        Ok(identity.tailscale.and_then(|tailscale| tailscale.dns_name))
+    }
+
     /// How many connected apps show `session`, such as a Mac or iOS app
     /// with it open.
     pub(crate) async fn showing(&self, session: &str) -> Result<u32> {
@@ -652,20 +679,53 @@ struct Client {
 struct ClientInfo {
     kind: String,
     platform: Option<String>,
+    /// What the app calls the device it runs on.
+    label: Option<String>,
+}
+
+/// What `rex whoami` says of the server.
+#[derive(Deserialize)]
+struct Identity {
+    tailscale: Option<Tailscale>,
+}
+
+#[derive(Deserialize)]
+struct Tailscale {
+    dns_name: Option<String>,
 }
 
 impl Clients {
     /// The connected Mac app, which shows what Shoal selects for the user.
     fn mac_app(&self) -> Option<&str> {
-        self.clients
-            .iter()
-            .find(|client| {
-                client.connection_state.as_deref() == Some("connected")
-                    && client.info.as_ref().is_some_and(|info| {
-                        info.kind == "app" && info.platform.as_deref() == Some("macos")
-                    })
-            })
+        self.mac_app_client()
             .map(|client| client.client_id.as_str())
+    }
+
+    /// The label the connected Mac app reports.
+    fn mac_app_label(&self) -> Option<&str> {
+        let info = self.mac_app_client()?.info.as_ref()?;
+        info.label.as_deref()
+    }
+
+    fn mac_app_client(&self) -> Option<&Client> {
+        self.apps()
+            .find(|(_, info)| info.platform.as_deref() == Some("macos"))
+            .map(|(client, _)| client)
+    }
+
+    /// The connected app labelled `label`.
+    fn app_labelled(&self, label: &str) -> Option<&str> {
+        self.apps()
+            .find(|(_, info)| info.label.as_deref() == Some(label))
+            .map(|(client, _)| client.client_id.as_str())
+    }
+
+    /// The connected apps, with what they report.
+    fn apps(&self) -> impl Iterator<Item = (&Client, &ClientInfo)> {
+        self.clients.iter().filter_map(|client| {
+            let info = client.info.as_ref().filter(|info| info.kind == "app")?;
+            (client.connection_state.as_deref() == Some("connected")).then_some((client, info))
+        })
     }
 
     /// How many connected apps show `session`.

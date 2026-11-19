@@ -29,8 +29,8 @@ pub use here::{current_origin, current_place, origin_here, with_instance};
 #[cfg(any(test, feature = "test-support"))]
 pub use host::Closes;
 pub use host::{
-    Attaches, Demo, DemoWorker, Host, NOT_INHERITED_BY_DEMOS, PlaceState, Places, Sessions, Start,
-    Watched, Watches,
+    Attaches, Demo, DemoWorker, Elsewhere, Host, NOT_INHERITED_BY_DEMOS, PlaceState, Places,
+    Sessions, Start, Watched, Watches,
 };
 pub(crate) use hosts::launcher_program;
 pub use hosts::{
