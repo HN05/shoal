@@ -69,7 +69,7 @@ impl ForgeRepo {
     pub fn parse_linked(remote: &str, linked: Option<ForgeKind>) -> Result<Self> {
         let remote = RemoteUrl::parse(remote).context("issue lookup needs a forge remote")?;
         let (host, path, web_scheme) = Self::location(&remote)?;
-        let kind = ForgeKind::detect(&host, linked);
+        let kind = hosts::detect(&host, linked);
         Self::on(kind, host, path, web_scheme)
     }
 

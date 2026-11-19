@@ -1,4 +1,5 @@
 use super::*;
+use shoal_forge_types::hosts::detect;
 
 #[test]
 fn only_failures_a_login_may_fix_carry_the_login_hint() {
@@ -23,6 +24,6 @@ fn well_known_and_gitlab_named_hosts_are_recognized() {
         ("git.corp.example", ForgeKind::Forgejo),
         ("mygitlab.example", ForgeKind::Forgejo),
     ] {
-        assert_eq!(ForgeKind::detect(host, None), kind, "{host}");
+        assert_eq!(detect(host, None), kind, "{host}");
     }
 }

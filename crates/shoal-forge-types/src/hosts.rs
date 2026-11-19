@@ -62,6 +62,23 @@ pub fn learned(host: &str) -> Option<ForgeKind> {
     })
 }
 
+/// What this process learned `host` serves, else the well-known hosts by
+/// name, else `linked`, the forge whose routes a link of the host uses;
+/// failing all three a host whose name has a `gitlab` label counts as
+/// GitLab and any other as Forgejo or Gitea.
+pub fn detect(host: &str, linked: Option<ForgeKind>) -> ForgeKind {
+    learned(host)
+        .or_else(|| ForgeKind::named(host))
+        .or(linked)
+        .unwrap_or_else(|| {
+            if host.split(['.', ':']).any(|label| label == "gitlab") {
+                ForgeKind::GitLab
+            } else {
+                ForgeKind::Forgejo
+            }
+        })
+}
+
 /// The type pinned for `host`, once the caller's pins are loaded.
 fn pinned(host: &str) -> Option<ForgeKind> {
     let mut pins = PINS.lock().unwrap_or_else(PoisonError::into_inner);

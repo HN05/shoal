@@ -2,6 +2,7 @@ use std::sync::{Mutex, PoisonError};
 
 use super::*;
 use crate::RepoRequests;
+use shoal_forge_types::hosts::detect;
 use shoal_forge_types::hosts::learn;
 use shoal_forge_types::hosts::learned;
 use shoal_forge_types::hosts::pin;
@@ -43,15 +44,9 @@ fn resolving_a_pinned_host_keeps_its_answer_for_after_the_pin() {
 
 #[test]
 fn learned_hosts_override_names_and_guesses() {
-    assert_eq!(
-        ForgeKind::detect("ghe.learned.example", None),
-        ForgeKind::Forgejo
-    );
+    assert_eq!(detect("ghe.learned.example", None), ForgeKind::Forgejo);
     learn("GHE.learned.example", ForgeKind::GitHub);
-    assert_eq!(
-        ForgeKind::detect("ghe.learned.example", None),
-        ForgeKind::GitHub
-    );
+    assert_eq!(detect("ghe.learned.example", None), ForgeKind::GitHub);
     let repo = ForgeRepo::parse("git@ghe.learned.example:team/repo.git").unwrap();
     assert_eq!(
         repo.pull("3").unwrap().1,

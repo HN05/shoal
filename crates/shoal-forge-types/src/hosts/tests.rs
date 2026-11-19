@@ -19,10 +19,7 @@ fn readers_wait_for_the_pins_another_reader_is_loading() {
     assert!(PINS.try_lock().is_err());
     proceed.send(()).unwrap();
     assert_eq!(first.join().unwrap(), None);
-    assert_eq!(
-        ForgeKind::detect("gitlab.pinned.example", None),
-        ForgeKind::Forgejo
-    );
+    assert_eq!(detect("gitlab.pinned.example", None), ForgeKind::Forgejo);
 }
 
 #[test]
