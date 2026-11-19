@@ -79,6 +79,7 @@ mod registry;
 mod releases;
 mod repo_configuration;
 mod repo_move;
+mod repo_removal;
 mod requests;
 pub mod resources;
 mod restart_recovery;

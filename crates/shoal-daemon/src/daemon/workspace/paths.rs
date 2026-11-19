@@ -9,7 +9,7 @@ use std::{
 
 /// Whether a canonical candidate contains home or Shoal state, including equality.
 /// Descendants of protected directories are left to the caller's policy.
-pub(super) fn contains_protected_directory(path: &Path, paths: &Paths) -> Result<bool> {
+pub(in crate::daemon) fn contains_protected_directory(path: &Path, paths: &Paths) -> Result<bool> {
     for protected in [&paths.home, &paths.state] {
         if fs::canonicalize(protected)?.starts_with(path) {
             return Ok(true);
@@ -53,7 +53,10 @@ pub(super) fn canonical_parent_with_missing(path: &Path) -> Result<PathBuf> {
 }
 
 /// Whether a Git worktree path refers to a recorded workspace path.
-pub(super) fn matches_recorded_worktree_path(recorded: &Path, candidate: &Path) -> Result<bool> {
+pub(in crate::daemon) fn matches_recorded_worktree_path(
+    recorded: &Path,
+    candidate: &Path,
+) -> Result<bool> {
     let canonical_recorded = canonical_parent_with_missing(recorded)?;
     Ok(candidate == canonical_recorded || candidate == recorded)
 }

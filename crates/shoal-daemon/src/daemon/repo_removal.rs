@@ -1,5 +1,5 @@
 //! Explicit repository deletion, retaining ownership and progress for retries.
-use super::{
+use super::workspace::{
     Manager,
     identity::has_directory_identity,
     paths::{
@@ -172,7 +172,7 @@ impl Manager {
         delete_shoal_dir(&repo, Contents::ReviewRuns).await?;
         delete_shoal_dir(&repo, Contents::GateRuns).await?;
         self.delete_proposal_files(&repo).await?;
-        super::super::imported_sessions::remove_imported_sessions(&repo).await?;
+        super::imported_sessions::remove_imported_sessions(&repo).await?;
         self.delete_repository_files(&repo).await?;
         delete_checkout(repo.path.clone()).await?;
         delete_local_config(repo.workspaces_dir.clone()).await?;
@@ -390,7 +390,7 @@ impl Manager {
             .read(move |tx| {
                 let mut ordered = store::repository_spaces(tx, &id)?
                     .into_iter()
-                    .map(|space| Ok((super::super::tree::removal_depth(tx, &space)?, space)))
+                    .map(|space| Ok((super::tree::removal_depth(tx, &space)?, space)))
                     .collect::<Result<Vec<_>>>()?;
                 ordered.sort_by_key(|(depth, _)| std::cmp::Reverse(*depth));
                 Ok(ordered.into_iter().map(|(_, space)| space).collect())

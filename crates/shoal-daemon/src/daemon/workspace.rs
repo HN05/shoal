@@ -22,7 +22,6 @@ mod merge;
 pub(super) mod ownership;
 pub(crate) mod paths;
 mod refresh;
-mod repo_removal;
 pub(super) mod reservation;
 mod stack;
 mod status;
