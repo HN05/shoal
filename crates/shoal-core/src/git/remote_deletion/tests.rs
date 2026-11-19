@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use super::*;
 use crate::test_support::{git, git_with_identity};
 
@@ -47,4 +49,46 @@ async fn a_sha1_branch_that_moved_after_its_check_is_kept() {
 #[tokio::test]
 async fn a_sha256_branch_that_moved_after_its_check_is_kept() {
     moved_after_its_check("sha256").await;
+}
+
+#[tokio::test]
+async fn configuration_the_process_inherits_sends_the_deletion_nowhere_else() {
+    let root = tempfile::tempdir().unwrap();
+    let work = crate::test_support::repository(root.path(), "work");
+    let [remote, decoy] = ["remote.git", "decoy.git"].map(|name| {
+        let path = root.path().join(name);
+        git(
+            root.path(),
+            &["init", "--quiet", "--bare", path.to_str().unwrap()],
+        );
+        git(
+            &work,
+            &["push", "--quiet", path.to_str().unwrap(), "main:topic"],
+        );
+        format!("file://{}", path.display())
+    });
+    let head = CommitId::from(git(&work, &["rev-parse", "HEAD"]).trim());
+    // SAFETY: nextest runs each test in a process of its own, and nothing
+    // else reads the environment yet.
+    unsafe {
+        std::env::set_var("GIT_CONFIG_COUNT", "1");
+        std::env::set_var("GIT_CONFIG_KEY_0", format!("url.{decoy}.insteadOf"));
+        std::env::set_var("GIT_CONFIG_VALUE_0", &remote);
+    }
+    let login = GitLogin {
+        username: "token",
+        password: "secret".into(),
+    };
+
+    delete_at(&remote, &"topic".into(), &head, &login)
+        .await
+        .unwrap();
+    let topic = |url: &str| {
+        let path = Path::new(url.trim_start_matches("file://"));
+        git(path, &["branch", "--list", "topic"])
+    };
+    assert_eq!(
+        (topic(&remote), topic(&decoy).trim()),
+        (String::new(), "topic")
+    );
 }

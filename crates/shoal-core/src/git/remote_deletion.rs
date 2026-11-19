@@ -3,13 +3,18 @@
 //! checked: Git sends that commit with the deletion, and the remote keeps a
 //! branch that moved since, such as by a push that landed after the check.
 //!
-//! The push runs from an empty repository made for it, without the user's
-//! Git configuration or `.netrc`, which could send it elsewhere or as
-//! someone else. Its
+//! The push runs from an empty repository made for it, without the
+//! configuration or `.netrc` it would otherwise inherit, which could send it
+//! elsewhere or as someone else. Its
 //! login reaches Git only on standard input, held by Git's in-memory
 //! credential cache, which answers only for the repository's host, so the
 //! token never enters a file, the environment or argv.
-use std::{io, os::unix::fs::PermissionsExt as _, path::PathBuf, process::Output};
+use std::{
+    io,
+    os::unix::fs::PermissionsExt as _,
+    path::{Path, PathBuf},
+    process::Output,
+};
 
 use anyhow::{Context, Result, bail, ensure};
 use shoal_forge::account::GitLogin;
@@ -65,8 +70,9 @@ impl Scratch {
         let format = format!("--object-format={}", object_format(head));
         let repository = self.repository();
         let repository = repository.to_string_lossy();
-        let init = ["init", "--quiet", "--bare", &format, &repository];
-        git::run_isolated(self.directory.path(), &init).await?;
+        let mut init = self.unconfigured(self.directory.path());
+        init.args(["init", "--quiet", "--bare", &format, &repository]);
+        git::bounded(init).output().await?;
         Ok(())
     }
 
@@ -117,20 +123,20 @@ impl Scratch {
     /// repository.
     async fn close(self) -> Result<()> {
         let socket = self.socket();
-        let socket = socket.to_string_lossy();
-        let stopped = git::run_isolated(
-            &self.repository(),
-            &["credential-cache", "--socket", &socket, "exit"],
-        )
-        .await;
+        let mut exit = self.unconfigured(&self.repository());
+        exit.arg("credential-cache").args([
+            "--socket".as_ref(),
+            socket.as_os_str(),
+            "exit".as_ref(),
+        ]);
+        let stopped = git::bounded(exit).output().await;
         off_runtime::run(move || Ok(self.directory.close()?)).await?;
         stopped.map(drop)
     }
 
     /// Git in the repository with only the credential cache to sign in
     /// with, for the URL's host alone, following no redirect elsewhere and
-    /// asking no one for a login. Its home is the scratch directory, which
-    /// keeps out the user's `.netrc`, whose login libcurl would send first.
+    /// asking no one for a login.
     fn git(&self) -> Command {
         let socket = self.socket();
         let socket = crate::shell::quote(&[socket.to_string_lossy()]);
@@ -138,15 +144,32 @@ impl Scratch {
             "credential.{}://{}.helper=cache --timeout 900 --socket {socket}",
             self.scheme, self.host
         );
-        let mut command = git::isolated_command(&self.repository());
+        let mut command = self.unconfigured(&self.repository());
         command
+            .args(["-c", "credential.helper=", "-c", &helper])
+            .args(["-c", "http.followRedirects=false"]);
+        command
+    }
+
+    /// Git in `directory` without configuration beyond the repository's:
+    /// none from the system, the user's files or the `GIT_` variables this
+    /// process inherited, which could send it elsewhere, sign it in as
+    /// someone else or log what it sends, and with the scratch directory as
+    /// its home, which keeps out the user's `.netrc`, whose login libcurl
+    /// would send first.
+    fn unconfigured(&self, directory: &Path) -> Command {
+        let mut command = git::isolated_command(directory);
+        for (name, _) in std::env::vars_os() {
+            if name.to_string_lossy().starts_with("GIT_") {
+                command.env_remove(name);
+            }
+        }
+        command
+            .env("GIT_TERMINAL_PROMPT", "0")
             .env("GIT_CONFIG_GLOBAL", "/dev/null")
             .env("GIT_CONFIG_NOSYSTEM", "1")
             .env("HOME", self.directory.path())
-            .env_remove("GIT_ASKPASS")
-            .env_remove("SSH_ASKPASS")
-            .args(["-c", "credential.helper=", "-c", &helper])
-            .args(["-c", "http.followRedirects=false"]);
+            .env_remove("SSH_ASKPASS");
         command
     }
 
