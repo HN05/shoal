@@ -61,7 +61,7 @@ pub(in crate::daemon) fn directory_identity(path: &Path) -> Result<String> {
 }
 
 /// Whether a directory still has a recorded identity.
-pub(super) fn has_directory_identity(path: &Path, recorded: &str) -> Result<bool> {
+pub(in crate::daemon) fn has_directory_identity(path: &Path, recorded: &str) -> Result<bool> {
     Ok(directory_identity(path)? == recorded)
 }
 

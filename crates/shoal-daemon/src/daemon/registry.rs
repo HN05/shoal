@@ -1,5 +1,5 @@
 //! Repository registration and lookup; independent of worktree lifecycle.
-use super::{Manager, spotlight};
+use super::{spotlight, workspace::Manager};
 use crate::{
     daemon::store,
     git,
@@ -62,7 +62,7 @@ impl Manager {
         &self,
         source: String,
         name: Option<String>,
-    ) -> Result<(Repository, super::ContributionHold)> {
+    ) -> Result<(Repository, super::workspace::ContributionHold)> {
         let _guard = self.gates.lock_registry().await;
         let registration = Registration::Contribution;
         let repo = (self.register_locked(source.into(), name, None, registration)).await?;
@@ -391,7 +391,7 @@ async fn requested_clone_path(
     if let Some(parent) = path.parent() {
         crate::daemon::access::ensure_writable(parent).await?;
     }
-    let path = super::paths::canonical_with_missing_tail(path)?;
+    let path = super::workspace::paths::canonical_with_missing_tail(path)?;
     outside_local_configs(&path, repositories)?;
     Ok(Some(path))
 }

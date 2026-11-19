@@ -31,7 +31,7 @@ fn excluded_root() -> (tempfile::TempDir, std::path::PathBuf, super::ConfiguredR
     let parent = std::fs::canonicalize(temp.path()).unwrap();
     let root = super::ConfiguredRoot {
         path: parent.join("shoal"),
-        layout: crate::daemon::workspace::spotlight::Layout::Excluded,
+        layout: crate::daemon::spotlight::Layout::Excluded,
     };
     (temp, parent, root)
 }
@@ -77,7 +77,7 @@ async fn an_excluded_root_refuses_a_recorded_repository_directory() {
 #[tokio::test]
 async fn registration_keeps_a_checkout_in_a_root_spotlight_indexes() {
     let (_temp, parent, mut root) = excluded_root();
-    root.layout = crate::daemon::workspace::spotlight::Layout::AsFound;
+    root.layout = crate::daemon::spotlight::Layout::AsFound;
     let project = root.path.join("project");
     std::fs::create_dir_all(&project).unwrap();
     let checkout = repository(&project, "checkout");
@@ -110,7 +110,7 @@ async fn an_excluded_root_refuses_a_workspace_at_its_excluded_directory() {
         .unwrap();
     let root = super::ConfiguredRoot {
         path: home.join("other"),
-        layout: crate::daemon::workspace::spotlight::Layout::Excluded,
+        layout: crate::daemon::spotlight::Layout::Excluded,
     };
     let repositories = manager.repositories().await.unwrap();
     let workspaces = manager.list_workspaces().await.unwrap();

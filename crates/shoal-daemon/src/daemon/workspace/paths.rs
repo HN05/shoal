@@ -59,7 +59,7 @@ pub(super) fn matches_recorded_worktree_path(recorded: &Path, candidate: &Path) 
 }
 
 /// Whether `path` is a real, non-redirected directory; `false` when missing.
-pub(super) fn is_real_directory(path: &Path) -> Result<bool> {
+pub(in crate::daemon) fn is_real_directory(path: &Path) -> Result<bool> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
@@ -77,7 +77,7 @@ pub(super) fn is_real_directory(path: &Path) -> Result<bool> {
 }
 
 /// Identity of a real, non-redirected directory; `None` when missing.
-pub(super) fn real_directory_identity(path: &Path) -> Result<Option<String>> {
+pub(in crate::daemon) fn real_directory_identity(path: &Path) -> Result<Option<String>> {
     is_real_directory(path)?
         .then(|| directory_identity(path))
         .transpose()

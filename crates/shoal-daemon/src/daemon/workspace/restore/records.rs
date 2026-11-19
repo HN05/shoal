@@ -319,7 +319,7 @@ pub(super) fn record(db: &Connection, removed: &RemovedSpace) -> Result<()> {
 
 /// Record that the removed chat `id` runs in `root_dir` once restored, as a
 /// root move that took its files there says, when it has a removal record.
-pub(in crate::daemon::workspace) fn rehome_removed_chat(
+pub(in crate::daemon) fn rehome_removed_chat(
     db: &Connection,
     id: &SpaceId,
     root_dir: &std::path::Path,

@@ -12,7 +12,7 @@ use super::super::{
 };
 use crate::{
     config::permissions::PermissionKey,
-    daemon::workspace::spotlight::Layout,
+    daemon::spotlight::Layout,
     protocol::{Body, RepositoryMethod},
 };
 use shoal_ids::repository_ids::RepositoryId;

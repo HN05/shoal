@@ -231,7 +231,7 @@ fn rehome(tx: &rusqlite::Transaction<'_>, id: &SpaceId, root_dir: &Path) -> Resu
         "UPDATE chats SET root_dir=?2 WHERE id=?1",
         params![id, root_dir.to_string_lossy()],
     )?;
-    super::super::restore::rehome_removed_chat(tx, id, root_dir)?;
+    super::super::workspace::restore::rehome_removed_chat(tx, id, root_dir)?;
     let recorded: Vec<(i64, Option<String>, String)> = tx
         .prepare(
             "SELECT id,root_dir,path FROM space_files
