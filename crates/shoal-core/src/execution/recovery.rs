@@ -22,11 +22,11 @@ use crate::{
     fsutil::atomic::{Permissions, ReplaceOptions},
     paths::Paths,
     process::identity::{self, Identity},
-    sessions::Origin,
     state::AgentState,
 };
 pub use shoal_protocol::executions::{Copied, LastSession, Record, Stage, Stop, StoppedAgent};
 pub use shoal_protocol::saved::{Saved, SavedCommand, SavedSession};
+use shoal_protocol::sessions::Origin;
 
 #[derive(Debug)]
 pub struct Recovery {

@@ -6,11 +6,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, ensure};
 use shoal_refs::BranchName;
 
-use crate::{
-    fsutil::off_runtime,
-    removal::{BranchOutcome, RemovalResult},
-    tools::Tool,
-};
+use crate::{fsutil::off_runtime, tools::Tool};
+use shoal_protocol::removal::{BranchOutcome, RemovalResult};
 
 pub mod interrupted;
 pub mod left;

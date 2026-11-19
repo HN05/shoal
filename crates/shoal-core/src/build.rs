@@ -6,5 +6,5 @@
 /// builds only when told to, as tests in a temporary home do.
 pub fn changes_user_files() -> bool {
     !cfg!(debug_assertions)
-        || std::env::var_os(crate::env::DEV_USER_FILES).is_some_and(|value| value == "1")
+        || std::env::var_os(shoal_protocol::env::DEV_USER_FILES).is_some_and(|value| value == "1")
 }

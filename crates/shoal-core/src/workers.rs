@@ -10,7 +10,8 @@ use std::{
 
 use anyhow::Result;
 
-use crate::{agent::ModelChoice, execution::TrackedAgent, paths::Paths, sessions::HostName};
+use crate::{agent::ModelChoice, execution::TrackedAgent, paths::Paths};
+use shoal_protocol::sessions::HostName;
 
 /// The hidden command that holds every worker below.
 pub const GROUP: &str = "internal";

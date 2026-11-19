@@ -127,7 +127,7 @@ fn refuse_user_state(state: &Path) -> Result<()> {
         !same_directory(state, &user),
         "a development build does not use the user's state directory {}; pass --state-dir with a temporary directory, or set {}=1 to use it",
         user.display(),
-        crate::env::DEV_USER_FILES
+        shoal_protocol::env::DEV_USER_FILES
     );
     Ok(())
 }
