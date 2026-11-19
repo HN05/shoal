@@ -117,8 +117,9 @@ cooldown_seconds = 5
 
 [machine.overload.memory]
 enabled = true                 # Opt out with false
-used_percent = 95              # Linux only; 50–99
-sustained_seconds = 0          # Stop on the first critical sample
+used_percent = 95              # RAM and swap in use; Linux only; 50–99
+stall_percent = 10             # Full memory stall; Linux only; 1–99
+sustained_seconds = 10         # How long the stall must hold
 
 [machine.overload.cpu]
 enabled = false                # Opt in with true
@@ -133,6 +134,7 @@ stop_free_gib = 2              # Stop executions below this; 1 to cleanup_free_g
 [machine.overload.warning]
 enabled = true                 # Message running agents before a stop
 memory_used_percent = 85       # Linux; macOS warns at native warning pressure
+memory_stall_percent = 10      # Some memory stall; Linux; at most the stop's
 cpu_used_percent = 80
 cpu_sustained_seconds = 60
 disk_free_gib = 10
@@ -141,29 +143,36 @@ repeat_minutes = 30            # Least time between repeats per signal and works
 [machine.overload.recovery]
 enabled = true                 # Applies only with a configured resume command
 memory_used_percent = 80       # Linux; macOS requires normal pressure
+memory_stall_percent = 2       # Some memory stall over a minute; Linux
 cpu_used_percent = 75
 sustained_seconds = 60
 ```
 
-The percentages above are those of `load = "balanced"` without swap. Each
-`load` sets these; the memory warning level is also where dynamic admission
-stops starting agents and CI jobs, and the CPU warning level, over its
-sustained seconds, where a CI job beside running ones waits:
+The percentages above are those of `load = "balanced"`. Each `load` sets
+these; the memory warning levels are also where dynamic admission stops
+starting agents and CI jobs, and the CPU warning level, over its sustained
+seconds, where a CI job beside running ones waits:
 
-| `load` | CPU warning / stop / recovery | Memory warning / stop / recovery |
-|---|---|---|
-| `light` | 60 / 80 / 55 | 75 / 90 / 70, with swap 80 / 93 / 75 |
-| `balanced` | 80 / 90 / 75 | 85 / 95 / 80, with swap 90 / 97 / 85 |
-| `full` | 95 / 100 / 90 | 95 / 98 / 90, with swap 97 / 99 / 93 |
+| `load` | CPU warning / stop / recovery | Memory used warning / stop / recovery | Memory stall warning / stop / recovery |
+|---|---|---|---|
+| `light` | 60 / 80 / 55 | 75 / 90 / 70 | 5 / 5 / 1 |
+| `balanced` | 80 / 90 / 75 | 85 / 95 / 80 | 10 / 10 / 2 |
+| `full` | 95 / 100 / 90 | 95 / 98 / 90 | 20 / 20 / 5 |
 
-Memory percentages apply on Linux, where configured swap lets memory fill
-further before the kernel kills processes; macOS uses its native pressure
-levels. CPU usage is aggregate busy time across all cores, excluding I/O wait
+Memory percentages apply on Linux; macOS uses its native pressure levels.
+Memory used is the share of RAM and swap together in use, counting
+reclaimable cache as free; past its stop level it stops work at once.
+Memory stall is the share of time tasks wait for memory, from the kernel's
+pressure stall information (`/proc/pressure/memory`): some tasks over ten
+seconds warns, every task over ten seconds stops once it has held for
+`sustained_seconds`, and recovery waits for some tasks over a minute. A
+kernel without it is measured by memory used alone. CPU usage is aggregate busy time across all cores, excluding I/O wait
 and niced time, except that job admission counts niced time, in which jobs
 run, as busy. Durations are seconds, bounded to one day; polling, cooldown
 and sustained CPU and recovery durations must be positive. Recovery thresholds
-must be positive and below their stop thresholds; warning thresholds are not
-checked against stop thresholds. What each threshold does is in
+must be positive and below their stop thresholds; the memory stall warning
+must be at most its stop, and other warning thresholds are not checked against
+stop thresholds. What each threshold does is in
 [overload protection](../../../../../../docs/reference.md#overload-protection).
 
 ### Git profiles

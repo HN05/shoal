@@ -271,11 +271,9 @@ impl Config {
             .and_then(toml::Value::as_table)
             .and_then(|machine| machine.get("overload"))
             .and_then(toml::Value::as_table);
-        machine.overload.follow_load(
-            machine.load,
-            overload::swap(),
-            overload.unwrap_or(&toml::Table::new()),
-        );
+        machine
+            .overload
+            .follow_load(machine.load, overload.unwrap_or(&toml::Table::new()));
         machine.follow_references()?;
         config.validate(paths)?;
         // A global file is complete with the mode and rule files beside it:
