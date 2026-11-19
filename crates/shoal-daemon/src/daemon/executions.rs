@@ -829,9 +829,11 @@ impl Manager {
                 Duration::from_millis(request.running_ms),
             )
             .await;
-            if let Some(protection) = &request.awaiting_restore {
-                self.await_agent_restore(&request.execution, protection.clone())
-                    .await;
+            match &request.awaiting_restore {
+                Some(protection) => {
+                    (self.await_agent_restore(&request.execution, protection.clone())).await
+                }
+                None => self.restart_undelivered(&request.execution).await,
             }
         }
         self.touch(&space.id).await;

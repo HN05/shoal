@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
@@ -7,12 +7,14 @@ use super::record::{self, Recorded};
 use crate::{
     config::permissions::PermissionChange,
     daemon::{
+        agents::ProtectionExt as _,
         executions::ExecutionKind,
         manager::Manager,
         scope::Caller,
         test_support::{manager, repository},
     },
     model::{AgentRestart, RestartOutcome, RestartWait, Workspace},
+    protocol::Reattach,
     state::AgentState,
 };
 
@@ -192,6 +194,7 @@ async fn a_restart_waiting_for_the_turn_is_recorded_until_the_turn_ends() {
         execution: execution.plan.id.clone(),
         restart: waiting(),
         asked_by: None,
+        begun: false,
     };
     assert_eq!(recorded(&manager).await, [restart]);
     // The space shows how its agent restarts.
@@ -579,46 +582,130 @@ async fn a_recorded_restart_goes_with_its_agent_rather_than_restart_the_next() {
     assert!(recorded(&manager).await.is_empty());
 }
 
-#[tokio::test]
-async fn a_wrapper_that_reattaches_continues_the_begun_restart_with_its_options() {
-    use crate::daemon::agents::ProtectionExt as _;
-    let (root, manager) = manager().await;
-    let (workspace, execution) = working(root.path(), &manager).await;
+/// A workspace whose `claude` agent runs as a wrapper of this process,
+/// with the reattachment its wrapper asks for after a takeover, once the
+/// daemon began `restart`, recorded until the agent's turn ended, and it
+/// waits for the stopped agent's processes.
+async fn waiting_for_processes(
+    root: &std::path::Path,
+    manager: &Arc<Manager>,
+    restart: AgentRestart,
+) -> (Workspace, Reattach) {
+    let workspace = workspace(root, manager).await;
+    let wrapper = crate::process::identity::capture(std::process::id())
+        .unwrap()
+        .unwrap();
+    let started = manager
+        .begin_execution(
+            workspace.id.as_str(),
+            Some(wrapper.clone()),
+            ExecutionKind::Command,
+            None,
+        )
+        .await
+        .unwrap();
+    let id = started.plan.id.clone();
+    (manager.record_execution_child(id.clone(), Some(wrapper.clone()), wrapper.pid))
+        .await
+        .unwrap();
+    track(manager, &workspace, &id, "claude", true).await;
     let space = SpaceSelector::id(&workspace.id);
-    let change = PermissionChange::assigned("push=direct").unwrap();
+    let turn = |state| manager.set_agent_state(&space, state, None, None);
+    turn(AgentState::Working).await.unwrap();
     let restart = AgentRestart {
-        change: Some(change.clone()),
-        ..waiting()
+        wait: true,
+        ..restart
     };
     (manager.restart_space(None, &space, restart))
         .await
         .unwrap();
-    (manager.set_agent_state(&space, AgentState::Idle, None, None))
+    turn(AgentState::Idle).await.unwrap();
+    let acting = tokio::spawn({
+        let (manager, space) = (manager.clone(), workspace.id.clone());
+        async move { manager.act_on_restart(&space).await }
+    });
+    let mut stop = started.stop.clone();
+    stop.wait_for(|stopping| *stopping).await.unwrap();
+    manager.notify_restore_waits(&id, "PID 7 survives").await;
+    assert!(!acting.await.unwrap());
+    let request = Reattach {
+        narrowing: Default::default(),
+        mode: None,
+        model: Default::default(),
+        execution: id,
+        wrapper: wrapper.clone(),
+        child: Some(wrapper.clone()),
+        group_id: wrapper.pid,
+        scope_token: started.plan.scope_token.clone(),
+        agent: Some("claude".into()),
+        recover: true,
+        running_ms: 0,
+        awaiting_restore: Some(crate::model::Protection::restart()),
+        between_runs: false,
+    };
+    (workspace, request)
+}
+
+/// Reattach the wrapper of `request` as to the daemon that took over,
+/// which knows the restart under way only from its record, returning what
+/// the wrapper's connection receives its stop and resume on.
+async fn take_over(manager: &Manager, request: &Reattach) -> tokio::sync::watch::Receiver<bool> {
+    manager.detach_execution(&request.execution).await;
+    (manager.store.quarantine_interrupted_operations())
         .await
         .unwrap();
-    manager.restart_finished_turns().await.unwrap();
-    let mut stop = execution.stop.clone();
-    stop.wait_for(|stopping| *stopping).await.unwrap();
-    let id = execution.plan.id.clone();
+    manager.reattach_execution(request).await.unwrap().stop
+}
 
-    // As the wrapper reattaches to a daemon that knows the restart only
-    // from its record.
-    let protection = crate::model::Protection::restart();
-    manager.await_agent_restore(&id, protection).await;
-    assert_eq!(manager.restart_change(&id).await, Some(change));
-    assert!(manager.settle_restart(&id).await);
+#[tokio::test]
+async fn a_restart_waiting_for_processes_keeps_its_options_through_takeovers() {
+    let (root, manager) = manager().await;
+    let change = PermissionChange::assigned("push=direct").unwrap();
+    let restart = AgentRestart {
+        in_place: true,
+        change: Some(change.clone()),
+        ..Default::default()
+    };
+    let (_workspace, request) = waiting_for_processes(root.path(), &manager, restart).await;
+    let id = &request.execution;
+    let mut wrapper = None;
+    for _ in 0..2 {
+        wrapper = Some(take_over(&manager, &request).await);
+        assert_eq!(manager.restart_change(id).await, Some(change.clone()));
+        assert!(recorded(&manager).await[0].begun);
+    }
+    assert!(manager.settle_restart(id).await);
+    assert!(manager.resume_agent_execution(id, None).await.unwrap());
+    assert!(!*wrapper.unwrap().borrow());
     assert!(recorded(&manager).await.is_empty());
+}
+
+#[tokio::test]
+async fn a_wrapper_that_reattaches_without_the_restarts_stop_lets_it_begin_again() {
+    let (root, manager) = manager().await;
+    let (_workspace, request) =
+        waiting_for_processes(root.path(), &manager, AgentRestart::default()).await;
+    let running = Reattach {
+        awaiting_restore: None,
+        ..request
+    };
+    take_over(&manager, &running).await;
+    assert!(!recorded(&manager).await[0].begun);
+}
+
+fn recorded_for(execution: &str) -> Recorded {
+    Recorded {
+        space_id: "space".into(),
+        execution: execution.into(),
+        restart: waiting(),
+        asked_by: None,
+        begun: false,
+    }
 }
 
 #[tokio::test]
 async fn a_recorded_restart_follows_its_agent_to_a_new_execution() {
     let (_root, manager) = manager().await;
-    let recorded_for = |execution: &str| Recorded {
-        space_id: "space".into(),
-        execution: execution.into(),
-        restart: waiting(),
-        asked_by: None,
-    };
     let old = recorded_for("old");
     manager
         .store
@@ -629,6 +716,23 @@ async fn a_recorded_restart_follows_its_agent_to_a_new_execution() {
         .await
         .unwrap();
     assert_eq!(recorded(&manager).await, [recorded_for("new")]);
+}
+
+#[tokio::test]
+async fn the_new_wrapper_of_a_begun_restart_applies_it() {
+    let (_root, manager) = manager().await;
+    let old = recorded_for("old");
+    manager
+        .store
+        .write(move |tx| {
+            record::put(tx, &old)?;
+            let (_, generation) = record::find_generation(tx, &old.space_id)?.unwrap();
+            record::begin(tx, &old.space_id, &generation)?;
+            record::follow(tx, &"old".into(), &"new".into())
+        })
+        .await
+        .unwrap();
+    assert!(recorded(&manager).await.is_empty());
 }
 
 #[tokio::test]

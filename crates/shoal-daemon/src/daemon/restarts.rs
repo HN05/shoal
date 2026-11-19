@@ -136,6 +136,7 @@ impl Manager {
             execution: execution.clone(),
             restart: superseding(earlier, restart),
             asked_by,
+            begun: false,
         };
         // A restart under way stopped the agent, whose turn is over.
         if !self.restarting(&execution).await {

@@ -82,8 +82,9 @@ impl Manager {
         if theirs.is_empty() || theirs.iter().any(|agent| agent.stopped.is_some()) {
             return Ok(Standing::Gone);
         }
-        // A wrapper reconnecting to a restarted daemon brings its agent back.
-        if theirs.iter().all(|agent| agent.agent.is_none()) {
+        // A wrapper reconnecting to a restarted daemon brings its agent
+        // back, and a begun restart goes on until its restore applies it.
+        if recorded.begun || theirs.iter().all(|agent| agent.agent.is_none()) {
             return Ok(Standing::Waits);
         }
         let ended =
@@ -98,8 +99,10 @@ impl Manager {
     /// Restart the agent of the space `id` as the restart recorded for it
     /// says, answering the requests that wait for it, or telling who asked
     /// when it fails and none is left to answer. The restart stays recorded
-    /// until it ends, so a daemon that exits meanwhile leaves it to the next.
-    /// Whether the agent runs again.
+    /// until it ends, so a daemon that exits meanwhile leaves it to the next,
+    /// and one that waits for the stopped agent's processes goes on, begun,
+    /// until the agent's restore applies its options. Whether the agent runs
+    /// again.
     pub(super) async fn act_on_restart(&self, id: &SpaceId) -> bool {
         let (recorded, generation, waiting, begun) = match self.begin_recorded_restart(id).await {
             Ok(Some(begun)) => begun,
@@ -115,7 +118,9 @@ impl Manager {
             }
             Begun::Ended(outcome) => outcome,
         };
-        self.end_recorded_restart(id, &generation).await;
+        let goes_on = matches!(outcome, Ok(RestartOutcome::Waits { .. }));
+        self.end_recorded_restart(id, (!goes_on).then_some(generation.as_str()))
+            .await;
         let ran = matches!(outcome, Ok(RestartOutcome::Restarted { .. }));
         if !answer_all(waiting, &outcome)
             && let Err(error) = &outcome
@@ -128,9 +133,9 @@ impl Manager {
     /// Begin the restart recorded for the space `id`, with the requests that
     /// wait for it, holding the decisions so no request decides on the space
     /// meanwhile; none once nothing is recorded, while the daemon carries it
-    /// out already, while the turn it waits for goes on, as a newer request
-    /// may record after the line took the space, or while the agent is
-    /// still to run after the restart under way.
+    /// out already or began it, while the turn it waits for goes on, as a
+    /// newer request may record after the line took the space, or while the
+    /// agent is still to run after the restart under way.
     async fn begin_recorded_restart(
         &self,
         id: &SpaceId,
@@ -155,6 +160,7 @@ impl Manager {
         };
         let begun = match agent {
             Err(skipped) => Begun::Ended(Ok(skipped)),
+            Ok(_) if recorded.begun => return Ok(None),
             Ok(_) if recorded.restart.wait && !self.agent_turn_ended(id).await? => {
                 return Ok(None);
             }
@@ -213,20 +219,28 @@ impl Manager {
         Ok(())
     }
 
-    /// Forget the restart of `generation` recorded for the space `id`,
-    /// which ended, unless a newer request replaced it, and let the daemon
-    /// act on the space's restarts again.
-    async fn end_recorded_restart(&self, id: &SpaceId, generation: &str) {
+    /// Let the daemon act on the restarts of the space `id` again,
+    /// forgetting the one recorded of the `ended` generation, unless a newer
+    /// request replaced it.
+    async fn end_recorded_restart(&self, id: &SpaceId, ended: Option<&str>) {
         let _decisions = self.restarts.decisions.lock().await;
+        if let Some(ended) = ended {
+            self.forget_ended_restart(id, ended).await;
+        }
+        self.restarts.set_acting(id, false);
+        // A newer restart recorded meanwhile waits for the watcher.
+        self.signals.agent_changed();
+    }
+
+    /// Forget the restart of `generation` recorded for the space `id`,
+    /// which ended, unless a newer request replaced it.
+    async fn forget_ended_restart(&self, id: &SpaceId, generation: &str) {
         let (space, ended) = (id.to_owned(), generation.to_owned());
         let forgotten =
             (self.store).write(move |tx| super::record::take_generation(tx, &space, &ended));
         if let Err(error) = forgotten.await {
             log!("ended restart of {id} not forgotten: {error:#}");
         }
-        self.restarts.set_acting(id, false);
-        // A newer restart recorded meanwhile waits for the watcher.
-        self.signals.agent_changed();
     }
 
     /// Tell the coordinator whose process asked for `recorded`, or else the

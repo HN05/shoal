@@ -2,7 +2,8 @@
 //! with the execution of the agent it is for, how that agent restarts and
 //! who asked, and a generation each record
 //! takes anew, which tells a newer request's record from the one it
-//! replaced.
+//! replaced. One the daemon began stays until the agent's restore applies
+//! its options, which each wrapper that reattaches meanwhile reads.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
@@ -19,9 +20,12 @@ pub(crate) struct Recorded {
     pub restart: AgentRestart,
     /// The space whose process asked for it; none for the user.
     pub asked_by: Option<SpaceId>,
+    /// The daemon began it, so it goes on until the agent's restore
+    /// applies its options or the agent goes.
+    pub begun: bool,
 }
 
-/// Record `recorded`, replacing what the space had.
+/// Record `recorded`, not begun, replacing what the space had.
 pub(super) fn put(db: &Connection, recorded: &Recorded) -> Result<()> {
     db.execute(
         "INSERT INTO agent_restarts(space_id,restart,asked_by,recorded_at,generation,execution)
@@ -82,11 +86,11 @@ pub(super) fn begin(db: &Connection, id: &SpaceId, generation: &str) -> Result<(
 }
 
 /// The begun restart recorded for the agent that runs as `execution`,
-/// which it no longer has, as its wrapper continues it.
-pub(crate) fn take_begun(db: &Connection, execution: &ExecutionId) -> Result<Option<AgentRestart>> {
+/// which its wrapper continues.
+pub(crate) fn begun(db: &Connection, execution: &ExecutionId) -> Result<Option<AgentRestart>> {
     let restart: Option<String> = db
         .query_row(
-            "DELETE FROM agent_restarts WHERE execution=?1 AND begun=1 RETURNING restart",
+            "SELECT restart FROM agent_restarts WHERE execution=?1 AND begun=1",
             [execution],
             |row| row.get(0),
         )
@@ -96,9 +100,31 @@ pub(crate) fn take_begun(db: &Connection, execution: &ExecutionId) -> Result<Opt
         .transpose()?)
 }
 
+/// Forget the begun restart recorded for the agent that runs as
+/// `execution`, whose restore applied its options.
+pub(crate) fn applied(db: &Connection, execution: &ExecutionId) -> Result<()> {
+    db.execute(
+        "DELETE FROM agent_restarts WHERE execution=?1 AND begun=1",
+        [execution],
+    )?;
+    Ok(())
+}
+
+/// Let the restart begun for the agent that runs as `execution` begin
+/// again, as its wrapper still runs the agent it never stopped.
+pub(crate) fn undelivered(db: &Connection, execution: &ExecutionId) -> Result<()> {
+    db.execute(
+        "UPDATE agent_restarts SET begun=0 WHERE execution=?1",
+        [execution],
+    )?;
+    Ok(())
+}
+
 /// Follow the agent that ran as `from` to `to`, the execution a new
-/// wrapper runs it as after a restart.
+/// wrapper runs it as after a restart, whose registration applied the
+/// options of the restart begun for it.
 pub(crate) fn follow(db: &Connection, from: &ExecutionId, to: &ExecutionId) -> Result<()> {
+    applied(db, from)?;
     db.execute(
         "UPDATE agent_restarts SET execution=?2 WHERE execution=?1",
         params![from, to],
@@ -130,20 +156,27 @@ pub(super) fn find(db: &Connection, id: &SpaceId) -> Result<Option<Recorded>> {
     found.map(recorded).transpose()
 }
 
-const COLUMNS: &str = "space_id,execution,restart,asked_by";
+const COLUMNS: &str = "space_id,execution,restart,asked_by,begun";
 
 /// A row of [`COLUMNS`], with the restart as its JSON.
-type Row = (SpaceId, ExecutionId, String, Option<SpaceId>);
+type Row = (SpaceId, ExecutionId, String, Option<SpaceId>, bool);
 
 fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
-    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+    Ok((
+        row.get(0)?,
+        row.get(1)?,
+        row.get(2)?,
+        row.get(3)?,
+        row.get(4)?,
+    ))
 }
 
-fn recorded((space_id, execution, restart, asked_by): Row) -> Result<Recorded> {
+fn recorded((space_id, execution, restart, asked_by, begun): Row) -> Result<Recorded> {
     Ok(Recorded {
         space_id,
         execution,
         restart: serde_json::from_str(&restart)?,
         asked_by,
+        begun,
     })
 }

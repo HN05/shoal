@@ -572,8 +572,13 @@ its place in the machine's line of sequential restarts, is a store record of
 its space, how it restarts, its permission change and who asked, which the
 turn ends watcher that conversions use acts on, so it outlives the request and
 the daemon, and a failure with no request left to answer reaches the
-coordinator that asked or the user. A newer request supersedes the earlier one
-as if that ran to its end first: permission changes merge key by key, the
+coordinator that asked or the user. Once the daemon begins it, the record stays
+until the agent's restore applies its options, as the wrapper resumes the
+agent in place or a new wrapper registers it, also while the restart waits for
+the stopped agent's processes: each wrapper that reattaches to a later daemon
+meanwhile continues it with them, and one that reattaches still running the
+agent, without the stop, lets the restart begin again. A newer request
+supersedes the earlier one as if that ran to its end first: permission changes merge key by key, the
 newer winning, while when and how come from the newer; a restart under way
 takes the newer request until its wrapper settles how and with what
 permissions it starts the agent, and after that the newer one is recorded and

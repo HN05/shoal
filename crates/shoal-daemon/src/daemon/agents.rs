@@ -658,8 +658,13 @@ impl Manager {
         // The agent's turns count again before it runs, and it reports its
         // own.
         let protected = self.agent_overload(id).await.is_some();
-        if protected || self.restart_requested(id).await {
+        let restart_requested = self.restart_requested(id).await;
+        if protected || restart_requested {
             self.forget_resumed_stop(id).await?;
+        }
+        // Its wrapper resumes it in place with the restart's options.
+        if restart_requested {
+            self.forget_applied_restart(id).await?;
         }
         let stop = connections
             .stop_channel(id)

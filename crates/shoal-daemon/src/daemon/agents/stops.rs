@@ -282,13 +282,14 @@ impl Manager {
     }
 
     /// The restart the daemon recorded and began for the agent of `id`,
-    /// which no longer stays recorded, as the agent's wrapper continues it.
-    async fn take_begun_restart(&self, id: &ExecutionId) -> Option<crate::model::AgentRestart> {
+    /// which stays recorded until the agent's restore applies it, as the
+    /// agent's wrapper continues it.
+    async fn begun_restart(&self, id: &ExecutionId) -> Option<crate::model::AgentRestart> {
         let execution = id.to_owned();
-        let taken = (self.store)
-            .write(move |tx| crate::daemon::restarts::record::take_begun(tx, &execution))
+        let begun = (self.store)
+            .read(move |tx| crate::daemon::restarts::record::begun(tx, &execution))
             .await;
-        taken.unwrap_or_else(|error| {
+        begun.unwrap_or_else(|error| {
             log!("recorded restart of execution {id} not read: {error:#}");
             None
         })
@@ -328,7 +329,7 @@ impl Manager {
     /// wrapper.
     pub(crate) async fn await_agent_restore(&self, id: &ExecutionId, protection: Protection) {
         if protection.is_restart() {
-            let restart = self.take_begun_restart(id).await.unwrap_or_default();
+            let restart = self.begun_restart(id).await.unwrap_or_default();
             self.executions
                 .with_agent(id, |agent| {
                     let restart = restart::Restart::new(restart.in_place, restart.change);

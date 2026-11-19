@@ -199,7 +199,8 @@ impl Manager {
     }
 
     /// Have the restarts recorded for the agent that ran as `from` follow
-    /// it to `to`, which a daemon after this one knows it as.
+    /// it to `to`, which a daemon after this one knows it as, forgetting
+    /// the one begun, whose options the new wrapper's registration applied.
     async fn follow_recorded_restarts(&self, from: &ExecutionId, to: &ExecutionId) {
         let (old, new) = (from.to_owned(), to.to_owned());
         let followed = (self.store)

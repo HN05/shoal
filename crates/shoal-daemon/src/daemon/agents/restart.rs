@@ -184,6 +184,28 @@ impl Manager {
             .unwrap_or(false)
     }
 
+    /// Forget the restart the daemon recorded and began for the agent of
+    /// `id`, whose restore applies its options now.
+    pub(crate) async fn forget_applied_restart(&self, id: &ExecutionId) -> Result<()> {
+        let execution = id.to_owned();
+        (self.store)
+            .write(move |tx| crate::daemon::restarts::record::applied(tx, &execution))
+            .await
+    }
+
+    /// Let the restart the daemon recorded and began for the agent of `id`
+    /// begin again, as its wrapper reattached still running the agent,
+    /// without the stop the previous daemon sent.
+    pub(crate) async fn restart_undelivered(&self, id: &ExecutionId) {
+        let execution = id.to_owned();
+        let reset = (self.store)
+            .write(move |tx| crate::daemon::restarts::record::undelivered(tx, &execution))
+            .await;
+        if let Err(error) = reset {
+            log!("undelivered restart of execution {id} not reset: {error:#}");
+        }
+    }
+
     /// Whether something stops the tracked agent of `id`, such as a restart
     /// or `shoal stop`, which a turn that starts now would not outlast.
     pub(crate) async fn agent_stopping(&self, id: &ExecutionId) -> bool {
