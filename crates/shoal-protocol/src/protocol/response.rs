@@ -394,6 +394,7 @@ paged_bodies!(
     CiRunJobs,
     CiRuns,
     ForgeBranches,
+    DeletedBranches,
     RemovedSpaces,
     AgentEnvironments,
     KeptBranches,

@@ -28,7 +28,7 @@ pub(super) async fn handle(
             force,
         } => {
             let deleted = manager.delete_branches(&target, &branches, force, caller);
-            Ok(Answer::Body(Body::DeletedBranches(deleted.await?)))
+            Ok(Answer::pages(deleted.await, Body::DeletedBranches))
         }
     }
 }

@@ -2,7 +2,7 @@
 //! listing them with what decides whether each can go, and deleting them.
 use anyhow::Result;
 
-use crate::connection::{Daemon, pages, request};
+use crate::connection::{Daemon, pages};
 use shoal_protocol::{
     branches::{DeletedBranch, ListedBranch},
     protocol::{BranchMethod, RepoTarget},
@@ -32,5 +32,5 @@ pub async fn delete(
         branches: branches.into_iter().map(Into::into).collect(),
         force,
     };
-    request(daemon, method).await
+    pages(daemon, method).await
 }

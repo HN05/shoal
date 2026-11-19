@@ -17,7 +17,8 @@ pub enum BranchMethod {
         merged: Option<bool>,
     },
     /// Delete `branches` on the forge, each at the commit it points to, or
-    /// none when one is refused; `force` deletes those whose changes the
+    /// none when one is refused, answered in one or more `deleted_branches`
+    /// frames and then `ok`; `force` deletes those whose changes the
     /// default branch lacks.
     DeleteBranches {
         #[serde(flatten)]
