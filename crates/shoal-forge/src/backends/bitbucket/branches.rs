@@ -1,5 +1,6 @@
 //! Bitbucket's branches, which its branch restrictions protect from
-//! deletion, and its PRs by the branches they join.
+//! deletion by a pattern or by their kind in the branching model, and its
+//! PRs by the branches they join.
 use anyhow::{Context, Result};
 use serde_json::Value;
 
@@ -31,7 +32,16 @@ impl Branches for Bitbucket {
         let restricted = repo
             .pages(account, &repo.repo_endpoint(restrictions))
             .await?;
-        restricted_branches(&listed, &restricted)
+        let by_model = (restricted.iter())
+            .any(|restriction| restriction["branch_match_kind"] == "branching_model");
+        let model = match by_model {
+            true => {
+                let read = Request::get(repo.repo_endpoint("effective-branching-model"));
+                repo.send(account, &read).await?
+            }
+            false => Value::Null,
+        };
+        restricted_branches(&listed, &restricted, &model)
     }
 
     fn open_pulls_path(&self) -> &'static str {
@@ -61,19 +71,52 @@ impl Branches for Bitbucket {
 }
 
 /// The branches `listed`, each protected where a restriction of
-/// `restricted` that names its branches by a pattern matches it.
-fn restricted_branches(listed: &[Value], restricted: &[Value]) -> Result<Vec<ForgeBranch>> {
-    let patterns: Vec<&str> = (restricted.iter())
-        .filter(|restriction| restriction["branch_match_kind"] == "glob")
-        .filter_map(|restriction| restriction["pattern"].as_str())
-        .collect();
+/// `restricted` matches it, by a pattern or by its kind in the repository's
+/// branching `model`.
+fn restricted_branches(
+    listed: &[Value],
+    restricted: &[Value],
+    model: &Value,
+) -> Result<Vec<ForgeBranch>> {
     (listed.iter())
         .map(|branch| {
             let name = branch["name"].as_str().unwrap_or_default();
-            let protected = patterns.iter().any(|pattern| glob_matches(pattern, name));
+            let protected = (restricted.iter())
+                .any(|restriction| restriction_matches(restriction, model, name));
             FIELDS.read(branch, protected)
         })
         .collect()
+}
+
+/// Whether `restriction` names the branch `name`, as `model` defines the
+/// kinds of branch a restriction may name.
+fn restriction_matches(restriction: &Value, model: &Value, name: &str) -> bool {
+    match restriction["branch_match_kind"].as_str() {
+        Some("glob") => {
+            (restriction["pattern"].as_str()).is_some_and(|pattern| glob_matches(pattern, name))
+        }
+        Some("branching_model") => (restriction["branch_type"].as_str())
+            .is_some_and(|kind| model_matches(model, kind, name)),
+        _ => false,
+    }
+}
+
+/// Whether `name` is a branch of `kind` in the branching `model`: its
+/// development or production branch by name, any other kind by its prefix.
+fn model_matches(model: &Value, kind: &str, name: &str) -> bool {
+    match kind {
+        "development" | "production" => {
+            let branch = &model[kind];
+            branch["branch"]["name"]
+                .as_str()
+                .or(branch["name"].as_str())
+                == Some(name)
+        }
+        _ => (model["branch_types"].as_array().into_iter().flatten()).any(|branch_type| {
+            branch_type["kind"] == kind
+                && (branch_type["prefix"].as_str()).is_some_and(|prefix| name.starts_with(prefix))
+        }),
+    }
 }
 
 /// Whether the branch restriction pattern `pattern`, where `*` stands for
