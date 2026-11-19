@@ -42,7 +42,7 @@ impl Manager {
             .run(move |db| {
                 ensure!(
                     !store::repository_removing(db, &id)?,
-                    "repository removal is incomplete; retry shoal repo rm --yes"
+                    "repository {id} is being removed, or its removal is incomplete; retry shoal repo rm {id} --yes"
                 );
                 store::ensure_repository_not_moving(db, &id)?;
                 Ok(())

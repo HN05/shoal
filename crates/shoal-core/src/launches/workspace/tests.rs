@@ -38,3 +38,22 @@ async fn reading_the_branches_of_a_repository_removed_meanwhile_says_so() {
         "{error}"
     );
 }
+
+#[tokio::test]
+async fn a_failed_read_of_a_repository_s_branches_names_it_by_its_id() {
+    let root = tempfile::tempdir().unwrap();
+    // Its checkout is there, though its Git files are gone, as while a
+    // removal deletes them.
+    let repo = Repository {
+        id: "repo-id".into(),
+        path: root.path().to_owned(),
+        source: "https://example.com/team/repo".into(),
+        last_used: 0,
+        name: Some("repo".into()),
+        workspaces_dir: root.path().join("workspaces"),
+        contribution: false,
+    };
+    let error = branches(&repo, "racing").await.unwrap_err();
+    let error = format!("{error:#}");
+    assert!(error.contains("repository repo (repo-id)"), "{error}");
+}

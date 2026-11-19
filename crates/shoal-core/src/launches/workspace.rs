@@ -212,9 +212,7 @@ pub async fn settle(
     let Some(name) = creation.branch.take() else {
         return Ok(None);
     };
-    let (remote, mut taken) = branches(repo, &name)
-        .await
-        .with_context(|| format!("read the branches of repository {}", repo.display_name()))?;
+    let (remote, mut taken) = branches(repo, &name).await?;
     let workspaces = repository_workspaces(reads, repo).await?;
     if let Some(workspace) = super::on_branch(&workspaces, &name, remote.as_ref()) {
         // A remote branch opens a local one only where it tracks it.
@@ -275,17 +273,27 @@ async fn branches(
 ) -> Result<(Option<(String, BranchName)>, Vec<BranchName>)> {
     let read = async {
         let remote = git::remote_branch(&repo.path, name).await?;
-        Ok((remote, git::branch::names_in_use(&repo.path).await?))
+        anyhow::Ok((remote, git::branch::names_in_use(&repo.path).await?))
     };
-    match read.await {
-        // Removed meanwhile, as `shoal repo rm` takes its checkout.
-        Err(_) if !repo.path.try_exists().unwrap_or(true) => {
-            let name = repo.display_name();
-            let message = format!("repository {name} ({}) was removed", repo.id);
-            Err(crate::refusal::Refusal::new(crate::refusal::Reason::NotFound, message).into())
-        }
-        read => read,
+    let error = match read.await {
+        Ok(read) => return Ok(read),
+        Err(error) => error,
+    };
+    let name = repo.display_name();
+    // Removed meanwhile, as `shoal repo rm` takes its checkout.
+    if !crate::fsutil::off_runtime::try_exists(&repo.path)
+        .await
+        .unwrap_or(true)
+    {
+        let message = format!("repository {name} ({}) was removed", repo.id);
+        return Err(crate::refusal::Refusal::new(crate::refusal::Reason::NotFound, message).into());
     }
+    // As while a removal deletes its files: named by its ID, which a
+    // retry of either takes.
+    Err(error.context(format!(
+        "read the branches of repository {name} ({})",
+        repo.id
+    )))
 }
 
 /// `creation` on the branch the issue at `url` with `title` settles in
