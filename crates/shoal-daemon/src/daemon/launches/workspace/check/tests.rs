@@ -37,6 +37,28 @@ async fn a_check_answers_the_workspace_that_has_the_branch() {
     assert!(manager.check_workspace_launch(named, None).await.is_err());
 }
 
+/// A check refuses a blocker the daemon knows nothing of, whether its
+/// launch goes into the workspace that has its branch or a new one.
+#[tokio::test]
+async fn a_check_refuses_an_unknown_blocker_on_either_branch() {
+    let (temp, manager) = manager().await;
+    let repo = offline_machine(&manager, &temp).await;
+    let base = Some("main".into());
+    (manager.create_workspace(&repo.id, "fix".into(), base, None, None))
+        .await
+        .unwrap();
+    let blocked = |branch: &str| Launch {
+        blockers: vec!["missing".into()],
+        ..launch_on_branch(&repo, Some(branch))
+    };
+
+    for branch in ["fix", "new"] {
+        let checked = manager.check_workspace_launch(blocked(branch), None).await;
+        let error = format!("{:#}", checked.unwrap_err());
+        assert!(error.contains("missing"), "{branch}: {error}");
+    }
+}
+
 /// A check refuses what creating its workspace would refuse, and creates
 /// nothing.
 #[tokio::test]

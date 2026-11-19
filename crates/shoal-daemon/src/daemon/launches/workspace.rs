@@ -101,13 +101,15 @@ impl Manager {
         let target =
             self.workspace_target(launch, &mut creation, copied.as_ref(), (&reads, fetches));
         let target = target.await?;
+        // What it names to wait for holds a new workspace's agent and an
+        // existing one's alike.
+        let blockers = (self.named_blockers(&target.repo.id, &launch.blockers, caller)).await?;
         let selector = (&target.repo.id).into();
         let settled = branch::settle(&reads, (&selector, &target.repo), &mut creation);
         if let Some(workspace) = settled.await? {
             ensure_takes_existing(launch, &creation, &workspace)?;
             return Ok(Settling::Existing(Box::new(workspace)));
         }
-        let blockers = (self.named_blockers(&target.repo.id, &launch.blockers, caller)).await?;
         let issue = match &target.issue {
             Some(issue) => {
                 let read = self.launch_issue(issue, (&target.repo.id, false), caller);
