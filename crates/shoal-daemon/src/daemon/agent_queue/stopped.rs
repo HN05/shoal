@@ -412,7 +412,9 @@ impl Manager {
     /// whose wrapper exited with `code` after its restore was admitted but
     /// before the agent started, as one whose binary an upgrade removed may.
     /// Shoal queues it on its own, so an agent stopped between turns waits
-    /// for an update, and starts it where the agent ran. Returns whether it
+    /// for an update, while one load stopped, which healthy readings
+    /// admitted already, waits only for a free slot; the daemon starts it
+    /// where the agent ran. Returns whether it
     /// is queued; otherwise its record stays for `shoal restore`.
     pub async fn queue_failed_restore(
         &self,
@@ -427,6 +429,8 @@ impl Manager {
         };
         let env = crate::terminal::detached_start_environment(record.origin.as_ref());
         let queued = async {
+            // Healthy readings admitted the restore that failed.
+            recovery::clear_load_mark(&self.paths, &space.id, execution)?;
             let restore = Restore::new(
                 Target::of(space),
                 execution,

@@ -71,7 +71,7 @@ fn waiting(entries: &[(&str, &str)]) -> Vec<Waiting> {
             repository: Some((*repository).into()),
             work: if id.starts_with('r') {
                 Work::Restore {
-                    waiting: true,
+                    holds_slot: true,
                     wake: Wake::Recovery,
                 }
             } else {
@@ -268,15 +268,15 @@ fn restores_wait_for_healthy_readings_without_holding_back_later_entries() {
     // A full machine keeps the launch behind them waiting.
     let full = limits(Some(3), &[]);
     assert_eq!(admit(&occupied, &queue, &full, false), ["a1"]);
-    // A restore whose agent is not waiting yet is passed over.
+    // A restore takes back the slot its agent kept, so a full machine
+    // restores it; one whose agent kept none, as one the daemon starts,
+    // waits for a free slot and leaves the healthy interval to the next.
+    assert_eq!(admit(&occupied, &queue, &full, true), ["a1", "ra"]);
     queue[1].work = Work::Restore {
-        waiting: false,
+        holds_slot: false,
         wake: Wake::Recovery,
     };
-    assert_eq!(
-        admit(&occupied, &queue, &unlimited, true),
-        ["a1", "rb", "b1"]
-    );
+    assert_eq!(admit(&occupied, &queue, &full, true), ["a1", "rb"]);
     // Dynamic admission measures room for a restored agent's memory too.
     let room = |room| Limits {
         room,
@@ -284,7 +284,7 @@ fn restores_wait_for_healthy_readings_without_holding_back_later_entries() {
     };
     assert_eq!(
         admit(&occupied, &queue[1..], &room(free(10 * GIB)), true),
-        ["rb"]
+        ["ra"]
     );
     assert!(admit(&occupied, &queue[1..], &room(free(GIB)), true).is_empty());
 }
@@ -308,26 +308,23 @@ fn stopped_oneshot_runs_restart_one_per_healthy_interval() {
 #[test]
 fn restores_between_turns_wait_only_for_an_update_and_a_free_slot() {
     let mut queue = waiting(&[("ra", "a"), ("a1", "a"), ("rb", "b")]);
-    let update = |waiting, due| Work::Restore {
-        waiting,
+    let update = |due| Work::Restore {
+        holds_slot: false,
         wake: Wake::Update { due },
     };
-    queue[0].work = update(true, false);
+    queue[0].work = update(false);
     let occupied = vec!["b".into()];
     let unlimited = Limits::default();
     // Without an update the restore holds back nothing behind it.
     assert_eq!(admit(&occupied, &queue, &unlimited, true), ["a1", "rb"]);
     // An update starts it without healthy readings, which the restore after
     // it still waits for.
-    queue[0].work = update(true, true);
+    queue[0].work = update(true);
     assert_eq!(admit(&occupied, &queue, &unlimited, false), ["ra", "a1"]);
     // Its agent holds no slot, so it needs a free one as a launch does.
     let full = limits(Some(2), &[]);
     assert_eq!(admit(&occupied, &queue, &full, false), ["ra"]);
     assert!(admit(&vec![RepositoryId::from("b"); 2], &queue, &full, false).is_empty());
-    // An agent not yet proven stopped is passed over.
-    queue[0].work = update(false, true);
-    assert_eq!(admit(&occupied, &queue, &unlimited, false), ["a1"]);
 }
 
 #[test]

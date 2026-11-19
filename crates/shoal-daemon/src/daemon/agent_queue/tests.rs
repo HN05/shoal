@@ -587,7 +587,7 @@ pub(super) async fn await_restore(
 /// A process group ID above every system's PID limit, so no process has it.
 const ABSENT_GROUP: u32 = i32::MAX as u32;
 
-fn publish_recovery(manager: &Manager) {
+pub(super) fn publish_recovery(manager: &Manager) {
     let epoch = manager.overload_recovery.epoch();
     manager.overload_recovery.publish(Some(epoch));
 }

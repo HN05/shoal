@@ -12,10 +12,11 @@ use anyhow::{Context, Result};
 use rusqlite::params;
 
 use super::{
-    blockers, expiry,
+    blockers,
+    carrier::Carrier,
+    expiry,
     limits::{Admission, Waiting, Wake, Work, admit},
     store::{QueuedRow, queued_rows},
-    wake::DueReading,
     weight::Light,
 };
 use crate::{
@@ -38,15 +39,28 @@ pub(crate) struct Start {
     pub env: BTreeMap<String, String>,
 }
 
+/// A queued restore as admission sees it: its agent's execution, what it
+/// waits for and what carries it out once admitted.
+struct QueuedRestore {
+    execution: ExecutionId,
+    wake: Wake,
+    carrier: Carrier,
+}
+
+impl QueuedRestore {
+    /// Whether its agent holds no slot while it waits: every process of it
+    /// has stopped, and it does not wait for healthy readings in its
+    /// wrapper, which keeps the slot it takes back.
+    fn dormant(&self) -> bool {
+        self.carrier == Carrier::Daemon || self.wake != Wake::Recovery
+    }
+}
+
 /// The waiting entries as admission sees them.
 struct WaitingWork {
     entries: Vec<Waiting>,
-    /// Each restore a waiting wrapper carries out, by entry ID, with its
-    /// execution and wake.
-    restores: HashMap<QueueEntryId, (ExecutionId, Wake)>,
-    /// The executions of the stopped agents whose restore the daemon starts,
-    /// which hold no slot until it is admitted.
-    stopped: HashSet<ExecutionId>,
+    /// Each restore that something can carry out, by entry ID.
+    restores: HashMap<QueueEntryId, QueuedRestore>,
     /// The jobs left out of `entries` while their repository's permits are
     /// all held.
     permits_busy: Vec<QueueEntryId>,
@@ -88,46 +102,31 @@ impl WaitingWork {
             .any(|entry| kind(&entry.work) && admitted.contains(&entry.id))
     }
 
-    /// The execution and wake of each restore in `admitted` that a waiting
-    /// wrapper carries out.
+    /// The restores in `admitted`.
     fn admitted_restores<'a>(
         &'a self,
         admitted: &'a [QueueEntryId],
-    ) -> impl Iterator<Item = &'a (ExecutionId, Wake)> {
+    ) -> impl Iterator<Item = &'a QueuedRestore> {
         admitted.iter().filter_map(|id| self.restores.get(id))
     }
 
     /// Whether `admitted` holds an entry that waited for healthy readings: a
-    /// restore of an agent stopped mid-turn or a one-shot run protection
-    /// stopped.
+    /// restore of an agent load or disk space stopped mid-turn or a one-shot
+    /// run protection stopped.
     fn needs_recovery(&self, admitted: &[QueueEntryId]) -> bool {
         self.admitted_restores(admitted)
-            .any(|(_, wake)| *wake == Wake::Recovery)
+            .any(|restore| restore.wake == Wake::Recovery)
             || self.admits(admitted, |work| *work == Work::OneShot { after_stop: true })
     }
-}
 
-/// The executions of the `waiting` restores that wait for an update or only
-/// a slot with every process of their agent proven stopped, which hold no
-/// slot. One whose processes may still run keeps its slot until they stop.
-fn dormant_restores(
-    waiting: &[Waiting],
-    restores: &HashMap<QueueEntryId, (ExecutionId, Wake)>,
-) -> HashSet<ExecutionId> {
-    waiting
-        .iter()
-        .filter(|entry| {
-            matches!(
-                entry.work,
-                Work::Restore {
-                    waiting: true,
-                    wake: Wake::Update { .. } | Wake::Slot,
-                }
-            )
-        })
-        .filter_map(|entry| restores.get(&entry.id))
-        .map(|(execution, _)| execution.clone())
-        .collect()
+    /// The executions of the restores whose agent holds no slot while it
+    /// waits.
+    fn dormant(&self) -> HashSet<ExecutionId> {
+        (self.restores.values())
+            .filter(|restore| restore.dormant())
+            .map(|restore| restore.execution.clone())
+            .collect()
+    }
 }
 
 impl Manager {
@@ -179,8 +178,9 @@ impl Manager {
     fn hold_back_for_exit(&self, work: &mut WaitingWork) {
         if self.gates.exiting().is_some() {
             let restores = &work.restores;
-            work.entries
-                .retain(|entry| restores.contains_key(&entry.id));
+            work.entries.retain(|entry| {
+                (restores.get(&entry.id)).is_some_and(|restore| restore.carrier == Carrier::Wrapper)
+            });
         }
     }
 
@@ -214,9 +214,7 @@ impl Manager {
         let repositories = (work.entries.iter())
             .filter_map(|entry| entry.repository.clone())
             .collect();
-        let mut dormant = dormant_restores(&work.entries, &work.restores);
-        dormant.extend(work.stopped.iter().cloned());
-        let slots = self.occupied_slots(&dormant, &work.light).await?;
+        let slots = self.occupied_slots(&work.dormant(), &work.light).await?;
         let jobs = self.job_activities().await?;
         let limits = self.agent_limits(repositories, &slots, &jobs).await?;
         let occupied: Vec<_> = slots.into_iter().map(|slot| slot.repository).collect();
@@ -224,7 +222,7 @@ impl Manager {
     }
 
     /// Grant the `admitted` entries of `work` their start: wake the runners
-    /// for a CI job, let each restore's waiting agent go and admit one-shot
+    /// for a CI job, let each restore's waiting wrapper go and admit one-shot
     /// runs, using up the recovery epoch `published` for those
     /// that waited for healthy readings. Return the entries left to mark
     /// starting, or none when a stop, reload or unsafe reading withdrew the
@@ -242,9 +240,11 @@ impl Manager {
             true => Some(published.and_then(|epoch| self.overload_recovery.consume(epoch))?),
             false => None,
         };
-        for (execution, wake) in work.admitted_restores(&admitted) {
-            if let Some(grant) = wake.grant(epoch) {
-                self.agent_queue.grant_restore(execution, grant);
+        let wrappers = (work.admitted_restores(&admitted))
+            .filter(|restore| restore.carrier == Carrier::Wrapper);
+        for restore in wrappers {
+            if let Some(grant) = restore.wake.grant(epoch) {
+                self.agent_queue.grant_restore(&restore.execution, grant);
             }
         }
         Some(
@@ -255,10 +255,9 @@ impl Manager {
         )
     }
 
-    /// The queued entries in rank order, each restore with whether its agent
-    /// waits and what for, without those a caller holds to start itself but
-    /// `caller`'s own. A restore the daemon starts is admitted like a launch
-    /// once it waits for nothing.
+    /// The queued entries in rank order, each restore with what it waits for
+    /// and what carries it out, without those a caller holds to start itself
+    /// but `caller`'s own, and those nothing can carry out yet.
     async fn waiting_work(&self, caller: Option<&QueueEntryId>) -> Result<WaitingWork> {
         let now = std::time::Instant::now();
         let held = self.agent_queue.held();
@@ -270,9 +269,8 @@ impl Manager {
             false => self.light().await?,
         };
         let upstream_limited = self.upstream_limited(&queued).await?;
-        let waiters = self.agent_queue.restore_waiters();
+        let carriers = self.carriers();
         let mut restores = HashMap::new();
-        let mut stopped = HashSet::new();
         let mut permits_busy = Vec::new();
         let mut waiting = Vec::new();
         for QueuedRow {
@@ -305,27 +303,19 @@ impl Manager {
                         cost: self.job_cost(repository, &job).await?,
                     }
                 }
-                (QueueKind::Restore, Some(execution), Some(workspace)) if started_here => {
-                    let work = self
-                        .stopped_restore_work(&workspace, &execution, automatic)
-                        .await?;
-                    stopped.insert(execution);
-                    work
-                }
                 (QueueKind::Restore, Some(execution), Some(workspace)) => {
-                    let waits = waiters.contains(&execution);
-                    let due = match waits {
-                        true => DueReading::Read,
-                        false => DueReading::Skip,
+                    let Some(carrier) = carriers.of(started_here, &execution) else {
+                        continue;
                     };
-                    let wake = self
-                        .restore_wake(&workspace, &execution, automatic, due)
-                        .await?;
-                    restores.insert(id.clone(), (execution, wake));
-                    Work::Restore {
-                        waiting: waits,
+                    let wake = (self.restore_wake(&workspace, &execution, automatic)).await?;
+                    let restore = QueuedRestore {
+                        execution,
                         wake,
-                    }
+                        carrier,
+                    };
+                    let holds_slot = !restore.dormant();
+                    restores.insert(id.clone(), restore);
+                    Work::Restore { holds_slot, wake }
                 }
                 _ => Work::Launch,
             };
@@ -351,7 +341,6 @@ impl Manager {
         Ok(WaitingWork {
             entries: waiting,
             restores,
-            stopped,
             permits_busy,
             upstream_limited,
             light,

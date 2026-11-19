@@ -1,8 +1,9 @@
-//! What wakes a queued restore: sustained healthy readings for an agent
-//! protection stopped mid-turn, an update for one stopped between turns,
-//! which has nothing to do until then, and for one stopped because its
-//! space is blocked, nothing blocking the space, unless `shoal restore`
-//! asked for it.
+//! What wakes a queued restore, decided from its agent's recovery record
+//! whatever carries it out: nothing blocking the space for an agent stopped
+//! because its space was blocked, an update for one stopped between turns,
+//! which has nothing to do until then, sustained healthy readings for one
+//! load or disk space stopped mid-turn, and a free slot for any other, or
+//! for one `shoal restore` asked for.
 use crate::execution::recovery::RecordExt;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
@@ -11,7 +12,7 @@ use std::collections::HashSet;
 use anyhow::Result;
 use rusqlite::Connection;
 
-use super::limits::{Wake, Work};
+use super::limits::Wake;
 use crate::{
     daemon::manager::Manager,
     execution::recovery,
@@ -29,14 +30,6 @@ pub(crate) enum Grant {
     Update,
     /// Its turn in the agent queue, or `shoal queue start`.
     Queue,
-}
-
-/// Whether reading a restore's wake reads if an update is due, which only
-/// matters once its agent waits for one.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum DueReading {
-    Read,
-    Skip,
 }
 
 /// A restore entry with the workspace and execution of its agent.
@@ -95,49 +88,67 @@ fn queued_restores(db: &Connection, workspace_id: &SpaceId) -> Result<Vec<Queued
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// Why Shoal stopped an agent, as its recovery record says, which decides
+/// what the agent's restore waits for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Stopped {
+    /// Its space was blocked: the restore waits until nothing blocks it.
+    Blocked,
+    /// Between turns: the restore waits for an update or a message.
+    BetweenTurns,
+    /// Mid-turn for load or free disk space: the restore waits for healthy
+    /// readings.
+    ForLoad,
+    /// Mid-turn otherwise, such as by a signal or a shutdown, or with no
+    /// readable record: the restore waits for a free slot.
+    MidTurn,
+}
+
+impl Stopped {
+    fn of(record: Option<&recovery::Record>) -> Self {
+        match record {
+            Some(record)
+                if record.stop_reason.as_deref() == Some(crate::daemon::agents::BLOCKED_REASON) =>
+            {
+                Self::Blocked
+            }
+            Some(record) if record.between_turns() => Self::BetweenTurns,
+            Some(record) if record.for_load => Self::ForLoad,
+            Some(_) | None => Self::MidTurn,
+        }
+    }
+
+    /// Whether the restore waits for an update, or for nothing to block
+    /// its space.
+    fn waits_for_update(self) -> bool {
+        matches!(self, Self::Blocked | Self::BetweenTurns)
+    }
+}
+
 impl Manager {
     /// The executions of the workspace whose agent, stopped between turns
-    /// with every process, waits in the queue for an update, in its wrapper
-    /// or for the daemon to start it, while none is recorded for it and no
-    /// timer will wake it. Disk space may still hold back one that is,
-    /// which has work all the same. An agent stopped because its space is
-    /// blocked is not idle.
+    /// with every process, waits in the queue for an update, for its
+    /// waiting wrapper or for the daemon to start it, while none is recorded
+    /// for it and no timer will wake it. Disk space may still hold back one
+    /// that is, which has work all the same. An agent stopped because its
+    /// space is blocked is not idle.
     pub(crate) async fn idle_restores(
         &self,
         workspace_id: &SpaceId,
     ) -> Result<HashSet<ExecutionId>> {
         let id = workspace_id.to_owned();
         let queued = self.store.run(move |db| queued_restores(db, &id)).await?;
-        let waiters = self.agent_queue.restore_waiters();
-        let mut idle = HashSet::new();
-        for restore in queued {
-            let wake = if restore.started_here {
-                match self
-                    .stopped_restore_work(workspace_id, &restore.execution, restore.automatic)
-                    .await?
-                {
-                    Work::Restore { wake, .. } => wake,
-                    Work::Launch | Work::OneShot { .. } | Work::Job { .. } => continue,
-                }
-            } else if waiters.contains(&restore.execution) {
-                self.restore_wake(
-                    workspace_id,
-                    &restore.execution,
-                    restore.automatic,
-                    DueReading::Skip,
-                )
-                .await?
-            } else {
-                continue;
-            };
-            // A blocked agent's restore keeps the workspace, which still
-            // has work to do once nothing blocks it.
-            if matches!(wake, Wake::Update { .. })
-                && !self.restore_waits_for_unblock(workspace_id, &restore.execution)
-            {
-                idle.insert(restore.execution);
-            }
-        }
+        let carriers = self.carriers();
+        let mut idle: HashSet<ExecutionId> = (queued.into_iter())
+            .filter(|restore| {
+                restore.automatic
+                    && carriers
+                        .of(restore.started_here, &restore.execution)
+                        .is_some()
+                    && self.stopped_as(workspace_id, &restore.execution) == Stopped::BetweenTurns
+            })
+            .map(|restore| restore.execution)
+            .collect();
         if !idle.is_empty()
             && (self.agent_updates_recorded(workspace_id).await?
                 || self.wake_timer_set(workspace_id).await?)
@@ -151,62 +162,34 @@ impl Manager {
     /// stopped between turns.
     pub(super) async fn restores_waiting_for_updates(&self) -> Result<HashSet<QueueEntryId>> {
         let restores = self.store.run(|db| restore_rows(db)).await?;
-        let mut waiting = HashSet::new();
-        for row in restores {
-            if self.restore_waits_for_update(&row.workspace, &row.execution)
-                && !self.restore_waits_for_unblock(&row.workspace, &row.execution)
-            {
-                waiting.insert(row.id);
-            }
-        }
-        Ok(waiting)
+        Ok((restores.into_iter())
+            .filter(|row| self.stopped_as(&row.workspace, &row.execution) == Stopped::BetweenTurns)
+            .map(|row| row.id)
+            .collect())
     }
 
-    /// What the queued restore of `execution` in `workspace_id`, which a
-    /// waiting wrapper carries out, waits for: a slot once `shoal restore`
-    /// asked for it, no longer `automatic`,
-    /// otherwise what its recovery record says. Whether an update is due is
-    /// read as `due` says, and free disk space must have
-    /// recovered as for any other restore, since disk protection stops
-    /// agents that start below it.
+    /// What the queued restore of `execution` in the space `id` waits for,
+    /// whatever carries it out: a slot once `shoal restore` asked for it, no
+    /// longer `automatic`, otherwise what its recovery record says. An
+    /// update is due only while free disk space has recovered as for any
+    /// other restore, since disk protection stops agents that start below
+    /// it.
     pub(super) async fn restore_wake(
         &self,
-        workspace_id: &SpaceId,
+        id: &SpaceId,
         execution: &ExecutionId,
         automatic: bool,
-        due: DueReading,
     ) -> Result<Wake> {
         if !automatic {
             return Ok(Wake::Slot);
         }
-        if !self.restore_waits_for_update(workspace_id, execution) {
-            return Ok(Wake::Recovery);
+        match self.stopped_as(id, execution) {
+            Stopped::ForLoad => Ok(Wake::Recovery),
+            Stopped::MidTurn => Ok(Wake::Slot),
+            Stopped::Blocked | Stopped::BetweenTurns => Ok(Wake::Update {
+                due: self.restore_due(id, execution).await?,
+            }),
         }
-        let due = match due {
-            DueReading::Read => self.restore_due(workspace_id, execution).await?,
-            DueReading::Skip => false,
-        };
-        Ok(Wake::Update { due })
-    }
-
-    /// How admission sees the restore of `execution` in `workspace_id` that
-    /// the daemon starts: like a launch, except that an `automatic` one of
-    /// an agent stopped between turns waits for an update first. Its agent's
-    /// processes have stopped, so it holds no slot meanwhile.
-    pub(super) async fn stopped_restore_work(
-        &self,
-        workspace_id: &SpaceId,
-        execution: &ExecutionId,
-        automatic: bool,
-    ) -> Result<Work> {
-        if !automatic || !self.restore_waits_for_update(workspace_id, execution) {
-            return Ok(Work::Launch);
-        }
-        let due = self.restore_due(workspace_id, execution).await?;
-        Ok(Work::Restore {
-            waiting: true,
-            wake: Wake::Update { due },
-        })
     }
 
     /// Whether the restore of `execution`, stopped between turns in
@@ -233,6 +216,13 @@ impl Manager {
         !self.config().machine.overload.disk.enabled || self.config_state.disk_space_recovered()
     }
 
+    /// Why Shoal stopped the agent of `execution` in the space `id`, as its
+    /// recovery record says, in a workspace or a chat alike.
+    pub(crate) fn stopped_as(&self, id: &SpaceId, execution: &ExecutionId) -> Stopped {
+        let path = recovery::record_path(&self.paths, id, execution);
+        Stopped::of(recovery::Record::load(&path).ok().flatten().as_ref())
+    }
+
     /// Whether the recovery record of `execution` says Shoal stopped it
     /// because its space was blocked, so its restore waits until nothing
     /// blocks the space.
@@ -241,24 +231,13 @@ impl Manager {
         workspace_id: &SpaceId,
         execution: &ExecutionId,
     ) -> bool {
-        let path = recovery::record_path(&self.paths, workspace_id, execution);
-        recovery::Record::load(&path)
-            .ok()
-            .flatten()
-            .is_some_and(|record| {
-                record.stop_reason.as_deref() == Some(crate::daemon::agents::BLOCKED_REASON)
-            })
+        self.stopped_as(workspace_id, execution) == Stopped::Blocked
     }
 
     /// Whether the recovery record of `execution` in the space `id` says it
-    /// stopped between turns, so its restore waits for an update, in a
-    /// workspace or a chat alike. An unreadable record leaves the turn
-    /// unknown, which counts as mid-turn.
+    /// stopped between turns, so its restore waits for an update, or for
+    /// nothing to block its space.
     pub(crate) fn restore_waits_for_update(&self, id: &SpaceId, execution: &ExecutionId) -> bool {
-        let path = recovery::record_path(&self.paths, id, execution);
-        recovery::Record::load(&path)
-            .ok()
-            .flatten()
-            .is_some_and(|record| record.between_turns())
+        self.stopped_as(id, execution).waits_for_update()
     }
 }

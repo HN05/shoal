@@ -76,25 +76,38 @@ pub(crate) enum Work {
     OneShot {
         after_stop: bool,
     },
-    /// A stopped agent's restore. `waiting` says its agent waits for it with
-    /// every process stopped.
+    /// A stopped agent's restore. `holds_slot` says its agent keeps its slot
+    /// while it waits, as one whose wrapper waits for healthy readings does.
     Restore {
-        waiting: bool,
+        holds_slot: bool,
         wake: Wake,
     },
+}
+
+impl Work {
+    /// Whether it starts only on sustained healthy readings.
+    fn waits_for_recovery(self) -> bool {
+        matches!(
+            self,
+            Work::Restore {
+                wake: Wake::Recovery,
+                ..
+            } | Work::OneShot { after_stop: true }
+        )
+    }
 }
 
 /// What a queued restore waits for besides a slot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Wake {
-    /// Sustained healthy readings, for an agent stopped mid-turn, whose slot
-    /// `occupied` still counts.
+    /// Sustained healthy readings, for an agent load or disk space stopped
+    /// mid-turn.
     Recovery,
     /// An update for an agent stopped between turns, which holds no slot
     /// meanwhile; `due` once one waits.
     Update { due: bool },
-    /// Only a free slot, for a restore `shoal restore` asked for, whose agent
-    /// holds none meanwhile.
+    /// Only a free slot, for a restore `shoal restore` asked for or an agent
+    /// stopped mid-turn otherwise, which holds none meanwhile.
     Slot,
 }
 
@@ -149,11 +162,11 @@ impl Admission {
 /// others. `occupied` holds one repository ID per used slot, none for a
 /// chat without one, which counts toward the machine's limits alone, as an
 /// entry without one does. Under fixed
-/// limits a launch, like a restore an update woke, needs a free slot and
-/// another restore takes back its own; under dynamic admission each needs
-/// room for its memory. Those other restores, like one-shot runs protection
-/// stopped, start only on sustained healthy readings (`recovered`), one per
-/// healthy interval. A CI job counts only against the jobs' limits, and under
+/// limits a launch, like a restore an update woke, needs a free slot and a
+/// restore whose agent kept its slot takes it back; under dynamic admission
+/// each needs room for its memory. A restore that waits for healthy
+/// readings, like a one-shot run protection stopped, starts only on
+/// sustained healthy readings (`recovered`), one per healthy interval. A CI job counts only against the jobs' limits, and under
 /// dynamic admission needs room for its own memory and takes the pass's one
 /// start, as an agent does, and beside running jobs a CPU below its level. A light agent's entry needs no slot and no room,
 /// so it takes none of the pass's starts and, restored, none of the healthy
@@ -211,16 +224,15 @@ pub(crate) fn admit(
             Work::OneShot { after_stop: true } if !recovered => continue,
             Work::Launch | Work::OneShot { .. } => 0,
             Work::Restore {
-                waiting: true,
                 wake: Wake::Slot | Wake::Update { due: true },
+                ..
             } => 0,
             Work::Restore {
-                wake: Wake::Slot | Wake::Update { .. },
+                wake: Wake::Update { due: false },
                 ..
             } => continue,
             Work::Restore { .. } if !recovered => continue,
-            Work::Restore { waiting: false, .. } => continue,
-            Work::Restore { waiting: true, .. } => 1,
+            Work::Restore { holds_slot, .. } => usize::from(holds_slot),
         };
         if entry.light {
             match light_hold(limits, writing) {
@@ -264,7 +276,7 @@ pub(crate) fn admit(
         writing += 1 - own;
         started = true;
         // Each healthy interval restarts one stopped agent or one-shot run.
-        recovered &= own == 0 && entry.work != Work::OneShot { after_stop: true };
+        recovered &= !entry.work.waits_for_recovery();
         admission.admitted.push(entry.id.clone());
     }
     admission

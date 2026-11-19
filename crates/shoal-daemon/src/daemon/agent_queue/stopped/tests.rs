@@ -6,7 +6,7 @@ use crate::{
             Grant,
             tests::{
                 add, admitted, await_restore, bounded, connected_agent, create, limit_globally,
-                queue, register, started, stopped_agents,
+                publish_recovery, queue, register, started, stopped_agents,
             },
         },
         test_support::{global_config, manager},
@@ -218,6 +218,57 @@ async fn entry(manager: &Manager, execution: &str) -> QueueEntry {
 async fn asleep(manager: &Manager, name: &str) -> Option<Asleep> {
     let id = manager.named(name).await;
     manager.workspace(&id).await.unwrap().asleep
+}
+
+/// The record of an agent load stopped mid-turn.
+const LOAD_STOPPED: &str = r#"{"agent":"claude","mode":"worker","stage":"stopped",
+    "stop_reason":"critical memory pressure","for_load":true}"#;
+
+/// Leave the restores of agents load stopped mid-turn in each of
+/// `workspaces`, as their sessions' end requested them, to the daemon.
+fn load_stops(manager: &Manager, workspaces: &[&Workspace]) {
+    for workspace in workspaces {
+        let execution = format!("{}-agent", workspace.name);
+        signal_stop(manager, &workspace.id, &execution);
+        stop(manager, &workspace.id, &execution, LOAD_STOPPED);
+    }
+}
+
+/// A restore the daemon starts of an agent load stopped mid-turn waits for
+/// healthy readings, one restore per healthy interval, as a waiting
+/// wrapper's does.
+#[tokio::test]
+async fn a_daemon_started_restore_after_a_load_stop_waits_for_healthy_readings() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 4);
+    let first = create(&manager, &repo, "first").await;
+    let second = create(&manager, &repo, "second").await;
+    load_stops(&manager, &[&first, &second]);
+
+    // Free slots alone do not restore them.
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(
+        queue(&manager).await,
+        [
+            ("first".into(), Restore, Queued),
+            ("second".into(), Restore, Queued)
+        ]
+    );
+    // Pressure that returns withdraws the readings before the pass.
+    publish_recovery(&manager);
+    manager.overload_recovery.reset();
+    manager.dispatch_queue().await.unwrap();
+    assert!(!started(&entry(&manager, "first-agent").await.id));
+
+    // Each healthy interval restores one of them.
+    publish_recovery(&manager);
+    manager.dispatch_queue().await.unwrap();
+    assert!(started(&entry(&manager, "first-agent").await.id));
+    assert_eq!(entry(&manager, "second-agent").await.state, Queued);
+    publish_recovery(&manager);
+    manager.dispatch_queue().await.unwrap();
+    assert!(started(&entry(&manager, "second-agent").await.id));
 }
 
 /// A chat's agent stopped between turns waits for an update before its
