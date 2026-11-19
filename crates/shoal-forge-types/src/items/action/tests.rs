@@ -15,6 +15,7 @@ fn actions_refuse_what_the_item_cannot_take() {
     assert!(base.validate(ItemKind::Pr).is_ok());
     let merge = Action::Merge {
         method: Some(MergeMethod::Merge),
+        message: None,
         delete_branch: false,
         head: None,
     };
@@ -49,12 +50,14 @@ fn actions_refuse_what_the_item_cannot_take() {
 fn actions_need_the_capabilities_they_use() {
     let rebase = Action::Merge {
         method: Some(MergeMethod::Rebase),
+        message: None,
         delete_branch: false,
         head: None,
     };
     assert_eq!(rebase.needs(ItemKind::Pr), [Capability::RebaseMerge]);
     let auto = |method| Action::AutoMerge {
         method,
+        message: None,
         delete_branch: false,
         head: None,
     };

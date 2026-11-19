@@ -48,14 +48,19 @@ impl Merging for GitLab {
         repo: &ForgeRepo,
         current: &Current,
         method: Option<MergeMethod>,
+        message: Option<&str>,
         delete_branch: bool,
     ) -> Result<Vec<Request>> {
         let endpoint = repo.item_endpoint(ItemKind::Pr, current.item.number);
+        let merge = Merge {
+            method,
+            message,
+            delete_branch,
+        };
         Ok(vec![merge_request(
             format!("{endpoint}/merge"),
             current,
-            method,
-            delete_branch,
+            merge,
             false,
         )?])
     }
@@ -66,14 +71,19 @@ impl Merging for GitLab {
         repo: &ForgeRepo,
         current: &Current,
         method: Option<MergeMethod>,
+        message: Option<&str>,
         delete_branch: bool,
     ) -> Result<Vec<Request>> {
         let endpoint = repo.item_endpoint(ItemKind::Pr, current.item.number);
+        let merge = Merge {
+            method,
+            message,
+            delete_branch,
+        };
         Ok(vec![merge_request(
             format!("{endpoint}/merge"),
             current,
-            method,
-            delete_branch,
+            merge,
             true,
         )?])
     }
@@ -112,26 +122,35 @@ impl Merging for GitLab {
     }
 }
 
-/// GitLab merges with the project's merge method, squashing as `method`
-/// says, or as the project's squash setting says without one, at the head
-/// `current` had when read, now or once the pipeline succeeds when
-/// `when_pipeline_succeeds`.
+/// How a merge merges.
+struct Merge<'a> {
+    method: Option<MergeMethod>,
+    message: Option<&'a str>,
+    delete_branch: bool,
+}
+
+/// GitLab merges with the project's merge method, squashing as the method
+/// `merge` names says, or as the project's squash setting says without
+/// one, at the head `current` had when read, now or once the pipeline
+/// succeeds when `when_pipeline_succeeds`.
 fn merge_request(
     endpoint: String,
     current: &Current,
-    method: Option<MergeMethod>,
-    delete_branch: bool,
+    merge: Merge<'_>,
     when_pipeline_succeeds: bool,
 ) -> Result<Request> {
-    if let Some(method @ MergeMethod::Rebase) = method {
+    if let Some(method @ MergeMethod::Rebase) = merge.method {
         return Err(capability::unsupported(&GitLab, Capability::merge(method)));
     }
     let mut body = json!({
-        "should_remove_source_branch": delete_branch,
+        "should_remove_source_branch": merge.delete_branch,
         "sha": current.read_head()?,
     });
-    if let Some(method) = method {
+    if let Some(method) = merge.method {
         body["squash"] = json!(method == MergeMethod::Squash);
+    }
+    if let Some(message) = merge.message {
+        body["squash_commit_message"] = json!(message.trim());
     }
     if when_pipeline_succeeds {
         body["merge_when_pipeline_succeeds"] = json!(true);

@@ -4825,7 +4825,10 @@ of the repository it acts in, or of the global config for another repository,
 and without that by the repository's default: Forgejo's and Gitea's default merge
 style, GitLab's merge method and squash setting, Bitbucket's default strategy,
 or on GitHub, which has none, the first of merge, squash and rebase that the
-repository allows. `--delete-branch` deletes the
+repository allows. `--message` gives a squash merge its commit message, the
+first line as its subject where the forge takes the subject apart, and is
+refused for a merge by another method or by a default the forge does not
+tell. `--delete-branch` deletes the
 PR's branch on the forge when it is in the repository, never a local branch.
 `--auto` has the forge merge the PR that way once its required checks and
 approvals pass, merging now when they already do: GitHub's auto-merge,

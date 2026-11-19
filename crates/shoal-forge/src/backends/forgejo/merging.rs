@@ -5,7 +5,7 @@ use serde_json::json;
 use super::Forgejo;
 use crate::{
     account::Account,
-    backends::{Merging, github_rest},
+    backends::{Merging, github_rest, subject_and_body},
     items::item::ItemRequests,
     transport::api::{Request, TransportRequests, encode},
 };
@@ -54,15 +54,15 @@ impl Merging for Forgejo {
         repo: &ForgeRepo,
         current: &Current,
         method: Option<MergeMethod>,
+        message: Option<&str>,
         delete_branch: bool,
     ) -> Result<Vec<Request>> {
-        Ok(vec![merge_request(
-            repo,
-            current,
+        let merge = Merge {
             method,
+            message,
             delete_branch,
-            false,
-        )?])
+        };
+        Ok(vec![merge_request(repo, current, merge, false)?])
     }
 
     /// Forgejo merges now when the checks already succeed.
@@ -71,15 +71,15 @@ impl Merging for Forgejo {
         repo: &ForgeRepo,
         current: &Current,
         method: Option<MergeMethod>,
+        message: Option<&str>,
         delete_branch: bool,
     ) -> Result<Vec<Request>> {
-        Ok(vec![merge_request(
-            repo,
-            current,
+        let merge = Merge {
             method,
+            message,
             delete_branch,
-            true,
-        )?])
+        };
+        Ok(vec![merge_request(repo, current, merge, true)?])
     }
 
     fn cancel_auto_merge(&self, repo: &ForgeRepo, current: &Current) -> Result<Vec<Request>> {
@@ -117,20 +117,31 @@ fn merge_endpoint(repo: &ForgeRepo, current: &Current) -> String {
     )
 }
 
-/// Merge the PR at the head it had when read, now or once its checks
-/// succeed when `when_checks_succeed`.
+/// How a merge merges.
+struct Merge<'a> {
+    method: Option<MergeMethod>,
+    message: Option<&'a str>,
+    delete_branch: bool,
+}
+
+/// Merge the PR as `merge` says at the head it had when read, now or once
+/// its checks succeed when `when_checks_succeed`.
 fn merge_request(
     repo: &ForgeRepo,
     current: &Current,
-    method: Option<MergeMethod>,
-    delete_branch: bool,
+    merge: Merge<'_>,
     when_checks_succeed: bool,
 ) -> Result<Request> {
     let mut body = json!({
-        "Do": current.merge_style(method)?,
-        "delete_branch_after_merge": delete_branch,
+        "Do": current.merge_style(merge.method)?,
+        "delete_branch_after_merge": merge.delete_branch,
         "head_commit_id": current.read_head()?,
     });
+    if let Some(message) = merge.message {
+        let (subject, message) = subject_and_body(message);
+        body["MergeTitleField"] = json!(subject);
+        body["MergeMessageField"] = json!(message);
+    }
     if when_checks_succeed {
         body["merge_when_checks_succeed"] = json!(true);
     }

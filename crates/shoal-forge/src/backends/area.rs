@@ -17,7 +17,7 @@ pub(super) use attachments::{image, link, served_at};
 pub(crate) use checks::Checks;
 pub(crate) use conventions::Conventions;
 pub(crate) use items::Items;
-pub(crate) use merging::Merging;
+pub(crate) use merging::{Merging, subject_and_body};
 pub(crate) use reactions::Reactions;
 pub(crate) use reviews::Reviews;
 pub(crate) use runners::Runners;

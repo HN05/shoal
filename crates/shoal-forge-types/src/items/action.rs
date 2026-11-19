@@ -34,10 +34,13 @@ pub enum Action {
     /// `head` is the commit the merge is for, such as one an approval bound,
     /// and else the head the PR has when read before merging; the forge
     /// refuses to merge a head that moved from it. Without a method the PR
-    /// merges by the repository's default.
+    /// merges by the repository's default. `message` is a squash merge's
+    /// commit message.
     Merge {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         method: Option<MergeMethod>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
         delete_branch: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         head: Option<CommitId>,
@@ -47,6 +50,8 @@ pub enum Action {
     AutoMerge {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         method: Option<MergeMethod>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
         delete_branch: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         head: Option<CommitId>,
@@ -319,9 +324,13 @@ impl Action {
                 "the comment is empty"
             ),
             Self::EditComment(edit) => edit.validate()?,
-            Self::Merge { .. } | Self::AutoMerge { .. } | Self::CancelAutoMerge => {
+            Self::Merge { message, .. } | Self::AutoMerge { message, .. } => {
                 pr_only("merge")?;
+                if let Some(message) = message {
+                    ensure!(!message.trim().is_empty(), "the merge message is empty");
+                }
             }
+            Self::CancelAutoMerge => pr_only("merge")?,
             Self::DeleteBranch => pr_only("branch to delete")?,
             Self::Update { .. } => pr_only("branch to update")?,
             Self::Thread(change) => {

@@ -33,6 +33,9 @@ pub struct MergeArgs {
     /// on the forge when left out; a local merge takes only merge.
     #[arg(short = 'X', long, value_enum)]
     pub method: Option<MergeMethod>,
+    /// The commit message of a squash merge.
+    #[arg(long, conflicts_with = "cancel_auto")]
+    pub message: Option<String>,
     /// Delete the PR's branch on the forge after merging.
     #[arg(long)]
     pub delete_branch: bool,
@@ -41,7 +44,7 @@ pub struct MergeArgs {
     #[arg(long)]
     pub auto: bool,
     /// Withdraw the PR's automatic merge.
-    #[arg(long, conflicts_with_all = ["method", "delete_branch", "auto"])]
+    #[arg(long, conflicts_with_all = ["method", "message", "delete_branch", "auto"])]
     pub cancel_auto: bool,
     /// Push the default branch to its upstream after a local merge,
     /// overriding [merge] push.
@@ -142,6 +145,7 @@ impl MergeArgs {
             (self.delete_branch, "--delete-branch"),
             (self.auto, "--auto"),
             (self.cancel_auto, "--cancel-auto"),
+            (self.message.is_some(), "--message"),
         ]
         .into_iter()
         .find_map(|(given, flag)| given.then_some(flag))

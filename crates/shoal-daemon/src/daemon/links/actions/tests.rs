@@ -276,6 +276,7 @@ async fn a_merge_naming_no_method_takes_the_configured_one() {
     configure(&manager, "[merge]\nmethod = \"squash\"\n").await;
     let merge = |method| Action::Merge {
         method,
+        message: None,
         delete_branch: false,
         head: None,
     };

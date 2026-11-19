@@ -26,7 +26,7 @@ use crate::{
 use shoal_forge_types::{
     ForgeRepo,
     items::{
-        action::{Action, Edit, same_label},
+        action::{Action, Edit, MergeMethod, same_label},
         item::{Current, Item, ItemState},
         link::ItemKind,
     },
@@ -414,22 +414,25 @@ impl ForgeRepo {
             }
             Action::Merge {
                 method,
+                message,
                 delete_branch,
                 head,
             } => {
                 ensure_open(item)?;
                 ensure_merge_head(current, head.as_ref())?;
-                self.kind().merge(self, current, *method, *delete_branch)?
+                let message = squash_message(current, *method, message.as_deref())?;
+                (self.kind()).merge(self, current, *method, message, *delete_branch)?
             }
             Action::AutoMerge {
                 method,
+                message,
                 delete_branch,
                 head,
             } => {
                 ensure_open(item)?;
                 ensure_merge_head(current, head.as_ref())?;
-                self.kind()
-                    .auto_merge(self, current, *method, *delete_branch)?
+                let message = squash_message(current, *method, message.as_deref())?;
+                (self.kind()).auto_merge(self, current, *method, message, *delete_branch)?
             }
             Action::CancelAutoMerge => {
                 ensure_open(item)?;
@@ -513,6 +516,22 @@ fn ensure_merge_head(current: &Current, head: Option<&CommitId>) -> Result<()> {
         current.item.number
     );
     Ok(())
+}
+
+/// `message`, refused for a merge of the PR `current` by `method` that does
+/// not squash, or whose method the forge does not tell.
+fn squash_message<'a>(
+    current: &Current,
+    method: Option<MergeMethod>,
+    message: Option<&'a str>,
+) -> Result<Option<&'a str>> {
+    if message.is_some() {
+        ensure!(
+            current.merge_style(method).ok() == Some(MergeMethod::Squash.as_str()),
+            "a merge message is a squash merge's commit message; pass -X squash"
+        );
+    }
+    Ok(message)
 }
 
 fn ensure_open(item: &Item) -> Result<()> {

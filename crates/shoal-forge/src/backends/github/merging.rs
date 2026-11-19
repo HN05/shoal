@@ -6,7 +6,7 @@ use shoal_refs::BranchName;
 use super::GitHub;
 use crate::{
     account::Account,
-    backends::{Merging, github_rest},
+    backends::{Merging, github_rest, subject_and_body},
     items::{
         item::{ItemRequests, text},
         revert::NewRevert,
@@ -55,13 +55,19 @@ impl Merging for GitHub {
         repo: &ForgeRepo,
         current: &Current,
         method: Option<MergeMethod>,
+        message: Option<&str>,
         delete_branch: bool,
     ) -> Result<Vec<Request>> {
         let item = &current.item;
         let pr = item.pr.as_ref().context("only PRs merge")?;
         let merge = format!("{}/merge", repo.item_endpoint(ItemKind::Pr, item.number));
-        let body =
+        let mut body =
             json!({ "merge_method": current.merge_style(method)?, "sha": current.read_head()? });
+        if let Some(message) = message {
+            let (subject, message) = subject_and_body(message);
+            body["commit_title"] = json!(subject);
+            body["commit_message"] = json!(message);
+        }
         // GitHub can answer success without merging.
         let mut requests =
             vec![Request::new(HttpMethod::Put, merge, Some(body)).confirming("merged")];
@@ -79,6 +85,7 @@ impl Merging for GitHub {
         repo: &ForgeRepo,
         current: &Current,
         method: Option<MergeMethod>,
+        message: Option<&str>,
         delete_branch: bool,
     ) -> Result<Vec<Request>> {
         ensure!(
@@ -86,10 +93,10 @@ impl Merging for GitHub {
             "GitHub deletes the branch of an automatic merge only when the repository's settings say so"
         );
         if current.merges_now {
-            return self.merge(repo, current, method, false);
+            return self.merge(repo, current, method, message, false);
         }
         let method = current.merge_style(method)?;
-        Ok(vec![auto_merge_request(current, Some(method))?])
+        Ok(vec![auto_merge_request(current, Some((method, message)))?])
     }
 
     fn cancel_auto_merge(&self, _repo: &ForgeRepo, current: &Current) -> Result<Vec<Request>> {
@@ -156,13 +163,13 @@ fn allowed_merge(repository: &Value) -> Option<MergeMethod> {
 
 /// The GraphQL request that has GitHub merge the PR `current` with `method`
 /// once it can, at the head it had when read, or withdraws that without one.
-fn auto_merge_request(current: &Current, method: Option<&str>) -> Result<Request> {
+fn auto_merge_request(current: &Current, merge: Option<(&str, Option<&str>)>) -> Result<Request> {
     let id = current
         .node_id
         .as_deref()
         .context("GitHub did not report the PR's node ID")?;
-    let (query, variables) = match method {
-        Some(method) => (
+    let (query, variables) = match merge {
+        Some((method, None)) => (
             "mutation($id: ID!, $method: PullRequestMergeMethod!, $head: GitObjectID!) { enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: $method, expectedHeadOid: $head}) { clientMutationId } }",
             json!({
                 "id": id,
@@ -170,6 +177,19 @@ fn auto_merge_request(current: &Current, method: Option<&str>) -> Result<Request
                 "head": current.read_head()?,
             }),
         ),
+        Some((method, Some(message))) => {
+            let (subject, body) = subject_and_body(message);
+            (
+                "mutation($id: ID!, $method: PullRequestMergeMethod!, $head: GitObjectID!, $subject: String!, $body: String!) { enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: $method, expectedHeadOid: $head, commitHeadline: $subject, commitBody: $body}) { clientMutationId } }",
+                json!({
+                    "id": id,
+                    "method": method.to_ascii_uppercase(),
+                    "head": current.read_head()?,
+                    "subject": subject,
+                    "body": body,
+                }),
+            )
+        }
         None => (
             "mutation($id: ID!) { disablePullRequestAutoMerge(input: {pullRequestId: $id}) { clientMutationId } }",
             json!({ "id": id }),

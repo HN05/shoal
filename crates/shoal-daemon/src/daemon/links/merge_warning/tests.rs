@@ -186,6 +186,7 @@ async fn a_merge_is_refused_once_its_warning_is_not_the_one_confirmed() {
     };
     let merge = Action::Merge {
         method: Some(crate::forge::items::action::MergeMethod::Merge),
+        message: None,
         delete_branch: false,
         head: None,
     };
@@ -280,6 +281,7 @@ async fn a_confirmed_merge_keeps_the_pr_whose_warning_it_read() {
     assert!(warning.is_some());
     let merge = Action::Merge {
         method: Some(crate::forge::items::action::MergeMethod::Merge),
+        message: None,
         delete_branch: false,
         head: None,
     };
@@ -338,6 +340,7 @@ async fn a_merge_binds_the_head_the_pr_has_unless_it_names_one() {
     };
     let merge = |head| Action::AutoMerge {
         method: Some(crate::forge::items::action::MergeMethod::Merge),
+        message: None,
         delete_branch: false,
         head,
     };

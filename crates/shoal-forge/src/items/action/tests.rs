@@ -232,6 +232,7 @@ fn comments_state_changes_and_merges_use_each_forges_endpoints() {
     }
     let merge = Action::Merge {
         method: Some(MergeMethod::Squash),
+        message: None,
         delete_branch: true,
         head: None,
     };
@@ -264,6 +265,7 @@ fn comments_state_changes_and_merges_use_each_forges_endpoints() {
     // A merge bound to a head refuses a PR whose head moved from it.
     let bound = |head: &str| Action::AutoMerge {
         method: Some(MergeMethod::Squash),
+        message: None,
         delete_branch: false,
         head: Some(head.into()),
     };
@@ -289,6 +291,7 @@ fn merges_without_a_method_name_the_style_the_repository_merges_by() {
     let [github, forgejo] = forges();
     let merge = Action::Merge {
         method: None,
+        message: None,
         delete_branch: false,
         head: None,
     };
@@ -309,12 +312,77 @@ fn merges_without_a_method_name_the_style_the_repository_merges_by() {
     );
     let auto = Action::AutoMerge {
         method: None,
+        message: None,
         delete_branch: false,
         head: None,
     };
     assert_eq!(
         requests(&github, &open, auto)[0].2["variables"]["method"],
         "SQUASH"
+    );
+}
+
+#[test]
+fn a_squash_merge_sends_its_message_where_each_forge_takes_it() {
+    let [github, forgejo] = forges();
+    let gitlab = ForgeRepo::parse("git@gitlab.com:group/repo.git").unwrap();
+    let squash = |method| Action::Merge {
+        method,
+        message: Some("Fix login\n\nThe session expired early.\n".into()),
+        delete_branch: false,
+        head: None,
+    };
+    let body = |forge: &ForgeRepo| {
+        requests(
+            forge,
+            &pr(forge, false, &[]),
+            squash(Some(MergeMethod::Squash)),
+        )[0]
+        .2
+        .clone()
+    };
+    let github_body = body(&github);
+    assert_eq!(
+        (&github_body["commit_title"], &github_body["commit_message"]),
+        (&json!("Fix login"), &json!("The session expired early."))
+    );
+    let forgejo_body = body(&forgejo);
+    assert_eq!(
+        (
+            &forgejo_body["MergeTitleField"],
+            &forgejo_body["MergeMessageField"]
+        ),
+        (&json!("Fix login"), &json!("The session expired early."))
+    );
+    assert_eq!(
+        body(&gitlab)["squash_commit_message"],
+        "Fix login\n\nThe session expired early."
+    );
+    // A merge that does not squash, or whose method the forge does not
+    // tell, takes no message.
+    let open = pr(&forgejo, false, &[]);
+    assert!(
+        forgejo
+            .plan(&open, &squash(Some(MergeMethod::Rebase)))
+            .is_err()
+    );
+    assert!(forgejo.plan(&open, &squash(None)).is_err());
+    let mut open = pr(&github, false, &[]);
+    open.merge_style = Some("squash".into());
+    assert_eq!(
+        requests(&github, &open, squash(None))[0].2["commit_title"],
+        "Fix login"
+    );
+    let auto = Action::AutoMerge {
+        method: Some(MergeMethod::Squash),
+        message: Some("Fix login".into()),
+        delete_branch: false,
+        head: None,
+    };
+    let variables = &requests(&github, &open, auto)[0].2["variables"];
+    assert_eq!(
+        (&variables["subject"], &variables["body"]),
+        (&json!("Fix login"), &json!(""))
     );
 }
 
@@ -479,6 +547,7 @@ fn gitlab_changes_merge_requests_in_one_update_by_user_id() {
     );
     let merge = |method| Action::Merge {
         method,
+        message: None,
         delete_branch: true,
         head: None,
     };
@@ -508,6 +577,7 @@ fn automatic_merges_use_each_forges_requests() {
     let gitlab = ForgeRepo::parse("git@gitlab.com:group/repo.git").unwrap();
     let auto = |delete_branch| Action::AutoMerge {
         method: Some(MergeMethod::Squash),
+        message: None,
         delete_branch,
         head: None,
     };

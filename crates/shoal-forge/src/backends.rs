@@ -68,6 +68,7 @@ macro_rules! dispatch {
 mod area;
 pub(crate) use area::{
     Activity, Attachments, Checks, Conventions, Items, Merging, Reactions, Reviews, Runners, Runs,
+    subject_and_body,
 };
 
 /// What a forge does its own way that every area needs beyond its

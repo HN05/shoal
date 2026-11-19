@@ -63,22 +63,26 @@ pub(crate) trait Merging: Backend {
     }
 
     /// The requests that merge the open PR `current` by `method`, or by the
-    /// repository's default without one.
+    /// repository's default without one, a squash merge with `message` as
+    /// its commit message where one is given.
     fn merge(
         &self,
         repo: &ForgeRepo,
         current: &Current,
         method: Option<MergeMethod>,
+        message: Option<&str>,
         delete_branch: bool,
     ) -> Result<Vec<Request>>;
 
     /// The requests that have the forge merge the open PR `current` once its
-    /// required checks and approvals pass, by `method` as a merge takes it.
+    /// required checks and approvals pass, by `method` and with `message`
+    /// as a merge takes them.
     fn auto_merge(
         &self,
         repo: &ForgeRepo,
         current: &Current,
         method: Option<MergeMethod>,
+        message: Option<&str>,
         delete_branch: bool,
     ) -> Result<Vec<Request>>;
 
@@ -108,4 +112,12 @@ pub(crate) trait Merging: Backend {
 
     /// The request that deletes `branch` from the repository.
     fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request;
+}
+
+/// A commit message's subject line and the body after it, for a forge that
+/// takes them apart.
+pub(crate) fn subject_and_body(message: &str) -> (&str, &str) {
+    let message = message.trim();
+    let (subject, body) = message.split_once('\n').unwrap_or((message, ""));
+    (subject.trim_end(), body.trim())
 }

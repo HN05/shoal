@@ -26,12 +26,14 @@ impl Merging for Bitbucket {
         repo: &ForgeRepo,
         current: &Current,
         method: Option<MergeMethod>,
+        message: Option<&str>,
         delete_branch: bool,
     ) -> Result<Vec<Request>> {
         let endpoint = repo.item_endpoint(ItemKind::Pr, current.item.number);
         Ok(vec![merge_request(
             format!("{endpoint}/merge"),
             method,
+            message,
             delete_branch,
         )])
     }
@@ -41,6 +43,7 @@ impl Merging for Bitbucket {
         _repo: &ForgeRepo,
         _current: &Current,
         _method: Option<MergeMethod>,
+        _message: Option<&str>,
         _delete_branch: bool,
     ) -> Result<Vec<Request>> {
         Err(capability::unsupported(self, Capability::AutoMerge))
@@ -66,9 +69,18 @@ impl Merging for Bitbucket {
 }
 
 /// Bitbucket's strategy for each merge method, where rebasing
-/// fast-forwards, or without one the repository's default strategy.
-fn merge_request(endpoint: String, method: Option<MergeMethod>, delete_branch: bool) -> Request {
+/// fast-forwards, or without one the repository's default strategy, with
+/// `message` as a squash merge's commit message.
+fn merge_request(
+    endpoint: String,
+    method: Option<MergeMethod>,
+    message: Option<&str>,
+    delete_branch: bool,
+) -> Request {
     let mut body = json!({ "close_source_branch": delete_branch });
+    if let Some(message) = message {
+        body["message"] = json!(message.trim());
+    }
     if let Some(method) = method {
         body["merge_strategy"] = json!(match method {
             MergeMethod::Merge => "merge_commit",

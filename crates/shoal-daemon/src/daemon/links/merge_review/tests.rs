@@ -127,6 +127,7 @@ impl Fixture {
 fn merge(head: Option<CommitId>) -> Action {
     Action::Merge {
         method: Some(MergeMethod::Merge),
+        message: None,
         delete_branch: false,
         head,
     }
@@ -236,6 +237,7 @@ async fn a_held_auto_merge_needs_a_forge_that_keeps_it_at_the_reviewed_head() {
     f.reviewed().await;
     let mut auto = Action::AutoMerge {
         method: Some(MergeMethod::Merge),
+        message: None,
         delete_branch: false,
         head: None,
     };
