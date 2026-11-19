@@ -692,7 +692,10 @@ async fn a_restart_waiting_for_processes_keeps_its_options_through_takeovers() {
         change: Some(change.clone()),
         ..Default::default()
     };
-    let (_workspace, request) = waiting_for_processes(root.path(), &manager, restart).await;
+    let (workspace, request) = waiting_for_processes(root.path(), &manager, restart).await;
+    // It is under way, not kept for later.
+    let space = SpaceSelector::id(&workspace.id);
+    assert_eq!(manager.cancel_restart(&space).await.unwrap(), None);
     let id = &request.execution;
     let mut wrapper = None;
     for _ in 0..2 {

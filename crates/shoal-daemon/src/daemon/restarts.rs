@@ -165,16 +165,19 @@ impl Manager {
         }
     }
 
-    /// Drop the restart recorded for the agent of `space`, answering the
-    /// requests that wait for it; one under way goes on. Returns how the
-    /// agent would have restarted, if anything was recorded.
+    /// Drop the restart the daemon keeps for later for the agent of
+    /// `space`, answering the requests that wait for it; one under way goes
+    /// on. Returns how the agent would have restarted, if anything was kept.
     pub(crate) async fn cancel_restart(
         &self,
         space: &SpaceSelector,
     ) -> Result<Option<AgentRestart>> {
         let space = self.space(space).await?;
         let mut waiters = self.restarts.decisions.lock().await;
-        let cancelled = self.forget_restart(&space.id).await?;
+        let id = space.id.clone();
+        let cancelled = (self.store)
+            .write(move |tx| record::take_kept(tx, &id))
+            .await?;
         let waiting = waiters.remove(&space.id).unwrap_or_default();
         let skipped = RestartOutcome::Skipped {
             agent: None,

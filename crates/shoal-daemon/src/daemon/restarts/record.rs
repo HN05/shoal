@@ -51,6 +51,17 @@ pub(super) fn take(db: &Connection, id: &SpaceId) -> Result<Option<Recorded>> {
     Ok(recorded)
 }
 
+/// The restart recorded for the space `id` that the daemon keeps for
+/// later, which it no longer has; one it began goes on.
+pub(super) fn take_kept(db: &Connection, id: &SpaceId) -> Result<Option<Recorded>> {
+    let kept = find(db, id)?.filter(|recorded| !recorded.begun);
+    db.execute(
+        "DELETE FROM agent_restarts WHERE space_id=?1 AND begun=0",
+        [id],
+    )?;
+    Ok(kept)
+}
+
 /// The restart recorded for the space `id`, with its generation, if it has
 /// one.
 pub(super) fn find_generation(db: &Connection, id: &SpaceId) -> Result<Option<(Recorded, String)>> {
@@ -133,9 +144,10 @@ pub(crate) fn follow(db: &Connection, from: &ExecutionId, to: &ExecutionId) -> R
 }
 
 /// How the agent of the space `id` restarts once the daemon acts on the
-/// restart it recorded, if it did.
+/// restart it keeps for later, if it does; one it began is under way.
 pub(crate) fn current(db: &Connection, id: &SpaceId) -> Result<Option<AgentRestart>> {
-    Ok(find(db, id)?.map(|recorded| recorded.restart))
+    let kept = find(db, id)?.filter(|recorded| !recorded.begun);
+    Ok(kept.map(|recorded| recorded.restart))
 }
 
 /// Every recorded restart, in the order they were recorded.
