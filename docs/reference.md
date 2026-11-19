@@ -931,7 +931,10 @@ machine, since its approval request would belong to that space's machine. This c
 CI commands that act on a space, and following an agent's session, whose bytes come back as its machine
 reads them. The link to the hub carries such answers as byte streams beside
 its other traffic, each held to what its reader has taken, so a reader that
-falls behind holds up nothing else. `restart` acts on the agents of its own machine. Commands that need the
+falls behind holds up nothing else. A machine that received a request but
+did not answer it in time fails the command, saying that the request may go
+on there, which `shoal status <space>` shows. `restart` acts on the agents of
+its own machine. Commands that need the
 space's files or processes, such as `setup`, leases, demos,
 `stop --interrupt`, `--leftovers` and `--processes`, `files` and an agent's
 hooks, run only

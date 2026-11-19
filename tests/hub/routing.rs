@@ -143,6 +143,19 @@ fn the_user_s_terminal_renames_and_removes_a_space_on_another_machine() {
 }
 
 #[test]
+fn a_restart_and_its_cancel_go_to_the_machine_of_the_space() {
+    let (hub, _laptop, there) = laptop_space();
+    // The laptop decides the restart: no agent runs in its space.
+    let restart = request(
+        &hub,
+        json!({"restart_agent": {"space": there, "restart": {}}}),
+    );
+    assert_eq!(restart["data"]["outcome"], "skipped", "{restart}");
+    let cancel = request(&hub, json!({"cancel_restart": {"space": there}}));
+    assert_eq!(cancel["type"], "cancelled_restart", "{cancel}");
+}
+
+#[test]
 fn a_command_that_needs_the_space_s_files_names_its_machine() {
     let (hub, _laptop, there) = laptop_space();
     let output = hub.run(&["files", &there]);

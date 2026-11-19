@@ -188,7 +188,11 @@ permissions, which the owning machine checks through the operation every
 scope check takes, under single-user trust as scope is cooperative; the
 owning machine answers it on its own socket under a token standing for that
 caller, whose vouch decides that request alone, never another of the same
-space's, and never forwards a forwarded request again. A request whose
+space's, and never forwards a forwarded request again. A request that can
+cross machines names a space, or an item of a space, never a handle only
+one machine knows, such as an execution ID, and a long wait is state on the
+owning daemon, never a connection held open or a client polling across the
+hub. A request whose
 answer goes on, as following an agent's session does, comes back on a byte
 stream as that machine's daemon writes it, failing at once while the machine
 is offline. Streams run on each link beside its calls, many at once, opened

@@ -22,7 +22,7 @@ use shoal_protocol::{
 };
 
 use super::{
-    session::Calls,
+    session::{self, Calls},
     streams::{Incoming, Outgoing},
 };
 use crate::{
@@ -162,7 +162,8 @@ impl Manager {
             return (self.stream_forwarded(machine, forwarded, duplex).await)
                 .map_err(|error| Refusal::wrap(Reason::MachineUnreachable, error));
         }
-        match self.send_forwarded(machine, forwarded, delivery).await? {
+        let sent = self.send_forwarded(machine, forwarded, delivery).await;
+        match sent.map_err(|error| unanswered(machine, space, error))? {
             Reply::Answered(answered) => Ok(Elsewhere::Answered(answered.frames)),
             Reply::Queued(queued) => Ok(Elsewhere::Queued(queued)),
             reply => Err(anyhow!("the hub answered with an unexpected {reply:?}")),
@@ -321,6 +322,20 @@ fn answered_body(frames: Vec<serde_json::Value>) -> Result<Body> {
     answered
         .context("the other machine's daemon closed the request unanswered")?
         .into_result()
+}
+
+/// `error`, of a request for the space `space` that `machine` runs: where
+/// the machine received the request but did not answer in time, a refusal
+/// saying that it may still carry it out.
+fn unanswered(machine: &Member, space: &SpaceSelector, error: anyhow::Error) -> anyhow::Error {
+    if !error.is::<session::Unanswered>() {
+        return error;
+    }
+    let message = format!(
+        "machine {} did not answer in time ({error:#}); the request may go on there, which shoal status {space} shows",
+        machine.name
+    );
+    Refusal::new(Reason::MachineUnreachable, message).into()
 }
 
 /// The call that asks for a stream, on its number.

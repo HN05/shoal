@@ -146,6 +146,8 @@ impl Operation {
                 AgentMethod::SetProgress { .. }
                     | AgentMethod::Progress { .. }
                     | AgentMethod::Sleep { .. }
+                    | AgentMethod::RestartAgent { .. }
+                    | AgentMethod::CancelRestart { .. }
             ) | Self::Question(
                 QuestionMethod::ListQuestions { .. }
                     | QuestionMethod::ShowQuestion { .. }
