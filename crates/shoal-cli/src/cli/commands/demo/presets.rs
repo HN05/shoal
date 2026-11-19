@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context as _, Result};
 
 use super::start::Chosen;
+use crate::client::connection::CommandPaths;
 use crate::client::leases::{self, Acquisition, PortAcquisition};
 use crate::{
     cli::{
@@ -18,7 +19,7 @@ use crate::{
     config::repo::ConflictPolicy,
     model::{PortRequest, PortReservation, Workspace},
 };
-use shoal_protocol::demos::{Launch, PORT, Preset, SIM_UDID};
+use shoal_protocol::demos::{Launch, PORT, Preset, Running, SIM_UDID};
 use shoal_protocol::sim::{SimRequest, Simulator};
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -168,16 +169,35 @@ async fn lease_simulator(
 }
 
 /// Show the demo as its preset does. Over SSH nothing on this machine's
-/// screen reaches the user, so the preset says how to reach the demo instead.
-pub(super) fn open(preset: Preset, launch: &Launch) -> Result<()> {
+/// screen reaches the user, so the preset says how to reach the demo
+/// instead, through a simulator demo's viewer.
+pub(super) async fn open(paths: &CommandPaths, preset: Preset, demo: &Running) -> Result<()> {
     let ssh = std::env::var("SSH_CONNECTION").ok();
-    for line in instructions(preset, launch, ssh.as_deref())? {
+    let viewer = match preset {
+        Preset::Simulator if ssh.is_some() && demo.launch.viewer.is_some() => {
+            Some(start_viewer(paths, demo).await?.1)
+        }
+        _ => None,
+    };
+    for line in instructions(preset, &demo.launch, ssh.as_deref(), viewer)? {
         outln!("{line}");
     }
     if preset == Preset::Simulator && ssh.is_none() {
-        show_simulator(launch)?;
+        show_simulator(&demo.launch)?;
     }
     Ok(())
+}
+
+/// Start the viewer of the simulator demo `demo`, wherever it runs, by
+/// opening a stream to it: the demo as it is then, and the port the viewer
+/// serves on there.
+pub(super) async fn start_viewer(paths: &CommandPaths, demo: &Running) -> Result<(Running, u16)> {
+    let name = demo.launch.name.clone();
+    let space = SpaceSelector::id(&demo.workspace_id);
+    let opened = crate::demos::open_stream(paths, space, name.clone()).await?;
+    let port = opened.demo.viewer.as_ref().and_then(|viewer| viewer.port);
+    let port = port.with_context(|| format!("demo {name} has no viewer"))?;
+    Ok((opened.demo, port))
 }
 
 /// Bring the demo's device forward in Simulator on this machine's screen.
@@ -193,38 +213,50 @@ fn show_simulator(launch: &Launch) -> Result<()> {
     Ok(())
 }
 
-/// What opening tells the user, given the `SSH_CONNECTION` the session has.
-fn instructions(preset: Preset, launch: &Launch, ssh: Option<&str>) -> Result<Vec<String>> {
+/// What opening tells the user, given the `SSH_CONNECTION` the session
+/// has and the port a simulator demo's `viewer` serves on.
+fn instructions(
+    preset: Preset,
+    launch: &Launch,
+    ssh: Option<&str>,
+    viewer: Option<u16>,
+) -> Result<Vec<String>> {
     let host = ssh.and_then(|connection| connection.split_whitespace().nth(2));
     Ok(match preset {
         Preset::Server | Preset::Web => {
-            let (Some(port), Some(location)) = (launch.environment.get(PORT), launch.location())
-            else {
+            let (Some(port), Some(location)) = (launch.port(), launch.location()) else {
                 anyhow::bail!("demo {} has no port", launch.name);
             };
-            let mut lines = vec![location];
-            if let Some(host) = host {
-                let user = std::env::var("USER").unwrap_or_default();
-                lines.push(format!(
-                    "Forward the port first: ssh -L {port}:localhost:{port} {user}@{host}"
-                ));
-            }
-            lines
+            reach(location, port, host)
         }
         Preset::Simulator => {
             let udid = launch
                 .environment
                 .get(SIM_UDID)
                 .with_context(|| format!("demo {} has no simulator", launch.name))?;
-            match host {
-                Some(host) => vec![format!(
-                    "Demo {} runs on simulator {udid}; view it with Screen Sharing to {host}",
+            let url = launch.viewer(viewer).and_then(|viewer| viewer.url);
+            match (host, viewer.zip(url)) {
+                (Some(host), Some((port, url))) => reach(url, port, Some(host)),
+                (Some(_), None) => vec![format!(
+                    "Demo {} runs on simulator {udid}, whose viewer is off",
                     launch.name
                 )],
-                None => vec![format!("Opening simulator {udid}")],
+                (None, _) => vec![format!("Opening simulator {udid}")],
             }
         }
     })
+}
+
+/// `location`, then over SSH to `host` the command that forwards `port`.
+fn reach(location: String, port: u16, host: Option<&str>) -> Vec<String> {
+    let mut lines = vec![location];
+    if let Some(host) = host {
+        let user = std::env::var("USER").unwrap_or_default();
+        lines.push(format!(
+            "Forward the port first: ssh -L {port}:localhost:{port} {user}@{host}"
+        ));
+    }
+    lines
 }
 
 #[cfg(test)]

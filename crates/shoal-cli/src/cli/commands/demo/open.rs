@@ -59,7 +59,7 @@ pub(super) fn pick(ctx: &Context, demos: Vec<Running>) -> Result<Running> {
 async fn open_running(ctx: &Context, demo: &Running) -> Result<()> {
     match (&demo.launch.open, demo.launch.preset) {
         (Some(open), _) => run_opener(ctx, demo, open).await,
-        (None, Some(preset)) => presets::open(preset, &demo.launch),
+        (None, Some(preset)) => presets::open(&ctx.paths, preset, demo).await,
         (None, None) => terminal::open_demo(&demo.launch).await,
     }
 }

@@ -145,7 +145,10 @@ pub struct Viewer {
     /// The program it runs, such as `serve-sim`, which says what protocol
     /// a client speaks to it.
     pub tool: String,
-    /// Where it serves on the demo's machine, while it runs.
+    /// The port it serves on, on the demo's machine, while it runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+    /// Where a browser opens it there, while it runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
 }
@@ -195,7 +198,7 @@ impl Launch {
             |name| name.to_string_lossy().into_owned(),
         );
         let url = port.map(|port| format!("http://localhost:{port}"));
-        Some(Viewer { tool, url })
+        Some(Viewer { tool, port, url })
     }
 
     /// The viewer's command for the device and `port`: `{udid}` and

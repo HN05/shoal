@@ -854,9 +854,10 @@ user how to open it; `shoal demo` and the inbox open it for them. The `server`
 preset reserves a port and passes it as `PORT`, and `web` does the same for a
 page opened in a browser; the `simulator` preset leases the workspace's
 simulator and passes its UDID as `SHOAL_SIM_UDID`. `shoal demo NAME
---workspace W` on a `server` or `web` demo another machine of the hub runs
-forwards it to a port of this machine, printing where, until stopped. Chats
-have no demos.
+--workspace W` on a `server`, `web` or `simulator` demo another machine of the
+hub runs forwards it to a port of this machine, printing where, until stopped;
+a simulator demo's is its viewer's, a page that shows the device and takes
+touches. Chats have no demos.
 
 ## Triggers
 
