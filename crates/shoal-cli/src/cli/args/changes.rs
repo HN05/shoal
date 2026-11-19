@@ -50,6 +50,24 @@ pub enum BranchCommand {
         #[arg(long)]
         unmerged: bool,
     },
+    /// Delete branches on the forge of the space's repository, or another
+    /// one, each at the commit it points to; one that cannot go keeps them
+    /// all. A workspace process deletes them as its `push` permission allows,
+    /// and keeps its local branch.
+    Delete {
+        /// Branches to delete, as `shoal branch ls` names them.
+        #[arg(required = true, value_name = "BRANCH")]
+        branches: Vec<String>,
+        /// Space, a workspace or chat, whose repository to delete them in;
+        /// defaults to the current workspace or chat, or a picker.
+        #[arg(short = 's', long, conflicts_with = "repo")]
+        space: Option<SpaceSelector>,
+        #[command(flatten)]
+        repo: TargetRepo,
+        /// Delete them even where the default branch lacks their changes.
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]

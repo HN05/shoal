@@ -1,5 +1,6 @@
-//! `shoal branch ls`: the branches on the forge of the space's repository,
-//! or another one, with what decides whether each can go.
+//! `shoal branch ls` and `shoal branch delete`: the branches on the forge
+//! of the space's repository, or another one, with what decides whether
+//! each can go, and deleting them.
 use anyhow::Result;
 
 use crate::cli::{
@@ -35,6 +36,24 @@ pub(super) async fn list(
     let listing = crate::client::branches::list(&ctx.paths, target, filter.state());
     let listed = ctx.progress("Reading branches", listing).await?;
     ctx.show(&listed, |listed| render(listed))?;
+    Ok(0)
+}
+
+pub(super) async fn delete(
+    ctx: &Context,
+    space: Option<SpaceSelector>,
+    repo: TargetRepo,
+    branches: Vec<String>,
+    force: bool,
+) -> Result<i32> {
+    let target = select_item_target(ctx, space, repo.name, None).await?;
+    let deletion = crate::client::branches::delete(&ctx.paths, target, branches, force);
+    let deleted = ctx.progress("Deleting branches", deletion).await?;
+    ctx.show(&deleted, |deleted| {
+        for branch in deleted {
+            outln!("Deleted branch {} at {}", branch.name, branch.head.short());
+        }
+    })?;
     Ok(0)
 }
 

@@ -25,6 +25,7 @@ use crate::{
 };
 
 /// An action a permission governs, as a scoped caller asks to take it.
+#[derive(Clone)]
 pub(crate) struct Action {
     pub key: PermissionKey,
     /// What it does, such as a command with its arguments, which approval
@@ -103,6 +104,36 @@ impl Manager {
         action: Action,
     ) -> Result<()> {
         self.take_action(caller, action, Use::Take).await.map(drop)
+    }
+
+    /// [`Self::authorize_action`] for each of `actions`, which `caller`
+    /// takes together: every one that waits asks for its decision before
+    /// any approval is used up, so none is taken until all may be.
+    pub(crate) async fn authorize_actions(
+        &self,
+        caller: Option<&Caller>,
+        actions: Vec<Action>,
+    ) -> Result<()> {
+        let Some(caller) = caller else {
+            return Ok(());
+        };
+        let mut undecided = None;
+        for action in actions.iter().cloned() {
+            match self.check_action(caller, action).await {
+                Ok(()) => {}
+                Err(error) if error.is::<Undecided>() => {
+                    undecided.get_or_insert(error);
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        if let Some(undecided) = undecided {
+            return Err(undecided);
+        }
+        for action in actions {
+            self.authorize_action(Some(caller), action).await?;
+        }
+        Ok(())
     }
 
     /// Let `caller` `start` an agent in `repository` regardless of

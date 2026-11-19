@@ -267,6 +267,7 @@ shoal merge 42 -X rebase      # Merge a PR yourself; without -X, by the reposito
 shoal merge 42 --auto         # Merge it once checks pass; --cancel-auto withdraws it
 shoal pr delete-branch 42     # Delete the branch of a merged or closed PR on the forge; agents cannot
 shoal branch ls --unmerged    # The forge's branches the default branch lacks the changes of
+shoal branch delete old-fix   # Delete a branch on the forge whose changes are on the default branch
 shoal pr revert 42            # Open a PR that reverts merged PR 42
 shoal issue ls --label bug flaky # Search issues by text, label, author and state; pr ls too
 shoal issue ls --repo team/tool crash # Search another repository's issues

@@ -666,6 +666,7 @@ shoal repo sync
 shoal conflicts [<branch>]
 shoal branch base [set <workspace>]
 shoal branch ls [--merged | --unmerged] [-r REPO]
+shoal branch delete <branch>... [--force] [-r REPO]
 shoal refresh [<workspace>]
 shoal merge [-s <space>]
 shoal merge [pr] <number-or-url> [-X merge|squash|rebase] [--message M] [--auto] [--delete-branch]
@@ -695,6 +696,12 @@ PR, the watch reports a `merge_conflict` when the check newly fails.
 default or protected, whether the default branch has its changes through any
 merge (unknown outside a registered repository), the open PRs whose head it
 is, and the workspace whose branch it is, `active`, `done` or `merged`.
+`branch delete` deletes branches on the forge, never local ones, each only at
+the commit it was read at, as the space's `push` permission allows,
+`propose` asking once per branch. It deletes none while one is the default
+or protected, the head or base of an open PR, or lacks its changes on the
+default branch without `--force`, or is the branch of an active workspace
+outside your scope.
 
 `merge` merges a space's work: its one open PR linked as assigned or opened,
 on the forge, else a workspace's committed branch into the default branch,

@@ -8,7 +8,7 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
-use super::items::{own_context, read_context_space};
+use super::items::{change_context_space, own_context, read_context_space};
 use crate::protocol::{Body, BranchMethod};
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -21,6 +21,14 @@ pub(super) async fn handle(
         BranchMethod::ListBranches { target, merged } => {
             let listed = manager.list_branches(&target, merged, caller).await;
             Ok(Answer::pages(listed, Body::ForgeBranches))
+        }
+        BranchMethod::DeleteBranches {
+            target,
+            branches,
+            force,
+        } => {
+            let deleted = manager.delete_branches(&target, &branches, force, caller);
+            Ok(Answer::Body(Body::DeletedBranches(deleted.await?)))
         }
     }
 }
@@ -35,6 +43,14 @@ impl Scoped for BranchMethod {
             // Reads go out as the agent account wherever they run.
             BranchMethod::ListBranches { target, .. } => {
                 read_context_space(manager, caller, own_context(caller, target)).await
+            }
+            // A deletion is made from the caller's own space, or a space below
+            // it, and a chat without a repository makes it in a registered
+            // checkout as its own space; its `push` permission decides it
+            // once it knows the commits it deletes.
+            BranchMethod::DeleteBranches { target, .. } => {
+                let context = own_context(caller, target);
+                Ok(Some(change_context_space(manager, caller, context).await?))
             }
         }
     }

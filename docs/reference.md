@@ -5356,6 +5356,8 @@ runs' URLs.
 shoal branch ls                     # the forge's branches of the space's repository
 shoal branch ls --unmerged          # only those whose changes the default branch lacks
 shoal branch ls --repo team/tool    # another repository's
+shoal branch delete fix-login old-api  # delete branches on the forge
+shoal branch delete spike --force   # one whose changes the default branch lacks
 ```
 
 `shoal branch ls` lists the branches on the forge of the space's repository,
@@ -5373,6 +5375,21 @@ answers so, leaving out the unknown ones. You read them with your login, a
 scoped process as the agent account. `--json` returns each branch's `name`,
 `head`, `committed_at`, `protected`, `default`, `merged` (`null` when
 unknown), `open_prs` and `space` with its `id`, `number`, `name` and `state`.
+
+`shoal branch delete` deletes the named branches on the forge, in the space's
+repository or, with `--repo`, a registered repository, from a chat without a
+repository any registered one, never a local branch. It checks every named
+branch first and deletes none while one is refused: the default branch, a
+branch the forge protects, the head or base of an open PR, a branch whose
+changes the default branch lacks, or of which Shoal cannot tell, unless
+`--force`, and for a scoped process the branch of an active workspace outside
+its scope, whatever `--force` says. Each branch goes only while it still points
+to the commit it was read at. You delete with your login, a scoped process as
+the agent account, as its space's [`push` permission](#mode-permissions)
+allows: `"propose"` makes one approval request per branch, bound to the commit
+it points to, so a branch that moved needs another. A workspace keeps its
+local branch, whose commits count as unpushed until it pushes again. `--json`
+returns the deleted branches' `name` and `head`.
 
 #### Forge API requests
 

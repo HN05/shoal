@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use shoal_refs::BranchName;
 
 /// Requests about the branches on the forge of the target repository: that
 /// of a space or registered checkout, or another one `--repo` names.
@@ -14,5 +15,15 @@ pub enum BranchMethod {
         target: super::RepoTarget,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         merged: Option<bool>,
+    },
+    /// Delete `branches` on the forge, each at the commit it points to, or
+    /// none when one is refused; `force` deletes those whose changes the
+    /// default branch lacks.
+    DeleteBranches {
+        #[serde(flatten)]
+        target: super::RepoTarget,
+        branches: Vec<BranchName>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        force: bool,
     },
 }

@@ -3,6 +3,8 @@
 //! changes, the open PRs it is the head of and the space whose branch it
 //! is. A scoped caller reads them as the agent account, the user with their
 //! own logins.
+mod deletion;
+
 use std::path::Path;
 
 use anyhow::Result;
@@ -13,15 +15,30 @@ use super::{place::Access, target::ForgeTarget};
 use crate::{
     branches::{BranchSpace, ListedBranch, SpaceWork},
     daemon::{scope::Caller, workspace::Manager},
-    forge::branches::{ForgeBranch, OpenPull},
+    forge::{
+        ForgeRepo,
+        branches::{ForgeBranch, OpenPull},
+    },
     git,
     model::{Repository, Workspace},
     protocol::RepoTarget,
 };
-use shoal_forge::{branches::BranchRequests, ci::workflow::WorkflowRequests};
+use shoal_forge::{account::Account, branches::BranchRequests, ci::workflow::WorkflowRequests};
 
 /// How many branches the merged check reads at once.
 const CHECKS_AT_ONCE: usize = 8;
+
+/// A repository's branches on its forge as the daemon read them, with what
+/// a deletion needs beyond them.
+pub(in crate::daemon) struct ReadBranches {
+    pub forge: ForgeRepo,
+    pub account: Account,
+    /// The registered repository they are the branches of; none for one
+    /// that is not registered.
+    pub checkout: Option<Repository>,
+    pub listed: Vec<ListedBranch>,
+    pub pulls: Vec<OpenPull>,
+}
 
 /// What describing a branch reads besides the branch.
 struct Context<'a> {
@@ -40,19 +57,19 @@ impl Manager {
         merged: Option<bool>,
         caller: Option<&Caller>,
     ) -> Result<Vec<ListedBranch>> {
-        let listed = self.read_branches(target, Access::Read, caller).await?;
+        let read = self.read_branches(target, Access::Read, caller).await?;
         let wanted = |branch: &ListedBranch| merged.is_none() || branch.merged == merged;
-        Ok(listed.into_iter().filter(wanted).collect())
+        Ok(read.listed.into_iter().filter(wanted).collect())
     }
 
     /// The branches on the forge of the `target` repository, read for
     /// `access` as [`Self::read_account`] chooses.
-    async fn read_branches(
+    pub(in crate::daemon) async fn read_branches(
         &self,
         target: &RepoTarget,
         access: Access,
         caller: Option<&Caller>,
-    ) -> Result<Vec<ListedBranch>> {
+    ) -> Result<ReadBranches> {
         let target = self.forge_target(target, None, access, caller).await?;
         let checkout = self.target_checkout(&target).await?;
         let (forge, account) = (target.into_forge()?, self.read_account(caller));
@@ -71,11 +88,18 @@ impl Manager {
             checkout: checkout.as_ref(),
             workspaces: &workspaces,
         };
-        stream::iter(branches)
+        let listed = stream::iter(branches)
             .map(|branch| describe(branch, &context))
             .buffered(CHECKS_AT_ONCE)
             .try_collect()
-            .await
+            .await?;
+        Ok(ReadBranches {
+            forge,
+            account,
+            checkout,
+            listed,
+            pulls,
+        })
     }
 
     /// The registered repository a request acts in as its own; none for

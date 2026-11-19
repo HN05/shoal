@@ -61,7 +61,7 @@ impl Need {
             ["repo", "labels"]
             | ["forge", "capabilities" | "reactions" | "api" | "download"]
             | ["ci", ..]
-            | ["branch", "ls"] => Self::Any,
+            | ["branch", "ls" | "delete"] => Self::Any,
             ["setup"] => Self::Setup,
             ["status" | "restore" | "rename"] | ["move", "export" | "ssh"] => Self::Any,
             ["convert", ..] => Self::Any,

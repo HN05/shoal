@@ -37,5 +37,11 @@ async fn branch(ctx: &Context, command: BranchCommand) -> Result<i32> {
             let filter = forge_branches::MergedFilter { merged, unmerged };
             forge_branches::list(ctx, space, repo, filter).await
         }
+        BranchCommand::Delete {
+            branches,
+            space,
+            repo,
+            force,
+        } => forge_branches::delete(ctx, space, repo, branches, force).await,
     }
 }

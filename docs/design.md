@@ -3491,7 +3491,18 @@ push runs, since the push lands regardless. Pushes Shoal authorized itself run
 without the rewrites. Unless `push` is `"direct"`, a scoped `merge` needs approval
 whatever the `merge` permission says, since it may push the default branch, and a
 forge's `pr revert`, which pushes at once, is refused for scoped callers. A
-pending push request keeps the workspace from unattended removal. Approving a merge
+pending push request keeps the workspace from unattended removal.
+Deleting branches on the forge is `shoal branch delete`, a forge request a chat
+makes as a workspace does, since a chat has no `git push --delete`; `push`
+governs it as it governs a pushed deletion, with one `"propose"` request per
+branch bound to the commit the branch points to, and the deletion goes only
+while it still points there. It checks every named branch before deleting
+any, and refuses the default and protected branches, the head or base of an
+open PR, a branch whose changes the default branch lacks unless `--force`, and
+an active space's branch outside the caller's scope whatever `--force` says; a
+space's branch is active while the space exists without a recorded completion
+and the default branch lacks its changes, and a finished space's branch goes
+as any other. The space keeps its local branch. Approving a merge
 request whose branch moved since it was requested is refused as stale and marks it outdated.
 Most requests the user approves only check routine things, so a permission
 of `"gate"`, between `"direct"` and `"propose"`, has an agent decide them

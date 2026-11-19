@@ -1,7 +1,9 @@
 //! A repository's branches on its forge as `shoal branch ls` lists them,
-//! with what decides whether one can go.
+//! with what decides whether one can go, and those `shoal branch delete`
+//! deleted.
 use serde::{Deserialize, Serialize};
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
+use shoal_refs::{BranchName, CommitId};
 use shoal_states::states;
 
 use crate::{
@@ -48,3 +50,11 @@ states!(
         Merged => "merged",
     }
 );
+
+/// A branch `shoal branch delete` deleted on the forge, at the commit it
+/// pointed to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeletedBranch {
+    pub name: BranchName,
+    pub head: CommitId,
+}
