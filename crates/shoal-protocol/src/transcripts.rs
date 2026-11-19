@@ -85,17 +85,24 @@ pub struct SessionBytes {
     /// The file's length when they were read, which tells a file its tool
     /// wrote again, shorter, from one sent again from its start.
     pub size: u64,
+    /// The file got shorter since the follow last read it, as one its tool
+    /// wrote again, so it comes again from 0 and what came of it before is
+    /// gone.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reset: bool,
     /// The bytes, in standard base64.
     pub data: String,
 }
 
 impl SessionBytes {
+    /// `bytes` of `file` from `offset`, the file then `size` long.
     pub fn new(file: PathBuf, offset: u64, size: u64, bytes: &[u8]) -> Self {
         use base64::Engine as _;
         Self {
             file,
             offset,
             size,
+            reset: false,
             data: base64::engine::general_purpose::STANDARD.encode(bytes),
         }
     }

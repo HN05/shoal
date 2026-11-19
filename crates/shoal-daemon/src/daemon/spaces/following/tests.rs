@@ -125,15 +125,18 @@ async fn a_session_file_that_is_gone_waits_and_one_that_cannot_be_read_ends_the_
     assert!(matches!(stopped, Stopped::Unreadable(_)), "{stopped}");
 }
 
-#[tokio::test]
-async fn a_file_emptied_since_it_was_read_comes_again_as_an_empty_chunk() {
+/// The chunk a follow that read the empty file `emptied.jsonl` as `seen`
+/// says, if at all, sends of it.
+async fn chunk_of_empty_file(seen: Option<FileRead>) -> serde_json::Value {
     let (root, manager) = crate::daemon::test_support::manager().await;
     let (mut client, theirs) = client(&manager);
     let emptied = root.path().join("emptied.jsonl");
     fs::write(&emptied, "").unwrap();
     let file: std::path::PathBuf = "emptied.jsonl".into();
-    let mut read =
-        std::collections::HashMap::from([(file.clone(), FileRead { offset: 5, size: 5 })]);
+    let mut read = std::collections::HashMap::new();
+    if let Some(seen) = seen {
+        read.insert(file.clone(), seen);
+    }
     send_file_gained(&mut client, &emptied, file, &mut read)
         .await
         .unwrap();
@@ -150,4 +153,18 @@ async fn a_file_emptied_since_it_was_read_comes_again_as_an_empty_chunk() {
         (&0.into(), &0.into(), &"".into()),
         "{frame}"
     );
+    chunk.clone()
+}
+
+#[tokio::test]
+async fn a_file_emptied_since_it_was_read_comes_again_as_an_empty_reset() {
+    let chunk = chunk_of_empty_file(Some(FileRead { offset: 5, size: 5 })).await;
+    assert_eq!(chunk["reset"], true, "{chunk}");
+}
+
+#[tokio::test]
+async fn an_empty_file_a_follow_reads_first_comes_as_an_empty_chunk() {
+    // As one emptied while the client was away, which it read before.
+    let chunk = chunk_of_empty_file(None).await;
+    assert!(chunk["reset"].is_null(), "{chunk}");
 }

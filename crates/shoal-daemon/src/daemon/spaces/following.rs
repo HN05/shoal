@@ -301,7 +301,8 @@ struct FileRead {
 /// follow's scope token before each read. A file that is gone, as one its
 /// tool replaced, may come back, so it waits; one that cannot be read
 /// otherwise ends the follow. A file written anew, shorter, comes again
-/// from offset 0, as an empty chunk when it is empty.
+/// from offset 0 as a reset, and one the follow reads for the first time
+/// comes even when it is empty, so the client learns it was emptied.
 async fn send_file_gained(
     client: &mut Client<'_>,
     path: &Path,
@@ -310,6 +311,7 @@ async fn send_file_gained(
 ) -> Result<()> {
     loop {
         client.ensure_scoped().await?;
+        let first = !read.contains_key(&file);
         let seen = read.get(&file).copied().unwrap_or_default();
         let path = path.to_owned();
         let reading = tokio::task::spawn_blocking(move || read_from(&path, seen));
@@ -329,10 +331,13 @@ async fn send_file_gained(
                 size: gained.size,
             },
         );
-        if gained.bytes.is_empty() && !gained.rewritten {
+        if gained.bytes.is_empty() && !gained.rewritten && !first {
             return Ok(());
         }
-        let bytes = SessionBytes::new(file.clone(), gained.offset, gained.size, &gained.bytes);
+        let bytes = SessionBytes {
+            reset: gained.rewritten,
+            ..SessionBytes::new(file.clone(), gained.offset, gained.size, &gained.bytes)
+        };
         client.send(Body::SessionBytes(bytes)).await?;
         if gained.bytes.is_empty() {
             return Ok(());

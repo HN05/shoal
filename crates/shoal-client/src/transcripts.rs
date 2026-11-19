@@ -171,7 +171,12 @@ impl<D: Daemon> SessionFollow<D> {
             }
             Body::SessionBytes(gained) => {
                 let bytes = gained.bytes()?;
-                let unread = (self.cursor).take(&gained.file, gained.offset, gained.size, bytes);
+                let read = Chunk {
+                    offset: gained.offset,
+                    size: gained.size,
+                    reset: gained.reset,
+                };
+                let unread = self.cursor.take(&gained.file, read, bytes);
                 Ok(unread.map(|(offset, bytes)| Followed::Bytes {
                     file: gained.file,
                     offset,
@@ -193,6 +198,15 @@ impl<D: Daemon> SessionFollow<D> {
         self.session = followed.clone();
         Some(followed)
     }
+}
+
+/// Where a chunk of a session file starts, how long the file was then, and
+/// whether the daemon sends it again from 0 as written anew.
+#[derive(Debug, Clone, Copy)]
+struct Chunk {
+    offset: u64,
+    size: u64,
+    reset: bool,
 }
 
 /// The most a follow opened again spends of its request on where it read
@@ -232,19 +246,18 @@ impl Cursor {
         from
     }
 
-    /// What of `bytes`, of `file` from `offset`, the file then `size` long,
-    /// the follow has not read, from its offset, keeping where it read
-    /// `file` to; none once it read them all before. A file sent again that
-    /// is shorter than it read it to was written anew, so it comes whole.
-    fn take(
-        &mut self,
-        file: &Path,
-        offset: u64,
-        size: u64,
-        bytes: Vec<u8>,
-    ) -> Option<(u64, Vec<u8>)> {
+    /// What of `bytes`, a `chunk` of `file`, the follow has not read, from
+    /// its offset, keeping where it read `file` to; none once it read them
+    /// all before. A file the daemon resets, or that comes again shorter
+    /// than it read it to, was written anew, so it comes whole.
+    fn take(&mut self, file: &Path, chunk: Chunk, bytes: Vec<u8>) -> Option<(u64, Vec<u8>)> {
+        let Chunk {
+            offset,
+            size,
+            reset,
+        } = chunk;
         let end = offset + bytes.len() as u64;
-        if self.replaying.get(file).is_some_and(|read| size < *read) {
+        if reset || self.replaying.get(file).is_some_and(|read| size < *read) {
             self.replaying.remove(file);
         }
         let (offset, bytes) = match self.replaying.get(file).copied() {
