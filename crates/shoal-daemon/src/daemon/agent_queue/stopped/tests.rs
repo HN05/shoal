@@ -271,6 +271,38 @@ async fn a_daemon_started_restore_after_a_load_stop_waits_for_healthy_readings()
     assert!(started(&entry(&manager, "second-agent").await.id));
 }
 
+/// Disabling recovery leaves a restore the daemon would start after a load
+/// stop for `shoal restore`, keeping the agent's record.
+#[tokio::test]
+async fn disabling_recovery_leaves_a_daemon_started_load_restore_for_shoal_restore() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let loaded = create(&manager, &repo, "loaded").await;
+    let idle = create(&manager, &repo, "idle").await;
+    load_stops(&manager, &[&loaded]);
+    signal_stop(&manager, &idle.id, "idle-agent");
+    stop(&manager, &idle.id, "idle-agent", IDLE);
+    manager.publish_config(global_config(
+        "[machine]\nmax_heavy_agents = 4\n[machine.overload.disk]\nenabled = false\n\
+         [machine.overload.recovery]\nenabled = false",
+    ));
+
+    manager.dispatch_queue().await.unwrap();
+
+    // An idle stop's restore does not follow the recovery policy.
+    assert_eq!(queue(&manager).await, [("idle".into(), Restore, Queued)]);
+    let record = record_path(&manager.paths, &loaded.id, &"loaded-agent".into());
+    assert!(record.exists());
+    let notifications = manager.notifications.list(true, 10).await.unwrap();
+    assert!(
+        notifications.iter().any(|notification| {
+            notification.kind == crate::daemon::notifications::NotificationKind::RecoveryBlocked
+                && notification.message.contains(loaded.id.as_str())
+        }),
+        "{notifications:?}"
+    );
+}
+
 /// A chat's agent stopped between turns waits for an update before its
 /// restore, as a workspace's does.
 #[tokio::test]

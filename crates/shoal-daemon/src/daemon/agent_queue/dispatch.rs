@@ -1,6 +1,7 @@
 //! Dispatch: each pass ends abandoned starts and restores, queues the
-//! restores stopped agents request, then admits the waiting entries that fit
-//! and starts what the daemon starts itself.
+//! restores stopped agents request, leaves those recovery no longer restores
+//! for `shoal restore`, then admits the waiting entries that fit and starts
+//! what the daemon starts itself.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceName;
 use std::{
@@ -142,6 +143,7 @@ impl Manager {
         self.forget_resolved_restores().await?;
         self.fail_lost_renewals().await?;
         self.queue_requested_restores().await?;
+        self.leave_unrecovered_restores().await?;
         self.admit_waiting(None).await?;
         Ok(())
     }

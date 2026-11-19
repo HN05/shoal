@@ -26,7 +26,8 @@ use crate::{
     paths::Paths,
     state::{QueueKind, QueueState},
 };
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::notifications::NotificationKind;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// The space a stopped agent restores in.
 #[derive(Clone)]
@@ -224,6 +225,34 @@ fn waiting_restores(db: &Connection) -> Result<Vec<(QueueEntryId, SpaceId, Execu
         )?
         .query_map(params![QueueKind::Restore, QueueState::Queued], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// A waiting restore the daemon starts that Shoal queued on its own.
+struct AutomaticRestore {
+    id: QueueEntryId,
+    space: SpaceId,
+    name: SpaceName,
+    execution: ExecutionId,
+    agent: crate::agent::Agent,
+}
+
+/// Each waiting restore the daemon starts that Shoal queued on its own.
+fn automatic_restores(db: &Connection) -> Result<Vec<AutomaticRestore>> {
+    Ok(db
+        .prepare(
+            "SELECT id,space_id,name,execution_id,agent FROM agent_queue
+             WHERE kind=?1 AND env IS NOT NULL AND state=?2 AND automatic",
+        )?
+        .query_map(params![QueueKind::Restore, QueueState::Queued], |row| {
+            Ok(AutomaticRestore {
+                id: row.get(0)?,
+                space: row.get(1)?,
+                name: row.get(2)?,
+                execution: row.get(3)?,
+                agent: row.get(4)?,
+            })
         })?
         .collect::<rusqlite::Result<_>>()?)
 }
@@ -496,6 +525,42 @@ impl Manager {
             }
         }
         recovery::forget_restore_request(&self.paths, &space.id, execution)
+    }
+
+    /// Leave the waiting restores the daemon starts of agents load or disk
+    /// space stopped mid-turn for `shoal restore` while
+    /// `[machine.overload.recovery]` is disabled, as their waiting wrappers
+    /// leave theirs, telling each space. Their records stay.
+    pub(super) async fn leave_unrecovered_restores(&self) -> Result<()> {
+        if self.config().machine.overload.recovery.enabled {
+            return Ok(());
+        }
+        let restores = self.store.run(|db| automatic_restores(db)).await?;
+        let left: Vec<_> = (restores.into_iter())
+            .filter(|restore| {
+                self.stopped_as(&restore.space, &restore.execution) == super::wake::Stopped::ForLoad
+            })
+            .collect();
+        if left.is_empty() {
+            return Ok(());
+        }
+        let ids: Vec<_> = left.iter().map(|restore| restore.id.clone()).collect();
+        self.store.run(move |db| delete_waiting(db, &ids)).await?;
+        for restore in left {
+            self.tell_restore_left(&restore).await;
+        }
+        Ok(())
+    }
+
+    /// Tell the space of `restore`, which recovery no longer restores, that
+    /// its agent stays stopped and what restores it.
+    async fn tell_restore_left(&self, restore: &AutomaticRestore) {
+        let message = format!(
+            "Automatic recovery is disabled, so {} stays stopped; `shoal restore {}` restores it",
+            restore.agent, restore.space
+        );
+        let kind = NotificationKind::RecoveryBlocked;
+        (self.notify_space(&restore.name, &restore.space, kind, message)).await;
     }
 
     /// Forget the waiting restores whose stopped agent's record is gone, as
