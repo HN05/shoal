@@ -6,6 +6,7 @@ use shoal_protocol::removal::{RemovalResult, SpaceRemovalCheck, UnsavedWork};
 use crate::connection::{Daemon, pages, request};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
+    absorb::{Absorb, Absorbed},
     cleanup::{ManualCleanup, Selection},
     model::{RemovedSpace, RestoredSpace},
     protocol::RemovalMethod,
@@ -46,6 +47,15 @@ pub async fn remove(
 /// the caller's agent, or else the user's notifications.
 pub async fn start(daemon: &impl Daemon, space: SpaceSelector, unsaved: UnsavedWork) -> Result<()> {
     request(daemon, RemovalMethod::StartRemoval { space, unsaved }).await
+}
+
+/// Absorb the space `absorb` names into the space that takes its work,
+/// returning once its work and records moved; its removal goes on in the
+/// background.
+pub async fn absorb(daemon: &impl Daemon, absorb: Absorb) -> Result<Absorbed> {
+    let absorbed: Box<Absorbed> =
+        request(daemon, RemovalMethod::AbsorbSpace(Box::new(absorb))).await?;
+    Ok(*absorbed)
 }
 
 /// Remove what `selection` selects that nothing keeps, or with `dry_run`

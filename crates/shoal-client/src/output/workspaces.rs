@@ -119,6 +119,7 @@ pub struct StartedBeside {
 
 outputs!(
     ListedSpace,
+    shoal_protocol::absorb::Absorbed,
     Removed,
     Removals,
     Directory,

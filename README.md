@@ -243,6 +243,7 @@ shoal done --integrated 3 # Another branch has its work under new commits
 shoal done 3 --undo                # Withdraw a recorded done
 shoal rm 3                    # Remove the workspace
 shoal rm 3 6                  # Remove several; the picker selects them with Tab or Ctrl-A
+shoal absorb 4                # Fold a space's work, links and children into its parent, then remove it
 shoal cleanup                 # Pick leftover workspaces, kept branches and caches to remove
 shoal checkpoint 3            # Keep HEAD and unsaved files to return to later
 shoal restore <id>            # Open a removed workspace or chat again

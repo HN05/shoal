@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::cli::{
     args::lifecycle::{LifecycleCommand, StopArgs},
-    commands::{cleanup, spaces, stop, transfer, turns},
+    commands::{absorb, cleanup, spaces, stop, transfer, turns},
     context::Context,
 };
 use shoal_protocol::processes::Selection;
@@ -26,6 +26,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: LifecycleComman
         }) => stop::processes(&ctx, targets.space, Selection::Leftovers).await,
         LifecycleCommand::Stop(args) => stop::run(&ctx, args).await,
         LifecycleCommand::Rm(args) => spaces::remove(&ctx, args).await,
+        LifecycleCommand::Absorb(args) => absorb::run(&ctx, args).await,
         LifecycleCommand::Cleanup { kind, args } => cleanup::run(&ctx, kind, args).await,
         LifecycleCommand::Move { command } => transfer::run(&ctx, command).await,
     }

@@ -32,6 +32,7 @@ const GROUPS: &[(&str, &[&str])] = &[
             "sleep",
             "done",
             "rm",
+            "absorb",
             "cleanup",
             "move",
         ],

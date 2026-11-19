@@ -1064,9 +1064,9 @@ push = false      # Push the default branch after a local merge
 method = "squash" # "merge", "rebase" or "squash"; no default
 ```
 
-`method` sets how both a local merge and a PR merge merge, unless `-X` says;
-without it, a PR merges by the forge's default and a local merge fast-forwards
-or creates a merge commit.
+`method` sets how a local merge, a PR merge and `shoal absorb` merge, unless
+`-X` says; without it, a PR merges by the forge's default and the others
+fast-forward or create a merge commit. `enabled` leaves `shoal absorb` alone.
 
 See [merge into the default branch](../../../../../../docs/reference.md#merge-into-the-default-branch).
 

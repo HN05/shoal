@@ -82,10 +82,10 @@ impl Need {
             | ["questions", "ask"]
             | ["demo", "start"] => Self::Ready,
             [
-                "diff" | "conflicts" | "rm" | "leases" | "messages" | "files" | "questions"
-                | "approvals" | "view" | "catalog" | "history" | "config" | "pr" | "issue"
-                | "alerts" | "demo" | "queue" | "review" | "progress" | "sleep" | "priority"
-                | "log",
+                "diff" | "conflicts" | "rm" | "absorb" | "leases" | "messages" | "files"
+                | "questions" | "approvals" | "view" | "catalog" | "history" | "config" | "pr"
+                | "issue" | "alerts" | "demo" | "queue" | "review" | "progress" | "sleep"
+                | "priority" | "log",
                 ..,
             ] => Self::Any,
             ["internal", ..] => Self::Any,

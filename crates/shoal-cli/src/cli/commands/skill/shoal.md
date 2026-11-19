@@ -169,7 +169,18 @@ shoal stop --interrupt <child>      # Cancel its agent's turn, keeping it runnin
 shoal restart <child>               # Its agent, a workspace's or a chat's
 shoal restore <child>               # --forget forgets the saved session
 shoal files <child>
+shoal absorb <child> [--into <space>] [-X squash] [--force]
 ```
+
+`absorb` takes a done child's work into your space, or `--into` another your
+scope reaches, and removes the child: its branch merges into that
+workspace's branch, its uncommitted files arrive there as uncommitted changes
+for you to review and commit, and its links, attached files, open questions
+and children move over, the children up one level. It refuses, changing
+nothing, a child that is not done, unless `--force` stops its agent and takes
+its work as it is, and a merge that conflicts or touches your uncommitted
+files. A chat, or a space of another repository, takes no code: a child with
+code it would lose is refused unless `--force` leaves the code behind.
 
 `stop` stops the child's agent and those below it, a workspace's or a chat's,
 keeping their sessions, and cancels agents queued to start there; `restart` stops the child's agent and

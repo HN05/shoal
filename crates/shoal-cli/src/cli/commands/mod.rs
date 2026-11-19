@@ -1,6 +1,7 @@
 //! CLI dispatch. Domain handlers own requests, prompts, and rendering;
 //! daemon modules own lifecycle and allocation policy.
 use crate::paths::PathsExt;
+mod absorb;
 mod acquisition;
 mod agent_state;
 mod api;

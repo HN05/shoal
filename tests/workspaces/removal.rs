@@ -469,6 +469,42 @@ fn removal_goes_on_in_the_background_once_its_checks_pass() {
 }
 
 #[test]
+fn absorb_merges_a_done_workspace_into_another_and_removes_it() {
+    let fixture = Fixture::new();
+    let taker = fixture.add("taker");
+    let worker = fixture.add("worker");
+    let worker_path = Path::new(worker["path"].as_str().unwrap()).to_owned();
+    let taker_path = Path::new(taker["path"].as_str().unwrap()).to_owned();
+    commit_file(&worker_path, "feature", "feature\n");
+    fs::write(worker_path.join("notes"), "unsaved\n").unwrap();
+    let (worker_id, taker_id) = (fixture.id("worker"), fixture.id("taker"));
+    // A top-level space has no parent to take its work by default.
+    assert!(
+        !fixture
+            .run(&["absorb", &worker_id, "--force"])
+            .status
+            .success()
+    );
+    let not_done = fixture.run(&["absorb", &worker_id, "--into", &taker_id]);
+    assert!(!not_done.status.success());
+
+    fixture.ok(&["done", &worker_id]);
+    let absorbed = fixture.ok(&["absorb", &worker_id, "--into", &taker_id, "-X", "squash"]);
+
+    assert_eq!(absorbed["merge"]["method"], "squash");
+    assert_eq!(absorbed["carried"], serde_json::json!(["notes"]));
+    assert_eq!(
+        git(&taker_path, &["log", "-1", "--format=%s"]).trim(),
+        "Absorb worker from branch 'worker'"
+    );
+    assert_eq!(
+        fs::read_to_string(taker_path.join("notes")).unwrap(),
+        "unsaved\n"
+    );
+    wait_removed(&fixture, "worker");
+}
+
+#[test]
 fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
     let fixture = Fixture::new();
     let workspace = fixture.add("dirty");

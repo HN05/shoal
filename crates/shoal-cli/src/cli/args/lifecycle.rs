@@ -1,7 +1,10 @@
 //! Arguments of commands that stop, remove and move workspaces.
 use clap::{Args, Subcommand};
 
-use crate::cli::args::{ConfirmationArgs, SpaceTargets, transfer::MoveCommand};
+use crate::{
+    cli::args::{ConfirmationArgs, SpaceTargets, transfer::MoveCommand},
+    forge::items::action::MergeMethod,
+};
 use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Debug, Subcommand)]
@@ -28,6 +31,16 @@ pub enum LifecycleCommand {
     /// A space's removal goes on in the background once Shoal has reserved it and checked that
     /// it can go; a failure after that keeps the space and arrives as a notification.
     Rm(RmArgs),
+    /// Fold a space below yours into a space of your subtree, which takes over its work, then
+    /// remove it.
+    ///
+    /// Its branch merges into the branch of the workspace that takes it, by `-X` or [merge]
+    /// method, and its uncommitted files carry over there as uncommitted changes. Its links,
+    /// attached files and open questions go with the work, and the spaces below it move up one
+    /// level. A space whose work is not done at its HEAD, or that a chat in its worktree has not
+    /// finished, needs `--force`, which stops their agents first. Its removal keeps a
+    /// checkpoint, from which `shoal restore` reopens its files.
+    Absorb(AbsorbArgs),
     /// Remove what Shoal left behind: spaces cleanup would remove, kept branches and caches.
     ///
     /// Without a kind, lists them; on a terminal, a picker offers them, where Tab selects several
@@ -110,6 +123,33 @@ pub struct StopArgs {
     /// Stop only leftovers.
     #[arg(long, conflicts_with_all = ["all", "yes", "skip_children", "interrupt"])]
     pub leftovers: bool,
+}
+
+// Arguments of `shoal absorb`.
+#[derive(Debug, Args)]
+pub struct AbsorbArgs {
+    /// The space to absorb, by number or ID.
+    #[arg(value_name = "SPACE")]
+    pub space: SpaceSelector,
+    /// The space that takes its work, by number or ID; defaults to your own space, or from your
+    /// terminal to the absorbed space's parent.
+    #[arg(long, value_name = "SPACE")]
+    pub into: Option<SpaceSelector>,
+    /// How its branch merges, by [merge] method when left out, and else by a fast-forward or
+    /// merge commit.
+    #[arg(short = 'X', long, value_enum)]
+    pub method: Option<MergeMethod>,
+    /// The commit message of a squash.
+    #[arg(long)]
+    pub message: Option<String>,
+    /// Leave its uncommitted files behind instead of carrying them over; its checkpoint keeps
+    /// them.
+    #[arg(long)]
+    pub discard_uncommitted: bool,
+    /// Absorb work that is not done, stopping its agents first, or leave behind code that the
+    /// space taking it has no branch for.
+    #[arg(long)]
+    pub force: bool,
 }
 
 // Arguments of `shoal rm`.
