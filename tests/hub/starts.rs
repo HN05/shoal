@@ -123,7 +123,8 @@ fn a_start_on_another_machine_carries_a_base_only_this_machine_has() {
     let child = on_laptop(&machines, "x", "workspace");
     let status = prepared_on_laptop(&machines, child["id"].as_str().unwrap());
     assert_eq!(status["workspace"]["state"], "ready", "{status}");
-    assert_eq!(status["workspace"]["base_commit"], commit, "{status}");
+    let base = &status["workspace"]["checkout"]["base"]["commit"];
+    assert_eq!(base, commit, "{status}");
 }
 
 #[test]
