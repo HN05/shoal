@@ -6,8 +6,8 @@ use crate::{
     cli::{
         args::internal::InternalCommand,
         commands::{
-            agent_state, approvals, environment, events, menu, messages, progress, subagents,
-            worktree_hooks,
+            agent_state, approvals, environment, events, menu, messages, progress, sessions,
+            subagents, worktree_hooks,
         },
         context::Context,
         terminal,
@@ -165,6 +165,12 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             )
             .await
         }
+        InternalCommand::Attach {
+            space,
+            viewer,
+            machine,
+            report,
+        } => sessions::attach_for_viewer(&ctx, space, viewer, machine, report).await,
         InternalCommand::Session {
             space,
             agent,

@@ -10,7 +10,7 @@ use crate::{
     config::Effective,
     model::{Execution, Protection},
     sessions::{HostName, Origin},
-    terminal::{Host, Session, Sessions, enabled_host, named},
+    terminal::{Elsewhere, Host, Places, Session, Sessions, enabled_host, named},
 };
 
 /// A place the daemon recorded, with the agent it recorded running there.
@@ -232,13 +232,34 @@ fn enabled_places<'a>(
 /// say how to return to it with `shoal attach <space>` when it outlives the
 /// attach. Returns whether its place still has a session once shown.
 pub(in crate::cli) async fn attach(space: &str, session: &Session) -> Result<bool> {
-    let host = named(session.place.host);
-    let (Some(places), Some(sessions)) = (host.places(), host.sessions()) else {
-        anyhow::bail!("{} keeps no sessions", host.name());
-    };
+    let (places, sessions) = keeping(session)?;
     places.show(&session.place, &session.name).await?;
     report_detach(sessions, space, &session.name).await?;
     Ok(still_open(sessions, &session.place).await)
+}
+
+/// Show `session` to `viewer`, a user on another machine, through the host
+/// that keeps it, then say how to return to it as [`attach`] does.
+pub(in crate::cli) async fn show_elsewhere(
+    space: &str,
+    session: &Session,
+    viewer: &Elsewhere<'_>,
+) -> Result<()> {
+    let (places, sessions) = keeping(session)?;
+    places
+        .show_elsewhere(&session.place, &session.name, viewer)
+        .await?;
+    report_detach(sessions, space, &session.name).await?;
+    Ok(())
+}
+
+/// The host that keeps `session`, as it shows and reads its sessions.
+fn keeping(session: &Session) -> Result<(&'static dyn Places, &'static dyn Sessions)> {
+    let host = named(session.place.host);
+    match (host.places(), host.sessions()) {
+        (Some(places), Some(sessions)) => Ok((places, sessions)),
+        _ => anyhow::bail!("{} keeps no sessions", host.name()),
+    }
 }
 
 /// Say how to return to `session`, one `host` attached this terminal to,

@@ -37,6 +37,7 @@ pub const APPROVAL_ROWS: &str = "approval-rows";
 pub const APPROVAL_DECIDE: &str = "approval-decide";
 pub const PROXY_REPORT: &str = "proxy-report";
 pub const TAKE_OVER: &str = "take-over";
+pub const ATTACH: &str = "attach";
 
 /// An approval decision the picker's decision worker makes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -149,6 +150,16 @@ pub enum Worker<'a> {
     /// set its environment.
     Launch {
         file: &'a Path,
+    },
+    /// Attach the terminal this runs on, which a user on another machine
+    /// views, to an agent's session of `space`, as `viewer`, the JSON of a
+    /// [`shoal_protocol::attaching::Viewer`], asks, writing the session it
+    /// chose to descriptor `report`; `machine` names this machine.
+    Attach {
+        space: &'a SpaceId,
+        viewer: &'a str,
+        machine: &'a str,
+        report: i32,
     },
     /// Continue an agent's wrapper whose binary an upgrade replaced: resume
     /// the agent of `workspace` from `record` over the daemon connection
@@ -397,6 +408,21 @@ pub(crate) fn internal_command_for(
                 args.extend(["--space".into(), space.to_string().into()]);
             }
         }
+        Worker::Attach {
+            space,
+            viewer,
+            machine,
+            report,
+        } => args.extend([
+            ATTACH.into(),
+            space.as_str().into(),
+            "--viewer".into(),
+            viewer.into(),
+            "--machine".into(),
+            machine.into(),
+            "--report".into(),
+            report.to_string().into(),
+        ]),
         Worker::ApprovalDecide { decision } => {
             let decision = match decision {
                 Decision::Approve => "approve",

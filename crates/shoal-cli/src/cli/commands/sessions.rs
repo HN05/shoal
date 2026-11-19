@@ -1,6 +1,11 @@
 //! Persistent agent sessions run in terminal hosts; attaching hands this
 //! terminal to one of a workspace's or a chat's, first waking at once an
-//! agent that sleeps or is stopped there.
+//! agent that sleeps or is stopped there. A user on another machine
+//! attaches through a terminal the space's machine makes for them.
+mod owner;
+
+pub(in crate::cli::commands) use owner::attach_for_viewer;
+
 use anyhow::{Context as _, Result, bail, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
@@ -36,7 +41,7 @@ pub(super) async fn attach(
     let target = Target::resolve(ctx, target).await?;
     // Attaching is the user's interaction with the space's agent.
     crate::client::agents::report_attach(&ctx.paths, SpaceSelector::id(target.id())).await?;
-    let (target, session) = target.awake_session(ctx, session).await?;
+    let (target, session) = target.awake_session(ctx, session, None).await?;
     if terminal::attach(&target.number().to_string(), &session).await? {
         target.record_detach(ctx).await;
     }
@@ -44,12 +49,14 @@ pub(super) async fn attach(
 }
 
 /// The one of `target`'s `sessions` that `named` names, else the only one
-/// [`offered`] offers, or one picked among them.
+/// [`offered`] offers, or one picked among them; for a user on another
+/// machine, a refusal names `machine`, this one.
 fn chosen_session<'a>(
     ctx: &Context,
     target: &Target,
     named: Option<String>,
     sessions: &'a [Session],
+    machine: Option<&str>,
 ) -> Result<&'a Session> {
     if let Some(name) = named {
         return sessions
@@ -58,7 +65,7 @@ fn chosen_session<'a>(
             .with_context(|| format!("{} has no session {name}", target.name()));
     }
     Ok(match offered(sessions).as_slice() {
-        [] => bail!("{}", target.without_sessions()),
+        [] => bail!("{}", target.without_sessions(machine)),
         [only] => only,
         several => {
             let labels: Vec<_> = several.iter().map(|session| session.label()).collect();
@@ -232,14 +239,20 @@ impl Target {
     /// taken once the agent there runs. With no session named and none
     /// showing an agent, an agent that sleeps wakes first, and a stopped one
     /// when no session is left to attach to; a session where Shoal stopped
-    /// the agent wakes it.
-    async fn awake_session(self, ctx: &Context, named: Option<String>) -> Result<(Self, Session)> {
+    /// the agent wakes it. For a user on another machine, a refusal names
+    /// `machine`, this one.
+    async fn awake_session(
+        self,
+        ctx: &Context,
+        named: Option<String>,
+        machine: Option<&str>,
+    ) -> Result<(Self, Session)> {
         let sessions = self.sessions(ctx).await?;
         let shows_agent = sessions.iter().any(|session| session.agent.is_some());
         if named.is_none() && !shows_agent && self.wake(ctx, sessions.is_empty()).await? {
             return self.awaited(ctx, None).await;
         }
-        let chosen = chosen_session(ctx, &self, named, &sessions)?.clone();
+        let chosen = chosen_session(ctx, &self, named, &sessions, machine)?.clone();
         let (Some(execution), Some(protection)) = (&chosen.execution, &chosen.stopped) else {
             return Ok((self, chosen));
         };
@@ -347,8 +360,39 @@ impl Target {
         }
     }
 
-    /// Why there is nothing to attach to, and for a chat where it runs instead.
-    fn without_sessions(&self) -> String {
+    /// The target's session at `place`, as an attach that lost its
+    /// connection finds it again, without waking or restoring its agent.
+    async fn session_again(
+        self,
+        ctx: &Context,
+        place: &crate::sessions::Origin,
+    ) -> Result<(Self, Session)> {
+        let sessions = self.sessions(ctx).await?;
+        let found = sessions
+            .into_iter()
+            .find(|session| session.place.same_place(place));
+        let Some(session) = found else {
+            bail!("{}'s session is gone", self.name());
+        };
+        if let Some(protection) = &session.stopped {
+            bail!("{}", stopped_agent(&self, protection));
+        }
+        Ok((self, session))
+    }
+
+    /// Why there is nothing to attach to, and for a chat where it runs
+    /// instead; for a user on another machine, that it runs on `machine`.
+    fn without_sessions(&self, machine: Option<&str>) -> String {
+        let without = self.without_sessions_here();
+        match machine {
+            Some(machine) => format!(
+                "{without}; it runs on machine {machine}: attach there, or move it to your machine with shoal move"
+            ),
+            None => without,
+        }
+    }
+
+    fn without_sessions_here(&self) -> String {
         match self {
             Self::Workspace(inspection) => {
                 format!("{} has no agent sessions", inspection.workspace.name)

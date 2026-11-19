@@ -203,6 +203,21 @@ pub enum InternalCommand {
     /// Run an operation the daemon started, reading its order on stdin.
     #[command(name = workers::OPERATION)]
     Operation,
+    /// Attach this terminal, which a user on another machine views, to an
+    /// agent's session as `shoal attach` would there; the daemon runs it.
+    #[command(name = workers::ATTACH)]
+    Attach {
+        space: SpaceId,
+        /// What the user's terminal asks for, as JSON.
+        #[arg(long, value_parser = viewer)]
+        viewer: shoal_protocol::attaching::Viewer,
+        /// This machine's name.
+        #[arg(long)]
+        machine: String,
+        /// The descriptor to write the chosen session's name to.
+        #[arg(long)]
+        report: i32,
+    },
     /// Start an admitted agent queue entry; the daemon runs it.
     #[command(name = workers::QUEUE_START)]
     QueueStart {
@@ -295,6 +310,11 @@ pub enum InternalCommand {
 /// The agent a worker runs, which Shoal recorded and passes on unchecked.
 fn agent(name: &str) -> Result<crate::agent::Agent, String> {
     Ok(crate::agent::Agent::unchecked(name.to_owned()))
+}
+
+/// The viewer an attach for another machine receives as JSON.
+fn viewer(json: &str) -> Result<shoal_protocol::attaching::Viewer, String> {
+    serde_json::from_str(json).map_err(|error| error.to_string())
 }
 
 /// A `--permission` narrowing a worker receives as JSON.
