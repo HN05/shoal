@@ -382,38 +382,31 @@ fn write_record(
             record.stage = saved.stage;
         }
     }
-    replace_record(&path, &record)?;
+    rewrite(&path, &record)?;
     Ok(path)
 }
 
 /// Clear the [`Record::for_load`] mark of the agent stopped as `id`, whose
 /// restore healthy readings admitted already, so its retry waits only for a
-/// free slot. A record without one is left as it is.
+/// free slot, under the claim a restore or permission change takes, which
+/// refuses a record one of them holds. A record without one is left as it
+/// is.
 pub fn clear_load_mark(paths: &Paths, space_id: &SpaceId, id: &ExecutionId) -> Result<()> {
     let path = record_path(paths, space_id, id);
+    if !Record::load(&path)?.is_some_and(|record| record.for_load) {
+        return Ok(());
+    }
+    let _claim = claim(&path)?;
     match Record::load(&path)? {
-        Some(record) if record.for_load => replace_record(
+        Some(record) => rewrite(
             &path,
             &Record {
                 for_load: false,
                 ..record
             },
         ),
-        Some(_) | None => Ok(()),
+        None => Ok(()),
     }
-}
-
-/// Write `record` at `path` in place of what is there.
-fn replace_record(path: &Path, record: &Record) -> Result<()> {
-    crate::fsutil::atomic::replace_atomically(
-        path,
-        &serde_json::to_vec(record)?,
-        ReplaceOptions {
-            permissions: Permissions::Temporary,
-            sync: true,
-        },
-    )?;
-    Ok(())
 }
 
 /// Ask the daemon to queue the restore of the agent stopped as `id`, which it

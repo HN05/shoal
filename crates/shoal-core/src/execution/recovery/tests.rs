@@ -92,6 +92,21 @@ fn the_wrappers_save_keeps_a_load_stops_mark() {
 }
 
 #[test]
+fn clearing_a_load_mark_waits_for_a_claimed_record() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    let (space, execution) = (SpaceId::from("workspace"), ExecutionId::from("execution"));
+    let agent = shoal_protocol::executions::TrackedAgent::named("codex");
+    let path = save_load_record(&paths, &space, &execution, &agent, None, None).unwrap();
+    let held = claim(&path).unwrap();
+    assert!(clear_load_mark(&paths, &space, &execution).is_err());
+    assert!(Record::load(&path).unwrap().unwrap().for_load);
+    drop(held);
+    clear_load_mark(&paths, &space, &execution).unwrap();
+    assert!(!Record::load(&path).unwrap().unwrap().for_load);
+}
+
+#[test]
 fn only_a_daemon_saved_stop_counts_as_undelivered() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());

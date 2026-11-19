@@ -375,6 +375,17 @@ fn delete_stopped_restores(db: &Connection, workspace_id: &SpaceId) -> Result<()
     Ok(())
 }
 
+/// Return the entries `ids` that still start to their place in the queue.
+fn requeue_starts(db: &Connection, ids: &[QueueEntryId]) -> Result<()> {
+    for id in ids {
+        db.execute(
+            "UPDATE agent_queue SET state=?2 WHERE id=?1 AND state=?3",
+            params![id, QueueState::Queued, QueueState::Starting],
+        )?;
+    }
+    Ok(())
+}
+
 /// Delete the entries `ids` that still wait; a starting one belongs to its agent.
 fn delete_waiting(db: &Connection, ids: &[QueueEntryId]) -> Result<()> {
     for id in ids {
@@ -630,17 +641,7 @@ impl Manager {
         let ids: Vec<_> = (self.load_restores(QueueState::Starting).await?.into_iter())
             .map(|restore| restore.id)
             .collect();
-        self.store
-            .run(move |db| {
-                for id in ids {
-                    db.execute(
-                        "UPDATE agent_queue SET state=?2 WHERE id=?1 AND state=?3",
-                        params![id, QueueState::Queued, QueueState::Starting],
-                    )?;
-                }
-                Ok(())
-            })
-            .await
+        self.store.run(move |db| requeue_starts(db, &ids)).await
     }
 
     /// The restores in `state` the daemon starts of agents load or disk
