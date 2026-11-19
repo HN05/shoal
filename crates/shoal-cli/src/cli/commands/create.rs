@@ -58,6 +58,9 @@ async fn picked_creation(
     parent: Option<SpaceSelector>,
 ) -> Result<NewCreation> {
     let mut launch = args.launch(args.parent.clone());
+    if let Some(copied) = super::copies::source(ctx, args.copy.clone()).await? {
+        copied.copy_into(&mut launch)?;
+    }
     launch.directory = ui::current_directory()?;
     launch.path = (launch.path.take())
         .map(|path| super::repositories::absolute(ctx, path))

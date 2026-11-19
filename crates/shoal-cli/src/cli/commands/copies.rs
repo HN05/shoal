@@ -11,6 +11,7 @@ use crate::{
     },
     protocol::CopySource,
 };
+use shoal_protocol::launches::{Launch, SpaceChoice, StartTarget};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// What a start or split copies.
@@ -18,6 +19,22 @@ pub(super) struct Copied {
     pub source: CopySource,
     /// The ID of the copied workspace's repository.
     pub repository: RepositoryId,
+}
+
+impl Copied {
+    /// `launch` copying this workspace, which a picker may have picked, in
+    /// its repository unless the start names one, as a number does beside a
+    /// branch or issue.
+    pub(super) fn copy_into(&self, launch: &mut Launch) -> Result<()> {
+        launch.copy = Some(SpaceChoice::Space(self.source.workspace.clone()));
+        let positional = crate::launches::decided_target(launch)?;
+        let names_repository =
+            launch.repository.is_some() || matches!(positional, Some(StartTarget::Repository(_)));
+        if !names_repository {
+            launch.repository = Some(self.repository.to_string());
+        }
+        Ok(())
+    }
 }
 
 /// What `args` copy; `None` when they ask for no copy. The workspace is the
