@@ -283,7 +283,7 @@ fn adopt(
     Ok(())
 }
 
-/// A waiting restore the daemon starts that Shoal queued on its own.
+/// A restore the daemon starts that Shoal queued on its own.
 struct AutomaticRestore {
     id: QueueEntryId,
     space: SpaceId,
@@ -292,14 +292,14 @@ struct AutomaticRestore {
     agent: crate::agent::Agent,
 }
 
-/// Each waiting restore the daemon starts that Shoal queued on its own.
-fn automatic_restores(db: &Connection) -> Result<Vec<AutomaticRestore>> {
+/// Each restore the daemon starts that Shoal queued on its own, in `state`.
+fn automatic_restores(db: &Connection, state: QueueState) -> Result<Vec<AutomaticRestore>> {
     Ok(db
         .prepare(
             "SELECT id,space_id,name,execution_id,agent FROM agent_queue
              WHERE kind=?1 AND env IS NOT NULL AND state=?2 AND automatic",
         )?
-        .query_map(params![QueueKind::Restore, QueueState::Queued], |row| {
+        .query_map(params![QueueKind::Restore, state], |row| {
             Ok(AutomaticRestore {
                 id: row.get(0)?,
                 space: row.get(1)?,
@@ -609,12 +609,7 @@ impl Manager {
         if self.config().machine.overload.recovery.enabled {
             return Ok(());
         }
-        let restores = self.store.run(|db| automatic_restores(db)).await?;
-        let left: Vec<_> = (restores.into_iter())
-            .filter(|restore| {
-                self.stopped_as(&restore.space, &restore.execution) == super::wake::Stopped::ForLoad
-            })
-            .collect();
+        let left = self.load_restores(QueueState::Queued).await?;
         if left.is_empty() {
             return Ok(());
         }
@@ -624,6 +619,42 @@ impl Manager {
             self.tell_restore_left(&restore).await;
         }
         Ok(())
+    }
+
+    /// Return the starting restores the daemon starts of agents load or disk
+    /// space stopped mid-turn to their place in the queue as the daemon
+    /// starts: the healthy readings that admitted them were the previous
+    /// daemon's, so they wait for this one's, as a reattaching wrapper's
+    /// restore does.
+    pub(crate) async fn return_recovery_starts(&self) -> Result<()> {
+        let ids: Vec<_> = (self.load_restores(QueueState::Starting).await?.into_iter())
+            .map(|restore| restore.id)
+            .collect();
+        self.store
+            .run(move |db| {
+                for id in ids {
+                    db.execute(
+                        "UPDATE agent_queue SET state=?2 WHERE id=?1 AND state=?3",
+                        params![id, QueueState::Queued, QueueState::Starting],
+                    )?;
+                }
+                Ok(())
+            })
+            .await
+    }
+
+    /// The restores in `state` the daemon starts of agents load or disk
+    /// space stopped mid-turn, which Shoal queued on its own.
+    async fn load_restores(&self, state: QueueState) -> Result<Vec<AutomaticRestore>> {
+        let restores = self
+            .store
+            .run(move |db| automatic_restores(db, state))
+            .await?;
+        Ok((restores.into_iter())
+            .filter(|restore| {
+                self.stopped_as(&restore.space, &restore.execution) == super::wake::Stopped::ForLoad
+            })
+            .collect())
     }
 
     /// Tell the space of `restore`, which recovery no longer restores, that

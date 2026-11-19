@@ -298,6 +298,37 @@ async fn readings_withdrawn_before_a_daemon_started_load_restore_runs_return_it(
     assert!(manager.reserve_queue_entry(&readmitted.id).await.is_ok());
 }
 
+/// A daemon restart returns a restore the daemon starts after a load stop,
+/// which the previous daemon's healthy readings admitted, to its place,
+/// where it waits for the new daemon's.
+#[tokio::test]
+async fn a_daemon_restart_returns_an_admitted_load_restore_to_its_place() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 4);
+    let loaded = create(&manager, &repo, "loaded").await;
+    load_stops(&manager, &[&loaded]);
+    publish_recovery(&manager);
+    manager.dispatch_queue().await.unwrap();
+    let admitted = entry(&manager, "loaded-agent").await;
+    assert_eq!(admitted.state, Starting);
+
+    let restarted = Manager::open(manager.paths.clone()).await.unwrap();
+    crate::daemon::quarantine::interrupted_operations(&restarted.store)
+        .await
+        .unwrap();
+    limit_globally(&restarted, 4);
+    restarted.return_recovery_starts().await.unwrap();
+
+    assert_eq!(entry(&restarted, "loaded-agent").await.state, Queued);
+    assert!(restarted.reserve_queue_entry(&admitted.id).await.is_err());
+    restarted.dispatch_queue().await.unwrap();
+    assert_eq!(entry(&restarted, "loaded-agent").await.state, Queued);
+    publish_recovery(&restarted);
+    restarted.dispatch_queue().await.unwrap();
+    assert_eq!(entry(&restarted, "loaded-agent").await.state, Starting);
+}
+
 /// Disabling recovery leaves a restore the daemon would start after a load
 /// stop for `shoal restore`, keeping the agent's record.
 #[tokio::test]
