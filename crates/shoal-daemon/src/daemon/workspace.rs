@@ -12,7 +12,6 @@ pub(crate) mod completion_cleanup;
 pub(crate) mod conflicts;
 mod contributions;
 mod converted;
-mod coordinated;
 mod copies;
 pub(super) mod creation;
 mod diff;

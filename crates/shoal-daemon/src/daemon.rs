@@ -24,6 +24,7 @@ mod connections;
 pub(crate) mod containers;
 mod contribution_holds;
 pub(crate) mod conversions;
+mod coordinated;
 mod daemon_exit;
 pub(crate) mod demos;
 pub(crate) mod disk;

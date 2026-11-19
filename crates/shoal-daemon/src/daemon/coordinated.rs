@@ -9,7 +9,7 @@ use anyhow::Result;
 use rusqlite::Connection;
 use shoal_ids::space_ids::SpaceId;
 
-use super::super::{
+use super::{
     agent_state,
     tree::{self, TrackedAgents},
     workspace::Manager,
