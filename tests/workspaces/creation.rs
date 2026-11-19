@@ -2714,3 +2714,15 @@ fn create_inside_a_workspace_makes_a_child_and_reopens_it() {
     assert_eq!(child["parent"]["id"], parent["id"], "{child}");
     assert_eq!(again["id"], child["id"], "{again}");
 }
+
+/// A create names a repository by a number beside its branch, as a start
+/// does.
+#[test]
+fn create_takes_a_numeric_repository_beside_a_branch() {
+    let fixture = Fixture::with_config(Some("[machine.overload.disk]\nenabled = false\n"));
+    fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "123"]);
+
+    let created = fixture.ok(&["create", "123", "--branch", "fix"]);
+
+    assert_eq!(created["branch"], "fix");
+}

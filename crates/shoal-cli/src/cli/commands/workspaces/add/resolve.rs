@@ -61,8 +61,11 @@ pub(super) async fn resolve<'a>(ctx: &'a Context, launch: &mut Launch) -> Result
 /// pick outside plan mode, a link beside a branch, an issue or a copy, and
 /// a branch that is not a literal Git branch name.
 pub(in crate::cli::commands) fn check_start_arguments(launch: &Launch) -> Result<()> {
+    // A number beside a branch or issue of the start's own names a
+    // repository rather than an item.
+    let positional = crate::launches::decided_target(launch)?;
     anyhow::ensure!(
-        launch.repository.is_none() || !matches!(launch.target, Some(StartTarget::Repository(_))),
+        launch.repository.is_none() || !matches!(positional, Some(StartTarget::Repository(_))),
         "a positional repository cannot be combined with --repo"
     );
     // Only plan mode, which starts in a chat, picks the issue.
@@ -70,7 +73,7 @@ pub(in crate::cli::commands) fn check_start_arguments(launch: &Launch) -> Result
         !matches!(launch.issue, Some(IssueChoice::Pick)),
         "--issue needs a number or URL outside plan mode"
     );
-    let links = !matches!(launch.target, None | Some(StartTarget::Repository(_)));
+    let links = !matches!(positional, None | Some(StartTarget::Repository(_)));
     anyhow::ensure!(
         !links || (launch.branch.is_none() && launch.issue.is_none()),
         "an item or branch link cannot be combined with --branch or --issue"
