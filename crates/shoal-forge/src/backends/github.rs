@@ -14,6 +14,7 @@ mod items;
 mod merging;
 mod reactions;
 mod reviews;
+mod rulesets;
 mod runners;
 mod runs;
 pub(crate) mod threads;

@@ -1,9 +1,10 @@
 //! GitHub's branches, which only its GraphQL API lists with their commits'
-//! times, and its PRs by the branches they join.
+//! times, protected by a branch protection rule or a ruleset, and its PRs
+//! by the branches they join.
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
-use super::{GitHub, graphql::graphql_nodes};
+use super::{GitHub, graphql::graphql_nodes, rulesets::DeletionRules};
 use crate::{
     account::Account,
     backends::{BranchFields, Branches, github_rest},
@@ -32,8 +33,13 @@ impl Branches for GitHub {
             &data["repository"]["refs"]
         })
         .await?;
+        let rules = DeletionRules::read(repo, account).await?;
         (nodes.iter())
-            .map(|branch| FIELDS.read(branch, branch["branchProtectionRule"].is_object()))
+            .map(|branch| {
+                let name = branch["name"].as_str().unwrap_or_default();
+                let protected = branch["branchProtectionRule"].is_object() || rules.protects(name);
+                FIELDS.read(branch, protected)
+            })
             .collect()
     }
 
