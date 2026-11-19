@@ -42,7 +42,8 @@ impl Manager {
             .await?;
         for demo in &mut demos {
             let viewer = self.running_viewer(&demo.execution_id).await?;
-            demo.viewer = demo.launch.viewer(viewer.map(|viewer| viewer.port));
+            let serving = viewer.filter(|viewer| viewer.serving);
+            demo.viewer = demo.launch.viewer(serving.map(|viewer| viewer.port));
         }
         Ok(demos)
     }

@@ -11,9 +11,18 @@ use crate::daemon::{
 };
 
 /// A viewer that writes the device it was given to each connection on the
-/// port it was given.
+/// port it was given, once the file it may name exists. It exits with the
+/// test that started it.
 const ECHO_DEVICE: &str = r#"
-import socket, sys
+import os, socket, sys, threading, time
+parent = os.getppid()
+def follow_parent():
+    while os.getppid() == parent:
+        time.sleep(0.2)
+    os._exit(0)
+threading.Thread(target=follow_parent, daemon=True).start()
+while len(sys.argv) > 3 and not os.path.exists(sys.argv[3]):
+    time.sleep(0.05)
 server = socket.create_server(("127.0.0.1", int(sys.argv[1])))
 while True:
     connection, _ = server.accept()
@@ -159,6 +168,36 @@ async fn the_viewer_outlives_the_demo_s_runs_and_ends_with_the_demo() {
 }
 
 #[tokio::test]
+async fn a_run_that_ends_while_the_viewer_starts_spares_it() {
+    let (temp, manager) = manager().await;
+    let gate = temp.path().join("serve");
+    let gate_arg = gate.to_str().unwrap();
+    let viewer = ["python3", "-c", ECHO_DEVICE, "{port}", "{udid}", gate_arg];
+    let (workspace, demo) = running(&manager, temp.path(), Some(&viewer)).await;
+    let opening = {
+        let (manager, demo) = (manager.clone(), demo.clone());
+        tokio::spawn(async move { manager.open_viewer(&demo).await })
+    };
+    // The viewer runs, recorded, but does not serve until the gate opens.
+    while manager
+        .running_viewer(&demo.execution_id)
+        .await
+        .unwrap()
+        .is_none()
+    {
+        tokio::time::sleep(START_POLL).await;
+    }
+    exited_run(&manager, &demo.execution_id).await;
+    manager
+        .release_exited_child(&demo.execution_id, &workspace)
+        .await
+        .unwrap();
+    std::fs::write(&gate, "").unwrap();
+    let port = opening.await.unwrap().unwrap();
+    assert_eq!(read(port).await, "UDID-1");
+}
+
+#[tokio::test]
 async fn a_viewer_an_earlier_daemon_started_is_the_demo_s_until_it_exits() {
     let (temp, manager) = manager().await;
     let (_, demo) = running(&manager, temp.path(), Some(&["false"])).await;
@@ -172,7 +211,11 @@ async fn a_viewer_an_earlier_daemon_started_is_the_demo_s_until_it_exits() {
     let process = crate::process::identity::capture(earlier.id())
         .unwrap()
         .unwrap();
-    let viewer = Viewer { port, process };
+    let viewer = Viewer {
+        port,
+        process,
+        serving: true,
+    };
     (manager.record_viewer(&demo.execution_id, &viewer))
         .await
         .unwrap();

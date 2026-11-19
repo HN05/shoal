@@ -123,7 +123,7 @@ impl Home {
     }
 
     /// The space as the execution's plan names it.
-    pub(super) fn plan_space(&self) -> ExecutionSpace {
+    pub(crate) fn plan_space(&self) -> ExecutionSpace {
         match self {
             Self::Workspace { workspace, .. } => workspace.into(),
             Self::Chat { chat, path, .. } => ExecutionSpace {
@@ -136,7 +136,7 @@ impl Home {
     }
 
     /// The space as the execution's connection keeps it.
-    pub(crate) fn into_space(self) -> Space {
+    pub(super) fn into_space(self) -> Space {
         match self {
             Self::Workspace { workspace, .. } => Space::from(workspace),
             Self::Chat { chat, .. } => Space::from(chat),
