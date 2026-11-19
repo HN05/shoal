@@ -3,8 +3,6 @@
 //! a PR's head, the workspace that owns a branch, and the branch an issue
 //! names.
 use anyhow::{Context as _, Result, ensure};
-use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::space_names::SpaceName;
 use shoal_refs::BranchName;
 
 use super::LaunchReads;
@@ -189,55 +187,6 @@ pub async fn repository_workspaces(
     Ok((reads.workspaces().await?.into_iter())
         .filter(|workspace| workspace.repository() == &repo.id)
         .collect())
-}
-
-/// The name of the workspace `creation` opens in `repo`: the one it gives,
-/// else the one it derives. An existing branch opens under its local name,
-/// so a remote's prefix is left out, as opening it does.
-pub async fn planned_name(repo: &Repository, creation: &Creation) -> Result<SpaceName> {
-    if let Some(name) = &creation.options.name {
-        return Ok(name.clone());
-    }
-    let branch = match (&creation.branch, opened_branch(repo, creation).await?) {
-        (Some(branch), _) => branch.clone(),
-        (None, Some(local)) => local,
-        (None, None) => (creation.copy.as_ref()).map_or_else(String::new, |copy| copy.name.clone()),
-    };
-    Ok(SpaceName::derive(&branch, "workspace"))
-}
-
-/// The local name of the existing branch `creation` opens in `repo`, if
-/// any.
-async fn opened_branch(repo: &Repository, creation: &Creation) -> Result<Option<String>> {
-    let Some(selector) = &creation.existing else {
-        return Ok(None);
-    };
-    if let Some(local) = git::strip_local(selector) {
-        return Ok(Some(local.to_owned()));
-    }
-    let remote = git::remote_branch(&repo.path, selector).await?;
-    Ok(Some(remote.map_or_else(
-        || selector.clone(),
-        |(_, branch)| branch.into(),
-    )))
-}
-
-/// The existing workspace of `repo` on the branch `creation` opens, which a
-/// launch there reopens as that workspace's agent.
-pub async fn reopened_workspace(
-    reads: &impl LaunchReads,
-    repo: &Repository,
-    creation: &Creation,
-) -> Result<Option<SpaceId>> {
-    let Some(branch) = opened_branch(repo, creation).await? else {
-        return Ok(None);
-    };
-    Ok((reads.workspaces().await?.into_iter())
-        .find(|workspace| {
-            workspace.repository() == &repo.id
-                && workspace.branch().map(BranchName::as_str) == Some(&branch)
-        })
-        .map(|workspace| workspace.id))
 }
 
 #[cfg(test)]
