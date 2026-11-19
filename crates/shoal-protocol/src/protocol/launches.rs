@@ -1,8 +1,15 @@
-//! Requests that launch agents.
-use serde::{Deserialize, Serialize};
+//! Requests that launch agents, and what a launch answers.
+use std::path::PathBuf;
 
-use super::Lifetime;
-use crate::launches::Launch;
+use serde::{Deserialize, Serialize};
+use shoal_ids::execution_ids::ExecutionId;
+
+use super::{Lifetime, operations::StartedWorkspace};
+use crate::{
+    agents::Delivery,
+    launches::Launch,
+    model::{QueueEntry, Space},
+};
 
 /// Requests that launch agents.
 #[derive(Debug, Serialize, Deserialize)]
@@ -21,6 +28,78 @@ impl LaunchMethod {
             // A chat's start waits for requests of the chat start worker it
             // runs.
             Self::Launch { .. } => Lifetime::Open,
+        }
+    }
+}
+
+/// The space a launch started its agent in, a workspace or a chat, and how
+/// that agent started.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Launched {
+    /// The space's record as the launch created or found it, before its
+    /// agent runs.
+    pub space: Box<Space>,
+    /// Its agent's entry in the agent queue while the agent waits there;
+    /// none once it runs, or when the launch starts no agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry: Option<Box<QueueEntry>>,
+    /// What recording, linking or assigning its issue warned of, which its
+    /// starter receives.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+    pub start: Started,
+}
+
+/// How a launch started its agent, with what only that kind of start
+/// reports.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Started {
+    /// In a new or, when `reused`, reopened workspace, which the operation
+    /// it names prepares, or will once what it waits for allows, with the
+    /// agent waiting in the queue for the preparation.
+    Preparing {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        operation: Option<String>,
+        #[serde(default)]
+        reused: bool,
+    },
+    /// As the worker of an existing workspace.
+    Worker,
+    /// In a new chat whose agent waits in the queue behind `waiting`
+    /// entries, this one included, or which the queue starts in a
+    /// background place, as its entry says.
+    Queued { waiting: usize },
+    /// In a new chat whose agent an app runs detached.
+    Detached(DetachedRun),
+}
+
+/// An agent session an app runs detached: its execution, process and log,
+/// and how its first message reached it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DetachedRun {
+    pub execution_id: ExecutionId,
+    pub pid: u32,
+    pub log: PathBuf,
+    #[serde(flatten)]
+    pub delivery: Delivery,
+}
+
+impl From<StartedWorkspace> for Launched {
+    /// The launch of the workspace a request `started`, which prepares it.
+    fn from(started: StartedWorkspace) -> Self {
+        let StartedWorkspace {
+            operation,
+            workspace,
+            reused,
+            entry,
+            warnings,
+        } = started;
+        Self {
+            space: Box::new(Space::from(*workspace)),
+            entry,
+            warnings,
+            start: Started::Preparing { operation, reused },
         }
     }
 }

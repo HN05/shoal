@@ -206,7 +206,7 @@ response_bodies! {
     Reached(crate::agent_messages::Reached),
     LaunchedChat(crate::chats::LaunchedChat),
     RenamedSpace(crate::model::RenamedSpace),
-    Launched(crate::launches::Launched),
+    Launched(super::Launched),
     Triggers(Vec<crate::triggers::TriggerStatus>),
     Trigger(crate::triggers::TriggerStatus),
     TriggerFired(crate::triggers::Fired),

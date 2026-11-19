@@ -1,12 +1,13 @@
 use crate::connection::{self};
 use crate::test_daemon::{Connect as _, code, queued_plan};
 use shoal_daemon::test_daemon::{TestDaemon, fake};
-use shoal_protocol::launches::{Launch, Launched, SpaceChoice, StartTarget, Started};
+use shoal_protocol::launches::{Launch, SpaceChoice, StartTarget};
 use shoal_protocol::model::Workspace;
 use shoal_protocol::protocol::{
     ErrorCode, WorkspaceMethod,
     operations::{OperationSpec, QueuedLaunch},
 };
+use shoal_protocol::protocol::{Launched, Started};
 use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]

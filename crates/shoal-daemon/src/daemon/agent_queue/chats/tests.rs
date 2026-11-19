@@ -11,7 +11,8 @@ use crate::{
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_protocol::{
-    launches::{Launch, LaunchSource, StartTarget, Started},
+    launches::{Launch, LaunchSource, StartTarget},
+    protocol::Started,
     space_names::SpaceSelector,
 };
 

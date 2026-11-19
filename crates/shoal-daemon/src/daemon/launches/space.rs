@@ -9,7 +9,8 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_protocol::launches::{Launch, LaunchSource, Launched};
+use shoal_protocol::launches::{Launch, LaunchSource};
+use shoal_protocol::protocol::Launched;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 use super::shape::Shape;

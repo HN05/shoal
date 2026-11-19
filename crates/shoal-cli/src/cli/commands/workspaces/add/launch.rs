@@ -34,7 +34,8 @@ use crate::{
     start_plan::{Creation, ResolvedAddAgent},
     state::QueueState,
 };
-use shoal_protocol::launches::{IssueChoice, Launch, Launched, SpaceChoice, StartTarget, Started};
+use shoal_protocol::launches::{IssueChoice, Launch, SpaceChoice, StartTarget};
+use shoal_protocol::protocol::{Launched, Started};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Have the daemon start `agent` as the worker of `workspace`, in `mode`,

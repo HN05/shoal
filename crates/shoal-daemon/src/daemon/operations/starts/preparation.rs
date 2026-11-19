@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use shoal_protocol::{launches::Started, space_names::SpaceSelector};
+use shoal_protocol::{protocol::Started, space_names::SpaceSelector};
 
 use super::{Preparing, home::Recorded, waiting::PreparationStart};
 use crate::{

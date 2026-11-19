@@ -23,7 +23,7 @@ use crate::{
     protocol::ChatStart,
 };
 use shoal_protocol::chats::LaunchedChat;
-use shoal_protocol::launches::Launched;
+use shoal_protocol::protocol::Launched;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 mod admission;

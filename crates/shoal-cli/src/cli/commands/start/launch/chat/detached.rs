@@ -16,7 +16,8 @@ use crate::{
     model::{QueueEntry, Space},
     state::QueueState,
 };
-use shoal_protocol::launches::{self, IssueChoice, Launch, Launched, Setup, SpaceChoice};
+use shoal_protocol::launches::{IssueChoice, Launch, Setup, SpaceChoice};
+use shoal_protocol::protocol::{self, Launched};
 use shoal_protocol::space_names::SpaceName;
 
 /// The launch the daemon carries out for the chat about `topic` with
@@ -83,7 +84,7 @@ pub(super) async fn start(ctx: &Context, launch: Launch) -> Result<Started> {
 pub(in crate::cli::commands) fn report_started(ctx: &Context, launched: Launched) -> Result<i32> {
     let space = &launched.space;
     let text = match &launched.start {
-        launches::Started::Queued { waiting } => {
+        protocol::Started::Queued { waiting } => {
             let entry = (launched.entry.as_ref())
                 .context("the daemon queued the chat's agent without an entry")?;
             match entry.state {
@@ -93,12 +94,12 @@ pub(in crate::cli::commands) fn report_started(ctx: &Context, launched: Launched
                 }
             }
         }
-        launches::Started::Detached(run) => format!(
+        protocol::Started::Detached(run) => format!(
             "Started chat {}; its output goes to {}",
             space.name,
             run.log.display()
         ),
-        launches::Started::Preparing { .. } | launches::Started::Worker => {
+        protocol::Started::Preparing { .. } | protocol::Started::Worker => {
             bail!("the daemon started the chat's agent in no chat")
         }
     };

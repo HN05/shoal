@@ -1,7 +1,8 @@
 //! A launch that starts the worker of an existing workspace: its own agent,
 //! started as a new workspace's is, with no space created.
 use anyhow::{Context as _, Result};
-use shoal_protocol::launches::{Launch, LaunchSource, Launched, SpaceChoice, Started};
+use shoal_protocol::launches::{Launch, LaunchSource, SpaceChoice};
+use shoal_protocol::protocol::{Launched, Started};
 use shoal_protocol::space_names::SpaceSelector;
 
 use super::shape::Shape;

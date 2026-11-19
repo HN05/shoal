@@ -144,7 +144,7 @@ outputs!(
     shoal_protocol::model::Space,
     shoal_protocol::model::SpaceHold,
     shoal_protocol::agent_messages::Reached,
-    shoal_protocol::launches::Launched,
+    shoal_protocol::protocol::Launched,
     shoal_protocol::config::options::Entry,
     shoal_protocol::service::Definition,
     crate::forge::capability::Capabilities,

@@ -25,7 +25,7 @@ use crate::{
     state::QueueState,
     terminal::PlaceName,
 };
-use shoal_protocol::launches::{Launched, Started};
+use shoal_protocol::protocol::{Launched, Started};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The workspace a launch started its agent in, as a start's workspace: a

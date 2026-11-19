@@ -16,7 +16,8 @@ use crate::{
     start_plan::QueuedStart,
 };
 use shoal_protocol::chats::LaunchedChat;
-use shoal_protocol::launches::{LaunchSource, Launched};
+use shoal_protocol::launches::LaunchSource;
+use shoal_protocol::protocol::Launched;
 
 impl Launch {
     /// Ask the agent queue to admit this chat's agent, unless its starter
@@ -96,7 +97,7 @@ impl Launch {
             space: Box::new(launched.chat.into()),
             entry: Some(Box::new(entry)),
             warnings: launched.warnings,
-            start: shoal_protocol::launches::Started::Queued { waiting },
+            start: shoal_protocol::protocol::Started::Queued { waiting },
         })))
     }
 

@@ -1,7 +1,7 @@
 //! Agent launches: the request that starts an agent as a launch asks.
 use anyhow::Result;
-use shoal_protocol::launches::{Launch, Launched};
 use shoal_protocol::protocol::LaunchMethod;
+use shoal_protocol::{launches::Launch, protocol::Launched};
 
 use crate::connection::{Daemon, request};
 

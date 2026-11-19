@@ -61,7 +61,7 @@ pub use frames::{
 pub use holds::HoldMethod;
 pub use hub::{HubMethod, JoinVia};
 pub use items::{DownloadPiece, ItemContext, ItemMethod, RepoTarget, ViewPiece};
-pub use launches::LaunchMethod;
+pub use launches::{DetachedRun, LaunchMethod, Launched, Started};
 pub use notifications::NotificationMethod;
 pub use operations::OperationMethod;
 pub use ports::PortMethod;

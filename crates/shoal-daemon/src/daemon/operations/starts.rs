@@ -26,7 +26,7 @@ use std::sync::Arc;
 use anyhow::{Context as _, Result, bail, ensure};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    launches::{Launched, Started},
+    protocol::{Launched, Started},
     space_names::{SpaceName, SpaceSelector},
 };
 use shoal_schedule::priority::Priority;
