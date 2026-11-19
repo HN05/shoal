@@ -335,7 +335,7 @@ impl Manager {
         let home = &self.paths.home;
         let command = gate_command(case, agent, session, prompt, files, &environment, home)?;
         let run = oneshot::Run {
-            runs: &self.oneshot_runs,
+            runs: self.reviews.runs(),
             command: &command.command,
             directory: &case.repository.path,
             files,

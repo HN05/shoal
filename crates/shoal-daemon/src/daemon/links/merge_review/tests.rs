@@ -229,7 +229,13 @@ async fn a_caller_outside_the_owners_tree_queues_no_review_there() {
     let refused = gated.await.unwrap_err().to_string();
     assert!(refused.contains("shoal review run"), "{refused}");
     let selector = SpaceSelector::id(&f.workspace.id);
-    assert!(f.manager.latest_review(&selector).await.is_err());
+    assert!(
+        f.manager
+            .reviews
+            .latest(f.manager.as_ref(), &selector)
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]

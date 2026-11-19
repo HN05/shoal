@@ -70,11 +70,10 @@ pub struct Manager {
     pub(crate) completed_owners: crate::daemon::spaces::Removing,
     pub(crate) seeds: super::seed::Seeds,
     pub(crate) forge_memories: crate::daemon::links::ForgeMemories,
-    pub(crate) reviews: crate::daemon::reviews::Reviews,
+    /// The local reviews of workspaces.
+    pub reviews: Arc<shoal_reviews::Reviews>,
     pub(crate) gate: crate::daemon::gate::Gatekeeper,
     pub(crate) runners: crate::daemon::runner::Runners,
-    /// One-shot agent runs whose processes may still be running.
-    pub(crate) oneshot_runs: shoal_reviews::oneshot::Runs,
     /// The retry each proxied execution's proxy waits to make.
     pub(super) proxy_retries:
         std::sync::Mutex<std::collections::HashMap<ExecutionId, super::proxy_retries::ProxyRetry>>,
@@ -112,6 +111,12 @@ impl Manager {
             notifications.clone(),
             Arc::new(super::leases::DaemonRecords),
         );
+        let reviews = Arc::new(shoal_reviews::Reviews::new(
+            store.clone(),
+            gates.clone(),
+            Arc::new(super::reviews::ReviewRecords),
+            paths.home.clone(),
+        ));
         Ok(Arc::new(Self {
             config_state,
             notifications,
@@ -155,10 +160,9 @@ impl Manager {
             completed_owners: Default::default(),
             seeds: Default::default(),
             forge_memories: Default::default(),
-            reviews: Default::default(),
+            reviews,
             gate: Default::default(),
             runners: Default::default(),
-            oneshot_runs: Default::default(),
             proxy_retries: Default::default(),
             upstream_limits: Default::default(),
             rejected_configs: Default::default(),

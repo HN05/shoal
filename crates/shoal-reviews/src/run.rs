@@ -4,50 +4,44 @@
 //! it found.
 use std::{collections::HashSet, path::Path, sync::Arc};
 
-use shoal_ids::repository_ids::RepositoryId;
-
 use anyhow::{Context, Result, anyhow};
+use shoal_forge::review::view::ViewRequests;
+use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::time::UnixTime;
 use shoal_refs::{BranchName, CommitId};
 use tokio::{sync::watch, task::JoinSet};
 
-use super::CheckoutHold;
 use crate::{
+    Reviews,
     agent::{Agent, ModelChoice},
+    checkouts::CheckoutHold,
     config::{Effective, templates},
-    daemon::{
-        agent_queue::{self, OneShotAdmission, Serving},
-        log,
-        manager::Manager,
-    },
+    daemon::{Admission, Daemon},
+    false_positives, findings, git, history, log,
     model::{Repository, Workspace},
+    oneshot,
+    reviewer::{self, Ended, Files, Reviewer},
     reviews::{FailureReason, Review, ReviewId, ReviewState, ReviewTarget},
     shoal_dirs::{Contents, ShoalDir},
-};
-use shoal_forge::review::view::ViewRequests;
-use shoal_ids::agent_session_ids::AgentSessionId;
-use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
-use shoal_reviews::oneshot;
-use shoal_reviews::{
-    false_positives, history,
-    reviewer::{self, Ended, Files, Reviewer},
     store,
 };
 
 /// Start every queued review, now and whenever one is queued; each then
 /// waits in the agent queue for admission.
-pub(crate) async fn run(manager: Arc<Manager>) {
+pub async fn run(reviews: Arc<Reviews>, daemon: Arc<dyn Daemon>) {
     let mut running = JoinSet::new();
     let mut started = HashSet::new();
     loop {
-        let queued = manager.reviews.queued.notified();
+        let queued = reviews.queued.notified();
         tokio::pin!(queued);
         queued.as_mut().enable();
-        match manager.store.run(|db| store::queued(db)).await {
+        match reviews.store.run(|db| store::queued(db)).await {
             Ok(ids) => {
                 for id in ids.into_iter().filter(|id| started.insert(*id)) {
-                    let manager = manager.clone();
+                    let (reviews, daemon) = (reviews.clone(), daemon.clone());
                     running.spawn(async move {
-                        manager.run_review(id).await;
+                        reviews.run_review(&*daemon, id).await;
                         id
                     });
                 }
@@ -88,36 +82,32 @@ struct Commits {
     base: CommitId,
 }
 
-impl Manager {
+impl Reviews {
     /// Run queued review `id` to its end. A failure to prepare it fails it,
     /// as the reviewer could not run.
-    async fn run_review(&self, id: ReviewId) {
+    async fn run_review(&self, daemon: &dyn Daemon, id: ReviewId) {
         loop {
             let (cancel, mut cancelled) = watch::channel(false);
             let cancel = Arc::new(cancel);
-            self.reviews
-                .cancels
-                .lock()
-                .unwrap()
-                .insert(id, cancel.clone());
-            match self.review_once(id, &cancel, &mut cancelled).await {
+            self.cancels.lock().unwrap().insert(id, cancel.clone());
+            match self.review_once(daemon, id, &cancel, &mut cancelled).await {
                 Ok(Pass::Stopped) => {
                     log!("review {id}: protection stopped it; it runs again once load recovers");
                 }
                 Ok(Pass::Ended) => break,
                 Err(error) => {
-                    self.fail_unprepared(id, error).await;
+                    self.fail_unprepared(daemon, id, error).await;
                     break;
                 }
             }
         }
-        self.reviews.cancels.lock().unwrap().remove(&id);
-        self.reviews.ended.send_modify(|ended| *ended += 1);
+        self.cancels.lock().unwrap().remove(&id);
+        self.ended.send_modify(|ended| *ended += 1);
     }
 
     /// Fail review `id`, which could not be prepared: for its repository's
     /// unreadable false positives, else as its reviewer could not run.
-    async fn fail_unprepared(&self, id: ReviewId, error: anyhow::Error) {
+    async fn fail_unprepared(&self, daemon: &dyn Daemon, id: ReviewId, error: anyhow::Error) {
         log!("review {id}: {error:#}");
         let reason = match error.downcast_ref::<false_positives::Unreadable>() {
             Some(_) => FailureReason::InvalidFalsePositives,
@@ -130,7 +120,7 @@ impl Manager {
             .run(move |db| store::fail(db, id, None, reason, now))
             .await;
         match failed {
-            Ok(true) => self.deliver_review(id).await,
+            Ok(true) => self.deliver(daemon, id).await,
             Ok(false) => {}
             Err(error) => log!("review {id}: {error:#}"),
         }
@@ -141,6 +131,7 @@ impl Manager {
     /// that waits for healthy readings.
     async fn review_once(
         &self,
+        daemon: &dyn Daemon,
         id: ReviewId,
         cancel: &Arc<watch::Sender<bool>>,
         cancelled: &mut watch::Receiver<bool>,
@@ -148,77 +139,64 @@ impl Manager {
         let Some(review) = self.queued_review(id).await? else {
             return Ok(Pass::Ended);
         };
-        let workspace = self.workspace_by_id(&review.workspace_id).await?;
-        let Some(admission) = self
-            .await_admission(id, &workspace, cancel, cancelled)
-            .await?
+        let workspace = daemon.workspace_by_id(&review.workspace_id).await?;
+        let Some(admission) =
+            (self.await_admission(daemon, id, &workspace, cancel, cancelled)).await?
         else {
             return Ok(Pass::Ended);
         };
         // The workspace may have moved while the review waited, as a fork
         // PR's moves to the PR's new head.
-        let workspace = self.workspace_by_id(&review.workspace_id).await?;
+        let workspace = daemon.workspace_by_id(&review.workspace_id).await?;
         // Its configuration and commits are read only from the worktree
         // that is this workspace's.
-        self.verify_worktree(&workspace).await?;
-        let settings = self.workspace_settings_with_templates(&workspace).await?;
-        let commits = self.review_commits(&workspace, &review.target).await?;
-        let repository = self.repository(workspace.repository()).await?;
+        daemon.verify_worktree(&workspace).await?;
+        let settings = daemon.settings_with_templates(&workspace).await?;
+        let commits = review_commits(daemon, &workspace, &review.target).await?;
+        let repository = daemon.repository(workspace.repository()).await?;
         let place = run_files(&repository, &review)?;
         let held = self.hold_run(id, &repository.id, place).await?;
         if !self.start_review(id, &commits).await? {
             return Ok(Pass::Ended);
         }
         let ended = self
-            .run_in_checkout(&review, &workspace, &settings, &commits, &held, cancelled)
+            .run_in_checkout(
+                daemon, &review, &workspace, &settings, &commits, &held, cancelled,
+            )
             .await;
         let left_running = matches!(ended, Ok((_, Ended::LeftRunning)));
         release_run(id, &held.files, held.checkout, admission, left_running).await;
         let (reviewer, ended) = ended?;
-        self.record_end(id, &workspace, &reviewer, ended).await
+        self.record_end(daemon, id, &workspace, &reviewer, ended)
+            .await
     }
 
     /// Review `id` while it is queued.
     async fn queued_review(&self, id: ReviewId) -> Result<Option<Review>> {
-        let review = self
-            .store
-            .run(move |db| store::load(db, &super::ReviewRecords, id))
-            .await?;
+        let review = self.load(id).await?;
         Ok(review.filter(|review| review.state == ReviewState::Queued))
     }
 
     /// Wait for review `id`'s admission in its workspace's repository, which
     /// protection takes back by sending `cancel`; none once `cancelled`, as a
     /// cancel or the workspace's removal recorded the review's end.
-    async fn await_admission(
+    async fn await_admission<'a>(
         &self,
+        daemon: &'a dyn Daemon,
         id: ReviewId,
-        workspace: &Workspace,
+        workspace: &'a Workspace,
         cancel: &Arc<watch::Sender<bool>>,
         cancelled: &mut watch::Receiver<bool>,
-    ) -> Result<Option<OneShotAdmission<'_>>> {
-        let (after_stop, queued_after) = self
-            .store
-            .read(move |tx| {
-                Ok((
-                    store::waits_for_recovery(tx, id)?,
-                    agent_queue::last_seq(tx)?,
-                ))
-            })
+    ) -> Result<Option<Box<dyn Admission + 'a>>> {
+        let after_stop = (self.store)
+            .run(move |db| store::waits_for_recovery(db, id))
             .await?;
-        let serving = Serving {
-            space: workspace.id.clone(),
-            queued_after,
-        };
         let stop = cancel.clone();
-        let mut admission = self.agent_queue.request_oneshot(
-            workspace.repository(),
-            serving,
-            after_stop,
-            move || {
-                stop.send_replace(true);
-            },
-        );
+        let stop = Box::new(move || {
+            stop.send_replace(true);
+        });
+        let repository = workspace.repository();
+        let mut admission = (daemon.admit(repository, &workspace.id, after_stop, stop)).await?;
         tokio::select! {
             () = admission.admitted() => Ok(Some(admission)),
             _ = cancelled.wait_for(|cancelled| *cancelled) => Ok(None),
@@ -236,9 +214,9 @@ impl Manager {
         repository: &RepositoryId,
         place: Files,
     ) -> Result<HeldRun<'_>> {
-        let mut ended = self.reviews.ended.subscribe();
+        let mut ended = self.ended.subscribe();
         loop {
-            match self.reviews.hold_run(id, repository, &place.directory) {
+            match self.try_hold_run(id, repository, &place.directory) {
                 Ok(checkout) if !place.directory.exists() => {
                     return Ok(HeldRun {
                         files: place,
@@ -260,7 +238,7 @@ impl Manager {
             place.directory.display()
         );
         let files = run_beside(&place, id);
-        let checkout = (self.reviews.hold_run(id, repository, &files.directory))
+        let checkout = (self.try_hold_run(id, repository, &files.directory))
             .map_err(|_| anyhow!("{} is in use", files.directory.display()))?;
         Ok(HeldRun {
             files,
@@ -281,8 +259,10 @@ impl Manager {
     /// Check the reviewed commit out in `held` and run the reviewers there,
     /// continuing the subject's session when it is at the subject's place;
     /// returns the agent that produced the result and how it ended.
+    #[allow(clippy::too_many_arguments)]
     async fn run_in_checkout(
         &self,
+        daemon: &dyn Daemon,
         review: &Review,
         workspace: &Workspace,
         settings: &Effective,
@@ -291,16 +271,13 @@ impl Manager {
         cancelled: &mut watch::Receiver<bool>,
     ) -> Result<(Agent, Ended)> {
         let files = &held.files;
-        self.prepare_checkout(review.id, workspace, &commits.head, files)
-            .await?;
+        prepare_checkout(daemon, review.id, workspace, &commits.head, files).await?;
         let run = Run {
-            runs: &self.oneshot_runs,
+            runs: &self.runs,
             settings,
-            configured: self
-                .hook_environment(workspace, workspace.repository(), settings)
-                .await?,
+            configured: daemon.environment(workspace, settings).await?,
             instructions: self
-                .review_instructions(review, workspace, settings, files, commits)
+                .review_instructions(daemon, review, workspace, settings, files, commits)
                 .await?,
             files,
         };
@@ -347,24 +324,6 @@ impl Manager {
             }
             (ended, _) => (agent, ended),
         }
-    }
-
-    /// Review `id`'s run directory with its ID, the output schema and a
-    /// detached checkout of `head`.
-    async fn prepare_checkout(
-        &self,
-        id: ReviewId,
-        workspace: &Workspace,
-        head: &CommitId,
-        files: &Files,
-    ) -> Result<()> {
-        let repository = self.repository(workspace.repository()).await?;
-        review_runs(&repository).create()?;
-        std::fs::create_dir_all(&files.directory)
-            .with_context(|| format!("create {}", files.directory.display()))?;
-        reviewer::write_id(files, id)?;
-        reviewer::write_schema(files)?;
-        crate::git::detached::add(&repository.path, &files.checkout(), head.as_str()).await
     }
 
     /// The session `review`'s agent resumes: the one the latest earlier
@@ -436,7 +395,7 @@ impl Manager {
         session: Option<&AgentSessionId>,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Ended {
-        let reviewer = match reviewer_for(run, agent, model, session, &self.paths.home) {
+        let reviewer = match reviewer_for(run, agent, model, session, &self.home) {
             Ok(reviewer) => reviewer,
             Err(error) => {
                 log!("review by {agent}: {error:#}");
@@ -452,6 +411,7 @@ impl Manager {
     /// stopped by protection, and its review is queued again.
     async fn record_end(
         &self,
+        daemon: &dyn Daemon,
         id: ReviewId,
         workspace: &Workspace,
         reviewer: &Agent,
@@ -482,20 +442,18 @@ impl Manager {
         if !recorded {
             return Ok(Pass::Ended);
         }
-        let review = self
-            .store
-            .run(move |db| store::load(db, &super::ReviewRecords, id))
-            .await?;
+        let review = self.load(id).await?;
         if let Some(review) = review.filter(|review| review.state == ReviewState::Finished) {
-            self.post_review(&review, workspace).await;
+            self.post(daemon, &review, workspace).await;
         }
-        self.deliver_review(id).await;
+        self.deliver(daemon, id).await;
         Ok(Pass::Ended)
     }
 
     /// The review's instructions for its checkout, then its history.
     async fn review_instructions(
         &self,
+        daemon: &dyn Daemon,
         review: &Review,
         workspace: &Workspace,
         settings: &Effective,
@@ -516,13 +474,14 @@ impl Manager {
             },
         );
         let (id, workspace_id) = (review.id, workspace.id.clone());
-        let false_positives = self.false_positives(workspace.repository()).await?;
+        let false_positives = findings::listed(daemon, workspace.repository()).await?;
+        let records = self.records.clone();
         let earlier = self
             .store
-            .run(move |db| store::earlier(db, &super::ReviewRecords, &workspace_id, id))
+            .run(move |db| store::earlier(db, &*records, &workspace_id, id))
             .await?;
         let pull = match &review.target {
-            ReviewTarget::Pr { url, .. } => self.pull_discussion(workspace, url).await,
+            ReviewTarget::Pr { url, .. } => pull_discussion(daemon, workspace, url).await,
             ReviewTarget::Workspace => None,
         };
         // The history fills what the instructions leave of the prompt.
@@ -534,84 +493,16 @@ impl Manager {
         })
     }
 
-    /// The PR's description, conversation and reviews as its agent account
-    /// reads them; a review without them still runs.
-    async fn pull_discussion(
-        &self,
-        workspace: &Workspace,
-        url: &crate::forge::items::reference::ItemRef,
-    ) -> Option<crate::forge::review::view::Details> {
-        let (forge, account) = match self.workspace_forge_account(workspace).await {
-            Ok(found) => found,
-            Err(error) => {
-                log!("the discussion of {url}: {error:#}");
-                return None;
-            }
-        };
-        let view = forge
-            .view(&account, crate::forge::items::link::ItemKind::Pr, url, true)
-            .await;
-        for error in &view.errors {
-            log!("the discussion of {url}: {error}");
-        }
-        view.details
-    }
-
-    /// The commits the review covers: the workspace's committed HEAD against
-    /// `shoal diff`'s base, or the PR's fetched head against its base.
-    async fn review_commits(
-        &self,
-        workspace: &Workspace,
-        target: &ReviewTarget,
-    ) -> Result<Commits> {
-        match target {
-            ReviewTarget::Workspace => {
-                let head = crate::daemon::links::pr::current_head(workspace).await?;
-                let base = self
-                    .diff_base(&SpaceSelector::id(&workspace.id))
-                    .await?
-                    .commit;
-                Ok(Commits { head, base })
-            }
-            ReviewTarget::Pr { head, base, .. } => {
-                let base_ref = crate::git::remote_ref("origin", base.as_str());
-                let head = self.pull_review_head(workspace, head).await?;
-                let base = crate::git::diff::merge_base_of(&workspace.path, &head, &base_ref)
-                    .await
-                    .with_context(|| format!("the PR base {base} is not fetched"))?;
-                Ok(Commits {
-                    head: head.into(),
-                    base,
-                })
-            }
-        }
-    }
-
-    /// The commit a PR review reads: the fetched head branch `head`, or for
-    /// a workspace at a commit, opened at the head of a PR whose branch
-    /// origin does not have, as a fork's, the head it was last moved to,
-    /// whatever was committed on top of it there since.
-    async fn pull_review_head(&self, workspace: &Workspace, head: &BranchName) -> Result<String> {
-        if let Some(at) = workspace.at() {
-            return Ok(at.commit.clone().into());
-        }
-        let head_ref = crate::git::remote_ref("origin", head.as_str());
-        crate::git::resolve_commit(&workspace.path, &head_ref, crate::git::run)
-            .await
-            .map(String::from)
-            .with_context(|| format!("the PR head {head} is not fetched"))
-    }
-
     /// Remove the checkouts and output that reviews a daemon stop interrupted
     /// left behind, and queue those reviews again.
-    pub(crate) async fn recover_reviews(&self) -> Result<()> {
-        let unreconciled = self.remove_interrupted_runs().await;
+    pub async fn recover(&self, daemon: &dyn Daemon) -> Result<()> {
+        let unreconciled = self.remove_interrupted_runs(daemon).await;
         let kept = match &unreconciled {
             Ok(kept) => kept.clone(),
-            Err(_) => self.unlisted_runs().await?,
+            Err(_) => self.unlisted_runs(daemon).await?,
         };
         for run in &kept {
-            self.hold_unreconciled_run(run);
+            self.hold_unreconciled_run(daemon, run);
         }
         let ids: Vec<ReviewId> = kept.iter().map(|run| run.id).collect();
         let now = UnixTime::now();
@@ -624,20 +515,20 @@ impl Manager {
         }
         // A review that had ended was delivered then.
         for id in failed {
-            self.deliver_review(id).await;
+            self.deliver(daemon, id).await;
         }
         unreconciled.map(drop)
     }
 
     /// The runs of the running reviews, any of whose processes may still
     /// run, for when the run directories cannot be listed.
-    async fn unlisted_runs(&self) -> Result<Vec<Unreconciled>> {
+    async fn unlisted_runs(&self, daemon: &dyn Daemon) -> Result<Vec<Unreconciled>> {
         let mut unlisted = Vec::new();
         for id in self.store.run(|db| store::running(db)).await? {
             unlisted.push(Unreconciled {
                 id,
                 left_running: true,
-                run: self.running_run(id).await,
+                run: self.running_run(daemon, id).await,
             });
         }
         Ok(unlisted)
@@ -645,14 +536,10 @@ impl Manager {
 
     /// Where running review `id`'s run is: in the reviewed workspace's
     /// repository's directory, while the workspace exists.
-    async fn running_run(&self, id: ReviewId) -> Option<LeftRun> {
-        let review = self
-            .store
-            .run(move |db| store::load(db, &super::ReviewRecords, id))
-            .await
-            .ok()??;
-        let workspace = self.workspace_by_id(&review.workspace_id).await.ok()?;
-        let repository = self.repository(workspace.repository()).await.ok()?;
+    async fn running_run(&self, daemon: &dyn Daemon, id: ReviewId) -> Option<LeftRun> {
+        let review = self.load(id).await.ok()??;
+        let workspace = daemon.workspace_by_id(&review.workspace_id).await.ok()?;
+        let repository = daemon.repository(workspace.repository()).await.ok()?;
         let place = run_files(&repository, &review).ok()?;
         let beside = run_beside(&place, id);
         Some(LeftRun {
@@ -667,29 +554,27 @@ impl Manager {
     /// Hold what `run`, which could not be removed, may still use until the
     /// daemon restarts: its checkout of the repository and, when its
     /// processes may still run, its tracking and its admission there.
-    fn hold_unreconciled_run(&self, run: &Unreconciled) {
+    fn hold_unreconciled_run(&self, daemon: &dyn Daemon, run: &Unreconciled) {
         let Some(left) = &run.run else {
             return;
         };
         if run.left_running {
-            self.oneshot_runs.track(&left.files.directory);
+            self.runs.track(&left.files.directory);
         }
         // Its place names the repository, as removing the workspace deletes
         // the review.
         let repository = &left.repository;
-        (self.reviews)
-            .hold_checkout(run.id, repository, &left.files.directory)
-            .keep();
+        (self.hold_checkout(run.id, repository, &left.files.directory)).keep();
         if run.left_running {
-            self.agent_queue.hold_oneshot(repository);
+            daemon.hold_admission(repository);
         }
     }
 
     /// Remove the runs a stopped daemon left, returning those that could
     /// not be removed; their checkouts stay for the next start.
-    async fn remove_interrupted_runs(&self) -> Result<Vec<Unreconciled>> {
+    async fn remove_interrupted_runs(&self, daemon: &dyn Daemon) -> Result<Vec<Unreconciled>> {
         let mut kept = Vec::new();
-        for left in self.left_runs().await? {
+        for left in left_runs(daemon).await? {
             // Read before a removal that fails partway can delete its file.
             let review = left.files.review();
             let left_running = self.remove_interrupted_run(&left.files).await;
@@ -704,31 +589,10 @@ impl Manager {
         Ok(kept)
     }
 
-    /// The runs stopped daemons may have left, in each repository's
-    /// directory.
-    async fn left_runs(&self) -> Result<Vec<LeftRun>> {
-        let mut runs = Vec::new();
-        for repository in self.repositories().await? {
-            let dir = review_runs(&repository);
-            if !dir.check_own()? {
-                continue;
-            }
-            runs.extend(
-                run_directories(dir.root())?
-                    .into_iter()
-                    .map(|files| LeftRun {
-                        files,
-                        repository: repository.id.clone(),
-                    }),
-            );
-        }
-        Ok(runs)
-    }
-
     /// Remove a run a stopped daemon left, after stopping its reviewer's
     /// processes; when it stays, whether they may still run.
     async fn remove_interrupted_run(&self, files: &Files) -> Option<bool> {
-        if let Err(error) = self.oneshot_runs.stop_leftovers(&files.directory).await {
+        if let Err(error) = self.runs.stop_leftovers(&files.directory).await {
             log!("{}: {error:#}", files.directory.display());
             return Some(true);
         }
@@ -740,14 +604,117 @@ impl Manager {
     /// Whether a run is left in the repository `id`'s directory, as one
     /// whose reviewer's processes may still run: a worktree of the
     /// repository whose link a move would break.
-    pub(super) async fn review_runs_left(&self, id: &RepositoryId) -> Result<bool> {
-        let repository = self.repository(id).await?;
+    pub(crate) async fn runs_left(&self, daemon: &dyn Daemon, id: &RepositoryId) -> Result<bool> {
+        let repository = daemon.repository(id).await?;
         let dir = review_runs(&repository);
         tokio::task::spawn_blocking(move || {
             Ok(dir.check_own()? && !run_directories(dir.root())?.is_empty())
         })
         .await?
     }
+}
+
+/// Review `id`'s run directory with its ID, the output schema and a
+/// detached checkout of `head`.
+async fn prepare_checkout(
+    daemon: &dyn Daemon,
+    id: ReviewId,
+    workspace: &Workspace,
+    head: &CommitId,
+    files: &Files,
+) -> Result<()> {
+    let repository = daemon.repository(workspace.repository()).await?;
+    review_runs(&repository).create()?;
+    std::fs::create_dir_all(&files.directory)
+        .with_context(|| format!("create {}", files.directory.display()))?;
+    reviewer::write_id(files, id)?;
+    reviewer::write_schema(files)?;
+    git::detached::add(&repository.path, &files.checkout(), head.as_str()).await
+}
+
+/// The PR's description, conversation and reviews as its agent account
+/// reads them; a review without them still runs.
+async fn pull_discussion(
+    daemon: &dyn Daemon,
+    workspace: &Workspace,
+    url: &crate::forge::items::reference::ItemRef,
+) -> Option<crate::forge::review::view::Details> {
+    let (forge, account) = match daemon.forge_account(workspace).await {
+        Ok(found) => found,
+        Err(error) => {
+            log!("the discussion of {url}: {error:#}");
+            return None;
+        }
+    };
+    let view = forge
+        .view(&account, crate::forge::items::link::ItemKind::Pr, url, true)
+        .await;
+    for error in &view.errors {
+        log!("the discussion of {url}: {error}");
+    }
+    view.details
+}
+
+/// The commits the review covers: the workspace's committed HEAD against
+/// `shoal diff`'s base, or the PR's fetched head against its base.
+async fn review_commits(
+    daemon: &dyn Daemon,
+    workspace: &Workspace,
+    target: &ReviewTarget,
+) -> Result<Commits> {
+    match target {
+        ReviewTarget::Workspace => {
+            let head = daemon.head(workspace).await?;
+            let base = daemon.diff_base(workspace).await?;
+            Ok(Commits { head, base })
+        }
+        ReviewTarget::Pr { head, base, .. } => {
+            let base_ref = git::remote_ref("origin", base.as_str());
+            let head = pull_review_head(workspace, head).await?;
+            let base = git::diff::merge_base_of(&workspace.path, &head, &base_ref)
+                .await
+                .with_context(|| format!("the PR base {base} is not fetched"))?;
+            Ok(Commits {
+                head: head.into(),
+                base,
+            })
+        }
+    }
+}
+
+/// The commit a PR review reads: the fetched head branch `head`, or for a
+/// workspace at a commit, opened at the head of a PR whose branch origin
+/// does not have, as a fork's, the head it was last moved to, whatever was
+/// committed on top of it there since.
+async fn pull_review_head(workspace: &Workspace, head: &BranchName) -> Result<String> {
+    if let Some(at) = workspace.at() {
+        return Ok(at.commit.clone().into());
+    }
+    let head_ref = git::remote_ref("origin", head.as_str());
+    git::resolve_commit(&workspace.path, &head_ref, git::run)
+        .await
+        .map(String::from)
+        .with_context(|| format!("the PR head {head} is not fetched"))
+}
+
+/// The runs stopped daemons may have left, in each repository's directory.
+async fn left_runs(daemon: &dyn Daemon) -> Result<Vec<LeftRun>> {
+    let mut runs = Vec::new();
+    for repository in daemon.repositories().await? {
+        let dir = review_runs(&repository);
+        if !dir.check_own()? {
+            continue;
+        }
+        runs.extend(
+            run_directories(dir.root())?
+                .into_iter()
+                .map(|files| LeftRun {
+                    files,
+                    repository: repository.id.clone(),
+                }),
+        );
+    }
+    Ok(runs)
 }
 
 /// A review's held run, and whether it is at its subject's place, where
@@ -783,7 +750,7 @@ async fn release_run(
     id: ReviewId,
     files: &Files,
     checkout: CheckoutHold<'_>,
-    admission: OneShotAdmission<'_>,
+    admission: Box<dyn Admission + '_>,
     left_running: bool,
 ) {
     if left_running {
@@ -925,7 +892,7 @@ fn review_runs(repository: &Repository) -> ShoalDir {
 
 /// Remove a run's checkout and files.
 async fn remove_run(files: &Files) -> Result<()> {
-    crate::git::detached::remove(&files.checkout()).await?;
+    git::detached::remove(&files.checkout()).await?;
     match std::fs::remove_dir_all(&files.directory) {
         Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
             Err(error).with_context(|| format!("remove {}", files.directory.display()))

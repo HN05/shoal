@@ -278,7 +278,9 @@ pub async fn run(
         "agent assignees",
         links::issue::agent_settles::run,
     );
-    spawn_supervised(&mut background, &manager, "reviews", reviews::run);
+    spawn_supervised(&mut background, &manager, "reviews", |manager| {
+        shoal_reviews::run(manager.reviews.clone(), manager)
+    });
     spawn_supervised(&mut background, &manager, "gate", gate::run);
     spawn_supervised(
         &mut background,
@@ -351,7 +353,7 @@ pub async fn run(
     background.shutdown().await;
     // Aborting a run kills its process group; what it started elsewhere
     // carries its marker.
-    manager.oneshot_runs.stop_all().await;
+    manager.reviews.runs().stop_all().await;
     manager.stop_remaining_work(&mut stopped).await;
     if let Some(requested) = &mut requested_exit {
         requested.answer(&manager, &stopped).await;
@@ -394,7 +396,7 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     {
         log!("{error:#}");
     }
-    let reviews = manager.recover_reviews();
+    let reviews = manager.reviews.recover(&*manager);
     if let Err(error) = startup
         .step("removing interrupted reviews' checkouts", reviews)
         .await

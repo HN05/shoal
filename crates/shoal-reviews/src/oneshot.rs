@@ -71,7 +71,7 @@ pub struct Runs {
     unfinished: std::sync::Mutex<HashSet<PathBuf>>,
     /// Makes the process inventory fail, so tests reach what a failed
     /// cleanup leaves.
-    #[cfg(any(test, feature = "test-support"))]
+    #[cfg(test)]
     pub fail_inventory: std::sync::atomic::AtomicBool,
 }
 
@@ -108,7 +108,7 @@ impl Runs {
     /// left. Anyone else's process, such as a shell in the run's
     /// directory, is left alone.
     pub async fn stop_leftovers(&self, files: &Path) -> Result<()> {
-        #[cfg(any(test, feature = "test-support"))]
+        #[cfg(test)]
         anyhow::ensure!(
             !self
                 .fail_inventory

@@ -4,22 +4,24 @@
 use std::fmt::Write as _;
 
 use crate::{
-    daemon::{log, manager::Manager, notifications::Source},
+    Reviews,
+    daemon::Daemon,
+    log,
     reviews::{AUTOMATED_NOTE, Review, ReviewId, ReviewState, severity_counts},
+    store,
     validate::MAX_AGENT_MESSAGE_LEN,
 };
-use shoal_reviews::store;
 
-impl Manager {
+impl Reviews {
     /// Deliver review `id`, which has ended: to the workspace's agents,
     /// unless a process of the workspace cancelled it, and as a notice to
     /// its coordinator.
-    pub(super) async fn deliver_review(&self, id: ReviewId) {
-        let loaded = self
-            .store
+    pub(crate) async fn deliver(&self, daemon: &dyn Daemon, id: ReviewId) {
+        let records = self.records.clone();
+        let loaded = (self.store)
             .run(move |db| {
                 Ok((
-                    store::load(db, &super::ReviewRecords, id)?,
+                    store::load(db, &*records, id)?,
                     store::cancelled_by(db, id)?,
                 ))
             })
@@ -33,27 +35,19 @@ impl Manager {
             }
         };
         if cancelled_by.as_deref() != Some(review.workspace_id.as_str())
-            && let Err(error) = self
-                .queue_agent_message(&review.workspace_id, agent_message(&review))
+            && let Err(error) = daemon
+                .message(&review.workspace_id, agent_message(&review))
                 .await
         {
             log!("delivering review {id}: {error:#}");
         }
-        self.tell_coordinator(
-            &review.workspace,
-            Some(&review.workspace_id),
-            None,
-            notice(&review),
-            Vec::new(),
-            Source::Daemon,
-        )
-        .await;
+        (daemon.tell_coordinator(&review.workspace, &review.workspace_id, notice(&review))).await;
     }
 }
 
 /// What the workspace's agents receive: a finished review's summary and
 /// findings, with the commands that answer them, or why it ended without.
-pub(super) fn agent_message(review: &Review) -> String {
+fn agent_message(review: &Review) -> String {
     let id = review.id;
     match review.state {
         ReviewState::Finished => findings_message(review),
@@ -101,7 +95,7 @@ fn findings_message(review: &Review) -> String {
 }
 
 /// The coordinator's one line, such as "review 17 finished: 1 blocker".
-pub(super) fn notice(review: &Review) -> String {
+fn notice(review: &Review) -> String {
     format!("review {} {}", review.id, review.status())
 }
 

@@ -16,15 +16,16 @@ pub(super) async fn handle(
     method: ReviewMethod,
     caller: Option<&Caller>,
 ) -> Result<Answer> {
+    let (reviews, daemon) = (&manager.reviews, &**manager);
     let shown = match method {
         ReviewMethod::AwaitReview { workspace, id } => {
-            let manager = manager.clone();
+            let (manager, reviews) = (manager.clone(), manager.reviews.clone());
             return Ok(Answer::wait(async move {
                 let id = match id {
                     Some(id) => id,
-                    None => manager.latest_review(&named(workspace)?).await?.id,
+                    None => reviews.latest(&*manager, &named(workspace)?).await?.id,
                 };
-                Ok(Body::ReviewId(manager.await_review(id).await?.id))
+                Ok(Body::ReviewId(reviews.wait(&*manager, id).await?.id))
             }));
         }
         ReviewMethod::CheckPrGate { workspace } => {
@@ -36,36 +37,38 @@ pub(super) async fn handle(
             target,
             agent,
             model,
-        } => pieces(manager.queue_review(&workspace, target, agent, model).await),
+        } => pieces(
+            reviews
+                .queue(daemon, &workspace, target, agent, model)
+                .await,
+        ),
         ReviewMethod::CancelReview { workspace, id } => {
             let by = caller.map(|caller| caller.space_id.clone());
-            pieces(manager.cancel_review(workspace.as_ref(), id, by).await)
+            pieces(reviews.cancel(daemon, workspace.as_ref(), id, by).await)
         }
         ReviewMethod::ListReviews {
             workspace,
             repository,
         } => pieces(
             async {
-                let ids = manager
-                    .review_workspaces(workspace.as_ref(), repository)
-                    .await?;
-                manager.reviews(ids).await
+                let ids = (reviews.workspaces(daemon, workspace.as_ref(), repository)).await?;
+                reviews.list(daemon, ids).await
             }
             .await,
         ),
         ReviewMethod::ShowReview { workspace, id } => pieces(match id {
-            Some(id) => manager.review(id).await,
+            Some(id) => reviews.review(daemon, id).await,
             None => match named(workspace) {
-                Ok(workspace) => manager.latest_review(&workspace).await,
+                Ok(workspace) => reviews.latest(daemon, &workspace).await,
                 Err(error) => Err(error),
             },
         }),
         ReviewMethod::ReplyToFinding { finding, body, .. } => {
-            pieces(manager.reply_to_finding(finding, body).await)
+            pieces(reviews.reply(daemon, finding, body).await)
         }
         ReviewMethod::ResolveFinding {
             finding, outcome, ..
-        } => pieces(manager.resolve_finding(finding, outcome).await),
+        } => pieces(reviews.resolve(daemon, finding, outcome).await),
     };
     Ok(Answer::pages(shown, Body::ReviewPieces))
 }
@@ -97,7 +100,7 @@ impl Scoped for ReviewMethod {
             | ReviewMethod::ShowReview { workspace, id }
             | ReviewMethod::AwaitReview { workspace, id } => {
                 if let Some(id) = id {
-                    *workspace = Some(SpaceSelector::id(&manager.review_workspace(*id).await?));
+                    *workspace = Some(SpaceSelector::id(&manager.reviews.workspace_of(*id).await?));
                 }
                 Some(caller.own_by_default(workspace))
             }
@@ -107,7 +110,7 @@ impl Scoped for ReviewMethod {
             | ReviewMethod::ResolveFinding {
                 workspace, finding, ..
             } => {
-                let id = manager.review_workspace(finding.review).await?;
+                let id = manager.reviews.workspace_of(finding.review).await?;
                 Some(workspace.insert(SpaceSelector::id(&id)))
             }
             ReviewMethod::RunReview { workspace, .. } | ReviewMethod::CheckPrGate { workspace } => {

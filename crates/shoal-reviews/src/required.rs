@@ -9,17 +9,19 @@ use std::fmt::Write as _;
 use anyhow::{Result, bail};
 
 use crate::{
+    Reviews,
     config::{Effective, repo::Requester},
-    daemon::{manager::Manager, scope::Caller},
+    daemon::Daemon,
     model::Workspace,
     reviews::{Review, ReviewId, ReviewState, ReviewTarget},
+    store,
 };
+use shoal_daemon_base::callers::Caller;
 use shoal_protocol::space_names::SpaceSelector;
-use shoal_reviews::store;
 
 /// What a gate guards.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Gate {
+pub enum Gate {
     /// `shoal pr open` of a new PR.
     Pr,
     /// `shoal ready`.
@@ -31,9 +33,9 @@ pub(crate) enum Gate {
 /// A gate's refusal for want of any review of the commit, with none queued
 /// or running, before a review is queued for it: queueing takes the
 /// registry gate, so a caller that holds a repository's Git gate releases
-/// it first, then queues as [`Manager::queue_unreviewed`] does.
+/// it first, then queues as [`Reviews::queue_unreviewed`] does.
 #[derive(Debug)]
-pub(crate) struct Unreviewed {
+pub struct Unreviewed {
     refusal: String,
     workspace: SpaceId,
 }
@@ -46,62 +48,55 @@ impl std::fmt::Display for Unreviewed {
 
 impl std::error::Error for Unreviewed {}
 
-impl Manager {
+impl Reviews {
     /// Refuse `caller`, where the workspace's setting for `gate` holds it,
     /// as [`Self::check_reviewed`] does, queueing the review it misses.
-    pub(crate) async fn require_review(
+    pub async fn require(
         &self,
+        daemon: &dyn Daemon,
         workspace: &Workspace,
         gate: Gate,
         head: &CommitId,
         caller: Option<&Caller>,
     ) -> Result<()> {
-        let checked = self.check_review(workspace, gate, head, caller).await;
-        self.queue_unreviewed(checked).await
+        let checked = self.check(daemon, workspace, gate, head, caller).await;
+        self.queue_unreviewed(daemon, checked).await
     }
 
     /// Refuse `caller`, where the setting for `gate` holds it, as
     /// [`Self::check_reviewed`] does.
-    pub(crate) async fn check_review(
+    pub async fn check(
         &self,
+        daemon: &dyn Daemon,
         workspace: &Workspace,
         gate: Gate,
         head: &CommitId,
         caller: Option<&Caller>,
     ) -> Result<()> {
-        let settings = self.gate_settings(workspace, gate).await?;
+        let settings = gate_settings(daemon, workspace, gate).await?;
         if !gate.holds(&settings, caller) {
             return Ok(());
         }
         self.check_reviewed(workspace, gate, head).await
     }
 
-    /// The settings that decide `gate` for `workspace`: its own, except for
-    /// a merge those of the repository it merges into, which no branch's own
-    /// config file turns off.
-    async fn gate_settings(&self, workspace: &Workspace, gate: Gate) -> Result<Effective> {
-        match gate {
-            Gate::Merge => self.space_settings_in(Some(workspace.repository())).await,
-            Gate::Pr | Gate::Ready => self.workspace_settings(workspace).await,
-        }
-    }
-
     /// Refuse unless a finished review of the workspace covers `head`, the
     /// commit a command acts on, with every finding resolved, saying what is
     /// missing: as [`Unreviewed`] without a review of it and with none
     /// queued or running.
-    pub(crate) async fn check_reviewed(
+    pub async fn check_reviewed(
         &self,
         workspace: &Workspace,
         gate: Gate,
         head: &CommitId,
     ) -> Result<()> {
         let (id, covering) = (workspace.id.clone(), head.to_owned());
+        let records = self.records.clone();
         let (reviewed, active) = self
             .store
             .read(move |tx| {
                 Ok((
-                    store::finished_at(tx, &super::ReviewRecords, &id, &covering)?,
+                    store::finished_at(tx, &*records, &id, &covering)?,
                     store::active(tx, &id)?,
                 ))
             })
@@ -128,7 +123,7 @@ impl Manager {
 
     /// `checked`, with a review of the workspace queued for an
     /// [`Unreviewed`] refusal, which then says how that went.
-    pub(crate) async fn queue_unreviewed<T>(&self, checked: Result<T>) -> Result<T> {
+    pub async fn queue_unreviewed<T>(&self, daemon: &dyn Daemon, checked: Result<T>) -> Result<T> {
         let error = match checked {
             Ok(checked) => return Ok(checked),
             Err(error) => error,
@@ -136,16 +131,21 @@ impl Manager {
         let Some(unreviewed) = error.downcast_ref::<Unreviewed>() else {
             return Err(error);
         };
-        let queued = self.queue_gate_review(&unreviewed.workspace).await;
+        let queued = self.queue_for_gate(daemon, &unreviewed.workspace).await;
         bail!("{unreviewed}{queued}")
     }
 
     /// Queue a review of the workspace `id` for a gate that found none,
     /// saying how it went.
-    async fn queue_gate_review(&self, id: &SpaceId) -> String {
+    async fn queue_for_gate(&self, daemon: &dyn Daemon, id: &SpaceId) -> String {
         let selector = SpaceSelector::id(id);
-        let queued =
-            self.queue_review(&selector, ReviewTarget::Workspace, None, Default::default());
+        let queued = self.queue(
+            daemon,
+            &selector,
+            ReviewTarget::Workspace,
+            None,
+            Default::default(),
+        );
         match queued.await {
             Ok(review) => format!(
                 "; queued review {}, whose findings arrive as a message",
@@ -158,7 +158,7 @@ impl Manager {
 
 impl Gate {
     /// Whether `settings` hold `caller` to the gate.
-    pub(crate) fn holds(self, settings: &Effective, caller: Option<&Caller>) -> bool {
+    pub fn holds(self, settings: &Effective, caller: Option<&Caller>) -> bool {
         let required = match self {
             Self::Pr => settings.review.require_for_pr,
             Self::Ready => settings.review.require_for_ready,
@@ -173,6 +173,20 @@ impl Gate {
             Self::Ready => "marking work ready",
             Self::Merge => "merging",
         }
+    }
+}
+
+/// The settings that decide `gate` for `workspace`: its own, except for a
+/// merge those of the repository it merges into, which no branch's own
+/// config file turns off.
+async fn gate_settings(
+    daemon: &dyn Daemon,
+    workspace: &Workspace,
+    gate: Gate,
+) -> Result<Effective> {
+    match gate {
+        Gate::Merge => daemon.repository_settings(workspace.repository()).await,
+        Gate::Pr | Gate::Ready => daemon.settings(workspace).await,
     }
 }
 

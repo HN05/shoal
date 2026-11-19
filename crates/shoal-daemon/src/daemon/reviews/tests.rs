@@ -8,9 +8,10 @@ use super::*;
 use crate::model::Workspace;
 use crate::{
     daemon::test_support::{configure, install_test_script, manager, repository, until_tests_end},
-    reviews::{FailureReason, ReviewState, Severity},
+    reviews::{FailureReason, FindingId, Outcome, Review, ReviewId, ReviewState, ReviewTarget},
 };
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_reviews::store;
 
 const REVIEW: &str = r#"{"summary":"One problem.","verdict":"comment","checked":[],
 "findings":[{"path":"tracked","line":1,"severity":"should-fix","title":"Unclear","body":"Name it."}]}"#;
@@ -57,7 +58,7 @@ async fn fixture_with(reviewers: &[(&str, &str)], review: &str, settings: &str) 
         .await
         .unwrap();
     if !reviewers.is_empty() {
-        tokio::spawn(run(manager.clone()));
+        tokio::spawn(shoal_reviews::run(manager.reviews.clone(), manager.clone()));
         tokio::spawn(crate::daemon::queued_starts::run(manager.clone()));
     }
     Fixture {
@@ -94,10 +95,12 @@ impl Fixture {
 
     /// [`Self::review_of`] by `agent`, else the configured reviewer.
     async fn review_by(&self, workspace: &SpaceId, agent: Option<&str>) -> Review {
-        let mut ended = self.manager.reviews.ended.subscribe();
+        let mut ended = self.manager.reviews.ends();
         let queued = self
             .manager
-            .queue_review(
+            .reviews
+            .queue(
+                self.manager.as_ref(),
                 &SpaceSelector::id(workspace),
                 ReviewTarget::Workspace,
                 agent.map(crate::agent::Agent::from),
@@ -106,117 +109,12 @@ impl Fixture {
             .await
             .unwrap();
         ended.changed().await.unwrap();
-        self.manager.await_review(queued.id).await.unwrap()
+        self.manager
+            .reviews
+            .wait(self.manager.as_ref(), queued.id)
+            .await
+            .unwrap()
     }
-}
-
-#[tokio::test]
-async fn a_reviewer_runs_with_the_requested_or_configured_model_and_effort() {
-    let script = "printf '%s\\n' \"$@\" > \"$(dirname '{review}')/args\"\ncat '{review}'";
-    let profile = "agent = 'modeled'\n[agents.modeled]\nbase = 'fake'\neffort = 'low'\n\
-        model_args = ['--model', '{model}']\neffort_args = ['--effort', '{effort}']\n";
-    let fixture = fixture(&[("fake", script)], profile).await;
-    let mut ended = fixture.manager.reviews.ended.subscribe();
-    let model = crate::agent::ModelChoice {
-        model: Some("m1".into()),
-        effort: None,
-    };
-    let queued = fixture
-        .manager
-        .queue_review(
-            &SpaceSelector::id(&fixture.workspace.id),
-            ReviewTarget::Workspace,
-            None,
-            model.clone(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(queued.model, model);
-    ended.changed().await.unwrap();
-    let review = fixture.manager.await_review(queued.id).await.unwrap();
-    assert_eq!(review.state, ReviewState::Finished, "{review:?}");
-    let args = std::fs::read_to_string(fixture._root.path().join("args")).unwrap();
-    // The selection comes before the review template's arguments.
-    assert!(args.starts_with("--model\nm1\n--effort\nlow\n"), "{args}");
-}
-
-#[tokio::test]
-async fn a_review_reads_the_committed_head_and_stores_its_findings() {
-    // Uncommitted edits stay out of the checkout.
-    let script = "[ -e uncommitted ] && exit 3\ncat '{review}'";
-    let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
-    std::fs::write(fixture.workspace.path.join("uncommitted"), "edit").unwrap();
-    let review = fixture.review().await;
-    assert_eq!(review.state, ReviewState::Finished, "{review:?}");
-    assert_eq!(
-        review.reviewer.as_ref().map(|agent| agent.name()),
-        Some("fake")
-    );
-    let head = crate::git::run(&fixture.workspace.path, &["rev-parse", "HEAD"])
-        .await
-        .unwrap();
-    assert_eq!(review.head, Some(head.trim().into()));
-    assert!(review.base.is_some());
-    assert_eq!(review.outdated, Some(false));
-    assert_eq!(review.findings[0].severity, Severity::ShouldFix);
-    assert_eq!(
-        review.findings[0].id.to_string(),
-        format!("{}.1", review.id)
-    );
-    assert!(!fixture.run().exists());
-    let worktrees = crate::git::run(&fixture.workspace.path, &["worktree", "list"])
-        .await
-        .unwrap();
-    assert!(!worktrees.contains("reviews"), "{worktrees}");
-}
-
-#[tokio::test]
-async fn a_failed_reviewer_falls_back_once_and_failures_are_typed() {
-    let fixture = fixture(
-        &[
-            ("first", "echo 'Error: 429 Too Many Requests' >&2\nexit 1"),
-            ("second", "echo not json"),
-        ],
-        "agent = 'first'",
-    )
-    .await;
-    let review = fixture.review().await;
-    assert_eq!(review.state, ReviewState::Failed);
-    assert_eq!(review.failure, Some(FailureReason::RateLimit));
-    assert_eq!(
-        review.reviewer.as_ref().map(|agent| agent.name()),
-        Some("first")
-    );
-
-    configure(&fixture.manager, "[review]\nagent = 'first'\nfallback_agent = 'second'\n[agents.first]\ncommand = ['false']\nreview = ['{prompt}', '{schema}']\n[agents.second]\ncommand = ['echo']\nreview = ['{prompt}', '{schema}']\n").await;
-    let review = fixture.review().await;
-    assert_eq!(review.state, ReviewState::Failed);
-    assert_eq!(review.failure, Some(FailureReason::InvalidOutput));
-    assert_eq!(
-        (
-            review.agent.name(),
-            review.reviewer.as_ref().map(|agent| agent.name())
-        ),
-        ("first", Some("second"))
-    );
-}
-
-#[tokio::test]
-async fn a_fallback_reviewer_produces_the_review() {
-    let fixture = fixture(
-        &[
-            ("first", "echo 'You have hit your usage limit' >&2\nexit 1"),
-            ("second", "cat '{review}'"),
-        ],
-        "agent = 'first'\nfallback_agent = 'second'",
-    )
-    .await;
-    let review = fixture.review().await;
-    assert_eq!(review.state, ReviewState::Finished, "{review:?}");
-    assert_eq!(
-        review.reviewer.as_ref().map(|agent| agent.name()),
-        Some("second")
-    );
 }
 
 #[tokio::test]
@@ -224,7 +122,9 @@ async fn a_review_protection_stops_is_queued_again() {
     let fixture = fixture(&[("slow", &until_tests_end())], "agent = 'slow'").await;
     let manager = &fixture.manager;
     let queued = manager
-        .queue_review(
+        .reviews
+        .queue(
+            manager.as_ref(),
             &SpaceSelector::id(&fixture.workspace.id),
             ReviewTarget::Workspace,
             None,
@@ -233,7 +133,14 @@ async fn a_review_protection_stops_is_queued_again() {
         .await
         .unwrap();
     let mut changed = manager.store.watch_changes();
-    while manager.review(queued.id).await.unwrap().state != ReviewState::Running {
+    while manager
+        .reviews
+        .review(manager.as_ref(), queued.id)
+        .await
+        .unwrap()
+        .state
+        != ReviewState::Running
+    {
         changed.changed().await.unwrap();
     }
     assert!(
@@ -241,10 +148,21 @@ async fn a_review_protection_stops_is_queued_again() {
             .stop_agent_for_overload("critical memory pressure")
             .await
     );
-    while manager.review(queued.id).await.unwrap().state != ReviewState::Queued {
+    while manager
+        .reviews
+        .review(manager.as_ref(), queued.id)
+        .await
+        .unwrap()
+        .state
+        != ReviewState::Queued
+    {
         changed.changed().await.unwrap();
     }
-    let review = manager.review(queued.id).await.unwrap();
+    let review = manager
+        .reviews
+        .review(manager.as_ref(), queued.id)
+        .await
+        .unwrap();
     assert_eq!((review.head, review.started_at), (None, None));
     // A restarted daemon keeps it waiting for healthy readings.
     let id = queued.id;
@@ -256,210 +174,14 @@ async fn a_review_protection_stops_is_queued_again() {
             .unwrap()
     );
     // It waits for healthy readings; a cancel still ends it.
-    let mut ended = manager.reviews.ended.subscribe();
+    let mut ended = manager.reviews.ends();
     let cancelled = manager
-        .cancel_review(None, Some(queued.id), None)
+        .reviews
+        .cancel(manager.as_ref(), None, Some(queued.id), None)
         .await
         .unwrap();
     assert_eq!(cancelled.state, ReviewState::Cancelled);
     ended.changed().await.unwrap();
-}
-
-#[tokio::test]
-async fn cancelling_stops_the_reviewer_and_removes_its_checkout() {
-    let fixture = fixture(&[("slow", &until_tests_end())], "agent = 'slow'").await;
-    let manager = &fixture.manager;
-    let queued = manager
-        .queue_review(
-            &SpaceSelector::id(&fixture.workspace.id),
-            ReviewTarget::Workspace,
-            None,
-            Default::default(),
-        )
-        .await
-        .unwrap();
-    let mut changed = manager.store.watch_changes();
-    while manager.review(queued.id).await.unwrap().state != ReviewState::Running {
-        changed.changed().await.unwrap();
-    }
-    let mut ended = manager.reviews.ended.subscribe();
-    let cancelled = manager
-        .cancel_review(
-            Some(&SpaceSelector::id(&fixture.workspace.id)),
-            None,
-            Some(fixture.workspace.id.clone()),
-        )
-        .await
-        .unwrap();
-    assert_eq!(cancelled.state, ReviewState::Cancelled);
-    ended.changed().await.unwrap();
-    assert!(!fixture.run().exists());
-    let again = manager.cancel_review(None, Some(queued.id), None).await;
-    assert!(again.is_err());
-}
-
-#[tokio::test]
-async fn a_reviewer_needs_a_review_template() {
-    let fixture = fixture(&[], "").await;
-    let refused = fixture
-        .manager
-        .queue_review(
-            &SpaceSelector::id(&fixture.workspace.id),
-            ReviewTarget::Workspace,
-            Some("pi".parse().unwrap()),
-            Default::default(),
-        )
-        .await;
-    assert!(refused.is_err());
-    let unset = fixture
-        .manager
-        .queue_review(
-            &SpaceSelector::id(&fixture.workspace.id),
-            ReviewTarget::Workspace,
-            None,
-            Default::default(),
-        )
-        .await;
-    assert!(unset.is_err());
-}
-
-#[tokio::test]
-async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() {
-    let fixture = fixture(&[], "").await;
-    let manager = &fixture.manager;
-    let id = fixture.workspace.id.clone();
-    let queued = manager
-        .store
-        .run(move |db| {
-            store::queue(
-                db,
-                &id,
-                &ReviewTarget::Workspace,
-                &"absent".into(),
-                &Default::default(),
-                UnixTime::from_seconds(1),
-            )
-        })
-        .await
-        .unwrap()
-        .id();
-    manager
-        .store
-        .run(move |db| {
-            store::start(
-                db,
-                queued,
-                &"head".into(),
-                &"base".into(),
-                UnixTime::from_seconds(2),
-            )
-        })
-        .await
-        .unwrap();
-    let checkout = fixture.left_run(queued).join("checkout");
-    let head = crate::git::run(&fixture.workspace.path, &["rev-parse", "HEAD"])
-        .await
-        .unwrap();
-    crate::git::detached::add(&fixture.workspace.path, &checkout, head.trim())
-        .await
-        .unwrap();
-    // Reviewer processes that outlived their daemon, in the checkout and
-    // after changing directory, and someone's shell in the checkout, none a
-    // child of this process.
-    let detached = |marked: bool, directory: &std::path::Path| {
-        // This test binary, whose environment can be read, unlike that of
-        // the platform's own executables on macOS.
-        let mut command = std::process::Command::new("sh");
-        command
-            .args([
-                "-c",
-                "\"$0\" --exact daemon::reviews::tests::sleep_as_a_survivor --ignored >/dev/null 2>&1 & echo $!",
-            ])
-            .arg(std::env::current_exe().unwrap())
-            .current_dir(directory);
-        command.env(SURVIVOR_OWNER, std::process::id().to_string());
-        if marked {
-            command.env(crate::env::ONESHOT_RUN, checkout.parent().unwrap());
-        }
-        let spawned = command.output().unwrap();
-        String::from_utf8_lossy(&spawned.stdout)
-            .trim()
-            .parse::<i32>()
-            .unwrap()
-    };
-    let identity = |pid: i32| {
-        crate::process::identity::capture(pid as u32)
-            .unwrap()
-            .unwrap()
-    };
-    let survivor = identity(detached(true, &checkout));
-    let moved = identity(detached(true, &fixture.workspace.path));
-    let bystander = identity(detached(false, &checkout));
-    manager.recover_reviews().await.unwrap();
-    // Alive as recovery judges it: a stopped orphan may wait to be reaped.
-    let alive = |process| crate::process::identity::alive(process).unwrap();
-    assert!(!alive(&survivor), "the survivor runs on");
-    assert!(!alive(&moved), "the survivor elsewhere runs on");
-    assert!(alive(&bystander), "the bystander was stopped");
-    crate::process::identity::stop_verified(&[bystander])
-        .await
-        .unwrap();
-    assert!(!checkout.parent().unwrap().exists());
-    let review = manager.review(queued).await.unwrap();
-    assert_eq!((review.state, review.head), (ReviewState::Queued, None));
-}
-
-#[tokio::test]
-async fn a_review_checkout_holds_its_repository_until_it_is_removed() {
-    let fixture = fixture(&[], "").await;
-    let manager = &fixture.manager;
-    let repository = fixture.workspace.repository().clone();
-    let id = fixture.workspace.id.clone();
-    let queued = manager
-        .store
-        .run(move |db| {
-            store::queue(
-                db,
-                &id,
-                &ReviewTarget::Workspace,
-                &"absent".into(),
-                &Default::default(),
-                UnixTime::from_seconds(1),
-            )
-        })
-        .await
-        .unwrap()
-        .id();
-    assert!(manager.ensure_no_reviews_in(&repository).await.is_err());
-    // Its records go with its workspace while its run still removes the
-    // checkout.
-    let run = fixture.run();
-    let checkout = manager.reviews.hold_checkout(queued, &repository, &run);
-    manager
-        .store
-        .run(move |db| Ok(db.execute("DELETE FROM reviews WHERE id=?1", [queued])?))
-        .await
-        .unwrap();
-    assert!(manager.ensure_no_reviews_in(&repository).await.is_err());
-    // The next review there waits for it.
-    let next = ReviewId(queued.0 + 1);
-    assert!(matches!(
-        manager.reviews.hold_run(next, &repository, &run),
-        Err(false)
-    ));
-    drop(checkout);
-    manager.ensure_no_reviews_in(&repository).await.unwrap();
-    drop(manager.reviews.hold_run(next, &repository, &run).unwrap());
-    // A checkout its run could not remove waits for a restarted daemon,
-    // which the next review there is told.
-    (manager.reviews)
-        .hold_checkout(queued, &repository, &run)
-        .keep();
-    assert!(manager.ensure_no_reviews_in(&repository).await.is_err());
-    assert!(matches!(
-        manager.reviews.hold_run(next, &repository, &run),
-        Err(true)
-    ));
 }
 
 #[tokio::test]
@@ -494,7 +216,9 @@ async fn removing_the_workspace_stops_its_review() {
     let fixture = fixture(&[("slow", &until_tests_end())], "agent = 'slow'").await;
     let manager = &fixture.manager;
     let queued = manager
-        .queue_review(
+        .reviews
+        .queue(
+            manager.as_ref(),
             &SpaceSelector::id(&fixture.workspace.id),
             ReviewTarget::Workspace,
             None,
@@ -503,10 +227,17 @@ async fn removing_the_workspace_stops_its_review() {
         .await
         .unwrap();
     let mut changed = manager.store.watch_changes();
-    while manager.review(queued.id).await.unwrap().state != ReviewState::Running {
+    while manager
+        .reviews
+        .review(manager.as_ref(), queued.id)
+        .await
+        .unwrap()
+        .state
+        != ReviewState::Running
+    {
         changed.changed().await.unwrap();
     }
-    let mut ended = manager.reviews.ended.subscribe();
+    let mut ended = manager.reviews.ends();
     manager
         .remove_selected(
             &SpaceSelector::id(&fixture.workspace.id),
@@ -516,191 +247,14 @@ async fn removing_the_workspace_stops_its_review() {
         .await
         .unwrap();
     ended.changed().await.unwrap();
-    assert!(manager.review(queued.id).await.is_err());
-    assert!(!fixture.run().exists());
-}
-
-#[tokio::test]
-async fn the_next_review_receives_the_history_and_checks_fixes() {
-    let script = "printf '%s' \"$1\" > \"$(dirname '{review}')/prompt\"\ncat '{review}'";
-    let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
-    let first = fixture.review().await;
-    let finding = first.findings[0].id;
-    fixture
-        .manager
-        .resolve_finding(finding, Some(Outcome::Fixed))
-        .await
-        .unwrap();
-    fixture.review().await;
-    let prompt_file = fixture._root.path().join("prompt");
-    let prompt = std::fs::read_to_string(prompt_file).unwrap();
     assert!(
-        prompt.contains(&format!(
-            "### Finding {finding} (should-fix) at tracked:1: Unclear"
-        )),
-        "{prompt}"
-    );
-}
-
-#[tokio::test]
-async fn later_reviews_receive_a_false_positive_until_it_is_reopened() {
-    let script = "printf '%s' \"$1\" > \"$(dirname '{review}')/prompt\"\ncat '{review}'";
-    let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
-    let prompt = || std::fs::read_to_string(fixture._root.path().join("prompt")).unwrap();
-    let finding = fixture.review().await.findings[0].id;
-    let reason = "The field's type names it.".to_owned();
-    fixture
-        .manager
-        .resolve_finding(finding, Some(Outcome::FalsePositive { reason }))
-        .await
-        .unwrap();
-    fixture.review().await;
-    let listed = prompt();
-    assert!(listed.contains("The field's type names it."), "{listed}");
-    fixture
-        .manager
-        .resolve_finding(finding, None)
-        .await
-        .unwrap();
-    fixture.review().await;
-    let reopened = prompt();
-    assert!(
-        !reopened.contains("The field's type names it."),
-        "{reopened}"
-    );
-}
-
-#[tokio::test]
-async fn a_finding_keeps_its_outcome_when_its_false_positive_cannot_be_kept() {
-    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
-    let finding = fixture.review().await.findings[0].id;
-    let repository = fixture.workspace.repository();
-    let path = fixture
-        .manager
-        .false_positives_path(repository)
-        .await
-        .unwrap()
-        .unwrap();
-    // A directory where the file belongs can be neither read nor replaced.
-    std::fs::create_dir_all(&path).unwrap();
-    let reason = "The field's type names it.".to_owned();
-    let resolved = fixture
-        .manager
-        .resolve_finding(finding, Some(Outcome::FalsePositive { reason }))
-        .await;
-    assert!(resolved.is_err());
-    let review = fixture.manager.review(finding.review).await.unwrap();
-    assert_eq!(review.findings[0].outcome, None);
-}
-
-#[tokio::test]
-async fn the_false_positives_go_back_when_the_outcome_cannot_be_stored() {
-    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
-    let finding = fixture.review().await.findings[0].id;
-    let reason = "The field's type names it.".to_owned();
-    fixture
-        .manager
-        .resolve_finding(finding, Some(Outcome::FalsePositive { reason }))
-        .await
-        .unwrap();
-    let repository = fixture.workspace.repository();
-    let path = fixture
-        .manager
-        .false_positives_path(repository)
-        .await
-        .unwrap()
-        .unwrap();
-    let kept = std::fs::read_to_string(&path).unwrap();
-    let missing = FindingId {
-        review: ReviewId(999),
-        number: 1,
-    };
-    fixture
-        .manager
-        .resolve_finding(finding, Some(Outcome::Duplicate { of: missing }))
-        .await
-        .unwrap_err();
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), kept);
-}
-
-#[tokio::test]
-async fn an_invalid_false_positives_file_fails_reviews_of_the_repository() {
-    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
-    let repository = fixture.workspace.repository();
-    let path = fixture
-        .manager
-        .false_positives_path(repository)
-        .await
-        .unwrap()
-        .unwrap();
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    std::fs::write(&path, "[[false_positive]]\nclaim = \"Unchecked\"\n").unwrap();
-    let review = fixture.review().await;
-    assert_eq!(review.state, ReviewState::Failed);
-    assert_eq!(review.failure, Some(FailureReason::InvalidFalsePositives));
-}
-
-#[tokio::test]
-async fn the_workspace_hears_its_reviews_except_its_own_cancels() {
-    let slow = until_tests_end();
-    let fixture = fixture(
-        &[("fake", "cat '{review}'"), ("slow", &slow)],
-        "agent = 'fake'",
-    )
-    .await;
-    let manager = &fixture.manager;
-    fixture.review().await;
-    let messages = manager
-        .agent_messages(&SpaceSelector::id(&fixture.workspace.id))
-        .await
-        .unwrap();
-    assert_eq!(messages.len(), 1, "{messages:?}");
-
-    // A reviewer that runs until it is cancelled.
-    let queued = manager
-        .queue_review(
-            &SpaceSelector::id(&fixture.workspace.id),
-            ReviewTarget::Workspace,
-            Some("slow".parse().unwrap()),
-            Default::default(),
-        )
-        .await
-        .unwrap();
-    let before = manager
-        .agent_messages(&SpaceSelector::id(&fixture.workspace.id))
-        .await
-        .unwrap()
-        .len();
-    manager
-        .cancel_review(None, Some(queued.id), Some(fixture.workspace.id.clone()))
-        .await
-        .unwrap();
-    assert_eq!(
         manager
-            .agent_messages(&SpaceSelector::id(&fixture.workspace.id))
+            .reviews
+            .review(manager.as_ref(), queued.id)
             .await
-            .unwrap()
-            .len(),
-        before
+            .is_err()
     );
-    let queued = manager
-        .queue_review(
-            &SpaceSelector::id(&fixture.workspace.id),
-            ReviewTarget::Workspace,
-            Some("slow".parse().unwrap()),
-            Default::default(),
-        )
-        .await
-        .unwrap();
-    manager
-        .cancel_review(None, Some(queued.id), None)
-        .await
-        .unwrap();
-    let messages = manager
-        .agent_messages(&SpaceSelector::id(&fixture.workspace.id))
-        .await
-        .unwrap();
-    assert_eq!(messages.len(), before + 1, "{messages:?}");
+    assert!(!fixture.run().exists());
 }
 
 #[tokio::test]
@@ -836,94 +390,16 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
 }
 
 #[tokio::test]
-async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
-    use super::gate::Gate;
-    let fixture = fixture(
-        &[("fake", "cat '{review}'")],
-        "agent = 'fake'\nrequire_for_ready = 'agents'",
-    )
-    .await;
-    let manager = &fixture.manager;
-    let workspace = &fixture.workspace;
-    let caller = agent_caller(workspace);
-    let agent = Some(&caller);
-    let head = crate::daemon::links::pr::current_head(workspace)
-        .await
-        .unwrap();
-    manager
-        .require_review(workspace, Gate::Pr, &head, agent)
-        .await
-        .unwrap();
-    // "agents" leaves the user's own commands alone.
-    manager
-        .require_review(workspace, Gate::Ready, &head, None)
-        .await
-        .unwrap();
-
-    let mut ended = manager.reviews.ended.subscribe();
-    assert!(
-        manager
-            .require_review(workspace, Gate::Ready, &head, agent)
-            .await
-            .is_err()
-    );
-    ended.changed().await.unwrap();
-
-    let review = manager
-        .latest_review(&SpaceSelector::id(&workspace.id))
-        .await
-        .unwrap();
-    let refused = manager
-        .require_review(workspace, Gate::Ready, &head, agent)
-        .await
-        .unwrap_err();
-    let refused = refused.to_string();
-    assert!(
-        refused.contains(&review.findings[0].id.to_string()),
-        "{refused}"
-    );
-    // Unresolved findings at HEAD need answers, not another review.
-    assert_eq!(
-        manager
-            .latest_review(&SpaceSelector::id(&workspace.id))
-            .await
-            .unwrap()
-            .id,
-        review.id
-    );
-
-    manager
-        .resolve_finding(
-            review.findings[0].id,
-            Some(Outcome::WontFix {
-                reason: "The name matches the file".into(),
-            }),
-        )
-        .await
-        .unwrap();
-    manager
-        .require_review(workspace, Gate::Ready, &head, agent)
-        .await
-        .unwrap();
-    // A workspace process's mark passes once the review covers HEAD.
-    let marks = manager
-        .mark_ready(&SpaceSelector::id(&workspace.id), Default::default(), agent)
-        .await
-        .unwrap()
-        .marks;
-    assert_eq!(marks.len(), 1);
-}
-
-#[tokio::test]
 async fn all_holds_the_users_own_commands_too() {
-    use super::gate::Gate;
+    use shoal_reviews::required::Gate;
     let fixture = fixture(&[], "require_for_pr = 'all'").await;
     let (manager, workspace) = (&fixture.manager, &fixture.workspace);
     let head = crate::daemon::links::pr::current_head(workspace)
         .await
         .unwrap();
     let refused = manager
-        .require_review(workspace, Gate::Pr, &head, None)
+        .reviews
+        .require(manager.as_ref(), workspace, Gate::Pr, &head, None)
         .await
         .unwrap_err()
         .to_string();
@@ -933,17 +409,6 @@ async fn all_holds_the_users_own_commands_too() {
     (manager.mark_ready(&selector, Default::default(), None))
         .await
         .unwrap();
-}
-
-/// A scoped caller of `workspace`, as its agent is.
-fn agent_caller(workspace: &crate::model::Workspace) -> crate::daemon::scope::Caller {
-    crate::daemon::scope::Caller {
-        space_id: workspace.id.clone(),
-        execution: None,
-        granted: None,
-        read_only: false,
-        vouched: None,
-    }
 }
 
 /// The frames the daemon answers `method` with, and the JSON their review
@@ -1029,7 +494,12 @@ async fn one_review_larger_than_a_frame_is_shown_whole() {
     };
     for _ in 0..9 {
         manager
-            .reply_to_finding(finding, "y".repeat(crate::validate::MAX_AGENT_MESSAGE_LEN))
+            .reviews
+            .reply(
+                manager.as_ref(),
+                finding,
+                "y".repeat(crate::validate::MAX_AGENT_MESSAGE_LEN),
+            )
             .await
             .unwrap();
     }
@@ -1045,7 +515,9 @@ async fn removing_the_repository_stops_its_reviews_first() {
     let fixture = fixture(&[("slow", &until_tests_end())], "agent = 'slow'").await;
     let manager = &fixture.manager;
     let queued = manager
-        .queue_review(
+        .reviews
+        .queue(
+            manager.as_ref(),
             &SpaceSelector::id(&fixture.workspace.id),
             ReviewTarget::Workspace,
             None,
@@ -1054,7 +526,14 @@ async fn removing_the_repository_stops_its_reviews_first() {
         .await
         .unwrap();
     let mut changed = manager.store.watch_changes();
-    while manager.review(queued.id).await.unwrap().state != ReviewState::Running {
+    while manager
+        .reviews
+        .review(manager.as_ref(), queued.id)
+        .await
+        .unwrap()
+        .state
+        != ReviewState::Running
+    {
         changed.changed().await.unwrap();
     }
     manager
@@ -1065,314 +544,14 @@ async fn removing_the_repository_stops_its_reviews_first() {
 }
 
 #[tokio::test]
-async fn each_review_of_a_workspace_runs_in_one_checkout_in_its_repository_directory() {
-    let script = "pwd >> \"$(dirname '{review}')/cwd\"\ncat '{review}'";
-    let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
-    for _ in 0..2 {
-        let review = fixture.review().await;
-        assert_eq!(review.state, ReviewState::Finished, "{review:?}");
-    }
-    let cwd = std::fs::read_to_string(fixture._root.path().join("cwd")).unwrap();
-    let cwd: Vec<_> = cwd.lines().map(std::path::Path::new).collect();
-    assert_eq!(cwd[0], cwd[1]);
-    // A temporary directory's path may lead through a link.
-    let checkout = std::path::Path::new(fixture.workspace.id.as_str()).join("checkout");
-    assert!(cwd[0].ends_with(&checkout), "{cwd:?}");
-    assert!(!fixture.manager.paths.state.join("reviews").exists());
-}
-
-/// A reviewer that records each run as `new` or `resume <session>` in `runs`,
-/// its directory in `cwd` and the latest resumed run's prompt in `resumed`,
-/// reports session
-/// `s<run>`, or the one it resumes, as Codex does, and cannot resume while
-/// `stale` exists.
-const RESUMER: &str = r#"dir="$(dirname '{review}')"
-pwd >> "$dir/cwd"
-if [ "$1" = resume ]; then echo "resume $2" >> "$dir/runs"; session=$2; printf '%s' "$3" > "$dir/resumed"
-else echo new >> "$dir/runs"; session="s$(wc -l < "$dir/runs" | tr -d ' ')"; fi
-echo "session id: $session" >&2
-[ "$1" = resume ] && [ -e "$dir/stale" ] && exit 1
-cat '{review}'"#;
-
-#[tokio::test]
-async fn later_reviews_resume_the_session_of_the_agent_that_reviewed_last() {
-    let reviewers = [("fake", RESUMER), ("other", RESUMER)];
-    let fixture = fixture_with(&reviewers, "agent = 'fake'", RESUMES).await;
-    let fixture = &fixture;
-    let review = |agent| async move {
-        let review = fixture.review_by(&fixture.workspace.id, agent).await;
-        assert_eq!(review.state, ReviewState::Finished, "{review:?}");
-    };
-    let root = fixture._root.path();
-    review(None).await;
-    review(None).await;
-    // The resumed session is given the instructions with the history again.
-    let resumed = std::fs::read_to_string(root.join("resumed")).unwrap();
-    assert!(resumed.contains("# Earlier reviews"), "{resumed}");
-    // Another agent's review starts its own, after which the configured
-    // agent starts a new one too.
-    review(Some("other")).await;
-    review(None).await;
-    // A session that cannot be resumed gives way to a new one, which the
-    // next review resumes.
-    std::fs::write(root.join("stale"), "").unwrap();
-    review(None).await;
-    std::fs::remove_file(root.join("stale")).unwrap();
-    review(None).await;
-    let runs = std::fs::read_to_string(root.join("runs")).unwrap();
-    assert_eq!(
-        runs.lines().collect::<Vec<_>>(),
-        [
-            "new",
-            "resume s1",
-            "new",
-            "new",
-            "resume s4",
-            "new",
-            "resume s6"
-        ]
-    );
-}
-
-/// What makes [`RESUMER`] resume its sessions as Codex does.
-const RESUMES: &str =
-    "base = 'codex'\nreview_resume = ['resume', '{session}', '{prompt}', '{schema}']\n";
-
-#[tokio::test]
-async fn a_review_runs_beside_a_run_that_could_not_be_removed_in_a_new_session() {
-    let fixture = fixture_with(&[("fake", RESUMER)], "agent = 'fake'", RESUMES).await;
-    let manager = &fixture.manager;
-    let review = || async {
-        let review = fixture.review().await;
-        assert_eq!(review.state, ReviewState::Finished, "{review:?}");
-        review
-    };
-    review().await;
-    // A run that could not be removed keeps the workspace's place until a
-    // restart.
-    let kept = ReviewId(999);
-    let run = fixture.left_run(kept);
-    let repository = fixture.workspace.repository().clone();
-    (manager.reviews)
-        .hold_checkout(kept, &repository, &run)
-        .keep();
-    let beside = review().await;
-    assert!(run.exists());
-    // Once it is gone, the next review continues the session there.
-    manager.reviews.checkouts.lock().unwrap().remove(&kept);
-    std::fs::remove_dir_all(&run).unwrap();
-    review().await;
-    let root = fixture._root.path();
-    let runs = std::fs::read_to_string(root.join("runs")).unwrap();
-    assert_eq!(
-        runs.lines().collect::<Vec<_>>(),
-        ["new", "new", "resume s1"]
-    );
-    let cwd = std::fs::read_to_string(root.join("cwd")).unwrap();
-    let cwd: Vec<_> = cwd.lines().map(std::path::Path::new).collect();
-    let workspace = fixture.workspace.id.as_str();
-    let elsewhere = std::path::Path::new(&format!("{workspace}-{}", beside.id)).join("checkout");
-    assert!(cwd[1].ends_with(&elsewhere), "{cwd:?}");
-    assert_eq!(cwd[0], cwd[2]);
-}
-
-#[tokio::test]
-async fn a_review_queued_while_a_cancelled_one_ends_waits_for_its_run() {
-    let fixture = fixture(&[("slow", &until_tests_end())], "agent = 'slow'").await;
-    let manager = &fixture.manager;
-    let selector = SpaceSelector::id(&fixture.workspace.id);
-    let queue =
-        || manager.queue_review(&selector, ReviewTarget::Workspace, None, Default::default());
-    let first = queue().await.unwrap();
-    let mut changed = manager.store.watch_changes();
-    let state = |id| async move { manager.review(id).await.unwrap().state };
-    while state(first.id).await != ReviewState::Running {
-        changed.changed().await.unwrap();
-    }
-    manager
-        .cancel_review(None, Some(first.id), None)
-        .await
-        .unwrap();
-    let second = queue().await.unwrap();
-    while state(second.id).await == ReviewState::Queued {
-        changed.changed().await.unwrap();
-    }
-    assert_eq!(state(second.id).await, ReviewState::Running);
-    // It holds the workspace's place, which it takes before it starts, not
-    // one beside the cancelled run.
-    let held = manager.reviews.checkouts.lock().unwrap()[&second.id]
-        .run
-        .clone();
-    assert_eq!(held, fixture.run());
-}
-
-#[tokio::test]
-async fn a_run_left_in_the_repository_directory_holds_back_its_move_and_removal() {
+async fn a_run_left_in_the_repository_directory_holds_back_its_removal() {
     let fixture = fixture(&[], "").await;
     let manager = &fixture.manager;
     let repository = fixture.workspace.repository().clone();
-    fixture.runs.create().unwrap();
-    manager.ensure_no_reviews_in(&repository).await.unwrap();
     let run = fixture.left_run(ReviewId(7));
     std::fs::create_dir_all(run.join("checkout")).unwrap();
-    assert!(manager.ensure_no_reviews_in(&repository).await.is_err());
     assert!(manager.remove_repository(&repository).await.is_err());
     assert!(run.exists());
-    std::fs::remove_dir_all(&run).unwrap();
-    manager.ensure_no_reviews_in(&repository).await.unwrap();
-}
-
-#[tokio::test]
-async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over() {
-    use std::os::unix::fs::PermissionsExt;
-    // Root deletes past permissions, as in CI's containers.
-    // SAFETY: geteuid has no arguments or memory-safety preconditions.
-    if unsafe { libc::geteuid() } == 0 {
-        return;
-    }
-    let fixture = fixture(&[], "").await;
-    let manager = &fixture.manager;
-    let repository = fixture.workspace.repository().clone();
-    let id = fixture.workspace.id.clone();
-    let stuck = manager
-        .store
-        .run(move |db| {
-            let review = store::queue(
-                db,
-                &id,
-                &ReviewTarget::Workspace,
-                &"absent".into(),
-                &Default::default(),
-                UnixTime::from_seconds(1),
-            )?
-            .id();
-            store::start(
-                db,
-                review,
-                &"head".into(),
-                &"base".into(),
-                UnixTime::from_seconds(2),
-            )?;
-            Ok(review)
-        })
-        .await
-        .unwrap();
-    let run = fixture.left_run(stuck);
-    std::fs::create_dir_all(run.join("checkout").join("file")).unwrap();
-    // Without write access to the run, its checkout cannot go.
-    std::fs::set_permissions(&run, std::fs::Permissions::from_mode(0o500)).unwrap();
-    manager.recover_reviews().await.unwrap();
-    let workspace = &fixture.workspace.id;
-    let delivered = manager
-        .agent_messages(&SpaceSelector::from(workspace.as_str()))
-        .await
-        .unwrap()
-        .len();
-    assert_eq!(delivered, 1);
-    // A later start that still cannot remove it delivers the review once.
-    manager.recover_reviews().await.unwrap();
-    let messages = manager
-        .agent_messages(&SpaceSelector::from(workspace.as_str()))
-        .await
-        .unwrap();
-    assert_eq!(messages.len(), delivered);
-    // Nothing runs there, so only the checkout is held, not a slot.
-    assert!(manager.agent_queue.admitted_oneshots().is_empty());
-    assert!(manager.ensure_no_reviews_in(&repository).await.is_err());
-    std::fs::set_permissions(&run, std::fs::Permissions::from_mode(0o700)).unwrap();
-    let review = manager.review(stuck).await.unwrap();
-    assert_eq!(review.state, ReviewState::Failed, "{review:?}");
-    assert!(run.join("checkout").exists());
-    // The next start removes it.
-    manager.recover_reviews().await.unwrap();
-    assert!(!run.exists());
-}
-
-#[tokio::test]
-async fn a_run_recovery_cannot_stop_keeps_its_checkout_and_admission() {
-    let fixture = fixture(&[], "").await;
-    let manager = &fixture.manager;
-    let repository = fixture.workspace.repository().clone();
-    let id = fixture.workspace.id.clone();
-    let stuck = manager
-        .store
-        .run(move |db| {
-            let review = store::queue(
-                db,
-                &id,
-                &ReviewTarget::Workspace,
-                &"absent".into(),
-                &Default::default(),
-                UnixTime::from_seconds(1),
-            )?
-            .id();
-            store::start(
-                db,
-                review,
-                &"head".into(),
-                &"base".into(),
-                UnixTime::from_seconds(2),
-            )?;
-            Ok(review)
-        })
-        .await
-        .unwrap();
-    // The second run's review went with its workspace.
-    let gone = ReviewId(stuck.0 + 1);
-    let runs = [
-        fixture.left_run(stuck),
-        fixture.runs.root().join(gone.to_string()),
-    ];
-    std::fs::create_dir_all(&runs[1]).unwrap();
-    std::fs::write(runs[1].join("review"), gone.to_string()).unwrap();
-    for run in &runs {
-        std::fs::create_dir_all(run.join("checkout")).unwrap();
-    }
-    // What the stopped daemon's reviewers left cannot be proven stopped.
-    manager
-        .oneshot_runs
-        .fail_inventory
-        .store(true, std::sync::atomic::Ordering::SeqCst);
-    manager.recover_reviews().await.unwrap();
-    let review = manager.review(stuck).await.unwrap();
-    assert_eq!(review.state, ReviewState::Failed, "{review:?}");
-    assert!(runs.iter().all(|run| run.join("checkout").exists()));
-    // Until a restart, the repository stays held and the slots used.
-    let held = manager.reviews.checkouts.lock().unwrap().clone();
-    let both = [stuck, gone].into_iter().zip(&runs).map(|(id, run)| {
-        let held = HeldCheckout {
-            repository: repository.clone(),
-            run: run.clone(),
-            kept: true,
-        };
-        (id, held)
-    });
-    assert_eq!(held, both.collect());
-    let slots = manager.agent_queue.admitted_oneshots();
-    assert_eq!(slots.len(), 2);
-    assert!(slots.iter().all(|(held, _)| *held == repository));
-}
-
-/// The test process a survivor outlives no longer than.
-const SURVIVOR_OWNER: &str = "REVIEW_TEST_SURVIVOR_OWNER";
-
-/// Sleeps as a process a stopped daemon's reviewer left, for the recovery
-/// test, which starts it: until that test's process exits, for at most ten
-/// minutes.
-#[test]
-#[ignore]
-fn sleep_as_a_survivor() {
-    let Some(owner) = std::env::var(SURVIVOR_OWNER)
-        .ok()
-        .and_then(|owner| owner.parse::<i32>().ok())
-    else {
-        return;
-    };
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(600);
-    // SAFETY: signal 0 only checks that the process exists.
-    while std::time::Instant::now() < deadline && unsafe { libc::kill(owner, 0) } == 0 {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
 }
 
 #[tokio::test]
@@ -1406,12 +585,12 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
         )
         .await
         .unwrap();
-    tokio::spawn(run(manager.clone()));
+    tokio::spawn(shoal_reviews::run(manager.reviews.clone(), manager.clone()));
     tokio::spawn(crate::daemon::queued_starts::run(manager.clone()));
     // No admission pass runs while the test holds the gate, so the review
     // waits for one.
     let gate = manager.agent_queue.lock_admission().await;
-    let mut ended = manager.reviews.ended.subscribe();
+    let mut ended = manager.reviews.ends();
     let target = ReviewTarget::Pr {
         url: "https://forge.example/team/repo/pulls/8".parse().unwrap(),
         head: "topic".into(),
@@ -1419,7 +598,9 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
         post: false,
     };
     let queued = manager
-        .queue_review(
+        .reviews
+        .queue(
+            manager.as_ref(),
             &SpaceSelector::id(&workspace.id),
             target,
             None,
@@ -1452,6 +633,10 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
     drop(gate);
     manager.agent_queue.wake();
     ended.changed().await.unwrap();
-    let review = manager.await_review(queued.id).await.unwrap();
+    let review = manager
+        .reviews
+        .wait(manager.as_ref(), queued.id)
+        .await
+        .unwrap();
     assert_eq!(review.head, Some(moved.as_str().into()), "{review:?}");
 }

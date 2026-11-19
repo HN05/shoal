@@ -355,7 +355,9 @@ impl Manager {
     /// review goes with its record, and a CI job ends through its forge
     /// before its runner is stopped.
     pub(in crate::daemon) async fn stop_worktree_work(&self, worktree: &WorktreeStage) {
-        self.stop_workspace_review(&worktree.workspace.id).await;
+        self.reviews
+            .stop_in_workspace(self, &worktree.workspace.id)
+            .await;
         self.cancel_job_before_stopping(&worktree.workspace.id, JobStop::Removal)
             .await;
     }

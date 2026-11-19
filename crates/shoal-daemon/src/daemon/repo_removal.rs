@@ -67,7 +67,7 @@ impl Manager {
             let _registry = self.gates.lock_registry().await;
             let repo = self.repository(selector).await?;
             let seed = self.pause_seed_build(&repo.id).await;
-            self.stop_repository_reviews(&repo.id).await;
+            self.reviews.stop_in_repository(self, &repo.id).await;
             let _fetch = self.gates.lock_fetch(&repo.id).await;
             let _git = self.gates.lock_git(&repo.id).await;
             let _seed = self.settle_creations(&repo.id, seed).await?;
@@ -89,7 +89,7 @@ impl Manager {
             let _registry = self.gates.lock_registry().await;
             let repo = self.repository(id).await?;
             let seed = self.pause_seed_build(&repo.id).await;
-            self.stop_repository_reviews(&repo.id).await;
+            self.reviews.stop_in_repository(self, &repo.id).await;
             let _fetch = self.gates.lock_fetch(&repo.id).await;
             let _git = self.gates.lock_git(&repo.id).await;
             let _seed = self.settle_creations(&repo.id, seed).await?;
@@ -137,7 +137,7 @@ impl Manager {
         self.check_repository_boundaries(&repo, &workspaces).await?;
         // A run its review left may still have its reviewer's processes in
         // the directory `.reviews` would delete.
-        self.ensure_no_review_runs_left(&repo.id).await?;
+        self.reviews.ensure_no_runs_left(self, &repo.id).await?;
         // A gate run works in the checkout and writes into `.gate`.
         self.ensure_no_gate_runs_in(&repo.id).await?;
         self.delete_runner_of_removed(&repo).await?;

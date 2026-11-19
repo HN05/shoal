@@ -4,14 +4,11 @@
 use anyhow::{Context, Result, bail};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_refs::CommitId;
+use shoal_reviews::required::{Gate, Unreviewed};
 
 use super::{place::Access, pr::current_head, target::ForgeTarget};
 use crate::{
-    daemon::{
-        manager::Manager,
-        reviews::gate::{Gate, Unreviewed},
-        scope::Caller,
-    },
+    daemon::{manager::Manager, scope::Caller},
     forge::{
         PullRequest,
         capability::Capability,
@@ -84,7 +81,10 @@ impl Manager {
             Some(head) => head,
             None => (pull.head_commit.clone()).context("the forge names no PR head")?,
         };
-        let checked = self.check_reviewed(&owner, Gate::Merge, &head).await;
+        let checked = self
+            .reviews
+            .check_reviewed(&owner, Gate::Merge, &head)
+            .await;
         self.queue_pull_review(checked, &owner, &head, &url, caller)
             .await?;
         Ok(Some(head))
@@ -114,7 +114,7 @@ impl Manager {
             None => true,
         };
         match at_head && reached {
-            true => self.queue_unreviewed(Err(error)).await,
+            true => self.reviews.queue_unreviewed(self, Err(error)).await,
             false => bail!("{error}; shoal review run {url} reviews the PR"),
         }
     }

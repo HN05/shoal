@@ -11,10 +11,11 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail, ensure};
 use shoal_refs::{BranchName, CommitId};
+use shoal_reviews::required::Gate;
 
 use super::super::{manager::Manager, workspace::branches::UpstreamPolicy};
 use crate::{
-    daemon::{reviews::gate::Gate, scope::Caller},
+    daemon::scope::Caller,
     forge::items::action::MergeMethod,
     fsutil::off_runtime,
     git::{
@@ -64,7 +65,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<MergePreview> {
         let merge = self.validate_merge(selector, options, caller).await;
-        let merge = self.queue_unreviewed(merge).await?;
+        let merge = self.reviews.queue_unreviewed(self, merge).await?;
         let default_commit = local_commit(&merge.repo, &merge.default).await?;
         let merged = Merged {
             workspace: &merge.workspace,
@@ -82,7 +83,7 @@ impl Manager {
     /// the tracked execution completes; a review gate's [`Unreviewed`]
     /// refusal is left for the caller to queue once it releases the gate.
     ///
-    /// [`Unreviewed`]: crate::daemon::reviews::gate::Unreviewed
+    /// [`Unreviewed`]: shoal_reviews::required::Unreviewed
     pub async fn prepare_merge(
         &self,
         selector: &SpaceSelector,
@@ -179,7 +180,8 @@ impl Manager {
             true => Some(push_target(&repo, &default).await?),
             false => None,
         };
-        self.check_review(&workspace, Gate::Merge, &source, caller)
+        self.reviews
+            .check(self, &workspace, Gate::Merge, &source, caller)
             .await?;
         Ok(MergeSource {
             workspace,

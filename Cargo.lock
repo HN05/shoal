@@ -2694,12 +2694,14 @@ name = "shoal-reviews"
 version = "0.19.0"
 dependencies = [
  "anyhow",
+ "futures-util",
  "libc",
  "rusqlite",
  "serde",
  "serde_json",
  "shoal-core",
  "shoal-daemon-base",
+ "shoal-forge",
  "shoal-forge-types",
  "shoal-ids",
  "shoal-protocol",

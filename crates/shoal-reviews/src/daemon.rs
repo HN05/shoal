@@ -1,9 +1,167 @@
-//! What reviews need of the rest of the daemon, which implements it.
+//! What reviews need of the rest of the daemon, which implements it: the
+//! workspaces they review, their repositories and settings, the agent
+//! queue that admits their runs, the agents and coordinators that hear of
+//! them and the forge a PR's review is posted on.
+use std::collections::BTreeMap;
+use std::ffi::OsString;
+use std::path::PathBuf;
+
 use anyhow::Result;
+use futures_util::future::BoxFuture;
 use rusqlite::Connection;
+use shoal_forge::account::Account;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::space_names::SpaceName;
+use shoal_protocol::repository::Selector;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_refs::CommitId;
+
+use crate::{
+    config::Effective,
+    forge::{ForgeRepo, items::reference::ItemRef, items::review::NewReview},
+    model::{Repository, Workspace},
+};
+
+/// The workspaces reviews are of.
+pub trait Spaces: Send + Sync {
+    /// The workspace `selector` names, refusing a chat.
+    fn workspace<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Workspace>>;
+
+    /// The workspace `id`, as it is now.
+    fn workspace_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Workspace>>;
+
+    /// Prove that the worktree of `workspace` is still its own, before its
+    /// configuration and commits are read there.
+    fn verify_worktree<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<()>>;
+
+    /// The committed HEAD of `workspace`, refused when its worktree is not
+    /// on the branch, or at the commit, it records.
+    fn head<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<CommitId>>;
+
+    /// The commit `shoal diff` compares `workspace` with.
+    fn diff_base<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<CommitId>>;
+}
+
+/// The registered repositories reviews run in.
+pub trait Repositories: Send + Sync {
+    /// The registered repository `id`.
+    fn repository<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Repository>>;
+
+    /// The registered repository `selector` names.
+    fn select_repository(&self, selector: Selector) -> BoxFuture<'_, Result<Repository>>;
+
+    /// Every registered repository.
+    fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>>;
+
+    /// Where the false positives of the repository `id` are kept, while its
+    /// local config has a place.
+    fn false_positives_path<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<Option<PathBuf>>>;
+
+    /// [`Self::false_positives_path`] for an entry to add, refusing where
+    /// the local config cannot be written. The caller holds the registry
+    /// gate.
+    fn writable_false_positives_path<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<PathBuf>>;
+}
+
+/// The settings reviews run under.
+pub trait Settings: Send + Sync {
+    /// The settings of `workspace` after every layer.
+    fn settings<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<Effective>>;
+
+    /// [`Self::settings`] with the templates that build an agent's
+    /// instructions.
+    fn settings_with_templates<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+    ) -> BoxFuture<'a, Result<Effective>>;
+
+    /// The settings of the repository `id` itself, which no branch's own
+    /// config file changes.
+    fn repository_settings<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Effective>>;
+
+    /// The variables `settings` configure for the processes of
+    /// `workspace`.
+    fn environment<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+        settings: &'a Effective,
+    ) -> BoxFuture<'a, Result<BTreeMap<String, OsString>>>;
+}
+
+/// The agent queue that admits a review's run, and the agents that hear
+/// of a review.
+pub trait Agents: Send + Sync {
+    /// Ask for admission in `repository` for a one-shot run serving the
+    /// space `space`, which waits in the queue at that space's rank. The
+    /// request and the admission end with the returned value. Protection
+    /// calls `stop` to stop the run; a run it stopped asks again
+    /// `after_stop`.
+    fn admit<'a>(
+        &'a self,
+        repository: &'a RepositoryId,
+        space: &'a SpaceId,
+        after_stop: bool,
+        stop: Box<dyn FnOnce() + Send + Sync>,
+    ) -> BoxFuture<'a, Result<Box<dyn Admission + 'a>>>;
+
+    /// Hold an admission in `repository` until the daemon restarts, for a
+    /// run a stopped daemon left whose processes could not be proven
+    /// stopped.
+    fn hold_admission(&self, repository: &RepositoryId);
+
+    /// Queue `message` for the agents of the space `id`.
+    fn message<'a>(&'a self, id: &'a SpaceId, message: String) -> BoxFuture<'a, Result<()>>;
+
+    /// Tell the coordinator of the space `id`, named `name`, about one of
+    /// its reviews.
+    fn tell_coordinator<'a>(
+        &'a self,
+        name: &'a SpaceName,
+        id: &'a SpaceId,
+        message: String,
+    ) -> BoxFuture<'a, ()>;
+}
+
+/// A one-shot run's admission in the agent queue, until it is dropped.
+pub trait Admission: Send {
+    /// Wait until admission lets the run start.
+    fn admitted(&mut self) -> BoxFuture<'_, ()>;
+
+    /// Keep the admission of a run whose processes may still be running
+    /// until the daemon restarts.
+    fn keep(self: Box<Self>);
+}
+
+/// The forge a PR's review is read from and posted on.
+pub trait Forge: Send + Sync {
+    /// The forge of `workspace`'s repository and the account its agents
+    /// act as there.
+    fn forge_account<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+    ) -> BoxFuture<'a, Result<(ForgeRepo, Account)>>;
+
+    /// Post `review` on the PR `pull` as `workspace`'s agents, recording
+    /// the change as the space's own.
+    fn post<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+        pull: &'a ItemRef,
+        review: NewReview,
+    ) -> BoxFuture<'a, Result<()>>;
+}
+
+/// Everything reviews need of the daemon, which each of their operations
+/// that reaches beyond them takes.
+pub trait Daemon: Spaces + Repositories + Settings + Agents + Forge {}
+
+impl<T: Spaces + Repositories + Settings + Agents + Forge> Daemon for T {}
 
 /// The records of the spaces reviews are of, which reviews read in the
 /// connection or transaction that reads the reviews, so a review and its

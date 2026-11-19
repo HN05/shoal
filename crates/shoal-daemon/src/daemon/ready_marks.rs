@@ -19,7 +19,6 @@ use crate::{
             wait::linked_items,
         },
         notifications::NotificationKind,
-        reviews::gate::Gate,
         scope::Caller,
     },
     forge::items::link::{ItemKind, LinkKind, Selection},
@@ -29,6 +28,7 @@ use crate::{
 use pulls::Pulls;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::CommitId;
+use shoal_reviews::required::Gate;
 
 mod pulls;
 
@@ -145,7 +145,8 @@ impl Manager {
         let workspace = &workspace;
         self.verify_worktree(workspace).await?;
         let head = current_head(workspace).await?;
-        self.require_review(workspace, Gate::Ready, &head, caller)
+        self.reviews
+            .require(self, workspace, Gate::Ready, &head, caller)
             .await?;
         Ok(Some(head))
     }

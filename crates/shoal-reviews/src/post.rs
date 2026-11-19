@@ -1,34 +1,33 @@
 //! Posting a finished PR review on the PR as a comment review by the
 //! workspace's agent account: findings on lines the PR's diff shows become
 //! line comments, the rest go in the body with the summary.
-use crate::forge::items::reference::ItemRef;
 use std::fmt::Write as _;
 
 use anyhow::Result;
-use shoal_refs::CommitId;
-
-use crate::{
-    daemon::{log, manager::Manager},
-    forge::items::{
-        action::Action,
-        link::ItemKind,
-        review::{LineComment, NewReview, ReviewVerdict, Side},
-    },
-    model::Workspace,
-    protocol::ItemContext,
-    reviews::{AUTOMATED_NOTE, Finding, Posted, Review, ReviewTarget, Severity, severity_counts},
-};
 use shoal_forge::{
     items::{action::ActionRequests, review::HeadMoved},
     review::diff::DiffRequests,
 };
-use shoal_protocol::space_names::SpaceSelector;
-use shoal_reviews::store;
+use shoal_refs::CommitId;
 
-impl Manager {
+use crate::{
+    Reviews,
+    daemon::Daemon,
+    forge::items::{
+        link::ItemKind,
+        reference::ItemRef,
+        review::{LineComment, NewReview, ReviewVerdict, Side},
+    },
+    log,
+    model::Workspace,
+    reviews::{AUTOMATED_NOTE, Finding, Posted, Review, ReviewTarget, Severity, severity_counts},
+    store,
+};
+
+impl Reviews {
     /// Post finished review `review` on its PR when its target asks to, and
     /// record what happened. It never approves or requests changes.
-    pub(super) async fn post_review(&self, review: &Review, workspace: &Workspace) {
+    pub(crate) async fn post(&self, daemon: &dyn Daemon, review: &Review, workspace: &Workspace) {
         let (
             ReviewTarget::Pr {
                 url, post: true, ..
@@ -38,7 +37,7 @@ impl Manager {
         else {
             return;
         };
-        let posted = match self.submit_review(review, workspace, url, head).await {
+        let posted = match submit(daemon, review, workspace, url, head).await {
             Ok(url) => Posted::Posted { url },
             Err(error) => {
                 log!("posting review {}: {error:#}", review.id);
@@ -56,62 +55,45 @@ impl Manager {
             log!("posting review {id}: {error:#}");
         }
     }
+}
 
-    /// Submit the review for the commit it covered, `head`, bound to it:
-    /// when the PR's head moved, before Shoal read it or before the forge was
-    /// asked, every finding goes in the body with a note that it is outdated.
-    /// Any other failure is not retried, since the review may have reached
-    /// the forge.
-    async fn submit_review(
-        &self,
-        review: &Review,
-        workspace: &Workspace,
-        pull: &ItemRef,
-        head: &CommitId,
-    ) -> Result<String> {
-        let (forge, account) = self.workspace_forge_account(workspace).await?;
-        pull.belongs_to(&forge)?;
-        let current = forge
-            .read(&account, ItemKind::Pr, pull.pull()?.get())
-            .await?;
-        let moved = current.head_sha.as_ref() != Some(head);
-        let diff = match moved {
-            true => None,
-            false => Some(forge.pr_diff(&account, &current).await?),
-        };
-        let shows = |finding: &Finding| {
-            diff.as_ref()
-                .is_some_and(|diff| diff.shows(&finding.path, u64::from(finding.line)))
-        };
-        let target = ItemContext::space(SpaceSelector::id(&workspace.id)).into();
-        let action = Action::Review(new_review(review, shows, moved.then_some(head)));
-        let url = pull.to_string();
-        match self
-            .item_action(
-                &target,
-                ItemKind::Pr,
-                Some(pull.clone().into()),
-                action,
-                None,
-            )
-            .await
-        {
-            Ok(_) => Ok(url),
-            // Nothing was sent, and the lines no longer match.
-            Err(error) if error.downcast_ref::<HeadMoved>().is_some() => {
-                let action = Action::Review(new_review(review, |_| false, Some(head)));
-                self.item_action(
-                    &target,
-                    ItemKind::Pr,
-                    Some(pull.clone().into()),
-                    action,
-                    None,
-                )
-                .await?;
-                Ok(url)
-            }
-            Err(error) => Err(error),
+/// Submit the review for the commit it covered, `head`, bound to it: when
+/// the PR's head moved, before Shoal read it or before the forge was asked,
+/// every finding goes in the body with a note that it is outdated. Any
+/// other failure is not retried, since the review may have reached the
+/// forge.
+async fn submit(
+    daemon: &dyn Daemon,
+    review: &Review,
+    workspace: &Workspace,
+    pull: &ItemRef,
+    head: &CommitId,
+) -> Result<String> {
+    let (forge, account) = daemon.forge_account(workspace).await?;
+    pull.belongs_to(&forge)?;
+    let current = forge
+        .read(&account, ItemKind::Pr, pull.pull()?.get())
+        .await?;
+    let moved = current.head_sha.as_ref() != Some(head);
+    let diff = match moved {
+        true => None,
+        false => Some(forge.pr_diff(&account, &current).await?),
+    };
+    let shows = |finding: &Finding| {
+        diff.as_ref()
+            .is_some_and(|diff| diff.shows(&finding.path, u64::from(finding.line)))
+    };
+    let url = pull.to_string();
+    let posted = new_review(review, shows, moved.then_some(head));
+    match daemon.post(workspace, pull, posted).await {
+        Ok(()) => Ok(url),
+        // Nothing was sent, and the lines no longer match.
+        Err(error) if error.downcast_ref::<HeadMoved>().is_some() => {
+            let posted = new_review(review, |_| false, Some(head));
+            daemon.post(workspace, pull, posted).await?;
+            Ok(url)
         }
+        Err(error) => Err(error),
     }
 }
 
@@ -120,7 +102,7 @@ impl Manager {
 /// automated-review note when there are findings. A review of `outdated`, a
 /// commit newer ones were pushed over, says so; any other is bound to the
 /// reviewed commit.
-pub(super) fn new_review(
+fn new_review(
     review: &Review,
     inline: impl Fn(&Finding) -> bool,
     outdated: Option<&CommitId>,

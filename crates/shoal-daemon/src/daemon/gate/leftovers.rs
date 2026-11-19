@@ -50,11 +50,11 @@ impl Manager {
                     continue;
                 }
                 let files = entry.path();
-                match self.oneshot_runs.stop_leftovers(&files).await {
+                match self.reviews.runs().stop_leftovers(&files).await {
                     Ok(()) => remove_run(&files),
                     Err(error) => {
                         log!("{}: {error:#}", files.display());
-                        self.oneshot_runs.track(&files);
+                        self.reviews.runs().track(&files);
                         self.agent_queue.hold_oneshot(&repository.id);
                     }
                 }

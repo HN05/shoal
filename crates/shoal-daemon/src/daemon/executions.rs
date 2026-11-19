@@ -568,7 +568,7 @@ impl Manager {
                     // gate, which comes before the Git gate.
                     Err(error) => {
                         drop(guard);
-                        return self.queue_unreviewed(Err(error)).await;
+                        return self.reviews.queue_unreviewed(self, Err(error)).await;
                     }
                 };
                 if let Some(caller) = caller {

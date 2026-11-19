@@ -1,504 +1,197 @@
-//! Local reviews of workspaces and PRs: queueing them, running each once in
-//! a detached checkout, and recording what the reviewer found and how the
-//! workspace's agent answered it.
+//! What reviews need of the rest of the daemon, which [`Manager`] gives
+//! them: the workspaces they review, their repositories and settings, the
+//! agent queue's admission of their runs, the agents and coordinators that
+//! hear of them and the forge a PR's review is posted on.
+use std::collections::BTreeMap;
+use std::ffi::OsString;
+use std::path::PathBuf;
+
+use anyhow::Result;
+use futures_util::future::BoxFuture;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
+use shoal_protocol::repository::Selector;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_refs::CommitId;
+use shoal_reviews::daemon::{Admission, Agents, Forge, Records, Repositories, Settings, Spaces};
+
+use super::{
+    agent_queue::{self, OneShotAdmission, Serving},
+    manager::Manager,
+    notifications::Source,
 };
-
-use anyhow::{Context, Result, bail, ensure};
-use tokio::sync::watch;
-
-use super::{log, manager::Manager};
 use crate::{
-    agent::Agent,
     config::Effective,
-    reviews::{FindingId, Outcome, Review, ReviewId, ReviewTarget},
+    forge::{
+        ForgeRepo,
+        items::{action::Action, link::ItemKind, reference::ItemRef, review::NewReview},
+    },
+    model::{Repository, Workspace},
+    protocol::ItemContext,
 };
-use shoal_protocol::{
-    space_names::{SpaceName, SpaceSelector},
-    time::UnixTime,
-};
-use shoal_reviews::{
-    false_positives::{self, FalsePositive},
-    store,
-};
+use shoal_forge::account::Account;
 
-mod delivery;
-pub(crate) mod gate;
-mod post;
-mod run;
+impl Spaces for Manager {
+    fn workspace<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Workspace>> {
+        Box::pin(Manager::workspace(self, selector))
+    }
 
-pub(crate) use run::run;
+    fn workspace_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Workspace>> {
+        Box::pin(Manager::workspace_by_id(self, id))
+    }
 
-/// The daemon's running reviews.
-pub(crate) struct Reviews {
-    /// Wakes the scheduler when a review is queued.
-    queued: tokio::sync::Notify,
-    /// Stops each review that has started to run.
-    cancels: std::sync::Mutex<HashMap<ReviewId, std::sync::Arc<watch::Sender<bool>>>>,
-    /// The repository and run of each review whose checkout, a worktree of
-    /// the repository, may exist, which outlives the review's records when
-    /// its workspace goes.
-    checkouts: std::sync::Mutex<HashMap<ReviewId, HeldCheckout>>,
-    /// Counts the runs that ended, for waits on one.
-    ended: watch::Sender<u64>,
-}
+    fn verify_worktree<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<()>> {
+        Box::pin(Manager::verify_worktree(self, workspace))
+    }
 
-impl Default for Reviews {
-    fn default() -> Self {
-        Self {
-            queued: Default::default(),
-            cancels: Default::default(),
-            checkouts: Default::default(),
-            ended: watch::channel(0).0,
-        }
+    fn head<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<CommitId>> {
+        Box::pin(super::links::pr::current_head(workspace))
+    }
+
+    fn diff_base<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<CommitId>> {
+        Box::pin(async move {
+            let selector = SpaceSelector::id(&workspace.id);
+            Ok(Manager::diff_base(self, &selector).await?.commit)
+        })
     }
 }
 
-impl Reviews {
-    /// Record that review `id` may have a checkout of `repository` in its
-    /// run at `run` until the returned value is dropped, once it is removed.
-    fn hold_checkout(
-        &self,
-        id: ReviewId,
-        repository: &RepositoryId,
-        run: &Path,
-    ) -> CheckoutHold<'_> {
-        self.checkouts
-            .lock()
-            .unwrap()
-            .insert(id, HeldCheckout::new(repository, run));
-        CheckoutHold { reviews: self, id }
+impl Repositories for Manager {
+    fn repository<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Repository>> {
+        Box::pin(Manager::repository(self, id))
     }
 
-    /// Hold the run at `run` for review `id` as [`Self::hold_checkout`]
-    /// does, unless another review's run there holds it; then whether that
-    /// one is kept, which only a restarted daemon removes.
-    fn hold_run(
-        &self,
-        id: ReviewId,
-        repository: &RepositoryId,
-        run: &Path,
-    ) -> Result<CheckoutHold<'_>, bool> {
-        let mut checkouts = self.checkouts.lock().unwrap();
-        if let Some(held) = checkouts.values().find(|held| held.run == run) {
-            return Err(held.kept);
-        }
-        checkouts.insert(id, HeldCheckout::new(repository, run));
-        Ok(CheckoutHold { reviews: self, id })
+    fn select_repository(&self, selector: Selector) -> BoxFuture<'_, Result<Repository>> {
+        Box::pin(Manager::repository(self, selector))
     }
 
-    /// Whether a review's checkout of `repository` may exist that its run
-    /// still removes, or, when `kept`, that only a restarted daemon removes.
-    fn holds_checkout_of(&self, repository: &RepositoryId, kept: bool) -> bool {
-        self.checkouts
-            .lock()
-            .unwrap()
-            .values()
-            .any(|held| held.repository == *repository && held.kept == kept)
+    fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>> {
+        Box::pin(Manager::repositories(self))
+    }
+
+    fn false_positives_path<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<Option<PathBuf>>> {
+        Box::pin(Manager::false_positives_path(self, id))
+    }
+
+    fn writable_false_positives_path<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<PathBuf>> {
+        Box::pin(Manager::writable_false_positives_path(self, id))
     }
 }
 
-/// A review's checkout that may exist.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct HeldCheckout {
-    repository: RepositoryId,
-    /// The run's directory, which holds the checkout.
-    run: PathBuf,
-    /// Whether its run ended without removing it.
-    kept: bool,
-}
+impl Settings for Manager {
+    fn settings<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<Effective>> {
+        Box::pin(self.workspace_settings(workspace))
+    }
 
-impl HeldCheckout {
-    fn new(repository: &RepositoryId, run: &Path) -> Self {
-        Self {
-            repository: repository.clone(),
-            run: run.to_owned(),
-            kept: false,
-        }
+    fn settings_with_templates<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+    ) -> BoxFuture<'a, Result<Effective>> {
+        Box::pin(self.workspace_settings_with_templates(workspace))
+    }
+
+    fn repository_settings<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Effective>> {
+        Box::pin(self.space_settings_in(Some(id)))
+    }
+
+    fn environment<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+        settings: &'a Effective,
+    ) -> BoxFuture<'a, Result<BTreeMap<String, OsString>>> {
+        Box::pin(self.hook_environment(workspace, workspace.repository(), settings))
     }
 }
 
-/// A review's possible checkout, until it is removed.
-struct CheckoutHold<'a> {
-    reviews: &'a Reviews,
-    id: ReviewId,
-}
-
-impl CheckoutHold<'_> {
-    /// Keep holding a checkout that could not be removed, until the daemon
-    /// restarts and removes what its runs left.
-    fn keep(self) {
-        if let Some(held) = self.reviews.checkouts.lock().unwrap().get_mut(&self.id) {
-            held.kept = true;
-        }
-        std::mem::forget(self);
-    }
-}
-
-impl Drop for CheckoutHold<'_> {
-    fn drop(&mut self) {
-        self.reviews.checkouts.lock().unwrap().remove(&self.id);
-    }
-}
-
-impl Manager {
-    /// Queue a review of the workspace by `agent`, else `[review] agent`, else
-    /// `agent.default`, with `model` over the agent's configured model and
-    /// effort, or return the one already queued. A running review refuses
-    /// another.
-    pub async fn queue_review(
-        &self,
-        selector: &SpaceSelector,
-        target: ReviewTarget,
-        agent: Option<Agent>,
-        model: crate::agent::ModelChoice,
-    ) -> Result<Review> {
-        let workspace = self.workspace(selector).await?;
-        let settings = self.workspace_settings(&workspace).await?;
-        let agent = reviewing_agent(&settings, agent)?;
-        let (id, now) = (workspace.id.clone(), UnixTime::now());
-        // A repository move, which refuses while a review is queued, holds
-        // the registry gate, so no review is queued while one runs.
-        let _registry = self.gates.lock_registry().await;
-        let queued = self
-            .store
-            .run(move |db| store::queue(db, &id, &target, &agent, &model, now))
-            .await?;
-        self.reviews.queued.notify_one();
-        self.review(queued.id()).await
-    }
-
-    /// Cancel review `id`, else the workspace's queued or running one, for a
-    /// process of workspace `by` when one asked.
-    pub async fn cancel_review(
-        &self,
-        selector: Option<&SpaceSelector>,
-        id: Option<ReviewId>,
-        by: Option<SpaceId>,
-    ) -> Result<Review> {
-        let id = match (id, selector) {
-            (Some(id), _) => id,
-            (None, Some(selector)) => self.active_review(selector).await?,
-            (None, None) => bail!("name a review or a workspace"),
-        };
-        let now = UnixTime::now();
-        let cancelled = self
-            .store
-            .run(move |db| store::cancel(db, id, by.as_ref(), now))
-            .await?;
-        ensure!(cancelled, "review {id} has already ended");
-        if let Some(cancel) = self.reviews.cancels.lock().unwrap().get(&id) {
-            cancel.send_replace(true);
-        }
-        self.deliver_review(id).await;
-        self.review(id).await
-    }
-
-    /// The ID of the workspace's queued or running review.
-    async fn active_review(&self, selector: &SpaceSelector) -> Result<ReviewId> {
-        let workspace = self.workspace(selector).await?;
-        let id = workspace.id.clone();
-        let active = self.store.run(move |db| store::active(db, &id)).await?;
-        let (id, _) = active
-            .with_context(|| format!("{} has no queued or running review", workspace.name))?;
-        Ok(id)
-    }
-
-    /// Review `id` in full, marked outdated once its workspace's HEAD moved.
-    pub async fn review(&self, id: ReviewId) -> Result<Review> {
-        let review = self
-            .store
-            .run(move |db| store::load(db, &ReviewRecords, id))
-            .await?;
-        let mut review = review.with_context(|| format!("review {id} does not exist"))?;
-        self.annotate_reviews(std::slice::from_mut(&mut review))
-            .await;
-        Ok(review)
-    }
-
-    /// The workspace's newest review.
-    pub async fn latest_review(&self, selector: &SpaceSelector) -> Result<Review> {
-        let workspace = self.workspace(selector).await?;
-        let id = workspace.id.clone();
-        let latest = self
-            .store
-            .run(move |db| store::latest(db, &ReviewRecords, &id))
-            .await?;
-        let mut review = latest.with_context(|| {
-            format!(
-                "{} has no reviews; start one with shoal review run",
-                workspace.name
-            )
-        })?;
-        self.annotate_reviews(std::slice::from_mut(&mut review))
-            .await;
-        Ok(review)
-    }
-
-    /// The workspaces whose reviews a listing shows: the one named, else the
-    /// repository's, else every workspace.
-    pub async fn review_workspaces(
-        &self,
-        workspace: Option<&SpaceSelector>,
-        repository: Option<crate::repository::Selector>,
-    ) -> Result<Vec<SpaceId>> {
-        if let Some(workspace) = workspace {
-            return Ok(vec![self.workspace(workspace).await?.id]);
-        }
-        let repository = match repository {
-            Some(repository) => Some(self.repository(repository).await?.id),
-            None => None,
-        };
-        self.store
-            .run(move |db| super::spaces::workspace_ids(db, repository.as_ref()))
-            .await
-    }
-
-    /// The reviews of the workspaces `ids`, newest first.
-    pub async fn reviews(&self, ids: Vec<SpaceId>) -> Result<Vec<Review>> {
-        let mut reviews = self
-            .store
-            .run(move |db| store::list(db, &ReviewRecords, &ids))
-            .await?;
-        self.annotate_reviews(&mut reviews).await;
-        Ok(reviews)
-    }
-
-    /// Review `id` once it is neither queued nor running.
-    pub async fn await_review(&self, id: ReviewId) -> Result<Review> {
-        let mut changed = self.store.watch_changes();
-        let mut ended = self.reviews.ended.subscribe();
-        loop {
-            let review = self.review(id).await?;
-            if !review.state.is_active() {
-                return Ok(review);
-            }
-            tokio::select! {
-                changed = changed.changed() => changed.context("the daemon is stopping")?,
-                ended = ended.changed() => ended.context("the daemon is stopping")?,
-            }
-        }
-    }
-
-    /// Add a reply to `finding`.
-    pub async fn reply_to_finding(&self, finding: FindingId, body: String) -> Result<Review> {
-        crate::validate::agent_message(&body)?;
-        let now = UnixTime::now();
-        self.store
-            .run(move |db| store::reply(db, finding, &body, now))
-            .await?;
-        self.review(finding.review).await
-    }
-
-    /// Resolve `finding` with `outcome`, or reopen it, and keep it among its
-    /// repository's false positives only while it is resolved as one. The
-    /// file changes first and goes back when the outcome cannot be stored,
-    /// so an interrupted resolve leaves the file with the newer intent.
-    pub async fn resolve_finding(
-        &self,
-        finding: FindingId,
-        outcome: Option<Outcome>,
-    ) -> Result<Review> {
-        // Moves and removal take this gate too. Holding it over both steps
-        // keeps concurrent resolves in one order in the outcome and the file.
-        let registry = self.gates.lock_registry().await;
-        let resolved = self.stored_review(finding.review).await?;
-        let previous = self
-            .keep_false_positive(&resolved, finding, outcome.as_ref())
-            .await?;
-        if let Err(error) = self.record_outcome(finding, outcome).await {
-            if let Some(previous) = previous {
-                previous.restore().await?;
-            }
-            return Err(error);
-        }
-        drop(registry);
-        self.review(finding.review).await
-    }
-
-    /// The false positives of the repository `repository_id`, newest first.
-    /// An error reading them has the context [`false_positives::Unreadable`].
-    async fn false_positives(&self, repository_id: &RepositoryId) -> Result<Vec<FalsePositive>> {
-        false_positives::listed(self.false_positives_path(repository_id).await?).await
-    }
-
-    /// Keep `finding` of `review` in its repository's false positives while
-    /// `outcome` is one, or drop it from them, and return the file as it
-    /// was when that changed it. The caller holds the registry gate, which
-    /// moves and removal take, so the file stays where it was found.
-    async fn keep_false_positive(
-        &self,
-        review: &Review,
-        finding: FindingId,
-        outcome: Option<&Outcome>,
-    ) -> Result<Option<false_positives::Previous>> {
-        let entry = false_positives::kept(review, finding, outcome)?;
-        let repository_id = self
-            .workspace_by_id(&review.workspace_id)
-            .await?
-            .repository()
-            .clone();
-        let path = match entry {
-            Some(_) => Some(self.writable_false_positives_path(&repository_id).await?),
-            None => self.false_positives_path(&repository_id).await?,
-        };
-        let Some(path) = path else {
-            return Ok(None);
-        };
-        false_positives::keep(path, finding, entry).await
-    }
-
-    /// Store `outcome` as `finding`'s, or reopen it without one.
-    async fn record_outcome(&self, finding: FindingId, outcome: Option<Outcome>) -> Result<()> {
-        self.store
-            .run(move |db| store::resolve(db, finding, outcome.as_ref()))
-            .await
-    }
-
-    /// Review `id` as stored, without what its workspace says of it.
-    async fn stored_review(&self, id: ReviewId) -> Result<Review> {
-        let review = self
-            .store
-            .run(move |db| store::load(db, &ReviewRecords, id))
-            .await?;
-        review.with_context(|| format!("review {id} does not exist"))
-    }
-
-    /// The workspace review `id` is of.
-    pub(crate) async fn review_workspace(&self, id: ReviewId) -> Result<SpaceId> {
-        let review = self
-            .store
-            .run(move |db| store::load(db, &ReviewRecords, id))
-            .await?;
-        Ok(review
-            .with_context(|| format!("review {id} does not exist"))?
-            .workspace_id)
-    }
-
-    /// Mark each review whose workspace's HEAD has moved past it as
-    /// outdated; HEAD that cannot be read leaves it unknown.
-    async fn annotate_reviews(&self, reviews: &mut [Review]) {
-        let mut heads = HashMap::new();
-        for review in reviews.iter_mut() {
-            let Some(reviewed) = &review.head else {
-                continue;
+impl Agents for Manager {
+    fn admit<'a>(
+        &'a self,
+        repository: &'a RepositoryId,
+        space: &'a SpaceId,
+        after_stop: bool,
+        stop: Box<dyn FnOnce() + Send + Sync>,
+    ) -> BoxFuture<'a, Result<Box<dyn Admission + 'a>>> {
+        Box::pin(async move {
+            let queued_after = self.store.read(|tx| agent_queue::last_seq(tx)).await?;
+            let serving = Serving {
+                space: space.clone(),
+                queued_after,
             };
-            if !heads.contains_key(&review.workspace_id) {
-                let head = match self.workspace_by_id(&review.workspace_id).await {
-                    Ok(workspace) => crate::daemon::links::pr::current_head(&workspace)
-                        .await
-                        .ok(),
-                    Err(_) => None,
-                };
-                heads.insert(review.workspace_id.clone(), head);
-            }
-            review.outdated = heads[&review.workspace_id]
-                .as_ref()
-                .map(|head| head != reviewed);
-        }
+            let admission =
+                (self.agent_queue).request_oneshot(repository, serving, after_stop, stop);
+            Ok(Box::new(QueueAdmission(admission)) as Box<dyn Admission>)
+        })
     }
 
-    /// Refuse while a review of the repository is queued or running, or
-    /// [`Self::ensure_no_review_runs_left`] refuses.
-    pub(crate) async fn ensure_no_reviews_in(&self, repository_id: &RepositoryId) -> Result<()> {
-        let id = repository_id.to_owned();
-        let active = self
-            .store
-            .run(move |db| store::active_in(db, &ReviewRecords, &id))
-            .await?;
-        ensure!(
-            active.is_empty() && !self.reviews.holds_checkout_of(repository_id, false),
-            "a review of the repository is queued or running; wait for it or cancel it"
-        );
-        self.ensure_no_review_runs_left(repository_id).await
+    fn hold_admission(&self, repository: &RepositoryId) {
+        self.agent_queue.hold_oneshot(repository);
     }
 
-    /// Refuse while a review that ended, even with its workspace, still has
-    /// a checkout, a worktree of the repository, or left its run in the
-    /// repository's directory, as one whose reviewer's processes may still
-    /// run, which only a restarted daemon removes.
-    pub(crate) async fn ensure_no_review_runs_left(
-        &self,
-        repository_id: &RepositoryId,
-    ) -> Result<()> {
-        let left = self.review_runs_left(repository_id).await?;
-        ensure!(
-            !self.reviews.holds_checkout_of(repository_id, true) && !left,
-            "an ended review left a checkout of the repository that could not be removed; \
-             restart the daemon with `shoal daemon restart` to remove it"
-        );
-        Ok(())
+    fn message<'a>(&'a self, id: &'a SpaceId, message: String) -> BoxFuture<'a, Result<()>> {
+        Box::pin(self.queue_agent_message(id, message))
     }
 
-    /// Cancel the reviews of the repository's workspaces and wait until their
-    /// runs have ended and removed their checkouts, which are worktrees of
-    /// the repository its removal would otherwise refuse.
-    pub(crate) async fn stop_repository_reviews(&self, repository_id: &RepositoryId) {
-        let id = repository_id.to_owned();
-        let active = match self
-            .store
-            .run(move |db| store::active_in(db, &ReviewRecords, &id))
-            .await
-        {
-            Ok(active) => active,
-            Err(error) => {
-                log!("reviews of a removed repository: {error:#}");
-                return;
-            }
-        };
-        let mut ended = self.reviews.ended.subscribe();
-        for id in &active {
-            if let Err(error) = self.cancel_review(None, Some(*id), None).await {
-                log!("stopping review {id}: {error:#}");
-            }
-        }
-        let running = || {
-            let cancels = self.reviews.cancels.lock().unwrap();
-            active.iter().any(|id| cancels.contains_key(id))
-        };
-        while running() {
-            if ended.changed().await.is_err() {
-                return;
-            }
-        }
-    }
-
-    /// Stop the workspace's running review, as its removal does; the removal
-    /// then deletes its reviews.
-    pub(crate) async fn stop_workspace_review(&self, workspace_id: &SpaceId) {
-        let id = workspace_id.to_owned();
-        let active = self.store.run(move |db| store::active(db, &id)).await;
-        match active {
-            Ok(Some((id, _))) => {
-                if let Err(error) = self.cancel_review(None, Some(id), None).await {
-                    log!("stopping review {id}: {error:#}");
-                }
-            }
-            Ok(None) => {}
-            Err(error) => log!("reviews of a removed workspace: {error:#}"),
-        }
+    fn tell_coordinator<'a>(
+        &'a self,
+        name: &'a SpaceName,
+        id: &'a SpaceId,
+        message: String,
+    ) -> BoxFuture<'a, ()> {
+        Box::pin(async move {
+            let source = Source::Daemon;
+            Manager::tell_coordinator(self, name, Some(id), None, message, Vec::new(), source)
+                .await;
+        })
     }
 }
 
-/// The agent that reviews: the one asked for, else `[review] agent`, else
-/// `agent.default`. It must have a review template.
-fn reviewing_agent(settings: &Effective, agent: Option<Agent>) -> Result<Agent> {
-    let agent = agent
-        .or_else(|| settings.review.agent.clone())
-        .or_else(|| settings.agent.default.clone())
-        .context("no reviewer: pass --agent, or set review.agent or agent.default")?;
-    settings.check_reviewer(&agent)?;
-    Ok(agent)
+/// A one-shot run's admission in the daemon's agent queue.
+struct QueueAdmission<'a>(OneShotAdmission<'a>);
+
+impl Admission for QueueAdmission<'_> {
+    fn admitted(&mut self) -> BoxFuture<'_, ()> {
+        Box::pin(self.0.admitted())
+    }
+
+    fn keep(self: Box<Self>) {
+        self.0.keep();
+    }
+}
+
+impl Forge for Manager {
+    fn forge_account<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+    ) -> BoxFuture<'a, Result<(ForgeRepo, Account)>> {
+        Box::pin(self.workspace_forge_account(workspace))
+    }
+
+    fn post<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+        pull: &'a ItemRef,
+        review: NewReview,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            let target = ItemContext::space(SpaceSelector::id(&workspace.id)).into();
+            let pull = Some(pull.clone().into());
+            let action = Action::Review(review);
+            (self.item_action(&target, ItemKind::Pr, pull, action, None)).await?;
+            Ok(())
+        })
+    }
 }
 
 /// The spaces' records, as reviews read them in their own connections.
 pub(crate) struct ReviewRecords;
 
-impl shoal_reviews::daemon::Records for ReviewRecords {
+impl Records for ReviewRecords {
     fn space_name(&self, db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<SpaceName>> {
         super::spaces::space_name(db, id)
     }

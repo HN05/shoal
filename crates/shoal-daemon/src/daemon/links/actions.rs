@@ -15,7 +15,7 @@ use super::{
 };
 use crate::{
     config::{permissions::Opening, resolve::Effective},
-    daemon::{events, manager::Manager, reviews::gate::Gate, scope::Caller},
+    daemon::{events, manager::Manager, scope::Caller},
     forge::{
         ForgeRepo,
         items::{
@@ -40,6 +40,7 @@ use shoal_forge::{
     updates::Edited,
 };
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_reviews::required::Gate;
 
 mod accounts;
 mod open_issue;
@@ -516,7 +517,8 @@ impl Manager {
                 (item, None, None)
             }
             None => {
-                self.require_review(&workspace, Gate::Pr, &head, caller)
+                self.reviews
+                    .require(self, &workspace, Gate::Pr, &head, caller)
                     .await?;
                 conventions::require(&forge, &account, ItemKind::Pr, required, &options.labels)
                     .await?;
@@ -616,7 +618,8 @@ impl Manager {
             Some(_) => Ok(()),
             None => {
                 let head = super::pr::current_head(&workspace).await?;
-                self.require_review(&workspace, Gate::Pr, &head, caller)
+                self.reviews
+                    .require(self, &workspace, Gate::Pr, &head, caller)
                     .await
             }
         }
