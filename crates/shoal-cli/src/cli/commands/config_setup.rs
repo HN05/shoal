@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
 
-use super::{start, workspaces};
+use super::start;
 use crate::config_file::ConfigExt;
 use crate::{
     cli::{args::service::ConfigSetupArgs, context::Context, ui},
@@ -36,17 +36,17 @@ pub(super) async fn start(ctx: &Context, mut args: ConfigSetupArgs) -> Result<i3
         agent,
         model,
         prompt: Some(subject(&config)),
-        task: workspaces::launch_args(args.args)?,
+        task: start::launch_args(args.args)?,
         directory: ui::current_directory()?,
         env: Some(crate::terminal::start_environment()),
         ..Launch::default()
     };
-    let options = workspaces::AddOptions {
+    let options = start::StartOptions {
         here: args.here,
         focus: !start::leaves_caller(ctx, args.here),
         ..Default::default()
     };
-    start::place(ctx, launch, &settings, &options).await
+    start::place(ctx, launch, false, &settings, &options).await
 }
 
 /// The global config file, in a directory that exists and is named as the

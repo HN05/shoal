@@ -13,7 +13,7 @@ use crate::client::{
 use crate::{
     cli::{
         args::create::CreateArgs,
-        commands::workspaces::DaemonReads,
+        commands::start::DaemonReads,
         context::Context,
         output::{Palette, Style},
         shell, terminal,
@@ -68,7 +68,7 @@ async fn picked_creation(
 ) -> Result<NewCreation> {
     let mut launch = args.launch(args.parent.clone());
     // What the arguments refuse fails before a picker opens.
-    super::workspaces::check_start_arguments(&launch)?;
+    super::start::check_start_arguments(&launch)?;
     check_registered(ctx, launch_repository(&launch)?).await?;
     if let Some(copied) = super::copies::source(ctx, args.copy.clone()).await? {
         copied.copy_into(&mut launch)?;
@@ -77,7 +77,7 @@ async fn picked_creation(
     launch.path = (launch.path.take())
         .map(|path| super::repositories::absolute(ctx, path))
         .transpose()?;
-    super::workspaces::pick_start_source(ctx, &mut launch).await?;
+    super::start::pick_start_source(ctx, &mut launch).await?;
     let below = parent.filter(|_| args.parent.is_none());
     Ok(NewCreation { launch, below })
 }

@@ -3,17 +3,37 @@
 //! plan goes to the issue's body, which is all an implementing agent
 //! receives.
 use anyhow::{Context as _, Result, ensure};
+use shoal_protocol::launches::{IssueChoice, Launch};
 
 use crate::{
     cli::{client, commands::issues, context::Context, ui},
-    config,
+    config::{self, Effective},
     forge::items::{link::ItemKind, list::Search, reference::ItemInput},
     model::Repository,
 };
 
+/// The issue a start in plan mode that asks for one without naming it
+/// plans, picked on a terminal among the open issues labelled `[issue]
+/// plan_label` of its `repository`, under its `settings`; a launch that
+/// names one keeps it.
+pub(in crate::cli::commands::start::settle) async fn pick_plan_issue(
+    ctx: &Context,
+    launch: &mut Launch,
+    (repository, settings): (Option<&Repository>, &Effective),
+) -> Result<()> {
+    if !matches!(launch.issue, Some(IssueChoice::Pick)) || !ctx.interactive() {
+        return Ok(());
+    }
+    let repo = repository.context("name the repository whose issue the plan settles")?;
+    let mode = (launch.mode.clone()).unwrap_or(config::modes::ModeName::DEFAULT);
+    let issue = picked(ctx, repo, &settings.issue, &mode).await?;
+    launch.issue = Some(IssueChoice::Named(issue));
+    Ok(())
+}
+
 /// In `mode` plan, the number of an open issue of `repo` labelled `[issue]
 /// plan_label`, picked; other modes start on a named issue only.
-pub(super) async fn picked(
+async fn picked(
     ctx: &Context,
     repo: &Repository,
     labels: &config::Issue,

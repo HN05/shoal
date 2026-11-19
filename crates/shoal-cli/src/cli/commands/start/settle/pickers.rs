@@ -1,0 +1,11 @@
+//! What a terminal picks of what a settled launch leaves open: what a new
+//! workspace starts from, the issue a plan settles, and the agent.
+mod agent;
+mod issue;
+mod source;
+
+pub(in crate::cli::commands) use agent::check_model;
+pub(super) use agent::{check_agent, pick_agent};
+pub(super) use issue::pick_plan_issue;
+pub(super) use source::pick_source;
+pub(in crate::cli::commands) use source::pick_start_source;

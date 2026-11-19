@@ -9,7 +9,6 @@ use std::path::PathBuf;
 use anyhow::Result;
 
 use crate::{
-    agent::{Agent, ModelChoice},
     model::QueueRequest,
     protocol::{
         CreationOptions, PullHead,
@@ -142,13 +141,6 @@ impl Creation {
             pr,
         })
     }
-}
-
-/// The agent a start runs, if any, with the model and effort requested
-/// over the configured ones.
-pub struct ResolvedAddAgent {
-    pub agent: Option<Agent>,
-    pub model: ModelChoice,
 }
 
 /// The queue request of `launch` in the recorded `space`, a workspace or a

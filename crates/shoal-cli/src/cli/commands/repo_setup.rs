@@ -12,17 +12,12 @@ use shoal_protocol::{
     space_names::SpaceSelector,
 };
 
-use super::{repositories, workspaces};
+use super::repositories;
 use crate::{
     agent::{Agent, ModelChoice},
-    cli::{
-        agents,
-        context::Context,
-        ui::{self, ModeChoice},
-    },
+    cli::{context::Context, ui},
     config::modes,
     model::Repository,
-    protocol::ConfigTarget,
     repository,
 };
 
@@ -53,66 +48,41 @@ pub(super) async fn start(
     let selector = repositories::chosen(ctx, repository).await?;
     let repos = crate::client::repositories::list(&ctx.paths).await?;
     let repo = repository::select(&repos, &selector).await?.clone();
-    // Chosen before anything is created, so a declined agent leaves no
-    // workspace.
-    let target = ConfigTarget::Repository(selector.clone());
-    let Some(agent) = agents::default_agent(ctx, target.clone(), options.agent.clone()).await?
-    else {
-        return Ok(0);
-    };
     let local_config = local_config(ctx, selector).await?;
     let prompt = subject(repo.display_name(), &local_config);
-    let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
-    launch(ctx, &repo, (agent, prompt), options, &settings).await
-}
-
-/// Have the daemon start the setup `agent` of `repo` on `prompt` in setup
-/// mode, as `options` ask, which the repository's `settings` refuse when
-/// they cannot start it in the background.
-async fn launch(
-    ctx: &Context,
-    repo: &Repository,
-    (agent, prompt): (Agent, String),
-    options: Options,
-    settings: &crate::config::Effective,
-) -> Result<i32> {
     let leaves = super::start::leaves_caller(ctx, options.here);
     let start = launch_options(options.here, ctx.on_terminal(), leaves);
-    let launch = setup_launch(repo, (agent, prompt), options)?;
-    let mode = ModeChoice::Named(modes::ModeName::SETUP);
-    workspaces::launch_workspace(ctx, launch, mode, (&start, settings)).await
+    let launch = setup_launch(&repo, prompt, options)?;
+    super::start::settle(ctx, launch, &start).await
 }
 
 /// How the setup agent's start runs, `here` or not: the user waits for it,
 /// so from a call `on_terminal` it takes a focused place whatever the
 /// `focus` setting says, unless the start `leaves` the caller, with
 /// nothing to focus.
-fn launch_options(here: bool, on_terminal: bool, leaves: bool) -> workspaces::AddOptions {
-    workspaces::AddOptions {
+fn launch_options(here: bool, on_terminal: bool, leaves: bool) -> super::start::StartOptions {
+    super::start::StartOptions {
         here,
         focus: on_terminal && !leaves,
         ..Default::default()
     }
 }
 
-/// The launch that has the daemon start the setup `agent` of `repo` on
-/// `prompt` with the model and arguments `options` give, on the setup
-/// branch, which opens its workspace or the branch an earlier setup left.
-/// The user waits for it, so it skips the queue.
-fn setup_launch(
-    repo: &Repository,
-    (agent, prompt): (Agent, String),
-    options: Options,
-) -> Result<Launch> {
+/// The launch that has the daemon start the setup agent of `repo` on
+/// `prompt` in setup mode, with the agent, model and arguments `options`
+/// give, on the setup branch, which opens its workspace or the branch an
+/// earlier setup left. The user waits for it, so it skips the queue.
+fn setup_launch(repo: &Repository, prompt: String, options: Options) -> Result<Launch> {
     Ok(Launch {
         repository: Some(repo.id.to_string()),
         branch: Some(BRANCH.to_owned()),
         setup: Some(Setup::Repository),
-        agent: Some(agent),
+        mode: Some(modes::ModeName::SETUP),
+        agent: options.agent,
         model: options.model,
         prompt: Some(prompt),
         now: true,
-        task: workspaces::launch_args(options.args)?,
+        task: super::start::launch_args(options.args)?,
         // A setup started in a chat goes below the chat.
         parent: crate::env::own_chat().map(SpaceSelector::Id),
         directory: ui::current_directory()?,

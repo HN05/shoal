@@ -35,7 +35,10 @@ fn the_mode_picker_lists_the_usual_mode_first_with_the_space_it_starts() {
         ]
     );
     // A start of one kind of space lists only its modes.
-    let chat = ModeFit::in_repository(SpaceKind::Chat);
+    let chat = ModeFit {
+        kind: Some(SpaceKind::Chat),
+        repository: Some(true),
+    };
     assert_eq!(listed(chat), [pair("chat", "chat"), pair("plan", "chat")]);
 }
 
@@ -46,7 +49,10 @@ fn a_start_takes_the_only_mode_of_its_kind_without_asking() {
         true,
     );
     let pick = ModeChoice::Pick;
-    let fit = ModeFit::in_repository(SpaceKind::Workspace);
+    let fit = ModeFit {
+        kind: Some(SpaceKind::Workspace),
+        repository: Some(true),
+    };
     assert_eq!(pick.chosen(&ctx, &built_in(), fit).unwrap(), "worker");
     let named = ModeChoice::Named("missing".into());
     assert!(named.chosen(&ctx, &built_in(), ModeFit::default()).is_err());

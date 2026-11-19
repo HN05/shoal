@@ -10,7 +10,7 @@ use crate::{
         args::create::{ContributeArgs, StartArgs},
         context::Context,
         output::Palette,
-        ui::{self, ModeChoice},
+        ui,
     },
     client::repositories::{self, ContributionHold},
     config::{Config, modes::ModeName, repo::ConfigLayers},
@@ -52,11 +52,10 @@ pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i3
         branch,
         repository: target.linked_repository().is_some().then_some(target),
         repository_override: Some(repo.id.to_string()),
-        checked_repository: Some(repo.id.into()),
+        mode: Some(ModeName::DEFAULT),
         ..Default::default()
     };
-    let mode = ModeChoice::Named(ModeName::DEFAULT);
-    super::start::in_workspace(ctx, start, mode).await
+    super::start::run(ctx, start).await
 }
 
 /// Refuse an unavailable agent before registration, which may fork and clone.

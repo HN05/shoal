@@ -4,37 +4,14 @@
 //! leaves their agents running, unless the user's agent runs its own way.
 use anyhow::{Result, ensure};
 
-use super::placement::Attach;
-use crate::cli::commands::workspaces::AddOptions;
-use crate::{
-    cli::{agents, context::Context},
-    config::Effective,
-};
+use super::placement::{Attach, StartOptions};
+use crate::{cli::context::Context, config::Effective};
 use shoal_protocol::launches::Launch;
 
 /// Whether a start not run `here` leaves this process: for a scoped
 /// caller, or for one without a terminal.
 pub(in crate::cli::commands) fn leaves_caller(ctx: &Context, here: bool) -> bool {
     !here && (crate::env::is_scoped() || !ctx.on_terminal())
-}
-
-/// Refuse, before any work is created, a detached start of `agent` that
-/// `--focus` asks to focus, which nothing shows. The daemon starts the
-/// agent from the background, which some host must take, unless the user's
-/// agent runs its own way.
-pub(in crate::cli::commands) fn ensure_detachable(
-    settings: &Effective,
-    agent: Option<&crate::agent::Agent>,
-    options: &AddOptions,
-) -> Result<()> {
-    let Some(agent) = agent else {
-        return Ok(());
-    };
-    ensure_unfocused(options)?;
-    if !crate::env::is_scoped() && agents::runs_its_own_way(agent, settings) {
-        return Ok(());
-    }
-    crate::terminal::queued::ensure_background(settings)
 }
 
 /// Why the daemon's queued start of an agent under `settings` could not
@@ -44,7 +21,7 @@ pub(in crate::cli::commands) fn ensure_detachable(
 fn unplaceable(
     settings: &Effective,
     agent: Option<&crate::agent::Agent>,
-    options: &AddOptions,
+    options: &StartOptions,
 ) -> Result<Option<String>> {
     if agent.is_some() {
         ensure_unfocused(options)?;
@@ -55,7 +32,7 @@ fn unplaceable(
 
 /// Refuse `--focus` for an agent that starts detached, with nothing to
 /// focus.
-fn ensure_unfocused(options: &AddOptions) -> Result<()> {
+fn ensure_unfocused(options: &StartOptions) -> Result<()> {
     ensure!(
         !options.focus,
         "a call without a terminal starts its agent detached, with nothing to focus; leave out --focus, or pass --here to run it in place"
@@ -74,7 +51,7 @@ pub(in crate::cli::commands) fn place_agent(
     (launch, issue_linked): (&mut Launch, bool),
     (attach, agent): (Option<Attach>, Option<&crate::agent::Agent>),
     settings: &Effective,
-    options: &AddOptions,
+    options: &StartOptions,
 ) -> Result<()> {
     if leaves_caller(ctx, options.here) {
         let refused = unplaceable(settings, agent, options)?;

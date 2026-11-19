@@ -241,22 +241,6 @@ pub(in crate::cli) async fn launch_agent(
     Ok(code)
 }
 
-/// The requested agent, else the configured `agent.default`, else a picker.
-pub(super) async fn default_agent(
-    ctx: &Context,
-    target: ConfigTarget,
-    agent: Option<Agent>,
-) -> Result<Option<Agent>> {
-    let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
-    let agent = start_agent(ctx, &settings, agent)?;
-    // Without a terminal nothing picks one, which this caller refuses.
-    ensure!(
-        agent.is_some() || ctx.interactive(),
-        crate::agents::NO_AGENT
-    );
-    Ok(agent)
-}
-
 /// The agent a start runs under `settings`: the one `named`, else
 /// `agent.default`, else the one a picker picks on a terminal. Without
 /// either, a start off a terminal names none, which the daemon refuses.

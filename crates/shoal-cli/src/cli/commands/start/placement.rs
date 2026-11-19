@@ -1,12 +1,33 @@
 //! Where the agent of a start runs when it runs in its caller, and whether
 //! it skips the queue there because the user waits for it.
 use super::detached::leaves_caller;
-use crate::cli::commands::workspaces::AddOptions;
 use crate::{
     cli::{agents, context::Context, terminal},
     config::{Effective, modes::ModeName},
 };
 use shoal_protocol::launches::{Launch, StartTarget};
+
+/// How a start runs its agent once the daemon records its space.
+#[derive(Debug, Clone, Copy, Default)]
+pub(in crate::cli::commands) struct StartOptions {
+    /// Run in this terminal instead of a new tab or detached session.
+    pub here: bool,
+    /// Focus the new tab or session whatever the `focus` setting says.
+    pub focus: bool,
+    /// Wait for a new workspace's preparation before returning.
+    pub wait: bool,
+}
+
+impl StartOptions {
+    /// The options `args` give.
+    pub(in crate::cli::commands) fn of(args: &crate::cli::args::create::StartArgs) -> Self {
+        Self {
+            here: args.here,
+            focus: args.focus,
+            wait: args.wait,
+        }
+    }
+}
 
 /// Where the agent of a start runs when it runs in its caller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,7 +55,7 @@ impl Attach {
         (launch, issue_linked): (&Launch, bool),
         agent: Option<&crate::agent::Agent>,
         settings: &Effective,
-        options: &AddOptions,
+        options: &StartOptions,
     ) -> Option<Self> {
         if launch.machine.is_some() {
             return None;
@@ -71,7 +92,7 @@ pub(in crate::cli::commands) fn in_caller(
     ctx: &Context,
     (launch, issue_linked): (&mut Launch, bool),
     settings: &Effective,
-    options: &AddOptions,
+    options: &StartOptions,
 ) {
     launch.here = true;
     let setting = settings.focus(&mode(launch));
@@ -88,7 +109,7 @@ pub(in crate::cli::commands) fn in_caller(
 fn starts_now(
     launch: &Launch,
     setting: Option<bool>,
-    options: &AddOptions,
+    options: &StartOptions,
     waits_for_user: bool,
 ) -> bool {
     options.focus || (launch.blockers.is_empty() && waits_for_user && setting != Some(false))

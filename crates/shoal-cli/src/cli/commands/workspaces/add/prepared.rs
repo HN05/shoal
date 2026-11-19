@@ -9,7 +9,6 @@ use crate::{
     client::preparation::Preparing,
     model::Workspace,
     protocol::operations::{Prepared, StartedWorkspace},
-    start_plan::ResolvedAddAgent,
 };
 use shoal_protocol::protocol::{Launched, Started};
 
@@ -90,12 +89,8 @@ pub(in crate::cli::commands) async fn follow_preparation(
         warnings: Vec::new(),
     };
     let preparing = Preparing::follow(&ctx.paths, started).await?;
-    let agent = ResolvedAddAgent {
-        agent,
-        model: Default::default(),
-    };
     // `--json` reports the workspace once the agent starts, or its waiting
     // entry instead.
-    let finished = finish_add_workspace(ctx, preparing, &agent, ctx.json).await?;
+    let finished = finish_add_workspace(ctx, preparing, agent.as_ref(), ctx.json).await?;
     Ok(finished.map(|Prepared { workspace, .. }| *workspace))
 }

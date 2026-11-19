@@ -253,11 +253,6 @@ pub struct StartArgs {
     /// Repository for an issue number or a pasted link.
     #[arg(short = 'r', long = "repo")]
     pub repository_override: Option<String>,
-    /// The repository the start resolved and checked before choosing what it
-    /// starts, which a workspace's start then takes in place of the
-    /// arguments that named it.
-    #[arg(skip)]
-    pub checked_repository: Option<crate::repository::Selector>,
     /// The branch to start on, as git switch takes it: an existing local
     /// branch or remote/branch opens, in its workspace when one has it, as
     /// --in does; any other name is a new branch, never suffixed. A
@@ -353,15 +348,6 @@ impl StartArgs {
             machine: self.machine.clone(),
             forwarded: None,
         }
-    }
-
-    /// The flags these set that only a workspace takes and only this
-    /// process reads, which a [`Launch`] leaves out.
-    pub(in crate::cli) fn terminal_workspace_flags(&self) -> Vec<&'static str> {
-        [("--fork", self.fork), ("--focus", self.focus)]
-            .into_iter()
-            .filter_map(|(flag, set)| set.then_some(flag))
-            .collect()
     }
 }
 

@@ -21,7 +21,6 @@ use crate::{
         ConfigTarget,
         operations::{Preparation, Prepared},
     },
-    start_plan::ResolvedAddAgent,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -32,7 +31,7 @@ use shoal_protocol::space_names::SpaceSelector;
 pub(super) async fn finish_add_workspace(
     ctx: &Context,
     preparing: Preparing<'_, CommandPaths>,
-    agent: &ResolvedAddAgent,
+    agent: Option<&Agent>,
     named: bool,
 ) -> Result<Option<Prepared>> {
     let reused = preparing.reused();
@@ -67,13 +66,8 @@ pub(super) async fn finish_add_workspace(
             );
         })?;
     }
-    let starts = post_setup.is_ok().then_some(agent);
-    enter_workspace(
-        ctx,
-        workspace,
-        starts.and_then(|agent| agent.agent.as_ref()),
-    )
-    .await?;
+    let starts = agent.filter(|_| post_setup.is_ok());
+    enter_workspace(ctx, workspace, starts).await?;
     post_setup?;
     Ok(Some(prepared))
 }

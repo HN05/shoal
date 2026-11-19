@@ -398,8 +398,8 @@ command's start adds, such as the subject a repository's setup gives its
 agent and the setup mode, which no other launch starts in; the daemon records a
 client's launch as `manual`, and names the source of a launch it makes
 itself. The
-daemon decides what the launch leaves out with the steps `shoal-core` shares
-with the CLI's own start: the mode, the kind of space and the repository,
+daemon alone decides what the launch leaves out, with the steps in
+`shoal-core`: the mode, the kind of space and the repository,
 which the launch names, its issue or link belongs to, or the checkout or
 worktree the start was made in has; and the branch a PR, a branch link, the
 typed name or earlier work on its issue settles. It then queues the worker of
@@ -3418,13 +3418,18 @@ command per kind of start. Without `--mode`, a start on a terminal picks the
 mode, since it decides what the agent is told, and lists the start's default
 first so Enter keeps it; without a terminal it takes the default, so scripts
 and agents start as before. The picker follows the checks of the arguments
-given, as every prompt does: a start whose arguments decide the kind of space
-picks among that kind's modes in its own flow, after that flow's checks, and
-another first resolves and checks its repository, parent and agent. The
-default mode, `worker`, always starts in a workspace, so a plain `start`
-without a terminal needs nothing from the daemon before it resolves its
-repository; another mode's kind is read
-from the named or current repository's settings. The mode alone decides the
+given, as every prompt does: one function in the CLI settles every start,
+`--in`'s, `repo setup`'s and `contribute`'s included, refusing what the
+arguments alone refuse, finding the repository and settings without asking
+and checking the agent, then sends one `CheckLaunch` before its first
+picker. The daemon settles that launch as it would start it, short of
+recording anything: the whole placement of the mode's kind once the mode is
+decided or the arguments name what only a workspace takes, and otherwise
+what every kind shares, the repository, parent, given permissions and named
+blockers. The pickers then follow what the launch leaves open, not a kind:
+the mode, the repository where the mode starts in one, a new workspace's
+source, a plan's issue and the agent, so a start that creates a workspace
+asks its mode before its source. The mode alone decides the
 kind of space, with no flag overriding it, so a mode's rules and instructions
 always describe the space its agent is in. With `--in`, the mode's kind
 gives the agent its role in that existing workspace: a mode that starts in a

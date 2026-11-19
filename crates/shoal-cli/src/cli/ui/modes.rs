@@ -30,16 +30,6 @@ pub struct ModeFit {
     pub repository: Option<bool>,
 }
 
-impl ModeFit {
-    /// A space of `kind` in a repository.
-    pub fn in_repository(kind: SpaceKind) -> Self {
-        Self {
-            kind: Some(kind),
-            repository: Some(true),
-        }
-    }
-}
-
 impl ModeChoice {
     /// The mode it names; none for a pick, which a start without a
     /// terminal leaves to the default mode.
