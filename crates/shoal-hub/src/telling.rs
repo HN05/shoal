@@ -173,14 +173,7 @@ impl Hub {
                 let about = about.map_or_else(About::default, |about| {
                     About::space(&about.name, &about.space)
                 });
-                let sender = match told.kind {
-                    AlertKind::Message if about.id.is_some() => Sender::Space,
-                    _ => Sender::Shoal,
-                };
-                let alert = NewAlert {
-                    sender,
-                    ..NewAlert::shoal(told.kind, about, message)
-                };
+                let alert = told_alert(told.kind, about, message);
                 (daemon.alert(&coordinator, alert, told.for_user)).await
             }
             (Some(Receiver::Elsewhere(next)), about) => {
@@ -194,7 +187,7 @@ impl Hub {
             (None, Some(about)) => {
                 if told.for_user {
                     let about = About::space(&about.name, &about.space);
-                    let alert = NewAlert::shoal(told.kind, about, message);
+                    let alert = told_alert(told.kind, about, message);
                     self.notifications.notify_user(alert).await;
                 }
                 Ok(())
@@ -234,6 +227,20 @@ impl Hub {
             message.to_string(),
         )
         .await;
+    }
+}
+
+/// The alert of `kind` with `message` about the space `about` that a told
+/// event becomes: that space's own message, which it may withdraw, or else
+/// Shoal's alert about it.
+fn told_alert(kind: AlertKind, about: About, message: String) -> NewAlert {
+    let sender = match kind {
+        AlertKind::Message if about.id.is_some() => Sender::Space,
+        _ => Sender::Shoal,
+    };
+    NewAlert {
+        sender,
+        ..NewAlert::shoal(kind, about, message)
     }
 }
 

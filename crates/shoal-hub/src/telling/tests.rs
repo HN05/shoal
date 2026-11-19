@@ -38,3 +38,24 @@ fn the_outbox_sends_in_the_order_events_came() {
     }
     assert_eq!(sent, ["first", "second"]);
 }
+
+#[tokio::test]
+async fn a_message_no_coordinator_takes_reaches_the_user_from_its_space() {
+    let root = tempfile::tempdir().unwrap();
+    let hub = crate::stand_in::hub(&root, shoal_core::config::Config::default()).await;
+    // A message of a child on another machine, with no agent above it.
+    let mut event = told(&[]);
+    (event.kind, event.message) = (AlertKind::Message, "from elsewhere".into());
+    (hub.deliver_told(&crate::stand_in::StandIn, event))
+        .await
+        .unwrap();
+    let alerts = hub.notifications.list(true, 10).await.unwrap();
+    let [alert] = alerts.as_slice() else {
+        panic!("{alerts:?}");
+    };
+    // The space that sent it, which may withdraw it.
+    assert_eq!(
+        (alert.sender, alert.space_id.as_ref().map(|id| id.as_str())),
+        (Sender::Space, Some("child"))
+    );
+}
