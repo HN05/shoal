@@ -10,8 +10,9 @@ use crate::{
     ForgeRepo,
     backends::Routes,
     capability::{Capability, Unsupported},
-    ci::{CiAction, JobState, check_state::CheckState, id},
+    ci::{CiAction, JobState, check_state::CheckState},
     numbers::{PullNumber, RunId, RunNumber},
+    repo::locator::id,
 };
 
 /// A workflow run in the repository, as its forge reports it.

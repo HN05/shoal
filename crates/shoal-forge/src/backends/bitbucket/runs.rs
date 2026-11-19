@@ -87,6 +87,6 @@ impl Runs for Bitbucket {
     }
 
     fn run_operation(&self, _run: &Run, action: CiAction, _failed: bool) -> Result<RunOperation> {
-        Err(capability::unsupported(self, Capability::ci(action)))
+        Err(capability::unsupported(self, action.capability()))
     }
 }

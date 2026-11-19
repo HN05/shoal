@@ -176,6 +176,27 @@ states!(UpdateMethod: ValueEnum {
     Rebase => "rebase",
 });
 
+impl MergeMethod {
+    /// What a forge needs to merge this way.
+    pub fn capability(self) -> Capability {
+        match self {
+            Self::Merge => Capability::MergeCommit,
+            Self::Rebase => Capability::RebaseMerge,
+            Self::Squash => Capability::SquashMerge,
+        }
+    }
+}
+
+impl UpdateMethod {
+    /// What a forge needs to update a PR's branch this way.
+    pub fn capability(self) -> Capability {
+        match self {
+            Self::Merge => Capability::UpdateByMerge,
+            Self::Rebase => Capability::UpdateByRebase,
+        }
+    }
+}
+
 impl Action {
     pub fn edit(edit: Edit) -> Self {
         Self::Edit(Box::new(edit))
@@ -259,11 +280,11 @@ impl Action {
             Self::Edit(edit) => {
                 let labels = (!edit.add_labels.is_empty() || !edit.remove_labels.is_empty())
                     .then_some(Capability::Labels);
-                let assignees = edit.assigns().then_some(Capability::assignees(kind));
+                let assignees = edit.assigns().then_some(kind.assignees_capability());
                 let milestone = edit
                     .milestone
                     .as_ref()
-                    .map(|_| Capability::milestones(kind));
+                    .map(|_| kind.milestones_capability());
                 let draft = edit.draft.map(|_| Capability::DraftPrs);
                 labels
                     .into_iter()
@@ -273,12 +294,12 @@ impl Action {
                     .collect()
             }
             Self::Reopen if kind == ItemKind::Pr => vec![Capability::ReopenPrs],
-            Self::Merge { method, .. } => method.map(Capability::merge).into_iter().collect(),
+            Self::Merge { method, .. } => method.map(MergeMethod::capability).into_iter().collect(),
             Self::AutoMerge { method, .. } => std::iter::once(Capability::AutoMerge)
-                .chain(method.map(Capability::merge))
+                .chain(method.map(MergeMethod::capability))
                 .collect(),
             Self::CancelAutoMerge => vec![Capability::AutoMerge],
-            Self::Update { method } => vec![Capability::update(*method)],
+            Self::Update { method } => vec![method.capability()],
             Self::Thread(change) if change.resolve.is_some() => vec![Capability::ResolveThreads],
             Self::Review(review) => {
                 let lines = (!review.comments.is_empty()).then_some(Capability::LineComments);

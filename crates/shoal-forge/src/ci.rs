@@ -21,7 +21,6 @@ use crate::{
 };
 use shoal_forge_types::{
     ForgeRepo,
-    capability::Capability,
     ci::{CiAction, JobState},
     items::{item::ItemState, link::ItemKind},
     numbers::{JobId, PullNumber, RunId, RunNumber},
@@ -89,8 +88,7 @@ impl ForgeRepo {
         action: CiAction,
         names: &[String],
     ) -> Result<Plan> {
-        self.require_on_server(account, Capability::ci(action))
-            .await?;
+        self.require_on_server(account, action.capability()).await?;
         let head = self.open_head(account, number).await?;
         let jobs = self.ci_jobs(account, head.as_str()).await?;
         let selected = select(&jobs, action, names)?;

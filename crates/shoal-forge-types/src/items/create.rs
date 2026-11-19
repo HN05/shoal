@@ -95,8 +95,8 @@ fn assignment_needs(
     assignees: &[String],
     milestone: &Option<String>,
 ) -> impl Iterator<Item = Capability> {
-    let assignees = (!assignees.is_empty()).then_some(Capability::assignees(kind));
-    let milestone = milestone.as_ref().map(|_| Capability::milestones(kind));
+    let assignees = (!assignees.is_empty()).then_some(kind.assignees_capability());
+    let milestone = milestone.as_ref().map(|_| kind.milestones_capability());
     assignees.into_iter().chain(milestone)
 }
 

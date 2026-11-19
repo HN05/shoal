@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ForgeRepo, IssueInput,
     backends::{ForgeKind, Routes},
+    capability::Capability,
     items::reference::{ItemInput, ItemRef},
     repo::locator::{ISSUE_URL, PULL_URL, item_path},
 };
@@ -29,6 +30,22 @@ impl ItemKind {
         match self {
             Self::Issue => "Issue",
             Self::Pr => "PR",
+        }
+    }
+
+    /// What a forge needs to assign items of this kind.
+    pub fn assignees_capability(self) -> Capability {
+        match self {
+            Self::Issue => Capability::IssueAssignees,
+            Self::Pr => Capability::PrAssignees,
+        }
+    }
+
+    /// What a forge needs to set the milestone of items of this kind.
+    pub fn milestones_capability(self) -> Capability {
+        match self {
+            Self::Issue => Capability::IssueMilestones,
+            Self::Pr => Capability::PrMilestones,
         }
     }
 }

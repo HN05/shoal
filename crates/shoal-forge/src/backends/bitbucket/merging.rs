@@ -54,7 +54,7 @@ impl Merging for Bitbucket {
         _current: &Current,
         method: UpdateMethod,
     ) -> Result<Vec<Request>> {
-        Err(capability::unsupported(self, Capability::update(method)))
+        Err(capability::unsupported(self, method.capability()))
     }
 }
 

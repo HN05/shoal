@@ -1,6 +1,11 @@
 //! GitLab's routes, which keep a project's items, branches and pipelines
 //! under `/-/`, below any nested groups.
-use crate::{ForgeRepo, backends::Routes, ci::id, numbers::RunNumber, repo::locator::ItemRoute};
+use crate::{
+    ForgeRepo,
+    backends::Routes,
+    numbers::RunNumber,
+    repo::locator::{ItemRoute, id},
+};
 
 #[derive(Clone, Copy)]
 pub struct GitLab;

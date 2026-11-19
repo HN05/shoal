@@ -9,11 +9,7 @@ use crate::{
     ci::{CiCheck, Job, Location, Operation, check, checks::plain},
     transport::api::TransportRequests,
 };
-use shoal_forge_types::{
-    ForgeRepo,
-    ci::{CiAction, id},
-    numbers::JobId,
-};
+use shoal_forge_types::{ForgeRepo, ci::CiAction, numbers::JobId, repo::locator::id};
 
 impl Checks for GitLab {
     async fn ci_checks(

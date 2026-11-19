@@ -6,8 +6,9 @@ use serde_json::Value;
 use crate::ci::{CiCheck, Job, Location, Operation, check};
 use shoal_forge_types::{
     ForgeRepo,
-    ci::{CiAction, JobState, check_state::CheckState, id},
+    ci::{CiAction, JobState, check_state::CheckState},
     numbers::{JobId, RunId},
+    repo::locator::id,
 };
 
 /// GitHub's latest check runs.

@@ -1,6 +1,11 @@
 //! GitHub's routes, on GitHub.com or an Enterprise Server: where its items,
 //! branches and runs are on the web.
-use crate::{ForgeRepo, backends::Routes, ci::id, numbers::RunNumber, repo::locator::ItemRoute};
+use crate::{
+    ForgeRepo,
+    backends::Routes,
+    numbers::RunNumber,
+    repo::locator::{ItemRoute, id},
+};
 
 #[derive(Clone, Copy)]
 pub struct GitHub;

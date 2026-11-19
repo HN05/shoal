@@ -111,3 +111,21 @@ pub fn item_path(input: &str) -> &str {
         .unwrap()
         .trim_end_matches('/')
 }
+
+impl ForgeRepo {
+    /// The path components of `target` after this repository's `section`.
+    /// Forges link jobs over HTTPS even when the remote uses HTTP.
+    pub fn repository_path<'a>(&self, target: &'a str, section: &str) -> Option<Vec<&'a str>> {
+        let path = target
+            .strip_prefix("https://")
+            .or_else(|| target.strip_prefix("http://"))?
+            .strip_prefix(&format!("{}/{}", self.host, self.path))?
+            .strip_prefix(section)?;
+        Some(path.split('/').collect())
+    }
+}
+
+/// A positive ID in a job URL.
+pub fn id(text: &str) -> Option<u64> {
+    text.parse::<u64>().ok().filter(|id| *id > 0)
+}

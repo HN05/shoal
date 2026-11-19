@@ -4,14 +4,6 @@
 use serde::{Deserialize, Serialize};
 use shoal_states::states;
 
-use crate::{
-    ci::CiAction,
-    items::{
-        action::{MergeMethod, UpdateMethod},
-        link::ItemKind,
-    },
-};
-
 states!(Capability: Variants {
     ResolveThreads => "resolve_threads",
     RerunJobs => "rerun_jobs",
@@ -87,42 +79,6 @@ impl Capability {
             Self::RevertPrs => "have the forge revert merged PRs",
             Self::RunJobs => "run CI jobs on this machine",
             Self::MeaningSearch => "search issues and PRs by meaning",
-        }
-    }
-
-    pub fn merge(method: MergeMethod) -> Self {
-        match method {
-            MergeMethod::Merge => Self::MergeCommit,
-            MergeMethod::Rebase => Self::RebaseMerge,
-            MergeMethod::Squash => Self::SquashMerge,
-        }
-    }
-
-    pub fn update(method: UpdateMethod) -> Self {
-        match method {
-            UpdateMethod::Merge => Self::UpdateByMerge,
-            UpdateMethod::Rebase => Self::UpdateByRebase,
-        }
-    }
-
-    pub fn assignees(kind: ItemKind) -> Self {
-        match kind {
-            ItemKind::Issue => Self::IssueAssignees,
-            ItemKind::Pr => Self::PrAssignees,
-        }
-    }
-
-    pub fn milestones(kind: ItemKind) -> Self {
-        match kind {
-            ItemKind::Issue => Self::IssueMilestones,
-            ItemKind::Pr => Self::PrMilestones,
-        }
-    }
-
-    pub fn ci(action: CiAction) -> Self {
-        match action {
-            CiAction::Rerun => Self::RerunJobs,
-            CiAction::Cancel => Self::CancelJobs,
         }
     }
 }

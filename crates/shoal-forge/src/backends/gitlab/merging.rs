@@ -12,7 +12,6 @@ use crate::{
 };
 use shoal_forge_types::{
     ForgeRepo,
-    capability::Capability,
     items::{
         action::{MergeMethod, UpdateMethod},
         item::Current,
@@ -105,7 +104,7 @@ impl Merging for GitLab {
         method: UpdateMethod,
     ) -> Result<Vec<Request>> {
         if method == UpdateMethod::Merge {
-            return Err(capability::unsupported(self, Capability::update(method)));
+            return Err(capability::unsupported(self, method.capability()));
         }
         let endpoint = repo.item_endpoint(ItemKind::Pr, current.item.number);
         Ok(vec![Request::new(
@@ -134,7 +133,7 @@ fn merge_request(
     when_pipeline_succeeds: bool,
 ) -> Result<Request> {
     if let Some(method @ MergeMethod::Rebase) = merge.method {
-        return Err(capability::unsupported(&GitLab, Capability::merge(method)));
+        return Err(capability::unsupported(&GitLab, method.capability()));
     }
     let mut body = json!({
         "should_remove_source_branch": merge.delete_branch,

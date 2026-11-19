@@ -13,7 +13,6 @@ use crate::{
 };
 use shoal_forge_types::{
     ForgeRepo,
-    capability::Capability,
     ci::{
         CiAction,
         run_action::{Run, RunActed},
@@ -42,8 +41,7 @@ impl ForgeRepo {
         run: &ItemRef,
         action: CiAction,
     ) -> Result<Run> {
-        self.require_on_server(account, Capability::ci(action))
-            .await?;
+        self.require_on_server(account, action.capability()).await?;
         self.read_run(account, run).await
     }
 
