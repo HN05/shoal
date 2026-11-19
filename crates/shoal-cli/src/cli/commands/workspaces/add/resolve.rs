@@ -56,10 +56,11 @@ pub(super) async fn resolve<'a>(ctx: &'a Context, launch: &mut Launch) -> Result
     })
 }
 
-/// The repository `launch` starts in: the one it names, else the one its
-/// link belongs to, offering to register it, else the current or a picked
-/// one; `launch` then names it by ID.
-async fn start_target(ctx: &Context, launch: &mut Launch) -> Result<AddTarget> {
+/// Refuse what `launch` asks for that its arguments alone refuse, before
+/// anything is looked up or a picker opens: two repositories, an issue to
+/// pick outside plan mode, a link beside a branch, an issue or a copy, and
+/// a branch that is not a literal Git branch name.
+pub(in crate::cli::commands) fn check_start_arguments(launch: &Launch) -> Result<()> {
     anyhow::ensure!(
         launch.repository.is_none() || !matches!(launch.target, Some(StartTarget::Repository(_))),
         "a positional repository cannot be combined with --repo"
@@ -74,6 +75,18 @@ async fn start_target(ctx: &Context, launch: &mut Launch) -> Result<AddTarget> {
         !links || (launch.branch.is_none() && launch.issue.is_none()),
         "an item or branch link cannot be combined with --branch or --issue"
     );
+    crate::launches::ensure_copy_fits(launch)?;
+    if let Some(branch) = &launch.branch {
+        shoal_core::git::check_branch_name(branch)?;
+    }
+    Ok(())
+}
+
+/// The repository `launch` starts in: the one it names, else the one its
+/// link belongs to, offering to register it, else the current or a picked
+/// one; `launch` then names it by ID.
+async fn start_target(ctx: &Context, launch: &mut Launch) -> Result<AddTarget> {
+    check_start_arguments(launch)?;
     let named = (launch.repository.clone()).or_else(|| match &launch.target {
         Some(StartTarget::Repository(named)) => Some(named.clone()),
         _ => None,

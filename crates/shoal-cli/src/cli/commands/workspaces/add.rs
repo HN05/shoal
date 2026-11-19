@@ -20,6 +20,7 @@ pub(in crate::cli) use finish::execute_add;
 pub(in crate::cli::commands) use launch::{launch_workspace, open_here, pick_start_source};
 pub(in crate::cli::commands) use plan::launch_args;
 pub(in crate::cli::commands) use reads::DaemonReads;
+pub(in crate::cli::commands) use resolve::check_start_arguments;
 use shoal_protocol::space_names::SpaceSelector;
 
 use anyhow::Result;

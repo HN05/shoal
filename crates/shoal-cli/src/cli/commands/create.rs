@@ -60,10 +60,7 @@ async fn picked_creation(
 ) -> Result<NewCreation> {
     let mut launch = args.launch(args.parent.clone());
     // What the arguments refuse fails before a picker opens.
-    if let Some(branch) = &launch.branch {
-        shoal_core::git::check_branch_name(branch)?;
-    }
-    crate::launches::ensure_copy_fits(&launch)?;
+    super::workspaces::check_start_arguments(&launch)?;
     if let Some(copied) = super::copies::source(ctx, args.copy.clone()).await? {
         copied.copy_into(&mut launch)?;
     }
