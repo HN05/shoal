@@ -2680,7 +2680,9 @@ runs for them (`shoal pr open` and approved pushes): fetches, pulls and pushes,
 to that host's every repository. Their Git settings clear your credential
 helpers for that host only and add Shoal's own, which asks the daemon for the
 token each time, so a changed token applies at once while a new host applies
-from the agent's next start. The token stays out of the agent's environment and
+from the agent's next start. Git asks Shoal's helper before its first request
+to that host, so with Git 2.46 or newer a login for it in your `.netrc` goes
+unused; older Git sends that login first. The token stays out of the agent's environment and
 Git config, and your helpers neither answer for that host nor save the token;
 while the daemon cannot answer, as during a restart, Git on that host fails
 instead of using your login or asking for a password. Your own terminal,

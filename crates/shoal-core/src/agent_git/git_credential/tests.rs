@@ -2,20 +2,24 @@ use super::{helper_covers, settings, strip};
 use crate::paths::Paths;
 
 #[test]
-fn each_host_gets_a_reset_then_shoal_s_helper() {
+fn each_host_gets_a_reset_then_shoal_s_helper_then_a_proactive_login() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
 
     let settings = settings(&paths, ["git.example.com:3000"], &[]).unwrap();
 
     let key = "credential.https://git.example.com:3000.helper";
-    let [(reset_key, reset), (helper_key, helper)] = settings.as_slice() else {
-        panic!("expected a reset and a helper, got {settings:?}");
+    let [(reset_key, reset), (helper_key, helper), proactive] = settings.as_slice() else {
+        panic!("expected a reset, a helper and a proactive login, got {settings:?}");
     };
     assert_eq!((reset_key.as_str(), reset.as_str()), (key, ""));
     assert_eq!(helper_key, key);
     assert!(helper.starts_with('!'), "{helper}");
     assert!(helper.ends_with(" internal git-credential"), "{helper}");
+    assert_eq!(
+        (proactive.0.as_str(), proactive.1.as_str()),
+        ("http.https://git.example.com:3000.proactiveAuth", "basic")
+    );
 }
 
 #[test]
@@ -35,6 +39,7 @@ fn a_profile_helper_that_covers_a_host_keeps_shoal_s_away_from_it() {
         [
             "credential.https://code.example.com.helper",
             "credential.https://code.example.com.helper",
+            "http.https://code.example.com.proactiveAuth",
         ]
     );
 }
@@ -82,7 +87,7 @@ fn helpers_cover_the_hosts_git_asks_them_for() {
 }
 
 #[test]
-fn strip_drops_shoal_s_helpers_and_their_resets_and_keeps_the_rest() {
+fn strip_drops_shoal_s_helpers_with_their_resets_and_proactive_logins_and_keeps_the_rest() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let user = [
@@ -90,6 +95,10 @@ fn strip_drops_shoal_s_helpers_and_their_resets_and_keeps_the_rest() {
         (
             "credential.https://other.example.com.helper".to_owned(),
             String::new(),
+        ),
+        (
+            "http.https://other.example.com.proactiveAuth".to_owned(),
+            "basic".to_owned(),
         ),
     ];
     let entries: Vec<_> = user

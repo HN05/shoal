@@ -1,9 +1,12 @@
 //! The Git settings that give an agent launch's Git over HTTPS the agent
 //! token of each host that has one, through Shoal's credential helper. For
 //! each such host, an empty helper first clears the user's helpers for that
-//! host only, so none of them answers for it or saves the token.
+//! host only, so none of them answers for it or saves the token, and Git
+//! asks Shoal's helper before its first request, so libcurl never sends a
+//! login of the user's `.netrc` for the host first, which Git 2.46 and newer
+//! do.
 
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 
 use anyhow::Result;
 
@@ -31,23 +34,52 @@ pub(crate) fn settings<'a>(
     Ok(hosts
         .into_iter()
         .flat_map(|host| {
-            let key = format!("credential.https://{host}.helper");
-            [(key.clone(), String::new()), (key, helper.clone())]
+            let context = format!("https://{host}");
+            let key = helper_key(&context);
+            [
+                (key.clone(), String::new()),
+                (key, helper.clone()),
+                (proactive_key(&context), PROACTIVE.to_owned()),
+            ]
         })
         .collect())
 }
 
-/// Remove Shoal's credential helpers, and the resets before them, from the
-/// Git settings `command` passes on, for a push that goes out as the user.
+/// Remove Shoal's credential helpers, with the resets before them and the
+/// proactive logins after, from the Git settings `command` passes on, for a
+/// push that goes out as the user.
 pub fn strip(command: &mut tokio::process::Command) {
-    let helpers: Vec<OsString> = super::passed_on(command)
+    let contexts: Vec<String> = super::passed_on(command)
         .into_iter()
         .filter(|(_, value)| is_helper(value))
-        .map(|(key, _)| key)
+        .filter_map(|(key, _)| helper_context(&key.to_string_lossy()).map(str::to_owned))
         .collect();
     super::retain(command, |(key, value)| {
-        !(helpers.contains(key) && (value.is_empty() || is_helper(value)))
+        let key = key.to_string_lossy();
+        !contexts.iter().any(|context| {
+            let helper = key == helper_key(context) && (value.is_empty() || is_helper(value));
+            helper || (*key == *proactive_key(context) && value == PROACTIVE)
+        })
     });
+}
+
+/// The value of `http.<url>.proactiveAuth` that has Git ask the credential
+/// helper for a Basic login before its first request to the URL.
+const PROACTIVE: &str = "basic";
+
+/// The key of the credential helper for the URL `context`.
+fn helper_key(context: &str) -> String {
+    format!("credential.{context}.helper")
+}
+
+/// The key of the proactive login for the URL `context`.
+fn proactive_key(context: &str) -> String {
+    format!("http.{context}.proactiveAuth")
+}
+
+/// The URL context of [`helper_key`]'s `key`.
+fn helper_context(key: &str) -> Option<&str> {
+    key.strip_prefix("credential.")?.strip_suffix(".helper")
 }
 
 /// Whether the Git setting `value` is Shoal's helper.

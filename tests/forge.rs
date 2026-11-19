@@ -2,6 +2,8 @@
 //! GitHub, and an HTTP server on Forgejo, both from `fixtures/forge.py`.
 mod support;
 
+#[path = "forge/agent_git.rs"]
+mod agent_git;
 #[path = "forge/branches.rs"]
 mod branches;
 
