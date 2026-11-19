@@ -1,7 +1,7 @@
 use crate::daemon::{
     agent_queue::tests::{create, launch_in, limit_globally, register},
     manager::Manager,
-    notifications::NotificationKind,
+    notifications::AlertKind,
     test_support::{commit, manager},
 };
 use crate::model::{QueueEntry, Workspace};
@@ -58,7 +58,7 @@ async fn a_pr_the_start_cannot_link_warns_its_starter_and_the_agent_starts() {
     let notifications = manager.notifications.list(true, 10).await.unwrap();
     let warned = notifications
         .iter()
-        .find(|notification| notification.kind == NotificationKind::StartWarned)
+        .find(|notification| notification.kind == AlertKind::StartWarned)
         .expect("the starter was not told of the refused link");
     assert!(
         warned.message.contains("cannot link PR 7"),

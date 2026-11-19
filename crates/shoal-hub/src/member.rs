@@ -4,7 +4,7 @@
 //! once it is lost, as after sleep or a network change. A refusal it cannot
 //! outwait, such as of a revoked credential, stops it until the user acts.
 use shoal_daemon_base::notifications::About;
-use shoal_protocol::notifications::NotificationKind;
+use shoal_protocol::alerts::AlertKind;
 use std::{
     sync::{Arc, Mutex},
     time::Duration,
@@ -401,7 +401,7 @@ impl Hub {
             self.notify(
                 daemon,
                 About::named(None),
-                NotificationKind::HubRefused,
+                AlertKind::HubRefused,
                 message.to_string(),
             )
             .await;

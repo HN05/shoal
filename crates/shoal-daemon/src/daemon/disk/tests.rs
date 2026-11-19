@@ -241,7 +241,7 @@ async fn cleanup_empties_unused_caches_after_removing_workspaces() {
     assert!(
         notifications
             .iter()
-            .any(|notification| notification.kind == NotificationKind::CachesEmptied),
+            .any(|notification| notification.kind == AlertKind::CachesEmptied),
         "{notifications:?}"
     );
 }
@@ -297,7 +297,7 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
     assert!(
         notifications
             .iter()
-            .any(|notification| notification.kind == NotificationKind::ResultsDeleted),
+            .any(|notification| notification.kind == AlertKind::ResultsDeleted),
         "{notifications:?}"
     );
 }
@@ -396,7 +396,7 @@ async fn failed_cleanup_still_stops_executions_on_critical_space() {
             .filter(|notification| {
                 matches!(
                     notification.kind,
-                    NotificationKind::AgentStopped | NotificationKind::StopFailed
+                    AlertKind::AgentStopped | AlertKind::StopFailed
                 )
             })
             .count()

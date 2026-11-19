@@ -15,15 +15,15 @@ use crate::store::{
     Store,
     sent_files::{sent_files, sent_ids},
 };
+pub use shoal_protocol::alerts::{Alert, AlertKind, Cleared, Sent};
 use shoal_protocol::files::SentFile;
-pub use shoal_protocol::notifications::{Cleared, Notification, NotificationKind, Sent};
 use shoal_protocol::space_names::SpaceName;
 
 /// Rows kept before older read notifications are pruned; unread ones stay.
 const RETAINED: usize = 500;
 
-/// Operations on the client type [`NotificationKind`] that only the `shoal` command uses.
-trait NotificationKindExt {
+/// Operations on the client type [`AlertKind`] that only the `shoal` command uses.
+trait AlertKindExt {
     /// Whether the agent of an ancestor coordinating the workspace's work
     /// receives this event instead of the user, and from whom.
     fn coordination(self) -> Option<Source>;
@@ -34,7 +34,7 @@ trait NotificationKindExt {
     fn collapses(self) -> bool;
 }
 
-impl NotificationKindExt for NotificationKind {
+impl AlertKindExt for AlertKind {
     fn coordination(self) -> Option<Source> {
         match self {
             Self::AgentExited
@@ -113,7 +113,7 @@ impl About {
 pub fn insert(
     tx: &rusqlite::Transaction<'_>,
     about: &About,
-    kind: NotificationKind,
+    kind: AlertKind,
     message: &str,
     files: &str,
 ) -> Result<Recorded> {
@@ -158,7 +158,7 @@ pub fn insert(
 pub fn retract(
     tx: &rusqlite::Transaction<'_>,
     space_id: &SpaceId,
-    kind: NotificationKind,
+    kind: AlertKind,
     message: &str,
 ) -> Result<bool> {
     let deleted = tx.execute(
@@ -172,7 +172,7 @@ pub fn retract(
 /// Returns whether there was one.
 pub fn retract_about(
     tx: &rusqlite::Transaction<'_>,
-    kind: NotificationKind,
+    kind: AlertKind,
     subject: &str,
 ) -> Result<bool> {
     let deleted = tx.execute(
@@ -183,15 +183,11 @@ pub fn retract_about(
 }
 
 /// Delete the unread message `id` that `workspace` sent the user.
-fn withdraw_message(
-    tx: &rusqlite::Transaction<'_>,
-    space: &About,
-    id: i64,
-) -> Result<Notification> {
+fn withdraw_message(tx: &rusqlite::Transaction<'_>, space: &About, id: i64) -> Result<Alert> {
     let notification = tx
         .query_row(
             &format!("SELECT {COLUMNS} FROM notifications WHERE id=?1 AND space_id=?2 AND kind=?3"),
-            params![id, space.id, NotificationKind::AgentMessage],
+            params![id, space.id, AlertKind::AgentMessage],
             row,
         )
         .optional()?
@@ -207,8 +203,8 @@ fn withdraw_message(
     Ok(notification)
 }
 
-fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Notification> {
-    Ok(Notification {
+fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Alert> {
+    Ok(Alert {
         id: row.get(0)?,
         created_at: row.get(1)?,
         workspace: row.get(2)?,
@@ -235,7 +231,7 @@ pub trait Coordinators: Send + Sync {
         &'a self,
         name: &'a SpaceName,
         id: Option<&'a SpaceId>,
-        kind: NotificationKind,
+        kind: AlertKind,
         message: String,
         files: Vec<PathBuf>,
         source: Source,
@@ -286,7 +282,7 @@ impl Notifications {
         &self,
         coordinators: &dyn Coordinators,
         about: About,
-        kind: NotificationKind,
+        kind: AlertKind,
         message: String,
         files: &[SentFile],
     ) {
@@ -302,7 +298,7 @@ impl Notifications {
         &self,
         coordinators: &dyn Coordinators,
         about: About,
-        kind: NotificationKind,
+        kind: AlertKind,
         message: String,
         files: &[SentFile],
     ) -> Result<Option<i64>> {
@@ -324,7 +320,7 @@ impl Notifications {
     /// Record an event about the space `about` names for the user whatever
     /// space above it has an agent, as when its coordinator's machine stays
     /// offline. A failure is logged.
-    pub async fn notify_user(&self, about: About, kind: NotificationKind, message: String) {
+    pub async fn notify_user(&self, about: About, kind: AlertKind, message: String) {
         let recorded = self.record_for_user(about, kind, message, "[]".into());
         if let Err(error) = recorded.await {
             log!("notification not recorded: {error:#}");
@@ -337,7 +333,7 @@ impl Notifications {
     async fn record_for_user(
         &self,
         about: About,
-        kind: NotificationKind,
+        kind: AlertKind,
         message: String,
         files: String,
     ) -> Result<i64> {
@@ -354,7 +350,7 @@ impl Notifications {
     /// Delete the message `id` the space `about` names sent the user, which
     /// the user need not see after all. A shown message stays; a correction
     /// follows it.
-    pub async fn withdraw_message(&self, about: About, id: i64) -> Result<Notification> {
+    pub async fn withdraw_message(&self, about: About, id: i64) -> Result<Alert> {
         self.store
             .write(move |tx| withdraw_message(tx, &about, id))
             .await
@@ -362,7 +358,7 @@ impl Notifications {
 
     /// Oldest first. `unread_only` gives the oldest unread notifications, so a
     /// backlog is shown in order across calls; otherwise the newest `limit`.
-    pub async fn list(&self, unread_only: bool, limit: u32) -> Result<Vec<Notification>> {
+    pub async fn list(&self, unread_only: bool, limit: u32) -> Result<Vec<Alert>> {
         self.store
             .run(move |db| {
                 if unread_only {
@@ -386,7 +382,7 @@ impl Notifications {
     }
 
     /// Notifications after `after`, unread only, oldest first.
-    pub async fn after(&self, after: i64, limit: u32) -> Result<Vec<Notification>> {
+    pub async fn after(&self, after: i64, limit: u32) -> Result<Vec<Alert>> {
         self.store
             .run(move |db| {
                 Ok(db

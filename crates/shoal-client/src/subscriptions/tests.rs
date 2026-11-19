@@ -140,7 +140,7 @@ async fn a_subscription_sends_its_snapshot_then_each_kind_of_change() {
         .unwrap();
     until_each(
         &mut subscription,
-        &[RecordKind::Question, RecordKind::Notification],
+        &[RecordKind::Question, RecordKind::Alert],
     )
     .await;
 
@@ -475,7 +475,7 @@ async fn a_scoped_subscription_covers_its_tree_without_notifications() {
     assert_eq!(ids(RecordKind::Repository), [daemon.repository.id.as_str()]);
     assert!(
         keys.iter()
-            .all(|key| !matches!(key.kind, RecordKind::Notification | RecordKind::Question)),
+            .all(|key| !matches!(key.kind, RecordKind::Alert | RecordKind::Question)),
         "{keys:?}"
     );
 }

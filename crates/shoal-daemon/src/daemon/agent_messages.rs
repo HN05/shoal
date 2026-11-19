@@ -13,7 +13,7 @@ use rusqlite::Transaction;
 use crate::{
     daemon::{
         manager::Manager,
-        notifications::NotificationKind,
+        notifications::AlertKind,
         workspace_files::{self, Attacher, NewFile, layout::Copy},
     },
     model::Space,
@@ -49,7 +49,7 @@ pub(crate) struct About {
     pub id: Option<SpaceId>,
     /// The notification the event would be for the user, which the user
     /// receives instead if the space goes before its agent reads it.
-    pub kind: Option<NotificationKind>,
+    pub kind: Option<AlertKind>,
 }
 
 /// A space's unread messages.

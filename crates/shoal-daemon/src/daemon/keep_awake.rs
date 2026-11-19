@@ -17,7 +17,7 @@ use super::{
     links::wait::watches_open_pr,
     log,
     manager::Manager,
-    notifications::NotificationKind,
+    notifications::AlertKind,
     tree::{TrackedAgents, delegated},
 };
 use crate::{config::Config, state::AgentState};
@@ -163,7 +163,7 @@ async fn failed(manager: &Manager, error: anyhow::Error, config: Arc<Config>) ->
     let message = format!("Shoal could not keep this machine awake: {error:#}");
     log!("keep awake: {error:#}");
     manager
-        .notify(None, NotificationKind::KeepAwakeFailed, message)
+        .notify(None, AlertKind::KeepAwakeFailed, message)
         .await;
     Hold::Failed(config)
 }

@@ -1,8 +1,6 @@
 use super::super::tests::{add, create, launch_in, limit_globally, register};
 use crate::{
-    daemon::{
-        chats::NewChat, manager::Manager, notifications::NotificationKind, test_support::manager,
-    },
+    daemon::{chats::NewChat, manager::Manager, notifications::AlertKind, test_support::manager},
     model::{QueueEntry, Repository},
     removal::{InspectionPolicy, UnsavedWork},
     state::QueueState,
@@ -54,7 +52,7 @@ async fn a_failed_launch_stays_on_its_space_with_its_error() {
         .unwrap();
     let notifications = manager.notifications.list(true, 10).await.unwrap();
     let told = (notifications.iter())
-        .find(|notification| notification.kind == NotificationKind::StartFailed)
+        .find(|notification| notification.kind == AlertKind::StartFailed)
         .unwrap();
     let number = workspace.number;
     assert!(told.message.contains(&format!("`shoal restore {number}`")));

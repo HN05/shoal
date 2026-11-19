@@ -11,8 +11,8 @@ use shoal_core::{config, env, fsutil, hooks, repository, tools};
 use shoal_daemon_base::{callers, gates, log, notifications};
 use shoal_daemon_base::{config_state::ConfigState, notifications::Notifications};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::approvals::{ApprovalRequest, Target};
-use shoal_protocol::notifications::NotificationKind;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_protocol::{model, protocol, state, time, validate};
 use shoal_store as store;
@@ -123,7 +123,7 @@ impl Leases {
         &self,
         daemon: &dyn Daemon,
         (name, id): (&SpaceName, &SpaceId),
-        kind: NotificationKind,
+        kind: AlertKind,
         message: String,
     ) {
         let about = notifications::About::space(name, id);

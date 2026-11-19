@@ -341,7 +341,7 @@ async fn a_deferred_restart_that_fails_reaches_the_user() {
     let notifications = manager.notifications.list(false, 10).await.unwrap();
     assert!(
         notifications.iter().any(|notice| notice.kind
-            == crate::daemon::notifications::NotificationKind::RecoveryBlocked
+            == crate::daemon::notifications::AlertKind::RecoveryBlocked
             && notice.message.contains(FAILURE)),
         "{notifications:?}"
     );

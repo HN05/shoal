@@ -133,7 +133,7 @@ async fn a_failed_inhibitor_is_retried_under_another_config() {
     let hold = update(&manager, hold, true, &reloaded, missing).await;
     assert!(matches!(hold, Hold::Failed(ref failed) if Arc::ptr_eq(failed, &reloaded)));
     let notifications = manager.notifications.list(false, 10).await.unwrap();
-    assert_eq!(notifications[0].kind, NotificationKind::KeepAwakeFailed);
+    assert_eq!(notifications[0].kind, AlertKind::KeepAwakeFailed);
 }
 
 #[tokio::test]

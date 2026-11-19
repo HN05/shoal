@@ -19,9 +19,7 @@ use rusqlite::params;
 
 use super::JobStop;
 use crate::{
-    daemon::{
-        capacity::Activity, manager::Manager, notifications::NotificationKind, scope::Caller,
-    },
+    daemon::{capacity::Activity, manager::Manager, notifications::AlertKind, scope::Caller},
     forge::ci::CiAction,
     model::QueuedJob,
     process::{execution::Processes, identity},
@@ -72,7 +70,7 @@ impl Manager {
             if let Err(error) = self.remove_job_workspace(&job.workspace_id).await {
                 self.notify(
                     None,
-                    NotificationKind::RunnerFailed,
+                    AlertKind::RunnerFailed,
                     format!(
                         "The workspace of the ended CI job {} could not be removed: {error:#}",
                         job.job.job.name
@@ -245,7 +243,7 @@ impl Manager {
     async fn notify_cancel_failed(&self, job: &ClaimedJob, error: &anyhow::Error) {
         self.notify(
             None,
-            NotificationKind::RunnerFailed,
+            AlertKind::RunnerFailed,
             format!(
                 "Stopping CI job {} could not cancel {} on the forge, where it times out: {error:#}",
                 job.job.job.name, job.job.run.url

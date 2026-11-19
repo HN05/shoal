@@ -56,7 +56,7 @@ pub enum AlertsCommand {
     Clear,
     /// Withdraw an unread message the space sent with shoal alerts send.
     Withdraw {
-        /// Notification number, as shoal alerts send printed it.
+        /// Alert number, as shoal alerts send printed it.
         id: i64,
         /// Space, a workspace or chat, that sent it; defaults to the current
         /// workspace or chat, or a picker.

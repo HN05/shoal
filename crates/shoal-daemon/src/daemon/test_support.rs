@@ -229,7 +229,7 @@ impl Manager {
         notifications
             .into_iter()
             .filter(|notification| {
-                notification.kind == crate::daemon::notifications::NotificationKind::SpaceDone
+                notification.kind == crate::daemon::notifications::AlertKind::SpaceDone
             })
             .map(|notification| notification.message)
             .collect()

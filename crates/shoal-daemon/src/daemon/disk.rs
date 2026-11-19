@@ -22,7 +22,7 @@ use super::{
     agents::Protection,
     caches::Emptying,
     manager::Manager,
-    notifications::NotificationKind,
+    notifications::AlertKind,
     spaces::removal_notices::Cleanup,
     warnings::{self, Signal, Warnings},
 };
@@ -364,7 +364,7 @@ async fn delete_results(
                     space.name
                 );
                 (
-                    NotificationKind::ResultsDeleted,
+                    AlertKind::ResultsDeleted,
                     format!(
                         "Deleted the kept files of {}, for disk space; {}",
                         space.name,
@@ -373,7 +373,7 @@ async fn delete_results(
                 )
             }
             Err(error) => (
-                NotificationKind::CleanupFailed,
+                AlertKind::CleanupFailed,
                 format!(
                     "Disk space cleanup could not delete the kept files of {}: {error:#}",
                     space.name
@@ -397,12 +397,12 @@ fn emptying_notice(
     name: &str,
     emptying: Result<Option<Emptying>>,
     filesystem: &Filesystem,
-) -> Option<(NotificationKind, String)> {
+) -> Option<(AlertKind, String)> {
     match emptying {
         Ok(Some(Emptying::Emptied { caches })) => {
             log!("disk space cleanup emptied caches of {name}");
             Some((
-                NotificationKind::CachesEmptied,
+                AlertKind::CachesEmptied,
                 format!(
                     "Emptied caches of {name} for disk space: {}; {}",
                     caches.join(", "),
@@ -414,7 +414,7 @@ fn emptying_notice(
         Err(error) => {
             log!("disk space cleanup kept caches of {name}: {error:#}");
             Some((
-                NotificationKind::CleanupFailed,
+                AlertKind::CleanupFailed,
                 format!("Disk space cleanup could not empty caches of {name}: {error:#}"),
             ))
         }
@@ -459,7 +459,7 @@ async fn stop_executions(
             Ok(()) => {
                 log!("disk space protection stopped commands in {}: {low}", workspace.name);
                 (
-                    NotificationKind::AgentStopped,
+                    AlertKind::AgentStopped,
                     format!(
                         "Stopped tracked commands: {low}; free disk space, then shoal restore {} lists them",
                         workspace.number
@@ -469,7 +469,7 @@ async fn stop_executions(
             Err(error) => {
                 log!("disk space protection could not stop {}: {error:#}", workspace.name);
                 (
-                    NotificationKind::StopFailed,
+                    AlertKind::StopFailed,
                     // Repeated failures collapse, so the message omits free space.
                     format!(
                         "Could not stop tracked executions while disk space is critical at {}: {error:#}",

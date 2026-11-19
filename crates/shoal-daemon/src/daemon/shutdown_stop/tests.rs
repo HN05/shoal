@@ -140,7 +140,7 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
     let notifications = manager.notifications.list(true, 10).await.unwrap();
     let stopped: Vec<_> = notifications
         .iter()
-        .filter(|n| n.kind == NotificationKind::SystemShutdown)
+        .filter(|n| n.kind == AlertKind::SystemShutdown)
         .map(|n| n.message.as_str())
         .collect();
     assert_eq!(stopped.len(), 1, "{stopped:?}");

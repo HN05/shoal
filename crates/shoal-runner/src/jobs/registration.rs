@@ -15,7 +15,7 @@ use shoal_forge::{
 };
 use shoal_forge_types::ForgeRepo;
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_protocol::{model::Repository, notifications::NotificationKind};
+use shoal_protocol::{alerts::AlertKind, model::Repository};
 
 use crate::{Runner, daemon::Daemon};
 
@@ -236,7 +236,7 @@ impl Runner {
 
     /// Tell the user `message` about a runner that failed.
     async fn notify_runner_failed(&self, message: String) {
-        let kind = NotificationKind::RunnerFailed;
+        let kind = AlertKind::RunnerFailed;
         (self.notifications)
             .notify_user(About::default(), kind, message)
             .await;

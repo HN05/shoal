@@ -5,7 +5,7 @@ use crate::{
     config::permissions::PermissionsConfig,
     daemon::{
         manager::Manager,
-        notifications::NotificationKind,
+        notifications::AlertKind,
         operations::fake,
         scope::Caller,
         test_support::{git, global_config, manager, repository, repository_with},
@@ -23,7 +23,7 @@ use crate::{
 };
 use shoal_ids::space_ids::SpaceNumber;
 use shoal_protocol::{
-    notifications::Notification,
+    alerts::Alert,
     space_names::{SpaceName, SpaceSelector},
 };
 
@@ -248,7 +248,7 @@ async fn a_workspace_whose_worktree_failed_goes_with_its_record() {
 
 /// The notification a start's preparation ending with `failure` records,
 /// and the started workspace's number.
-async fn reported(failure: Failure) -> (Notification, SpaceNumber) {
+async fn reported(failure: Failure) -> (Alert, SpaceNumber) {
     let (root, manager) = manager().await;
     let repository = registered(root.path(), &manager).await;
     let started = start(&manager, &repository, "child", "HEAD").await;
@@ -261,7 +261,7 @@ async fn reported_for(
     manager: &Manager,
     started: StartedWorkspace,
     failure: Failure,
-) -> (Notification, SpaceNumber) {
+) -> (Alert, SpaceNumber) {
     let worker = fake::take(started.operation.as_deref().unwrap());
     let failed = Report::Ended(Ended::Failed(failure));
     (manager.report_operation(started.operation.as_deref().unwrap(), failed, None))
@@ -272,7 +272,7 @@ async fn reported_for(
         loop {
             let notifications = manager.notifications.list(false, 10).await.unwrap();
             let found = (notifications.into_iter())
-                .find(|notification| notification.kind == NotificationKind::PreparationFailed);
+                .find(|notification| notification.kind == AlertKind::PreparationFailed);
             match found {
                 Some(found) => return found,
                 None => tokio::task::yield_now().await,

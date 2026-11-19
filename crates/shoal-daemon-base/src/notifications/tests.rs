@@ -8,7 +8,7 @@ impl Coordinators for Nobody {
         &'a self,
         _name: &'a SpaceName,
         _id: Option<&'a SpaceId>,
-        _kind: NotificationKind,
+        _kind: AlertKind,
         _message: String,
         _files: Vec<PathBuf>,
         _source: Source,
@@ -32,9 +32,9 @@ async fn pruning_keeps_unread_and_the_newest_read_notifications() {
     let (_temp, notifications) = notifications().await;
     let notify =
         |kind, message: String| notifications.notify(&Nobody, About::default(), kind, message, &[]);
-    notify(NotificationKind::SpaceRemoved, "keep unread".into()).await;
+    notify(AlertKind::SpaceRemoved, "keep unread".into()).await;
     for i in 0..RETAINED + 5 {
-        notify(NotificationKind::AgentExited, format!("exit {i}")).await;
+        notify(AlertKind::AgentExited, format!("exit {i}")).await;
     }
     notifications
         .store
@@ -44,7 +44,7 @@ async fn pruning_keeps_unread_and_the_newest_read_notifications() {
         })
         .await
         .unwrap();
-    notify(NotificationKind::AgentExited, "final".into()).await;
+    notify(AlertKind::AgentExited, "final".into()).await;
     // Read rows beyond the newest RETAINED go; the older unread one stays.
     let all = notifications.list(false, u32::MAX).await.unwrap();
     assert_eq!(all.len(), RETAINED + 1);

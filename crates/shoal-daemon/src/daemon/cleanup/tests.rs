@@ -1,5 +1,5 @@
 use super::*;
-use crate::daemon::{notifications::NotificationKind, workspace_files::Attacher};
+use crate::daemon::{notifications::AlertKind, workspace_files::Attacher};
 use crate::model::Space;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::assignments::Done;
@@ -308,7 +308,7 @@ async fn invalid_pr_record_does_not_block_other_workspace_cleanup() {
         1,
         "repeated invalid records collapse until read"
     );
-    assert_eq!(failures[0].kind, NotificationKind::CleanupFailed);
+    assert_eq!(failures[0].kind, AlertKind::CleanupFailed);
 }
 
 #[tokio::test]
@@ -1038,7 +1038,7 @@ async fn a_sweep_skips_workspaces_where_file_access_stalled_and_cleans_up_the_ot
         .await
         .unwrap()
         .into_iter()
-        .filter(|notification| notification.kind == NotificationKind::CleanupFailed)
+        .filter(|notification| notification.kind == AlertKind::CleanupFailed)
         .map(|notification| notification.message)
         .collect();
     assert_eq!(failures, Vec::<String>::new());
@@ -1131,7 +1131,7 @@ async fn completion_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
         .await
         .unwrap()
         .into_iter()
-        .filter(|notification| notification.kind == NotificationKind::CleanupFailed)
+        .filter(|notification| notification.kind == AlertKind::CleanupFailed)
         .map(|notification| notification.workspace)
         .collect();
     assert_eq!(failures, [Some("parent".into())]);

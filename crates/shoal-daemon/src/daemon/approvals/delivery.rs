@@ -6,7 +6,7 @@ use super::{ApprovalRequest, DecisionStatus, store::give_back, text::RequestText
 use crate::daemon::{
     log,
     manager::Manager,
-    notifications::{About, NotificationKind},
+    notifications::{About, AlertKind},
 };
 
 impl Manager {
@@ -27,7 +27,7 @@ impl Manager {
                 id: Some(request.space_id.clone()),
                 subject: None,
             },
-            NotificationKind::ApprovalWithdrawn,
+            AlertKind::ApprovalWithdrawn,
             message,
         )
         .await;
@@ -117,11 +117,7 @@ impl Manager {
             id: Some(request.space_id.clone()),
             subject: Some(request.key.clone()),
         };
-        self.notify_about(
-            about,
-            NotificationKind::ApprovalRequested,
-            request.notification(),
-        )
-        .await;
+        self.notify_about(about, AlertKind::ApprovalRequested, request.notification())
+            .await;
     }
 }

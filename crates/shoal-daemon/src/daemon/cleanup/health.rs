@@ -11,7 +11,7 @@ use crate::{
     daemon::{
         log,
         manager::Manager,
-        notifications::{About, NotificationKind},
+        notifications::{About, AlertKind},
     },
     time::UnixTime,
 };
@@ -266,7 +266,7 @@ impl Manager {
             };
             let name = health.name().to_lowercase();
             let message = format!("{name} failed: {}", unreported.error);
-            let kind = NotificationKind::CleanupFailed;
+            let kind = AlertKind::CleanupFailed;
             match self
                 .notifications
                 .record(self, about, kind, message, &[])

@@ -1,4 +1,4 @@
-use crate::daemon::notifications::NotificationKind;
+use crate::daemon::notifications::AlertKind;
 use shoal_protocol::files::Attacher;
 use shoal_protocol::status::{SpaceDetail, SpaceStatus};
 
@@ -35,7 +35,7 @@ async fn status_counts_only_the_spaces_own_unread_notifications() {
             .unwrap(),
     );
 
-    let kind = NotificationKind::CleanupFailed;
+    let kind = AlertKind::CleanupFailed;
     for workspace in &workspaces {
         let message = workspace.name.to_string();
         (manager.notify_space(&workspace.name, &workspace.id, kind, message)).await;

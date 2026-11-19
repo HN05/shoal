@@ -22,8 +22,8 @@ use crate::{
     store, validate,
 };
 use shoal_daemon_base::approval_requests::ApprovalRequestExt;
+use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::approvals::{ApprovalRequest, PortSpecification, Specification, Target};
-use shoal_protocol::notifications::NotificationKind;
 use shoal_protocol::space_names::SpaceSelector;
 
 mod selection;
@@ -140,7 +140,7 @@ impl Leases {
             .await?;
         let space = (&workspace.name, &workspace.id);
         if let Some(conflict) = conflict {
-            let kind = NotificationKind::PortConflict;
+            let kind = AlertKind::PortConflict;
             self.notify(daemon, space, kind, conflict).await;
         }
         if let Acquisition::Allocation(allocation) = &outcome {

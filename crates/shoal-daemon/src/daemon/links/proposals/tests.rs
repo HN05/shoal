@@ -589,7 +589,7 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         .await
         .unwrap()
         .into_iter()
-        .filter(|n| n.kind == crate::daemon::notifications::NotificationKind::ApprovalRequested)
+        .filter(|n| n.kind == crate::daemon::notifications::AlertKind::ApprovalRequested)
         .count();
     assert_eq!(asked, 1);
 }

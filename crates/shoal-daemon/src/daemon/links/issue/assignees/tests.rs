@@ -71,7 +71,7 @@ async fn an_assignee_a_removal_cannot_take_back_notifies_the_user() {
         .unwrap();
     let notifications = fixture.manager.notifications.list(true, 10).await.unwrap();
     let kept = (notifications.iter())
-        .find(|notification| notification.kind == NotificationKind::UnassignFailed)
+        .find(|notification| notification.kind == AlertKind::UnassignFailed)
         .unwrap();
     assert!(
         kept.message.contains("--remove-assignee shoal-user"),

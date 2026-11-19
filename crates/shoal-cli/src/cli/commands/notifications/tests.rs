@@ -1,12 +1,12 @@
 use crate::time::UnixTime;
 #[test]
 fn terminal_notification_is_one_osc_9_sequence_without_control_characters() {
-    let notification = shoal_protocol::notifications::Notification {
+    let notification = shoal_protocol::alerts::Alert {
         id: 1,
         created_at: UnixTime::from_seconds(0),
         workspace: Some("fix-login".into()),
         space_id: None,
-        kind: shoal_protocol::notifications::NotificationKind::AgentExited,
+        kind: shoal_protocol::alerts::AlertKind::AgentExited,
         message: "claude exited\x07 with code 0\n".into(),
         read: false,
         files: Vec::new(),
@@ -19,12 +19,12 @@ fn terminal_notification_is_one_osc_9_sequence_without_control_characters() {
 
 #[test]
 fn listed_notifications_name_the_files_sent_with_them() {
-    let notification = shoal_protocol::notifications::Notification {
+    let notification = shoal_protocol::alerts::Alert {
         id: 1,
         created_at: UnixTime::from_seconds(0),
         workspace: Some("fix-login".into()),
         space_id: None,
-        kind: shoal_protocol::notifications::NotificationKind::AgentMessage,
+        kind: shoal_protocol::alerts::AlertKind::AgentMessage,
         message: "Which layout?".into(),
         read: false,
         files: vec![shoal_protocol::files::SentFile {

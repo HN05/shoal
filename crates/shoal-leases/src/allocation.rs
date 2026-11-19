@@ -1,8 +1,8 @@
 //! Shared outcomes of daemon-owned resource allocation.
 use crate::{Leases, daemon::Daemon, protocol::Body};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::approvals::ApprovalRequest;
-use shoal_protocol::notifications::NotificationKind;
 use shoal_protocol::space_names::SpaceName;
 
 pub enum Allocation<T> {
@@ -34,7 +34,7 @@ impl Leases {
             Allocation::Granted(_) => {}
             Allocation::Busy(message) => {
                 let message = format!("{busy_prefix}{message}");
-                (self.notify(daemon, space, NotificationKind::ResourceBusy, message)).await;
+                (self.notify(daemon, space, AlertKind::ResourceBusy, message)).await;
             }
             Allocation::Approval(request) => daemon.announce(request).await,
         }

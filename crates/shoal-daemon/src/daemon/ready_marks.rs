@@ -18,7 +18,7 @@ use crate::{
             space::{LinkSpace, require_ready_space},
             wait::linked_items,
         },
-        notifications::NotificationKind,
+        notifications::AlertKind,
         scope::Caller,
     },
     forge::items::link::{ItemKind, LinkKind, Selection},
@@ -173,7 +173,7 @@ impl Manager {
         };
         if let Err(error) = result {
             let message = format!("marked ready for review; {error:#}");
-            let kind = NotificationKind::HookFailed;
+            let kind = AlertKind::HookFailed;
             (self.notify_space(&space.name, &space.id, kind, message)).await;
         }
     }

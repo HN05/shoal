@@ -12,7 +12,7 @@ use crate::{
         item_numbers::ItemNumber,
         links::{pr::current_head, space::require_ready_space},
         manager::Manager,
-        notifications::NotificationKind,
+        notifications::AlertKind,
         progress, questions, turn_retry, wake_timers,
         workspace_files::Attacher,
     },
@@ -186,7 +186,7 @@ impl Manager {
         self.notify_space(
             &space.name,
             &space.id,
-            NotificationKind::SpaceDone,
+            AlertKind::SpaceDone,
             done_notice(&space.number.to_string(), &completion, &closed),
         )
         .await;
@@ -256,7 +256,7 @@ impl Manager {
     ) {
         let hook = Hook::PostDone(completion);
         if let Err(error) = (self.run_space_hook(hook, space, settings, command)).await {
-            let kind = NotificationKind::HookFailed;
+            let kind = AlertKind::HookFailed;
             let message = format!("finished; {error:#}");
             (self.notify_space(&space.name, &space.id, kind, message)).await;
         }

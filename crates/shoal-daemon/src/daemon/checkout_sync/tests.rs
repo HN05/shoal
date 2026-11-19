@@ -10,7 +10,7 @@ use futures_util::FutureExt as _;
 
 use crate::daemon::{
     manager::Manager,
-    notifications::NotificationKind,
+    notifications::AlertKind,
     test_support::{commit, git, manager, repository},
 };
 
@@ -157,7 +157,7 @@ async fn a_lasting_failure_shows_in_status_then_the_inbox_and_one_notification()
     let notifications = f.manager.notifications.list(false, 100).await.unwrap();
     let told: Vec<_> = notifications
         .iter()
-        .filter(|n| n.kind == NotificationKind::SyncFailed)
+        .filter(|n| n.kind == AlertKind::SyncFailed)
         .collect();
     assert_eq!(told.len(), 1, "{notifications:?}");
 }

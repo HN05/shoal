@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
-use super::{log, manager::Manager, notifications::NotificationKind};
+use super::{log, manager::Manager, notifications::AlertKind};
 
 #[cfg(target_os = "linux")]
 mod logind;
@@ -66,7 +66,7 @@ async fn delay_shutdown<L: LoginManager>(manager: &Manager, login: &L) -> Option
             let message =
                 format!("Shoal could not delay system shutdowns to stop agents first: {error:#}");
             manager
-                .notify(None, NotificationKind::EnvironmentProblem, message)
+                .notify(None, AlertKind::EnvironmentProblem, message)
                 .await;
             None
         }

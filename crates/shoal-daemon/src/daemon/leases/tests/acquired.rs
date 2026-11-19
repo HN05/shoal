@@ -12,7 +12,7 @@ use crate::daemon::{
 };
 use crate::{model::Workspace, refusal::Reason};
 use shoal_protocol::acquirers::Acquirer;
-use shoal_protocol::notifications::NotificationKind;
+use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::{resources::ResourceRequest, space_names::SpaceSelector};
 
 /// A ready workspace in a daemon whose global config is `config`.
@@ -441,7 +441,7 @@ async fn a_release_a_busy_resource_operation_holds_off_waits_for_the_next_pass()
     assert_eq!(fixture.permits().await, []);
     let notices = manager.notifications.list(false, 10).await.unwrap();
     assert!(
-        (notices.iter()).all(|notice| notice.kind != NotificationKind::ReleaseFailed),
+        (notices.iter()).all(|notice| notice.kind != AlertKind::ReleaseFailed),
         "no release failed"
     );
 }

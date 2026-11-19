@@ -14,7 +14,7 @@ use crate::{
 };
 use shoal_core::refusal::Reason;
 use shoal_protocol::{
-    acquirers::Acquirer, demos::Launch, notifications::NotificationKind, space_names::SpaceSelector,
+    acquirers::Acquirer, alerts::AlertKind, demos::Launch, space_names::SpaceSelector,
 };
 
 /// A lease that ends with the execution that acquired it.
@@ -282,7 +282,7 @@ impl Leases {
             lease.held.release_command(workspace.number),
         );
         log!("{message}");
-        let kind = NotificationKind::ReleaseFailed;
+        let kind = AlertKind::ReleaseFailed;
         let space = (&workspace.name, &workspace.id);
         self.notify(daemon, space, kind, message).await;
     }

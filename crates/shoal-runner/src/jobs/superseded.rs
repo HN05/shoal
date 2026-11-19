@@ -16,7 +16,7 @@ use shoal_forge_types::{
     ForgeRepo, ci::runner::JobRun, items::reference::ItemRef, numbers::PullNumber,
 };
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_protocol::{notifications::NotificationKind, space_names::SpaceName};
+use shoal_protocol::{alerts::AlertKind, space_names::SpaceName};
 use shoal_refs::CommitId;
 
 use crate::{
@@ -125,7 +125,7 @@ impl Runner {
              failed: {error:#}. It may hold the PR's checks; cancel it with \
              shoal ci cancel {run}"
         );
-        let (about, kind) = (About::named(Some(name)), NotificationKind::RunnerFailed);
+        let (about, kind) = (About::named(Some(name)), AlertKind::RunnerFailed);
         (self.notifications)
             .notify(daemon, about, kind, message, &[])
             .await;

@@ -3,12 +3,12 @@ use super::{
     DaemonStatus, DownloadPiece, Exited, MAX_FRAME, ReviewPiece, VERSION, ViewPiece, WokenTurn,
     Work, chats, frame_pages, operations,
 };
+use crate::alerts::Alert;
 use crate::events::EventItem;
 use crate::model::{
     ConflictCheck, DiffBase, ExecutionPlan, PortOverview, PortReservation, PortSuggestion,
     Repository, RepositoryRemoval, SyncedRepository, Workspace,
 };
-use crate::notifications::Notification;
 use crate::recovery::Report;
 use crate::removal::{RemovalResult, SpaceRemovalCheck};
 use crate::resources::{Overview, ResourceLease};
@@ -315,15 +315,15 @@ response_bodies! {
     LayeredConfig(super::RepositoryLayers),
     SyncedRepository(SyncedRepository),
     FailingSyncs(Vec<crate::model::CheckoutSync>),
-    Notifications(Vec<Notification>),
-    Cleared(crate::notifications::Cleared),
+    Notifications(Vec<Alert>),
+    Cleared(crate::alerts::Cleared),
     AgentMessages(Vec<crate::agent_messages::AgentMessage>),
     Question(crate::questions::Question),
     Questions(crate::questions::Listing),
     ReviewPieces(Vec<ReviewPiece>),
     ReviewId(crate::reviews::ReviewId),
-    Notification(Notification),
-    Sent(crate::notifications::Sent),
+    Alert(Alert),
+    Sent(crate::alerts::Sent),
     EventItem(EventItem),
     PrUpdates(crate::links::Updates),
     Port(PortReservation),

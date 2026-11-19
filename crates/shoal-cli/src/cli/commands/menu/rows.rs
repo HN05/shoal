@@ -22,8 +22,8 @@ use crate::{
     forge::items::reference::ItemRef,
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::alerts::Alert;
 use shoal_protocol::item_numbers::ItemNumber;
-use shoal_protocol::notifications::Notification;
 use shoal_protocol::space_names::SpaceSelector;
 
 const ADD_ENTRY: &str = "add-workspace";
@@ -72,7 +72,7 @@ pub(super) enum Row {
     Elsewhere(SpaceId),
     Workspace(SpaceId),
     /// A notification, by the ID of its space, if any.
-    Notification(String),
+    Alert(String),
     Add,
 }
 
@@ -144,7 +144,7 @@ impl Row {
             Self::SyncFailed(repository) => format!("sync-failed:{repository}"),
             Self::Elsewhere(space) => format!("elsewhere:{space}"),
             Self::Workspace(workspace) => workspace.to_string(),
-            Self::Notification(id) => format!("notification:{id}"),
+            Self::Alert(id) => format!("notification:{id}"),
             Self::Add => ADD_ENTRY.into(),
         }
     }
@@ -157,7 +157,7 @@ impl Row {
             return Ok(Self::Workspace(SpaceId::from(id)));
         };
         if kind == "notification" {
-            return Ok(Self::Notification(rest.to_owned()));
+            return Ok(Self::Alert(rest.to_owned()));
         }
         if kind == "untracked" {
             return Ok(Self::Untracked(decode_path(rest)?));
@@ -218,9 +218,7 @@ impl Row {
                 workspace: space, ..
             }
             | Self::Workspace(space) => Some(SpaceSelector::id(space)),
-            Self::Notification(id) => {
-                (!id.is_empty()).then(|| SpaceSelector::Id(id.clone().into()))
-            }
+            Self::Alert(id) => (!id.is_empty()).then(|| SpaceSelector::Id(id.clone().into())),
             // Keys that act on a space act on this machine's.
             Self::Untracked(_)
             | Self::Cleanup
@@ -272,7 +270,7 @@ async fn notification_rows(ctx: &Context) -> Result<Entries> {
     Ok(notifications
         .iter()
         .map(|notification| {
-            Row::Notification(
+            Row::Alert(
                 notification
                     .space_id
                     .as_ref()
@@ -287,7 +285,7 @@ async fn notification_rows(ctx: &Context) -> Result<Entries> {
 
 /// One aligned row per notification: when, its workspace, and the message,
 /// dimmed once read and cut to fit the picker.
-fn notification_labels(notifications: &[Notification]) -> Vec<String> {
+fn notification_labels(notifications: &[Alert]) -> Vec<String> {
     let now = crate::time::UnixTime::now();
     let cells = notifications
         .iter()
@@ -310,7 +308,7 @@ fn notification_labels(notifications: &[Notification]) -> Vec<String> {
 }
 
 /// Mark the unread ones of `notifications` read.
-async fn mark_read(ctx: &Context, notifications: &[Notification]) -> Result<()> {
+async fn mark_read(ctx: &Context, notifications: &[Alert]) -> Result<()> {
     let unread: Vec<_> = notifications
         .iter()
         .filter(|notification| !notification.read)

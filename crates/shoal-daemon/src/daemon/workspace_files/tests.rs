@@ -604,7 +604,7 @@ async fn deleting_every_workspaces_files_spares_active_ones() {
 #[tokio::test]
 async fn results_outlive_removal_as_long_as_its_record() {
     use crate::daemon::{
-        notifications::NotificationKind,
+        notifications::AlertKind,
         scope::{self, Caller},
     };
     use crate::protocol::FileMethod;
@@ -647,7 +647,7 @@ async fn results_outlive_removal_as_long_as_its_record() {
             .await
             .unwrap()
             .iter()
-            .any(|n| n.kind == NotificationKind::SpaceDone && n.message.contains("report.md")),
+            .any(|n| n.kind == AlertKind::SpaceDone && n.message.contains("report.md")),
     );
 
     manager

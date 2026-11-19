@@ -15,7 +15,7 @@ use crate::{
         agents::{Requested, restarted},
         log,
         manager::Manager,
-        notifications::{About, NotificationKind},
+        notifications::{About, AlertKind},
     },
     model::{RestartOutcome, RunningAgent},
     sessions::Origin,
@@ -249,7 +249,7 @@ impl Manager {
         };
         if !told {
             let about = About::space(&space.name, id);
-            (self.notify_about(about, NotificationKind::RecoveryBlocked, message)).await;
+            (self.notify_about(about, AlertKind::RecoveryBlocked, message)).await;
         }
     }
 }

@@ -4,8 +4,8 @@ use shoal_hub::daemon::Records as _;
 use shoal_hub::numbering::{forget_unless_joined, keep_spares, next};
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::{
+    alerts::AlertKind,
     hub::numbering::{Numbering, Renumbering},
-    notifications::NotificationKind,
     questions::Ask,
     space_names::{SpaceName, SpaceSelector},
 };
@@ -147,7 +147,7 @@ async fn a_renumbered_space_takes_its_questions_and_their_waits_along() -> Resul
     assert_eq!(waiter.await??.status.answer(), Some("Postgres"));
     let notifications = manager.notifications.list(false, 50).await?;
     let notice = (notifications.iter())
-        .find(|notification| notification.kind == NotificationKind::SpaceRenumbered)
+        .find(|notification| notification.kind == AlertKind::SpaceRenumbered)
         .context("no notice of the renumbering")?;
     assert!(
         notice.message.contains("space 4") && notice.message.contains("not 1"),

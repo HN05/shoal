@@ -11,12 +11,12 @@ use anyhow::Result;
 use rusqlite::{Transaction, params};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
+    alerts::AlertKind,
     approvals::DecisionStatus,
     hub::{
         directory::Directory,
         routing::{Told, ToldAbout},
     },
-    notifications::NotificationKind,
     questions::Question,
 };
 
@@ -135,14 +135,14 @@ impl Hub {
                         space: question.space_id.clone(),
                         name: question.space.clone(),
                     }),
-                    kind: Some(NotificationKind::QuestionAsked),
+                    kind: Some(AlertKind::QuestionAsked),
                     message: question.notification(),
                     files: Vec::new(),
                 };
                 self.send_told(daemon, told).await?;
             }
             None => {
-                let kind = NotificationKind::QuestionAsked;
+                let kind = AlertKind::QuestionAsked;
                 let (name, id) = (&question.space, &question.space_id);
                 let about = shoal_daemon_base::notifications::About::space(name, id);
                 let message = question.notification();

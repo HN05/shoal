@@ -241,7 +241,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
         Row::Workspace(workspace) => Command::Workspace(WorkspaceCommand::Cd {
             workspace: Some(SpaceSelector::id(&workspace)),
         }),
-        Row::Notification(id) => {
+        Row::Alert(id) => {
             ensure!(!id.is_empty(), "the notification names no workspace");
             Command::Workspace(WorkspaceCommand::Cd {
                 workspace: Some(SpaceSelector::Id(id.into())),

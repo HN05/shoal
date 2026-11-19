@@ -15,7 +15,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{manager::Manager, notifications::Source};
 use crate::{
-    daemon::notifications::NotificationKind,
+    daemon::notifications::AlertKind,
     model::{RefPart, Repository, Space, SpaceKind, SpaceRef, Workspace},
     protocol::CopySource,
     state::WorkspaceState,
@@ -182,7 +182,7 @@ impl Manager {
         &self,
         name: &SpaceName,
         workspace_id: Option<&SpaceId>,
-        kind: Option<NotificationKind>,
+        kind: Option<AlertKind>,
         message: String,
         attachments: Vec<PathBuf>,
         source: Source,

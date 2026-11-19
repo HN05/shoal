@@ -7,12 +7,12 @@ use shoal_ids::{
     member_ids::MemberId,
     space_ids::{SpaceId, SpaceNumber},
 };
+use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::hub::{
     Member, MemberKind,
     directory::{Conflict, Directory, Report},
     numbering::Numbering,
 };
-use shoal_protocol::notifications::NotificationKind;
 
 use crate::{Hub, daemon::Daemon};
 
@@ -57,7 +57,7 @@ impl Hub {
             self.notify(
                 daemon,
                 About::named(None),
-                NotificationKind::SpaceConflict,
+                AlertKind::SpaceConflict,
                 message.to_string(),
             )
             .await;

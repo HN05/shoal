@@ -8,8 +8,8 @@ use rusqlite::{Connection, Transaction};
 use shoal_daemon_base::notifications::About;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::config::permissions::Permissions;
-use shoal_protocol::notifications::NotificationKind;
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::views::Viewed;
@@ -50,7 +50,7 @@ impl Requesters for Manager {
         Box::pin(Manager::tell_space(self, id, message))
     }
 
-    fn notify(&self, about: About, kind: NotificationKind, message: String) -> BoxFuture<'_, ()> {
+    fn notify(&self, about: About, kind: AlertKind, message: String) -> BoxFuture<'_, ()> {
         Box::pin(self.notify_about(about, kind, message))
     }
 

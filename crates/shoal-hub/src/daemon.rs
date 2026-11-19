@@ -12,11 +12,11 @@ use shoal_daemon_base::{callers::Caller, notifications::Coordinators};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::{
+    alerts::AlertKind,
     approvals::ApprovalRequest,
     config::permissions::Permissions,
     hub::{Member, routing::ChainedMode},
     model::{QueueEntry, Repository, RunningAgent, Space},
-    notifications::NotificationKind,
     protocol::{AppMethod, Request},
     questions::Question,
     saved::SavedSummary,
@@ -123,7 +123,7 @@ pub struct About {
     pub name: SpaceName,
     pub id: Option<SpaceId>,
     /// The notification the event would be for the user.
-    pub kind: Option<NotificationKind>,
+    pub kind: Option<AlertKind>,
 }
 
 /// The messages that reach the agents of spaces here.

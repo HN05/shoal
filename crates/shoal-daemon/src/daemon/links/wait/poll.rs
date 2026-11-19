@@ -15,7 +15,7 @@ use super::{
     start::PollStart,
 };
 use crate::{
-    daemon::{links::space::LinkSpace, manager::Manager, notifications::NotificationKind},
+    daemon::{links::space::LinkSpace, manager::Manager, notifications::AlertKind},
     forge::{
         items::link::{LinkKind, Selection},
         updates::Update,
@@ -250,8 +250,7 @@ impl Manager {
             limit.host,
             limit.until.local_minutes()
         );
-        self.notify(None, NotificationKind::ForgeLimited, message)
-            .await;
+        self.notify(None, AlertKind::ForgeLimited, message).await;
         true
     }
 }

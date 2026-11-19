@@ -126,7 +126,7 @@ impl Scoped for Operation {
             Operation::Item(method) => method.scope(manager, caller).await,
             Operation::Ci(method) => method.scope(manager, caller).await,
             Operation::Branch(method) => method.scope(manager, caller).await,
-            Operation::Notification(method) => method.scope(manager, caller).await,
+            Operation::Alert(method) => method.scope(manager, caller).await,
             Operation::Operations(method) => method.scope(manager, caller).await,
             Operation::Question(method) => method.scope(manager, caller).await,
             Operation::Review(method) => method.scope(manager, caller).await,

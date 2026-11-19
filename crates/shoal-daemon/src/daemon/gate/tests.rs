@@ -7,7 +7,7 @@ use crate::daemon::{
     test_support::{configure, install_test_script, manager, repository},
 };
 use crate::model::Workspace;
-use shoal_protocol::{links::PushOutcome, notifications::NotificationKind};
+use shoal_protocol::{alerts::AlertKind, links::PushOutcome};
 use shoal_protocol::{scope_tokens::ScopeToken, space_names::SpaceSelector};
 
 /// A fake gate agent: it records each run as `new` or `resume <session>`,
@@ -178,7 +178,7 @@ impl Fixture {
     async fn asked_user(&self) -> Vec<String> {
         let notifications = self.manager.notifications.list(false, 100).await.unwrap();
         (notifications.into_iter())
-            .filter(|notification| notification.kind == NotificationKind::ApprovalRequested)
+            .filter(|notification| notification.kind == AlertKind::ApprovalRequested)
             .map(|notification| notification.message)
             .collect()
     }

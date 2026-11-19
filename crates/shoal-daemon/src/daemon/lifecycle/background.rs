@@ -11,7 +11,7 @@ use crate::{
     daemon::{
         agent_messages, log,
         manager::Manager,
-        notifications::{About, NotificationKind},
+        notifications::{About, AlertKind},
         scope::Caller,
     },
     model::Space,
@@ -83,7 +83,7 @@ impl Manager {
         requester: Option<&SpaceId>,
         error: &anyhow::Error,
     ) {
-        let kind = NotificationKind::RemovalFailed;
+        let kind = AlertKind::RemovalFailed;
         let message = format!(
             "removal failed: {error:#}; the {} stays, and shoal rm {} tries again",
             space.kind(),

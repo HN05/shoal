@@ -2,7 +2,7 @@ use crate::removal::{InspectionPolicy, UnsavedWork};
 use crate::{
     daemon::{
         manager::Manager,
-        notifications::NotificationKind,
+        notifications::AlertKind,
         notifications::Source,
         test_support::{manager, repository},
         workspace_files::Attacher,
@@ -46,7 +46,7 @@ async fn received(manager: &Manager, chat: &Chat) -> Vec<String> {
     messages.into_iter().map(|m| m.message).collect()
 }
 
-async fn user(manager: &Manager) -> Vec<(Option<String>, NotificationKind, String)> {
+async fn user(manager: &Manager) -> Vec<(Option<String>, AlertKind, String)> {
     let notifications = manager.notifications.list(false, 100).await.unwrap();
     notifications
         .into_iter()
@@ -131,7 +131,7 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
         user(&manager).await,
         [(
             Some("worker".into()),
-            NotificationKind::AgentMessage,
+            AlertKind::AgentMessage,
             "first".into()
         )]
     );
@@ -374,7 +374,7 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
     assert!(unread.iter().all(|(space, _)| *space != chat.id));
     let unread = (
         Some("worker".to_owned()),
-        NotificationKind::AgentMessage,
+        AlertKind::AgentMessage,
         "unread".to_owned(),
     );
     assert_eq!(user(&manager).await, [unread]);
@@ -439,11 +439,11 @@ async fn a_removed_workspace_gives_the_user_the_events_it_had_not_received() {
         .await
         .unwrap();
     let messages: Vec<_> = (user(&manager).await.into_iter())
-        .filter(|(_, kind, _)| *kind == NotificationKind::AgentMessage)
+        .filter(|(_, kind, _)| *kind == AlertKind::AgentMessage)
         .collect();
     let unread = (
         Some("child".to_owned()),
-        NotificationKind::AgentMessage,
+        AlertKind::AgentMessage,
         "unread".to_owned(),
     );
     assert_eq!(messages, [unread]);

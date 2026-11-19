@@ -12,7 +12,7 @@ use crate::{
         item_numbers::{self, ItemKind, ItemNumber},
         links::space::require_ready_space,
         manager::Manager,
-        notifications::{self, NotificationKind},
+        notifications::{self, AlertKind},
     },
     model::Space,
 };
@@ -475,11 +475,8 @@ impl Manager {
         self.store
             .write(move |tx| {
                 let request = withdraw(tx, &selected)?;
-                let retracted = notifications::retract_about(
-                    tx,
-                    NotificationKind::ApprovalRequested,
-                    &request.key,
-                )?;
+                let retracted =
+                    notifications::retract_about(tx, AlertKind::ApprovalRequested, &request.key)?;
                 Ok((request, retracted))
             })
             .await

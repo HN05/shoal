@@ -20,7 +20,7 @@ use crate::{
         agent_messages,
         item_numbers::{self, ItemKind, ItemNumber},
         manager::Manager,
-        notifications::{self, About, NotificationKind},
+        notifications::{self, About, AlertKind},
         store::sent_files::{sent_files, sent_ids},
         workspace_files::{self, Attacher, FileSource, NewFile, SentFile},
     },
@@ -408,7 +408,7 @@ fn move_open(
     for (id, files) in open {
         let before = query(tx, "WHERE q.id=?1", [id])?;
         for question in &before {
-            let (kind, about) = (NotificationKind::QuestionAsked, question.notification());
+            let (kind, about) = (AlertKind::QuestionAsked, question.notification());
             notifications::retract(tx, &question.space_id, kind, &about)?;
         }
         let files: Vec<i64> = serde_json::from_str(&files)?;
@@ -560,7 +560,7 @@ fn close_in_chat(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<Vec<(Questi
             let retracted = notifications::retract(
                 tx,
                 space_id,
-                NotificationKind::QuestionAsked,
+                AlertKind::QuestionAsked,
                 &question.notification(),
             )?;
             Ok((question, retracted))
@@ -704,7 +704,7 @@ impl Manager {
             Err(error) => crate::daemon::log!("question {number} not rechecked: {error:#}"),
         }
         let about = About::space(&question.space, &question.space_id);
-        let kind = NotificationKind::QuestionAsked;
+        let kind = AlertKind::QuestionAsked;
         (self.notifications)
             .notify(self, about, kind, question.notification(), &question.files)
             .await;
@@ -815,7 +815,7 @@ impl Manager {
                 let retracted = notifications::retract(
                     tx,
                     &question.space_id,
-                    NotificationKind::QuestionAsked,
+                    AlertKind::QuestionAsked,
                     &question.notification(),
                 )?;
                 Ok((question, retracted))
@@ -825,7 +825,7 @@ impl Manager {
         if !retracted {
             self.notify_about(
                 About::space(&question.space, &question.space_id),
-                NotificationKind::QuestionWithdrawn,
+                AlertKind::QuestionWithdrawn,
                 question.withdrawal_notification(),
             )
             .await;
@@ -862,7 +862,7 @@ impl Manager {
         for (question, _) in closed.iter().filter(|(_, retracted)| !retracted) {
             self.notify_about(
                 About::space(&question.space, &question.space_id),
-                NotificationKind::QuestionWithdrawn,
+                AlertKind::QuestionWithdrawn,
                 question.withdrawal_notification(),
             )
             .await;

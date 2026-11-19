@@ -8,7 +8,7 @@ use anyhow::Context;
 use super::*;
 use crate::{
     daemon::{
-        notifications::NotificationKind,
+        notifications::AlertKind,
         test_support::{global_config, manager, repository},
         workspace_files::Attacher,
     },
@@ -355,7 +355,7 @@ async fn turn_failures(manager: &Manager) -> Vec<String> {
         .unwrap();
     notifications
         .into_iter()
-        .filter(|notification| notification.kind == NotificationKind::TurnFailed)
+        .filter(|notification| notification.kind == AlertKind::TurnFailed)
         .map(|notification| notification.message)
         .collect()
 }

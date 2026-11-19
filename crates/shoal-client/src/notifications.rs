@@ -1,5 +1,5 @@
 //! The user's notifications: what the daemon recorded for the user to read.
-use shoal_protocol::notifications::{Cleared, Notification, Sent};
+use shoal_protocol::alerts::{Alert, Cleared, Sent};
 
 use anyhow::{Context, Result};
 
@@ -13,11 +13,7 @@ use shoal_protocol::{
 };
 
 /// The newest `limit` notifications, only the unread ones when `unread_only`.
-pub async fn list(
-    daemon: &impl Daemon,
-    unread_only: bool,
-    limit: u32,
-) -> Result<Vec<Notification>> {
+pub async fn list(daemon: &impl Daemon, unread_only: bool, limit: u32) -> Result<Vec<Alert>> {
     pages(
         daemon,
         NotificationMethod::ListNotifications { unread_only, limit },
@@ -51,7 +47,7 @@ pub async fn send(
 }
 
 /// Take back `space`'s unread notification `id`.
-pub async fn withdraw(daemon: &impl Daemon, space: SpaceSelector, id: i64) -> Result<Notification> {
+pub async fn withdraw(daemon: &impl Daemon, space: SpaceSelector, id: i64) -> Result<Alert> {
     request(daemon, NotificationMethod::WithdrawMessage { space, id }).await
 }
 
@@ -83,7 +79,7 @@ impl Watch {
     }
 
     /// The next notification, once the daemon records it.
-    pub async fn next(&mut self, daemon: &impl Daemon) -> Result<Notification> {
+    pub async fn next(&mut self, daemon: &impl Daemon) -> Result<Alert> {
         loop {
             let response: Response = match protocol::read_buffered(&mut self.stream).await {
                 Ok(response) => response,
@@ -96,7 +92,7 @@ impl Watch {
                 }
                 Err(error) => return Err(error).context("daemon closed the notification stream"),
             };
-            let notification = Notification::try_from(response.body)?;
+            let notification = Alert::try_from(response.body)?;
             self.delivered = notification.id;
             return Ok(notification);
         }

@@ -1,7 +1,7 @@
 use crate::daemon::allocation::Allocation;
 use crate::daemon::approvals::ApprovalRequestExt;
 use crate::daemon::approvals::{ApprovalRequest, DecisionStatus, Specification, Target};
-use crate::daemon::notifications::NotificationKind;
+use crate::daemon::notifications::AlertKind;
 use shoal_protocol::approvals::PortSpecification;
 use shoal_protocol::config::repo::Lifetime;
 
@@ -95,11 +95,11 @@ async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals
             .iter()
             .all(|n| n.workspace.as_deref() == Some("worker"))
     );
-    assert_eq!(notifications[0].kind, NotificationKind::ResourceBusy);
+    assert_eq!(notifications[0].kind, AlertKind::ResourceBusy);
     assert_eq!(notifications[0].message, "busy");
-    assert_eq!(notifications[1].kind, NotificationKind::ResourceBusy);
+    assert_eq!(notifications[1].kind, AlertKind::ResourceBusy);
     assert_eq!(notifications[1].message, "simulator: busy");
-    assert_eq!(notifications[2].kind, NotificationKind::ApprovalRequested);
+    assert_eq!(notifications[2].kind, AlertKind::ApprovalRequested);
     let number = request.number.to_string();
     assert!(notifications[2].message.contains(&number));
 }

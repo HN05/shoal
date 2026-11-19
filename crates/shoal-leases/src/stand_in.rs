@@ -20,8 +20,8 @@ use shoal_daemon_base::{
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::approvals::{ApprovalRequest, DecisionStatus, Target};
-use shoal_protocol::notifications::NotificationKind;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 use crate::{
@@ -87,7 +87,7 @@ impl Fixture {
     }
 
     /// The notifications recorded for the user, as kind and message.
-    pub(crate) async fn notified(&self) -> Vec<(NotificationKind, String)> {
+    pub(crate) async fn notified(&self) -> Vec<(AlertKind, String)> {
         let listed = self.leases.notifications.list(false, 100).await.unwrap();
         (listed.into_iter())
             .map(|notification| (notification.kind, notification.message))
@@ -269,7 +269,7 @@ impl Coordinators for StandIn {
         &'a self,
         _name: &'a SpaceName,
         _id: Option<&'a SpaceId>,
-        _kind: NotificationKind,
+        _kind: AlertKind,
         _message: String,
         _files: Vec<PathBuf>,
         _source: Source,

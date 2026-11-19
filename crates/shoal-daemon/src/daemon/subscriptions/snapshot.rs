@@ -11,7 +11,7 @@ use crate::{
         agent_messages::AgentMessage,
         approvals::DecisionStatus,
         manager::Manager,
-        notifications::{Notification, NotificationKind},
+        notifications::{Alert, AlertKind},
         scope::Caller,
     },
     model::{Relation, Space},
@@ -302,7 +302,7 @@ async fn messages(
                 .list(false, u32::MAX)
                 .await?
                 .iter()
-                .filter(|notification| notification.kind == NotificationKind::AgentMessage)
+                .filter(|notification| notification.kind == AlertKind::AgentMessage)
                 .map(|notification| Record::Message(user_message(notification))),
         );
     }
@@ -323,7 +323,7 @@ fn agent_message(message: AgentMessage, space: &Space) -> Message {
 }
 
 /// A space's message to the user, which its notification records.
-fn user_message(notification: &Notification) -> Message {
+fn user_message(notification: &Alert) -> Message {
     Message {
         id: format!("user/{}", notification.id),
         recipient: MessageRecipient::User,
@@ -341,7 +341,7 @@ async fn notifications(manager: &Manager) -> Result<Vec<Record>> {
         .list(false, u32::MAX)
         .await?
         .into_iter()
-        .map(Record::Notification)
+        .map(Record::Alert)
         .collect())
 }
 

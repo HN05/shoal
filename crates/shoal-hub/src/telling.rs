@@ -11,11 +11,11 @@ use anyhow::{Context as _, Result};
 use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
+    alerts::AlertKind,
     hub::{
         link::Call,
         routing::{Expired, HeldOutcome, Told, ToldAbout},
     },
-    notifications::NotificationKind,
     space_names::SpaceName,
 };
 
@@ -31,7 +31,7 @@ const OUTBOX_LOOK: std::time::Duration = std::time::Duration::from_secs(60);
 pub struct Event<'a> {
     pub name: &'a SpaceName,
     pub space: &'a SpaceId,
-    pub kind: Option<NotificationKind>,
+    pub kind: Option<AlertKind>,
     pub message: String,
     pub attachments: &'a [PathBuf],
 }
@@ -216,7 +216,7 @@ impl Hub {
         self.notify(
             daemon,
             shoal_daemon_base::notifications::About::named(None),
-            NotificationKind::HubExpired,
+            AlertKind::HubExpired,
             message.to_string(),
         )
         .await;

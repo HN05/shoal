@@ -105,7 +105,7 @@ async fn a_failing_release_hook_keeps_the_permit_as_the_users_and_tells_the_user
     assert_eq!(fixture.daemon.hooks_run.lock().unwrap().len(), 1);
     let notified = fixture.notified().await;
     let failed: Vec<_> = (notified.iter())
-        .filter(|(kind, _)| *kind == NotificationKind::ReleaseFailed)
+        .filter(|(kind, _)| *kind == AlertKind::ReleaseFailed)
         .collect();
     assert_eq!(failed.len(), 1);
     assert!(

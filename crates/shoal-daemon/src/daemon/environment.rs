@@ -7,7 +7,7 @@ use std::{ffi::OsStr, path::PathBuf};
 use anyhow::Result;
 
 use crate::{
-    daemon::{events::ShoalEventKind, log, manager::Manager, notifications::NotificationKind},
+    daemon::{events::ShoalEventKind, log, manager::Manager, notifications::AlertKind},
     sessions::HostName,
     tools::{Dependency, Tool},
 };
@@ -203,7 +203,7 @@ impl Manager {
             Err(error) => log!("environment check skipped forge hosts: {error:#}"),
         }
         for problem in problems {
-            self.notify(None, NotificationKind::EnvironmentProblem, problem)
+            self.notify(None, AlertKind::EnvironmentProblem, problem)
                 .await;
         }
     }

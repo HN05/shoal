@@ -18,7 +18,7 @@ use shoal_daemon::test_daemon::{
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::assignments::Done;
 use shoal_protocol::space_names::SpaceSelector;
-use shoal_protocol::{files::Attacher, notifications::NotificationKind};
+use shoal_protocol::{alerts::AlertKind, files::Attacher};
 use std::{fs, future::Future, os::unix::fs::PermissionsExt, time::Duration};
 
 mod agent_restart;
@@ -725,7 +725,7 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
             .await
             .unwrap()
             .iter()
-            .any(|event| event.kind == NotificationKind::AgentResumed)
+            .any(|event| event.kind == AlertKind::AgentResumed)
     );
     serving.abort();
 }
@@ -809,7 +809,7 @@ async fn a_restore_its_wrapper_fails_to_start_waits_in_the_agent_queue() {
         .await
         .unwrap()
         .into_iter()
-        .filter(|event| event.kind == NotificationKind::AgentExited)
+        .filter(|event| event.kind == AlertKind::AgentExited)
         .map(|event| event.message)
         .collect();
     assert_eq!(messages.len(), 1, "{messages:?}");
@@ -1092,7 +1092,7 @@ async fn unproven_stop_keeps_the_agent_waiting_until_proof_then_restores_it() {
             .await
             .unwrap()
             .iter()
-            .any(|event| event.kind == NotificationKind::RecoveryBlocked)
+            .any(|event| event.kind == AlertKind::RecoveryBlocked)
         {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
@@ -1632,7 +1632,7 @@ async fn critical_disk_space_stops_commands_and_restores_agents_once_space_recov
         .await
         .unwrap()
         .into_iter()
-        .filter(|event| event.kind == NotificationKind::AgentStopped)
+        .filter(|event| event.kind == AlertKind::AgentStopped)
         .map(|event| event.message)
         .collect::<Vec<_>>();
     assert_eq!(messages.len(), 2, "{messages:?}");

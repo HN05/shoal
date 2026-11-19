@@ -11,7 +11,7 @@ use crate::{
         links::issue::{AssignerOf, OpenIssue},
         log,
         manager::Manager,
-        notifications::NotificationKind,
+        notifications::AlertKind,
         scope::Caller,
     },
     forge::items::reference::ItemRef,
@@ -83,7 +83,7 @@ impl Manager {
             return;
         }
         let message = format!("starting {} warned: {}", space.name, warnings.join("; "));
-        let kind = NotificationKind::StartWarned;
+        let kind = AlertKind::StartWarned;
         self.notify_space(&space.name, &space.id, kind, message)
             .await;
     }

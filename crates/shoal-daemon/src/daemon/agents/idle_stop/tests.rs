@@ -4,7 +4,7 @@ use crate::execution::recovery::RecordExt;
 use crate::{
     daemon::{
         executions::{ExecutionKind, StartedExecution},
-        notifications::NotificationKind,
+        notifications::AlertKind,
         test_support::{manager, repository},
     },
     execution::recovery::Record,
@@ -128,7 +128,7 @@ async fn an_idle_agent_the_user_is_away_from_sleeps_seconds_after_its_turn() {
     let notifications = manager.notifications.list(false, 10).await.unwrap();
     let stopped: Vec<_> = notifications
         .iter()
-        .filter(|event| event.kind == NotificationKind::AgentStopped)
+        .filter(|event| event.kind == AlertKind::AgentStopped)
         .collect();
     assert_eq!(stopped.len(), 1);
 }
@@ -420,7 +420,7 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
     assert!(
         !notifications
             .iter()
-            .any(|event| event.kind == NotificationKind::AgentStopped)
+            .any(|event| event.kind == AlertKind::AgentStopped)
     );
     // Its waiting restore keeps the workspace from cleanup, unlike an idle
     // agent's, even with no update left waiting for it.

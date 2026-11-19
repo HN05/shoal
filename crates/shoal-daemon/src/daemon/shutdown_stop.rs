@@ -12,7 +12,7 @@ use crate::daemon::runner::JobStop;
 use crate::{
     daemon::{
         log,
-        notifications::{About, NotificationKind},
+        notifications::{About, AlertKind},
     },
     execution::recovery::{self, Saved, SavedExt as _},
     model::Space,
@@ -64,10 +64,10 @@ impl Shutdown {
         }
     }
 
-    fn notification(self) -> NotificationKind {
+    fn notification(self) -> AlertKind {
         match self {
-            Self::System => NotificationKind::SystemShutdown,
-            Self::Daemon => NotificationKind::DaemonStopped,
+            Self::System => AlertKind::SystemShutdown,
+            Self::Daemon => AlertKind::DaemonStopped,
         }
     }
 
@@ -176,7 +176,7 @@ impl Manager {
         log!("stop {moment}: {} not stopped: {error:#}", &space.name);
         self.notify_about(
             About::space(&space.name, &space.id),
-            NotificationKind::StopFailed,
+            AlertKind::StopFailed,
             format!("Could not stop tracked executions {moment}: {error:#}"),
         )
         .await;

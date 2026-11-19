@@ -19,7 +19,7 @@ use crate::{
     client::notifications::{self, Watch},
     installed::Executable,
 };
-use shoal_protocol::notifications::Notification;
+use shoal_protocol::alerts::Alert;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// List the notifications `args` ask for, marking them read unless they
@@ -105,7 +105,7 @@ pub(super) async fn send(
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let sent = notifications::send(&ctx.paths, space.clone(), message, attachments).await?;
     let text = match sent.notification {
-        Some(id) => format!("Notification {id} sent."),
+        Some(id) => format!("Alert {id} sent."),
         None => "Sent to the coordinating agent.".to_owned(),
     };
     ctx.emit(&text, &sent)?;
@@ -145,7 +145,7 @@ pub(super) async fn follow(ctx: &Context, keep_unread: bool, after: i64) -> Resu
 /// OSC 9 desktop notification, shown by iTerm2, Ghostty, WezTerm, and Kitty
 /// and ignored by terminals without it. Control characters would end or
 /// corrupt the sequence, so they are dropped from the text.
-fn terminal_notification(notification: &Notification) -> String {
+fn terminal_notification(notification: &Alert) -> String {
     let text: String = format!(
         "Shoal {}: {}",
         notification.workspace.as_deref().unwrap_or("daemon"),
@@ -157,14 +157,14 @@ fn terminal_notification(notification: &Notification) -> String {
     format!("\x1b]9;{text}\x07")
 }
 
-fn render(notification: &Notification, palette: Palette, now: crate::time::UnixTime) -> String {
+fn render(notification: &Alert, palette: Palette, now: crate::time::UnixTime) -> String {
     let line = ui::aligned(vec![cells(notification, now)], palette).concat();
     with_files(&line, notification)
 }
 
 /// The notification's row `line`, then a line for each file its space sent
 /// with it.
-fn with_files(line: &str, notification: &Notification) -> String {
+fn with_files(line: &str, notification: &Alert) -> String {
     std::iter::once(line.to_owned())
         .chain(
             (notification.files.iter())
@@ -175,7 +175,7 @@ fn with_files(line: &str, notification: &Notification) -> String {
 }
 
 /// When, read at `now`, the workspace, and the message.
-fn cells(notification: &Notification, now: crate::time::UnixTime) -> [ui::Cell; 3] {
+fn cells(notification: &Alert, now: crate::time::UnixTime) -> [ui::Cell; 3] {
     [
         (notification.created_at.local_ago(now), Some(Style::Muted)),
         (

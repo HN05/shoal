@@ -462,7 +462,7 @@ async fn completion_removes_the_spaces_blockers() {
 
 #[tokio::test]
 async fn becoming_blocked_notifies_once_until_the_space_clears() {
-    use crate::daemon::notifications::NotificationKind;
+    use crate::daemon::notifications::AlertKind;
     use shoal_protocol::progress::Blocker;
     let (temp, manager) = manager().await;
     let [blocked] = workspaces(&manager, &temp, ["blocked"]).await;
@@ -489,7 +489,7 @@ async fn becoming_blocked_notifies_once_until_the_space_clears() {
     };
     let notified = || async {
         (manager.notifications.list(false, 20).await.unwrap().iter())
-            .filter(|notification| notification.kind == NotificationKind::SpaceBlocked)
+            .filter(|notification| notification.kind == AlertKind::SpaceBlocked)
             .count()
     };
     // Other work remains.

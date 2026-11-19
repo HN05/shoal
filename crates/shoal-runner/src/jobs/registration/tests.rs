@@ -60,7 +60,7 @@ async fn runner_notifications(fixture: &Fixture) -> Vec<Notification> {
     let notifications = fixture.runner.notifications.list(false, 50).await.unwrap();
     notifications
         .into_iter()
-        .filter(|notification| notification.kind == NotificationKind::RunnerFailed)
+        .filter(|notification| notification.kind == AlertKind::RunnerFailed)
         .collect()
 }
 

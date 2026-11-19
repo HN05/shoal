@@ -14,7 +14,7 @@ use shoal_protocol::hub::link::Updates;
 use tokio::time::Instant;
 
 use shoal_daemon_base::notifications::About;
-use shoal_protocol::notifications::NotificationKind;
+use shoal_protocol::alerts::AlertKind;
 
 use crate::{Hub, daemon::Daemon, log};
 
@@ -177,13 +177,8 @@ impl Hub {
             ),
         };
         log!("hub: {message}");
-        self.notify(
-            daemon,
-            About::named(None),
-            NotificationKind::HubRefused,
-            message,
-        )
-        .await;
+        self.notify(daemon, About::named(None), AlertKind::HubRefused, message)
+            .await;
     }
 
     /// Install the hub's `version` over `installation`.

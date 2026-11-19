@@ -12,7 +12,7 @@ use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use anyhow::Result;
 
-use super::{manager::Manager, notifications::NotificationKind, store};
+use super::{manager::Manager, notifications::AlertKind, store};
 use crate::daemon::log;
 use crate::{
     execution::recovery::{Record, Stage, record_path},
@@ -300,7 +300,7 @@ impl Manager {
             .as_deref()
             .map_or(String::new(), |reason| format!(" ({reason})"));
         self.notify_space(&space.name, &space.id,
-            NotificationKind::RecoveryBlocked,
+            AlertKind::RecoveryBlocked,
             format!(
                 "{} stopped{reason}, but its execution {} is not proven stopped: {issue}; Shoal reconciles it once those processes exit, or stop them with shoal stop {}; then run shoal restore {} --execution {}",
                 record.agent, execution.id, space.number, space.number, execution.id
@@ -316,7 +316,7 @@ impl Manager {
             error,
         } = unreadable;
         self.notify_space(&space.name, &space.id,
-            NotificationKind::RecoveryBlocked,
+            AlertKind::RecoveryBlocked,
             format!(
                 "The recovery record of execution {execution} cannot be read: {error:#}; check or remove {}",
                 crate::execution::recovery::record_path(&self.paths, &space.id, execution).display()

@@ -8,8 +8,7 @@ use shoal_ids::space_ids::SpaceId;
 
 use crate::{
     daemon::{
-        links::wait::record_shoal_change, manager::Manager, notifications::NotificationKind,
-        scope::Caller,
+        links::wait::record_shoal_change, manager::Manager, notifications::AlertKind, scope::Caller,
     },
     forge::{ForgeRepo, items::reference::ItemRef},
     model::{Assigner, IssueAssignee},
@@ -86,8 +85,7 @@ impl Manager {
         if let Some(dropped) = dropped {
             drop(gate);
             for warning in self.release_assignees(vec![dropped]).await {
-                self.notify(None, NotificationKind::UnassignFailed, warning)
-                    .await;
+                self.notify(None, AlertKind::UnassignFailed, warning).await;
             }
         }
         Ok(Some(assignment))

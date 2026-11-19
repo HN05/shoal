@@ -158,7 +158,7 @@ async fn a_taken_preferred_port_is_only_suggested_and_the_conflict_notified() {
     assert_ne!(suggestion.suggested_port, port);
     let notified = fixture.notified().await;
     assert_eq!(notified.len(), 1);
-    assert_eq!(notified[0].0, NotificationKind::PortConflict);
+    assert_eq!(notified[0].0, AlertKind::PortConflict);
     assert!(
         notified[0]
             .1

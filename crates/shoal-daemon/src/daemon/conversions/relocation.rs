@@ -19,7 +19,7 @@ use crate::{
     daemon::{
         log,
         manager::Manager,
-        notifications::{About, NotificationKind},
+        notifications::{About, AlertKind},
     },
     execution::recovery::{self, LastSession, LastSessionExt},
     sessions::Origin,
@@ -175,7 +175,7 @@ impl Manager {
             "The post-setup hook of {name} failed: {failure}; its agent stopped instead of restarting there, and shoal restore {number} continues it once the hook is repaired"
         );
         let about = About::space(&name, id);
-        (self.notify_about(about, NotificationKind::RecoveryBlocked, message)).await;
+        (self.notify_about(about, AlertKind::RecoveryBlocked, message)).await;
         Ok(())
     }
 
@@ -403,12 +403,8 @@ impl Manager {
                 "{name} did not become a chat: {error:#}; it stays a workspace, whose stopped agent shoal restore {number} continues"
             ),
         };
-        self.notify_about(
-            About::space(&name, id),
-            NotificationKind::RecoveryBlocked,
-            message,
-        )
-        .await;
+        self.notify_about(About::space(&name, id), AlertKind::RecoveryBlocked, message)
+            .await;
     }
 }
 

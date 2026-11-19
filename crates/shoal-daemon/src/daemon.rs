@@ -145,7 +145,7 @@ use answer::OperationGuard;
 use daemon_exit::Ending;
 use events::{ShoalEventDetails, ShoalEventKind};
 use manager::Manager;
-use notifications::NotificationKind;
+use notifications::AlertKind;
 use ownership::Ownership;
 use scope::Caller;
 
@@ -444,7 +444,7 @@ impl Manager {
                 let message = format!(
                     "Shoal could not update its installed service definition: {error:#}; run `shoal daemon install`"
                 );
-                self.notify(None, NotificationKind::EnvironmentProblem, message)
+                self.notify(None, AlertKind::EnvironmentProblem, message)
                     .await;
             }
         }

@@ -5,7 +5,7 @@
 //! tunnel in front of it provides, and binds again once a reload changes
 //! its address or the hub role.
 use shoal_daemon_base::notifications::About;
-use shoal_protocol::notifications::NotificationKind;
+use shoal_protocol::alerts::AlertKind;
 use std::{
     convert::Infallible,
     net::SocketAddr,
@@ -107,7 +107,7 @@ impl Hub {
                 (self.notify(
                     daemon,
                     About::named(None),
-                    NotificationKind::EnvironmentProblem,
+                    AlertKind::EnvironmentProblem,
                     message.clone(),
                 ))
                 .await;

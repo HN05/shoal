@@ -15,7 +15,7 @@ use crate::{
     daemon::{
         capacity::Activity,
         manager::Manager,
-        notifications::NotificationKind,
+        notifications::AlertKind,
         queued_starts::fake::STARTED,
         stopped_work::PermissionTargets,
         test_support::{global_config, manager, repository},
@@ -145,13 +145,12 @@ async fn a_full_machine_queues_until_a_start_ends() {
     assert_eq!(entries[0].state, QueueState::Starting);
     let failure = manager.notifications.list(true, 10).await.unwrap();
     assert!(failure.iter().any(|notification| {
-        notification.kind == NotificationKind::StartFailed
-            && notification.message.contains("setup failed")
+        notification.kind == AlertKind::StartFailed && notification.message.contains("setup failed")
     }));
     assert!(
         failure
             .iter()
-            .any(|notification| notification.kind == NotificationKind::QueueStarted)
+            .any(|notification| notification.kind == AlertKind::QueueStarted)
     );
 }
 
@@ -261,10 +260,8 @@ async fn abandoned_starts_expire_after_the_grace_period_unless_held() {
             .await
             .unwrap()
             .iter()
-            .any(
-                |notification| notification.kind == NotificationKind::StartFailed
-                    && notification.message.contains("abandoned")
-            )
+            .any(|notification| notification.kind == AlertKind::StartFailed
+                && notification.message.contains("abandoned"))
     );
     // Releasing the hold starts a fresh grace period instead of ending it.
     manager.release_queue_hold(&held.id).await.unwrap();
@@ -291,7 +288,7 @@ async fn failing_an_ended_entry_frees_nothing_and_says_nothing() {
     assert_eq!(
         failures
             .iter()
-            .filter(|notification| notification.kind == NotificationKind::StartFailed)
+            .filter(|notification| notification.kind == AlertKind::StartFailed)
             .count(),
         1
     );
@@ -1137,7 +1134,7 @@ async fn an_expired_launch_in_an_existing_workspace_reports_its_failure() {
     let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert!(
         notifications.iter().any(|notification| {
-            notification.kind == NotificationKind::StartFailed
+            notification.kind == AlertKind::StartFailed
                 && notification.message.contains(entry.name.as_str())
         }),
         "{notifications:?}"

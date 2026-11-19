@@ -1,7 +1,7 @@
 use super::super::tests::{fixture, fixture_with_hook, fixture_with_removal_hook};
 use crate::removal::InspectionPolicy;
 use crate::{
-    daemon::{notifications::NotificationKind, scope::Caller},
+    daemon::{notifications::AlertKind, scope::Caller},
     removal::{NOTHING, UnsavedWork},
     state::WorkspaceState,
 };
@@ -79,7 +79,7 @@ async fn a_failure_retains_the_workspace_and_tells_the_user() {
     assert!(
         notifications
             .iter()
-            .any(|notification| notification.kind == NotificationKind::RemovalFailed)
+            .any(|notification| notification.kind == AlertKind::RemovalFailed)
     );
 }
 
@@ -114,7 +114,7 @@ async fn a_failure_reaches_the_requesting_agent() {
     assert!(
         notifications
             .iter()
-            .all(|notification| notification.kind != NotificationKind::RemovalFailed)
+            .all(|notification| notification.kind != AlertKind::RemovalFailed)
     );
 }
 
@@ -143,8 +143,8 @@ async fn a_failure_outlives_the_requesting_chat() {
         .await
         .unwrap();
     drop(manager.gates.quiesce().await);
-    let failed = |notification: &crate::daemon::notifications::Notification| {
-        notification.kind == NotificationKind::RemovalFailed
+    let failed = |notification: &crate::daemon::notifications::Alert| {
+        notification.kind == AlertKind::RemovalFailed
             && notification.workspace.as_ref() == Some(&workspace.name)
     };
     assert!(

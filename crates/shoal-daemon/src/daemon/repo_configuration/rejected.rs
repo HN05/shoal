@@ -8,7 +8,7 @@ use shoal_ids::space_ids::SpaceId;
 use crate::daemon::{
     log,
     manager::Manager,
-    notifications::{About, NotificationKind},
+    notifications::{About, AlertKind},
 };
 use crate::model::Workspace;
 
@@ -52,7 +52,7 @@ impl Manager {
         log!("ignored the config file of {}: {error}", workspace.name);
         self.notify_about(
             About::space(&workspace.name, &workspace.id),
-            NotificationKind::ConfigIgnored,
+            AlertKind::ConfigIgnored,
             format!("Config file ignored until fixed: {error}"),
         )
         .await;

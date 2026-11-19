@@ -91,7 +91,7 @@ async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
     assert!(
         events
             .iter()
-            .all(|event| event.kind == NotificationKind::AgentExited)
+            .all(|event| event.kind == AlertKind::AgentExited)
     );
 }
 
@@ -400,7 +400,7 @@ async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
     );
     let notifications = manager.notifications.list(false, 10).await.unwrap();
     assert_eq!(notifications.len(), 1);
-    assert_eq!(notifications[0].kind, NotificationKind::AgentStopped);
+    assert_eq!(notifications[0].kind, AlertKind::AgentStopped);
     assert!(
         notifications[0]
             .message

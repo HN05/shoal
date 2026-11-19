@@ -11,7 +11,7 @@ use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use super::{
     events,
     manager::Manager,
-    notifications::{About, Coordinators, Notification, NotificationKind, Sent, Source},
+    notifications::{About, Alert, AlertKind, Coordinators, Sent, Source},
     workspace_files::{self, Attacher, FileSource, NewFile, SentFile},
 };
 
@@ -21,7 +21,7 @@ impl Manager {
     pub async fn notify(
         &self,
         workspace: Option<&SpaceName>,
-        kind: NotificationKind,
+        kind: AlertKind,
         message: impl Into<String>,
     ) {
         self.notify_about(About::named(workspace), kind, message.into())
@@ -34,7 +34,7 @@ impl Manager {
         &self,
         name: &SpaceName,
         id: &SpaceId,
-        kind: NotificationKind,
+        kind: AlertKind,
         message: impl Into<String>,
     ) {
         (self.notify_about(About::space(name, id), kind, message.into())).await;
@@ -42,7 +42,7 @@ impl Manager {
 
     /// [`Manager::notify`] about a workspace whose identity the caller holds,
     /// so a rename meanwhile cannot attribute the event to another one.
-    pub(crate) async fn notify_about(&self, about: About, kind: NotificationKind, message: String) {
+    pub(crate) async fn notify_about(&self, about: About, kind: AlertKind, message: String) {
         (self.notifications)
             .notify(self, about, kind, message, &[])
             .await;
@@ -65,7 +65,7 @@ impl Manager {
         let space = self.space(selector).await?;
         let about = About::space(&space.name, &space.id);
         let id = space.id.clone();
-        let (kind, text) = (NotificationKind::AgentMessage, message.clone());
+        let (kind, text) = (AlertKind::AgentMessage, message.clone());
         let notification = (self.send_with_files(
             &space.into(),
             FileSource::Alert,
@@ -99,7 +99,7 @@ impl Manager {
             format!("agent state report failed; {error}"),
             crate::validate::MAX_MESSAGE_LEN,
         );
-        let kind = NotificationKind::StateReportFailed;
+        let kind = AlertKind::StateReportFailed;
         (self.notifications)
             .record(self, about, kind, message, &[])
             .await?;
@@ -108,11 +108,7 @@ impl Manager {
 
     /// Delete the message `id` the space sent the user, which the user need
     /// not see after all. A shown message stays; a correction follows it.
-    pub async fn withdraw_message(
-        &self,
-        selector: &SpaceSelector,
-        id: i64,
-    ) -> Result<Notification> {
+    pub async fn withdraw_message(&self, selector: &SpaceSelector, id: i64) -> Result<Alert> {
         let space = self.space_about(selector).await?;
         self.notifications.withdraw_message(space, id).await
     }
@@ -123,7 +119,7 @@ impl Coordinators for Manager {
         &'a self,
         name: &'a SpaceName,
         id: Option<&'a SpaceId>,
-        kind: NotificationKind,
+        kind: AlertKind,
         message: String,
         files: Vec<PathBuf>,
         source: Source,

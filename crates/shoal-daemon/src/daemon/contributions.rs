@@ -11,7 +11,7 @@ use super::{
 
 pub(crate) mod holds;
 use crate::{
-    daemon::{log, notifications::NotificationKind, store},
+    daemon::{log, notifications::AlertKind, store},
     git,
     model::Repository,
     time::UnixTime,
@@ -59,7 +59,7 @@ impl Manager {
         if let Some(removal) = self.remove_finished_contribution(&repo.id).await? {
             self.forget_trust(repo, &removal.workspace_paths).await;
             let message = removal_notice(repo, &removal.path, fork.as_deref());
-            self.notify(None, NotificationKind::RepositoryRemoved, message)
+            self.notify(None, AlertKind::RepositoryRemoved, message)
                 .await;
         }
         Ok(())

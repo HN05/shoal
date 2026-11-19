@@ -21,7 +21,7 @@ use tokio::{
 
 use self::health::Health;
 use crate::{
-    daemon::{log, manager::Manager, notifications::NotificationKind},
+    daemon::{log, manager::Manager, notifications::AlertKind},
     model::{CheckoutSync, SyncedRepository},
     time::UnixTime,
 };
@@ -256,8 +256,7 @@ impl Manager {
             };
             let name = repo.name.unwrap_or_else(|| repo.path.display().to_string());
             let message = failure_message(&name, sync.failing_since, &error);
-            self.notify(None, NotificationKind::SyncFailed, message)
-                .await;
+            self.notify(None, AlertKind::SyncFailed, message).await;
         }
     }
 }

@@ -25,7 +25,7 @@ pub(crate) use crate::model::Protection;
 use crate::daemon::log;
 use crate::{
     agent::ModelChoice,
-    daemon::notifications::NotificationKind,
+    daemon::notifications::AlertKind,
     protocol::timing,
     state::{AgentState, WorkspaceState},
 };
@@ -299,13 +299,8 @@ impl Manager {
                 ),
             }
         };
-        self.notify_space(
-            &space.name,
-            &space.id,
-            NotificationKind::AgentExited,
-            message,
-        )
-        .await;
+        self.notify_space(&space.name, &space.id, AlertKind::AgentExited, message)
+            .await;
     }
 
     /// Forget a finished agent's reported session, first keeping it as one of
@@ -373,7 +368,7 @@ impl Manager {
             self.notify_space(
                 &space.name,
                 &space.id,
-                NotificationKind::HookFailed,
+                AlertKind::HookFailed,
                 format!("agent exited; {error:#}"),
             )
             .await;
@@ -641,7 +636,7 @@ impl Manager {
         self.notify_space(
             &workspace,
             &workspace_id,
-            NotificationKind::RecoveryBlocked,
+            AlertKind::RecoveryBlocked,
             format!("Automatic restore of {name} waits until its remaining processes exit: {issue}; shoal stop {workspace_id} cancels the restore"),
         )
         .await;
@@ -715,7 +710,7 @@ impl Manager {
         self.notify_space(
             &workspace,
             &workspace_id,
-            NotificationKind::AgentResumed,
+            AlertKind::AgentResumed,
             format!("Restoring {name} {cause}"),
         )
         .await;
@@ -1228,7 +1223,7 @@ impl Manager {
         self.notify_space(
             workspace,
             workspace_id,
-            NotificationKind::AgentStopped,
+            AlertKind::AgentStopped,
             format!("Stopping {name}: {}; {recovery}; after the wrapper exits, restore with shoal restore {workspace_id} --execution {id}{}; workspace and resource leases retained", protection.reason, if agent.handoff_saved || !agent.recorded { "" } else { "; recovery handoff could not be saved; run shoal stop if the wrapper exits" }),
         )
         .await;

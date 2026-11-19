@@ -16,7 +16,7 @@ use crate::{
         executions::{ExecutionKind, StartedExecution},
         lifecycle::STOPPED_REMOVAL,
         manager::Manager,
-        notifications::NotificationKind,
+        notifications::AlertKind,
         runner::JobStop,
         test_support::{configure, git, manager, repository},
     },
@@ -560,7 +560,7 @@ async fn a_job_whose_checkout_fails_is_passed_over_and_its_workspace_removed() {
     let checkout_failed = format!("check out {}", fixture.head);
     assert!(
         notifications.iter().any(|notification| {
-            notification.kind == NotificationKind::RunnerFailed
+            notification.kind == AlertKind::RunnerFailed
                 && notification.message.contains(&checkout_failed)
         }),
         "{notifications:?}"
@@ -740,7 +740,7 @@ async fn turning_the_runner_off_withdraws_its_jobs_without_claiming_them() {
     assert!(
         notifications
             .iter()
-            .all(|notification| notification.kind != NotificationKind::RunnerFailed),
+            .all(|notification| notification.kind != AlertKind::RunnerFailed),
         "{notifications:?}"
     );
     // So do waiting ones once the runners are checked.
@@ -1034,7 +1034,7 @@ async fn the_daemon_exiting_stops_a_jobs_runner_when_the_forge_refuses_to_cancel
         .await
         .unwrap()
         .into_iter()
-        .filter(|notification| notification.kind == NotificationKind::RunnerFailed)
+        .filter(|notification| notification.kind == AlertKind::RunnerFailed)
         .map(|notification| notification.message)
         .collect();
     assert_eq!(failures.len(), 1, "{failures:?}");

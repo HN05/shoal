@@ -354,7 +354,7 @@ async fn disabling_recovery_leaves_a_daemon_started_load_restore_for_shoal_resto
     let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert!(
         notifications.iter().any(|notification| {
-            notification.kind == crate::daemon::notifications::NotificationKind::RecoveryBlocked
+            notification.kind == crate::daemon::notifications::AlertKind::RecoveryBlocked
                 && notification.message.contains(loaded.id.as_str())
         }),
         "{notifications:?}"
@@ -632,7 +632,7 @@ async fn a_restore_whose_agent_never_starts_expires_and_says_so() {
     assert!(queue(&manager).await.is_empty());
     let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert!(notifications.iter().any(|notification| {
-        notification.kind == crate::daemon::notifications::NotificationKind::QueueFailed
+        notification.kind == crate::daemon::notifications::AlertKind::QueueFailed
     }));
     // The agent stays stopped for `shoal restore`.
     assert!(record_path(&manager.paths, &workspace.id, &ExecutionId::from("agent")).exists());

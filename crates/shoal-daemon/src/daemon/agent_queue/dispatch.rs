@@ -21,7 +21,7 @@ use super::{
     weight::Light,
 };
 use crate::{
-    daemon::{manager::Manager, notifications::NotificationKind},
+    daemon::{manager::Manager, notifications::AlertKind},
     model::HeldBy,
     state::{QueueKind, QueueState},
 };
@@ -461,7 +461,7 @@ impl Manager {
                 Ok(()) => {
                     self.notify(
                         Some(&start.name),
-                        NotificationKind::QueueStarted,
+                        AlertKind::QueueStarted,
                         format!("Starting {} from the agent queue", start.name),
                     )
                     .await;
@@ -495,7 +495,7 @@ impl Manager {
     /// by its space's identity and a launch that recorded no space by name
     /// alone, which no space's name identifies since names repeat.
     async fn report_expired_start(&self, failure: expiry::FailedStart) {
-        let kind = NotificationKind::QueueFailed;
+        let kind = AlertKind::QueueFailed;
         match failure {
             expiry::FailedStart::KeptLaunch(space) => {
                 self.tell_launch_failed(&space, expiry::ENDED).await;

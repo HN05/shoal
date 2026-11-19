@@ -27,7 +27,7 @@ use crate::{
     paths::Paths,
     state::{QueueKind, QueueState},
 };
-use shoal_protocol::notifications::NotificationKind;
+use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// The space a stopped agent restores in.
@@ -542,7 +542,7 @@ impl Manager {
             return false;
         }
         self.notify_space(&space.name, &space.id,
-            crate::daemon::notifications::NotificationKind::AgentExited,
+            crate::daemon::notifications::AlertKind::AgentExited,
             format!(
                 "Restore of {agent} failed with exit code {code}; its restore waits in the agent queue"
             ),
@@ -665,7 +665,7 @@ impl Manager {
             "Automatic recovery is disabled, so {} stays stopped; `shoal restore {}` restores it",
             restore.agent, restore.space
         );
-        let kind = NotificationKind::RecoveryBlocked;
+        let kind = AlertKind::RecoveryBlocked;
         (self.notify_space(&restore.name, &restore.space, kind, message)).await;
     }
 

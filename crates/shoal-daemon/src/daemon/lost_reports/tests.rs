@@ -8,7 +8,7 @@ use crate::{
     state::ExecutionState,
 };
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::notifications::NotificationKind;
+use shoal_protocol::alerts::AlertKind;
 
 /// A workspace whose agent runs in the execution `agent`, in `state`.
 async fn workspace_in(
@@ -83,7 +83,7 @@ async fn failures(manager: &Manager) -> Vec<(Option<String>, String)> {
         .await
         .unwrap()
         .into_iter()
-        .filter(|notification| notification.kind == NotificationKind::StateReportFailed)
+        .filter(|notification| notification.kind == AlertKind::StateReportFailed)
         .map(|notification| {
             let workspace = notification.workspace.map(|name| name.to_string());
             (workspace, notification.message)

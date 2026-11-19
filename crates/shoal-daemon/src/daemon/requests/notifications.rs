@@ -44,7 +44,7 @@ pub(super) async fn handle(
             Body::Sent(sent.await?)
         }
         NotificationMethod::WithdrawMessage { space, id } => {
-            Body::Notification(manager.withdraw_message(&space, id).await?)
+            Body::Alert(manager.withdraw_message(&space, id).await?)
         }
         NotificationMethod::MarkNotificationsRead { ids } => {
             manager.notifications.mark_read(ids).await?;
@@ -99,7 +99,7 @@ async fn watch_notifications(
         let batch = manager.notifications.after(delivered, 100).await?;
         for notification in batch {
             delivered = notification.id;
-            let response = Response::new(request_id, Body::Notification(notification));
+            let response = Response::new(request_id, Body::Alert(notification));
             protocol::write(&mut writer, &response).await?;
             if !keep_unread {
                 manager.notifications.mark_read(vec![delivered]).await?;

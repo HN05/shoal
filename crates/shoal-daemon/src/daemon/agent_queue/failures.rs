@@ -11,7 +11,7 @@ use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 use super::store::{Awaits, Launch, LaunchRequest, entry, insert_launch};
 use crate::{
-    daemon::{manager::Manager, notifications::NotificationKind, store::json_column},
+    daemon::{manager::Manager, notifications::AlertKind, store::json_column},
     model::{QueueEntry, SpaceKind},
     state::{QueueKind, QueueState},
     time::UnixTime,
@@ -226,7 +226,7 @@ impl Manager {
         let message = format!(
             "{name} did not start: {error}; `shoal restore {number}` starts its agent again, and `shoal rm {number}` removes the {kind}"
         );
-        (self.notify_space(name, &space.id, NotificationKind::StartFailed, message)).await;
+        (self.notify_space(name, &space.id, AlertKind::StartFailed, message)).await;
     }
 }
 

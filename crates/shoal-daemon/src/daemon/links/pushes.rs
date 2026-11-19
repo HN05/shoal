@@ -16,7 +16,7 @@ use crate::{
         },
         log,
         manager::Manager,
-        notifications::NotificationKind,
+        notifications::AlertKind,
         scope::Caller,
     },
     git,
@@ -277,7 +277,7 @@ impl Manager {
                     id: Some(request.space_id.clone()),
                     subject: None,
                 },
-                NotificationKind::PushFailed,
+                AlertKind::PushFailed,
                 message,
             )
             .await;

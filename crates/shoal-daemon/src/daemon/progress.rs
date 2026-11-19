@@ -8,7 +8,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 use shoal_ids::space_ids::SpaceId;
 
-use super::{manager::Manager, notifications::NotificationKind};
+use super::{manager::Manager, notifications::AlertKind};
 use crate::model::Space;
 use crate::time::UnixTime;
 use shoal_protocol::progress;
@@ -335,7 +335,7 @@ impl Manager {
             space.name,
             blockers.join("; ")
         );
-        let kind = NotificationKind::SpaceBlocked;
+        let kind = AlertKind::SpaceBlocked;
         (self.notify_space(&space.name, &space.id, kind, message)).await;
     }
 

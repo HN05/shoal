@@ -472,7 +472,7 @@ async fn post_ready_hook_receives_marks_and_its_failure_keeps_them() {
     assert!(
         notifications
             .iter()
-            .any(|notification| notification.kind == NotificationKind::HookFailed)
+            .any(|notification| notification.kind == AlertKind::HookFailed)
     );
 }
 

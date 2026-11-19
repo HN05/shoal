@@ -20,11 +20,11 @@ use shoal_daemon_base::{
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::{
+    alerts::AlertKind,
     approvals::ApprovalRequest,
     config::permissions::Permissions,
     hub::{Member, routing::ChainedMode},
     model::{QueueEntry, Repository, RunningAgent, Space},
-    notifications::NotificationKind,
     paths::Paths,
     protocol::{AppMethod, Request},
     questions::Question,
@@ -242,7 +242,7 @@ impl Coordinators for StandIn {
         &'a self,
         _: &'a SpaceName,
         _: Option<&'a SpaceId>,
-        _: NotificationKind,
+        _: AlertKind,
         _: String,
         _: Vec<PathBuf>,
         _: Source,

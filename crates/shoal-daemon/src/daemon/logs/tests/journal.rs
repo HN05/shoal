@@ -4,7 +4,7 @@ use crate::{
     daemon::{
         executions::ExecutionKind,
         manager::Manager,
-        notifications::NotificationKind,
+        notifications::AlertKind,
         test_support::{git, manager, repository},
         workspace_files::Attacher,
     },
@@ -81,7 +81,7 @@ async fn replay_drains_multiple_batches_and_live_readers_do_not_consume_notifica
     manager
         .notify(
             Some(&"worker".into()),
-            NotificationKind::SpaceRemoved,
+            AlertKind::SpaceRemoved,
             "idle cleanup",
         )
         .await;

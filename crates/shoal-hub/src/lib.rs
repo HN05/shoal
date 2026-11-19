@@ -15,7 +15,7 @@ use shoal_daemon_base::{
     log,
     notifications::{About, Notifications},
 };
-use shoal_protocol::notifications::NotificationKind;
+use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::paths::Paths;
 use shoal_protocol::time;
 use shoal_store::Store;
@@ -147,13 +147,7 @@ impl Hub {
 impl Hub {
     /// Tell the user `message`, of `kind`, about what `about` names, or
     /// its coordinator.
-    async fn notify(
-        &self,
-        daemon: &dyn Daemon,
-        about: About,
-        kind: NotificationKind,
-        message: String,
-    ) {
+    async fn notify(&self, daemon: &dyn Daemon, about: About, kind: AlertKind, message: String) {
         (self.notifications)
             .notify(daemon, about, kind, message, &[])
             .await;

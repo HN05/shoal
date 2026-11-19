@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use shoal_states::states;
 
-states!(NotificationKind {
+states!(AlertKind {
     ApprovalRequested => "approval_requested",
     /// A workspace's agent withdrew an approval request the user had been shown.
     ApprovalWithdrawn => "approval_withdrawn",
@@ -117,7 +117,7 @@ states!(NotificationKind {
 });
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Notification {
+pub struct Alert {
     pub id: i64,
     pub created_at: crate::time::UnixTime,
     /// Workspace name when the event happened; kept after removal.
@@ -125,7 +125,7 @@ pub struct Notification {
     /// The ID of that space, which selects it while it exists.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub space_id: Option<shoal_ids::space_ids::SpaceId>,
-    pub kind: NotificationKind,
+    pub kind: AlertKind,
     pub message: String,
     pub read: bool,
     /// The files the space's agent sent with the message.

@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
 
 use crate::{
+    alerts::AlertKind,
     config::permissions::{PermissionKey, Permissions},
-    notifications::NotificationKind,
     space_names::SpaceName,
     time::UnixTime,
 };
@@ -117,7 +117,7 @@ pub struct Told {
     /// The notification the event is for the user, if no space above takes
     /// it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub kind: Option<NotificationKind>,
+    pub kind: Option<AlertKind>,
     pub message: String,
     /// What the space's machine kept of the files it sent, which stay
     /// there.

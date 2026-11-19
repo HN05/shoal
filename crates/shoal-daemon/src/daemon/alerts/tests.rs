@@ -8,34 +8,22 @@ async fn repeated_conflicts_collapse_until_read_and_completed_events_never_do() 
     let watcher = manager.notifications.watch();
     for _ in 0..3 {
         manager
-            .notify(
-                Some(&"a".into()),
-                NotificationKind::ResourceBusy,
-                "pool busy",
-            )
+            .notify(Some(&"a".into()), AlertKind::ResourceBusy, "pool busy")
             .await;
     }
     manager
-        .notify(
-            Some(&"b".into()),
-            NotificationKind::ResourceBusy,
-            "pool busy",
-        )
+        .notify(Some(&"b".into()), AlertKind::ResourceBusy, "pool busy")
         .await;
     for _ in 0..2 {
         manager
-            .notify(
-                Some(&"a".into()),
-                NotificationKind::AgentExited,
-                "claude exited",
-            )
+            .notify(Some(&"a".into()), AlertKind::AgentExited, "claude exited")
             .await;
     }
     for _ in 0..2 {
         manager
             .notify(
                 Some(&"a".into()),
-                NotificationKind::HookFailed,
+                AlertKind::HookFailed,
                 "workspace removed; hook failed",
             )
             .await;
@@ -49,18 +37,18 @@ async fn repeated_conflicts_collapse_until_read_and_completed_events_never_do() 
     assert_eq!(
         summary,
         [
-            (Some("a"), NotificationKind::ResourceBusy, "pool busy"),
-            (Some("b"), NotificationKind::ResourceBusy, "pool busy"),
-            (Some("a"), NotificationKind::AgentExited, "claude exited"),
-            (Some("a"), NotificationKind::AgentExited, "claude exited"),
+            (Some("a"), AlertKind::ResourceBusy, "pool busy"),
+            (Some("b"), AlertKind::ResourceBusy, "pool busy"),
+            (Some("a"), AlertKind::AgentExited, "claude exited"),
+            (Some("a"), AlertKind::AgentExited, "claude exited"),
             (
                 Some("a"),
-                NotificationKind::HookFailed,
+                AlertKind::HookFailed,
                 "workspace removed; hook failed"
             ),
             (
                 Some("a"),
-                NotificationKind::HookFailed,
+                AlertKind::HookFailed,
                 "workspace removed; hook failed"
             ),
         ]
@@ -95,11 +83,7 @@ async fn repeated_conflicts_collapse_until_read_and_completed_events_never_do() 
     );
     // Once read, the same conflict is news again.
     manager
-        .notify(
-            Some(&"a".into()),
-            NotificationKind::ResourceBusy,
-            "pool busy",
-        )
+        .notify(Some(&"a".into()), AlertKind::ResourceBusy, "pool busy")
         .await;
     let after = manager.notifications.after(last, 50).await.unwrap();
     assert_eq!(after.len(), 1);
@@ -116,7 +100,7 @@ async fn repeated_conflicts_collapse_until_read_and_completed_events_never_do() 
     );
     assert_eq!(manager.notifications.unread().await.unwrap(), 0);
     manager
-        .notify(None, NotificationKind::AgentExited, "claude exited")
+        .notify(None, AlertKind::AgentExited, "claude exited")
         .await;
     let next = manager.notifications.after(after[0].id, 50).await.unwrap();
     assert_eq!(next.len(), 1);
@@ -173,7 +157,7 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
     let unread = manager.notifications.list(true, 50).await.unwrap();
     assert_eq!(unread.len(), 1);
     assert_eq!(unread[0].workspace.as_deref(), Some("sender"));
-    assert_eq!(unread[0].kind, NotificationKind::AgentMessage);
+    assert_eq!(unread[0].kind, AlertKind::AgentMessage);
     assert_eq!(unread[0].message, "PR #12 is ready to merge");
     manager
         .executions
@@ -257,11 +241,7 @@ async fn senders_withdraw_their_own_messages_until_shown() {
     // A repeat collapses into the same notification.
     assert_eq!(send("PR #12 is ready to merge").await, sent);
     manager
-        .notify(
-            Some(&"sender".into()),
-            NotificationKind::ResourceBusy,
-            "pool busy",
-        )
+        .notify(Some(&"sender".into()), AlertKind::ResourceBusy, "pool busy")
         .await;
     let busy = manager.notifications.list(true, 50).await.unwrap()[1].id;
     for (workspace, id) in [(&other.id, sent), (&sender.id, busy)] {
@@ -354,7 +334,7 @@ async fn a_message_stays_its_sender_s_through_a_rename_while_it_is_recorded() {
         .create_workspace(&repo.id, "sender".into(), None, None, path)
         .await
         .unwrap();
-    let kind = NotificationKind::AgentMessage;
+    let kind = AlertKind::AgentMessage;
     let id = (manager.notifications)
         .record(&*manager, about, kind, "ready".into(), &[])
         .await
@@ -392,7 +372,7 @@ async fn a_failed_state_report_alerts_one_line_that_fits() {
         .unwrap();
     let unread = manager.notifications.list(true, 50).await.unwrap();
     assert_eq!(unread.len(), 1);
-    assert_eq!(unread[0].kind, NotificationKind::StateReportFailed);
+    assert_eq!(unread[0].kind, AlertKind::StateReportFailed);
     assert_eq!(unread[0].workspace.as_deref(), Some("reporter"));
     assert!(crate::validate::message(&unread[0].message).is_ok());
     assert!(
@@ -584,12 +564,7 @@ async fn an_event_named_alone_takes_no_workspace_that_shares_its_name() {
         .unwrap();
 
     // A launch that opened no workspace is named alone.
-    (manager.notify(
-        Some(&"fix".into()),
-        NotificationKind::QueueFailed,
-        "did not start",
-    ))
-    .await;
+    (manager.notify(Some(&"fix".into()), AlertKind::QueueFailed, "did not start")).await;
 
     let [notification] = &manager.notifications.list(true, 10).await.unwrap()[..] else {
         panic!("one notification");

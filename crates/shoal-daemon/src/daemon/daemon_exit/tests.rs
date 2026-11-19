@@ -9,7 +9,7 @@ use crate::{
     daemon::{
         execution_connection::{ExecutionContext, execute},
         executions::ExecutionKind,
-        notifications::NotificationKind,
+        notifications::AlertKind,
         test_support::{manager, repository},
     },
     execution::recovery,
@@ -154,7 +154,7 @@ impl Running {
             .contains("earlier")
     }
 
-    async fn notifications(&self, kind: NotificationKind) -> Vec<String> {
+    async fn notifications(&self, kind: AlertKind) -> Vec<String> {
         let notifications = self.manager.notifications.list(true, 10).await.unwrap();
         notifications
             .into_iter()
@@ -180,10 +180,7 @@ async fn a_signal_stops_work_saved_first_keeping_its_restores() {
     );
     assert!(running.queued_restore().await);
     assert_eq!(
-        running
-            .notifications(NotificationKind::DaemonStopped)
-            .await
-            .len(),
+        running.notifications(AlertKind::DaemonStopped).await.len(),
         1
     );
 }
@@ -208,7 +205,7 @@ async fn daemon_stop_stops_work_as_stop_all_does() {
     assert!(saved.agents.is_empty(), "{:?}", saved.agents);
     assert!(
         running
-            .notifications(NotificationKind::DaemonStopped)
+            .notifications(AlertKind::DaemonStopped)
             .await
             .is_empty()
     );
@@ -239,7 +236,7 @@ async fn a_restart_and_a_signal_after_a_system_shutdown_stop_leave_work_alone() 
     bounded(&mut running.executing).await.unwrap().unwrap();
     assert!(
         running
-            .notifications(NotificationKind::DaemonStopped)
+            .notifications(AlertKind::DaemonStopped)
             .await
             .is_empty()
     );

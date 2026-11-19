@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::{
     daemon::{
         manager::Manager,
-        notifications::NotificationKind,
+        notifications::AlertKind,
         test_support::{commit, git, manager, repository},
     },
     model::Repository,
@@ -205,7 +205,7 @@ async fn a_contribution_goes_once_its_workspaces_and_checkpoints_are_gone() {
     assert!(
         notifications
             .iter()
-            .any(|notification| notification.kind == NotificationKind::RepositoryRemoved)
+            .any(|notification| notification.kind == AlertKind::RepositoryRemoved)
     );
 }
 
@@ -297,7 +297,7 @@ async fn a_removed_contribution_names_the_fork_it_leaves() {
     let notifications = manager.notifications.list(false, 10).await.unwrap();
     let removed = notifications
         .iter()
-        .find(|notification| notification.kind == NotificationKind::RepositoryRemoved)
+        .find(|notification| notification.kind == AlertKind::RepositoryRemoved)
         .unwrap();
     assert!(removed.message.contains(fork), "{}", removed.message);
 }

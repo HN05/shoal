@@ -126,7 +126,7 @@ fn renumber_requests(db: &Connection, requests: &mut HashMap<String, Request>) -
 
 /// A notification about a question or a request: what it says, the
 /// request it asks about, and the space it names.
-struct Notification {
+struct Alert {
     id: i64,
     kind: String,
     message: String,
@@ -151,7 +151,7 @@ fn rewrite_notifications(db: &Connection, requests: &HashMap<String, Request>) -
                 ('approval_requested','approval_withdrawn','question_asked','question_withdrawn')",
         )?
         .query_map([], |row| {
-            Ok(Notification {
+            Ok(Alert {
                 id: row.get(0)?,
                 kind: row.get(1)?,
                 message: row.get(2)?,
@@ -189,7 +189,7 @@ fn rewrite_notifications(db: &Connection, requests: &HashMap<String, Request>) -
 /// `old` before the upgrade.
 fn request_named(
     requests: &HashMap<String, Request>,
-    notification: &Notification,
+    notification: &Alert,
     old: i64,
 ) -> Option<ItemNumber> {
     let request = match &notification.subject {

@@ -23,7 +23,7 @@ use tokio::time::Instant;
 
 use super::{
     log,
-    notifications::{About, NotificationKind, Notifications},
+    notifications::{About, AlertKind, Notifications},
 };
 use crate::protocol::{AccessStall, PRIVACY_PROMPT};
 
@@ -98,7 +98,7 @@ impl FileAccess {
         Box::pin(async move {
             let (result, stall) = self.check(path, check).await;
             if let Some(stall) = stall {
-                let kind = NotificationKind::AccessStalled;
+                let kind = AlertKind::AccessStalled;
                 (notifications)
                     .notify_user(About::default(), kind, stall.message())
                     .await;

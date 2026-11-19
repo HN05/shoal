@@ -8,7 +8,7 @@ use rusqlite::{Connection, params};
 use shoal_ids::space_ids::SpaceId;
 
 use crate::{
-    daemon::{links::space::LinkSpace, manager::Manager, notifications::NotificationKind},
+    daemon::{links::space::LinkSpace, manager::Manager, notifications::AlertKind},
     execution::recovery,
     forge::items::reference::ItemRef,
     model::{Assigner, Space},
@@ -46,7 +46,7 @@ impl Manager {
             }
         };
         for warning in warnings {
-            let kind = NotificationKind::UnassignFailed;
+            let kind = AlertKind::UnassignFailed;
             (self.notify_space(&space.name, id, kind, warning)).await;
         }
     }

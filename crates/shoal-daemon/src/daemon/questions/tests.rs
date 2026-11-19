@@ -70,7 +70,7 @@ async fn asking_notifies_once_and_repeats_return_the_same_question() {
     let notifications = manager.notifications.list(true, 50).await.unwrap();
     let asked: Vec<_> = notifications
         .iter()
-        .filter(|n| n.kind == NotificationKind::QuestionAsked)
+        .filter(|n| n.kind == AlertKind::QuestionAsked)
         .collect();
     assert_eq!(asked.len(), 1);
     assert!(
@@ -745,7 +745,7 @@ async fn done_closes_open_questions_for_good() {
     assert!(
         notifications
             .iter()
-            .any(|n| n.kind == NotificationKind::SpaceDone
+            .any(|n| n.kind == AlertKind::SpaceDone
                 && n.message.contains(&open.number.to_string()))
     );
     // The undelivered answer still reaches the agents.
@@ -980,7 +980,7 @@ async fn withdrawing_a_shown_question_tells_the_user() {
         .unwrap();
     let unread = manager.notifications.list(true, 50).await.unwrap();
     assert_eq!(unread.len(), 1);
-    assert_eq!(unread[0].kind, NotificationKind::QuestionWithdrawn);
+    assert_eq!(unread[0].kind, AlertKind::QuestionWithdrawn);
 }
 
 #[tokio::test]

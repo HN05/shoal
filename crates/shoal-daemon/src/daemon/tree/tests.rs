@@ -821,7 +821,7 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
 
 #[tokio::test]
 async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user() {
-    use crate::{daemon::notifications::NotificationKind, state::AgentState};
+    use crate::{daemon::notifications::AlertKind, state::AgentState};
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -923,7 +923,7 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
         .notify_space(
             &helper.name,
             &helper.id,
-            NotificationKind::AgentExited,
+            AlertKind::AgentExited,
             "claude exited",
         )
         .await;
@@ -1471,7 +1471,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
             .await
             .unwrap()
             .into_iter()
-            .filter(|n| n.kind == crate::daemon::notifications::NotificationKind::ApprovalRequested)
+            .filter(|n| n.kind == crate::daemon::notifications::AlertKind::ApprovalRequested)
             .count()
     };
     assert_eq!(user().await, 0);
@@ -1660,7 +1660,7 @@ async fn a_request_withdrawn_once_given_back_notifies_nobody() {
     use crate::{
         daemon::{
             approvals::{ApprovalRequest, Specification, Target},
-            notifications::NotificationKind,
+            notifications::AlertKind,
         },
         state::AgentState,
     };
@@ -1713,7 +1713,7 @@ async fn a_request_withdrawn_once_given_back_notifies_nobody() {
         .await
         .unwrap()
         .into_iter()
-        .filter(|n| n.kind == NotificationKind::ApprovalRequested)
+        .filter(|n| n.kind == AlertKind::ApprovalRequested)
         .count();
     assert_eq!(asked, 0);
 }
@@ -1787,7 +1787,7 @@ async fn a_chat_whose_agent_stops_gives_the_requests_it_decides_back_to_the_user
     use crate::{
         daemon::{
             approvals::{ApprovalRequest, Specification, Target},
-            notifications::NotificationKind,
+            notifications::AlertKind,
         },
         state::AgentState,
     };
@@ -1860,7 +1860,7 @@ async fn a_chat_whose_agent_stops_gives_the_requests_it_decides_back_to_the_user
         .await
         .unwrap()
         .into_iter()
-        .filter(|n| n.kind == NotificationKind::ApprovalRequested)
+        .filter(|n| n.kind == AlertKind::ApprovalRequested)
         .count();
     assert_eq!(asked, 1);
 }
@@ -1870,7 +1870,7 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
     use crate::{
         daemon::{
             approvals::{ApprovalRequest, Specification, Target},
-            notifications::NotificationKind,
+            notifications::AlertKind,
         },
         state::AgentState,
     };
@@ -1992,7 +1992,7 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .await
         .unwrap()
         .into_iter()
-        .filter(|n| n.kind == NotificationKind::ApprovalRequested)
+        .filter(|n| n.kind == AlertKind::ApprovalRequested)
         .count();
     assert_eq!(asked, 1);
 }
@@ -2002,7 +2002,7 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
     use crate::{
         daemon::{
             approvals::{ApprovalRequest, DecisionStatus, Specification, Target},
-            notifications::NotificationKind,
+            notifications::AlertKind,
         },
         state::AgentState,
     };
@@ -2056,7 +2056,7 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
             .await
             .unwrap()
             .into_iter()
-            .filter(|n| n.kind == NotificationKind::ApprovalRequested)
+            .filter(|n| n.kind == AlertKind::ApprovalRequested)
             .count()
     };
     for name in ["token", "other"] {

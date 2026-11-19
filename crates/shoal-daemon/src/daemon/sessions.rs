@@ -14,7 +14,7 @@ use shoal_protocol::space_names::SpaceName;
 
 use super::manager::Manager;
 use crate::{
-    daemon::notifications::NotificationKind,
+    daemon::notifications::AlertKind,
     sessions::{HostName, Origin, Owner, PlaceClose},
 };
 
@@ -228,12 +228,9 @@ impl Manager {
             format!("terminal session cleanup failed: {error:#}; retry with shoal cleanup");
         match workspace {
             Some((name, id)) => {
-                (self.notify_space(name, id, NotificationKind::CleanupFailed, message)).await
+                (self.notify_space(name, id, AlertKind::CleanupFailed, message)).await
             }
-            None => {
-                self.notify(None, NotificationKind::CleanupFailed, message)
-                    .await
-            }
+            None => self.notify(None, AlertKind::CleanupFailed, message).await,
         }
     }
 }

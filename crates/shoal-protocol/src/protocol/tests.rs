@@ -1,7 +1,7 @@
 use super::*;
+use crate::alerts::Alert;
 use crate::executions::ExecutionKind;
 use crate::model::{ExecutionPlan, Workspace};
-use crate::notifications::Notification;
 use serde::Deserialize;
 use serde_json::json;
 use shoal_ids::space_ids::SpaceId;
@@ -420,7 +420,7 @@ fn extraction_preserves_wire_shapes() {
 fn stream_payloads_and_acknowledgements_preserve_remote_errors() {
     for error in [
         ExecutionPlan::try_from(Body::error(ErrorCode::ScopeDenied, "denied")).unwrap_err(),
-        Notification::try_from(Body::error(ErrorCode::ScopeDenied, "denied")).unwrap_err(),
+        Alert::try_from(Body::error(ErrorCode::ScopeDenied, "denied")).unwrap_err(),
         <()>::try_from(Body::error(ErrorCode::ScopeDenied, "denied")).unwrap_err(),
     ] {
         let remote = error.downcast_ref::<RemoteError>().unwrap();

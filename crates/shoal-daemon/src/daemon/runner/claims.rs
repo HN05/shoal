@@ -24,7 +24,7 @@ use super::Registration;
 use crate::{
     config::Runner,
     daemon::{
-        allocation::Allocation, manager::Manager, notifications::NotificationKind,
+        allocation::Allocation, manager::Manager, notifications::AlertKind,
         workspace::commits::RecordedJobWorkspace,
     },
     forge::ForgeRepo,
@@ -110,7 +110,7 @@ impl Manager {
         if let Some(error) = error {
             self.notify(
                 Some(&entry.name),
-                NotificationKind::RunnerFailed,
+                AlertKind::RunnerFailed,
                 format!(
                     "CI job {} did not start; the forge keeps it for other runners: {error:#}",
                     entry.name

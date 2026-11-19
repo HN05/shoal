@@ -15,9 +15,9 @@ use shoal_daemon_base::{callers::Caller, notifications::About};
 use shoal_forge::account::Account;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::approvals::ApprovalRequest;
 use shoal_protocol::config::permissions::Permissions;
-use shoal_protocol::notifications::NotificationKind;
 use shoal_protocol::repository::Selector;
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
@@ -196,7 +196,7 @@ pub trait Requesters: Send + Sync {
     fn tell_space<'a>(&'a self, id: &'a SpaceId, message: String) -> BoxFuture<'a, bool>;
 
     /// Tell the user `message`, of `kind`, about what `about` names.
-    fn notify(&self, about: About, kind: NotificationKind, message: String) -> BoxFuture<'_, ()>;
+    fn notify(&self, about: About, kind: AlertKind, message: String) -> BoxFuture<'_, ()>;
 
     /// A scope token for `caller`, which the daemon accepts until it is
     /// revoked.

@@ -19,7 +19,7 @@ fn takes_more_than_it_reads(operation: &Operation) -> bool {
     matches!(
         operation,
         Operation::Agent(AgentMethod::AgentUpdates { .. } | AgentMethod::GitCredential { .. })
-            | Operation::Notification(NotificationMethod::ListNotifications { .. })
+            | Operation::Alert(NotificationMethod::ListNotifications { .. })
             | Operation::Item(ItemMethod::ForgeDownload { .. })
             | Operation::Launch(
                 LaunchMethod::CheckLaunch { .. } | LaunchMethod::LaunchModes { .. }

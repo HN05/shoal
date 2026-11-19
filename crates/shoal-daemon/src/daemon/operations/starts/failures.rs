@@ -11,7 +11,7 @@ use crate::{
     daemon::{
         log,
         manager::Manager,
-        notifications::{About, NotificationKind},
+        notifications::{About, AlertKind},
         operations::Entry,
     },
     protocol::operations::{Ended, Failure},
@@ -53,7 +53,7 @@ impl Manager {
             "The preparation of {name} failed: {reason}; `shoal {retry} {number}` retries it, and `shoal rm {number}` removes the workspace"
         );
         let about = About::space(name, id);
-        let kind = NotificationKind::PreparationFailed;
+        let kind = AlertKind::PreparationFailed;
         if let Err(error) = self
             .notifications
             .record(self, about, kind, message, &[])

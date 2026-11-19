@@ -260,7 +260,7 @@ async fn idle_cleanup_keeps_a_stopped_chat_while_its_coordinator_runs() {
 
 #[tokio::test]
 async fn a_blocked_child_tells_its_coordinator_rather_than_the_user() {
-    use crate::daemon::notifications::NotificationKind;
+    use crate::daemon::notifications::AlertKind;
     use shoal_protocol::progress::ProgressChange;
     let (root, manager) = manager().await;
     let (parent, child) = split_child(&manager, root.path()).await;
@@ -293,7 +293,7 @@ async fn a_blocked_child_tells_its_coordinator_rather_than_the_user() {
     assert!(
         !notifications
             .iter()
-            .any(|notification| notification.kind == NotificationKind::SpaceBlocked)
+            .any(|notification| notification.kind == AlertKind::SpaceBlocked)
     );
     finish(&manager, reporting).await;
     finish(&manager, started).await;

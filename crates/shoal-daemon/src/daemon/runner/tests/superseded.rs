@@ -3,7 +3,7 @@ use super::{
     Fixture, admit_and_claim, fixture, hold_the_builds_permit, job, job_entries,
     refresh_waiting_jobs,
 };
-use crate::{daemon::notifications::NotificationKind, state::QueueState};
+use crate::{daemon::alerts::AlertKind, state::QueueState};
 
 /// Move PR 12 past the commit its runs wait at.
 fn move_pull_on(fixture: &Fixture) {
@@ -22,7 +22,7 @@ async fn cancel_failed(fixture: &Fixture) -> bool {
     let notifications = fixture.manager.notifications.list(false, 50).await.unwrap();
     notifications
         .iter()
-        .any(|notification| notification.kind == NotificationKind::RunnerFailed)
+        .any(|notification| notification.kind == AlertKind::RunnerFailed)
 }
 
 /// Admit the queued jobs and claim each.
@@ -97,8 +97,7 @@ async fn a_queued_job_whose_run_the_forge_does_not_cancel_is_passed_over_with_a_
     let run = format!("http://{}/team/repo/actions/runs/8", fixture.server.host);
     assert!(
         notifications.iter().any(|notification| {
-            notification.kind == NotificationKind::RunnerFailed
-                && notification.message.contains(&run)
+            notification.kind == AlertKind::RunnerFailed && notification.message.contains(&run)
         }),
         "{notifications:?}"
     );

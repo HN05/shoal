@@ -12,7 +12,7 @@ use tokio::{net::UnixListener, task::JoinSet, time::timeout};
 
 use super::{install_test_script, manager, repository};
 use crate::daemon::{
-    Server, connections, manager::Manager, notifications::NotificationKind, serve, store,
+    Server, connections, manager::Manager, notifications::AlertKind, serve, store,
 };
 use crate::execution::recovery::{Record, RecordExt as _, record_path};
 use crate::model::Execution;
@@ -307,7 +307,7 @@ pub async fn blocked(manager: &Manager) -> Vec<String> {
         .await
         .unwrap()
         .into_iter()
-        .filter(|notification| notification.kind == NotificationKind::RecoveryBlocked)
+        .filter(|notification| notification.kind == AlertKind::RecoveryBlocked)
         .map(|notification| notification.message)
         .collect()
 }

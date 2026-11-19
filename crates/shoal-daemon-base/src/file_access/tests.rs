@@ -177,6 +177,6 @@ async fn the_daemon_alerts_once_while_a_directory_stays_stalled() {
     let [alert] = alerts.as_slice() else {
         panic!("expected one alert: {alerts:?}");
     };
-    assert_eq!(alert.kind, NotificationKind::AccessStalled);
+    assert_eq!(alert.kind, AlertKind::AccessStalled);
     assert_eq!(access.stalls().len(), 1);
 }

@@ -10,7 +10,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use super::{About, AgentMessage, Delivery, MAX_UNREAD, MAX_UNREAD_BYTES, Unread};
 use crate::{
     daemon::{
-        notifications::{self, NotificationKind},
+        notifications::{self, AlertKind},
         workspace_files,
     },
     state::WorkspaceState,
@@ -223,7 +223,8 @@ pub(crate) fn hand_to_user(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<O
                 crate::daemon::store::json_column(row, "attachments")?.unwrap_or_default();
             Ok((about, row.get(2)?, row.get(3)?, attachments))
         })?
-        .collect::<rusqlite::Result<Vec<(notifications::About, NotificationKind, String, Vec<PathBuf>)>>>()?;
+        .collect::<rusqlite::Result<Vec<(notifications::About, AlertKind, String, Vec<PathBuf>)>>>(
+        )?;
     let mut last = None;
     for (about, kind, message, attachments) in unread {
         let files = workspace_files::ids_at(tx, &attachments)?;

@@ -56,7 +56,7 @@ impl Operation {
                         | ItemMethod::ViewItems { .. }
                         | ItemMethod::ForgeDownload { .. }
                 )
-                | Self::Notification(NotificationMethod::ListNotifications { .. })
+                | Self::Alert(NotificationMethod::ListNotifications { .. })
                 | Self::Port(PortMethod::PortOverview { .. } | PortMethod::PortCatalog { .. })
                 | Self::Question(
                     QuestionMethod::ListQuestions { .. } | QuestionMethod::ShowQuestion { .. }

@@ -11,8 +11,8 @@ use std::{
 use anyhow::{Result, bail};
 use shoal_daemon_base::notifications::About;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::approvals::{ApprovalRequest, DecisionStatus, GateStep};
-use shoal_protocol::notifications::NotificationKind;
 use tokio::task::{Id, JoinError, JoinSet};
 
 use crate::{Reviews, daemon::GateDaemon, log};
@@ -348,7 +348,7 @@ async fn report_unavailable_gate(
          or agent.default to an AI tool with a review template, then run shoal config reload",
         request.number
     );
-    let kind = NotificationKind::GateUnavailable;
+    let kind = AlertKind::GateUnavailable;
     daemon.notify(about, kind, message).await;
 }
 

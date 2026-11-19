@@ -18,10 +18,10 @@ use shoal_daemon_base::{callers::Caller, gates::Gates, notifications::About};
 use shoal_forge::account::Account;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::approvals::{ApprovalRequest, DecisionStatus, GateStep};
 use shoal_protocol::config::permissions::Permissions;
 use shoal_protocol::item_numbers::ItemNumber;
-use shoal_protocol::notifications::NotificationKind;
 use shoal_protocol::paths::Paths;
 use shoal_protocol::repository::Selector;
 use shoal_protocol::scope_tokens::ScopeToken;
@@ -201,7 +201,7 @@ pub(crate) async fn store(path: PathBuf, id: &'static str) -> Store {
 pub(crate) struct StandIn {
     requests: Arc<StandInRequests>,
     /// What the user was told, by kind.
-    pub(crate) notified: Mutex<Vec<(NotificationKind, String)>>,
+    pub(crate) notified: Mutex<Vec<(AlertKind, String)>>,
     /// The keys of the requests announced to whoever decides them.
     pub(crate) announced: Mutex<Vec<String>>,
     /// Whether approving a request fails, as when what it does cannot run.
@@ -462,7 +462,7 @@ impl Requesters for StandIn {
         Box::pin(async { true })
     }
 
-    fn notify(&self, _about: About, kind: NotificationKind, message: String) -> BoxFuture<'_, ()> {
+    fn notify(&self, _about: About, kind: AlertKind, message: String) -> BoxFuture<'_, ()> {
         self.notified.lock().unwrap().push((kind, message));
         Box::pin(async {})
     }

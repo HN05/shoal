@@ -494,7 +494,7 @@ impl Manager {
         self.notify_space(
             &workspace.name,
             &workspace.id,
-            crate::daemon::notifications::NotificationKind::HookFailed,
+            crate::daemon::notifications::AlertKind::HookFailed,
             &message,
         )
         .await;

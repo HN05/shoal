@@ -14,7 +14,7 @@ use hyper::{
 };
 use hyper_util::rt::{TokioIo, TokioTimer};
 use shoal_daemon_base::notifications::About;
-use shoal_protocol::{notifications::NotificationKind, triggers::WebhookRequest};
+use shoal_protocol::{alerts::AlertKind, triggers::WebhookRequest};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::Semaphore,
@@ -91,7 +91,7 @@ impl Runner {
                     "Shoal could not listen for webhooks on {address}: {error}; change [machine.webhooks] listen and run shoal config reload"
                 );
                 log!("webhooks: {message}");
-                let kind = NotificationKind::EnvironmentProblem;
+                let kind = AlertKind::EnvironmentProblem;
                 (self.notifications)
                     .notify_user(About::default(), kind, message)
                     .await;

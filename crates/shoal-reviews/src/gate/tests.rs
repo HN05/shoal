@@ -162,7 +162,7 @@ impl Fixture {
     fn unavailable(&self) -> usize {
         let notified = self.daemon.notified.lock().unwrap();
         (notified.iter())
-            .filter(|(kind, _)| *kind == NotificationKind::GateUnavailable)
+            .filter(|(kind, _)| *kind == AlertKind::GateUnavailable)
             .count()
     }
 

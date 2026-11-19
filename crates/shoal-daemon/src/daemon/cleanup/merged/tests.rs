@@ -7,7 +7,7 @@ use std::{fs, sync::Arc};
 use super::*;
 use crate::daemon::test_support::{commit, git, manager, repository};
 use crate::{
-    daemon::{notifications::NotificationKind, workspace_files::Attacher},
+    daemon::{notifications::AlertKind, workspace_files::Attacher},
     execution::recovery,
     model::{CleanupReason, Workspace},
 };
@@ -153,7 +153,7 @@ async fn merged_workspace_is_removed_once_idle_whatever_its_assignment() {
     assert!(
         notifications
             .iter()
-            .any(|notification| notification.kind == NotificationKind::SpaceRemoved)
+            .any(|notification| notification.kind == AlertKind::SpaceRemoved)
     );
 }
 

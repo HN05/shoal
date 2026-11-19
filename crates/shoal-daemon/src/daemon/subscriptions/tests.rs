@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    daemon::{notifications::NotificationKind, test_daemon::TestDaemon},
+    daemon::{notifications::AlertKind, test_daemon::TestDaemon},
     protocol::{self, Request, SubscriptionMethod},
 };
 use shoal_protocol::subscriptions::records::{Record, RecordKey, RecordKind, Topic};
@@ -56,7 +56,7 @@ async fn a_large_snapshot_arrives_in_pages() {
         let message = format!("{n}: {}", "x".repeat(1000));
         daemon
             .manager
-            .notify(None, NotificationKind::CleanupFailed, message)
+            .notify(None, AlertKind::CleanupFailed, message)
             .await;
     }
     let stream = daemon.raw().await;

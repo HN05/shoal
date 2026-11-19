@@ -134,7 +134,7 @@ async fn exit_notifications(manager: &Manager) -> Vec<String> {
         .await
         .unwrap()
         .into_iter()
-        .filter(|event| event.kind == NotificationKind::AgentExited)
+        .filter(|event| event.kind == AlertKind::AgentExited)
         .map(|event| event.message)
         .collect()
 }

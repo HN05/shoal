@@ -27,7 +27,7 @@ async fn assert_clone_refused(manager: &Manager, layout: &Layout) {
     assert!(
         notifications
             .iter()
-            .any(|notification| notification.kind == NotificationKind::SeedFailed),
+            .any(|notification| notification.kind == AlertKind::SeedFailed),
         "{notifications:?}"
     );
 }
@@ -166,7 +166,7 @@ async fn a_failed_build_is_reported_once_per_commit() {
     assert!(
         notifications
             .iter()
-            .any(|notification| notification.kind == NotificationKind::SeedFailed),
+            .any(|notification| notification.kind == AlertKind::SeedFailed),
         "{notifications:?}"
     );
     assert!(Snapshot::open(&layout).unwrap().is_none());
@@ -269,7 +269,7 @@ async fn fake_tools(
 async fn seed_failures(manager: &Manager) -> Vec<String> {
     let notifications = manager.notifications.list(true, 10).await.unwrap();
     (notifications.into_iter())
-        .filter(|notification| notification.kind == NotificationKind::SeedFailed)
+        .filter(|notification| notification.kind == AlertKind::SeedFailed)
         .map(|notification| notification.message)
         .collect()
 }

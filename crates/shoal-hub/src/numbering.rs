@@ -9,7 +9,7 @@ use anyhow::Result;
 use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_daemon_base::notifications::About;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
-use shoal_protocol::notifications::NotificationKind;
+use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::{
     hub::numbering::{Numbering, Renumbering},
     space_names::SpaceName,
@@ -49,7 +49,7 @@ impl Hub {
         let message = format!(
             "{name} is space {to} now, not {from}, which a space on another machine of the hub held first; its questions and approval requests are numbered {to}.N"
         );
-        let kind = NotificationKind::SpaceRenumbered;
+        let kind = AlertKind::SpaceRenumbered;
         let about = About::space(name, id);
         self.notify(daemon, about, kind, message.clone()).await;
         let told = daemon.message_next_turn(id, message);

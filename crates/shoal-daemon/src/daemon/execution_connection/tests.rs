@@ -63,7 +63,7 @@ async fn scoped_merge_answers_with_its_approval_request() {
     assert!(
         notifications
             .iter()
-            .any(|n| n.kind == crate::daemon::notifications::NotificationKind::ApprovalRequested),
+            .any(|n| n.kind == crate::daemon::notifications::AlertKind::ApprovalRequested),
         "{notifications:?}"
     );
 }

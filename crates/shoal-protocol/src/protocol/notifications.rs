@@ -17,7 +17,7 @@ pub enum NotificationMethod {
     /// Deletes every notification, read or not; answers with how many.
     ClearNotifications,
     /// Long-lived: unread notifications after `after`, then new ones as they
-    /// are recorded, each as a [`Body::Notification`] response and marked
+    /// are recorded, each as a [`Body::Alert`] response and marked
     /// read on delivery unless `keep_unread`.
     WatchNotifications {
         keep_unread: bool,

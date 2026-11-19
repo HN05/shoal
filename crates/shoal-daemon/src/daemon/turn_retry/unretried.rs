@@ -8,7 +8,7 @@ use shoal_ids::space_ids::SpaceId;
 
 use super::{Manager, cancel};
 use crate::{
-    daemon::notifications::NotificationKind,
+    daemon::notifications::AlertKind,
     model::Space,
     state::{AgentState, TurnFailure},
 };
@@ -103,13 +103,8 @@ impl Manager {
             .await?
         {
             let message = reason.message(agent, failure);
-            self.notify_space(
-                &space.name,
-                &space.id,
-                NotificationKind::TurnFailed,
-                message,
-            )
-            .await;
+            self.notify_space(&space.name, &space.id, AlertKind::TurnFailed, message)
+                .await;
         }
         Ok(())
     }

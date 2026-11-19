@@ -22,7 +22,7 @@ use crate::{
         approvals::{ApprovalRequest, release_decided_by},
         events,
         links::{self, issue::Dropped},
-        notifications::NotificationKind,
+        notifications::AlertKind,
         spaces, workspace_files,
     },
     fsutil::off_runtime,
@@ -317,7 +317,7 @@ impl Manager {
             ),
         }
         for warning in warnings {
-            let kind = NotificationKind::UnassignFailed;
+            let kind = AlertKind::UnassignFailed;
             (self.notify_space(&space.name, &space.id, kind, warning)).await;
         }
     }

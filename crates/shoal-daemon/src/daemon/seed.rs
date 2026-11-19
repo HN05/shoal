@@ -23,7 +23,7 @@ use crate::{
         capacity::{self, MemoryState},
         log,
         manager::Manager,
-        notifications::NotificationKind,
+        notifications::AlertKind,
         workspace::identity,
     },
     fsutil::{
@@ -125,7 +125,7 @@ impl Manager {
                 let name = repo.display_name();
                 self.notify(
                     None,
-                    NotificationKind::SeedFailed,
+                    AlertKind::SeedFailed,
                     format!("Seed build for {name} failed: {error:#}"),
                 )
                 .await;
@@ -162,7 +162,7 @@ impl Manager {
         for failure in failures {
             self.notify(
                 None,
-                NotificationKind::SeedFailed,
+                AlertKind::SeedFailed,
                 format!(
                     "Seed build for {name} kept the outputs of its other steps: {failure}; \
                      new workspaces start without its outputs"
@@ -356,7 +356,7 @@ impl Manager {
             self.notify_space(
                 &workspace.name,
                 &workspace.id,
-                NotificationKind::SeedFailed,
+                AlertKind::SeedFailed,
                 format!("Workspace starts without the seed build: {error:#}"),
             )
             .await;

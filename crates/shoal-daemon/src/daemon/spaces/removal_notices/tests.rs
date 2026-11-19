@@ -18,7 +18,7 @@ async fn retentions(manager: &Manager) -> Vec<Option<EventCause>> {
         .collect()
 }
 
-async fn notices(manager: &Manager) -> Vec<(NotificationKind, Option<String>)> {
+async fn notices(manager: &Manager) -> Vec<(AlertKind, Option<String>)> {
     let notifications = manager.notifications.list(false, 100).await.unwrap();
     notifications
         .into_iter()
@@ -47,7 +47,7 @@ async fn a_retained_workspace_records_its_cleanup_as_the_cause() {
     assert_eq!(retentions(&manager).await, [Some(EventCause::Merged)]);
     assert_eq!(
         notices(&manager).await,
-        [(NotificationKind::CleanupFailed, Some("topic".to_owned()))]
+        [(AlertKind::CleanupFailed, Some("topic".to_owned()))]
     );
 }
 
@@ -65,7 +65,7 @@ async fn a_retained_chat_records_its_cleanup_as_the_cause() {
     assert_eq!(retentions(&manager).await, [Some(EventCause::Idle)]);
     assert_eq!(
         notices(&manager).await,
-        [(NotificationKind::CleanupFailed, Some("notes".to_owned()))]
+        [(AlertKind::CleanupFailed, Some("notes".to_owned()))]
     );
 }
 

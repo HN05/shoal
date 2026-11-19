@@ -4,7 +4,7 @@
 //! socket, without one; a paired one by the key it paired with, unless the
 //! hub revoked it or another installation holds its link.
 use shoal_daemon_base::notifications::About;
-use shoal_protocol::notifications::NotificationKind;
+use shoal_protocol::alerts::AlertKind;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result, bail};
@@ -350,7 +350,7 @@ impl Hub {
             self.notify(
                 daemon,
                 About::named(None),
-                NotificationKind::HubRefused,
+                AlertKind::HubRefused,
                 message.to_string(),
             )
             .await;

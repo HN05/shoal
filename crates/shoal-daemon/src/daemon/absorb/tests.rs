@@ -4,7 +4,7 @@ use crate::{
     daemon::{
         events::{EventItem, EventKind},
         manager::Manager,
-        notifications::NotificationKind,
+        notifications::AlertKind,
         scope::Caller,
         test_support::{chat, manager, repository},
         workspace_files::Attacher,
@@ -242,7 +242,7 @@ async fn a_forced_squash_takes_the_open_questions_of_work_that_is_not_done() {
     // Announced again under its new number, its old notification gone.
     let notifications = manager.notifications.list(true, 50).await.unwrap();
     let asked: Vec<_> = (notifications.iter())
-        .filter(|notification| notification.kind == NotificationKind::QuestionAsked)
+        .filter(|notification| notification.kind == AlertKind::QuestionAsked)
         .collect();
     assert_eq!(asked.len(), 1, "{asked:?}");
     let number = listing.questions[0].number.to_string();

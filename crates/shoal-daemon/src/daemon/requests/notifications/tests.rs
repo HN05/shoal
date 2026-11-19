@@ -1,5 +1,5 @@
 use super::*;
-use crate::daemon::{notifications::NotificationKind, test_support::manager};
+use crate::daemon::{notifications::AlertKind, test_support::manager};
 
 #[tokio::test]
 async fn a_long_notification_listing_goes_in_pages() {
@@ -9,7 +9,7 @@ async fn a_long_notification_listing_goes_in_pages() {
         manager
             .notify(
                 None,
-                NotificationKind::SpaceDone,
+                AlertKind::SpaceDone,
                 format!("assignment finished {n}; results: {}", "x".repeat(700)),
             )
             .await;
@@ -31,7 +31,7 @@ async fn a_long_notification_listing_goes_in_pages() {
     let listed: usize = pages
         .into_iter()
         .map(|page| {
-            Vec::<crate::daemon::notifications::Notification>::try_from(page)
+            Vec::<crate::daemon::notifications::Alert>::try_from(page)
                 .unwrap()
                 .len()
         })

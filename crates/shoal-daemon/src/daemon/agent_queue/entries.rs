@@ -14,7 +14,7 @@ use super::{
     store::{Awaits, ENTRY_COLUMNS, Launch, LaunchRequest, entry, insert_launch},
 };
 use crate::{
-    daemon::{manager::Manager, notifications::NotificationKind},
+    daemon::{manager::Manager, notifications::AlertKind},
     model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, SpaceKind, Workspace},
     state::{QueueKind, QueueState},
 };
@@ -422,7 +422,7 @@ impl Manager {
         // A launch that opened no workspace has its name alone, which no
         // workspace's identifies since names repeat.
         let (kind, message) = (
-            NotificationKind::QueueFailed,
+            AlertKind::QueueFailed,
             format!("{name} did not start from the agent queue: {error}"),
         );
         match space {

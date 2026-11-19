@@ -1,4 +1,4 @@
-use crate::daemon::{notifications::NotificationKind, test_support};
+use crate::daemon::{notifications::AlertKind, test_support};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// A registered repository and its local config's directory, which does not
@@ -142,7 +142,7 @@ async fn ignored_configs(manager: &super::Manager) -> Vec<String> {
         .await
         .unwrap()
         .into_iter())
-    .filter(|notification| notification.kind == NotificationKind::ConfigIgnored)
+    .filter(|notification| notification.kind == AlertKind::ConfigIgnored)
     .map(|notification| notification.message)
     .collect()
 }

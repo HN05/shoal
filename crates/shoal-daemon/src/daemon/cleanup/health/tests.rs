@@ -124,7 +124,7 @@ async fn failing_passes_notify_once_and_show_where_they_belong() {
     }
     let notifications = manager.notifications.list(true, 100).await.unwrap();
     let cleanup: Vec<_> = (notifications.iter())
-        .filter(|notification| notification.kind == NotificationKind::CleanupFailed)
+        .filter(|notification| notification.kind == AlertKind::CleanupFailed)
         .map(|notification| notification.workspace.as_deref())
         .collect();
     assert_eq!(cleanup, [None, Some("failing")]);
@@ -164,9 +164,10 @@ async fn idle_sleep_reports_its_failures_as_cleanup_does_under_its_own_name() {
     assert!(problem.starts_with("Idle sleep failed"), "{problem}");
     let notifications = manager.notifications.list(true, 100).await.unwrap();
     assert!(
-        notifications.iter().any(|notification| notification.kind
-            == NotificationKind::CleanupFailed
-            && notification.message.starts_with("idle sleep failed")),
+        notifications
+            .iter()
+            .any(|notification| notification.kind == AlertKind::CleanupFailed
+                && notification.message.starts_with("idle sleep failed")),
         "{notifications:?}"
     );
     // A cleanup sweep that passes leaves the idle sleep's failure.

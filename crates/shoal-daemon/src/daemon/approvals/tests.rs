@@ -7,7 +7,7 @@ use super::*;
 use crate::daemon::resources::{Definition, LockMode, Scope};
 use crate::daemon::{
     item_numbers::{self, ItemNumber},
-    notifications::NotificationKind,
+    notifications::AlertKind,
     scope::Caller,
     store,
 };
@@ -412,7 +412,7 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
         .unwrap();
     let unread = manager.notifications.list(true, 50).await.unwrap();
     assert_eq!(unread.len(), 1);
-    assert_eq!(unread[0].kind, NotificationKind::ApprovalWithdrawn);
+    assert_eq!(unread[0].kind, AlertKind::ApprovalWithdrawn);
 
     // Workspace processes withdraw only their own requests.
     let caller = crate::daemon::scope::Caller {
@@ -499,7 +499,7 @@ async fn a_withdrawn_request_is_never_announced_afterwards() {
     assert!(
         unread
             .iter()
-            .all(|n| n.kind != NotificationKind::ApprovalRequested),
+            .all(|n| n.kind != AlertKind::ApprovalRequested),
         "{unread:?}"
     );
 }

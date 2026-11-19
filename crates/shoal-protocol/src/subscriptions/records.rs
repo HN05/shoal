@@ -12,10 +12,10 @@ use shoal_refs::CommitId;
 use shoal_states::states;
 
 use crate::{
+    alerts::Alert,
     approvals::ApprovalRequest,
     forge::{ci::check_state::CheckState, items::link::LinkKind, updates::SnapshotState},
     model::{Relation, Repository, Space},
-    notifications::Notification,
     questions::Question,
     transcripts::ReportedSession,
 };
@@ -53,7 +53,7 @@ states!(
         Question => "question",
         Approval => "approval",
         Message => "message",
-        Notification => "notification",
+        Alert => "notification",
         LogEntry => "log_entry",
     }
 );
@@ -77,7 +77,7 @@ pub enum Record {
     Question(Question),
     Approval(Box<ApprovalRequest>),
     Message(Message),
-    Notification(Notification),
+    Alert(Alert),
     /// An entry of the space's log the subscription follows.
     LogEntry(Box<crate::log::LogEntry>),
 }
@@ -92,7 +92,7 @@ impl Record {
             Self::Question(record) => (RecordKind::Question, record.number.to_string()),
             Self::Approval(record) => (RecordKind::Approval, record.key.clone()),
             Self::Message(record) => (RecordKind::Message, record.id.clone()),
-            Self::Notification(record) => (RecordKind::Notification, record.id.to_string()),
+            Self::Alert(record) => (RecordKind::Alert, record.id.to_string()),
             // Padded, so keys sort as the log does.
             Self::LogEntry(record) => (RecordKind::LogEntry, format!("{:020}", record.id())),
         };
