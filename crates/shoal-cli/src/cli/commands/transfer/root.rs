@@ -24,7 +24,6 @@ use crate::{
     config::{Config, edit::Change},
     model::{Execution, MovedRepository, Repository, RepositoryMoves, Spaces, Workspace},
     protocol::{QueuedLaunches, UntrackedProcesses},
-    repository,
 };
 
 /// Check that every repository outside the root `args` name, or the
@@ -232,7 +231,7 @@ fn show(ctx: &Context, moved: &Vec<MovedRepository>, queued: Option<&Queued>) ->
                     Style::Success,
                     format_args!(
                         "Moved {} to {}",
-                        repository::name(&moved.repository),
+                        moved.repository.display_name(),
                         moved.repository.workspaces_dir.display()
                     )
                 )
@@ -252,7 +251,7 @@ fn plan(moves: &RepositoryMoves, spaces: &Spaces) -> String {
     for repo in &moves.repositories {
         text.push_str(&format!(
             "\n  {}: {}",
-            repository::name(repo),
+            repo.display_name(),
             repo.workspaces_dir.display()
         ));
     }

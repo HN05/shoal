@@ -98,7 +98,7 @@ impl Manager {
             Ok(existing)
                 if existing.id == source.value()
                     || existing.source == source.value()
-                    || repository::name(existing) == source.value() =>
+                    || existing.display_name() == source.value() =>
             {
                 existing.source.clone()
             }

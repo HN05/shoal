@@ -442,7 +442,7 @@ fn report_chat(
             app.name(),
             app.agent(),
             chat.name,
-            repository.map_or("every repository", crate::repository::name),
+            repository.map_or("every repository", Repository::display_name),
             launch.pid,
             app.place(),
             log.display(),

@@ -1,5 +1,6 @@
 //! Registered repositories and changes to their registration.
 use super::Execution;
+use crate::forge::repo::remote_url::source_name;
 use serde::{Deserialize, Serialize};
 use shoal_ids::repository_ids::RepositoryId;
 use std::path::PathBuf;
@@ -19,6 +20,15 @@ pub struct Repository {
     /// Registered by `shoal contribute`: removed once nothing of it is left.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub contribution: bool,
+}
+
+impl Repository {
+    /// The explicit name, or the last path component of the source.
+    pub fn display_name(&self) -> &str {
+        self.name
+            .as_deref()
+            .unwrap_or_else(|| source_name(&self.source))
+    }
 }
 
 /// A saved edit of a repository's local config and the backup it kept.

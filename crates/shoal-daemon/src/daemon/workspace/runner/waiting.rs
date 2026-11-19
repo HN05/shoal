@@ -56,7 +56,7 @@ impl Manager {
                 .refresh_repository_jobs(&repository, &registration, &labels)
                 .await
             {
-                let name = crate::repository::name(&repository);
+                let name = repository.display_name();
                 log!("runner: the waiting jobs of {name}: {error:#}");
             }
         }

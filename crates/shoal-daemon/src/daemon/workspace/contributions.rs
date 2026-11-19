@@ -24,7 +24,7 @@ impl Manager {
             if repo.contribution
                 && let Err(error) = self.sweep_contribution(&repo).await
             {
-                failed.push(format!("{}: {error:#}", crate::repository::name(&repo)));
+                failed.push(format!("{}: {error:#}", repo.display_name()));
             }
         }
         ensure!(failed.is_empty(), "{}", failed.join("; "));
@@ -71,7 +71,7 @@ impl Manager {
         if !crate::build::changes_user_files() {
             return;
         }
-        let name = crate::repository::name(repo);
+        let name = repo.display_name();
         let environments = self.agent_environments(&repo.id).await;
         if let Err(error) = &environments {
             log!("contribution {name}: agent configs unknown: {error:#}");
@@ -164,7 +164,7 @@ async fn fork_url(checkout: &std::path::Path) -> Result<Option<String>> {
 fn removal_notice(repo: &Repository, path: &std::path::Path, fork: Option<&str>) -> String {
     let removed = format!(
         "Removed contribution repository {} at {}",
-        crate::repository::name(repo),
+        repo.display_name(),
         path.display()
     );
     match fork {

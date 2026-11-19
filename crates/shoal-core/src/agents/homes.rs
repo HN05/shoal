@@ -173,7 +173,7 @@ impl HomeRecords {
                 AgentHome::Chat {
                     chat,
                     home,
-                    repo: repository.as_ref().map(crate::repository::name),
+                    repo: repository.as_ref().map(Repository::display_name),
                 }
             }
         })

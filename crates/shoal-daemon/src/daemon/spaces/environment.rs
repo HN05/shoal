@@ -37,7 +37,7 @@ impl Manager {
         let caches = crate::caches::directories(&repository, &settings.caches)?;
         let tmp_dir = crate::tmp_dirs::directory(&repository, &workspace.id)?;
         let configured = settings.env;
-        let repository_name = crate::repository::name(&repository).to_owned();
+        let repository_name = repository.display_name().to_owned();
         let workspace_id = workspace.id.clone();
         let paths = self.paths.clone();
         self.store

@@ -20,7 +20,7 @@ impl PlaceName {
     pub fn new(template: Option<String>, repo: &Repository, issue: Option<(u64, &str)>) -> Self {
         Self {
             template,
-            repo: crate::repository::name(repo).to_owned(),
+            repo: repo.display_name().to_owned(),
             issue_number: issue.map(|(number, _)| number),
             issue_title: issue.map(|(_, title)| title.to_owned()),
         }

@@ -88,13 +88,6 @@ impl From<&Selector> for Selector {
     }
 }
 
-/// The explicit name, or the last path component of the source.
-pub fn name(repo: &crate::model::Repository) -> &str {
-    repo.name
-        .as_deref()
-        .unwrap_or_else(|| source_name(&repo.source))
-}
-
 /// A filesystem-safe clone directory name derived from the source.
 pub fn directory_name(source: &str) -> String {
     let name: String = source_name(source)

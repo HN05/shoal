@@ -81,7 +81,7 @@ impl Manager {
         repo: &Repository,
         on: impl Fn(&Path) -> bool,
     ) -> bool {
-        let name = crate::repository::name(repo);
+        let name = repo.display_name();
         let settings = match self.repository_settings(&repo.id).await {
             Ok(settings) if uses_xcode(&settings) => settings,
             Ok(_) => return false,
@@ -111,7 +111,7 @@ impl Manager {
     /// keeps a worktree from coming back meanwhile; merging holds it through
     /// a whole build, so a busy gate leaves the deletion to a later pass.
     async fn delete_left_derived_data(&self, repo: &Repository, location: PathBuf) -> bool {
-        let name = crate::repository::name(repo);
+        let name = repo.display_name();
         let directory = repo.workspaces_dir.clone();
         if !off_runtime::try_exists(&directory).await.unwrap_or(false) {
             return false;
@@ -155,7 +155,7 @@ impl Manager {
     /// repository removal, which may be removing this workspace, so a busy
     /// gate leaves pruning to a later pass rather than waiting.
     async fn prune_checkouts(&self, repo: &Repository, cache: PathBuf) -> bool {
-        let name = crate::repository::name(repo);
+        let name = repo.display_name();
         let Some(_git) = self.gates.try_lock_git(&repo.id) else {
             log!("package checkouts of {name} kept: the repository is busy");
             return false;

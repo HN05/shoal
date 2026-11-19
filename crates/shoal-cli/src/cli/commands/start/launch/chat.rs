@@ -288,7 +288,9 @@ async fn tracked(
     let agent_home = crate::agents::AgentHome::Chat {
         chat,
         home,
-        repo: repository.registered().map(crate::repository::name),
+        repo: repository
+            .registered()
+            .map(crate::model::Repository::display_name),
     };
     let space_args = shoal_workers::homes::args(&ctx.paths, agent_home, &settings, &agent).await?;
     let command = command::command(

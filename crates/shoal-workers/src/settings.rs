@@ -10,7 +10,6 @@ use crate::{
     config::{Config, Effective, repo::ConfigLayers},
     model::Workspace,
     protocol::ConfigTarget,
-    repository,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -43,7 +42,7 @@ pub async fn configured_environment(
     Ok(crate::env::render_configured_environment(
         &settings.env,
         workspace,
-        repository::name(&repo),
+        repo.display_name(),
         &crate::client::workspaces::inspect(paths, SpaceSelector::id(&workspace.id))
             .await?
             .ports,

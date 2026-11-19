@@ -212,12 +212,9 @@ pub async fn settle(
     let Some(name) = creation.branch.take() else {
         return Ok(None);
     };
-    let (remote, mut taken) = branches(repo, &name).await.with_context(|| {
-        format!(
-            "read the branches of repository {}",
-            crate::repository::name(repo)
-        )
-    })?;
+    let (remote, mut taken) = branches(repo, &name)
+        .await
+        .with_context(|| format!("read the branches of repository {}", repo.display_name()))?;
     let workspaces = repository_workspaces(reads, repo).await?;
     if let Some(workspace) = super::on_branch(&workspaces, &name, remote.as_ref()) {
         // A remote branch opens a local one only where it tracks it.

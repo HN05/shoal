@@ -15,7 +15,6 @@ use crate::{
         commands::configured,
     },
     config::{Effective, templates},
-    repository,
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::space_names::SpaceName;
@@ -155,7 +154,9 @@ fn brief(
     resumes: bool,
 ) -> Result<templates::Brief> {
     let place = templates::Place::Chat {
-        repo: repo.registered().map(repository::name),
+        repo: repo
+            .registered()
+            .map(crate::model::Repository::display_name),
         home: topic.home(repo),
         delivery: crate::agents::delivery(
             crate::agents::agent_integration(settings, agent),

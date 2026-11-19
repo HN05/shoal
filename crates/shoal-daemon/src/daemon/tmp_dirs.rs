@@ -56,7 +56,7 @@ impl Manager {
                 .sweep_layout_tmp_dirs(Some(Layout::of(&repo)), Some(&repo.id))
                 .await
             {
-                failed.push(format!("{}: {error:#}", crate::repository::name(&repo)));
+                failed.push(format!("{}: {error:#}", repo.display_name()));
             }
         }
         let outside = self.outside_tmp_layout();

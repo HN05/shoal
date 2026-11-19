@@ -239,7 +239,7 @@ impl Manager {
             anyhow::Ok(own.resolve_named(named, &self.forge_hosts()).await? == own)
         };
         (matches.await).with_context(|| {
-            let name = crate::repository::name(repository);
+            let name = repository.display_name();
             format!("cannot tell whether {named} is the registered repository {name}")
         })
     }
@@ -270,7 +270,7 @@ fn no_own_repository(name: &shoal_protocol::space_names::SpaceName) -> String {
 fn ensure_one(named: &str, found: &[Repository]) -> Result<()> {
     if found.len() > 1 {
         let names: Vec<String> = (found.iter())
-            .map(|repo| format!("{} ({})", crate::repository::name(repo), repo.id))
+            .map(|repo| format!("{} ({})", repo.display_name(), repo.id))
             .collect();
         bail!(
             "{named} names several registered repositories: {}; name one by its URL",

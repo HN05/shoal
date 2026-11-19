@@ -57,7 +57,7 @@ impl Manager {
                     NotificationKind::RunnerFailed,
                     format!(
                         "The runner of {} could not change: {error:#}",
-                        crate::repository::name(&repository)
+                        repository.display_name()
                     ),
                 )
                 .await;
@@ -79,7 +79,7 @@ impl Manager {
                 NotificationKind::RunnerFailed,
                 format!(
                     "The runner of {} stays registered at {}; delete it in the repository's Actions settings: {error:#}",
-                    crate::repository::name(repository),
+                    repository.display_name(),
                     registration.forge_repository
                 ),
             )

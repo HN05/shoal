@@ -130,8 +130,8 @@ impl Manager {
         name: &str,
     ) -> Result<Option<shoal_ids::repository_ids::RepositoryId>> {
         let repositories = self.repositories().await?;
-        let mut named = (repositories.into_iter())
-            .filter(|repository| crate::repository::name(repository) == name);
+        let mut named =
+            (repositories.into_iter()).filter(|repository| repository.display_name() == name);
         Ok(match (named.next(), named.next()) {
             (Some(repository), None) => Some(repository.id),
             _ => None,

@@ -35,7 +35,7 @@ impl<'a> Repo<'a> {
 
     async fn name(&self, paths: &CommandPaths) -> Result<String> {
         let repos = match self {
-            Self::Known(repo) => return Ok(crate::repository::name(repo).to_owned()),
+            Self::Known(repo) => return Ok(repo.display_name().to_owned()),
             Self::Root(root) => {
                 let name = root.file_name().unwrap_or(root.as_os_str());
                 return Ok(name.to_string_lossy().into_owned());
@@ -49,7 +49,7 @@ impl<'a> Repo<'a> {
                 .find(|repo| matches!(self, Self::Id(id) if repo.id == *id))
                 .context("repository is no longer registered")?,
         };
-        Ok(crate::repository::name(repo).to_owned())
+        Ok(repo.display_name().to_owned())
     }
 }
 

@@ -61,7 +61,7 @@ pub(super) async fn start(
         return Ok(0);
     };
     let local_config = local_config(ctx, selector).await?;
-    let prompt = subject(repository::name(&repo), &local_config);
+    let prompt = subject(repo.display_name(), &local_config);
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     launch(ctx, &repo, (agent, prompt), options, &settings).await
 }

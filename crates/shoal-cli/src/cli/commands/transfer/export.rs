@@ -320,7 +320,7 @@ pub(super) async fn repository_spaces(ctx: &Context, repository: String) -> Resu
     ensure!(
         !spaces.is_empty(),
         "{} has no spaces to export",
-        crate::repository::name(repo)
+        repo.display_name()
     );
     spaces.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(spaces)

@@ -12,7 +12,7 @@ use crate::{
     fsutil::{self, off_runtime},
     git,
     model::{Execution, MovedRepository, Repository, RepositoryMoves, Workspace},
-    process, repository, seed,
+    process, seed,
     state::{QueueKind, QueueState, WorkspaceState},
 };
 use anyhow::{Context, Result, ensure};
@@ -275,7 +275,7 @@ impl Manager {
                     "{} contains {}, which belongs to the repository {}",
                     directory.display(),
                     path.display(),
-                    repository::name(&other)
+                    other.display_name()
                 );
             }
         }

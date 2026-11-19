@@ -524,7 +524,7 @@ impl Targets {
             targets
                 .repositories
                 .iter()
-                .map(|repo| (crate::repository::name(repo), repo.id.as_str())),
+                .map(|repo| (repo.display_name(), repo.id.as_str())),
         )?;
         Ok(targets)
     }
@@ -538,7 +538,7 @@ async fn empty_caches_on_request(
 ) -> Result<Vec<CacheCleanup>> {
     let mut report = Vec::new();
     for repo in repositories {
-        if !pick.covers(crate::repository::name(&repo), repo.id.as_str()) {
+        if !pick.covers(repo.display_name(), repo.id.as_str()) {
             continue;
         }
         let emptying = match manager.empty_caches(&repo, dry_run).await {
@@ -555,7 +555,7 @@ async fn empty_caches_on_request(
             }
         };
         report.push(CacheCleanup {
-            repository: crate::repository::name(&repo).to_owned(),
+            repository: repo.display_name().to_owned(),
             repository_id: repo.id.clone(),
             emptying,
         });

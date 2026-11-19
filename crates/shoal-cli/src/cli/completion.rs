@@ -614,13 +614,9 @@ fn repository_candidates(
 ) -> Vec<CompletionCandidate> {
     let mut candidates = vec![];
     for repo in repos {
-        let name = crate::repository::name(repo);
-        let unique = repo.name.is_some()
-            || repos
-                .iter()
-                .filter(|r| crate::repository::name(r) == name)
-                .count()
-                == 1;
+        let name = repo.display_name();
+        let unique =
+            repo.name.is_some() || repos.iter().filter(|r| r.display_name() == name).count() == 1;
         let target = if unique {
             name.to_owned()
         } else {

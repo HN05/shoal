@@ -74,7 +74,7 @@ impl<'a> ChatHome<'a> {
     pub fn chat_name(self, mode: &crate::config::modes::ModeName) -> String {
         match self {
             Self::Checkout(repository) => {
-                format!("{} {mode}", crate::repository::name(repository))
+                format!("{} {mode}", repository.display_name())
             }
             Self::Workspace(workspace) => format!("{} chat", workspace.name),
             Self::Root(_) => mode.to_string(),

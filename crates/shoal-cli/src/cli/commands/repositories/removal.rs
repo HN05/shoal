@@ -51,7 +51,7 @@ fn confirm_target(
             ctx,
             &format!(
                 "Delete repository: {}\nSource: {}\nCheckout: {}\nDeletes: checkout, all Shoal workspaces and their resources\nWork:    uncommitted and unpushed changes are permanently lost",
-                repository::name(target),
+                target.display_name(),
                 target.source,
                 target.path.display(),
             ),

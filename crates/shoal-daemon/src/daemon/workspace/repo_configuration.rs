@@ -447,7 +447,7 @@ impl Manager {
         Ok(crate::env::render_configured_environment(
             &settings.env,
             space,
-            crate::repository::name(&repository),
+            repository.display_name(),
             &ports,
             &caches,
             tmp_dir.as_deref(),

@@ -196,7 +196,7 @@ async fn an_app_starts_a_chat_whose_agent_and_mode_the_daemon_resolves() {
     assert_eq!(chat.parent, None);
     // Without a name of its own, a chat in the checkout takes its
     // repository's and its mode's.
-    let named = format!("{} chat", shoal_core::repository::name(&daemon.repository));
+    let named = format!("{} chat", daemon.repository.display_name());
     assert_eq!(chat.name.as_str(), named);
     let chats = daemon.manager.chats().await.unwrap();
     assert!(chats.iter().any(|recorded| recorded.id == chat.id));

@@ -186,7 +186,7 @@ fn configured_in(repository: Option<&RepositoryId>, repositories: &[Repository])
         .find(|repository| repository.id == *id)
         .map_or_else(
             || id.to_string(),
-            |repository| crate::repository::name(repository).to_owned(),
+            |repository| repository.display_name().to_owned(),
         )
 }
 

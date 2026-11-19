@@ -486,7 +486,7 @@ pub fn queue_rows(
             repositories
                 .iter()
                 .find(|repo| entry.repository_id.as_ref() == Some(&repo.id))
-                .map_or("unknown repository", crate::repository::name)
+                .map_or("unknown repository", crate::model::Repository::display_name)
         })
         .collect();
     let several = names.iter().collect::<HashSet<_>>().len() > 1;
@@ -656,7 +656,7 @@ fn truncated(text: String, width: usize) -> String {
 pub fn repository_label(repo: &Repository, palette: Palette) -> String {
     format!(
         "{}  {}",
-        palette.paint(Style::Heading, crate::repository::name(repo)),
+        palette.paint(Style::Heading, repo.display_name()),
         palette.paint(Style::Muted, &repo.source)
     )
 }
@@ -713,7 +713,7 @@ fn distinct_labels(
 /// The repository's name, with the host of `source`, or `local`, when its
 /// name is `shared`.
 fn name_label(repo: &Repository, source: &str, shared: &HashSet<&str>) -> String {
-    let name = crate::repository::name(repo);
+    let name = repo.display_name();
     if !shared.contains(name) {
         return name.to_owned();
     }
@@ -728,7 +728,7 @@ fn shared_names(repos: &[Repository]) -> HashSet<&str> {
     let mut seen = HashSet::new();
     repos
         .iter()
-        .map(crate::repository::name)
+        .map(crate::model::Repository::display_name)
         .filter(|name| !seen.insert(*name))
         .collect()
 }
@@ -744,8 +744,8 @@ async fn distinguishing_sources(
 ) -> Vec<String> {
     let read = &read;
     join_all(repos.iter().map(|repo| async move {
-        let checkout = shared.contains(crate::repository::name(repo))
-            && crate::repository::host(&repo.source).is_none();
+        let checkout =
+            shared.contains(repo.display_name()) && crate::repository::host(&repo.source).is_none();
         if !checkout {
             return repo.source.clone();
         }

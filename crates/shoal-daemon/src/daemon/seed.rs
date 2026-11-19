@@ -73,7 +73,7 @@ impl Plan {
                 &settings.env,
                 &layout.worktree(),
                 branch.as_str(),
-                crate::repository::name(repo),
+                repo.display_name(),
                 &crate::caches::locate(repo, &settings.caches),
             ),
             caches: settings.caches.clone(),
@@ -124,7 +124,7 @@ impl Manager {
         };
         for repo in repositories {
             if let Err(error) = self.refresh_seed(&repo).await {
-                let name = crate::repository::name(&repo);
+                let name = repo.display_name();
                 self.notify(
                     None,
                     NotificationKind::SeedFailed,
@@ -160,7 +160,7 @@ impl Manager {
     /// Tell the user which soft steps of the repository's installed seed
     /// failed, so new workspaces start without their outputs.
     async fn report_soft_failures(&self, repo: &Repository, failures: &[StepFailure]) {
-        let name = crate::repository::name(repo);
+        let name = repo.display_name();
         for failure in failures {
             self.notify(
                 None,
@@ -291,7 +291,7 @@ impl Manager {
         };
         for repo in repositories {
             if let Err(error) = self.refill_spare(&repo.id).await {
-                let name = crate::repository::name(&repo);
+                let name = repo.display_name();
                 log!("seed spare for {name}: {error:#}");
             }
         }

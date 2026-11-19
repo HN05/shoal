@@ -129,7 +129,7 @@ pub async fn select_with<'a>(
         .iter()
         .filter(|repo| {
             exact.is_some_and(|exact| exact.id == repo.id)
-                || (exact.is_none() && name(repo) == value)
+                || (exact.is_none() && repo.display_name() == value)
                 || repo.path.to_str() == Some(value)
                 || canonical.as_ref() == Some(&repo.path)
         })
@@ -139,7 +139,12 @@ pub async fn select_with<'a>(
         "repository name is ambiguous: {value}; matches {}; use its ID, path, or source URL",
         matches
             .iter()
-            .map(|repo| format!("{} ({}, {})", name(repo), repo.id, repo.path.display()))
+            .map(|repo| format!(
+                "{} ({}, {})",
+                repo.display_name(),
+                repo.id,
+                repo.path.display()
+            ))
             .collect::<Vec<_>>()
             .join(", ")
     );
@@ -228,7 +233,7 @@ impl ItemOf {
         let registered = find_by_identity(repositories, &repository, origins).await?;
         Ok(Some(Self {
             kind,
-            registered: registered.map(|repo| name(repo).to_owned()),
+            registered: registered.map(|repo| repo.display_name().to_owned()),
             repository,
         }))
     }
