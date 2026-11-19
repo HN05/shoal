@@ -36,6 +36,21 @@ impl<'a> ManagerReads<'a> {
     fn new(manager: &'a Manager, caller: Option<&'a Caller>) -> Self {
         Self { manager, caller }
     }
+
+    /// Refuse what opening the existing branch `existing` in the repository
+    /// `repository` names would refuse, such as a local branch of its name
+    /// that does not track it.
+    async fn check_opens(
+        &self,
+        repository: &crate::repository::Selector,
+        existing: &str,
+    ) -> Result<()> {
+        let options = crate::daemon::workspace::NewWorktreeOptions::default();
+        (self
+            .manager
+            .check_creation(repository, None, Some(existing), options))
+        .await
+    }
 }
 
 impl LaunchReads for ManagerReads<'_> {
@@ -57,18 +72,6 @@ impl LaunchReads for ManagerReads<'_> {
     async fn settings(&self, target: ConfigTarget) -> Result<Effective> {
         let layers = self.manager.config_layers_for(target).await?;
         (self.manager.config()).resolve_with_template_files(&layers, &self.manager.paths)
-    }
-
-    async fn check_opens(
-        &self,
-        repository: &crate::repository::Selector,
-        existing: &str,
-    ) -> Result<()> {
-        let options = crate::daemon::workspace::NewWorktreeOptions::default();
-        (self
-            .manager
-            .check_creation(repository, None, Some(existing), options))
-        .await
     }
 }
 

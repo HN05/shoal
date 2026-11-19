@@ -5,7 +5,6 @@ use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
     cli::context::Context,
-    client::workspaces::PlannedWorkspace,
     config::Effective,
     launches::LaunchReads,
     model::{Repository, Workspace},
@@ -43,23 +42,5 @@ impl LaunchReads for DaemonReads<'_> {
                 .resolve(&Default::default()),
             target => shoal_workers::settings::of(&self.0.paths, target).await,
         }
-    }
-
-    async fn check_opens(
-        &self,
-        repository: &crate::repository::Selector,
-        existing: &str,
-    ) -> Result<()> {
-        let planned = PlannedWorkspace {
-            repository: repository.clone(),
-            branch: None,
-            existing: Some(existing.to_owned()),
-            base: None,
-            git_profile: None,
-            path: None,
-            parent: None,
-            options: Default::default(),
-        };
-        crate::client::workspaces::check_creation(&self.0.paths, planned).await
     }
 }

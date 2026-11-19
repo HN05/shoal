@@ -27,13 +27,4 @@ pub trait LaunchReads {
     /// The settings of `target`, with the mode and rule files beside the
     /// global config, which a launch's mode may come from.
     async fn settings(&self, target: ConfigTarget) -> Result<Effective>;
-
-    /// Refuse what opening the existing branch `existing` in the repository
-    /// `repository` names would refuse, such as a local branch of its name
-    /// that does not track it.
-    async fn check_opens(
-        &self,
-        repository: &crate::repository::Selector,
-        existing: &str,
-    ) -> Result<()>;
 }

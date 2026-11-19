@@ -1,7 +1,7 @@
-//! What a launch that creates or reopens a workspace starts on: the branch
-//! it names as typed, a PR's or branch link's branch, or the branch earlier
-//! work on its issue left, which the CLI and the daemon settle the same way
-//! from what [`LaunchReads`] reads.
+//! What a launch that creates or reopens a workspace starts on, as far as
+//! the CLI and the daemon both settle it from what [`LaunchReads`] reads:
+//! a PR's head, the workspace that owns a branch, and the branch an issue
+//! names.
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;
@@ -9,12 +9,11 @@ use shoal_refs::BranchName;
 
 use super::LaunchReads;
 use crate::{
-    forge::{ForgeRepo, PullRequest, items::reference::ItemRef},
+    forge::{ForgeRepo, PullRequest},
     git,
     model::{Repository, Workspace},
     protocol::PullHead,
-    start_plan::{CopyCreation, Creation},
-    state::WorkspaceState,
+    start_plan::Creation,
 };
 
 /// The longest branch an issue names, and the most title words it takes.
@@ -71,35 +70,6 @@ pub async fn ensure_link_in(repo: &Repository, linked: Option<&ForgeRepo>) -> Re
         linked.is_some_and(|linked| linked.is_remote(&remote)),
         "link belongs to a different repository"
     );
-    Ok(())
-}
-
-/// What `launch` creates as it names it, a copy of `copy` when it copies
-/// one, before its target settles the rest.
-pub fn launch_creation(
-    launch: &shoal_protocol::launches::Launch,
-    copy: Option<CopyCreation>,
-) -> Creation {
-    Creation {
-        path: launch.path.clone(),
-        branch: launch.branch.clone(),
-        base: launch.base.clone(),
-        git_profile: launch.git_profile.clone(),
-        options: crate::protocol::CreationOptions {
-            name: launch.name.clone(),
-            priority: launch.priority,
-            skip_setup: launch.skip_setup,
-            disposable: launch.disposable,
-        },
-        copy,
-        ..Creation::default()
-    }
-}
-
-/// Open the pushed `branch` a branch link names.
-pub async fn branch_creation(branch: &str, creation: &mut Creation) -> Result<()> {
-    git::check_branch_name(branch)?;
-    creation.existing = Some(git::remote_ref("origin", branch));
     Ok(())
 }
 
@@ -199,50 +169,6 @@ pub async fn fetch_pull_branch(
         .with_context(|| format!("could not fetch the PR {role} {branch}"))
 }
 
-/// Settle the branch `creation` names as typed in `repo`, which `selector`
-/// names: the workspace that already has it, which the start goes into
-/// instead, else the existing branch `creation` then opens, else the new
-/// branch it creates, which a name already taken would suffix and is
-/// refused.
-pub async fn settle(
-    reads: &impl LaunchReads,
-    (selector, repo): (&crate::repository::Selector, &Repository),
-    creation: &mut Creation,
-) -> Result<Option<Workspace>> {
-    let Some(name) = creation.branch.take() else {
-        return Ok(None);
-    };
-    let (remote, mut taken) = branches(repo, &name).await?;
-    let workspaces = repository_workspaces(reads, repo).await?;
-    if let Some(workspace) = super::on_branch(&workspaces, &name, remote.as_ref()) {
-        // A remote branch opens a local one only where it tracks it.
-        if remote.is_some() {
-            reads.check_opens(selector, &name).await?;
-        }
-        return Ok(Some(workspace.clone()));
-    }
-    if remote.is_some() || taken.contains(&name.as_str().into()) {
-        ensure!(
-            creation.copy.is_none(),
-            "a copy starts a new branch, and branch {name} exists; name another"
-        );
-        creation.existing = Some(name);
-        return Ok(None);
-    }
-    taken.extend(
-        workspaces
-            .into_iter()
-            .filter_map(|workspace| workspace.branch().cloned()),
-    );
-    ensure!(
-        git::repo::allocate_branch(&name, &taken) == name,
-        "branch {name} conflicts with an existing branch or workspace; name another"
-    );
-    creation.branch = Some(name);
-    creation.typed = true;
-    Ok(None)
-}
-
 /// The workspace of `repo` that already has the branch `name` selects, as
 /// typed or as a remote's, which a start on it goes into.
 pub async fn owning_workspace(
@@ -256,133 +182,13 @@ pub async fn owning_workspace(
 }
 
 /// The workspaces of `repo`.
-async fn repository_workspaces(
+pub async fn repository_workspaces(
     reads: &impl LaunchReads,
     repo: &Repository,
 ) -> Result<Vec<Workspace>> {
     Ok((reads.workspaces().await?.into_iter())
         .filter(|workspace| workspace.repository() == &repo.id)
         .collect())
-}
-
-/// The remote and branch `name` names in `repo`, if it names a remote one,
-/// and the branch names a new branch must not take.
-async fn branches(
-    repo: &Repository,
-    name: &str,
-) -> Result<(Option<(String, BranchName)>, Vec<BranchName>)> {
-    let read = async {
-        let remote = git::remote_branch(&repo.path, name).await?;
-        anyhow::Ok((remote, git::branch::names_in_use(&repo.path).await?))
-    };
-    let error = match read.await {
-        Ok(read) => return Ok(read),
-        Err(error) => error,
-    };
-    let name = repo.display_name();
-    // Removed meanwhile, as `shoal repo rm` takes its checkout.
-    if !crate::fsutil::off_runtime::try_exists(&repo.path)
-        .await
-        .unwrap_or(true)
-    {
-        let message = format!("repository {name} ({}) was removed", repo.id);
-        return Err(crate::refusal::Refusal::new(crate::refusal::Reason::NotFound, message).into());
-    }
-    // As while a removal deletes its files: named by its ID, which a
-    // retry of either takes.
-    Err(error.context(format!(
-        "read the branches of repository {name} ({})",
-        repo.id
-    )))
-}
-
-/// `creation` on the branch the issue at `url` with `title` settles in
-/// `repo` when nothing else names one: the branch or workspace earlier
-/// work on it left, else a new branch named after it.
-pub async fn issue_settled(
-    reads: &impl LaunchReads,
-    repo: &Repository,
-    creation: Creation,
-    issue: Option<(&ItemRef, &str)>,
-) -> Result<Creation> {
-    match issue {
-        Some((url, title)) if creation.unsettled() => {
-            let branch = issue_branch(url.issue()?.get(), title);
-            issue_creation(reads, repo, creation, (branch, url)).await
-        }
-        _ => Ok(creation),
-    }
-}
-
-/// `creation` on the branch `name` of an issue at `issue_url`: the local
-/// branch or workspace earlier work on the issue left, which reopens rather
-/// than suffixing a new branch and is refused here when it cannot, else
-/// the new branch `name`.
-pub async fn issue_creation(
-    reads: &impl LaunchReads,
-    repo: &Repository,
-    mut creation: Creation,
-    (name, issue_url): (String, &ItemRef),
-) -> Result<Creation> {
-    let workspaces = reads.workspaces().await?;
-    let mut associated = None;
-    for workspace in workspaces
-        .iter()
-        .filter(|workspace| workspace.repository() == &repo.id)
-    {
-        if (workspace.links.issues.iter()).any(|issue| issue.url == *issue_url) {
-            ensure!(
-                associated.is_none(),
-                "multiple workspaces are associated with this issue; pass an explicit branch"
-            );
-            ensure_reopens(workspace)?;
-            associated = Some(
-                workspace
-                    .require_branch("reopening for an issue")?
-                    .to_owned(),
-            );
-        }
-    }
-    if let Some(branch) = associated {
-        creation.existing = Some(branch.into());
-        return Ok(creation);
-    }
-    let local = BranchName::from(name.as_str());
-    if let Some(workspace) = workspaces
-        .into_iter()
-        .find(|workspace| workspace.repository() == &repo.id && workspace.branch() == Some(&local))
-    {
-        ensure_reopens(&workspace)?;
-    } else if git::ref_exists(&repo.path, &git::local_ref(&local)).await? {
-        git::existing_branch::ensure_not_checked_out(&repo.path, &local).await?;
-    } else {
-        creation.branch = Some(name);
-        return Ok(creation);
-    }
-    creation.existing = Some(name);
-    Ok(creation)
-}
-
-/// The first flag of a start that only the new workspace of `creation` takes,
-/// with an issue of its own when `issue` and below a parent it names when
-/// `parent`, which a start into the workspace that has its branch refuses.
-pub fn new_space_flag(creation: &Creation, issue: bool, parent: bool) -> Option<&'static str> {
-    let new_space = [
-        ("--issue", issue),
-        ("--name", creation.options.name.is_some()),
-        ("--parent", parent),
-        ("--base", creation.base.is_some()),
-        ("--path", creation.path.is_some()),
-        ("--git-profile", creation.git_profile.is_some()),
-        ("--copy", creation.copy.is_some()),
-        ("--skip-setup", creation.options.skip_setup),
-        ("--disposable", creation.options.disposable),
-        // `shoal priority` sets an existing workspace's.
-        ("--priority", creation.options.priority.is_some()),
-    ];
-    (new_space.into_iter())
-        .find(|(_, set)| *set)
-        .map(|(flag, _)| flag)
 }
 
 /// The name of the workspace `creation` opens in `repo`: the one it gives,
@@ -432,17 +238,6 @@ pub async fn reopened_workspace(
                 && workspace.branch().map(BranchName::as_str) == Some(&branch)
         })
         .map(|workspace| workspace.id))
-}
-
-/// Refuse to reopen `workspace` unless it is ready.
-fn ensure_reopens(workspace: &Workspace) -> Result<()> {
-    ensure!(
-        workspace.state == WorkspaceState::Ready,
-        "workspace {} is {}; inspect or set it up before reopening",
-        workspace.name,
-        workspace.state
-    );
-    Ok(())
 }
 
 #[cfg(test)]

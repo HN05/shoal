@@ -22,6 +22,7 @@ use crate::{
     start_plan::Creation,
 };
 
+mod branch;
 mod check;
 mod copy;
 mod target;
@@ -101,8 +102,7 @@ impl Manager {
             self.workspace_target(launch, &mut creation, copied.as_ref(), (&reads, fetches));
         let target = target.await?;
         let selector = (&target.repo.id).into();
-        let settled =
-            crate::launches::workspace::settle(&reads, (&selector, &target.repo), &mut creation);
+        let settled = branch::settle(&reads, (&selector, &target.repo), &mut creation);
         if let Some(workspace) = settled.await? {
             ensure_takes_existing(launch, &creation, &workspace)?;
             return Ok(Settling::Existing(Box::new(workspace)));
@@ -134,7 +134,7 @@ impl Manager {
         issue: Option<&StartIssue>,
     ) -> Result<Creation> {
         let titled = issue.and_then(|issue| Some((&issue.url, issue.title.as_deref()?)));
-        fits::workspace::issue_settled(reads, repo, creation, titled).await
+        branch::issue_settled(reads, repo, creation, titled).await
     }
 
     /// The issues the forge records as blocking `issue` of `repo`.
@@ -156,14 +156,55 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<(Creation, Option<Repository>)> {
         let Some(copied) = self.launch_copy(launch, caller).await? else {
-            return Ok((fits::workspace::launch_creation(launch, None), None));
+            return Ok((named_creation(launch, None), None));
         };
         let repository = self.repository(copied.repository.clone()).await?;
         Ok((
-            fits::workspace::launch_creation(launch, Some(copied.creation)),
+            named_creation(launch, Some(copied.creation)),
             Some(repository),
         ))
     }
+}
+
+/// What `launch` creates as it names it, a copy of `copy` when it copies
+/// one, before its target settles the rest.
+fn named_creation(launch: &Launch, copy: Option<crate::start_plan::CopyCreation>) -> Creation {
+    Creation {
+        path: launch.path.clone(),
+        branch: launch.branch.clone(),
+        base: launch.base.clone(),
+        git_profile: launch.git_profile.clone(),
+        options: crate::protocol::CreationOptions {
+            name: launch.name.clone(),
+            priority: launch.priority,
+            skip_setup: launch.skip_setup,
+            disposable: launch.disposable,
+        },
+        copy,
+        ..Creation::default()
+    }
+}
+
+/// The first flag of a start that only the new workspace of `creation` takes,
+/// with an issue of its own when `issue` and below a parent it names when
+/// `parent`, which a start into the workspace that has its branch refuses.
+fn new_space_flag(creation: &Creation, issue: bool, parent: bool) -> Option<&'static str> {
+    let new_space = [
+        ("--issue", issue),
+        ("--name", creation.options.name.is_some()),
+        ("--parent", parent),
+        ("--base", creation.base.is_some()),
+        ("--path", creation.path.is_some()),
+        ("--git-profile", creation.git_profile.is_some()),
+        ("--copy", creation.copy.is_some()),
+        ("--skip-setup", creation.options.skip_setup),
+        ("--disposable", creation.options.disposable),
+        // `shoal priority` sets an existing workspace's.
+        ("--priority", creation.options.priority.is_some()),
+    ];
+    (new_space.into_iter())
+        .find(|(_, set)| *set)
+        .map(|(flag, _)| flag)
 }
 
 /// Refuse what only the new workspace of `creation` takes for `launch`,
@@ -179,7 +220,7 @@ fn ensure_takes_existing(
     let forks_parent = launch.fork.is_some() && creation.copy.is_none();
     let parent = launch.parent.is_some() && !forks_parent;
     let issue = launch.issue.is_some();
-    let Some(flag) = fits::workspace::new_space_flag(creation, issue, parent) else {
+    let Some(flag) = new_space_flag(creation, issue, parent) else {
         return Ok(());
     };
     let branch = workspace.branch().map_or("", |branch| branch.as_str());

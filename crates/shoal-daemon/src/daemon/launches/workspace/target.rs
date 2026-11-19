@@ -73,7 +73,7 @@ impl Manager {
                 (self.pull_target(&repo, pull, creation, (reads, fetches))).await?
             }
             StartTarget::Branch { branch, .. } => {
-                workspace::branch_creation(&branch, creation).await?
+                super::branch::branch_creation(&branch, creation).await?
             }
             StartTarget::Repository(_) | StartTarget::Number(_) | StartTarget::Issue(_) => {
                 unreachable!("returned above")
