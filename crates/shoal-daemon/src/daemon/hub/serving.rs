@@ -84,8 +84,17 @@ impl Manager {
         let Forwarded { caller, method, .. } = request;
         let method: Method =
             serde_json::from_value(method).context("unreadable forwarded request")?;
+        // One whose answer goes on comes on a stream; collected here, it
+        // would never end.
         match &method {
-            Method::Operation(operation) if operation.forwarding() != Forwarding::Never => {}
+            Method::Operation(operation)
+                if matches!(
+                    operation.forwarding(),
+                    Forwarding::Online | Forwarding::Queued
+                ) => {}
+            Method::Operation(operation) if operation.forwarding() == Forwarding::Streamed => {
+                bail!("this request's answer goes on, so it comes only on a stream")
+            }
             _ => bail!("this request runs only on the machine of the space it acts on"),
         }
         let held = self.hub.vouches.hold(caller);

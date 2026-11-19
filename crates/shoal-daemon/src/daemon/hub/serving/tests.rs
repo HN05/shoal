@@ -66,3 +66,16 @@ async fn a_streamed_request_s_vouch_stands_for_its_caller_only_until_its_answer_
     // space's process bring afresh.
     assert!(manager.vouched_space(&workspace.id).is_none());
 }
+
+#[tokio::test]
+async fn a_request_whose_answer_goes_on_is_refused_where_answers_are_collected() {
+    let daemon = TestDaemon::start().await;
+    let workspace = daemon.workspace("followed").await;
+    let request = Forwarded {
+        caller: Vouched::User,
+        method: serde_json::json!({"follow_session": {"space": workspace.id}}),
+        summary: "follow".into(),
+    };
+    let refused = daemon.manager.serve_forwarded(request).await.unwrap_err();
+    assert!(refused.to_string().contains("stream"), "{refused:#}");
+}
