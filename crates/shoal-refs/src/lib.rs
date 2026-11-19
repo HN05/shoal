@@ -46,9 +46,10 @@ macro_rules! text_ref {
             }
         }
 
+        /// The text, padded to the width a format asks for.
         impl std::fmt::Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str(&self.0)
+                f.pad(&self.0)
             }
         }
 

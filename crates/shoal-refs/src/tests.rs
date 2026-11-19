@@ -34,3 +34,9 @@ fn a_short_commit_is_its_first_twelve_characters() {
     assert_eq!(CommitId::from("abc").short(), "abc");
     assert_eq!(CommitId::from("0123456789").abbreviated(7), "0123456");
 }
+
+#[test]
+fn branches_and_commits_pad_to_a_columns_width() {
+    let row = format!("{:8}|{:>4}|", BranchName::from("fix"), CommitId::from("ab"));
+    assert_eq!(row, "fix     |  ab|");
+}
