@@ -381,6 +381,33 @@ async fn a_viewer_writes_its_errors_where_no_daemon_needs_to_read_them() {
 }
 
 #[tokio::test]
+async fn a_viewer_that_exits_before_serving_takes_what_it_started_along() {
+    let (temp, manager) = manager().await;
+    let pid_file = temp.path().join("helper.pid");
+    let script = format!("sleep 30 & echo $! > {}; exit 3", pid_file.display());
+    let viewer = ["sh", "-c", script.as_str()];
+    let (_, demo) = running(&manager, temp.path(), Some(&viewer)).await;
+    let refused = manager.open_viewer(&demo, None).await.err().unwrap();
+    assert_eq!(Reason::of(&refused), Some(Reason::NotReady), "{refused:#}");
+    let pid: u32 = std::fs::read_to_string(&pid_file)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    let gone = async {
+        while crate::process::identity::capture(pid)
+            .unwrap()
+            .is_some_and(|helper| runs(&helper))
+        {
+            tokio::time::sleep(START_POLL).await;
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(60), gone)
+        .await
+        .unwrap_or_else(|_| panic!("helper {pid} of the failed viewer still runs"));
+}
+
+#[tokio::test]
 async fn a_viewer_that_exits_fails_the_open_with_what_it_printed() {
     let (temp, manager) = manager().await;
     let viewer = ["sh", "-c", "echo 'no device {udid}' >&2; exit 3"];

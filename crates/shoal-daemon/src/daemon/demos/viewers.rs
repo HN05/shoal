@@ -392,10 +392,23 @@ impl Starting {
     }
 
     async fn await_port(&mut self, port: u16) -> Result<()> {
-        let (child, log) = (&mut self.child, &self.log);
+        let (child, process, log) = (&mut self.child, &self.process, &self.log);
         let exited = || {
+            if !process::unreaped(process).unwrap_or(false) {
+                return Ok(None);
+            }
+            // Until it is reaped, its ID still names the group it leads, so
+            // what it started there goes with it.
+            // SAFETY: the group of the unreaped child this daemon started.
+            unsafe {
+                libc::kill(-(process.pid as i32), libc::SIGKILL);
+            }
             let status = child.try_wait()?;
-            Ok(status.map(|status| format!("exited with {status}{}", printed(log))))
+            let status = status.map_or_else(
+                || "exited".to_owned(),
+                |status| format!("exited with {status}"),
+            );
+            Ok(Some(format!("{status}{}", printed(log))))
         };
         await_port(port, &self.program, exited).await
     }
