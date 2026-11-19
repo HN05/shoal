@@ -10,3 +10,11 @@ RUST_MIN_STACK = "8388608"
 # time waiting for that lock than querying. Shoal reads no SQLite memory
 # statistics, so the bundled build leaves them out.
 LIBSQLITE3_FLAGS = "-DSQLITE_DEFAULT_MEMSTATUS=0"
+
+# On Apple targets rustc asks for unwind tables valid at every instruction,
+# whose epilogue entries compact unwind cannot encode, so most functions'
+# unwind info falls back to __eh_frame. A debug build of shoal outgrows the
+# 16 MB the compact unwind table can address, and ld warns. Functions that can
+# unwind keep their tables without this; only those that cannot lose them.
+[target.'cfg(target_vendor = "apple")']
+rustflags = ["-C", "force-unwind-tables=no"]
