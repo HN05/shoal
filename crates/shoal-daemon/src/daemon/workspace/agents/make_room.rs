@@ -16,9 +16,7 @@ use super::{
     Manager, Protection, ProtectionExt,
     idle_stop::{Candidate, Chosen},
 };
-use crate::{
-    daemon::workspace::engagement::FLOOR, model::HeldBy, state::QueueState, time::UnixTime,
-};
+use crate::{daemon::engagement::FLOOR, model::HeldBy, state::QueueState, time::UnixTime};
 
 /// A queued entry waiting for room, with its priority and what it needs.
 struct Waiting {

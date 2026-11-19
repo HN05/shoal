@@ -9,7 +9,7 @@ use std::{collections::HashMap, time::Duration};
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::Manager;
+use super::workspace::Manager;
 use crate::daemon::{log, scope::Caller};
 use crate::{state::AgentState, time::UnixTime};
 

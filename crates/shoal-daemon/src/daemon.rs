@@ -23,6 +23,7 @@ pub(crate) mod containers;
 mod contribution_holds;
 pub(crate) mod conversions;
 pub(crate) mod disk;
+pub(crate) mod engagement;
 pub mod environment;
 pub mod events;
 mod execution_connection;
