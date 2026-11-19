@@ -97,7 +97,7 @@ impl Manager {
         // A demo's viewer goes with it.
         self.viewers.end(id);
         if let Some(viewer) = viewer {
-            crate::daemon::demos::viewers::stop_recorded(&viewer.process).await;
+            crate::daemon::demos::viewers::stop_recorded(id, &viewer.process).await;
         }
         Ok(demo)
     }

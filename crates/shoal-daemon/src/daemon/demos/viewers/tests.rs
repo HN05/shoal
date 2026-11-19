@@ -133,6 +133,62 @@ async fn exited_run(manager: &Manager, execution: &ExecutionId) {
         .unwrap();
 }
 
+/// A shell command that starts a helper writing its PID to `pid_file`,
+/// which runs well past every wait here unless something stops it.
+fn helper(pid_file: &std::path::Path) -> String {
+    format!("sleep 600 & echo $! > {}", pid_file.display())
+}
+
+/// A shell command that waits until `gate` exists.
+fn await_file(gate: &std::path::Path) -> String {
+    format!("while [ ! -e {} ]; do sleep 0.05; done", gate.display())
+}
+
+/// A helper a test viewer started, killed as the test ends unless the
+/// cleanup under test stopped it.
+struct Helper {
+    pid: u32,
+    process: Option<Identity>,
+}
+
+impl Helper {
+    /// The helper whose PID `pid_file` holds, once it holds one.
+    async fn read(pid_file: &std::path::Path) -> Self {
+        let pid = loop {
+            let written = std::fs::read_to_string(pid_file).unwrap_or_default();
+            if let Ok(pid) = written.trim().parse::<u32>() {
+                break pid;
+            }
+            tokio::time::sleep(START_POLL).await;
+        };
+        let process = crate::process::identity::capture(pid).unwrap();
+        Self { pid, process }
+    }
+
+    /// Wait, with a hang guard, until the helper no longer runs.
+    async fn assert_stopped(&self) {
+        let Some(process) = &self.process else {
+            return;
+        };
+        let stopped = async {
+            while runs(process) {
+                tokio::time::sleep(START_POLL).await;
+            }
+        };
+        tokio::time::timeout(Duration::from_secs(60), stopped)
+            .await
+            .unwrap_or_else(|_| panic!("helper {} still runs", self.pid));
+    }
+}
+
+impl Drop for Helper {
+    fn drop(&mut self) {
+        if let Some(process) = &self.process {
+            let _ = crate::process::identity::signal(process, libc::SIGKILL);
+        }
+    }
+}
+
 /// The process of the viewer recorded for `demo`.
 async fn viewer_process(manager: &Manager, demo: &Running) -> Identity {
     let viewer = manager.running_viewer(&demo.execution_id).await.unwrap();
@@ -384,27 +440,48 @@ async fn a_viewer_writes_its_errors_where_no_daemon_needs_to_read_them() {
 async fn a_viewer_that_exits_before_serving_takes_what_it_started_along() {
     let (temp, manager) = manager().await;
     let pid_file = temp.path().join("helper.pid");
-    let script = format!("sleep 30 & echo $! > {}; exit 3", pid_file.display());
+    let script = format!("{}; exit 3", helper(&pid_file));
     let viewer = ["sh", "-c", script.as_str()];
     let (_, demo) = running(&manager, temp.path(), Some(&viewer)).await;
     let refused = manager.open_viewer(&demo, None).await.err().unwrap();
     assert_eq!(Reason::of(&refused), Some(Reason::NotReady), "{refused:#}");
-    let pid: u32 = std::fs::read_to_string(&pid_file)
+    Helper::read(&pid_file).await.assert_stopped().await;
+}
+
+#[tokio::test]
+async fn a_recovered_viewer_that_exits_before_serving_takes_what_it_started_along() {
+    let (temp, manager) = manager().await;
+    let (_, demo) = running(&manager, temp.path(), Some(&["false"])).await;
+    let port = manager.reserve_viewer_port(&demo, None).await.unwrap();
+    let (pid_file, gate) = (temp.path().join("helper.pid"), temp.path().join("exit"));
+    // As an earlier daemon left it: marked as the demo's execution and
+    // recorded as starting, its leader exiting once recorded.
+    let script = format!("{}; {}; exit 0", helper(&pid_file), await_file(&gate));
+    let mut earlier = ProcessGroup::spawn(
+        std::process::Command::new("sh")
+            .args(["-c", &script])
+            .env(env::EXECUTION_ID, &demo.execution_id),
+    );
+    let process = crate::process::identity::capture(earlier.id())
         .unwrap()
-        .trim()
-        .parse()
         .unwrap();
-    let gone = async {
-        while crate::process::identity::capture(pid)
-            .unwrap()
-            .is_some_and(|helper| runs(&helper))
-        {
-            tokio::time::sleep(START_POLL).await;
-        }
+    let helper = Helper::read(&pid_file).await;
+    let starting = Viewer {
+        port,
+        process: process.clone(),
+        serving: false,
     };
-    tokio::time::timeout(Duration::from_secs(60), gone)
+    (manager.record_viewer(&demo.execution_id, &starting))
         .await
-        .unwrap_or_else(|_| panic!("helper {pid} of the failed viewer still runs"));
+        .unwrap();
+    std::fs::write(&gate, "").unwrap();
+    while !process::unreaped(&process).unwrap() {
+        tokio::time::sleep(START_POLL).await;
+    }
+    let refused = manager.open_viewer(&demo, None).await.err().unwrap();
+    assert_eq!(Reason::of(&refused), Some(Reason::NotReady), "{refused:#}");
+    helper.assert_stopped().await;
+    let _ = earlier.wait();
 }
 
 #[tokio::test]
@@ -478,11 +555,7 @@ async fn a_demo_whose_viewer_is_off_is_refused_one() {
 async fn stopping_a_viewer_that_exited_unreaped_takes_what_it_started_along() {
     let temp = tempfile::tempdir().unwrap();
     let (pid_file, gate) = (temp.path().join("helper.pid"), temp.path().join("exit"));
-    let script = format!(
-        "sleep 30 & echo $! > {}; while [ ! -e {} ]; do sleep 0.05; done; exit 0",
-        pid_file.display(),
-        gate.display()
-    );
+    let script = format!("{}; {}; exit 0", helper(&pid_file), await_file(&gate));
     let mut child = Command::new("sh")
         .args(["-c", &script])
         .process_group(0)
@@ -493,27 +566,13 @@ async fn stopping_a_viewer_that_exited_unreaped_takes_what_it_started_along() {
         .unwrap();
     // The leader exits once its identity is known, leaving its helper,
     // and stays unreaped.
+    let helper = Helper::read(&pid_file).await;
     std::fs::write(&gate, "").unwrap();
     while !process::unreaped(&leader).unwrap() {
         tokio::time::sleep(START_POLL).await;
     }
-    let pid: u32 = std::fs::read_to_string(&pid_file)
-        .unwrap()
-        .trim()
-        .parse()
-        .unwrap();
     stop_unreaped(&mut child).await;
-    let gone = async {
-        while crate::process::identity::capture(pid)
-            .unwrap()
-            .is_some_and(|helper| runs(&helper))
-        {
-            tokio::time::sleep(START_POLL).await;
-        }
-    };
-    tokio::time::timeout(Duration::from_secs(60), gone)
-        .await
-        .unwrap_or_else(|_| panic!("helper {pid} still runs"));
+    helper.assert_stopped().await;
 }
 
 #[test]

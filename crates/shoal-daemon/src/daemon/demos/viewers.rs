@@ -6,7 +6,7 @@
 //! other processes. The daemon records its process with the demo, by which
 //! it spares the viewer between the demo's runs, across its own restarts too.
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     ffi::OsString,
     path::{Path, PathBuf},
     process::Stdio,
@@ -166,7 +166,7 @@ impl Manager {
         let exited = || Ok((!runs(&viewer.process)).then(|| "exited".to_owned()));
         if let Err(error) = await_port(viewer.port, program, exited).await {
             // Stopped and forgotten, so the next open starts another.
-            stop_recorded(&viewer.process).await;
+            stop_recorded(&demo.execution_id, &viewer.process).await;
             self.forget_viewer(&demo.execution_id).await;
             return Err(error);
         }
@@ -306,18 +306,37 @@ fn scope_token(db: &Connection, execution: &ExecutionId) -> Result<ScopeToken> {
     token.context("the demo's execution has no scope token")
 }
 
-/// Kill the viewer `process` and its process group, which it leads while
-/// its identity verifies: a viewer serves only its demo, so nothing in its
-/// group has work to save.
-pub(crate) async fn stop_recorded(process: &Identity) {
+/// Kill the viewer `process` of the demo `execution` runs and its process
+/// group: the whole group while the leader verifies, and otherwise each
+/// member that carries the execution's marker, verified one by one. A
+/// viewer serves only its demo, so nothing in its group has work to save.
+pub(crate) async fn stop_recorded(execution: &ExecutionId, process: &Identity) {
     if runs(process) {
         // SAFETY: the group the live, verified viewer leads.
         unsafe {
             libc::kill(-(process.pid as i32), libc::SIGKILL);
         }
     }
-    if let Err(error) = process::stop_verified(std::slice::from_ref(process)).await {
+    let mut targets = group_members(execution, process.pid).await;
+    targets.push(process.clone());
+    targets.retain(runs);
+    if let Err(error) = process::stop_verified(&targets).await {
         log!("viewer {} not stopped: {error:#}", process.pid);
+    }
+}
+
+/// The live processes of process group `group` that carry the marker of
+/// `execution`.
+async fn group_members(execution: &ExecutionId, group: u32) -> Vec<Identity> {
+    match process::scan(HashSet::from([execution.clone()])).await {
+        Ok(scan) => (scan.processes.into_iter())
+            .map(|owned| owned.identity)
+            .filter(|member| process::group_of(member) == Some(group))
+            .collect(),
+        Err(error) => {
+            log!("viewer group {group} not scanned: {error:#}");
+            Vec::new()
+        }
     }
 }
 
