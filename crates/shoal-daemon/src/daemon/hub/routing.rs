@@ -8,7 +8,7 @@
 //! refuses the rest, naming the machine and when it last saw it.
 use std::sync::Arc;
 
-use anyhow::{Result, anyhow, bail, ensure};
+use anyhow::{Result, anyhow, bail};
 use shoal_ids::member_ids::MemberId;
 use shoal_protocol::hub::{
     Member, MemberKind,
@@ -66,16 +66,7 @@ impl Manager {
         let Some(named) = launch_machine(&mut request.method, default)? else {
             return Ok(machine.clone());
         };
-        let own = self.hub_identity().await?.public.clone();
-        let member = (self.store)
-            .read(move |tx| super::members::select(tx, &named, &own))
-            .await?;
-        ensure!(
-            member.kind == MemberKind::Machine,
-            "{} is a device, which starts no spaces; name a machine",
-            member.name
-        );
-        Ok(member.id)
+        Ok(self.named_machine(&named).await?.machine.id)
     }
 
     /// Answer `request`, which the member `from` forwards to the machine

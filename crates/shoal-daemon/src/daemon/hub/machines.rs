@@ -24,18 +24,18 @@ impl Manager {
         let Some((own, directory)) = self.directory_or_known().await? else {
             bail!("this machine joined no hub, so its spaces start here; leave out --machine");
         };
-        let machines = (directory.machines.into_iter())
-            .filter(|member| member.kind == MemberKind::Machine)
-            .collect();
-        let machine = select(machines, named)?;
+        let machine = select(directory.machines, named)?;
         let own = machine.id == own;
         Ok(Named { machine, own })
     }
 }
 
-/// The machine of `machines` that `named` names, by its ID or a name only
-/// one of them has.
-fn select(machines: Vec<Member>, named: &str) -> Result<Member> {
+/// The machine among `members` that `named` names, by its ID or a name
+/// only one machine has, whatever devices are named.
+fn select(members: Vec<Member>, named: &str) -> Result<Member> {
+    let machines: Vec<Member> = (members.into_iter())
+        .filter(|member| member.kind == MemberKind::Machine)
+        .collect();
     if let Some(machine) = machines.iter().find(|machine| machine.id.as_str() == named) {
         return Ok(machine.clone());
     }
