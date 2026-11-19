@@ -380,7 +380,7 @@ async fn a_merge_binds_the_head_the_pr_has_unless_it_names_one() {
     let subject = manager.bind_merge(&context, Some("1".parse().unwrap()), &mut squash, &caller);
     let subject = subject.await.unwrap();
     assert!(
-        subject.ends_with(&format!(" at {named} by squash as \"Fix login\"")),
+        subject.ends_with(&format!(" at {named} by squash as \"Fix login\\n\\nWhy\"")),
         "{subject}"
     );
     let Action::Merge { method, .. } = squash else {
@@ -390,4 +390,13 @@ async fn a_merge_binds_the_head_the_pr_has_unless_it_names_one() {
         method,
         Some(crate::forge::items::action::MergeMethod::Squash)
     );
+    // Another body under the same first line is another merge to approve.
+    let mut reworded = Action::Merge {
+        method: None,
+        message: Some("Fix login\n\nAnother reason".into()),
+        delete_branch: false,
+        head: Some(named.clone()),
+    };
+    let other = manager.bind_merge(&context, Some("1".parse().unwrap()), &mut reworded, &caller);
+    assert_ne!(other.await.unwrap(), subject);
 }

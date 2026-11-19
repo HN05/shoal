@@ -168,8 +168,8 @@ impl Manager {
 }
 
 /// The method and squash message `action` merges by, as an approval of it
-/// names them: ` by squash as "Fix login"`; nothing for the forge's
-/// default.
+/// names them, the whole message so another body needs another decision:
+/// ` by squash as "Fix login\n\nWhy"`; nothing for the forge's default.
 fn merge_terms(action: &Action) -> String {
     let (Action::Merge {
         method, message, ..
@@ -182,8 +182,7 @@ fn merge_terms(action: &Action) -> String {
     };
     let mut terms = method.map_or_else(String::new, |method| format!(" by {method}"));
     if let Some(message) = message {
-        let subject = crate::model::message_subject(message);
-        terms.push_str(&format!(" as \"{subject}\""));
+        terms.push_str(&format!(" as {:?}", message.trim()));
     }
     terms
 }
