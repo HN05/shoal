@@ -7,7 +7,13 @@ use shoal_refs::{BranchName, CommitId};
 
 use crate::{
     forge::items::action::MergeMethod,
-    git::{self, merge_tree, repo::clean_branch, run_isolated as git_run, scratch},
+    git::{
+        self,
+        merge_methods::{self, Applied},
+        merge_tree,
+        repo::clean_branch,
+        run_isolated as git_run, scratch,
+    },
     model::{UnmergePlan, Unmerged},
 };
 
@@ -147,8 +153,8 @@ async fn squashed(
 /// `tip`'s first-parent history: in the chain on `previous` whose commits
 /// each copy one of the branch's own, as [`authored_identity`] tells them,
 /// since a copy's patch differs where the rebase moved a change to a
-/// renamed file, the last whose files are the merge of the two, as a clean
-/// rebase leaves them. A commit of the branch with no copy there is one the
+/// renamed file, the last whose files are those the rebase leaves, which a
+/// replay of it shows. A commit of the branch with no copy there is one the
 /// rebase dropped once it became empty, as when the default branch had its
 /// change in a squash of several; a later commit that copies its authorship
 /// changes the files, so it is no part of the merge.
@@ -167,8 +173,7 @@ async fn rebased(
             .entry(authored_identity(repo, original.as_str()).await?)
             .or_default() += 1;
     }
-    let Some(merged) = merge_tree::merged_tree(repo, previous.as_str(), source.as_str()).await?
-    else {
+    let Some(rebased) = rebased_tree(repo, previous, source).await? else {
         return Ok(None);
     };
     let mut last = None;
@@ -177,11 +182,25 @@ async fn rebased(
             Some(left @ 1..) => *left -= 1,
             _ => break,
         }
-        if merge_tree::tree_of(repo, copy.as_str()).await? == merged {
+        if merge_tree::tree_of(repo, copy.as_str()).await? == rebased {
             last = Some(copy);
         }
     }
     Ok(last)
+}
+
+/// The files a rebase of `source` onto `previous` leaves, as a replay of it
+/// in a worktree of its own shows them; `None` when it copies nothing or
+/// does not apply cleanly.
+async fn rebased_tree(
+    repo: &Path,
+    previous: &CommitId,
+    source: &CommitId,
+) -> Result<Option<String>> {
+    Ok(match merge_methods::rebase(repo, previous, source).await? {
+        Applied::Commit(commit) => Some(merge_tree::tree_of(repo, commit.as_str()).await?),
+        Applied::Unchanged | Applied::Conflicts(_) => None,
+    })
 }
 
 /// The commits of `source` a rebase onto `previous` copies, in the order

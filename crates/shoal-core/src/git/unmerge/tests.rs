@@ -315,3 +315,34 @@ async fn a_rebase_merge_of_a_branch_with_merges_is_found_whatever_its_dates() {
         Some(rebased)
     );
 }
+
+#[tokio::test]
+async fn a_rebase_merge_is_found_where_a_merge_of_the_branch_would_conflict() {
+    use crate::forge::items::action::MergeMethod;
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    git(&repo, &["switch", "-q", "-c", "side"]);
+    for (file, text) in [("tracked", "branch\n"), ("notes", "notes\n")] {
+        fs::write(repo.join(file), text).unwrap();
+        commit(&repo, file);
+    }
+    // main takes the branch's first commit, then changes its line again,
+    // which a merge of the branch conflicts with and its rebase leaves out.
+    git(&repo, &["switch", "-q", "main"]);
+    fs::write(repo.join("main"), "main\n").unwrap();
+    commit(&repo, "main");
+    git(&repo, &["cherry-pick", "side~1"]);
+    fs::write(repo.join("tracked"), "edited on main\n").unwrap();
+    commit(&repo, "tracked");
+    let previous: CommitId = rev(&repo, "main").as_str().into();
+    git(&repo, &["switch", "-q", "--detach", "side"]);
+    git(&repo, &["rebase", "-q", "main"]);
+    let rebased = rev(&repo, "HEAD");
+    git(&repo, &["switch", "-q", "main"]);
+    git(&repo, &["merge", "-q", "--ff-only", &rebased]);
+    assert_eq!(rev(&repo, &format!("{rebased}~1")), previous.as_str());
+    assert_eq!(
+        result(&repo, &previous, MergeMethod::Rebase).await,
+        Some(rebased)
+    );
+}
