@@ -110,5 +110,14 @@ fn flags_of_both_paths_are_refused_before_a_space_is_chosen() -> Result<()> {
         assert!(merged(flags).is_err(), "{flags:?}");
     }
     assert_eq!(merged(&["-X", "squash", "--push"])?, Merged::Work);
+    // A message for a method that does not squash is refused too.
+    for method in ["merge", "rebase"] {
+        assert!(
+            merged(&["-X", method, "--message", "Fix"]).is_err(),
+            "{method}"
+        );
+    }
+    assert_eq!(merged(&["-X", "squash", "--message", "Fix"])?, Merged::Work);
+    assert_eq!(merged(&["--message", "Fix"])?, Merged::Work);
     Ok(())
 }
