@@ -6,8 +6,8 @@
 use crate::{approvals::ApprovalRequest, item_numbers::ItemNumber, questions::Question};
 
 use super::{
-    AgentMethod, ApprovalMethod, AssignmentMethod, CiMethod, HoldMethod, ItemMethod, Operation,
-    QuestionMethod, QueueMethod, RemovalMethod, WorkspaceMethod,
+    AgentMethod, ApprovalMethod, AssignmentMethod, BranchMethod, CiMethod, HoldMethod, ItemMethod,
+    Operation, QuestionMethod, QueueMethod, RemovalMethod, WorkspaceMethod,
 };
 
 /// What a daemon does with a request for another machine's space.
@@ -162,6 +162,9 @@ impl Operation {
                         | CiMethod::CiRunJobLog { .. }
                         | CiMethod::ListCiRuns { .. }
                         | CiMethod::StartCiRun { .. }
+                )
+                | Self::Branch(
+                    BranchMethod::ListBranches { .. } | BranchMethod::DeleteBranches { .. }
                 )
         )
     }
