@@ -155,10 +155,7 @@ async fn merge_branch(plan: MergePlan) -> Result<MergedBranch> {
         }
     };
     let default_ref = git::local_ref(&plan.default_refresh.branch);
-    let commit = git_run(repo, &["rev-parse", "--verify", &default_ref])
-        .await?
-        .trim()
-        .into();
+    let commit = git::resolve_commit(repo, &default_ref, git_run).await?;
     Ok(merged_branch(plan, commit, updated, fast_forward))
 }
 
