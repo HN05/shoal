@@ -1,0 +1,29 @@
+use clap::Parser;
+
+use super::ensure_flags_fit;
+use crate::{
+    cli::{Cli, Command, args::create::CreateCommand, args::create::StartArgs},
+    model::SpaceKind,
+};
+
+fn start(args: &[&str]) -> StartArgs {
+    let cli = Cli::try_parse_from(["shoal", "start"].iter().chain(args)).unwrap();
+    let Some(Command::Create(CreateCommand::Start(start))) = cli.command else {
+        panic!("expected start");
+    };
+    *start
+}
+
+#[test]
+fn a_chat_mode_refuses_the_copy_and_fork_its_pickers_would_ask_for() {
+    for flag in ["--copy", "--fork"] {
+        let args = start(&["repo", "-m", "chat", flag]);
+        let mode = "chat".into();
+        let error = ensure_flags_fit(&args, SpaceKind::Chat, &mode).unwrap_err();
+        assert!(
+            error.to_string().starts_with(&format!("{flag} ")),
+            "{error}"
+        );
+        ensure_flags_fit(&args, SpaceKind::Workspace, &mode).unwrap();
+    }
+}

@@ -45,8 +45,11 @@ pub(super) async fn launch(ctx: &Context, args: &StartArgs) -> Result<Launch> {
     launch.path = (launch.path.take())
         .map(|path| repositories::absolute(ctx, path))
         .transpose()?;
-    // A start in a chat puts its space below the chat.
-    launch.parent = (launch.parent.take()).or(crate::env::own_chat().map(SpaceSelector::Id));
+    // A start in a chat puts its new space below the chat; one in an
+    // existing workspace creates none.
+    if launch.in_workspace.is_none() {
+        launch.parent = (launch.parent.take()).or(crate::env::own_chat().map(SpaceSelector::Id));
+    }
     launch.directory = ui::current_directory()?;
     launch.env = Some(crate::terminal::start_environment());
     launch.setup_env = Some(crate::env::without_secrets());

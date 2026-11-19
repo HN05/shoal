@@ -3,7 +3,11 @@
 use anyhow::{Result, ensure};
 use shoal_protocol::launches::{Launch, StartTarget};
 
-use crate::{cli::args::create::StartArgs, config::permissions::PermissionChange};
+use crate::{
+    cli::args::create::StartArgs,
+    config::{modes::ModeName, permissions::PermissionChange},
+    model::SpaceKind,
+};
 
 /// Refuse what `launch` asks for that its arguments alone refuse, as
 /// [`check_start_arguments`] and [`crate::launches`] refuse it, a mode only
@@ -54,3 +58,16 @@ pub(super) fn ensure_nothing_dropped(args: &StartArgs) -> Result<()> {
     );
     Ok(())
 }
+
+/// Refuse what `args` ask for that the `kind` of space their `mode` starts
+/// cannot take, `--fork` included, which only this process reads.
+pub(super) fn ensure_flags_fit(args: &StartArgs, kind: SpaceKind, mode: &ModeName) -> Result<()> {
+    let fork: &[&'static str] = match args.fork {
+        true => &["--fork"],
+        false => &[],
+    };
+    crate::launches::ensure_fits(&args.launch(), fork, kind, Some(mode))
+}
+
+#[cfg(test)]
+mod tests;

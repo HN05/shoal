@@ -44,18 +44,22 @@ pub(super) async fn found(ctx: &Context, launch: &mut Launch) -> Result<Option<R
     crate::launches::shape::launch_repository(&DaemonReads(ctx), launch).await
 }
 
-/// The repository a start in `mode` goes in and its settings: the `found`
-/// one with its `settings`, else, where `mode` starts in a repository, one
-/// a terminal picks, which `launch` then names, with its settings.
-pub(super) async fn picked(
+/// The repository a start in `mode` goes in and its settings: none for a
+/// mode without a repository, which starts under the global config's, as
+/// the daemon starts it; else the `found` one with its `settings`, else
+/// one a terminal picks, which `launch` then names, with its settings.
+pub(super) async fn settled(
     ctx: &Context,
     launch: &mut Launch,
     mode: &ModeName,
     (found, settings): (Option<Repository>, Effective),
 ) -> Result<(Option<Repository>, Effective)> {
-    let in_repository =
-        mode::configured(launch, mode, &settings)?.is_some_and(|mode| mode.repository);
-    if found.is_some() || !in_repository || !ui::can_pick(ctx) {
+    let configured = mode::configured(launch, mode, &settings)?;
+    if configured.is_some_and(|mode| !mode.repository) {
+        let settings = DaemonReads(ctx).settings(ConfigTarget::Global).await?;
+        return Ok((None, settings));
+    }
+    if found.is_some() || configured.is_none() || !ui::can_pick(ctx) {
         return Ok((found, settings));
     }
     let repo = pick(ctx, launch).await?;

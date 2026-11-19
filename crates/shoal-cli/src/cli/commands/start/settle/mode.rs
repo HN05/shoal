@@ -5,7 +5,8 @@ use shoal_protocol::launches::{IssueChoice, Launch};
 
 use crate::{
     cli::{
-        commands::issues,
+        args::create::StartArgs,
+        commands::{issues, start::DaemonReads},
         context::Context,
         ui::{self, ModeChoice, ModeFit},
     },
@@ -40,6 +41,26 @@ pub(super) async fn decided(
         None => None,
     };
     Ok(labelled.map_or(ModeChoice::Pick, ModeChoice::Named))
+}
+
+/// Refuse the copy and fork pickers that making the launch of `args`
+/// opens where the mode they name starts a kind of space that takes
+/// neither, before either picker asks anything.
+pub(super) async fn ensure_located_fit(ctx: &Context, args: &StartArgs) -> Result<()> {
+    let Some(mode) = args
+        .mode
+        .as_ref()
+        .filter(|_| args.copy.is_set() || args.fork)
+    else {
+        return Ok(());
+    };
+    let launch = Launch {
+        directory: ui::current_directory()?,
+        ..args.launch()
+    };
+    let settings = launches::shape::launch_settings(&DaemonReads(ctx), &launch).await?;
+    let kind = modes::get(&settings.modes, mode)?.kind;
+    super::arguments::ensure_flags_fit(args, kind, mode)
 }
 
 /// The mode `choice` names, else one picked under `settings` among those
