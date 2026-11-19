@@ -1,6 +1,6 @@
 use std::fs;
 
-use super::read_from;
+use super::{Client, Stopped, read_from, send_file_gained};
 
 #[test]
 fn a_file_is_read_on_from_where_the_last_read_ended() {
@@ -42,4 +42,51 @@ fn a_whole_chunk_of_a_file_with_the_longest_path_fits_in_a_frame() {
     let bytes = SessionBytes::new(path.into(), u64::MAX, &[0xff; super::CHUNK]);
     let frame = Response::new(u64::MAX, Body::SessionBytes(bytes));
     assert!(serde_json::to_vec(&frame).unwrap().len() < MAX_FRAME);
+}
+
+/// A follow's client on one end of a new connection, and the other end.
+fn client(manager: &crate::daemon::workspace::Manager) -> (Client<'_>, tokio::net::UnixStream) {
+    let (ours, theirs) = tokio::net::UnixStream::pair().unwrap();
+    let (_, writer) = ours.into_split();
+    let client = Client {
+        manager,
+        writer,
+        id: 1,
+        scope: None,
+    };
+    (client, theirs)
+}
+
+#[tokio::test]
+async fn a_follow_writes_nothing_once_a_restart_holds_operations_off() {
+    let (_root, manager) = crate::daemon::test_support::manager().await;
+    let (mut client, mut theirs) = client(&manager);
+    let _quiet = manager.gates.quiesce().await;
+    let sent = client.send(shoal_protocol::protocol::Body::Ok).await;
+    let stopped = sent.unwrap_err().downcast::<Stopped>().unwrap();
+    assert!(matches!(stopped, Stopped::Restarting), "{stopped}");
+    drop(client);
+    let mut written = Vec::new();
+    tokio::io::AsyncReadExt::read_to_end(&mut theirs, &mut written)
+        .await
+        .unwrap();
+    assert!(written.is_empty());
+}
+
+#[tokio::test]
+async fn a_session_file_that_is_gone_waits_and_one_that_cannot_be_read_ends_the_follow() {
+    let (root, manager) = crate::daemon::test_support::manager().await;
+    let (mut client, _theirs) = client(&manager);
+    let mut offsets = std::collections::HashMap::new();
+    let gone = root.path().join("gone.jsonl");
+    send_file_gained(&mut client, &gone, "gone.jsonl".into(), &mut offsets)
+        .await
+        .unwrap();
+    // A directory opens but cannot be read.
+    let unreadable = root.path().join("unreadable.jsonl");
+    fs::create_dir(&unreadable).unwrap();
+    let file = "unreadable.jsonl".into();
+    let failed = send_file_gained(&mut client, &unreadable, file, &mut offsets).await;
+    let stopped = failed.unwrap_err().downcast::<Stopped>().unwrap();
+    assert!(matches!(stopped, Stopped::Unreadable(_)), "{stopped}");
 }

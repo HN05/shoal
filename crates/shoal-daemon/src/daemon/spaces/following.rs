@@ -20,7 +20,10 @@ use shoal_protocol::{
     space_names::SpaceSelector,
     transcripts::{self, Environments, FollowedSession, SessionBytes, Store},
 };
-use tokio::net::{UnixStream, unix::OwnedWriteHalf};
+use tokio::net::{
+    UnixStream,
+    unix::{OwnedReadHalf, OwnedWriteHalf},
+};
 
 use crate::{
     daemon::{
@@ -98,14 +101,15 @@ impl Manager {
 
     /// Send `following`'s session, then its files' bytes as they grow,
     /// until the client hangs up, the scope token it came with, `scope`,
-    /// stops acting for a caller, or a daemon restart closes the follow.
-    /// It reads nothing more once the token stops acting, so a client that
-    /// paused reading gets no byte read after that.
+    /// stops acting for a caller, its files cannot be read, or a daemon
+    /// restart closes the follow. It reads nothing more once the token
+    /// stops acting, so a client that paused reading gets no byte read
+    /// after that.
     pub(crate) async fn follow_session(
         self: Arc<Self>,
         stream: UnixStream,
         id: u64,
-        (mut following, scope): (Following, Option<ScopeToken>),
+        (following, scope): (Following, Option<ScopeToken>),
         startup: OperationGuard,
     ) -> Result<()> {
         let (mut reader, writer) = stream.into_split();
@@ -115,32 +119,45 @@ impl Manager {
             id,
             scope,
         };
+        drop(startup);
+        let followed = self
+            .keep_following(&mut client, &mut reader, following)
+            .await;
+        let Err(error) = followed else {
+            return Ok(());
+        };
+        match error.downcast::<Stopped>() {
+            // The client follows again on the replacement.
+            Ok(Stopped::Restarting) => Ok(()),
+            Ok(Stopped::Revoked) => client.refuse_scope().await,
+            Ok(Stopped::Unreadable(error)) => client.fail(&error).await,
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Send `following`'s session, then its files' bytes as they grow, to
+    /// `client` until it hangs up, which `reader` tells.
+    async fn keep_following(
+        &self,
+        client: &mut Client<'_>,
+        reader: &mut OwnedReadHalf,
+        mut following: Following,
+    ) -> Result<()> {
         client
             .send(Body::FollowedSession(following.session.clone()))
             .await?;
-        drop(startup);
         loop {
-            // A restarting daemon closes the follow, which the client opens
-            // again on its replacement.
-            let Some(operation) = self.gates.try_operation() else {
-                return Ok(());
-            };
-            if !client.scoped().await? {
-                return client.refuse_scope().await;
-            }
+            client.ensure_scoped().await?;
             if let Some(next) = self.next_following(&following).await? {
                 following = next;
                 client
                     .send(Body::FollowedSession(following.session.clone()))
                     .await?;
             }
-            if !send_gained(&mut client, &mut following).await? {
-                return client.refuse_scope().await;
-            }
-            drop(operation);
+            send_gained(client, &mut following).await?;
             tokio::select! {
                 () = tokio::time::sleep(POLL) => {}
-                () = answer::hangup(&mut reader) => return Ok(()),
+                () = answer::hangup(reader) => return Ok(()),
             }
         }
     }
@@ -168,6 +185,29 @@ impl Manager {
     }
 }
 
+/// Why a follow stops before its client hangs up.
+#[derive(Debug)]
+enum Stopped {
+    /// A daemon restart holds operations off.
+    Restarting,
+    /// The follow's scope token no longer acts for a caller.
+    Revoked,
+    /// The session's files could not be looked for or read.
+    Unreadable(anyhow::Error),
+}
+
+impl std::fmt::Display for Stopped {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Restarting => f.write_str("the daemon is restarting"),
+            Self::Revoked => f.write_str("the follow's scope token was revoked"),
+            Self::Unreadable(error) => write!(f, "{error:#}"),
+        }
+    }
+}
+
+impl std::error::Error for Stopped {}
+
 /// Where a follow writes: its client's connection, for the scope token
 /// the follow came with.
 struct Client<'a> {
@@ -178,14 +218,23 @@ struct Client<'a> {
 }
 
 impl Client<'_> {
+    /// Send `body` under a daemon operation of its own, so a follow holds
+    /// off a restart only while it writes; [`Stopped::Restarting`] once a
+    /// restart holds operations off.
     async fn send(&mut self, body: Body) -> Result<()> {
+        let Some(_operation) = self.manager.gates.try_operation() else {
+            return Err(Stopped::Restarting.into());
+        };
         protocol::write(&mut self.writer, &Response::new(self.id, body)).await
     }
 
-    /// Whether the follow's scope token still acts for a caller, so that
-    /// the follow reads more for it.
-    async fn scoped(&self) -> Result<bool> {
-        self.manager.still_scoped(self.scope.as_ref()).await
+    /// Go on only while the follow's scope token acts for a caller, so
+    /// that the follow reads more for it; [`Stopped::Revoked`] once not.
+    async fn ensure_scoped(&self) -> Result<()> {
+        match self.manager.still_scoped(self.scope.as_ref()).await? {
+            true => Ok(()),
+            false => Err(Stopped::Revoked.into()),
+        }
     }
 
     /// End the follow, whose scope token no longer acts for a caller.
@@ -193,22 +242,28 @@ impl Client<'_> {
         let body = Body::error(ErrorCode::ScopeDenied, "expired or unknown workspace scope");
         self.send(body).await
     }
+
+    /// End the follow, whose session's files could not be looked for or
+    /// read, for `error`.
+    async fn fail(&mut self, error: &anyhow::Error) -> Result<()> {
+        let message = format!("could not follow the session's files: {error:#}");
+        self.send(Body::error(ErrorCode::OperationFailed, message))
+            .await
+    }
 }
 
 /// Send what the files of `following`'s session gained since its offsets,
-/// keeping where each now ends; `false` once the follow's scope token
-/// stopped acting for a caller, before a read.
-async fn send_gained(client: &mut Client<'_>, following: &mut Following) -> Result<bool> {
-    let Some(found) = locate(following).await? else {
-        return Ok(true);
+/// keeping where each now ends.
+async fn send_gained(client: &mut Client<'_>, following: &mut Following) -> Result<()> {
+    let found = locate(following).await;
+    let Some(found) = found.map_err(Stopped::Unreadable)? else {
+        return Ok(());
     };
     for file in found.files.files {
         let path = found.directory.join(&file);
-        if !send_file_gained(client, &path, file, &mut following.offsets).await? {
-            return Ok(false);
-        }
+        send_file_gained(client, &path, file, &mut following.offsets).await?;
     }
-    Ok(true)
+    Ok(())
 }
 
 /// Where the files of `following`'s session are now, none while its tool
@@ -224,28 +279,32 @@ async fn locate(following: &Following) -> Result<Option<transcripts::Found>> {
 }
 
 /// Send what the session's file `file`, at `path`, gained since its offset
-/// in `offsets`, keeping where it now ends; `false` once the follow's scope
-/// token stopped acting for a caller, which it checks before each read.
+/// in `offsets`, keeping where it now ends, checking the follow's scope
+/// token before each read. A file that is gone, as one its tool replaced,
+/// may come back, so it waits; one that cannot be read otherwise ends the
+/// follow.
 async fn send_file_gained(
     client: &mut Client<'_>,
     path: &Path,
     file: PathBuf,
     offsets: &mut HashMap<PathBuf, u64>,
-) -> Result<bool> {
+) -> Result<()> {
     loop {
-        if !client.scoped().await? {
-            return Ok(false);
-        }
+        client.ensure_scoped().await?;
         let offset = offsets.get(&file).copied().unwrap_or(0);
         let path = path.to_owned();
         let read = tokio::task::spawn_blocking(move || read_from(&path, offset));
-        // Gone, as a file its tool replaced, which may come back.
-        let Ok((offset, bytes)) = read.await.context("read a session file")? else {
-            return Ok(true);
+        let (offset, bytes) = match read.await.context("read a session file")? {
+            Ok(read) => read,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => {
+                let error = anyhow::Error::from(error).context(format!("read {}", file.display()));
+                return Err(Stopped::Unreadable(error).into());
+            }
         };
         offsets.insert(file.clone(), offset + bytes.len() as u64);
         if bytes.is_empty() {
-            return Ok(true);
+            return Ok(());
         }
         let gained = SessionBytes::new(file.clone(), offset, &bytes);
         client.send(Body::SessionBytes(gained)).await?;
