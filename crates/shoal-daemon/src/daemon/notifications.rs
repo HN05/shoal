@@ -8,7 +8,8 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
 
 use crate::daemon::log;
-use crate::daemon::workspace_files::{self, Attacher, FileSource, NewFile, SentFile, sent_files};
+use crate::daemon::store::sent_files::{sent_files, sent_ids};
+use crate::daemon::workspace_files::{self, Attacher, FileSource, NewFile, SentFile};
 use crate::daemon::{manager::Manager, tree::Source};
 pub(crate) use shoal_protocol::notifications::{Cleared, Notification, NotificationKind, Sent};
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
@@ -359,7 +360,7 @@ impl Manager {
                 return Ok(None);
             }
         }
-        let files = workspace_files::sent_ids(files)?;
+        let files = sent_ids(files)?;
         let id = self
             .record_user_notification(about, kind, message, files)
             .await?;

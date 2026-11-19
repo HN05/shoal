@@ -9,9 +9,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
-use super::{
-    AttachedFile, AttachedTo, Attacher, FileSource, HomeKey, SentFile, Space, layout::Copy,
-};
+use super::{AttachedFile, AttachedTo, Attacher, FileSource, HomeKey, Space, layout::Copy};
 use shoal_protocol::model::SpaceKind;
 
 const COLUMNS: &str = "id,space,source,name,title,path,bytes,created_at,attached_by,
@@ -22,28 +20,6 @@ const COLUMNS: &str = "id,space,source,name,title,path,bytes,created_at,attached
 
 /// The owners of attached files that are gone.
 const GONE: &str = "space_id NOT IN (SELECT id FROM spaces)";
-
-/// SQL for a `files` column with the files whose record IDs the JSON array
-/// in `$column` lists, in its order, as a JSON array of [`SentFile`]s; a file
-/// whose record is gone, as after `shoal files rm`, drops out.
-macro_rules! sent_files {
-    ($column:literal) => {
-        concat!(
-            "(SELECT json_group_array(json(file)) FROM (
-                SELECT json_object('id',f.id,'name',f.name,'title',f.title,'path',f.path) AS file
-                FROM json_each(",
-            $column,
-            ") j JOIN space_files f ON f.id=j.value ORDER BY j.key)) AS files"
-        )
-    };
-}
-pub(crate) use sent_files;
-
-/// The record IDs of `files`, as a column [`sent_files`] reads stores them.
-pub(crate) fn sent_ids(files: &[SentFile]) -> Result<String> {
-    let ids: Vec<i64> = files.iter().map(|file| file.id).collect();
-    Ok(serde_json::to_string(&ids)?)
-}
 
 /// The record IDs of Shoal's copies at `paths`, in their order, as a column
 /// [`sent_files`] reads stores them; a path no record has is left out.

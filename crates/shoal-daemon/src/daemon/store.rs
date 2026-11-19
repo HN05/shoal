@@ -29,6 +29,7 @@ mod place_owners;
 mod place_servers;
 mod queue_plans;
 mod record_shapes;
+pub(crate) mod sent_files;
 mod space_titles;
 mod worker;
 #[cfg(test)]

@@ -21,7 +21,8 @@ use crate::{
         item_numbers::{self, ItemKind, ItemNumber},
         manager::Manager,
         notifications::{self, About, NotificationKind},
-        workspace_files::{self, Attacher, FileSource, NewFile, SentFile, sent_files},
+        store::sent_files::{sent_files, sent_ids},
+        workspace_files::{self, Attacher, FileSource, NewFile, SentFile},
     },
     model::Space,
 };
@@ -255,7 +256,7 @@ fn insert(
             ask.reason,
             serde_json::to_string(&ask.choices)?,
             in_chat,
-            workspace_files::sent_ids(files)?
+            sent_ids(files)?
         ],
     )?;
     Ok(number)
