@@ -29,7 +29,7 @@ use super::streaming::connect;
 use crate::daemon::log;
 use crate::{
     config::repo::ConflictPolicy,
-    daemon::manager::Manager,
+    daemon::{manager::Manager, scope::Caller},
     env,
     model::{ExecutionSpace, PortRequest},
     paths::Paths,
@@ -91,7 +91,7 @@ fn lock(locks: &Locks, execution: &ExecutionId) -> Arc<AsyncMutex<()>> {
 impl Manager {
     /// The port the viewer of the simulator demo `demo` serves on, started
     /// on the demo's first open; refused for a demo whose viewer is off.
-    pub(crate) async fn open_viewer(&self, demo: &Running) -> Result<u16> {
+    pub(crate) async fn open_viewer(&self, demo: &Running, caller: Option<&Caller>) -> Result<u16> {
         let name = &demo.launch.name;
         if demo.launch.viewer_command.is_none() {
             let message =
@@ -108,7 +108,7 @@ impl Manager {
             return Ok(port);
         }
         let place = self.viewer_place(demo).await?;
-        let port = self.reserve_viewer_port(demo).await?;
+        let port = self.reserve_viewer_port(demo, caller).await?;
         let starting = self.spawn_recorded_viewer(demo, port, &place).await?;
         let process = starting.process.clone();
         if let Err(error) = starting.serve(port).await {
@@ -137,6 +137,10 @@ impl Manager {
     ) -> Result<Starting> {
         let spawning = self.viewers.spawn_lock(&demo.execution_id);
         let _spawning = spawning.lock().await;
+        if self.executions.completing(&demo.execution_id).is_some() {
+            let message = format!("demo {} is stopping", demo.launch.name);
+            return Err(Refusal::new(Reason::NotReady, message).into());
+        }
         let starting = Starting::spawn(demo, port, place)?;
         let viewer = Viewer {
             port,
@@ -197,8 +201,9 @@ impl Manager {
         })
     }
 
-    /// The port reserved for `demo`'s viewer, under the demo's name.
-    async fn reserve_viewer_port(&self, demo: &Running) -> Result<u16> {
+    /// The port reserved for `demo`'s viewer, under the demo's name, as
+    /// `caller` reserves it; refused while it waits for approval.
+    async fn reserve_viewer_port(&self, demo: &Running, caller: Option<&Caller>) -> Result<u16> {
         let name = &demo.launch.name;
         let request = PortRequest {
             port: None,
@@ -208,12 +213,19 @@ impl Manager {
         };
         let workspace = SpaceSelector::id(&demo.workspace_id);
         let acquired = (self.leases)
-            .acquire_port(self, &workspace, name.clone(), request, None)
+            .acquire_port(self, &workspace, name.clone(), request, caller)
             .await?;
         match acquired {
             Acquisition::Allocation(Allocation::Granted(reservation)) => Ok(reservation.port),
             Acquisition::Allocation(Allocation::Busy(message)) => bail!(message),
-            Acquisition::Allocation(Allocation::Approval(_)) | Acquisition::Suggested(_) => {
+            Acquisition::Allocation(Allocation::Approval(request)) => {
+                let message = format!(
+                    "the viewer of demo {name} waits for approval {} of its port; open the demo again once it is approved",
+                    request.number
+                );
+                Err(Refusal::new(Reason::NotReady, message).into())
+            }
+            Acquisition::Suggested(_) => {
                 bail!("no port could be reserved for the viewer of demo {name}")
             }
         }

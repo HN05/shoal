@@ -64,7 +64,7 @@ async fn a_web_demo_s_stream_carries_one_connection_both_ways() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let workspace = running(&manager, temp.path(), Some(Preset::Web), port).await;
-    let open = manager.open_demo(&workspace, "site").await.unwrap();
+    let open = manager.open_demo(&workspace, "site", None).await.unwrap();
     let (client, daemon) = UnixStream::pair().unwrap();
     let guard = manager.gates.owned_operation().await;
     let relay = tokio::spawn(manager.clone().relay_demo(daemon, 7, (open, None), guard));
@@ -95,7 +95,11 @@ async fn a_web_demo_s_stream_carries_one_connection_both_ways() {
 async fn a_terminal_demo_is_refused_a_stream() {
     let (temp, manager) = manager().await;
     let workspace = running(&manager, temp.path(), None, 1).await;
-    let refused = manager.open_demo(&workspace, "site").await.err().unwrap();
+    let refused = manager
+        .open_demo(&workspace, "site", None)
+        .await
+        .err()
+        .unwrap();
     assert_eq!(Reason::of(&refused), Some(Reason::NotReady));
     assert!(refused.to_string().contains("terminal"), "{refused:#}");
 }
@@ -111,6 +115,10 @@ async fn a_demo_that_takes_no_connection_is_refused_a_stream() {
         .unwrap()
         .port();
     let workspace = running(&manager, temp.path(), Some(Preset::Server), port).await;
-    let refused = manager.open_demo(&workspace, "site").await.err().unwrap();
+    let refused = manager
+        .open_demo(&workspace, "site", None)
+        .await
+        .err()
+        .unwrap();
     assert_eq!(Reason::of(&refused), Some(Reason::NotReady));
 }

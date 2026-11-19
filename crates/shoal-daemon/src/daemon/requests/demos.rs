@@ -14,6 +14,7 @@ use shoal_protocol::{scope_tokens::ScopeToken, space_names::SpaceSelector};
 pub(super) async fn handle(
     manager: &Arc<Manager>,
     method: DemoMethod,
+    caller: Option<&Caller>,
     scope: Option<&ScopeToken>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
@@ -28,7 +29,7 @@ pub(super) async fn handle(
             Body::Ok
         }
         DemoMethod::OpenDemoStream { workspace, name } => {
-            let open = manager.open_demo(&workspace, &name).await?;
+            let open = manager.open_demo(&workspace, &name, caller).await?;
             // Another machine's stream is checked there as it goes, its
             // token here standing for its caller only while it opens.
             let scope = scope.filter(|token| manager.hub.vouched_caller(token).is_none());

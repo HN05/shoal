@@ -697,6 +697,10 @@ async fn finish(
     // A restart whose stop the agent never took saved a handoff for nothing.
     let restarting = agent.is_some() && manager.restart_before_resume(&execution_id).await;
     let renewed = agent.is_some() && manager.restart_continues_elsewhere(&execution_id).await;
+    // A demo's viewer that spawns from here on would outlive the final
+    // inventory, so its spawn waits, then finds the execution completing.
+    let spawning = manager.viewers.spawn_lock(&execution_id);
+    let spawning = spawning.lock().await;
     // Setup instead fails on what it leaves running, and merge runs Git.
     if kind == ExecutionKind::Command && result.is_ok() {
         manager
@@ -716,6 +720,7 @@ async fn finish(
     let complete = manager
         .finish_execution(execution_id.clone(), kind, result.as_ref().ok().copied())
         .await?;
+    drop(spawning);
     if let Some(launch) = unrun {
         manager.executions.remember_unrun_launch(launch);
     }

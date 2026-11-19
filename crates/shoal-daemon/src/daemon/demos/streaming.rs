@@ -15,7 +15,7 @@ use shoal_protocol::{
 use tokio::net::{TcpStream, UnixStream};
 
 use crate::{
-    daemon::{answer::OperationGuard, manager::Manager},
+    daemon::{answer::OperationGuard, manager::Manager, scope::Caller},
     refusal::{Reason, Refusal},
 };
 
@@ -32,7 +32,12 @@ pub(crate) struct OpenDemo {
 impl Manager {
     /// Connect to the running demo `name` of the workspace `selector`
     /// names; refused for a demo of a kind Shoal does not stream.
-    pub(crate) async fn open_demo(&self, selector: &SpaceSelector, name: &str) -> Result<OpenDemo> {
+    pub(crate) async fn open_demo(
+        &self,
+        selector: &SpaceSelector,
+        name: &str,
+        caller: Option<&Caller>,
+    ) -> Result<OpenDemo> {
         crate::demos::validate_name(name)?;
         let running = self.demos(Some(selector)).await?;
         let Some(mut demo) = running.into_iter().find(|demo| demo.launch.name == name) else {
@@ -42,7 +47,7 @@ impl Manager {
         let port = match demo.kind {
             Kind::Server | Kind::Web => demo.launch.port(),
             Kind::Simulator => {
-                let port = self.open_viewer(&demo).await?;
+                let port = self.open_viewer(&demo, caller).await?;
                 demo.viewer = demo.launch.viewer(Some(port));
                 Some(port)
             }

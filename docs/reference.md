@@ -2129,7 +2129,9 @@ host focuses its place inside that host, and from another terminal attaches to i
 or shows it where the host shows its places, such as Rex's Mac app.
 A simulator demo's viewer, serve-sim unless its `viewer` names another command,
 starts when the demo is first opened over SSH, from another machine or by an
-app, bound to loopback on a port reserved under the demo's name, and runs
+app, bound to loopback on a port reserved under the demo's name as the opener
+reserves it, so a port that needs approval refuses the open until it is
+approved, and runs
 until the demo stops; a demo nobody opens runs none. Over SSH opening prints
 its URL and the `ssh -L` command that forwards it. Without serve-sim the demo
 keeps running and opening fails, naming the command that installs it.

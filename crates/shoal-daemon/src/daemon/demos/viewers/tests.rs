@@ -41,6 +41,19 @@ async fn running(
     root: &std::path::Path,
     viewer: Option<&[&str]>,
 ) -> (SpaceId, Running) {
+    let (workspace, _) = started(manager, root, viewer).await;
+    reserve_free_port(manager, &workspace.id).await;
+    let demo = listed(manager, &workspace.id).await;
+    (workspace.id, demo)
+}
+
+/// A workspace running the simulator demo `app` with `viewer`, whose port
+/// is not reserved yet, and the demo.
+async fn started(
+    manager: &Manager,
+    root: &std::path::Path,
+    viewer: Option<&[&str]>,
+) -> (crate::model::Workspace, Running) {
     let checkout = repository(root, "repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
@@ -71,9 +84,8 @@ async fn running(
         )
         .await
         .unwrap();
-    reserve_free_port(manager, &workspace.id).await;
     let demo = listed(manager, &workspace.id).await;
-    (workspace.id, demo)
+    (workspace, demo)
 }
 
 /// Reserve the demo's port at one nothing listens on.
@@ -132,12 +144,12 @@ async fn the_first_open_starts_the_viewer_on_the_demo_s_device_and_later_ones_re
     let (workspace, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
     let unopened = demo.viewer.clone().expect("a simulator demo has a viewer");
     assert_eq!((unopened.tool.as_str(), unopened.url), ("python3", None));
-    let port = manager.open_viewer(&demo).await.unwrap();
+    let port = manager.open_viewer(&demo, None).await.unwrap();
     assert_eq!(read(port).await, "UDID-1");
     let opened = listed(&manager, &workspace).await.viewer.unwrap();
     assert_eq!(opened.url, Some(format!("http://localhost:{port}")));
     let process = viewer_process(&manager, &demo).await;
-    assert_eq!(manager.open_viewer(&demo).await.unwrap(), port);
+    assert_eq!(manager.open_viewer(&demo, None).await.unwrap(), port);
     assert_eq!(viewer_process(&manager, &demo).await, process);
 }
 
@@ -145,7 +157,7 @@ async fn the_first_open_starts_the_viewer_on_the_demo_s_device_and_later_ones_re
 async fn the_viewer_outlives_the_demo_s_runs_and_ends_with_the_demo() {
     let (temp, manager) = manager().await;
     let (workspace, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
-    let port = manager.open_viewer(&demo).await.unwrap();
+    let port = manager.open_viewer(&demo, None).await.unwrap();
     // Between runs the daemon stops what the exited run left, which the
     // viewer, marked as the demo's execution, is not.
     exited_run(&manager, &demo.execution_id).await;
@@ -176,7 +188,7 @@ async fn a_run_that_ends_while_the_viewer_starts_spares_it() {
     let (workspace, demo) = running(&manager, temp.path(), Some(&viewer)).await;
     let opening = {
         let (manager, demo) = (manager.clone(), demo.clone());
-        tokio::spawn(async move { manager.open_viewer(&demo).await })
+        tokio::spawn(async move { manager.open_viewer(&demo, None).await })
     };
     // The viewer runs, recorded, but does not serve until the gate opens.
     while manager
@@ -235,7 +247,7 @@ async fn a_run_that_ends_while_the_viewer_spawns_waits_until_it_is_recorded() {
 async fn an_open_waits_for_a_viewer_an_earlier_daemon_left_starting() {
     let (temp, manager) = manager().await;
     let (workspace, demo) = running(&manager, temp.path(), Some(&["false"])).await;
-    let port = manager.reserve_viewer_port(&demo).await.unwrap();
+    let port = manager.reserve_viewer_port(&demo, None).await.unwrap();
     let gate = temp.path().join("serve");
     let earlier = ProcessGroup::spawn(std::process::Command::new("python3").args([
         "-c",
@@ -257,7 +269,7 @@ async fn an_open_waits_for_a_viewer_an_earlier_daemon_left_starting() {
         .unwrap();
     let opening = {
         let (manager, demo) = (manager.clone(), demo.clone());
-        tokio::spawn(async move { manager.open_viewer(&demo).await })
+        tokio::spawn(async move { manager.open_viewer(&demo, None).await })
     };
     std::fs::write(&gate, "").unwrap();
     assert_eq!(opening.await.unwrap().unwrap(), port);
@@ -270,7 +282,7 @@ async fn an_open_waits_for_a_viewer_an_earlier_daemon_left_starting() {
 async fn a_viewer_an_earlier_daemon_started_is_the_demo_s_until_it_exits() {
     let (temp, manager) = manager().await;
     let (_, demo) = running(&manager, temp.path(), Some(&["false"])).await;
-    let port = manager.reserve_viewer_port(&demo).await.unwrap();
+    let port = manager.reserve_viewer_port(&demo, None).await.unwrap();
     let earlier = ProcessGroup::spawn(std::process::Command::new("python3").args([
         "-c",
         ECHO_DEVICE,
@@ -289,10 +301,44 @@ async fn a_viewer_an_earlier_daemon_started_is_the_demo_s_until_it_exits() {
         .await
         .unwrap();
     // Its command would fail, so the open reuses the recorded viewer.
-    assert_eq!(manager.open_viewer(&demo).await.unwrap(), port);
+    assert_eq!(manager.open_viewer(&demo, None).await.unwrap(), port);
     earlier.kill();
-    let refused = manager.open_viewer(&demo).await.err().unwrap();
+    let refused = manager.open_viewer(&demo, None).await.err().unwrap();
     assert_eq!(Reason::of(&refused), Some(Reason::NotReady));
+}
+
+#[tokio::test]
+async fn a_scoped_open_waits_for_approval_of_a_viewer_port_that_needs_it() {
+    let (temp, manager) = manager().await;
+    let (workspace, demo) = started(&manager, temp.path(), Some(ECHO_VIEWER)).await;
+    let config = "[ports.app]\nrequires_approval = true\n";
+    std::fs::write(workspace.path.join(".shoal.toml"), config).unwrap();
+    let caller = Caller::of_space(workspace.id.clone());
+    let refused = manager
+        .open_viewer(&demo, Some(&caller))
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(Reason::of(&refused), Some(Reason::NotReady), "{refused:#}");
+    let viewer = manager.running_viewer(&demo.execution_id).await.unwrap();
+    assert!(
+        viewer.is_none(),
+        "the viewer started without its port's approval"
+    );
+}
+
+#[tokio::test]
+async fn a_demo_whose_execution_is_completing_starts_no_viewer() {
+    let (temp, manager) = manager().await;
+    let (_, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
+    let stopping = crate::daemon::executions::Completing::StoppingSurvivors;
+    manager
+        .executions
+        .set_completing(&demo.execution_id, stopping);
+    let refused = manager.open_viewer(&demo, None).await.err().unwrap();
+    assert_eq!(Reason::of(&refused), Some(Reason::NotReady), "{refused:#}");
+    let viewer = manager.running_viewer(&demo.execution_id).await.unwrap();
+    assert!(viewer.is_none(), "a viewer started for an ending demo");
 }
 
 #[tokio::test]
@@ -300,7 +346,7 @@ async fn a_viewer_that_exits_fails_the_open_with_what_it_printed() {
     let (temp, manager) = manager().await;
     let viewer = ["sh", "-c", "echo 'no device {udid}' >&2; exit 3"];
     let (_, demo) = running(&manager, temp.path(), Some(&viewer)).await;
-    let refused = manager.open_viewer(&demo).await.err().unwrap();
+    let refused = manager.open_viewer(&demo, None).await.err().unwrap();
     assert_eq!(Reason::of(&refused), Some(Reason::NotReady));
     assert!(
         refused.to_string().contains("no device UDID-1"),
@@ -313,7 +359,7 @@ async fn a_demo_whose_viewer_is_off_is_refused_one() {
     let (temp, manager) = manager().await;
     let (_, demo) = running(&manager, temp.path(), None).await;
     assert!(demo.viewer.is_none());
-    let refused = manager.open_viewer(&demo).await.err().unwrap();
+    let refused = manager.open_viewer(&demo, None).await.err().unwrap();
     assert_eq!(Reason::of(&refused), Some(Reason::NotReady));
 }
 
