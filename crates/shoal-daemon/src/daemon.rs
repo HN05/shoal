@@ -390,6 +390,13 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     startup.step("learning forge hosts", hosts).await?;
     let audit = manager.audit_worktrees();
     startup.step("auditing worktrees", audit).await?;
+    // Before requests, so no surviving start worker finds its readings held.
+    let recovery_starts = manager.return_recovery_starts();
+    (startup.step(
+        "requeueing restores admitted on old readings",
+        recovery_starts,
+    ))
+    .await?;
     let removals = manager.restore_interrupted_removals();
     if let Err(error) = startup
         .step("restoring files of interrupted removals", removals)

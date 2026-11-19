@@ -27,9 +27,6 @@ pub(super) async fn run(manager: Arc<Manager>) {
     if let Err(error) = manager.refresh_starting_entries().await {
         log!("agent queue: {error:#}");
     }
-    if let Err(error) = manager.return_recovery_starts().await {
-        log!("agent queue: {error:#}");
-    }
     let mut changed = manager.store.watch_changes();
     let mut config = manager.config_state.watch();
     // Restores wait for sustained healthy readings.
