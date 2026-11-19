@@ -45,14 +45,16 @@ pub(super) async fn send(
     let message = message_text(message, body_file, !attach.is_empty())?;
     let attachments = attachments(&attach)?;
     let to = target(ctx, recipients).await?;
-    let sent = alerts::send(&ctx.paths, to, message, attachments).await?;
+    let from = super::alerts::sending_space(ctx).await?;
+    let sent = alerts::send(&ctx.paths, to, from, message, attachments).await?;
     show_sent(ctx, &sent)
 }
 
-/// Where `recipients` sends: a scoped process without a space sends up.
+/// Where `recipients` sends: a process in a space of its own sends up
+/// without a space.
 async fn target(ctx: &Context, recipients: Recipients) -> Result<AlertTarget> {
     Ok(match recipients {
-        Recipients::Space(None) if crate::env::is_scoped() => AlertTarget::Up,
+        Recipients::Space(None) if super::alerts::in_own_space() => AlertTarget::Up,
         Recipients::Space(space) => AlertTarget::Space {
             space: ui::select_space(ctx, space, Fallback::CurrentDirectory).await?,
         },

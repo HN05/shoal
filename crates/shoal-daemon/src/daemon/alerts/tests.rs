@@ -177,11 +177,12 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
     // tells which by its scope.
     for mut method in [
         AlertMethod::SendAlert {
+            from: None,
             to: crate::protocol::AlertTarget::Up,
             message: "hello".into(),
             attachments: Vec::new(),
         },
-        AlertMethod::WithdrawAlert { id: 1 },
+        AlertMethod::WithdrawAlert { id: 1, from: None },
     ] {
         assert!(
             scope::authorize(&manager, Some(&"scope".into()), &mut method)

@@ -27,13 +27,23 @@ pub enum AlertMethod {
     /// An alert from the caller, answered with where it went.
     SendAlert {
         to: AlertTarget,
+        /// The space the user acts as, as a session in it that Shoal did not
+        /// start does; a scoped caller always acts as its own.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        from: Option<SpaceSelector>,
         message: String,
         /// Files to send with it by absolute path, which the daemon copies.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<crate::files::NewFile>,
     },
     /// Delete the unread alert `id` the caller sent.
-    WithdrawAlert { id: i64 },
+    WithdrawAlert {
+        id: i64,
+        /// The space the user acts as, as a session in it that Shoal did not
+        /// start does; a scoped caller always acts as its own.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        from: Option<SpaceSelector>,
+    },
 }
 
 impl AlertMethod {

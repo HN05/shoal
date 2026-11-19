@@ -1044,6 +1044,7 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
             assert_eq!(authorized.is_ok(), allowed, "{} {method:?}", workspace.name);
         }
         let mut alert = crate::protocol::AlertMethod::SendAlert {
+            from: None,
             to: crate::protocol::AlertTarget::Space { space: name() },
             message: "Rebase onto main".into(),
             attachments: Vec::new(),

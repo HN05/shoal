@@ -201,6 +201,7 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
     }
     // A process sends its own space's agent nothing: its alerts go up.
     let mut method = AlertMethod::SendAlert {
+        from: None,
         to: AlertTarget::Space {
             space: SpaceSelector::id(&workspace.id),
         },
@@ -413,6 +414,7 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
         (None, true),
     ] {
         let mut method = AlertMethod::SendAlert {
+            from: None,
             to: AlertTarget::All {
                 repository: repository.cloned().map(Into::into),
             },

@@ -324,6 +324,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
         .await
         .unwrap();
     let message = || AlertMethod::SendAlert {
+        from: None,
         to: AlertTarget::Space {
             space: SpaceSelector::id(&user.id),
         },
@@ -336,6 +337,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
         .await
         .unwrap();
     let AlertMethod::SendAlert {
+        from: None,
         to: AlertTarget::Space { space },
         ..
     } = method

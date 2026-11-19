@@ -37,6 +37,7 @@ pub(super) async fn handle(
         }
         AlertMethod::SendAlert {
             to,
+            from,
             message,
             attachments,
         } => {
@@ -46,19 +47,40 @@ pub(super) async fn handle(
             if let AlertTarget::Space { space } = &to {
                 manager.record_user_interaction(caller, space).await;
             }
-            let sent = manager.send_alert(caller, to, message, attachments).await?;
+            let acting = acting(manager, caller, from).await?;
+            let sent = (manager.send_alert(acting.as_ref(), to, message, attachments)).await?;
             if to_all {
                 manager.record_users_message(caller, &sent.reached).await;
             }
             Body::Sent(sent)
         }
-        AlertMethod::WithdrawAlert { id } => Body::Alert(manager.withdraw_alert(caller, id).await?),
+        AlertMethod::WithdrawAlert { id, from } => {
+            let acting = acting(manager, caller, from).await?;
+            Body::Alert(manager.withdraw_alert(acting.as_ref(), id).await?)
+        }
         AlertMethod::MarkAlertsRead { ids } => {
             manager.mark_alerts_read(caller, ids).await?;
             Body::Ok
         }
         AlertMethod::ClearAlerts => Body::Cleared(manager.notifications.clear().await?),
     }))
+}
+
+/// Who sends or withdraws an alert: a scoped caller, or the user acting as
+/// the space `from` names, as a session in it that Shoal did not start does,
+/// or else the user.
+async fn acting(
+    manager: &Manager,
+    caller: Option<&Caller>,
+    from: Option<SpaceSelector>,
+) -> Result<Option<Caller>> {
+    if let Some(caller) = caller {
+        return Ok(Some(caller.clone()));
+    }
+    let Some(from) = from else {
+        return Ok(None);
+    };
+    Ok(Some(Caller::of_space(manager.space(&from).await?.id)))
 }
 
 /// Reading, clearing and watching the user's alerts is the `notifications`
@@ -71,6 +93,11 @@ impl Scoped for AlertMethod {
         manager: &Manager,
         caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
+        // A scoped caller sends and withdraws as its own space.
+        if let AlertMethod::SendAlert { from, .. } | AlertMethod::WithdrawAlert { from, .. } = self
+        {
+            *from = None;
+        }
         Ok(match self {
             AlertMethod::ListAlerts {
                 to: AlertsFor::Space { space },

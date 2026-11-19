@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use tokio::{io::BufReader, net::UnixStream};
 
 use crate::connection::{Daemon, open_buffered, pages, reconnect, request, stream_closed};
+use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     files::NewFile,
     protocol::{self, AlertMethod, AlertTarget, AlertsFor, Response},
@@ -38,24 +39,28 @@ pub async fn clear(daemon: &impl Daemon) -> Result<Cleared> {
     request(daemon, AlertMethod::ClearAlerts).await
 }
 
-/// Send `message` with `attachments` to `to`.
+/// Send `message` with `attachments` to `to`, as the space `from` names
+/// when the user acts as one.
 pub async fn send(
     daemon: &impl Daemon,
     to: AlertTarget,
+    from: Option<SpaceSelector>,
     message: String,
     attachments: Vec<NewFile>,
 ) -> Result<Sent> {
     let method = AlertMethod::SendAlert {
         to,
+        from,
         message,
         attachments,
     };
     request(daemon, method).await
 }
 
-/// Take back the unread alert `id` the caller sent.
-pub async fn withdraw(daemon: &impl Daemon, id: i64) -> Result<Alert> {
-    request(daemon, AlertMethod::WithdrawAlert { id }).await
+/// Take back the unread alert `id` the caller sent, or the space `from`
+/// names when the user acts as one.
+pub async fn withdraw(daemon: &impl Daemon, id: i64, from: Option<SpaceSelector>) -> Result<Alert> {
+    request(daemon, AlertMethod::WithdrawAlert { id, from }).await
 }
 
 /// The user's alerts the daemon records, as it records them, after the one

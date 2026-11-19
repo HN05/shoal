@@ -24,6 +24,7 @@ use crate::{
 use shoal_protocol::{
     alerts::{Alert, Sender},
     protocol::AlertsFor,
+    space_names::SpaceSelector,
 };
 
 pub(super) mod delivery;
@@ -77,7 +78,7 @@ async fn listing(ctx: &Context, args: &AlertListArgs) -> Result<Listing> {
             marks_read: true,
         });
     }
-    let to = match crate::env::is_scoped() {
+    let to = match in_own_space() {
         true => AlertsFor::Space {
             space: delivery::own_space(ctx).await?,
         },
@@ -90,6 +91,21 @@ async fn listing(ctx: &Context, args: &AlertListArgs) -> Result<Listing> {
         to,
         marks_read: true,
     })
+}
+
+/// Whether this process acts in a space of its own, a scoped one or its
+/// chat's agent, whose alerts are its own and whose sends go up.
+pub(super) fn in_own_space() -> bool {
+    crate::env::is_scoped() || crate::env::own_chat().is_some()
+}
+
+/// The space this process sends and withdraws alerts as, which the daemon
+/// takes from a scoped caller's scope; none for the user.
+pub(super) async fn sending_space(ctx: &Context) -> Result<Option<SpaceSelector>> {
+    match in_own_space() {
+        true => Ok(Some(delivery::own_space(ctx).await?)),
+        false => Ok(None),
+    }
 }
 
 /// Print `shown`, or that there are none.
@@ -147,7 +163,8 @@ fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
 }
 
 pub(super) async fn withdraw(ctx: &Context, id: i64) -> Result<i32> {
-    let withdrawn = alerts::withdraw(&ctx.paths, id).await?;
+    let from = sending_space(ctx).await?;
+    let withdrawn = alerts::withdraw(&ctx.paths, id, from).await?;
     ctx.emit(
         &format!("Withdrew alert {id}: {}", withdrawn.message),
         &withdrawn,

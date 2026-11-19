@@ -123,7 +123,8 @@ pub(in crate::cli::commands) async fn request_name(
         space.number
     );
     let to = shoal_protocol::protocol::AlertTarget::Space { space: selector };
-    crate::client::alerts::send(&ctx.paths, to, NAME_REQUEST.into(), Vec::new()).await?;
+    let request = NAME_REQUEST.into();
+    crate::client::alerts::send(&ctx.paths, to, None, request, Vec::new()).await?;
     ctx.emit("Asked the space's agent to choose its name.", ())?;
     Ok(0)
 }
