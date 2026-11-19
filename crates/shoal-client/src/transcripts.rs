@@ -171,7 +171,7 @@ impl<D: Daemon> SessionFollow<D> {
             }
             Body::SessionBytes(gained) => {
                 let bytes = gained.bytes()?;
-                let unread = self.cursor.take(&gained.file, gained.offset, bytes);
+                let unread = (self.cursor).take(&gained.file, gained.offset, gained.size, bytes);
                 Ok(unread.map(|(offset, bytes)| Followed::Bytes {
                     file: gained.file,
                     offset,
@@ -232,11 +232,21 @@ impl Cursor {
         from
     }
 
-    /// What of `bytes`, of `file` from `offset`, the follow has not read,
-    /// from its offset, keeping where it read `file` to; none once it read
-    /// them all before.
-    fn take(&mut self, file: &Path, offset: u64, bytes: Vec<u8>) -> Option<(u64, Vec<u8>)> {
+    /// What of `bytes`, of `file` from `offset`, the file then `size` long,
+    /// the follow has not read, from its offset, keeping where it read
+    /// `file` to; none once it read them all before. A file sent again that
+    /// is shorter than it read it to was written anew, so it comes whole.
+    fn take(
+        &mut self,
+        file: &Path,
+        offset: u64,
+        size: u64,
+        bytes: Vec<u8>,
+    ) -> Option<(u64, Vec<u8>)> {
         let end = offset + bytes.len() as u64;
+        if self.replaying.get(file).is_some_and(|read| size < *read) {
+            self.replaying.remove(file);
+        }
         let (offset, bytes) = match self.replaying.get(file).copied() {
             Some(read) if end <= read => {
                 if end == read {

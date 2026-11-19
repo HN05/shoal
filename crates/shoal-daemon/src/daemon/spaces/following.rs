@@ -295,7 +295,11 @@ async fn send_file_gained(
         let offset = offsets.get(&file).copied().unwrap_or(0);
         let path = path.to_owned();
         let read = tokio::task::spawn_blocking(move || read_from(&path, offset));
-        let (offset, bytes) = match read.await.context("read a session file")? {
+        let Gained {
+            offset,
+            size,
+            bytes,
+        } = match read.await.context("read a session file")? {
             Ok(read) => read,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
             Err(error) => {
@@ -307,24 +311,38 @@ async fn send_file_gained(
         if bytes.is_empty() {
             return Ok(());
         }
-        let gained = SessionBytes::new(file.clone(), offset, &bytes);
+        let gained = SessionBytes::new(file.clone(), offset, size, &bytes);
         client.send(Body::SessionBytes(gained)).await?;
     }
 }
 
-/// The offset `path` is read from, `offset` unless the file shrank below
-/// it, as one its tool wrote again, then 0, and up to [`CHUNK`] bytes from
-/// there.
-fn read_from(path: &Path, offset: u64) -> std::io::Result<(u64, Vec<u8>)> {
+/// What a read of a session file gained.
+#[derive(Debug, PartialEq, Eq)]
+struct Gained {
+    /// Where its bytes start.
+    offset: u64,
+    /// The file's length when they were read.
+    size: u64,
+    bytes: Vec<u8>,
+}
+
+/// Up to [`CHUNK`] bytes of `path` from `offset`, or from 0 where the file
+/// shrank below it, as one its tool wrote again.
+fn read_from(path: &Path, offset: u64) -> std::io::Result<Gained> {
     let mut file = std::fs::File::open(path)?;
-    let offset = match file.metadata()?.len() < offset {
+    let size = file.metadata()?.len();
+    let offset = match size < offset {
         true => 0,
         false => offset,
     };
     file.seek(SeekFrom::Start(offset))?;
     let mut bytes = Vec::with_capacity(CHUNK);
     file.take(CHUNK as u64).read_to_end(&mut bytes)?;
-    Ok((offset, bytes))
+    Ok(Gained {
+        offset,
+        size,
+        bytes,
+    })
 }
 
 #[cfg(test)]

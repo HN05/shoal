@@ -2,15 +2,21 @@ use std::fs;
 
 use super::{Client, Stopped, read_from, send_file_gained};
 
+/// Where a read of `path` from `offset` starts and the bytes it gains.
+fn read(path: &std::path::Path, offset: u64) -> (u64, Vec<u8>) {
+    let gained = read_from(path, offset).unwrap();
+    (gained.offset, gained.bytes)
+}
+
 #[test]
 fn a_file_is_read_on_from_where_the_last_read_ended() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("session.jsonl");
     fs::write(&path, "first\n").unwrap();
-    assert_eq!(read_from(&path, 0).unwrap(), (0, b"first\n".to_vec()));
+    assert_eq!(read(&path, 0), (0, b"first\n".to_vec()));
     fs::write(&path, "first\nsecond\n").unwrap();
-    assert_eq!(read_from(&path, 6).unwrap(), (6, b"second\n".to_vec()));
-    assert_eq!(read_from(&path, 13).unwrap(), (13, Vec::new()));
+    assert_eq!(read(&path, 6), (6, b"second\n".to_vec()));
+    assert_eq!(read(&path, 13), (13, Vec::new()));
 }
 
 #[test]
@@ -18,7 +24,8 @@ fn a_file_that_shrank_is_read_again_from_its_start() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("session.jsonl");
     fs::write(&path, "new\n").unwrap();
-    assert_eq!(read_from(&path, 13).unwrap(), (0, b"new\n".to_vec()));
+    let gained = read_from(&path, 13).unwrap();
+    assert_eq!((gained.offset, gained.size), (0, 4));
 }
 
 #[test]
@@ -26,9 +33,9 @@ fn a_large_file_comes_a_chunk_at_a_time() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("session.jsonl");
     fs::write(&path, vec![b'x'; super::CHUNK + 1]).unwrap();
-    let (_, first) = read_from(&path, 0).unwrap();
+    let (_, first) = read(&path, 0);
     assert_eq!(first.len(), super::CHUNK);
-    let (offset, rest) = read_from(&path, first.len() as u64).unwrap();
+    let (offset, rest) = read(&path, first.len() as u64);
     assert_eq!((offset, rest.len()), (super::CHUNK as u64, 1));
 }
 
@@ -39,7 +46,7 @@ fn a_whole_chunk_of_a_file_with_the_longest_path_fits_in_a_frame() {
         transcripts::SessionBytes,
     };
     let path = "p".repeat(4096);
-    let bytes = SessionBytes::new(path.into(), u64::MAX, &[0xff; super::CHUNK]);
+    let bytes = SessionBytes::new(path.into(), u64::MAX, u64::MAX, &[0xff; super::CHUNK]);
     let frame = Response::new(u64::MAX, Body::SessionBytes(bytes));
     assert!(serde_json::to_vec(&frame).unwrap().len() < MAX_FRAME);
 }

@@ -82,16 +82,20 @@ pub struct SessionBytes {
     /// transcript or another file of the session.
     pub file: PathBuf,
     pub offset: u64,
+    /// The file's length when they were read, which tells a file its tool
+    /// wrote again, shorter, from one sent again from its start.
+    pub size: u64,
     /// The bytes, in standard base64.
     pub data: String,
 }
 
 impl SessionBytes {
-    pub fn new(file: PathBuf, offset: u64, bytes: &[u8]) -> Self {
+    pub fn new(file: PathBuf, offset: u64, size: u64, bytes: &[u8]) -> Self {
         use base64::Engine as _;
         Self {
             file,
             offset,
+            size,
             data: base64::engine::general_purpose::STANDARD.encode(bytes),
         }
     }

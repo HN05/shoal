@@ -17,7 +17,8 @@ fn file(number: usize) -> PathBuf {
 fn read(files: usize) -> Cursor {
     let mut cursor = Cursor::default();
     for number in 0..files {
-        cursor.take(&file(number), 0, vec![0; number + 1]);
+        let read = number as u64 + 1;
+        cursor.take(&file(number), 0, read, vec![0; number + 1]);
     }
     cursor
 }
@@ -43,10 +44,30 @@ fn what_the_daemon_sends_again_from_a_file_s_start_is_read_only_past_where_it_wa
     let left_out = file(0);
     assert!(!from.contains_key(&left_out));
     // The file left out comes again from its start, then grows.
-    assert_eq!(cursor.take(&left_out, 0, vec![0; 1]), None);
-    assert_eq!(cursor.take(&left_out, 1, vec![7; 2]), Some((1, vec![7; 2])));
+    assert_eq!(cursor.take(&left_out, 0, 3, vec![0; 1]), None);
+    assert_eq!(
+        cursor.take(&left_out, 1, 3, vec![7; 2]),
+        Some((1, vec![7; 2]))
+    );
     // One that was read to 2 and comes again with a byte more.
     let grown = file(1);
     assert!(!from.contains_key(&grown));
-    assert_eq!(cursor.take(&grown, 0, vec![9; 3]), Some((2, vec![9])));
+    assert_eq!(cursor.take(&grown, 0, 3, vec![9; 3]), Some((2, vec![9])));
+}
+
+#[test]
+fn a_file_left_out_that_its_tool_wrote_again_shorter_comes_whole() {
+    let mut cursor = read(2_000);
+    let from = cursor.resume();
+    let rewritten = file(99);
+    assert!(!from.contains_key(&rewritten));
+    // Read to 100 before, it is 50 bytes long now.
+    assert_eq!(
+        cursor.take(&rewritten, 0, 50, vec![5; 50]),
+        Some((0, vec![5; 50]))
+    );
+    assert_eq!(
+        cursor.take(&rewritten, 50, 51, vec![6]),
+        Some((50, vec![6]))
+    );
 }
