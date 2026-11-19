@@ -13,6 +13,9 @@ pub use super::placeholders::render;
 
 /// What a workspace's agent is told about its space.
 const WORKSPACE_FACTS: &str = include_str!("templates/facts/workspace.md");
+/// What the agent of a workspace at a commit, which has no branch to push,
+/// is told about its space.
+const COMMIT_WORKSPACE_FACTS: &str = include_str!("templates/facts/commit_workspace.md");
 /// What the agent of a chat in a repository's checkout is told about its
 /// space.
 const CHECKOUT_CHAT_FACTS: &str = include_str!("templates/facts/checkout_chat.md");
@@ -41,6 +44,7 @@ const REVIEW_BASE_MARKER: &str = "<!-- base -->\n";
 pub fn repeats_guidance(template: &str) -> bool {
     let openings = [
         WORKSPACE_FACTS,
+        COMMIT_WORKSPACE_FACTS,
         CHECKOUT_CHAT_FACTS,
         WORKSPACE_CHAT_FACTS,
         ROOT_CHAT_FACTS,
@@ -292,7 +296,10 @@ fn converts_to_workspace(place: Place<'_>, mode: &modes::Mode) -> bool {
 /// What the agent at `place` is told about its space, by the space's kind.
 fn facts(place: Place<'_>) -> &'static str {
     match place {
-        Place::Workspace { .. } => WORKSPACE_FACTS,
+        Place::Workspace { workspace, .. } => match workspace.head {
+            Head::Branch(_) => WORKSPACE_FACTS,
+            Head::Commit(_) => COMMIT_WORKSPACE_FACTS,
+        },
         Place::Chat { home, .. } => match home {
             ChatHome::Checkout(_) => CHECKOUT_CHAT_FACTS,
             ChatHome::Workspace(_) => WORKSPACE_CHAT_FACTS,
@@ -329,6 +336,7 @@ impl Fields {
                         .map(ToString::to_string)
                         .unwrap_or_default(),
                 ),
+                ("{head}", head_label(workspace)),
                 ("{path}", workspace.path.to_string_lossy().into_owned()),
                 ("{updates}", delivery.description().to_owned()),
             ],
@@ -380,7 +388,8 @@ impl Fields {
     }
 }
 
-/// What `workspace` has checked out, as a chat's text names it.
+/// What `workspace` has checked out, as its agent's text, or that of a
+/// chat in its worktree, names it.
 fn head_label(workspace: &Workspace) -> String {
     match &workspace.head {
         Head::Branch(branch) => format!("on branch {branch}"),

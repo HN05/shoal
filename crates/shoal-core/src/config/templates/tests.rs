@@ -162,6 +162,32 @@ fn a_chat_in_a_workspace_selects_it_by_number() {
 }
 
 #[test]
+fn the_agent_of_a_workspace_at_a_commit_is_told_it_has_no_branch() {
+    let settings = settings("[rules.worker]\ntext = 'Check out {head}.'\n");
+    let mut workspace = workspace();
+    workspace.head = crate::model::Head::Commit(crate::model::StartingCommit {
+        commit: "3f2a9c1".repeat(6).into(),
+        made_for: Some(crate::model::MadeFor::Pr(
+            crate::forge::numbers::PullNumber::new(8),
+        )),
+    });
+    let place = Place::Workspace {
+        workspace: &workspace,
+        delivery: Delivery::Pushed,
+    };
+    let system = brief(&settings, &"worker".into(), place, None)
+        .unwrap()
+        .system;
+    let opening = "workspace topic at commit 3f2a9c1 (PR #8) at /work/topic.";
+    assert!(system.contains(opening), "{system}");
+    assert!(system.contains("cannot push"), "{system}");
+    assert!(
+        system.contains("Check out at commit 3f2a9c1 (PR #8)."),
+        "{system}"
+    );
+}
+
+#[test]
 fn built_in_modes_carry_the_work_rule_until_a_mode_leaves_it_out() {
     let place = worker(Delivery::Watched);
     let system = |config: &str| {

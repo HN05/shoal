@@ -498,8 +498,9 @@ blank line between nonempty texts, and the local config's wins over the
 worktree's; an empty repository value suppresses the repository's additions,
 and an empty global value suppresses the built-in text. Texts are read at
 launch. Rules and instructions may use `{workspace}`, `{branch}` and `{path}` of
-the space, `{repo}` and `{head}` for a chat, `{workspace_number}` for a chat in
-a workspace's worktree, `{updates}`, how the agent receives issue and PR
+the space, `{head}`, what a workspace has checked out (`on branch fix` or `at
+commit 3f2a9c1 (PR #8)`), `{repo}` for a chat, `{workspace_number}` for a chat
+in a workspace's worktree, `{updates}`, how the agent receives issue and PR
 activity, `{issue.number}`, `{issue.title}` and `{issue.url}` of the subject's
 issue, and `{relabel}`, the sentence that swaps the `[issue]` `plan_label` for
 `planned_label`; unknown placeholders stay literal.
