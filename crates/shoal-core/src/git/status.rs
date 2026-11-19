@@ -258,8 +258,9 @@ pub async fn unkept_commits_by(
     Ok(run(repo, &args).await?.trim().parse()?)
 }
 
-/// Whether `target` already has `rev`'s changes: it is an ancestor, a
-/// trial merge of it leaves the target's tree unchanged (squash merges), or every
+/// Whether `target` already has `rev`'s changes: it is an ancestor, or
+/// shares history with the target and a trial merge of it leaves the
+/// target's tree unchanged (squash merges), or every
 /// commit since the fork point, none of them a merge, has an equivalent patch
 /// on it (rebase merges).
 ///
@@ -289,6 +290,11 @@ pub async fn merged_into(repo: &Path, rev: &str, target: &str) -> Result<bool> {
 async fn target_has_changes(repo: &Path, head: &str, target: &str) -> Result<bool> {
     if super::is_ancestor(repo, head, target, super::command).await? {
         return Ok(true);
+    }
+    // Without a merge base there is nothing to merge: an unrelated history
+    // brings changes of its own.
+    if !super::predicates::share_history(repo, head, target).await? {
+        return Ok(false);
     }
     let target_tree = super::revision(repo, &format!("{target}^{{tree}}"), run).await?;
     let merged = super::merge_tree::merged_tree(repo, target, head)

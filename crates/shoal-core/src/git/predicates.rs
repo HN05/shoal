@@ -26,6 +26,14 @@ pub async fn is_ancestor(
     predicate(command, 1, None).await
 }
 
+/// Whether `one` and `other` share any history, so a merge of them has a
+/// base; an orphan branch, such as a site's, shares none.
+pub(crate) async fn share_history(repo: &Path, one: &str, other: &str) -> Result<bool> {
+    let mut command = super::command(repo);
+    command.args(["merge-base", one, other]);
+    predicate(command, 1, None).await
+}
+
 /// Whether an exact ref exists, without resolving its target object. Callers
 /// pass full ref names, not revision expressions.
 pub async fn ref_exists(repo: &Path, reference: &str) -> Result<bool> {

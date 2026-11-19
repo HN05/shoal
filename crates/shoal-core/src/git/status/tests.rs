@@ -82,6 +82,16 @@ async fn status_leaves_a_stale_index_unwritten() {
 }
 
 #[tokio::test]
+async fn an_unrelated_history_is_not_merged() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    git(&repo, &["checkout", "-q", "--orphan", "pages"]);
+    fs::write(repo.join("index.html"), "site\n").unwrap();
+    commit(&repo, "index.html");
+    assert!(!super::merged_into(&repo, "pages", "main").await.unwrap());
+}
+
+#[tokio::test]
 async fn merged_into_sees_merges_squashes_and_rebases() {
     let root = tempfile::tempdir().unwrap();
     let repo = repository(root.path(), "repo");
