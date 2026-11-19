@@ -408,18 +408,28 @@ impl Manager {
             let (space_id, preparation) = self
                 .prepare_execution(selector, &record, caller, merge.clone())
                 .await?;
-            match self.register_execution(&space_id, record.clone()).await {
-                Err(error) if error.is::<Reserved>() && record.waits_out_reservations() => {
-                    // The operation may need the gates the preparation holds.
-                    drop(preparation);
-                    self.await_reservation_end(&space_id).await?;
-                }
-                Err(error) if error.is::<Reserved>() => {
-                    return Err(Refusal::wrap(Reason::NotReady, error));
-                }
-                registered => return Ok((space_id, preparation, registered?)),
+            let error = match self.register_execution(&space_id, record.clone()).await {
+                Ok(registered) => return Ok((space_id, preparation, registered)),
+                Err(error) => error,
+            };
+            if !self.reservation_refused(&error, &space_id).await? {
+                return Err(error);
             }
+            if !record.waits_out_reservations() {
+                return Err(Refusal::wrap(Reason::NotReady, error));
+            }
+            // The operation may need the gates the preparation holds.
+            drop(preparation);
+            self.await_reservation_end(&space_id).await?;
         }
+    }
+
+    /// Whether a lifecycle operation that passes refused the registration
+    /// in `space_id` that failed with `error`: one its transaction found, or
+    /// one that began after the start's first look, which may have left the
+    /// worktree unverifiable meanwhile.
+    async fn reservation_refused(&self, error: &anyhow::Error, space_id: &SpaceId) -> Result<bool> {
+        Ok(error.is::<Reserved>() || self.reservation_holds(space_id).await?)
     }
 
     /// Record `record` as an execution of the space `space_id`, with what

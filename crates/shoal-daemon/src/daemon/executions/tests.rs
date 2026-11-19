@@ -787,6 +787,9 @@ async fn command_started_during(
             (manager.begin_execution(id.as_str(), None, ExecutionKind::Command, None)).await
         })
     };
+    // The start subscribes and queues its read of the state in one poll,
+    // and the store runs its operations in order, so what the caller writes
+    // next comes after that read, which finds `held`.
     bounded(async {
         while manager.store.change_watchers() == watchers && !start.is_finished() {
             tokio::task::yield_now().await;
@@ -863,5 +866,26 @@ async fn an_agent_registering_during_an_update_is_refused_instead_of_waiting() {
         reason,
         Some(crate::refusal::Reason::NotReady),
         "{refused:#}"
+    );
+}
+
+#[tokio::test]
+async fn a_registration_failing_while_an_operation_that_passes_holds_it_waits() {
+    let (_root, manager, workspace) = fixture("exit 0").await;
+    let failed = || anyhow::anyhow!("workspace directory is missing");
+    assert!(
+        !(manager.reservation_refused(&failed(), &workspace.id))
+            .await
+            .unwrap()
+    );
+    // As when a move reserves the workspace after the start's first look.
+    manager
+        .reserve_lifecycle(&workspace.id, WorkspaceState::Reconciling)
+        .await
+        .unwrap();
+    assert!(
+        (manager.reservation_refused(&failed(), &workspace.id))
+            .await
+            .unwrap()
     );
 }
