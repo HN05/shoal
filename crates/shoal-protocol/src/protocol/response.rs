@@ -104,6 +104,9 @@ shoal_states::open_enum! {
         /// through the hub now, or its answer broke off, as while it or the
         /// hub restarts.
         MachineUnreachable => "machine_unreachable",
+        /// A write or deletion of an app's entry names a revision the entry
+        /// is no longer at: another one changed it since its writer read it.
+        StaleRevision => "stale_revision",
     }
 }
 
@@ -125,6 +128,7 @@ impl ErrorCode {
                 | Self::PushFailed
                 | Self::NotImported
                 | Self::MachineUnreachable
+                | Self::StaleRevision
         )
     }
 }
@@ -221,6 +225,9 @@ response_bodies! {
     HubView(Vec<crate::hub::directory::ViewPart>),
     Queued(crate::hub::routing::Queued),
     AppConfig(Option<toml::Table>),
+    AppEntryPieces(Vec<crate::apps::store::EntryPiece>),
+    AppEntries(Vec<crate::apps::store::Entry>),
+    AppEntry(crate::apps::store::Entry),
     ScopeToken(crate::scope_tokens::ScopeToken),
     Granted(Option<crate::scope_tokens::ScopeToken>),
     Branches(Vec<crate::model::Branch>),
@@ -415,6 +422,8 @@ paged_bodies!(
     SimHistory,
     Records,
     HubView,
+    AppEntryPieces,
+    AppEntries,
 );
 
 impl TryFrom<Body> for () {

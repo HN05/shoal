@@ -53,6 +53,7 @@ pub struct Machine {
     pub simulators: crate::sim::SimConfig,
     pub webhooks: Webhooks,
     pub hub: Hub,
+    pub app_store: AppStore,
     pub containers: Containers,
     /// The options of `[machine]` that take another's value.
     #[serde(skip)]
@@ -124,6 +125,52 @@ impl Machine {
         let [machine] = layers;
         *self = machine;
         Ok(())
+    }
+}
+
+/// `[machine.app_store]`: how much the entries of apps this daemon keeps
+/// may hold, each and in all for one app.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct AppStore {
+    /// The most bytes one entry holds, in MiB.
+    pub max_entry_mib: u64,
+    /// The most bytes all of one app's entries hold, in MiB.
+    pub max_app_mib: u64,
+}
+
+impl AppStore {
+    /// The largest entry the hub's link carries whole.
+    const MOST_ENTRY_MIB: u64 = 128;
+
+    pub fn max_entry_bytes(&self) -> u64 {
+        self.max_entry_mib << 20
+    }
+
+    pub fn max_app_bytes(&self) -> u64 {
+        self.max_app_mib << 20
+    }
+
+    pub(crate) fn validate(&self) -> Result<()> {
+        anyhow::ensure!(
+            (1..=Self::MOST_ENTRY_MIB).contains(&self.max_entry_mib),
+            "machine.app_store.max_entry_mib must be between 1 and {}",
+            Self::MOST_ENTRY_MIB
+        );
+        anyhow::ensure!(
+            self.max_app_mib >= self.max_entry_mib,
+            "machine.app_store.max_app_mib must be at least max_entry_mib"
+        );
+        Ok(())
+    }
+}
+
+impl Default for AppStore {
+    fn default() -> Self {
+        Self {
+            max_entry_mib: 16,
+            max_app_mib: 256,
+        }
     }
 }
 

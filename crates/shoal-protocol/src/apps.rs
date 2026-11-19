@@ -1,9 +1,12 @@
 //! Apps built on Shoal, such as Quay: the settings the user gives each in
-//! its `[apps.<name>]` config tables, which Shoal hands it unread.
+//! its `[apps.<name>]` config tables, which Shoal hands it unread, and what
+//! it keeps in the app store.
 use std::{fmt, str::FromStr};
 
 use anyhow::{Result, ensure};
 use shoal_states::text_key;
+
+pub mod store;
 
 /// The name an app goes by in Shoal: its `[apps.<name>]` table's. At most
 /// [`AppName::MAX`] bytes of printable text without a `/`.

@@ -86,7 +86,11 @@ impl Operation {
                 | Self::Secret(SecretMethod::SecretCatalog { .. })
                 | Self::Trigger(TriggerMethod::ListTriggers { .. })
                 | Self::Hub(HubMethod::HubMembers | HubMethod::HubDirectory)
-                | Self::App(AppMethod::ReadAppConfig { .. })
+                | Self::App(
+                    AppMethod::ReadAppConfig { .. }
+                        | AppMethod::ReadAppEntry { .. }
+                        | AppMethod::ListAppEntries { .. }
+                )
                 | Self::Container(
                     ContainerMethod::ContainerCatalog { .. }
                         | ContainerMethod::ContainerOverview { .. }

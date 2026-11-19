@@ -834,6 +834,23 @@ CREATE TABLE agent_restarts (
     begun INTEGER NOT NULL DEFAULT 0 CHECK(begun IN (0,1))
 );
 
+CREATE TABLE app_entries (
+    app TEXT NOT NULL,
+    scope TEXT NOT NULL CHECK(scope IN ('shared', 'device')),
+    device TEXT NOT NULL DEFAULT '' CHECK(scope = 'device' OR device = ''),
+    key TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    bytes BLOB NOT NULL,
+    revision INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(app, scope, device, key)
+);
+
+CREATE TABLE app_revisions (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    revision INTEGER NOT NULL
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -965,6 +982,8 @@ INSERT INTO "sqlite_sequence" VALUES ('questions', 0);
 INSERT INTO "sqlite_sequence" VALUES ('notifications', 0);
 
 INSERT INTO "journal_pruned" VALUES (0);
+
+INSERT INTO "app_revisions" VALUES (1, 0);
 
 CREATE TRIGGER simulator_owner_insert
 BEFORE INSERT ON simulators

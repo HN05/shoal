@@ -304,6 +304,21 @@ on this machine waits for a coordinator whose machine is offline before it
 passes to the next space above with an agent on a connected machine, or to
 you.
 
+### App store
+
+```toml
+[machine.app_store]
+max_entry_mib = 16    # The default; at most 128
+max_app_mib = 256     # The default
+```
+
+The limits of the [app store](../../../../../../docs/reference.md#apps) this
+daemon keeps: how many MiB one entry holds, and how many all of one app's
+entries hold together, shared ones and every machine's or device's own. A write
+past either is refused before its bytes are sent. A machine that joined a hub
+keeps only its own entries; the hub's limits govern the shared ones and its
+devices'.
+
 ### Container runtime
 
 ```toml
@@ -1192,4 +1207,5 @@ repository in the global config. Shoal checks only that it is a TOML table: it
 layers each one as it layers its own options, a table merging key by key with
 the one below it and any other value replacing what is below, and hands the
 result to the app, which reads it for a space, a repository or the global
-config alone. See [apps](../../../../../../docs/reference.md#apps).
+config alone. It is configuration you edit, apart from the app store, which
+the app writes. See [apps](../../../../../../docs/reference.md#apps).

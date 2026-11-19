@@ -313,6 +313,7 @@ impl Config {
         machine.simulators.validate()?;
         machine.git_profiles.validate()?;
         machine.forges.validate()?;
+        machine.app_store.validate()?;
         for name in [&repository.git_profile, &repository.agent.git_profile]
             .into_iter()
             .flatten()

@@ -22,6 +22,9 @@ pub enum Reason {
     /// The other joined machine a request goes to cannot be reached through
     /// the hub now, or its answer broke off.
     MachineUnreachable,
+    /// A write or deletion of an app's entry names a revision the entry is
+    /// no longer at.
+    StaleRevision,
 }
 
 #[derive(Debug)]
@@ -120,6 +123,7 @@ impl Reason {
             Self::UnsavedWork => ErrorCode::UnsavedWork,
             Self::NotImported => ErrorCode::NotImported,
             Self::MachineUnreachable => ErrorCode::MachineUnreachable,
+            Self::StaleRevision => ErrorCode::StaleRevision,
         }
     }
 

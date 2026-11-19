@@ -756,7 +756,20 @@ stays awake as one in your terminal does.
 `apps::config` reads the app's own settings, its
 [`[apps.<name>]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#apps)
 table, as every layer resolves it for a space, a repository or the global
-config alone; Shoal never reads it. Without a scope token the caller is the user; with one, it is
+config alone; Shoal never reads it.
+What an app writes itself, such as its layouts or exports, goes in the app
+store, under keys of its own such as `layout/main`: `apps::write`, `read`,
+`list` and `delete` keep each entry as bytes with a content type, its
+settings as `application/json`, either shared across your machines and
+devices or one device's own. Shoal never reads an entry's bytes, and keeps
+them in its state directory, reached only through the protocol. Each change
+gives an entry a new revision; a write or deletion names the revision it
+replaces, none for a new entry, and is refused with `stale_revision`, which
+`apps::stale` tells, once another change took the entry past it, so two
+devices never overwrite each other unseen. An entry and each app's entries in
+all are held to the
+[`[machine.app_store]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#app-store)
+limits. Without a scope token the caller is the user; with one, it is
 that workspace's agent, under the rules of its `shoal` commands, reading the
 config of its own repository and of the spaces its scope reaches. The library
 speaks only its own release's protocol: a daemon of another release refuses
