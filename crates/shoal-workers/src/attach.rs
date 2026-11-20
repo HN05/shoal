@@ -35,7 +35,7 @@ pub trait Attaching: Resuming {
     /// What starts a stopped agent the attach resumes.
     fn starter(&self) -> Starter;
 
-    /// Tell the user that the queued restore `entry` starts.
+    /// Tell the user that the queued restore or launch `entry` starts.
     fn resuming(&self, entry: &QueueEntry) -> Result<()>;
 }
 

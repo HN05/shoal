@@ -23,6 +23,7 @@ use crate::{
     execution::recovery::{SavedCommand, SavedSession},
     model::{Chat, QueueEntry, Space, Spaces},
     sessions::Origin,
+    state::QueueKind,
     terminal::Session,
 };
 use shoal_protocol::{
@@ -108,7 +109,11 @@ impl Attaching for Callbacks<'_> {
     }
 
     fn resuming(&self, entry: &QueueEntry) -> Result<()> {
-        self.0.emit(&format!("Resuming {}", entry.name), entry)
+        let starts = match entry.kind {
+            QueueKind::Launch => "Starting",
+            QueueKind::Restore | QueueKind::Job => "Resuming",
+        };
+        self.0.emit(&format!("{starts} {}", entry.name), entry)
     }
 }
 

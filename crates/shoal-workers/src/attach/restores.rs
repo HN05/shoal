@@ -23,26 +23,35 @@ impl<A: Attaching> Steps<'_, A> {
     /// session, where its wrapper waits; `false` when no restore of it
     /// waits in the queue.
     pub async fn resume_stopped(&self, execution: &ExecutionId) -> Result<bool> {
-        self.resume_restore(|entry| entry.execution.as_ref() == Some(execution))
-            .await
+        self.resume_queued(|entry| {
+            entry.kind == QueueKind::Restore && entry.execution.as_ref() == Some(execution)
+        })
+        .await
     }
 
     /// Start the queued restore of an agent of the space `space`, as
-    /// [`Self::resume_stopped`] does; `false` when none waits in the queue.
+    /// [`Self::resume_stopped`] does, or wait for the agent a launch starts
+    /// there, as one a start that attaches to it at once asked to start
+    /// now; `false` when neither waits in the queue.
     pub async fn resume_space(&self, space: &SpaceId) -> Result<bool> {
-        self.resume_restore(|entry| entry.space() == Some(space))
-            .await
+        self.resume_queued(|entry| {
+            let starts = match entry.kind {
+                QueueKind::Restore => true,
+                QueueKind::Launch => entry.state == QueueState::Starting,
+                QueueKind::Job => false,
+            };
+            starts && entry.space() == Some(space)
+        })
+        .await
     }
 
-    /// Start the first queued restore that `restores` picks, unless it is
+    /// Start the first queued entry that `picks` picks, unless it is
     /// already starting, and wait until its agent runs in a session,
     /// failing at once when it leaves the queue without one; `false` when
     /// none waits.
-    async fn resume_restore(&self, restores: impl Fn(&QueueEntry) -> bool) -> Result<bool> {
+    async fn resume_queued(&self, picks: impl Fn(&QueueEntry) -> bool) -> Result<bool> {
         let entries = queue::entries(self.paths).await?;
-        let restore =
-            (entries.into_iter()).find(|entry| entry.kind == QueueKind::Restore && restores(entry));
-        let Some(restore) = restore else {
+        let Some(restore) = entries.into_iter().find(picks) else {
             return Ok(false);
         };
         let entry = match restore.state {

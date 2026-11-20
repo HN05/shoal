@@ -1805,7 +1805,8 @@ wakes an agent at once, whatever the agent limits and the queue's rank, and
 attaches once it runs: the session of an agent that sleeps shows only the stop
 while its wrapper waits, the pickers list that session as stopped, and
 attaching to it starts its restore there, as `shoal queue start --attach`
-does. Without a session showing an agent, attaching starts the restore an
+does. Without a session showing an agent, attaching waits for the agent a
+launch is starting there, starts the restore an
 asleep agent waits for, and without any session left it restores a stopped
 agent as `shoal resume --now` does, refusing, with the reason, one that
 restore does not start where a session can show it. Neither starts a second agent beside one whose wrapper waits. A session
