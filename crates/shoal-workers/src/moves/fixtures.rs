@@ -59,12 +59,15 @@ pub(super) async fn left_move(
     );
     packing.await.unwrap();
     let phase = match destination {
-        MoveDestination::Ssh(_) | MoveDestination::Client { .. } => MovePhase::Delivering,
+        MoveDestination::Ssh(_) | MoveDestination::Machine(_) | MoveDestination::Client { .. } => {
+            MovePhase::Delivering
+        }
         _ => MovePhase::Delivered,
     };
     let record = MoveRecord {
         space: workspace.id.clone(),
         destination,
+        ticket: shoal_ids::move_tickets::MoveTicket::generate(),
         carrying,
         unsaved,
         phase,

@@ -102,6 +102,7 @@ fn chat_import(repository: Option<&crate::model::Repository>, chat: RemovedSpace
         session_files: Vec::new(),
         copies: Default::default(),
         recorded: Default::default(),
+        ticket: None,
     }
 }
 

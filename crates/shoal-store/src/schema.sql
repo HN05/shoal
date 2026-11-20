@@ -908,20 +908,21 @@ CREATE TABLE thread_links (
     PRIMARY KEY(space_id, thread_id)
 );
 
-CREATE TABLE space_moves (
+CREATE TABLE hub_move_fences (
+    ticket TEXT PRIMARY KEY,
+    settled_at INTEGER NOT NULL
+);
+
+CREATE TABLE "space_moves" (
     space_id TEXT PRIMARY KEY REFERENCES spaces(id) ON DELETE CASCADE,
     destination TEXT NOT NULL,
+    ticket TEXT NOT NULL,
     carrying TEXT NOT NULL,
     unsaved TEXT NOT NULL,
     phase TEXT NOT NULL CHECK(phase IN ('packing','delivering','delivered')),
     checkpoints TEXT NOT NULL DEFAULT '{}',
     saved_before TEXT NOT NULL DEFAULT '{}',
     created_at INTEGER NOT NULL
-);
-
-CREATE TABLE hub_move_fences (
-    ticket TEXT PRIMARY KEY,
-    settled_at INTEGER NOT NULL
 );
 
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;

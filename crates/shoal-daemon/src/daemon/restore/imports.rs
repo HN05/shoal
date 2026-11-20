@@ -1,5 +1,6 @@
 //! Importing a space another Shoal exported: recording its removal record
 //! here as its kind needs, then restoring it as `shoal restore` does.
+use shoal_ids::move_tickets::MoveTicket;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::repository::Selector;
 use shoal_protocol::transcripts::CarriedSessionFile;
@@ -47,6 +48,9 @@ pub(crate) struct SpaceImport {
     /// has here, which stay its parent and the workspace a chat ran in
     /// though they open only after this import.
     pub(crate) recorded: BTreeSet<SpaceId>,
+    /// The ticket of the move through the hub that brings it, which its
+    /// claim carries; none for a copy, which takes an ID of its own.
+    pub(crate) ticket: Option<MoveTicket>,
 }
 
 impl Manager {
@@ -55,9 +59,7 @@ impl Manager {
     /// below its parent where that is here, a copy under an ID of its own.
     /// A failed restore leaves the record for `shoal restore`.
     pub(crate) async fn import_space(&self, import: SpaceImport) -> Result<RestoredSpace> {
-        let (removed, warnings) = (self.record_import(import))
-            .await
-            .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
+        let (removed, warnings) = self.record_import(import).await?;
         let id = removed.space_id;
         let mut restored = (self.reopen_space(&SpaceSelector::id(&id), None))
             .await
@@ -72,15 +74,30 @@ impl Manager {
     /// workspace's checkpoint fetched from its bundle or else on the
     /// default branch, and its agents' session files, and claim it at the
     /// hub, so it takes the ID over from the machine it moves from; with
-    /// the warnings of what it changed. An error leaves no record.
+    /// the warnings of what it changed. An error that says nothing was
+    /// imported leaves no record. A move through the hub claims it first,
+    /// since that claim makes the space this machine's: a refused claim
+    /// records nothing, and an error after it leaves the space here.
     pub(crate) async fn record_import(
         &self,
         import: SpaceImport,
     ) -> Result<(RemovedSpace, Vec<String>)> {
-        let recorded = self.record_package(import).await?;
-        // The machine it moves from keeps it until this import is done.
-        self.hub.claim_space(self, &recorded.0.space_id).await;
-        Ok(recorded)
+        let id = import.space.space_id.clone();
+        let Some(ticket) = import.ticket.clone() else {
+            let recorded = (self.record_package(import).await)
+                .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
+            // The machine it moves from keeps it until this import is done.
+            self.hub.claim_space(self, &id).await;
+            return Ok(recorded);
+        };
+        (self.hub.claim_moved(self, &id, &ticket).await).map_err(|error| {
+            Refusal::wrap(
+                Reason::NotImported,
+                error.context("the hub took no claim of it"),
+            )
+        })?;
+        (self.record_package(import).await)
+            .with_context(|| format!("space {id} is this machine's now, but recording it failed"))
     }
 
     /// Record the space `import` packages as removed here, as

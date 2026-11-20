@@ -97,6 +97,28 @@ async fn an_import_whose_clone_fails_records_nothing() {
 }
 
 #[tokio::test]
+async fn a_move_through_the_hub_whose_claim_the_hub_cannot_take_records_nothing() {
+    let (_source, bytes, _url) = exported_worker().await;
+    let (target, importing) = manager().await;
+    let file = target.path().join("moved.shoal");
+    fs::write(&file, &bytes).unwrap();
+    let import = crate::transfer::PackageImport {
+        package: crate::transfer::PackageSource::File(file.clone()),
+        repository: None,
+        sessions: None,
+        ticket: Some(shoal_ids::move_tickets::MoveTicket::generate()),
+    };
+
+    // A machine in no hub has none to claim the space at.
+    let input = super::PackageInput::File(file);
+    let refused = (importing.import_package(&import, input, None).await).unwrap_err();
+
+    assert_eq!(Reason::of(&refused), Some(Reason::NotImported));
+    assert!(importing.removed_spaces().await.unwrap().is_empty());
+    assert!(importing.spaces_within(None).await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn a_package_cut_short_records_nothing_and_keeps_none_of_it() {
     let (_source, bytes, _url) = exported_worker().await;
     let (_target, importing) = manager().await;

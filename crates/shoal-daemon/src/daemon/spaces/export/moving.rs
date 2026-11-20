@@ -19,6 +19,7 @@ use crate::{
         StoppedExecutions,
     },
 };
+use shoal_ids::move_tickets::MoveTicket;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -65,7 +66,9 @@ impl Manager {
             MoveDestination::File { .. } | MoveDestination::Directory { .. } => {
                 MovePhase::Delivered
             }
-            MoveDestination::Ssh(_) | MoveDestination::Client { .. } => MovePhase::Delivering,
+            MoveDestination::Ssh(_)
+            | MoveDestination::Machine(_)
+            | MoveDestination::Client { .. } => MovePhase::Delivering,
         };
         let advanced = record.clone();
         (self.store)
@@ -176,6 +179,7 @@ impl Manager {
         let record = MoveRecord {
             space: space.id.clone(),
             destination: destination.clone(),
+            ticket: MoveTicket::generate(),
             carrying: carrying.clone(),
             unsaved: unsaved.clone(),
             phase: MovePhase::Packing,
@@ -228,7 +232,7 @@ impl Manager {
         {
             crate::daemon::log!("forget the move of {}: {error:#}", record.space);
         }
-        if let MoveDestination::Ssh(_) = record.destination {
+        if record.destination.machine().is_some() {
             let name = crate::transfer::package_name(&record.space);
             let _ = std::fs::remove_file(self.paths.move_packages().join(name));
         }
@@ -239,7 +243,7 @@ impl Manager {
     /// here to another machine.
     fn move_package(&self, id: &SpaceId, destination: &MoveDestination) -> Result<PathBuf> {
         let staging = self.paths.move_packages();
-        if let MoveDestination::Ssh(_) = destination {
+        if destination.machine().is_some() {
             std::fs::create_dir_all(&staging)
                 .with_context(|| format!("create {}", staging.display()))?;
         }

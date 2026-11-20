@@ -145,7 +145,7 @@ impl Moving<'_> {
         removal: RemovalResult,
         arrived: Option<Arrived>,
     ) -> SpaceMoved {
-        let shipped = matches!(self.destination, MoveDestination::Ssh(_));
+        let shipped = self.destination.machine().is_some();
         SpaceMoved {
             id: self.id.clone(),
             name: self.name.clone(),
@@ -179,8 +179,17 @@ async fn deliver(
     (id, file): (&SpaceId, &PathBuf),
     steps: &impl Steps,
 ) -> Result<Option<Arrived>> {
-    let MoveDestination::Ssh(destination) = destination else {
-        return Ok(None);
+    let destination = match destination {
+        MoveDestination::Ssh(destination) => destination,
+        MoveDestination::Machine(destination) => {
+            anyhow::bail!(
+                "Shoal delivers no move to machine {} yet",
+                destination.machine
+            )
+        }
+        MoveDestination::File { .. }
+        | MoveDestination::Directory { .. }
+        | MoveDestination::Client { .. } => return Ok(None),
     };
     steps.reached(Step::MoveDelivering).await;
     let remote = Remote::new(destination);
@@ -221,9 +230,9 @@ pub(super) async fn maybe_there(
 /// What a move to `destination` of the space `id`, whose package went to
 /// `file`, says when the space could not end here after all.
 fn both_places(destination: &MoveDestination, file: &Path, id: &SpaceId) -> String {
-    let there = match destination {
-        MoveDestination::Ssh(destination) => format!("on {}", destination.host),
-        _ => format!("in {}", file.display()),
+    let there = match super::packages::other_machine(destination) {
+        Some(machine) => format!("on {machine}"),
+        None => format!("in {}", file.display()),
     };
     format!(
         "it now exists here and {there}; once the work you want is there, shoal rm {id} removes it here"

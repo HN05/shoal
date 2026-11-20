@@ -177,6 +177,7 @@ async fn a_move_recorded_before_its_package_was_written_packs_again_under_its_re
     let left = MoveRecord {
         space: workspace.id.clone(),
         destination: destination.clone(),
+        ticket: shoal_ids::move_tickets::MoveTicket::generate(),
         carrying: Carrying::Subtree,
         unsaved: UnsavedWork::All,
         phase: MovePhase::Packing,
@@ -443,6 +444,7 @@ async fn an_import_that_records_nothing_says_so() {
         session_files: Vec::new(),
         copies: Default::default(),
         recorded: Default::default(),
+        ticket: None,
     };
     let error = importing.import_space(import).await.unwrap_err();
     assert_eq!(Reason::of(&error), Some(Reason::NotImported));

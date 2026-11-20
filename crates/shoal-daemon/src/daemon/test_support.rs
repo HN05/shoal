@@ -35,6 +35,7 @@ pub async fn import_file_as(
         package: crate::transfer::PackageSource::File(file.clone()),
         repository: repository.map(|repository| (&repository.id).into()),
         sessions: None,
+        ticket: None,
     };
     let input = super::restore::PackageInput::File(file);
     manager.import_package(&import, input, caller).await

@@ -37,8 +37,17 @@ pub(super) async fn copy_one(
         arrived: None,
         warnings: exported.warnings,
     };
-    let MoveDestination::Ssh(destination) = &order.destination else {
-        return Ok(moved);
+    let destination = match &order.destination {
+        MoveDestination::Ssh(destination) => destination,
+        MoveDestination::Machine(destination) => {
+            anyhow::bail!(
+                "Shoal delivers no copy to machine {} yet",
+                destination.machine
+            )
+        }
+        MoveDestination::File { .. }
+        | MoveDestination::Directory { .. }
+        | MoveDestination::Client { .. } => return Ok(moved),
     };
     steps.reached(Step::MoveDelivering).await;
     let imported = Remote::new(destination).import(&file).await;

@@ -9,7 +9,6 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
 use crate::connection::{Daemon, open_buffered, request};
-use shoal_protocol::repository::Selector;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     protocol::{self, RemovalMethod, WorkspaceMethod},
@@ -98,19 +97,16 @@ pub async fn import(daemon: &impl Daemon, import: PackageImport) -> Result<Impor
     request(daemon, RemovalMethod::ImportPackage(Box::new(import))).await
 }
 
-/// [`import`] the package `package` holds, into `repository` or the one
-/// with its origin, keeping the agents' sessions as `sessions` says:
+/// [`import`] the package `package` holds as `import` says otherwise:
 /// sent on the request's connection once the daemon asks for it.
 pub async fn import_streamed(
     daemon: &impl Daemon,
-    repository: Option<Selector>,
-    sessions: Option<bool>,
+    import: PackageImport,
     package: &mut (impl AsyncRead + Unpin),
 ) -> Result<ImportedPackage> {
     let import = PackageImport {
         package: PackageSource::Stream,
-        repository,
-        sessions,
+        ..import
     };
     let method = RemovalMethod::ImportPackage(Box::new(import));
     let (stream, asked) = open_buffered(daemon, method).await?;

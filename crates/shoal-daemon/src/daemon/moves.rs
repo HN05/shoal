@@ -62,13 +62,13 @@ impl Manager {
             Ok(_) => return Ok(()),
             Err(absent) => absent,
         };
-        if let MoveDestination::Ssh(_) = destination {
+        if destination.machine().is_some() {
             return Err(absent);
         }
         match self.removed_space(&selector).await {
             Ok(_) => Ok(()),
             Err(_) => anyhow::bail!(
-                "no space {id} here, where the move would write its file; a space on another machine moves from there, or with --ssh"
+                "no space {id} here, where the move would write its file; a space on another machine moves from there, or with --ssh or --machine"
             ),
         }
     }

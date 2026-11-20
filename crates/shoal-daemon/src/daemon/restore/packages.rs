@@ -20,6 +20,7 @@ use crate::{
     },
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_ids::move_tickets::MoveTicket;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::transcripts::CarriedSessionFile;
 
@@ -86,7 +87,8 @@ impl Manager {
         let directory = self.unpacking_directory(destinations.own()).await?;
         let parts = input.read_parts(&manifest, directory).await?;
         self.ensure_none_here(&manifest).await?;
-        let (own, carried) = space_imports(&manifest, import.sessions, &destinations, &parts.parts);
+        let kept = (import.sessions, import.ticket.as_ref());
+        let (own, carried) = space_imports(&manifest, kept, &destinations, &parts.parts);
         Ok(Package {
             own,
             carried,
@@ -199,17 +201,20 @@ fn copy_warnings(manifest: &Manifest, sessions: Option<bool>) -> Result<Vec<Stri
 /// The imports of the spaces of `manifest`, its own and those it carries,
 /// whose agents keep their sessions on this machine as `sessions` says,
 /// into the repositories `destinations` names, with the bundles and session
-/// files `parts` hold for them.
+/// files `parts` hold for them, claimed with the `ticket` of the move
+/// through the hub that brings them, unless they are copies.
 fn space_imports(
     manifest: &Manifest,
-    sessions: Option<bool>,
+    (sessions, ticket): (Option<bool>, Option<&MoveTicket>),
     destinations: &Destinations,
     parts: &Parts,
 ) -> (SpaceImport, Vec<SpaceImport>) {
     let machine = crate::process::machine::id();
     let machine = machine.as_deref();
+    // A copy takes IDs of its own, which no other machine has.
+    let ticket = ticket.filter(|_| manifest.copy.is_none());
     let import_of = |packaged: &PackagedSpace, kept: Sessions| {
-        space_import(manifest, destinations, parts, packaged, kept)
+        space_import(manifest, destinations, parts, packaged, (kept, ticket))
     };
     let own = import_of(&manifest.space, manifest.sessions_on(machine, sessions));
     let carried = (manifest.carried.iter())
@@ -223,13 +228,13 @@ fn space_imports(
 
 /// The import of the space `packaged` of `manifest`, whose agents keep
 /// `sessions`, into the repository `destinations` names for it, with the
-/// bundle and session files `parts` hold for it.
+/// bundle and session files `parts` hold for it, claimed with `ticket`.
 fn space_import(
     manifest: &Manifest,
     destinations: &Destinations,
     parts: &Parts,
     packaged: &PackagedSpace,
-    sessions: Sessions,
+    (sessions, ticket): (Sessions, Option<&MoveTicket>),
 ) -> SpaceImport {
     let space = packaged.record_with(sessions);
     let id = &space.space_id;
@@ -242,6 +247,7 @@ fn space_import(
         copy: manifest.copy.is_some(),
         copies: BTreeMap::new(),
         recorded: BTreeSet::new(),
+        ticket: ticket.cloned(),
     }
 }
 

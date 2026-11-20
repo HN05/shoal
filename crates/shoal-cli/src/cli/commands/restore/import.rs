@@ -79,11 +79,7 @@ async fn import_package(
             PackageSource::File(_) => crate::client::transfer::import(&ctx.paths, import).await,
             PackageSource::Stream => {
                 let mut input = tokio::io::stdin();
-                let (repository, sessions) = (import.repository, import.sessions);
-                crate::client::transfer::import_streamed(
-                    &ctx.paths, repository, sessions, &mut input,
-                )
-                .await
+                crate::client::transfer::import_streamed(&ctx.paths, import, &mut input).await
             }
         }
     };
@@ -108,6 +104,7 @@ fn package_import(file: &Path, options: &ImportOptions) -> Result<PackageImport>
         package,
         repository: repository.transpose()?,
         sessions: options.sessions,
+        ticket: None,
     })
 }
 

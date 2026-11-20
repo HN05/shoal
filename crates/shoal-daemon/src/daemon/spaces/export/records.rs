@@ -11,7 +11,7 @@ use crate::time::UnixTime;
 use crate::transfer::{MovePhase, MoveRecord};
 use shoal_ids::space_ids::SpaceId;
 
-const COLUMNS: &str = "space_id,destination,carrying,unsaved,phase,checkpoints,saved_before";
+const COLUMNS: &str = "space_id,destination,ticket,carrying,unsaved,phase,checkpoints,saved_before";
 
 /// Record `record`, the move of its space, refusing a space another move
 /// already takes.
@@ -21,11 +21,12 @@ pub(super) fn insert(tx: &Transaction<'_>, record: &MoveRecord) -> Result<()> {
         return Err(Refusal::new(Reason::MoveInProgress, message).into());
     }
     tx.execute(
-        "INSERT INTO space_moves(space_id,destination,carrying,unsaved,phase,checkpoints,
-            saved_before,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+        "INSERT INTO space_moves(space_id,destination,ticket,carrying,unsaved,phase,checkpoints,
+            saved_before,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
         params![
             record.space,
             serde_json::to_string(&record.destination)?,
+            record.ticket,
             serde_json::to_string(&record.carrying)?,
             serde_json::to_string(&record.unsaved)?,
             record.phase,
@@ -81,6 +82,7 @@ fn record(row: &Row<'_>) -> rusqlite::Result<MoveRecord> {
     Ok(MoveRecord {
         space: row.get("space_id")?,
         destination: required(row, "destination")?,
+        ticket: row.get("ticket")?,
         carrying: required(row, "carrying")?,
         unsaved: required(row, "unsaved")?,
         phase: row.get::<_, MovePhase>("phase")?,

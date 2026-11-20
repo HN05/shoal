@@ -751,6 +751,9 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
     if version >= 255 {
         db.execute_batch(include_str!("hub_move_fences.sql"))?;
     }
+    if version >= 256 {
+        db.execute_batch(include_str!("space_move_tickets.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"

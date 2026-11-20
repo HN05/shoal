@@ -161,9 +161,10 @@ async fn plan_space(
         return Ok(Planned::Copied { space });
     }
     let file = packages::reserve(paths, &order.destination, &space.id)?;
-    let into = match order.destination {
-        MoveDestination::Ssh(_) => None,
-        _ => Some(file.as_path()),
+    // A package for another machine waits in the staging directory.
+    let into = match order.destination.machine() {
+        Some(_) => None,
+        None => Some(file.as_path()),
     };
     let checked = checks::check_export(paths, space, into, tree, &order.carrying()).await?;
     if let checks::Ending::Workspace(check) = &checked.space {

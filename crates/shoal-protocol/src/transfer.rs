@@ -17,6 +17,7 @@ use crate::{
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::move_tickets::MoveTicket;
 use shoal_ids::space_ids::SpaceId;
 
 /// What a package holds besides its session files and bundle.
@@ -146,6 +147,11 @@ pub struct PackageImport {
     /// machine that wrote the package or whose files it carries.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sessions: Option<bool>,
+    /// The ticket of the move through the hub that delivers the package,
+    /// which the claims of its spaces carry: the hub's claim of its own
+    /// space commits the move, so one the hub refuses records nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ticket: Option<MoveTicket>,
 }
 
 /// Where the daemon reads a package from.
@@ -191,6 +197,9 @@ pub enum CarriedRecord {
 pub enum MoveDestination {
     /// Another machine's Shoal, which `ssh` reaches.
     Ssh(SshDestination),
+    /// Another machine joined to the same hub, whose daemon takes the
+    /// package over a stream the hub relays.
+    Machine(MachineDestination),
     /// A new file, by its absolute path, that takes the one space moved.
     File { path: PathBuf },
     /// A directory, by its absolute path, that takes a new file per space,
@@ -214,6 +223,15 @@ pub struct SshDestination {
     pub resume: bool,
 }
 
+/// Another machine joined to the same hub.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MachineDestination {
+    /// Its name, or its ID as `shoal hub ls` shows it, as the move names it.
+    pub machine: String,
+    /// Whether the import there resumes the agents.
+    pub resume: bool,
+}
+
 impl MoveDestination {
     /// The file the package of the space `id` goes to: the file named, its
     /// file in the directory named, or for another machine its file among
@@ -222,7 +240,17 @@ impl MoveDestination {
         match self {
             Self::File { path } | Self::Client { path } => path.clone(),
             Self::Directory { path } => path.join(package_name(id)),
-            Self::Ssh(_) => staging.join(package_name(id)),
+            Self::Ssh(_) | Self::Machine(_) => staging.join(package_name(id)),
+        }
+    }
+
+    /// The other machine the package goes to, by its SSH host or as the
+    /// move names the joined machine; none for a file.
+    pub fn machine(&self) -> Option<&str> {
+        match self {
+            Self::Ssh(destination) => Some(&destination.host),
+            Self::Machine(destination) => Some(&destination.machine),
+            Self::File { .. } | Self::Directory { .. } | Self::Client { .. } => None,
         }
     }
 }
@@ -254,6 +282,9 @@ shoal_states::states!(
 pub struct MoveRecord {
     pub space: SpaceId,
     pub destination: MoveDestination,
+    /// The ticket a machine's claims of the package's spaces carry, for a
+    /// move through the hub, which settling it there refuses.
+    pub ticket: MoveTicket,
     pub carrying: Carrying,
     /// The unsaved work the caller let the move delete.
     pub unsaved: UnsavedWork,

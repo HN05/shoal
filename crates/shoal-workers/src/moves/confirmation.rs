@@ -27,12 +27,15 @@ pub(super) fn question(order: &MoveOrder, planned: &[Planned]) -> Option<String>
 /// What the confirmation of `order`, ending the spaces `checks` describe,
 /// asks under.
 fn heading(order: &MoveOrder, checks: &[&Checked]) -> String {
-    let to = match &order.destination {
-        MoveDestination::Ssh(destination) => format!(" to {}", destination.host),
-        MoveDestination::File { path } | MoveDestination::Directory { path } => {
+    let to = match (
+        &order.destination,
+        super::packages::other_machine(&order.destination),
+    ) {
+        (_, Some(machine)) => format!(" to {machine}"),
+        (MoveDestination::File { path } | MoveDestination::Directory { path }, None) => {
             format!(" to {}", path.display())
         }
-        MoveDestination::Client { .. } => String::new(),
+        _ => String::new(),
     };
     match checks {
         [check] => format!("Move {}{to}", label(check)),

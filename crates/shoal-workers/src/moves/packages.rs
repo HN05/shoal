@@ -27,7 +27,7 @@ pub(super) fn reserve(
                 .with_context(|| format!("create the directory {}", path.display()))?;
             path.as_path()
         }
-        MoveDestination::Ssh(_) => {
+        MoveDestination::Ssh(_) | MoveDestination::Machine(_) => {
             let staging = paths.move_packages();
             std::fs::create_dir_all(&staging)
                 .with_context(|| format!("create {}", staging.display()))?;
@@ -83,8 +83,10 @@ pub(super) fn done(order: &MoveOrder, moved: &SpaceMoved) -> Option<String> {
         true => "as a new space",
         false => "on another machine",
     };
+    if let Some(machine) = other_machine(&order.destination) {
+        return Some(arrived(&machine, order.keep, moved));
+    }
     Some(match (&order.destination, &moved.file) {
-        (MoveDestination::Ssh(destination), _) => arrived(&destination.host, order.keep, moved),
         (MoveDestination::Client { .. }, _) => return None,
         (_, None) => format!("Exported {space}"),
         (_, Some(file)) => format!(
@@ -92,6 +94,18 @@ pub(super) fn done(order: &MoveOrder, moved: &SpaceMoved) -> Option<String> {
             file.display()
         ),
     })
+}
+
+/// The other machine `destination` takes packages to, as a move's lines
+/// name it: its SSH host, or the joined machine; none for a file.
+pub(super) fn other_machine(destination: &MoveDestination) -> Option<String> {
+    match destination {
+        MoveDestination::Ssh(destination) => Some(destination.host.clone()),
+        MoveDestination::Machine(destination) => Some(format!("machine {}", destination.machine)),
+        MoveDestination::File { .. }
+        | MoveDestination::Directory { .. }
+        | MoveDestination::Client { .. } => None,
+    }
 }
 
 /// The line that tells where `moved` went on `host`, under the name the
@@ -123,16 +137,17 @@ fn arrived(host: &str, copy: bool, moved: &SpaceMoved) -> String {
 /// The line that sums up a move of several spaces, or one that failed.
 pub(super) fn summary(order: &MoveOrder, report: &MoveReport) -> String {
     let (done, failed) = (report.moved.len(), report.failed.len());
-    let verb = match (&order.destination, order.keep) {
-        (MoveDestination::Ssh(_), false) => "Moved",
-        (MoveDestination::Ssh(_), true) => "Copied",
-        (_, false) => "Exported",
-        (_, true) => "Exported copies of",
+    let machine = other_machine(&order.destination);
+    let verb = match (&machine, order.keep) {
+        (Some(_), false) => "Moved",
+        (Some(_), true) => "Copied",
+        (None, false) => "Exported",
+        (None, true) => "Exported copies of",
     };
-    let to = match &order.destination {
-        MoveDestination::Ssh(destination) => format!(" to {}", destination.host),
-        MoveDestination::Directory { path } => format!(" to {}", path.display()),
-        MoveDestination::File { .. } | MoveDestination::Client { .. } => String::new(),
+    let to = match (&order.destination, machine) {
+        (_, Some(machine)) => format!(" to {machine}"),
+        (MoveDestination::Directory { path }, None) => format!(" to {}", path.display()),
+        _ => String::new(),
     };
     if failed > 0 {
         return format!(
