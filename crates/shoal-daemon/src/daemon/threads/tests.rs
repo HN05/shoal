@@ -463,6 +463,71 @@ async fn the_user_s_threads_list_past_larger_newer_threads() {
     assert_eq!(numbers, [asked.number]);
 }
 
+/// Remove the space `id`, its unsaved work and all.
+async fn remove(manager: &Manager, id: &shoal_ids::space_ids::SpaceId) {
+    use crate::removal::{InspectionPolicy, UnsavedWork};
+    (manager.remove_selected(
+        &SpaceSelector::id(id),
+        UnsavedWork::All,
+        InspectionPolicy::GitOnly,
+    ))
+    .await
+    .unwrap();
+}
+
+/// A thread the parent opened with its child, whose removals, the child's
+/// then the parent's, closed it, restored with the child first when `child_first`.
+async fn restored_after_removals(child_first: bool) -> Thread {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .create_child(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    let thread = open(&manager, Some(&caller(&parent)), Some(&child)).await;
+    send(&manager, Some(&caller(&parent)), &thread, "Which port?").await;
+    remove(&manager, &child.id).await;
+    remove(&manager, &parent.id).await;
+    let order = match child_first {
+        true => [&child.id, &parent.id],
+        false => [&parent.id, &child.id],
+    };
+    for id in order {
+        (manager.restore_space(&SpaceSelector::id(id), None))
+            .await
+            .unwrap();
+    }
+    let parent = manager.space(&SpaceSelector::id(&parent.id)).await.unwrap();
+    let number = ThreadNumber::Full(shoal_protocol::item_numbers::ItemNumber {
+        space: parent.number,
+        item: thread.number.item,
+    });
+    manager.thread(None, number).await.unwrap()
+}
+
+#[tokio::test]
+async fn restoring_a_child_then_its_parent_reopens_their_thread() {
+    assert!(restored_after_removals(true).await.is_open());
+}
+
+#[tokio::test]
+async fn restoring_a_parent_then_its_child_reopens_their_thread() {
+    assert!(restored_after_removals(false).await.is_open());
+}
+
 #[tokio::test]
 async fn the_opener_resolves_its_thread_and_takes_back_an_unread_notice() {
     let tree = tree().await;

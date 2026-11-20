@@ -88,7 +88,10 @@ fn tell_opener(
 
 /// Reopen the threads closed for `cause` by the space `space_id`, without
 /// Shoal's posts that told their openers, and tell those openers; their
-/// numbers and what that delivered.
+/// numbers and what that delivered. A thread a removal closed reopens once
+/// every space it involves is back: the space it is numbered in, its
+/// holder and the space whose removal closed it, whichever of them
+/// `space_id` restores last.
 pub(crate) fn reopen(
     tx: &Transaction<'_>,
     space_id: &SpaceId,
@@ -96,8 +99,14 @@ pub(crate) fn reopen(
 ) -> Result<(Vec<ItemNumber>, Delivered)> {
     let closed = records::query(
         tx,
-        "WHERE t.resolver_id=?1 AND json_extract(t.outcome,'$.outcome')='closed'
-            AND json_extract(t.outcome,'$.cause')=?2 AND t.space_number IS NOT NULL",
+        &format!(
+            "WHERE json_extract(t.outcome,'$.outcome')='closed'
+                AND json_extract(t.outcome,'$.cause')=?2 AND t.space_number IS NOT NULL
+                AND (t.resolver_id=?1 OR (?2='removal' AND (t.space_id=?1 OR t.holder_id=?1)))
+                AND NOT {} AND NOT {}",
+            removed("t.resolver_id"),
+            removed("t.holder_id")
+        ),
         params![space_id, cause],
     )?;
     let label = records::label(tx, space_id)?;
@@ -139,4 +148,14 @@ impl Manager {
         self.announce_threads(delivered).await;
         Ok(())
     }
+}
+
+/// SQL true when the space in `column` was removed and not restored: it
+/// has a removal record and no live record. A space on another machine has
+/// neither here.
+fn removed(column: &str) -> String {
+    format!(
+        "({column} IS NOT NULL AND NOT EXISTS (SELECT 1 FROM spaces WHERE id={column})
+            AND EXISTS (SELECT 1 FROM removed_spaces WHERE space_id={column}))"
+    )
 }
