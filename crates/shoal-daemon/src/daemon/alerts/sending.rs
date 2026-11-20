@@ -155,6 +155,30 @@ impl Manager {
         Ok(sent)
     }
 
+    /// `to`, where the scoped `caller` sends an alert, narrowed to what its
+    /// scope reaches: a space below its own, or the agents below it of its
+    /// own repository; the space it names, which the caller's scope must
+    /// reach too.
+    pub(in crate::daemon) async fn scoped_alert_target<'a>(
+        &self,
+        caller: &Caller,
+        to: &'a mut AlertTarget,
+    ) -> Result<Option<&'a mut SpaceSelector>> {
+        const REFUSAL: &str = "scoped processes send alerts down only to the spaces below theirs";
+        Ok(match to {
+            AlertTarget::Space { space } => {
+                Some(self.workspace_below(caller, space, REFUSAL).await?)
+            }
+            AlertTarget::All {
+                repository: Some(repository),
+            } => {
+                *repository = self.own_repository(caller, repository, REFUSAL).await?;
+                None
+            }
+            AlertTarget::Up | AlertTarget::All { repository: None } => None,
+        })
+    }
+
     /// Who an alert from `caller` comes from: its space, which it names,
     /// else the user. A caller another machine vouches for names its space
     /// by its ID alone, since this machine does not keep that space.
@@ -284,7 +308,7 @@ impl Outcome<'_> {
 }
 
 /// `space` as an alert's result names it.
-fn recipient(space: &Space) -> Recipient {
+pub(crate) fn recipient(space: &Space) -> Recipient {
     Recipient {
         number: space.number,
         id: space.id.clone(),

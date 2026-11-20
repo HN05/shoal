@@ -22,6 +22,7 @@ mod sending;
 
 pub(crate) use reading::users_alerts;
 pub(crate) use routing::{Reader, Recipients, Route};
+pub(crate) use sending::recipient;
 #[cfg(test)]
 pub(crate) use sending::sent_alert;
 

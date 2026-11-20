@@ -55,6 +55,9 @@ pub(super) async fn handle(
             }
             Body::Sent(sent)
         }
+        AlertMethod::AlertInChat { to, attachments } => {
+            Body::ChatMarked(manager.mark_chat_alert(caller, to, attachments).await?)
+        }
         AlertMethod::WithdrawAlert { id, space, from } => {
             let acting = acting(manager, caller, from).await?;
             let withdrawn = manager.withdraw_alert(acting.as_ref(), space.as_ref(), id);
@@ -99,40 +102,14 @@ impl Scoped for AlertMethod {
                     .await?;
                 None
             }
-            AlertMethod::SendAlert {
-                to: AlertTarget::Space { space },
-                ..
-            } => Some(
-                manager
-                    .workspace_below(
-                        caller,
-                        space,
-                        "scoped processes send alerts down only to the spaces below theirs",
-                    )
-                    .await?,
-            ),
-            AlertMethod::SendAlert {
-                to:
-                    AlertTarget::All {
-                        repository: Some(repository),
-                    },
-                ..
-            } => {
-                *repository = manager
-                    .own_repository(
-                        caller,
-                        repository,
-                        "scoped processes send alerts down only to the spaces below theirs",
-                    )
-                    .await?;
-                None
+            AlertMethod::SendAlert { to, .. } | AlertMethod::AlertInChat { to, .. } => {
+                manager.scoped_alert_target(caller, to).await?
             }
             AlertMethod::ListAlerts {
                 to: AlertsFor::Every,
                 ..
             }
             | AlertMethod::MarkAlertsRead { .. }
-            | AlertMethod::SendAlert { .. }
             | AlertMethod::WithdrawAlert { .. } => None,
         })
     }

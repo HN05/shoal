@@ -9,6 +9,7 @@ use tokio::{io::BufReader, net::UnixStream};
 use crate::connection::{Daemon, open_buffered, pages, reconnect, request, stream_closed};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
+    chat_marks::ChatMarked,
     files::NewFile,
     protocol::{self, AlertMethod, AlertTarget, AlertsFor, Response},
 };
@@ -55,6 +56,16 @@ pub async fn send(
         attachments,
     };
     request(daemon, method).await
+}
+
+/// Mark the calling agent's turn as sending its final message to `to`
+/// with `attachments` once it ends, with the mark it replaced.
+pub async fn send_in_chat(
+    daemon: &impl Daemon,
+    to: AlertTarget,
+    attachments: Vec<NewFile>,
+) -> Result<ChatMarked> {
+    request(daemon, AlertMethod::AlertInChat { to, attachments }).await
 }
 
 /// Take back the unread alert `id` the caller sent, or the space `from`

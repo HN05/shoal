@@ -36,6 +36,14 @@ pub enum AlertMethod {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<crate::files::NewFile>,
     },
+    /// The caller's agent sends its turn's final message as an alert to
+    /// `to` once the turn ends, with copies of `attachments` made then;
+    /// answered with the mark and the one it replaced.
+    AlertInChat {
+        to: AlertTarget,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attachments: Vec<crate::files::NewFile>,
+    },
     /// Delete the unread alert `id` the caller sent, to the space `space`
     /// when it names one, which finds the alert on that space's machine.
     WithdrawAlert {

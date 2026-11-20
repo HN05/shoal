@@ -240,6 +240,7 @@ const REQUESTS: &[&str] = &[
     r#"{"open_thread":{"name":"Which database?","kind":"question","to":"part","from":"planning"}}"#,
     r#"{"post":{"thread":4,"post":{"text":"Which?","choices":["A","B"],"recommendation":"A","reason":"Simpler"}}}"#,
     r#"{"post_in_chat":{"space":"fix","thread":6}}"#,
+    r#"{"alert_in_chat":{"to":{"space":{"space":"part"}},"attachments":[{"path":"/fix/log.txt"}]}}"#,
     r#"{"replied_in_chat":{"space":"fix","prompt":"Use SQLite"}}"#,
     r#"{"forward_thread":{"thread":6,"to":"part","note":"You built the cache"}}"#,
     r#"{"resolve_thread":{"thread":6,"outcome":"duplicate","of":{"space_number":2,"item":1,"number":"2.1"}}}"#,

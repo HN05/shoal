@@ -1,9 +1,10 @@
 //! The mark an agent puts on its turn with `shoal send --in-chat`, on the
 //! execution it runs as, a chat's as a workspace's: once the turn ends,
-//! its final message goes as a post in a thread. A turn has one mark,
+//! its final message goes as a post in a thread or as an alert (see
+//! [`alerts`]). A turn has one mark,
 //! which a later one replaces. A prompt the user submits in the agent's
 //! conversation answers the turn instead, which drops its mark.
-use anyhow::{Result, ensure};
+use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension as _, Transaction, params};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::{
@@ -22,10 +23,16 @@ use crate::{
 pub(crate) const WROTE_IN_CHAT: &str =
     "The agent wrote in its chat; attach to its session to read it.";
 
+mod alerts;
+
+use alerts::MarkedAlert;
+
 /// What a marked turn's final message becomes, as its record keeps it.
 enum Mark {
     /// A post in the thread of this record ID.
     Post(i64),
+    /// An alert.
+    Alert(MarkedAlert),
 }
 
 /// Mark the turn of the agent `execution` runs with `mark`, returning what
@@ -35,32 +42,45 @@ fn put(tx: &Transaction<'_>, execution: &ExecutionId, mark: &Mark) -> Result<Opt
         Some(replaced) => Some(shown(tx, &replaced)?),
         None => None,
     };
-    let Mark::Post(thread) = mark;
+    let (thread, alert) = match mark {
+        Mark::Post(thread) => (Some(*thread), None),
+        Mark::Alert(alert) => (None, Some(serde_json::to_string(alert)?)),
+    };
     tx.execute(
-        "INSERT INTO chat_marks(execution_id,thread_id) VALUES (?1,?2)",
-        params![execution, thread],
+        "INSERT INTO chat_marks(execution_id,thread_id,alert) VALUES (?1,?2,?3)",
+        params![execution, thread, alert],
     )?;
     Ok(replaced)
 }
 
 /// Clear the mark of the turn of the agent `execution` runs, returning it.
 fn take(tx: &Transaction<'_>, execution: &ExecutionId) -> Result<Option<Mark>> {
-    let thread: Option<Option<i64>> = tx
+    let row: Option<(Option<i64>, Option<String>)> = tx
         .query_row(
-            "SELECT thread_id FROM chat_marks WHERE execution_id=?1",
+            "SELECT thread_id,alert FROM chat_marks WHERE execution_id=?1",
             [execution],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?;
     tx.execute("DELETE FROM chat_marks WHERE execution_id=?1", [execution])?;
-    Ok(thread.flatten().map(Mark::Post))
+    Ok(match row {
+        None => None,
+        Some((Some(thread), _)) => Some(Mark::Post(thread)),
+        Some((None, Some(alert))) => Some(Mark::Alert(serde_json::from_str(&alert)?)),
+        Some((None, None)) => bail!("a turn's mark names neither a thread nor an alert"),
+    })
 }
 
-/// What `mark` shows the agent: the thread its post goes to.
+/// What `mark` shows the agent: the thread its post goes to, or whom its
+/// alert reaches.
 fn shown(db: &Connection, mark: &Mark) -> Result<ChatMark> {
-    let Mark::Post(id) = mark;
-    Ok(ChatMark::Post {
-        thread: crate::daemon::threads::number_of(db, *id)?,
+    Ok(match mark {
+        Mark::Post(id) => ChatMark::Post {
+            thread: crate::daemon::threads::number_of(db, *id)?,
+        },
+        Mark::Alert(alert) => ChatMark::Alert {
+            to: alert.recipients.clone(),
+        },
     })
 }
 
@@ -129,9 +149,16 @@ impl Manager {
         message: Option<String>,
     ) -> Result<()> {
         let space = self.space(selector).await?;
-        match self.store.write(move |tx| take(tx, &turn)).await? {
+        let taken = {
+            let turn = turn.clone();
+            self.store.write(move |tx| take(tx, &turn)).await?
+        };
+        match taken {
             None => Ok(()),
             Some(Mark::Post(thread)) => self.post_marked(&space, thread, message).await,
+            Some(Mark::Alert(alert)) => {
+                (self.send_marked_alert(&space, turn, alert, message)).await
+            }
         }
     }
 
