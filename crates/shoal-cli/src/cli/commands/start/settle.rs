@@ -8,10 +8,14 @@ use anyhow::Result;
 use shoal_protocol::launches::Launch;
 
 use super::StartOptions;
-use crate::cli::{
-    args::create::StartArgs,
-    commands::start::{launch_settings, start_modes},
-    context::Context,
+use crate::{
+    cli::{
+        args::create::StartArgs,
+        commands::start::{launch_settings, start_modes},
+        context::Context,
+    },
+    config::Effective,
+    model::Repository,
 };
 
 mod arguments;
@@ -54,7 +58,7 @@ pub(in crate::cli::commands) async fn settle(
     repository::take_parents(ctx, &launch).await?;
     let found = repository::found(ctx, &mut launch).await?;
     let settings = launch_settings(ctx, &launch).await?;
-    let (found, settings) = pickers::pick_items(ctx, &mut launch, (found, settings)).await?;
+    let (found, settings) = picked_items(ctx, &mut launch, (found, settings)).await?;
     let modes = start_modes(ctx, &launch, &settings).await?;
     let choice = mode::decided(ctx, &launch, found.as_ref(), (&settings, &modes)).await?;
     let (mut found, mut settings) = match choice.clone().named() {
@@ -96,4 +100,27 @@ pub(in crate::cli::commands) async fn settle(
     pickers::pick_agent(ctx, &mut launch, &settings)?;
     let issue_linked = worker && check::issue_linked(checked.as_ref());
     super::place(ctx, launch, issue_linked, &settings, options).await
+}
+
+/// The repository and settings `launch` goes on with once a terminal has
+/// picked the issue and PR it asks for without naming them, from the
+/// `found` repository with its `settings`, else a picked one: first what
+/// its named mode and its agent refuse, so no picker asks for what would
+/// be refused.
+async fn picked_items(
+    ctx: &Context,
+    launch: &mut Launch,
+    (found, settings): (Option<Repository>, Effective),
+) -> Result<(Option<Repository>, Effective)> {
+    if !pickers::picks_items(launch) {
+        return Ok((found, settings));
+    }
+    if let Some(mode) = launch.mode.clone() {
+        let modes = start_modes(ctx, launch, &settings).await?;
+        mode::ensure_fits(launch, &mode, &modes)?;
+    }
+    let (found, settings) = repository::required(ctx, launch, (found, settings)).await?;
+    pickers::check_agent(launch, &settings)?;
+    pickers::pick_items(ctx, launch, (found.as_ref(), &settings)).await?;
+    Ok((found, settings))
 }

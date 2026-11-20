@@ -3147,6 +3147,12 @@ fn a_bare_pr_offers_the_open_prs_carrying_the_named_modes_label() {
     assert!(output.status.success(), "{}", printed(&output));
     assert!(rows.contains("PR 7"), "{rows}");
     assert_eq!(started_in(&fixture), (true, false));
+    // What the named mode or the agent refuses comes before the picker.
+    let repo = fixture.repo.to_str().unwrap();
+    let chat = ["start", repo, "--mode", "chat", "--pr", "--agent", "pi"];
+    fixture.assert_refused_before_prompting(&chat, "--pr does not apply");
+    let missing = ["start", repo, "--pr", "--agent", "missing-agent"];
+    fixture.assert_refused_before_prompting(&missing, "missing-agent");
 }
 
 #[test]

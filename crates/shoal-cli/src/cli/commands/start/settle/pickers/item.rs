@@ -12,32 +12,29 @@ use crate::{
     model::Repository,
 };
 
+/// Whether `launch` asks for an issue or PR without naming it.
+pub(in crate::cli::commands::start::settle) fn picks_items(launch: &Launch) -> bool {
+    [&launch.issue, &launch.pr].contains(&&Some(ItemChoice::Pick))
+}
+
 /// The issue and PR `launch` asks for without naming them, picked on a
-/// terminal in its `found` repository, else one a terminal picks, which
-/// the start then goes in under its own settings; off a terminal, refused.
-/// Returns the repository and settings the start goes on with.
+/// terminal in `repository` under its `settings`; off a terminal, refused.
 pub(in crate::cli::commands::start::settle) async fn pick_items(
     ctx: &Context,
     launch: &mut Launch,
-    (found, settings): (Option<Repository>, Effective),
-) -> Result<(Option<Repository>, Effective)> {
-    let picks = |choice: &Option<ItemChoice>| *choice == Some(ItemChoice::Pick);
-    if !picks(&launch.issue) && !picks(&launch.pr) {
-        return Ok((found, settings));
-    }
-    let required = super::super::repository::required(ctx, launch, (found, settings));
-    let (found, settings) = required.await?;
-    let label = mode_label(launch, &settings);
+    (repository, settings): (Option<&Repository>, &Effective),
+) -> Result<()> {
+    let label = mode_label(launch, settings);
     for (choice, kind) in [
         (&mut launch.issue, ItemKind::Issue),
         (&mut launch.pr, ItemKind::Pr),
     ] {
-        if picks(choice) {
-            let picked = picked(ctx, found.as_ref(), kind, label.as_deref()).await?;
+        if *choice == Some(ItemChoice::Pick) {
+            let picked = picked(ctx, repository, kind, label.as_deref()).await?;
             *choice = Some(ItemChoice::Named(picked));
         }
     }
-    Ok((found, settings))
+    Ok(())
 }
 
 /// The label of the mode `launch` names under `settings`, if any.
