@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::cli::{
     args::changes::{BranchCommand, ChangesCommand},
-    commands::{base, ci, forge_branches, items, merge, review, workspaces},
+    commands::{base, changes, ci, forge_branches, items, merge, review, workspaces},
     context::Context,
 };
 
@@ -12,6 +12,11 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ChangesCommand)
         ChangesCommand::Issue { command } => items::issue(&ctx, command).await,
         ChangesCommand::Ci { command } => ci::run(&ctx, command).await,
         ChangesCommand::Branch { command } => branch(&ctx, command).await,
+        ChangesCommand::Diff {
+            thread: Some(thread),
+            since,
+            ..
+        } => changes::thread_diff(&ctx, thread, since).await,
         ChangesCommand::Diff { workspace, .. } => workspaces::diff(&ctx, workspace).await,
         ChangesCommand::Conflicts { target, workspace } => {
             workspaces::conflicts(&ctx, workspace, target).await
