@@ -16,7 +16,7 @@ use crate::client::output::batch::Failure;
 use crate::{
     cli::{
         context::Context,
-        recent,
+        hub_view, recent,
         ui::{self, Fallback, NoCurrentWorkspace},
     },
     client::connection::CommandPaths,
@@ -25,7 +25,10 @@ use crate::{
     sessions::Origin,
     terminal::Session,
 };
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{
+    hub::directory::{HubView, Listed},
+    space_names::SpaceSelector,
+};
 
 pub(super) async fn attach(
     ctx: &Context,
@@ -37,14 +40,13 @@ pub(super) async fn attach(
         "attach to sessions outside scoped executions"
     );
     ensure!(ctx.on_terminal(), "attach requires a terminal");
-    if let Some(selector) = &target
-        && let Some((remote, view)) = super::machines::space_elsewhere(ctx, selector).await?
-    {
-        let machine = view.directory.machine(&remote.machine);
-        let machine = machine.map_or(remote.machine.as_str(), |machine| machine.name.as_str());
-        return viewer::attach(ctx, remote.space.id.clone(), machine, session).await;
-    }
-    let target = resolve(ctx, target).await?;
+    let target = match resolve(ctx, target).await? {
+        Chosen::Here(target) => target,
+        Chosen::Elsewhere(found) => {
+            let (remote, view) = *found;
+            return attach_elsewhere(ctx, &remote, &view, session).await;
+        }
+    };
     let id = SpaceSelector::id(target.id());
     if shoal_workers::attach::here(&ctx.paths, target, session, &Callbacks(ctx)).await? {
         // Remember the space once its session was shown and still runs, so
@@ -53,6 +55,23 @@ pub(super) async fn attach(
         recent::record_attach(ctx, &id).await;
     }
     Ok(0)
+}
+
+/// Attach to `remote`, a space of another machine `view` lists, through
+/// that machine, and remember it for `attach -` once its session was shown.
+async fn attach_elsewhere(
+    ctx: &Context,
+    remote: &Listed,
+    view: &HubView,
+    session: Option<String>,
+) -> Result<i32> {
+    let machine = view.directory.machine(&remote.machine);
+    let machine = machine.map_or(remote.machine.as_str(), |machine| machine.name.as_str());
+    let code = viewer::attach(ctx, remote.space.id.clone(), machine, session).await?;
+    if code == 0 {
+        recent::record_attach_elsewhere(ctx, &remote.space.id);
+    }
+    Ok(code)
 }
 
 /// `shoal internal attach`: attach this terminal, which `viewer` views
@@ -116,34 +135,83 @@ fn attachable(spaces: Spaces) -> Spaces {
         .collect()
 }
 
-/// The chat or workspace `name` selects, where `-` is the one whose session
-/// this terminal last left running; without one, the current workspace,
-/// else the current checkout's only running chat, else a picker of the
-/// workspaces and the chats with sessions or an agent that sleeps or is
-/// stopped.
-async fn resolve(ctx: &Context, name: Option<SpaceSelector>) -> Result<Target> {
-    let spaces = crate::client::spaces::list(&ctx.paths).await?;
+/// The IDs of the other machines' spaces of `view` that `attach -` returns
+/// to, as [`attachable`] chooses this machine's.
+fn attachable_elsewhere(view: &HubView) -> Vec<SpaceId> {
+    (view.directory.spaces.iter())
+        .filter(|listed| listed.space.kind.has_worktree() || listed.space.running.is_some())
+        .map(|listed| listed.space.id.clone())
+        .collect()
+}
+
+/// The space an attach shows, on this machine or another joined one.
+enum Chosen {
+    Here(Target),
+    /// Another machine's space, with the hub's view that lists it.
+    Elsewhere(Box<(Listed, HubView)>),
+}
+
+/// The space `name` selects, on this machine or another joined one, where
+/// `-` is the one whose session this terminal last left running; without
+/// one, the current workspace, else the current checkout's only running
+/// chat, else a picker of the workspaces and the chats with sessions or an
+/// agent that sleeps or is stopped, then the other machines' spaces with an
+/// agent.
+async fn resolve(ctx: &Context, name: Option<SpaceSelector>) -> Result<Chosen> {
     if name.as_ref().is_some_and(recent::is_previous) {
-        let id = recent::previous_among(ctx, &attachable(spaces.clone()))?;
-        return Target::among(&ctx.paths, spaces.into_chats(), id).await;
+        return previous(ctx).await;
     }
+    if let Some(selector) = &name
+        && let Some(found) = super::machines::space_elsewhere(ctx, selector).await?
+    {
+        return Ok(Chosen::Elsewhere(Box::new(found)));
+    }
+    resolve_here(ctx, name).await
+}
+
+/// The space whose session this terminal last left running, other than
+/// the current one, on this machine or another joined one.
+async fn previous(ctx: &Context) -> Result<Chosen> {
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
+    let view = hub_view::view(ctx).await;
+    let elsewhere = view.as_ref().map(attachable_elsewhere).unwrap_or_default();
+    let id = recent::previous_among(ctx, &attachable(spaces.clone()), &elsewhere)?;
+    match view.and_then(|view| listing(view, &id)) {
+        Some(found) => Ok(Chosen::Elsewhere(Box::new(found))),
+        None => Ok(Chosen::Here(
+            Target::among(&ctx.paths, spaces.into_chats(), id).await?,
+        )),
+    }
+}
+
+/// The space `id` that `view` lists, with `view`; none when it lists none.
+fn listing(view: HubView, id: &SpaceId) -> Option<(Listed, HubView)> {
+    let listed = (view.directory.spaces.iter()).find(|listed| &listed.space.id == id)?;
+    Some((listed.clone(), view))
+}
+
+/// [`resolve`] for a space `name` selects on this machine, else the current
+/// or a picked one.
+async fn resolve_here(ctx: &Context, name: Option<SpaceSelector>) -> Result<Chosen> {
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let chats = spaces.into_chats();
     let running: Vec<Chat> = (chats.iter())
         .filter(|chat| chat.running)
         .cloned()
         .collect();
     if let Some(name) = name {
-        return match (chats.into_iter()).find(|chat| name.selects(&chat.id, chat.number)) {
-            Some(chat) => Ok(Target::Chat(Box::new(chat))),
-            None => workspace(ctx, Some(name), Fallback::CurrentDirectory).await,
+        let target = match (chats.into_iter()).find(|chat| name.selects(&chat.id, chat.number)) {
+            Some(chat) => Target::Chat(Box::new(chat)),
+            None => workspace(ctx, Some(name), Fallback::CurrentDirectory).await?,
         };
+        return Ok(Chosen::Here(target));
     }
     match workspace(ctx, None, Fallback::CurrentDirectoryOnly).await {
         Err(error) if error.is::<NoCurrentWorkspace>() => {}
-        current => return current,
+        current => return current.map(Chosen::Here),
     }
     if let Some(chat) = checkout_chat(ctx, &running).await? {
-        return Ok(Target::Chat(Box::new(chat)));
+        return Ok(Chosen::Here(Target::Chat(Box::new(chat))));
     }
     picked(ctx, chats).await
 }
@@ -158,8 +226,9 @@ async fn workspace(
 }
 
 /// A workspace or one of `chats` with an agent session, or whose agent
-/// sleeps or is stopped, which the picker's status shows, from a picker.
-async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Target> {
+/// sleeps or is stopped, which the picker's status shows, or another
+/// machine's space with an agent, from a picker.
+async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Chosen> {
     let places = chat_places(&ctx.paths, &chats).await;
     let places: Vec<_> = places.iter().map(|(id, place)| (id, place)).collect();
     let attachable = crate::terminal::session_owners(&places);
@@ -171,7 +240,10 @@ async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Target> {
         .await?
         .into_workspaces();
     let id = ui::pick_space(ctx, workspaces, &chats, ui::Offered::Spaces, "workspace").await?;
-    Target::among(&ctx.paths, chats, id).await
+    match super::machines::space_elsewhere(ctx, &SpaceSelector::id(&id)).await? {
+        Some(found) => Ok(Chosen::Elsewhere(Box::new(found))),
+        None => Ok(Chosen::Here(Target::among(&ctx.paths, chats, id).await?)),
+    }
 }
 
 /// Where the daemon recorded `chats` running, by chat ID: where their agents
@@ -209,3 +281,6 @@ pub(in crate::cli::commands) async fn checkout_chat(
         _ => None,
     })
 }
+
+#[cfg(test)]
+mod tests;

@@ -12,7 +12,7 @@ use crate::{
     state::WorkspaceState,
 };
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{hub::directory::SpaceSummary, space_names::SpaceSelector};
 
 /// The condition a command's workspace must meet.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -103,6 +103,13 @@ impl Need {
     /// on: for one that acts on holds, a chat that has one.
     pub fn offers_chat(self, chat: &Chat) -> bool {
         self != Self::Holds || !chat.holds.is_empty()
+    }
+
+    /// Whether a command of this need offers `space`, another joined
+    /// machine's, as the hub lists it: for one that attaches, a space with
+    /// an agent.
+    pub fn offers_elsewhere(self, space: &SpaceSummary) -> bool {
+        self != Self::Session || space.agent
     }
 
     /// What a picker reports when no workspace is left to offer.

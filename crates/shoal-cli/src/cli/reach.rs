@@ -9,7 +9,8 @@ pub fn reaches_elsewhere(path: &[String]) -> bool {
     let path: Vec<&str> = path.iter().map(String::as_str).collect();
     matches!(
         path.as_slice(),
-        ["diff"
+        ["attach"
+            | "diff"
             | "conflicts"
             | "stop"
             | "restart"

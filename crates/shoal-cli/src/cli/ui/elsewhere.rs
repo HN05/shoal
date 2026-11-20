@@ -5,7 +5,7 @@ use shoal_protocol::hub::directory::{HubView, SpaceSummary};
 
 use super::{Entries, Machines, picker_width, remote_rows};
 use crate::{
-    cli::{context::Context, hub_view, output::Palette, reach},
+    cli::{availability::Need, context::Context, hub_view, output::Palette, reach},
     model::SpaceKind,
 };
 
@@ -40,18 +40,21 @@ pub(super) async fn elsewhere_entries(ctx: &Context, offered: Offered) -> Entrie
     let Some(view) = hub_view::view(ctx).await else {
         return Entries::new();
     };
-    view_entries(&view, offered, Palette::stderr(ctx.json), picker_width())
+    let palette = Palette::stderr(ctx.json);
+    view_entries(&view, offered, ctx.need, palette, picker_width())
 }
 
-/// The entries of the spaces of `view` that `offered` names, by their IDs.
+/// The entries of the spaces of `view` that `offered` names and `need`
+/// offers, by their IDs, in `palette` cut to `width`.
 fn view_entries(
     view: &HubView,
     offered: Offered,
+    need: Need,
     palette: Palette,
     width: Option<usize>,
 ) -> Entries {
     let spaces: Vec<_> = (view.directory.spaces.iter())
-        .filter(|listed| offered.offers(&listed.space))
+        .filter(|listed| offered.offers(&listed.space) && need.offers_elsewhere(&listed.space))
         .collect();
     let rows = remote_rows(&spaces, &Machines::new(view), palette, width);
     (spaces.iter())

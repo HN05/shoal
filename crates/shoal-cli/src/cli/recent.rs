@@ -94,14 +94,17 @@ impl History {
 /// and the space this process runs in.
 pub async fn previous(ctx: &Context) -> Result<SpaceId> {
     let spaces = crate::client::spaces::list(&ctx.paths).await?;
-    previous_among(ctx, &spaces)
+    previous_among(ctx, &spaces, &[])
 }
 
-/// [`previous`] among `spaces`, for a command that returns only to some.
-pub fn previous_among(ctx: &Context, spaces: &Spaces) -> Result<SpaceId> {
+/// [`previous`] among `spaces` and `elsewhere`, other joined machines'
+/// spaces, for a command that returns only to some.
+pub fn previous_among(ctx: &Context, spaces: &Spaces, elsewhere: &[SpaceId]) -> Result<SpaceId> {
     let command = command(ctx)?;
     let current = current(spaces)?;
-    let listed: Vec<&SpaceId> = spaces.iter().map(|space| &space.id).collect();
+    let listed: Vec<&SpaceId> = (spaces.iter().map(|space| &space.id))
+        .chain(elsewhere)
+        .collect();
     let current: Vec<&SpaceId> = current.iter().collect();
     History::load(&ctx.paths)
         .previous(command, &listed, &current)
@@ -164,6 +167,14 @@ pub async fn record_move(ctx: &Context, selector: &SpaceSelector) {
 /// so `attach -` returns to it whichever command showed it.
 pub async fn record_attach(ctx: &Context, selector: &SpaceSelector) {
     remember(ctx, ATTACH, selector, false, |_| true).await;
+}
+
+/// [`record_attach`] for `space`, another joined machine's, which this
+/// machine does not list.
+pub fn record_attach_elsewhere(ctx: &Context, space: &SpaceId) {
+    if keeps_history(ctx) {
+        let _ = History::update(&ctx.paths, |history| history.record(ATTACH, space));
+    }
 }
 
 /// Remember the space `selector` names when `accepts` takes it, and the
