@@ -1,6 +1,8 @@
 //! Agent launches: the request that starts an agent as a launch asks, and
-//! the one that checks a launch of a new workspace before a picker asks.
+//! the one that checks a launch of a new workspace before a picker asks,
+//! and the one that reads the modes it may start in.
 use anyhow::Result;
+use shoal_protocol::config::modes::ModeShapes;
 use shoal_protocol::protocol::LaunchMethod;
 use shoal_protocol::{launches::Launch, model::Workspace, protocol::Launched};
 
@@ -19,6 +21,22 @@ pub async fn launch(daemon: &impl Daemon, launch: Launch) -> Result<Launched> {
 pub async fn check(daemon: &impl Daemon, launch: Launch) -> Result<Option<Workspace>> {
     let launch = Box::new(launch);
     request(daemon, LaunchMethod::CheckLaunch { launch }).await
+}
+
+/// The modes `launch` may start in, each with the space it starts, as the
+/// machine it starts on defines them.
+pub async fn modes(daemon: &impl Daemon, launch: Launch) -> Result<ModeShapes> {
+    let launch = Box::new(launch);
+    request(daemon, LaunchMethod::LaunchModes { launch }).await
+}
+
+/// Have this machine register the repository of the space `launch` goes
+/// below, which another machine runs in a repository this one has not
+/// registered, before the start settles anything else there, refusing
+/// first what the launch would refuse there.
+pub async fn take_parent_repository(daemon: &impl Daemon, launch: Launch) -> Result<()> {
+    let launch = Box::new(launch);
+    request::<()>(daemon, LaunchMethod::TakeParentRepository { launch }).await
 }
 
 #[cfg(test)]

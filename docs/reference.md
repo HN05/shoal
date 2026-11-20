@@ -968,8 +968,13 @@ below the caller's own, else at the top level. Your machine's daemon
 forwards the start through the hub, and that machine's daemon starts it as
 its own `shoal start` does, so the space's queue, limits, cleanup, ports and
 leases are that machine's, and its queue starts the agent in the background
-there with that machine's agent tools. That machine finds the repository by
-its origin, cloning it as `shoal repo add <url>` does where it has none. A
+there with that machine's agent tools and modes: `--mode` names one of that
+machine's, which decides whether it starts a workspace or a chat, and a
+terminal's picker lists them. That machine finds the repository by
+its origin, cloning it as `shoal repo add <url>` does where it has none; a
+start on any machine below another machine's space, in a repository the
+starting machine lacks, clones it from the origin URL that space's machine
+reports to the hub. A
 `--base` goes as the origin's branch of that name, or as a commit one of the
 origin's branches holds; a base with commits only your machine has, such as
 a stacked branch you have not pushed, goes along as a Git bundle of what the

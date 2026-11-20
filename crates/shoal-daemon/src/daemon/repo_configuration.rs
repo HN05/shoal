@@ -9,7 +9,7 @@ use crate::{
     },
     fsutil::off_runtime,
     hooks::{HookDirectory, HookKind},
-    model::{LocalConfigEdit, Part, Space, Workspace},
+    model::{LocalConfigEdit, Part, Repository, Space, Workspace},
     protocol::ConfigTarget,
 };
 use anyhow::{Context, Result};
@@ -257,6 +257,34 @@ impl Manager {
         let repo = self.repository(&selector).await?;
         let file = self.worktree_file(&repo.path).await?;
         self.config_layers(&repo.id, file).await
+    }
+
+    /// The config file the checkout of `repository` tracks, as TOML, which
+    /// another machine reads it by before it has the repository.
+    pub(crate) async fn tracked_config(&self, repository: &Repository) -> Result<String> {
+        let (file, _) = self.worktree_file(&repository.path).await?;
+        Ok(toml::to_string(&file)?)
+    }
+
+    /// The config file the repository of the space `selector` tracks, as
+    /// [`Self::tracked_config`] reads it.
+    pub(crate) async fn space_tracked_config(&self, selector: &SpaceSelector) -> Result<String> {
+        let space = self.space(selector).await?;
+        let id =
+            (space.repository_id).with_context(|| format!("{} has no repository", space.name))?;
+        self.tracked_config(&self.repository(&id).await?).await
+    }
+
+    /// The settings of a repository this machine has none of, whose
+    /// `tracked` config another machine sent, over the global config.
+    pub(crate) fn tracked_settings(&self, tracked: &str) -> Result<Effective> {
+        let worktree_file = toml::from_str::<RepoConfig>(tracked)
+            .context("the repository's config does not fit this machine's Shoal")?;
+        let layers = ConfigLayers {
+            worktree_file,
+            ..Default::default()
+        };
+        (self.config()).resolve_with_template_files(&layers, &self.paths)
     }
 
     /// The config file and template files of the checkout or worktree at

@@ -20,7 +20,7 @@ use crate::{
     model::{SpaceKind, SpaceMode},
 };
 
-pub use shoal_protocol::config::modes::ModeName;
+pub use shoal_protocol::config::modes::{ModeName, ModeShape, ModeShapes};
 
 /// The rule a local review's style comes from, after its fixed instructions.
 pub const REVIEW_RULE: &str = "review";
@@ -218,11 +218,23 @@ pub fn ensure_startable(name: &ModeName) -> Result<()> {
     Ok(())
 }
 
-/// The mode `name` of `modes`, refused when no config defines it.
-pub fn get<'a>(modes: &'a BTreeMap<String, Mode>, name: &ModeName) -> Result<&'a Mode> {
+/// The mode `name` of `modes`, or what is read of it, such as its
+/// [`ModeShape`], refused when no config defines it.
+pub fn get<'a, M>(modes: &'a BTreeMap<String, M>, name: &ModeName) -> Result<&'a M> {
     modes
         .get(name.as_str())
         .with_context(|| format!("no mode {name}; [modes.{name}] in config defines one"))
+}
+
+/// The space each of `modes` starts.
+pub fn shapes(modes: &BTreeMap<String, Mode>) -> ModeShapes {
+    let shape = |mode: &Mode| ModeShape {
+        kind: mode.kind,
+        repository: mode.repository,
+    };
+    (modes.iter())
+        .map(|(name, mode)| (name.clone(), shape(mode)))
+        .collect()
 }
 
 /// The mode `name` of a space of `kind`, with a repository or without one

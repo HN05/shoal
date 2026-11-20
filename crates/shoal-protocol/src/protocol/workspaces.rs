@@ -173,6 +173,12 @@ pub enum WorkspaceMethod {
     SpaceStatus {
         space: SpaceSelector,
     },
+    /// The config file the repository of the space `space` tracks, as
+    /// TOML, which a machine without that repository reads a child's modes
+    /// under. Answers with [`super::Body::TrackedConfig`].
+    TrackedConfig {
+        space: SpaceSelector,
+    },
     /// The sessions the agents of a workspace or chat reported.
     SpaceSessions {
         space: SpaceSelector,

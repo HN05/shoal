@@ -247,15 +247,23 @@ with a fresh time and an unused nonce. A request that needs
 the space's files or processes stays on its machine and is refused
 elsewhere, naming it. `shoal start --machine` forwards its launch through
 the hub to the machine it names, whose daemon starts it as its own caller's,
-so the space's queue, admission, cleanup and leases are that machine's; the
-launch carries its parent by ID, its repository by its origin's URL, which
+so the space's queue, admission, cleanup and leases are that machine's, as
+are its mode and the kind of space it implies, which the caller's machine
+reads of that machine's modes through the hub, naming the repository by its
+origin and sending the config it tracks, which that machine reads them
+under where it has none of the repository; the launch carries its parent by ID, its repository by its origin's URL, which
 that machine registers as a URL clone where it has none, and its base as a
 branch or commit of that origin, or, for a base only the caller's machine
 has, as a commit it carries first in a Git bundle of the history the
 origin's default branch lacks, over a duplex stream of the hub's links,
 which that machine fetches under a ref of Shoal's own and deletes once
 nothing needs the commit: its launch failed, or no workspace there waits
-to start from it or records it as a base that no branch holds. A device's start, which is on no machine, goes to the machine its launch
+to start from it or records it as a base that no branch holds. A start
+below another machine's space, on whichever machine, in a repository that
+machine has not registered, clones the URL of its origin, which the
+parent's machine reports to the hub beside the key repositories match by,
+and reads its modes under the config that repository tracks, which the
+parent's machine reads for it. A device's start, which is on no machine, goes to the machine its launch
 names, else to the hub's `[machine.hub] default_machine`, else to the
 machine the device sent it to. The space tree may span
 machines, as when a space moves without its parent or starts elsewhere: what a space passes up reaches the nearest space

@@ -41,7 +41,8 @@ impl Operation {
     /// goes to another: an approval's environment, where the owning
     /// machine pushes in its daemon's own, and a launch's directory and
     /// terminal, where that machine starts the agent in a place of its own,
-    /// marking the launch as one another machine forwarded.
+    /// or reads its modes, marking the launch as one another machine
+    /// forwarded.
     pub fn leave_caller_machine(&mut self) {
         match self {
             Self::Approval(ApprovalMethod::DecideApproval { env, .. }) => *env = None,
@@ -50,6 +51,10 @@ impl Operation {
                 launch.env = None;
                 launch.setup_env = None;
                 launch.unplaceable = None;
+                launch.forwarded.get_or_insert_default();
+            }
+            Self::Launch(LaunchMethod::LaunchModes { launch }) => {
+                launch.directory = None;
                 launch.forwarded.get_or_insert_default();
             }
             _ => {}
@@ -139,6 +144,7 @@ impl Operation {
             self,
             Self::Workspace(
                 WorkspaceMethod::SpaceStatus { .. }
+                    | WorkspaceMethod::TrackedConfig { .. }
                     | WorkspaceMethod::SpaceLog { .. }
                     | WorkspaceMethod::RenameSpace { .. }
                     | WorkspaceMethod::Conflicts { .. }
@@ -168,7 +174,7 @@ impl Operation {
                     | RemovalMethod::RemoveSpace { .. }
                     | RemovalMethod::StartRemoval { .. }
             ) | Self::Queue(QueueMethod::SetPriority { .. } | QueueMethod::QueueRestore { .. })
-                | Self::Launch(LaunchMethod::Launch { .. })
+                | Self::Launch(LaunchMethod::Launch { .. } | LaunchMethod::LaunchModes { .. })
                 | Self::Demo(DemoMethod::ListDemos { .. })
                 | Self::Hold(
                     HoldMethod::HoldAcquire { .. }

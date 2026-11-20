@@ -23,7 +23,7 @@ impl Operation {
                 | Self::Approval(
                     ApprovalMethod::ListApprovals { .. } | ApprovalMethod::ShowApproval { .. }
                 )
-                | Self::Launch(LaunchMethod::CheckLaunch { .. })
+                | Self::Launch(LaunchMethod::CheckLaunch { .. } | LaunchMethod::LaunchModes { .. })
                 | Self::Ci(
                     CiMethod::CheckLog { .. }
                         | CiMethod::ViewCiRun { .. }
@@ -108,6 +108,7 @@ impl Operation {
                         | WorkspaceMethod::FindSpaces { .. }
                         | WorkspaceMethod::InspectWorkspace { .. }
                         | WorkspaceMethod::SpaceStatus { .. }
+                        | WorkspaceMethod::TrackedConfig { .. }
                         | WorkspaceMethod::SpaceSessions { .. }
                         | WorkspaceMethod::FollowSession { .. }
                         | WorkspaceMethod::DiffBase { .. }

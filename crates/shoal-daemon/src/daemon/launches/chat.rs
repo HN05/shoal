@@ -132,7 +132,8 @@ impl Manager {
             None => "pass <repository>",
         };
         let reads = super::ManagerReads::new(self, caller);
-        if let Some(parent) = launches::shape::parent_repository(&reads, launch).await? {
+        let parent = launches::shape::parent_repository(&reads, launch).await?;
+        if let Some(parent) = parent.here()? {
             return Ok(parent);
         }
         (launches::shape::directory_repository(&reads, launch, &repos).await?)

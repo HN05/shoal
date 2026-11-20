@@ -26,6 +26,15 @@ pub(super) async fn handle(
         LaunchMethod::CheckLaunch { launch } => {
             Body::CheckedLaunch(manager.check_launch(*launch, caller).await?)
         }
+        LaunchMethod::LaunchModes { launch } => {
+            Body::LaunchModes(manager.launch_modes(&launch, caller).await?)
+        }
+        LaunchMethod::TakeParentRepository { launch } => {
+            manager
+                .take_launch_parent_repository(*launch, caller)
+                .await?;
+            Body::Ok
+        }
     }))
 }
 
@@ -47,6 +56,9 @@ impl Scoped for LaunchMethod {
                     _ => None,
                 }
             }
+            // Registering the parent's repository checks the parent against
+            // the caller's scope first.
+            LaunchMethod::LaunchModes { .. } | LaunchMethod::TakeParentRepository { .. } => None,
         })
     }
 }

@@ -214,6 +214,8 @@ response_bodies! {
     RenamedSpace(crate::model::RenamedSpace),
     Launched(super::Launched),
     CheckedLaunch(Option<Workspace>),
+    LaunchModes(crate::config::modes::ModeShapes),
+    TrackedConfig(String),
     Triggers(Vec<crate::triggers::TriggerStatus>),
     Trigger(crate::triggers::TriggerStatus),
     TriggerFired(crate::triggers::Fired),

@@ -204,7 +204,7 @@ async fn commit_repository(
     copied: Option<RepositoryId>,
 ) -> Result<crate::repository::Selector> {
     let own = match parent {
-        Some(parent) => DaemonReads(ctx).space_repository(parent).await?,
+        Some(parent) => DaemonReads(ctx).space_repository(parent).await?.here()?,
         None => None,
     };
     let repository = match own.or(copied) {

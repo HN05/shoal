@@ -211,6 +211,9 @@ pub(super) async fn handle(
         WorkspaceMethod::SpaceStatus { space } => {
             Body::SpaceStatus(Box::new(manager.space_status(&space).await?))
         }
+        WorkspaceMethod::TrackedConfig { space } => {
+            Body::TrackedConfig(manager.space_tracked_config(&space).await?)
+        }
         WorkspaceMethod::SpaceSessions { space } => {
             Body::SpaceSessions(manager.space_sessions(&space).await?)
         }
@@ -419,6 +422,7 @@ impl Scoped for WorkspaceMethod {
             } => Some(workspace),
             WorkspaceMethod::RenameSpace { space, .. }
             | WorkspaceMethod::SpaceStatus { space }
+            | WorkspaceMethod::TrackedConfig { space }
             | WorkspaceMethod::SpaceSessions { space }
             | WorkspaceMethod::FollowSession { space, .. }
             | WorkspaceMethod::PlaceOwnership { space, .. } => Some(space),

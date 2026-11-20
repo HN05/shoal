@@ -4,15 +4,14 @@
 //! refuses what does not fit them, and starts its agent where they say,
 //! under the caller's scope and permissions.
 use anyhow::{Context as _, Result};
-use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::launches::{Launch, LaunchSource, SpaceChoice};
 use shoal_protocol::protocol::Launched;
 use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
-    config::Effective,
+    config::{Effective, modes::ModeShapes},
     daemon::{manager::Manager, scope::Caller},
-    launches::{self, LaunchReads},
+    launches::{self, LaunchReads, SpaceRepository},
     model::{Repository, Workspace},
     protocol::ConfigTarget,
 };
@@ -67,13 +66,17 @@ impl LaunchReads for ManagerReads<'_> {
             .collect())
     }
 
-    async fn space_repository(&self, space: &SpaceSelector) -> Result<Option<RepositoryId>> {
+    async fn space_repository(&self, space: &SpaceSelector) -> Result<SpaceRepository> {
         self.manager.parent_repository(space).await
     }
 
     async fn settings(&self, target: ConfigTarget) -> Result<Effective> {
         let layers = self.manager.config_layers_for(target).await?;
         (self.manager.config()).resolve_with_template_files(&layers, &self.manager.paths)
+    }
+
+    async fn launch_modes(&self, launch: &Launch) -> Result<ModeShapes> {
+        self.manager.launch_modes(launch, self.caller).await
     }
 }
 
@@ -109,6 +112,7 @@ impl Manager {
         launches::ensure_copy_fits(&launch)?;
         launches::ensure_in_fits(&launch)?;
         self.select_launch_spaces(&mut launch).await?;
+        self.take_parent_repository(&mut launch, caller).await?;
         let shape = self.launch_shape(&launch, caller).await?;
         launches::ensure_fits(&launch, &[], shape.kind, Some(&shape.mode))?;
         self.authorize_setup(&launch, caller).await?;
@@ -129,6 +133,22 @@ impl Manager {
     async fn record_launch_interaction(&self, launched: &Launched, caller: Option<&Caller>) {
         let space = SpaceSelector::id(&launched.space.id);
         self.record_user_interaction(caller, &space).await;
+    }
+
+    /// Register the repository of the space `launch` goes below for
+    /// `caller`, as [`Self::take_parent_repository`] does first in a launch
+    /// that starts here, for a client that settles the rest of the start in
+    /// it.
+    pub(crate) async fn take_launch_parent_repository(
+        &self,
+        mut launch: Launch,
+        caller: Option<&Caller>,
+    ) -> Result<()> {
+        if self.launches_elsewhere(&launch).await? {
+            return Ok(());
+        }
+        self.select_launch_spaces(&mut launch).await?;
+        self.take_parent_repository(&mut launch, caller).await
     }
 
     /// Name the spaces `launch` names by ID: the space it goes below, here

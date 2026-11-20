@@ -7,7 +7,7 @@ use shoal_protocol::launches::Launch;
 
 use super::ManagerReads;
 use crate::{
-    config::modes::ModeName,
+    config::modes::{self, ModeName, ModeShapes},
     daemon::{manager::Manager, scope::Caller},
     launches,
     model::SpaceKind,
@@ -46,6 +46,32 @@ impl Manager {
             mode,
             repository,
         })
+    }
+
+    /// The modes `launch` may start in for `caller`, each with the space it
+    /// starts, as the machine it starts on defines them: through the hub
+    /// for another joined machine it names, else here, under the config
+    /// the repository it starts in tracks where this machine has none of
+    /// it: as a launch another machine forwarded carries it, or as the
+    /// machine of the space it goes below reads it.
+    pub(crate) async fn launch_modes(
+        &self,
+        launch: &Launch,
+        caller: Option<&Caller>,
+    ) -> Result<ModeShapes> {
+        if let Some(machine) = self.machine_elsewhere(launch).await? {
+            return self.modes_on_machine(&machine, launch, caller).await;
+        }
+        let mut launch = launch.clone();
+        let tracked = match self.read_carried(&mut launch).await? {
+            Some(tracked) => Some(tracked),
+            None => self.inherited_tracked_config(&launch, caller).await?,
+        };
+        if let Some(tracked) = tracked {
+            return Ok(modes::shapes(&self.tracked_settings(&tracked)?.modes));
+        }
+        let reads = ManagerReads::new(self, caller);
+        launches::shape::local_modes(&reads, &launch).await
     }
 
     /// The ID of the workspace whose worktree the start of `launch` was

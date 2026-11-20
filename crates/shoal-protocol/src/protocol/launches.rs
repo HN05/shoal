@@ -27,6 +27,18 @@ pub enum LaunchMethod {
     /// workspace that already has the branch it names, which the start goes
     /// into, if any.
     CheckLaunch { launch: Box<Launch> },
+    /// The modes `launch` may start in, each with the space it starts, as
+    /// the machine it starts on defines them where it would start: another
+    /// joined machine the launch names answers through the hub. Answers
+    /// with [`super::Body::LaunchModes`].
+    LaunchModes { launch: Box<Launch> },
+    /// Register the repository of the space `launch` goes below, which
+    /// another machine runs in a repository this one has not registered,
+    /// as a clone of the URL that machine reports, as a launch does first,
+    /// so that a client settles the rest of the start in that repository,
+    /// refusing first what the launch would refuse there. Answers with
+    /// [`super::Body::Ok`].
+    TakeParentRepository { launch: Box<Launch> },
 }
 
 impl LaunchMethod {
@@ -35,7 +47,9 @@ impl LaunchMethod {
             // A launch whose agent an app runs waits for the worker that
             // starts it.
             Self::Launch { .. } => Lifetime::Open,
-            Self::CheckLaunch { .. } => Lifetime::Reply,
+            Self::CheckLaunch { .. }
+            | Self::LaunchModes { .. }
+            | Self::TakeParentRepository { .. } => Lifetime::Reply,
         }
     }
 }

@@ -26,29 +26,31 @@ use crate::{Hub, daemon::Daemon};
 /// on every change.
 const ORIGIN_FRESH: Duration = Duration::from_secs(5 * 60);
 
-/// The origins of this machine's repositories as reports last read them,
-/// each with when.
+/// The URLs of the origins of this machine's repositories as reports last
+/// read them, each with when.
 #[derive(Default)]
 pub(super) struct Origins(HashMap<RepositoryId, (Option<String>, Instant)>);
 
 impl Origins {
-    /// `repository` as other machines tell it: its origin, read again once
+    /// `repository` as other machines tell it: its origin, by the key
+    /// repositories match by and the URL it is cloned from, read again once
     /// [`ORIGIN_FRESH`] passed, and the name it has now.
     async fn of(&mut self, repository: &Repository) -> RepositoryOrigin {
-        let origin = match self.0.get(&repository.id) {
-            Some((origin, read)) if read.elapsed() < ORIGIN_FRESH => origin.clone(),
+        let url = match self.0.get(&repository.id) {
+            Some((url, read)) if read.elapsed() < ORIGIN_FRESH => url.clone(),
             _ => {
                 // A checkout whose origin cannot be read matches no other
                 // machine's.
-                let read = crate::repository::identity(&repository.source).await;
-                let origin = read.unwrap_or_default();
-                let entry = (origin.clone(), Instant::now());
+                let read = crate::repository::remote_url_from_source(&repository.source).await;
+                let url = read.unwrap_or_default();
+                let entry = (url.clone(), Instant::now());
                 self.0.insert(repository.id.clone(), entry);
-                origin
+                url
             }
         };
         RepositoryOrigin {
-            origin,
+            origin: url.as_deref().map(shoal_protocol::repository::url_key),
+            url,
             name: repository_name(repository),
         }
     }

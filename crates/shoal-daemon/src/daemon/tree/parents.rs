@@ -12,19 +12,28 @@ use crate::{
         spaces::{self, Removing},
         store,
     },
+    launches::SpaceRepository,
     model::{OpenedWorkspace, SpaceKind, Workspace},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
-    /// Give `workspace` to the space `parent` that opened it, or to the user
-    /// when it was opened outside one or the parent is gone. A workspace
-    /// split from another stays below it.
+    /// Give `workspace` to the space `parent` that opened it, here or on
+    /// another joined machine, or to the user when it was opened outside
+    /// one or the parent is gone. A workspace split from another stays
+    /// below it.
     pub async fn assign_parent(&self, workspace: &SpaceId, parent: Option<SpaceId>) -> Result<()> {
         let workspace = workspace.to_owned();
         let held = [self.space_removals.clone(), self.completed_owners.clone()];
+        let elsewhere = match &parent {
+            Some(parent) => {
+                self.find_space(parent).await?.is_none()
+                    && self.hub.runs_elsewhere(self, parent).await
+            }
+            None => false,
+        };
         self.store
-            .write(move |tx| assign(tx, &workspace, parent.as_ref(), &held))
+            .write(move |tx| assign(tx, &workspace, (parent.as_ref(), elsewhere), &held))
             .await
     }
 
@@ -160,10 +169,13 @@ impl Manager {
     pub(crate) async fn parent_repository(
         &self,
         selector: &SpaceSelector,
-    ) -> Result<Option<RepositoryId>> {
+    ) -> Result<SpaceRepository> {
         let id = (self.parent_space_id(Some(selector)).await?).context("a parent names a space")?;
         match self.find_space(&id).await? {
-            Some(space) => Ok(space.repository_id),
+            Some(space) => Ok(match space.repository_id {
+                Some(repository) => SpaceRepository::Registered(repository),
+                None => SpaceRepository::Without,
+            }),
             None => self.hub.repository_elsewhere(self, &id).await,
         }
     }
@@ -184,11 +196,13 @@ impl Manager {
 /// user. A workspace below a chat being removed stays there: the removal
 /// listed it after reserving the chat, on this one thread, and takes it. A
 /// parent the workspace already has stays, as one another joined machine
-/// runs, which its creation recorded once the hub listed it.
+/// runs, which its creation recorded once the hub listed it, and a new
+/// `parent` that the hub lists `elsewhere` takes it, whose own machine
+/// decides what it takes.
 fn assign(
     tx: &rusqlite::Transaction<'_>,
     workspace: &SpaceId,
-    parent: Option<&SpaceId>,
+    (parent, elsewhere): (Option<&SpaceId>, bool),
     [removing, owners]: &[Removing; 2],
 ) -> Result<()> {
     // A removal decided by the space the workspace is below keeps it there.
@@ -220,19 +234,21 @@ fn assign(
     let parent = match parent
         .filter(|parent| !removing.reserved(parent) || current.as_ref() == Some(*parent))
     {
-        Some(parent) if spaces::space_kind(tx, parent)?.is_some() => Some(parent),
+        Some(parent) if elsewhere || spaces::space_kind(tx, parent)?.is_some() => Some(parent),
         _ => None,
     };
     if parent != current.as_ref() {
-        if let Some(parent) = parent {
-            let repository: RepositoryId = tx.query_row(
-                "SELECT repository_id FROM spaces WHERE id=?1",
-                [workspace],
-                |row| row.get(0),
-            )?;
-            super::ensure_parent(tx, Some(&repository), workspace, parent)?;
+        match parent {
+            Some(parent) => {
+                let repository: RepositoryId = tx.query_row(
+                    "SELECT repository_id FROM spaces WHERE id=?1",
+                    [workspace],
+                    |row| row.get(0),
+                )?;
+                super::place_below(tx, Some(&repository), workspace, parent)?;
+            }
+            None => super::set_parent(tx, workspace, None)?,
         }
-        super::set_parent(tx, workspace, parent)?;
     }
     Ok(())
 }

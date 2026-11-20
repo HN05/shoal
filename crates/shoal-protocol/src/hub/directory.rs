@@ -71,6 +71,10 @@ pub struct RepositoryOrigin {
     /// none for a checkout without one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,
+    /// The URL its origin remote is fetched from, which a machine without
+    /// the repository clones.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
     pub name: String,
 }
 

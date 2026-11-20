@@ -9,7 +9,7 @@ use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     config::permissions::Permissions,
     hub::{
-        directory::{Directory, Listed},
+        directory::{Directory, Listed, RepositoryOrigin},
         routing::ChainedMode,
     },
     list_status::ListStatus,
@@ -18,6 +18,7 @@ use shoal_protocol::{
 };
 
 use crate::{Hub, daemon::Daemon, log};
+use shoal_core::launches::SpaceRepository;
 
 impl Hub {
     /// The spaces above the space `id` from the first one this machine
@@ -289,38 +290,54 @@ impl Hub {
         Ok(Some(reported))
     }
 
-    /// This machine's registration of the repository of the space `id`,
-    /// which another machine runs, by the origin the hub lists it with;
-    /// none for a chat without one, or for a repository this machine has
-    /// not registered.
+    /// The repository of the space `id`, which another machine runs, as
+    /// this machine knows it by the origin the hub lists it with.
     pub async fn repository_elsewhere(
         &self,
         daemon: &dyn Daemon,
         id: &SpaceId,
-    ) -> Result<Option<RepositoryId>> {
+    ) -> Result<SpaceRepository> {
         let Some(origin) = self.origin_elsewhere(daemon, id).await? else {
-            return Ok(None);
+            return Ok(SpaceRepository::Without);
         };
         let repositories = daemon.repositories().await?;
         let registered = crate::repository::with_origin(&repositories, &origin).await;
-        Ok(registered.map(|repository| repository.id.clone()))
-    }
-
-    /// Whether the space `id`, which another machine runs, is in a
-    /// repository this machine has not registered.
-    pub async fn unregistered_elsewhere(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<bool> {
-        let listed = self.origin_elsewhere(daemon, id).await?.is_some();
-        Ok(listed && self.repository_elsewhere(daemon, id).await?.is_none())
+        Ok(match registered {
+            Some(repository) => SpaceRepository::Registered(repository.id.clone()),
+            None => SpaceRepository::Unregistered,
+        })
     }
 
     /// The origin of the repository of the space `id`, which another
     /// machine runs, as the hub lists it; none for a chat without one.
     async fn origin_elsewhere(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<Option<String>> {
+        let repository = self.listed_repository(daemon, id).await?;
+        Ok(repository.and_then(|repository| repository.origin))
+    }
+
+    /// The URL the origin of the repository of the space `id`, which
+    /// another machine runs, is cloned from, as that machine reports it.
+    pub async fn origin_url_elsewhere(
+        &self,
+        daemon: &dyn Daemon,
+        id: &SpaceId,
+    ) -> Result<Option<String>> {
+        let repository = self.listed_repository(daemon, id).await?;
+        Ok(repository.and_then(|repository| repository.url))
+    }
+
+    /// The repository of the space `id`, which another machine runs, as
+    /// the hub lists it; none for a chat without one.
+    async fn listed_repository(
+        &self,
+        daemon: &dyn Daemon,
+        id: &SpaceId,
+    ) -> Result<Option<RepositoryOrigin>> {
         let Some((_, directory)) = self.directory_or_known(daemon).await? else {
             return Ok(None);
         };
-        let listed = (directory.spaces.iter()).find(|listed| &listed.space.id == id);
-        Ok(listed.and_then(|listed| listed.space.repository.as_ref()?.origin.clone()))
+        let listed = (directory.spaces.into_iter()).find(|listed| &listed.space.id == id);
+        Ok(listed.and_then(|listed| listed.space.repository))
     }
 
     /// The origin other machines know the registered repository `id` by.

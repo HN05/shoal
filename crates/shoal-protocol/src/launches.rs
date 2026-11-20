@@ -153,6 +153,10 @@ pub struct Carried {
     /// only while something it records needs the commit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub commit: Option<CommitId>,
+    /// The config file its repository tracks, as TOML, which this machine
+    /// reads a launch's modes under where it has none of the repository.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tracked_config: Option<String>,
 }
 
 /// What a setup launch sets up, which decides the space its agent starts in.

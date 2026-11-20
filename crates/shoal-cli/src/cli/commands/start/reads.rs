@@ -1,12 +1,12 @@
 //! What settling a start's workspace reads, asked of the daemon.
 use anyhow::Result;
-use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::launches::Launch;
 use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
     cli::context::Context,
-    config::Effective,
-    launches::LaunchReads,
+    config::{Effective, modes::ModeShapes},
+    launches::{LaunchReads, SpaceRepository},
     model::{Repository, Workspace},
     protocol::ConfigTarget,
     refusal::{Reason, Refusal},
@@ -27,11 +27,14 @@ impl LaunchReads for DaemonReads<'_> {
     }
 
     /// For another joined machine's space, this machine's registration of
-    /// the repository the hub lists it in, by its origin, if any.
-    async fn space_repository(&self, selector: &SpaceSelector) -> Result<Option<RepositoryId>> {
+    /// the repository the hub lists it in, by its origin.
+    async fn space_repository(&self, selector: &SpaceSelector) -> Result<SpaceRepository> {
         let spaces = crate::client::spaces::list(&self.0.paths).await?;
         if let Some(space) = spaces.find(selector) {
-            return Ok(space.repository_id.clone());
+            return Ok(match &space.repository_id {
+                Some(id) => SpaceRepository::Registered(id.clone()),
+                None => SpaceRepository::Without,
+            });
         }
         let elsewhere = crate::cli::commands::machines::space_elsewhere(self.0, selector);
         let Some((remote, _)) = elsewhere.await? else {
@@ -43,11 +46,15 @@ impl LaunchReads for DaemonReads<'_> {
             .repository
             .and_then(|repository| repository.origin);
         let Some(origin) = origin else {
-            return Ok(None);
+            return Ok(SpaceRepository::Without);
         };
         let repos = crate::client::repositories::list(&self.0.paths).await?;
-        let registered = crate::repository::with_origin(&repos, &origin).await;
-        Ok(registered.map(|repository| repository.id.clone()))
+        Ok(
+            match crate::repository::with_origin(&repos, &origin).await {
+                Some(repository) => SpaceRepository::Registered(repository.id.clone()),
+                None => SpaceRepository::Unregistered,
+            },
+        )
     }
 
     /// The global config's settings read here, at launch, else the
@@ -57,6 +64,16 @@ impl LaunchReads for DaemonReads<'_> {
             ConfigTarget::Global => crate::config::Config::load_with_templates(&self.0.paths)?
                 .resolve(&Default::default()),
             target => shoal_workers::settings::of(&self.0.paths, target).await,
+        }
+    }
+
+    /// For a launch that names a machine, as that machine defines them,
+    /// which the daemon asks through the hub; else as this machine's
+    /// settings define them.
+    async fn launch_modes(&self, launch: &Launch) -> Result<ModeShapes> {
+        match launch.machine {
+            Some(_) => crate::client::launches::modes(&self.0.paths, launch.clone()).await,
+            None => crate::launches::shape::local_modes(self, launch).await,
         }
     }
 }

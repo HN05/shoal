@@ -104,7 +104,8 @@ impl Manager {
                     Some(_) => "pass --repo <repository> or a forge URL",
                     None => "pass <repository>",
                 };
-                match crate::launches::shape::parent_repository(reads, launch).await? {
+                let parent = crate::launches::shape::parent_repository(reads, launch).await?;
+                match parent.here()? {
                     Some(repository) => self.repository(repository).await?,
                     None => self.current_repository(launch, &repos, reads, hint).await?,
                 }

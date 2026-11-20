@@ -6,9 +6,14 @@ use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::launches::{Launch, Setup, SpaceChoice};
 use shoal_protocol::space_names::SpaceSelector;
 
-use super::{LaunchReads, linked_items, positional_repository, workspace::owning_workspace};
+use super::{
+    LaunchReads, SpaceRepository, linked_items, positional_repository, workspace::owning_workspace,
+};
 use crate::{
-    config::{Effective, modes, modes::ModeName},
+    config::{
+        Effective, modes,
+        modes::{ModeName, ModeShapes},
+    },
     model::{Repository, SpaceKind},
     protocol::ConfigTarget,
 };
@@ -34,9 +39,16 @@ pub async fn launch_kind(
     if *mode == ModeName::DEFAULT {
         return Ok((SpaceKind::Workspace, true));
     }
-    let settings = launch_settings(reads, launch).await?;
-    let found = modes::get(&settings.modes, mode)?;
+    let modes = reads.launch_modes(launch).await?;
+    let found = modes::get(&modes, mode)?;
     Ok((found.kind, found.repository))
+}
+
+/// The modes `launch` may start in on this machine, each with the space it
+/// starts, from the settings [`launch_settings`] finds.
+pub async fn local_modes(reads: &impl LaunchReads, launch: &Launch) -> Result<ModeShapes> {
+    let settings = launch_settings(reads, launch).await?;
+    Ok(modes::shapes(&settings.modes))
 }
 
 /// The kind of space `setup` starts in, and whether it has a repository: a
@@ -89,7 +101,8 @@ pub async fn launch_settings(reads: &impl LaunchReads, launch: &Launch) -> Resul
 /// The registered repository `launch` names, else the one an issue or item
 /// URL it names belongs to, else that of the space it goes below, which a
 /// child shares, else that of the checkout or worktree the start was made
-/// in.
+/// in; none below another machine's space in a repository this machine has
+/// not registered, which no other repository stands in for.
 pub async fn launch_repository(
     reads: &impl LaunchReads,
     launch: &Launch,
@@ -109,21 +122,22 @@ pub async fn launch_repository(
         }
     }
     let id = match parent_repository(reads, launch).await? {
-        Some(id) => Some(id),
-        None => directory_repository(reads, launch, &repos).await?,
+        SpaceRepository::Registered(id) => Some(id),
+        SpaceRepository::Unregistered => None,
+        SpaceRepository::Without => directory_repository(reads, launch, &repos).await?,
     };
     Ok(id.and_then(|id| repos.into_iter().find(|repo| repo.id == id)))
 }
 
 /// The repository of the space `launch` names to go below, which a child
-/// shares; none without a parent or for a chat without a repository.
+/// shares; [`SpaceRepository::Without`] without a parent.
 pub async fn parent_repository(
     reads: &impl LaunchReads,
     launch: &Launch,
-) -> Result<Option<RepositoryId>> {
+) -> Result<SpaceRepository> {
     match &launch.parent {
         Some(parent) => reads.space_repository(parent).await,
-        None => Ok(None),
+        None => Ok(SpaceRepository::Without),
     }
 }
 

@@ -57,6 +57,7 @@ const REQUESTS: &[&str] = &[
     r#"{"revoke_scope":{"space":"fix","token":"t1"}}"#,
     r#"{"space_environment":{"space":"fix"}}"#,
     r#"{"space_status":{"space":"fix"}}"#,
+    r#"{"tracked_config":{"space":"7"}}"#,
     r#"{"space_sessions":{"space":"fix"}}"#,
     r#"{"follow_session":{"space":"fix","session":"abc","from":{"p/abc.jsonl":{"offset":12,"size":20}}}}"#,
     r#"{"attach_session":{"space":"fix","viewer":{"session":"shoal-7","again":{"host":"zmx","place":"shoal-7","owned":true},"size":{"rows":40,"columns":120},"term":"xterm-256color","apps":[{"host":"rex","label":"desk"}]}}}"#,
@@ -138,6 +139,8 @@ const REQUESTS: &[&str] = &[
     // Chats.
     r#"{"launch":{"launch":{"target":"app","in":{"space":"3"},"mode":"chat","agent":"claude","task":["Read the build"]}}}"#,
     r#"{"check_launch":{"launch":{"target":"app","base":"main","issue":{"named":"https://forge.example/team/app/issues/42"}}}}"#,
+    r#"{"launch_modes":{"launch":{"target":"app","machine":"laptop"}}}"#,
+    r#"{"take_parent_repository":{"launch":{"branch":"fix","parent":"7"}}}"#,
     r#""chat_root""#,
     // The agent queue.
     r#"{"queue_agent":{"workspace":"fix","launch":{"agent":null,"prompt":"Fix the build"}}}"#,
