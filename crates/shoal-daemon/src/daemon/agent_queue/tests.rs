@@ -1356,13 +1356,10 @@ async fn a_restored_agent_ends_its_turn_and_an_update_reaches_it() {
 async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    // Disk protection's lowest thresholds, under which admission reads the
-    // host's disk as healthy unless it has less than 1 GiB free.
-    manager.publish_config(global_config(
-        "[machine]\nmax_heavy_agents = 1000\n\
-         [machine.overload.disk]\nstop_free_gib = 1\ncleanup_free_gib = 1\n\
-         [machine.overload.warning]\ndisk_free_gib = 1",
-    ));
+    // Disk protection stays on for its readings, while admission reads
+    // every filesystem as free.
+    crate::daemon::capacity::fake_disk_free(u64::MAX);
+    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 1000"));
     let idle = create(&manager, &repo, "idle").await;
     let (execution, _stop) = connected_agent(&manager, &idle).await;
     manager

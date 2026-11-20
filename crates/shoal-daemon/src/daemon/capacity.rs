@@ -290,13 +290,30 @@ fn memory_room(memory: load::Memory, settings: &Overload) -> u64 {
     warning.saturating_sub(used).try_into().unwrap_or(u64::MAX)
 }
 
+/// The free space admission reads in place of the host's, once a test sets
+/// it to keep admission off the free space of the machine running it.
+#[cfg(any(test, feature = "test-support"))]
+static FAKE_DISK_FREE: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+
+/// Read `free` bytes as every filesystem's free space for admission from
+/// now on, in this process.
+#[cfg(any(test, feature = "test-support"))]
+pub fn fake_disk_free(free: u64) {
+    FAKE_DISK_FREE.get_or_init(|| free);
+}
+
 /// The least free space across `paths`, as [`sample`] probes it.
 pub(crate) fn disk_free(paths: &[&Path], settings: &Overload) -> Option<u64> {
-    sample_disk(
-        paths,
-        settings.disk.enabled,
-        fsutil::disk_space::available_bytes,
-    )
+    sample_disk(paths, settings.disk.enabled, available)
+}
+
+/// The free space of `path`'s filesystem, or what a test set in its place.
+fn available(path: &Path) -> std::io::Result<u64> {
+    #[cfg(any(test, feature = "test-support"))]
+    if let Some(free) = FAKE_DISK_FREE.get() {
+        return Ok(*free);
+    }
+    fsutil::disk_space::available_bytes(path)
 }
 
 fn sample_disk(

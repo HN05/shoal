@@ -26,6 +26,7 @@ use shoal_subprocess as subprocess;
 #[cfg(feature = "test-support")]
 pub mod test_daemon {
     pub use crate::daemon::approvals::ApprovalRequestExt;
+    pub use crate::daemon::capacity::fake_disk_free;
     pub use crate::daemon::disk::Monitor as DiskMonitor;
     pub use crate::daemon::links::proposals::store_issue_proposal;
     pub use crate::daemon::operations::fake;

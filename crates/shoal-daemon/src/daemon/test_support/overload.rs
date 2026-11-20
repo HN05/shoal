@@ -40,12 +40,10 @@ pub async fn configure_fixture(manager: &Manager, text: &str) {
 }
 
 /// [`configure_fixture`] with disk protection on, for the tests that feed
-/// its monitor readings: at its lowest thresholds, admission's own reading
-/// holds a start only on a host with less than 1 GiB free.
+/// its monitor readings, with admission reading every filesystem as free.
 pub async fn configure_disk_fixture(manager: &Manager, text: &str) {
-    let lowest = "stop_free_gib = 1\ncleanup_free_gib = 1\n\
-                  [machine.overload.warning]\ndisk_free_gib = 1\n";
-    configure_limits(manager, text, lowest).await;
+    crate::daemon::capacity::fake_disk_free(u64::MAX);
+    configure_limits(manager, text, "enabled = true\n").await;
 }
 
 /// Replace the fixture's global config with `text`, a fixed agent limit
