@@ -33,7 +33,7 @@ use crate::{
     env,
     model::{ExecutionSpace, PortRequest},
     paths::{Paths, StateFiles as _},
-    process::identity::{self as process, Identity},
+    process::identity::{self as process, Identity, IdentityExt as _},
     refusal::{Reason, Refusal},
 };
 
@@ -373,6 +373,10 @@ fn scope_token(db: &Connection, execution: &ExecutionId) -> Result<ScopeToken> {
 /// Fails while a live process remains in the group, such as one whose
 /// environment cannot be read, which unknown ownership leaves running.
 async fn stop_recorded(execution: &ExecutionId, process: &Identity) -> Result<()> {
+    // Its group ended with that boot; its number may name another now.
+    if process.of_earlier_boot() {
+        return Ok(());
+    }
     if runs(process) {
         // SAFETY: the group the live, verified viewer leads.
         unsafe {

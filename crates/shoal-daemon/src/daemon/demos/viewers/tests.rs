@@ -688,6 +688,30 @@ async fn a_demo_that_ends_while_its_viewer_cannot_be_proven_stopped_keeps_its_re
 }
 
 #[tokio::test]
+async fn a_viewer_of_an_earlier_boot_leaves_a_group_that_took_its_number_alone() {
+    let (temp, manager) = manager().await;
+    let (_, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
+    let port = manager.reserve_viewer_port(&demo, None).await.unwrap();
+    // After a restart of the machine, the viewer's group number names an
+    // unrelated live group.
+    let unrelated = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let live = crate::process::identity::capture(unrelated.id())
+        .unwrap()
+        .unwrap();
+    let earlier = Viewer {
+        port,
+        process: live.clone().recorded_in("an-earlier-boot"),
+        serving: true,
+    };
+    (manager.record_viewer(&demo.execution_id, &earlier))
+        .await
+        .unwrap();
+    manager.forget_execution(&demo.execution_id).await.unwrap();
+    assert!(runs(&live), "the unrelated group was stopped");
+    unrelated.kill();
+}
+
+#[tokio::test]
 async fn a_viewer_port_another_process_listens_on_starts_no_viewer() {
     let (temp, manager) = manager().await;
     let (_, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
