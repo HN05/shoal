@@ -543,3 +543,97 @@ async fn an_exit_that_waits_refuses_commands_that_would_stop_with_it() {
     executing.abort();
     crate::daemon::operations::fake::take(&operation).exit(0);
 }
+
+#[tokio::test]
+async fn an_agents_pause_records_the_kills_of_the_run_it_stopped() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "killed".into(), None, None, None)
+        .await
+        .unwrap();
+    let wrapper = crate::process::identity::capture(std::process::id())
+        .unwrap()
+        .unwrap();
+    let (client, server) = UnixStream::pair().unwrap();
+    let executing = tokio::spawn(execute(
+        server,
+        1,
+        manager.clone(),
+        ExecutionContext {
+            space: SpaceSelector::id(&workspace.id),
+            wrapper: wrapper.clone(),
+            kind: ExecutionKind::Command,
+            agent: Some(TrackedAgent::named("claude")),
+            recover: false,
+            reattach: true,
+            caller: None,
+            queue_entry: None,
+            demo: None,
+            origin: None,
+            merge: None,
+        },
+        manager.gates.owned_operation().await,
+    ));
+    let mut wrapper_side = BufReader::new(client);
+    let response: Response = read(&mut wrapper_side).await;
+    assert!(matches!(response.body, Body::Execution(_)));
+    let events = [
+        ExecutionEvent::Started {
+            child: None,
+            group_id: wrapper.pid,
+            restored: false,
+            restored_from: Vec::new(),
+        },
+        ExecutionEvent::Paused {
+            memory: Some(ScopeMemory {
+                oom_kills: 2,
+                peak: 1 << 30,
+            }),
+        },
+    ];
+    for event in events {
+        protocol::write(wrapper_side.get_mut(), &event)
+            .await
+            .unwrap();
+    }
+    assert!(matches!(read(&mut wrapper_side).await, Control::Started));
+    // The wrapper then finishes without a restore, its run already reported.
+    let finished = ExecutionEvent::Finished {
+        exit_code: 143,
+        memory: None,
+    };
+    protocol::write(wrapper_side.get_mut(), &finished)
+        .await
+        .unwrap();
+    assert!(matches!(
+        read(&mut wrapper_side).await,
+        Control::Finished { .. }
+    ));
+    bounded(executing).await.unwrap().unwrap();
+    let id = workspace.id.clone();
+    let kills: Vec<(String, Option<i64>)> = (manager.store)
+        .run(move |db| {
+            let mut query = db.prepare(
+                "SELECT json_extract(record,'$.kind'), json_extract(record,'$.agent.oom_kills')
+                 FROM space_events WHERE space_id=?1
+                 AND json_extract(record,'$.kind') IN ('agent_stopped','agent_exited')",
+            )?;
+            Ok(query
+                .query_map([id], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .collect::<rusqlite::Result<_>>()?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(kills, [("agent_stopped".to_owned(), Some(2))]);
+    let alerts = manager.notifications.list(false, 1).await.unwrap();
+    assert!(
+        alerts[0].message.contains("killed 2"),
+        "{}",
+        alerts[0].message
+    );
+}

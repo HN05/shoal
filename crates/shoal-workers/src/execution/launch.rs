@@ -234,7 +234,19 @@ impl TrackedLaunch {
             }
             return Ok(false);
         };
-        match pause_agent(&mut self.link, paths, &self.plan, mode, recovery, stop).await? {
+        // The pause reports its run's memory; a restored run reports its own.
+        let memory = self.memory.take();
+        match pause_agent(
+            &mut self.link,
+            paths,
+            &self.plan,
+            mode,
+            recovery,
+            stop,
+            memory,
+        )
+        .await?
+        {
             AfterPause::Finish => Ok(false),
             AfterPause::TakeOver {
                 installed,

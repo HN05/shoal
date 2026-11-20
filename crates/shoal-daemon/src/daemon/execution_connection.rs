@@ -326,7 +326,7 @@ async fn relay(
     let mut restored_record = None;
     loop {
         let event = if std::mem::take(&mut resumed_pause) {
-            ExecutionEvent::Paused
+            ExecutionEvent::Paused { memory: None }
         } else if awaiting_started {
             incoming.recv().await.context("execution disconnected")??
         } else {
@@ -415,7 +415,8 @@ async fn relay(
                 memory: reported,
             } => {
                 *stopped = sent_stop;
-                *memory = reported;
+                // A pause reported the memory of the run it stopped.
+                *memory = reported.or(*memory);
                 return Ok(Ended::Finished(exit_code));
             }
             ExecutionEvent::ChildExited => {
@@ -459,10 +460,16 @@ async fn relay(
                 protocol::write(writer, &control).await?;
                 *unattachable = Some(operation);
             }
-            ExecutionEvent::Paused => {
+            ExecutionEvent::Paused { memory: reported } => {
                 *handoff_claimed = true;
+                // Named again by the stop's alert once the wrapper finishes
+                // without a restore; a restored run reports its own.
+                *memory = reported;
                 if let Some(tracked) = agent {
-                    let stopped = agent_event(tracked, execution_id, None);
+                    let stopped = AgentEvent {
+                        oom_kills: reported.map_or(0, |memory| memory.oom_kills),
+                        ..agent_event(tracked, execution_id, None)
+                    };
                     (crate::daemon::events::record_agent(
                         &manager.store,
                         &space.id,

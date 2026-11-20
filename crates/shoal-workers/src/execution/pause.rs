@@ -8,6 +8,8 @@ use std::{ffi::OsString, io::Write, path::PathBuf};
 
 use anyhow::Result;
 
+use shoal_protocol::protocol::ScopeMemory;
+
 use super::{
     Mode,
     link::Link,
@@ -49,8 +51,9 @@ pub(super) enum AfterPause {
     },
 }
 
-/// Save the paused agent's recovery record before reporting the pause, then,
-/// when protection stopped it, wait for the daemon to restore it.
+/// Save the paused agent's recovery record before reporting the pause, with
+/// what its scope recorded of its `memory`, then, when protection stopped
+/// it, wait for the daemon to restore it.
 pub(super) async fn pause_agent(
     link: &mut Link,
     paths: &CommandPaths,
@@ -58,6 +61,7 @@ pub(super) async fn pause_agent(
     mode: &Mode,
     recovery: &recovery::Recovery,
     stop: &Halt,
+    memory: Option<ScopeMemory>,
 ) -> Result<AfterPause> {
     let automatic = recovery.automatic && stop.recovers();
     let restorer = restorer(recovery, stop, automatic);
@@ -83,7 +87,7 @@ pub(super) async fn pause_agent(
         return Ok(AfterPause::Finish);
     }
     let awaited = stop.protection().filter(|_| automatic);
-    report_pause(link, awaited.clone()).await?;
+    report_pause(link, awaited.clone(), memory).await?;
     let Some(protection) = awaited else {
         return Ok(AfterPause::Finish);
     };
@@ -249,14 +253,19 @@ fn agent_place(mode: &Mode) -> Option<crate::sessions::Origin> {
         .flatten()
 }
 
-/// Tell the daemon the agent paused. Awaiting a restore keeps the link armed
-/// to reattach; otherwise the daemon may forget the stopped child.
-async fn report_pause(link: &mut Link, awaited: Option<Protection>) -> Result<()> {
+/// Tell the daemon the agent paused, with what its scope recorded of its
+/// `memory`. Awaiting a restore keeps the link armed to reattach; otherwise
+/// the daemon may forget the stopped child.
+async fn report_pause(
+    link: &mut Link,
+    awaited: Option<Protection>,
+    memory: Option<ScopeMemory>,
+) -> Result<()> {
     match awaited {
         Some(protection) => link.await_restore(protection),
         None => link.disarm(),
     }
-    link.send(&ExecutionEvent::Paused).await
+    link.send(&ExecutionEvent::Paused { memory }).await
 }
 
 /// Keep a stopped command for `shoal resume` to report.

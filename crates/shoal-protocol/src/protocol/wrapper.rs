@@ -78,7 +78,13 @@ pub enum ExecutionEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         memory: Option<ScopeMemory>,
     },
-    Paused,
+    Paused {
+        /// What the scope of the paused agent's command recorded of its
+        /// memory since it started or was last restored, where it ran in
+        /// one of its own.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        memory: Option<ScopeMemory>,
+    },
     /// The user woke the agent whose restore the wrapper waits for, in the
     /// place it waits in: start that restore now, whatever the limits, as
     /// `shoal queue start` does. Ignored while no restore of it waits.
