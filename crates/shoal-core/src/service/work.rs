@@ -12,7 +12,7 @@ use tokio::sync::OnceCell;
 
 /// The slice of the user's service manager Shoal's work runs in, which
 /// systemd nests in `shoal.slice`.
-pub const SLICE: &str = "shoal-work.slice";
+const SLICE: &str = "shoal-work.slice";
 
 /// The launcher [`launcher`] found, unset until it first runs.
 static LAUNCHER: OnceCell<Vec<OsString>> = OnceCell::const_new();
