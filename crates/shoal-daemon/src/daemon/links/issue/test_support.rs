@@ -148,16 +148,24 @@ impl Fixture {
     /// Link issue 7 to the space `id` as assigned by `assigner`.
     pub(crate) async fn link_space(&self, id: &SpaceId, assigner: Assigner) -> Vec<String> {
         let selector = SpaceSelector::id(id);
-        (self
-            .manager
-            .set_issue(&selector, &"7".parse().unwrap(), None, assigner))
+        (self.manager.links.set_issue(
+            &*self.manager,
+            &selector,
+            &"7".parse().unwrap(),
+            None,
+            assigner,
+        ))
         .await
         .unwrap()
     }
 
     pub(crate) async fn unlink(&self, workspace: &Workspace) -> Vec<String> {
         let selector = SpaceSelector::id(&workspace.id);
-        self.manager.clear_issue(&selector, None).await.unwrap()
+        self.manager
+            .links
+            .clear_issue(&*self.manager, &selector, None)
+            .await
+            .unwrap()
     }
 
     /// The token of each assignee edit the forge received, in order.

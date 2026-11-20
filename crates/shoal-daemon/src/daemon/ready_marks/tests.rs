@@ -208,7 +208,8 @@ async fn marks_follow_links_outlast_commits_and_record_events() {
 
     // Unlinking withdraws a mark; explicit clearing needs an existing mark.
     manager
-        .clear_issue(&SpaceSelector::id(&workspace.id), None)
+        .links
+        .clear_issue(&*manager, &SpaceSelector::id(&workspace.id), None)
         .await
         .unwrap();
     let cleared = manager

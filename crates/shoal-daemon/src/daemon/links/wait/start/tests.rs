@@ -91,7 +91,8 @@ async fn linking_an_issue_takes_its_comments_as_seen() {
     let space = shoal_protocol::space_names::SpaceSelector::id(&workspace);
     let input = issue.to_string().parse().unwrap();
     manager
-        .set_issue(&space, &input, None, assigner)
+        .links
+        .set_issue(&*manager, &space, &input, None, assigner)
         .await
         .unwrap();
     set_state(&manager, &workspace, "ready").await;

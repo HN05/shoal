@@ -1,5 +1,6 @@
 //! What links need of the rest of the daemon, which implements it: the
-//! registered repositories and the spaces requests come from, which forge
+//! registered repositories and the spaces requests come from, the watches
+//! of their linked items, which forge
 //! each host serves, the permission a scoped caller acts with, the
 //! coordinators alerts about a space reach, and the spaces' state links
 //! check in their own transactions.
@@ -61,6 +62,20 @@ pub trait Spaces: Send + Sync {
 
     /// What the daemon records of the agent of the space `id`.
     fn space_agent<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<SpaceAgent>>;
+
+    /// Run the cleanup sweep now, as after a change to what keeps a space.
+    fn wake_cleanup(&self);
+}
+
+/// The watches of a space's linked items.
+pub trait Watches: Send + Sync {
+    /// Start the watches of `items`, which the space `id` just linked; the
+    /// caller holds the space's PR gate.
+    fn start_linked_watches_gated<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        items: Vec<ItemRef>,
+    ) -> BoxFuture<'a, ()>;
 }
 
 /// What the daemon records of a space's agent, which settling the agent
@@ -103,9 +118,9 @@ pub trait Forges: Send + Sync {
 
 /// Everything links need of the daemon, which each of their operations
 /// that reaches beyond them takes.
-pub trait Daemon: Spaces + Forges + Permissions + Coordinators {}
+pub trait Daemon: Spaces + Watches + Forges + Permissions + Coordinators {}
 
-impl<T> Daemon for T where T: Spaces + Forges + Permissions + Coordinators {}
+impl<T> Daemon for T where T: Spaces + Watches + Forges + Permissions + Coordinators {}
 
 /// What links check of a space in their own transactions. Its methods run
 /// on the store's thread, so they are not futures.

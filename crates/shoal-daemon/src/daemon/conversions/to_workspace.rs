@@ -165,7 +165,14 @@ impl Manager {
         let OpenIssue { url, title, .. } =
             self.links.read_open_issue(self, &checkout, input).await?;
         let selector = SpaceSelector::id(&chat.id);
-        (self.set_issue(&selector, &url.into(), Some(title), Assigner::of(caller))).await
+        (self.links.set_issue(
+            self,
+            &selector,
+            &url.into(),
+            Some(title),
+            Assigner::of(caller),
+        ))
+        .await
     }
 
     /// Refuse a conversion of the space `id`, named `name`, whose agent has

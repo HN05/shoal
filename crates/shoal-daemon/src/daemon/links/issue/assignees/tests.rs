@@ -232,8 +232,14 @@ async fn an_agents_assignment_adds_the_users_login() {
     let fixture = Fixture::start(&["fix"], &[], USER, AGENT_TOKEN).await;
     let workspace = &fixture.workspaces[0];
     let selector = SpaceSelector::id(&workspace.id);
-    let warnings = (fixture.manager)
-        .set_issue(&selector, &"7".parse().unwrap(), None, Assigner::Agent)
+    let warnings = (fixture.manager.links)
+        .set_issue(
+            &*fixture.manager,
+            &selector,
+            &"7".parse().unwrap(),
+            None,
+            Assigner::Agent,
+        )
         .await
         .unwrap();
     assert!(warnings.is_empty(), "{warnings:?}");

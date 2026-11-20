@@ -1,9 +1,9 @@
 //! The registered repositories and the spaces requests about items come
-//! from, as links read them.
+//! from, and the watches of their linked items, as links reach them.
 use anyhow::Result;
 use futures_util::future::BoxFuture;
 use shoal_links::{
-    daemon::{SpaceAgent, Spaces},
+    daemon::{SpaceAgent, Spaces, Watches},
     space::LinkSpace,
 };
 
@@ -63,5 +63,19 @@ impl Spaces for Manager {
 
     fn space_agent<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<SpaceAgent>> {
         Box::pin(Manager::issue_agent(self, id))
+    }
+
+    fn wake_cleanup(&self) {
+        self.signals.wake_cleanup();
+    }
+}
+
+impl Watches for Manager {
+    fn start_linked_watches_gated<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        items: Vec<ItemRef>,
+    ) -> BoxFuture<'a, ()> {
+        Box::pin(Manager::start_linked_watches_gated(self, id, items))
     }
 }

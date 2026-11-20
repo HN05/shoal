@@ -26,7 +26,7 @@ use shoal_protocol::{
 };
 
 use crate::{
-    daemon::{Forges, Permissions, SpaceAgent, Spaces},
+    daemon::{Forges, Permissions, SpaceAgent, Spaces, Watches},
     space::LinkSpace,
 };
 
@@ -84,6 +84,18 @@ impl Spaces for StandIn {
 
     fn space_agent<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<SpaceAgent>> {
         Box::pin(async { bail!(NOT_HERE) })
+    }
+
+    fn wake_cleanup(&self) {}
+}
+
+impl Watches for StandIn {
+    fn start_linked_watches_gated<'a>(
+        &'a self,
+        _: &'a SpaceId,
+        _: Vec<ItemRef>,
+    ) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
     }
 }
 

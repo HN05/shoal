@@ -90,7 +90,10 @@ impl Manager {
         let assigner = <issue::Assigner as issue::AssignerOf>::of(caller);
         match (relation, kind) {
             (Relation::Assigned, LinkKind::Issue) => {
-                return self.set_issue(selector, input, title, assigner).await;
+                return self
+                    .links
+                    .set_issue(self, selector, input, title, assigner)
+                    .await;
             }
             (Relation::Assigned, LinkKind::Pr) => {
                 let url = input.clone();
@@ -282,7 +285,7 @@ impl Manager {
         }
         let mut warnings = Vec::new();
         if kind != Some(ItemKind::Pr) {
-            warnings = self.clear_issue(selector, input).await?;
+            warnings = self.links.clear_issue(self, selector, input).await?;
         }
         if kind != Some(ItemKind::Issue) {
             let action = input.map_or(Action::Clear, |url| Action::Unwatch { url: url.clone() });

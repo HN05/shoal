@@ -1,4 +1,5 @@
 use super::*;
+use crate::daemon::manager::Manager;
 use crate::daemon::{
     events::{EventItem, EventKind},
     test_support::{git, manager, repository},
@@ -24,7 +25,9 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
     );
     let url = "https://github.com/team/repo/issues/316";
     manager
+        .links
         .set_issue(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             &url.parse().unwrap(),
             None,
@@ -33,7 +36,9 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
         .await
         .unwrap();
     manager
+        .links
         .set_issue(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             &"316".parse().unwrap(),
             Some("Show titles".into()),
@@ -42,7 +47,9 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
         .await
         .unwrap();
     manager
+        .links
         .set_issue(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             &"316".parse().unwrap(),
             None,
@@ -71,7 +78,9 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
     assert_eq!(linked[0].url, url);
     // A second issue joins the first.
     manager
+        .links
         .set_issue(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             &"317".parse().unwrap(),
             None,
@@ -81,7 +90,9 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
         .unwrap();
     assert!(
         manager
+            .links
             .set_issue(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 &"https://github.com/other/repo/issues/316".parse().unwrap(),
                 None,
@@ -111,7 +122,9 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
     assert_eq!(numbers(&inspected.issues), [316, 317]);
     assert!(
         reopened
+            .links
             .clear_issue(
+                &*reopened,
                 &SpaceSelector::id(&workspace.id),
                 Some(&"318".parse().unwrap())
             )
@@ -120,7 +133,9 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
     );
     // Unlinking one issue keeps the others.
     reopened
+        .links
         .clear_issue(
+            &*reopened,
             &SpaceSelector::id(&workspace.id),
             Some(&"316".parse().unwrap()),
         )
@@ -140,7 +155,9 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
     assert!(links.issues[0].title.is_none());
     // An issue linked again comes after those still assigned.
     reopened
+        .links
         .set_issue(
+            &*reopened,
             &SpaceSelector::id(&workspace.id),
             &"316".parse().unwrap(),
             None,
@@ -155,7 +172,8 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
         .unwrap();
     assert_eq!(numbers(&registrations), [317, 316]);
     reopened
-        .clear_issue(&SpaceSelector::id(&workspace.id), None)
+        .links
+        .clear_issue(&*reopened, &SpaceSelector::id(&workspace.id), None)
         .await
         .unwrap();
     assert!(

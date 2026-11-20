@@ -35,7 +35,11 @@ impl Manager {
         for issue in &links.issues {
             let (selector, input) = (SpaceSelector::id(id), issue.url.clone().into());
             let assigner = assigned_as(carried, &issue.url, caller);
-            match (self.set_issue(&selector, &input, issue.title.clone(), assigner)).await {
+            match (self
+                .links
+                .set_issue(self, &selector, &input, issue.title.clone(), assigner))
+            .await
+            {
                 Ok(assigned) => warnings.extend(assigned),
                 Err(error) => warnings.push(format!("cannot link issue {}: {error:#}", issue.url)),
             }

@@ -63,7 +63,8 @@ impl Manager {
         let space = &recorded.space;
         let selector = SpaceSelector::id(&space.id);
         let assigned = self
-            .set_issue(&selector, &url.into(), title, Assigner::of(caller))
+            .links
+            .set_issue(self, &selector, &url.into(), title, Assigner::of(caller))
             .await;
         if assigned.is_err() && !recorded.reused {
             self.discard_new(space).await;

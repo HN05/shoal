@@ -653,7 +653,10 @@ impl Manager {
         match kind {
             ItemKind::Issue => {
                 let (selector, title) = (SpaceSelector::id(space), Some(item.title.clone()));
-                (self.set_issue_gated(&selector, &url.into(), title, assigner)).await
+                (self
+                    .links
+                    .set_issue_gated(self, &selector, &url.into(), title, assigner))
+                .await
             }
             ItemKind::Pr => {
                 let check = super::pr::WatchCheck::Known;

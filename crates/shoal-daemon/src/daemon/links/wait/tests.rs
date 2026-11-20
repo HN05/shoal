@@ -2263,7 +2263,8 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
             .is_empty()
     );
     manager
-        .clear_issue(&SpaceSelector::id(&workspace.id), None)
+        .links
+        .clear_issue(&*manager, &SpaceSelector::id(&workspace.id), None)
         .await
         .unwrap();
     assert!(
@@ -3289,7 +3290,9 @@ async fn the_background_poll_reads_spaces_together() {
     for (number, workspace) in workspaces {
         let issue = format!("http://{host}/team/repo/issues/{number}");
         manager
+            .links
             .set_issue(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 &issue.parse().unwrap(),
                 Some("Fix".into()),
