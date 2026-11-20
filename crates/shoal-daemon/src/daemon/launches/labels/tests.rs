@@ -6,13 +6,15 @@ use shoal_forge::test_support::Server;
 use shoal_protocol::config::modes::ModeName;
 use shoal_protocol::launches::SeveralModes;
 
-/// The modes whose labels call for them.
+/// The modes whose labels call for them, two of them in a workspace.
 const LABELLED: &str = "[modes.plan]\nlabel = \"needs-plan\"\n\
-     [modes.worker]\nlabel = \"planned\"\n";
+     [modes.worker]\nlabel = \"planned\"\n\
+     [modes.hotfix]\nkind = \"workspace\"\nlabel = \"hotfix\"\n";
 
 /// A manager under [`LABELLED`] with a repository whose origin is a
-/// Forgejo `team/repo` whose open issue 7 carries plan's label, 8 the
-/// labels of both modes and 9 neither's, with the repository's ID.
+/// Forgejo `team/repo` whose open issue 7 carries plan's label, 8 those
+/// of plan and the worker, 9 no mode's and 10 those of both workspace
+/// modes, with the repository's ID.
 async fn labelled_forge() -> (tempfile::TempDir, std::sync::Arc<Manager>, Server, String) {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
@@ -24,6 +26,7 @@ async fn labelled_forge() -> (tempfile::TempDir, std::sync::Arc<Manager>, Server
             "GET /api/v1/repos/team/repo/issues/7" => (7, vec!["needs-plan", "type/bug"]),
             "GET /api/v1/repos/team/repo/issues/8" => (8, vec!["needs-plan", "planned"]),
             "GET /api/v1/repos/team/repo/issues/9" => (9, vec!["type/bug"]),
+            "GET /api/v1/repos/team/repo/issues/10" => (10, vec!["planned", "hotfix"]),
             _ => return (404, Vec::new(), Vec::new()),
         };
         let labels: Vec<_> = (labels.into_iter())
@@ -102,4 +105,20 @@ async fn a_named_mode_reads_no_labels() {
     assert_eq!(shape.mode, ModeName::DEFAULT);
     let read = (server.received().iter()).any(|request| request.line.contains("/issues/"));
     assert!(!read, "the issue was read");
+}
+
+/// A check of a launch whose item carries the labels of several modes
+/// leaves the mode to a terminal's picker instead of refusing it, even
+/// where its other arguments decide the kind of space.
+#[tokio::test]
+async fn a_check_leaves_several_labelled_modes_to_a_picker() {
+    let (_root, manager, _server, repository) = labelled_forge().await;
+    let launch = Launch {
+        branch: Some("fix".into()),
+        ..on_issue(&repository, "10")
+    };
+    assert!(launches::decides_kind(&launch));
+    let labelled = manager.labelled_launch_mode(&launch, None).await.unwrap();
+    assert!(matches!(labelled, LabelledMode::Several(_)), "{labelled:?}");
+    manager.check_launch(launch, None).await.unwrap();
 }

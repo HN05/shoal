@@ -2,8 +2,8 @@
 //! daemon would refuse of it, settled as [`Manager::launch`] settles it
 //! short of recording or fetching anything, whatever kind of space it
 //! starts in. A launch whose kind is decided checks that kind's whole
-//! placement; one whose mode a terminal has yet to pick checks what every
-//! kind shares.
+//! placement; one whose mode a terminal has yet to pick, such as among the
+//! modes its item's labels call for, checks what every kind shares.
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::launches::{Launch, SpaceChoice, StartTarget};
@@ -58,13 +58,16 @@ impl Manager {
         self.select_launch_spaces(&mut launch).await?;
         let repository = self.checked_repository(&launch, caller).await?;
         (self.ensure_caller_holds(caller, &launch.permissions, repository.as_ref())).await?;
-        match launches::decides_kind(&launch) {
-            true => {
-                let shape = self.launch_shape(&launch, caller).await?;
+        let shape = match launches::decides_kind(&launch) {
+            true => self.checked_shape(&launch, caller).await?,
+            false => None,
+        };
+        match shape {
+            Some(shape) => {
                 self.check_placement(&launch, (&shape, starts), caller)
                     .await
             }
-            false => {
+            None => {
                 self.check_shared(&launch, repository.as_ref(), caller)
                     .await
             }

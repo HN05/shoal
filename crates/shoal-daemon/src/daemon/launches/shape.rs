@@ -3,7 +3,7 @@
 //! from what the launch names and the settings that apply to it.
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::launches::{LabelledMode, Launch};
+use shoal_protocol::launches::{LabelledMode, Launch, SeveralModes};
 
 use crate::{
     config::modes::{self, ModeName, ModeShapes},
@@ -30,17 +30,59 @@ impl Shape {
 }
 
 impl Manager {
-    /// The shape of `launch` for `caller`: in the mode it names, else the
-    /// [`Self::unnamed_launch_mode`], the kind of space that mode starts in.
+    /// The shape of `launch` for `caller`: in its [`Self::launch_mode`],
+    /// refused where the labels of its item call for several, the kind of
+    /// space that mode starts in.
     pub(super) async fn launch_shape(
         &self,
         launch: &Launch,
         caller: Option<&Caller>,
     ) -> Result<Shape> {
-        let mode = match launch.mode.clone() {
-            Some(mode) => mode,
-            None => self.unnamed_launch_mode(launch, caller).await?,
-        };
+        let mode = self.launch_mode(launch, caller).await??;
+        self.shape_in(launch, mode, caller).await
+    }
+
+    /// The shape a check of `launch` for `caller` places it in, as
+    /// [`Self::launch_shape`] decides it; none where the labels of its item
+    /// call for several modes, which a terminal's picker chooses among.
+    pub(super) async fn checked_shape(
+        &self,
+        launch: &Launch,
+        caller: Option<&Caller>,
+    ) -> Result<Option<Shape>> {
+        match self.launch_mode(launch, caller).await? {
+            Ok(mode) => self.shape_in(launch, mode, caller).await.map(Some),
+            Err(_) => Ok(None),
+        }
+    }
+
+    /// The mode of `launch` for `caller`: the one it names, else the one
+    /// the labels of the issue or PR it names call for, else the
+    /// [`launches::default_mode`]; the modes whose labels its item carries
+    /// where they call for several.
+    async fn launch_mode(
+        &self,
+        launch: &Launch,
+        caller: Option<&Caller>,
+    ) -> Result<Result<ModeName, SeveralModes>> {
+        if let Some(mode) = &launch.mode {
+            return Ok(Ok(mode.clone()));
+        }
+        Ok(match self.labelled_launch_mode(launch, caller).await? {
+            LabelledMode::Called(mode) => Ok(mode),
+            LabelledMode::Several(several) => Err(several),
+            LabelledMode::Unlabelled => Ok(launches::default_mode(launch)),
+        })
+    }
+
+    /// The shape of `launch` in `mode` for `caller`: the kind of space that
+    /// mode starts in, and whether it has a repository.
+    async fn shape_in(
+        &self,
+        launch: &Launch,
+        mode: ModeName,
+        caller: Option<&Caller>,
+    ) -> Result<Shape> {
         launches::ensure_mode_fits(launch, &mode)?;
         let (kind, repository) = self.launch_kind(launch, &mode, caller).await?;
         Ok(Shape {
@@ -48,21 +90,6 @@ impl Manager {
             mode,
             repository,
         })
-    }
-
-    /// The mode of `launch`, which names none, for `caller`: the one the
-    /// labels of the issue or PR it names call for, refused where they call
-    /// for several, else the [`launches::default_mode`].
-    async fn unnamed_launch_mode(
-        &self,
-        launch: &Launch,
-        caller: Option<&Caller>,
-    ) -> Result<ModeName> {
-        match self.labelled_launch_mode(launch, caller).await? {
-            LabelledMode::Called(mode) => Ok(mode),
-            LabelledMode::Several(several) => Err(several.into()),
-            LabelledMode::Unlabelled => Ok(launches::default_mode(launch)),
-        }
     }
 
     /// The kind of space `launch` creates in `mode`, which must exist, for
