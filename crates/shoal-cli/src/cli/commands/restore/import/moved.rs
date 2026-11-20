@@ -19,11 +19,11 @@ use crate::{
 use shoal_ids::move_tickets::MoveTicket;
 
 /// Continue the package on standard input, claiming its spaces with
-/// `ticket`, queueing their agents' restores when `restore`, and print how
-/// it went as the last line of standard output.
+/// `ticket`, which a copy lacks, queueing their agents' restores when
+/// `restore`, and print how it went as the last line of standard output.
 pub(in crate::cli::commands) async fn import_moved(
     ctx: &Context,
-    ticket: MoveTicket,
+    ticket: Option<MoveTicket>,
     restore: bool,
 ) -> Result<i32> {
     let imported = match receive(ctx, ticket).await {
@@ -42,12 +42,12 @@ pub(in crate::cli::commands) async fn import_moved(
 
 /// Have the daemon import the package on standard input, claiming its
 /// spaces with `ticket`.
-async fn receive(ctx: &Context, ticket: MoveTicket) -> Result<ImportedPackage> {
+async fn receive(ctx: &Context, ticket: Option<MoveTicket>) -> Result<ImportedPackage> {
     let import = PackageImport {
         package: PackageSource::Stream,
         repository: None,
         sessions: None,
-        ticket: Some(ticket),
+        ticket,
     };
     let mut input = tokio::io::stdin();
     crate::client::transfer::import_streamed(&ctx.paths, import, &mut input).await

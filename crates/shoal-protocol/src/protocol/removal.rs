@@ -147,13 +147,30 @@ pub enum RemovalMethod {
     /// needs that are not here, record its spaces as removed here once the
     /// whole package checks out, and open its own space again.
     ImportPackage(Box<crate::transfer::PackageImport>),
+    /// Deliver the package of the recorded move of `space` to the joined
+    /// machine it goes to, through the hub; answered with how the import
+    /// there went, and refused when it is unknown whether that machine
+    /// claimed the space.
+    DeliverMove { space: SpaceSelector },
+    /// Deliver the package of a copy of the space `space` to the joined
+    /// machine `destination` names, through the hub; answered with how the
+    /// import there went.
+    DeliverCopy {
+        space: SpaceSelector,
+        destination: crate::transfer::MachineDestination,
+    },
+    /// Ask the hub whether the joined machine the recorded move of `space`
+    /// goes to claimed the space, which then no longer can when it did
+    /// not; answered with how the hub settled it.
+    SettleMove { space: SpaceSelector },
     /// Take the package of a move another joined machine sends on the
     /// request's connection once the first reply asks for it, and continue
     /// its spaces here as `shoal restore --from -` does, their claims at
-    /// the hub carrying `ticket`, with their agents' restores queued when
-    /// `resume`; answered with how the import went.
+    /// the hub carrying `ticket`, which a copy lacks, with their agents'
+    /// restores queued when `resume`; answered with how the import went.
     ReceiveMove {
-        ticket: shoal_ids::move_tickets::MoveTicket,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ticket: Option<shoal_ids::move_tickets::MoveTicket>,
         resume: bool,
     },
 }

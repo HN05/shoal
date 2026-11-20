@@ -27,11 +27,14 @@ impl Manager {
         self: Arc<Self>,
         mut stream: UnixStream,
         request_id: u64,
-        (ticket, resume): (MoveTicket, bool),
+        (ticket, resume): (Option<MoveTicket>, bool),
         guard: OperationGuard,
     ) -> Result<()> {
         protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
-        let body = match self.import_moved(&mut stream, &ticket, resume).await {
+        let body = match self
+            .import_moved(&mut stream, ticket.as_ref(), resume)
+            .await
+        {
             Ok(imported) => Body::ImportedMove(imported),
             Err(error) => answer::failure(&error),
         };
@@ -46,7 +49,7 @@ impl Manager {
     async fn import_moved(
         &self,
         stream: &mut UnixStream,
-        ticket: &MoveTicket,
+        ticket: Option<&MoveTicket>,
         resume: bool,
     ) -> Result<ImportedMove> {
         let argv = internal_command(&self.paths, true, Worker::ImportMoved { ticket, resume })?;

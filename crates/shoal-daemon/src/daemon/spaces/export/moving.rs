@@ -194,7 +194,7 @@ impl Manager {
     }
 
     /// The recorded move of the space `id`.
-    async fn recorded_move(&self, id: &SpaceId) -> Result<MoveRecord> {
+    pub(crate) async fn recorded_move(&self, id: &SpaceId) -> Result<MoveRecord> {
         (self.move_record(id).await?)
             .with_context(|| format!("no move of space {id} is in progress"))
     }

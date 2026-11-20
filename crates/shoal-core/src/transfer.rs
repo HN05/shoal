@@ -23,8 +23,8 @@ pub use carried::{CarriedSpaceExt, Placed, carried_spaces};
 pub use shoal_protocol::transfer::{
     Arrived, CarriedRecord, CarriedSpace, Carrying, Consent, ExportedSpace, ImportedMove,
     ImportedPackage, MachineDestination, Manifest, MoveDestination, MoveFailure, MoveOrder,
-    MovePhase, MoveRecord, MoveReport, PackageImport, PackageSource, PackagedSpace, Sessions,
-    SpaceMoved, SshDestination, StoppedExecutions, package_name,
+    MovePhase, MoveRecord, MoveReport, MoveSettled, PackageImport, PackageSource, PackagedSpace,
+    Sessions, SpaceMoved, SshDestination, StoppedExecutions, package_name,
 };
 
 mod carried;

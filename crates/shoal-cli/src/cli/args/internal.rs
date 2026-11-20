@@ -213,9 +213,10 @@ pub enum InternalCommand {
     /// went as JSON; the daemon runs it.
     #[command(name = workers::IMPORT_MOVED)]
     ImportMoved {
-        /// The move's ticket, which the claims of its spaces carry.
+        /// The move's ticket, which the claims of its spaces carry; a copy
+        /// has none.
         #[arg(long)]
-        ticket: shoal_ids::move_tickets::MoveTicket,
+        ticket: Option<shoal_ids::move_tickets::MoveTicket>,
         /// Leave the agents stopped for a later shoal resume.
         #[arg(long)]
         no_resume: bool,

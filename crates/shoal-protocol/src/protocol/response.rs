@@ -319,6 +319,7 @@ response_bodies! {
     ExportedSpace(crate::transfer::ExportedSpace),
     ImportedPackage(crate::transfer::ImportedPackage),
     ImportedMove(crate::transfer::ImportedMove),
+    MoveSettled(crate::transfer::MoveSettled),
     MoveAbandoned(crate::transfer::StoppedExecutions),
     DiffBase(DiffBase),
     Conflicts(ConflictCheck),

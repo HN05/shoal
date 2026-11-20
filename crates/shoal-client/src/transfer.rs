@@ -1,6 +1,7 @@
 //! Packages of spaces `shoal move` carries between machines: what one holds.
 use shoal_protocol::transfer::{
-    Carrying, ExportedSpace, ImportedPackage, MoveDestination, PackageImport, StoppedExecutions,
+    Carrying, ExportedSpace, ImportedMove, ImportedPackage, MachineDestination, MoveDestination,
+    MoveSettled, PackageImport, StoppedExecutions,
 };
 use std::path::PathBuf;
 
@@ -70,6 +71,30 @@ pub async fn end_moved(daemon: &impl Daemon, space: SpaceSelector) -> Result<Rem
 /// agents.
 pub async fn abandon_move(daemon: &impl Daemon, space: SpaceSelector) -> Result<StoppedExecutions> {
     request(daemon, RemovalMethod::AbandonMove { space }).await
+}
+
+/// Deliver the package of the recorded move of `space` to the joined
+/// machine it goes to, returning how the import there went; an error leaves
+/// it unknown whether that machine claimed the space.
+pub async fn deliver_move(daemon: &impl Daemon, space: SpaceSelector) -> Result<ImportedMove> {
+    request(daemon, RemovalMethod::DeliverMove { space }).await
+}
+
+/// Deliver the package of a copy of `space` to the joined machine
+/// `destination` names, returning how the import there went.
+pub async fn deliver_copy(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+    destination: MachineDestination,
+) -> Result<ImportedMove> {
+    request(daemon, RemovalMethod::DeliverCopy { space, destination }).await
+}
+
+/// Settle at the hub the recorded move of `space`, whose arrival the joined
+/// machine it goes to could not report; fails while the hub cannot be
+/// asked.
+pub async fn settle_move(daemon: &impl Daemon, space: SpaceSelector) -> Result<MoveSettled> {
+    request(daemon, RemovalMethod::SettleMove { space }).await
 }
 
 /// Package a copy of `space`, with copies of the spaces below it that

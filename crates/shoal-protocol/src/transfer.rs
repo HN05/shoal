@@ -408,6 +408,18 @@ pub enum ImportedMove {
     Failed { error: String },
 }
 
+shoal_states::states!(
+    /// How the hub settled a move through it whose arrival its source
+    /// could not learn from the destination.
+    MoveSettled {
+        /// The destination claimed the space, which is that machine's now.
+        Arrived => "arrived",
+        /// The destination never claimed the space and no longer can, so
+        /// it stays with its source.
+        Kept => "kept",
+    }
+);
+
 /// A space a move failed to take, which stayed here unless its error says
 /// otherwise.
 #[derive(Debug, Clone, Serialize, Deserialize)]

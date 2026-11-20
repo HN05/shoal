@@ -4,4 +4,5 @@
 //! `shoal restore --from -` would. The destination's claim of the space at
 //! the hub commits the move, so a source that cannot learn from the
 //! destination whether it claimed the space asks the hub instead.
+mod delivering;
 mod receiving;

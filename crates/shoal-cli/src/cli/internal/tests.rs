@@ -413,21 +413,15 @@ fn operation_parses_without_arguments() {
 #[test]
 fn import_moved_round_trips_its_ticket_and_resume() {
     let ticket = shoal_ids::move_tickets::MoveTicket::generate();
-    for resume in [true, false] {
+    for (ticket, resume) in [(Some(&ticket), true), (None, false)] {
         let InternalCommand::ImportMoved {
             ticket: parsed,
             no_resume,
-        } = parse(
-            Worker::ImportMoved {
-                ticket: &ticket,
-                resume,
-            },
-            true,
-        )
+        } = parse(Worker::ImportMoved { ticket, resume }, true)
         else {
             panic!("expected import-moved worker");
         };
-        assert_eq!((parsed, no_resume), (ticket.clone(), !resume));
+        assert_eq!((parsed.as_ref(), no_resume), (ticket, !resume));
     }
 }
 

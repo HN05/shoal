@@ -111,10 +111,10 @@ pub enum Worker<'a> {
     Operation,
     /// Continue the spaces of the package another joined machine moves
     /// here, which the daemon writes to standard input, their claims at the
-    /// hub carrying `ticket`, with their agents' restores queued when
-    /// `resume`.
+    /// hub carrying `ticket`, which a copy lacks, with their agents'
+    /// restores queued when `resume`.
     ImportMoved {
-        ticket: &'a MoveTicket,
+        ticket: Option<&'a MoveTicket>,
         resume: bool,
     },
     /// Start an admitted queue entry where its launching terminal would.
@@ -382,7 +382,10 @@ pub(crate) fn internal_command_for(
         }
         Worker::Operation => args.push(OPERATION.into()),
         Worker::ImportMoved { ticket, resume } => {
-            args.extend([IMPORT_MOVED.into(), "--ticket".into(), ticket.into()]);
+            args.push(IMPORT_MOVED.into());
+            if let Some(ticket) = ticket {
+                args.extend(["--ticket".into(), ticket.into()]);
+            }
             if !resume {
                 args.push("--no-resume".into());
             }

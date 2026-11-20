@@ -47,7 +47,11 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         | RemovalMethod::ExportRemovedSpace { .. } => false,
         // A move in progress finishes, which an exit that waits for it
         // waits for.
-        RemovalMethod::EndMovedSpace { .. } | RemovalMethod::AbandonMove { .. } => false,
+        RemovalMethod::EndMovedSpace { .. }
+        | RemovalMethod::AbandonMove { .. }
+        | RemovalMethod::DeliverMove { .. }
+        | RemovalMethod::DeliverCopy { .. }
+        | RemovalMethod::SettleMove { .. } => false,
     }
 }
 
@@ -172,6 +176,15 @@ pub(super) async fn handle(
         }
         RemovalMethod::AbandonMove { space } => {
             Body::MoveAbandoned(manager.abandon_move(&space).await?)
+        }
+        RemovalMethod::DeliverMove { space } => {
+            Body::ImportedMove(manager.deliver_move(&space).await?)
+        }
+        RemovalMethod::DeliverCopy { space, destination } => {
+            Body::ImportedMove(manager.deliver_copy(&space, &destination).await?)
+        }
+        RemovalMethod::SettleMove { space } => {
+            Body::MoveSettled(manager.settle_move(&space).await?)
         }
         RemovalMethod::ImportPackage(import) => {
             return import_package(manager, *import, caller).await;
@@ -344,6 +357,9 @@ impl Scoped for RemovalMethod {
             | RemovalMethod::ExportMovingSpace { .. }
             | RemovalMethod::EndMovedSpace { .. }
             | RemovalMethod::AbandonMove { .. }
+            | RemovalMethod::DeliverMove { .. }
+            | RemovalMethod::DeliverCopy { .. }
+            | RemovalMethod::SettleMove { .. }
             | RemovalMethod::ImportPackage(_)
             | RemovalMethod::ReceiveMove { .. } => administer(manager, caller, self).await,
         }
@@ -388,6 +404,9 @@ fn administered(method: &mut RemovalMethod) -> Option<&mut SpaceSelector> {
         RemovalMethod::ExportMovingSpace { space, .. }
         | RemovalMethod::EndMovedSpace { space }
         | RemovalMethod::AbandonMove { space }
+        | RemovalMethod::DeliverMove { space }
+        | RemovalMethod::DeliverCopy { space, .. }
+        | RemovalMethod::SettleMove { space }
         | RemovalMethod::DropRestoredSessions { space } => Some(space),
         _ => None,
     }
