@@ -131,3 +131,6 @@ impl Runner {
             .await
     }
 }
+
+#[cfg(test)]
+mod tests;

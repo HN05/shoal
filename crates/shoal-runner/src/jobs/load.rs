@@ -90,3 +90,6 @@ impl Runner {
         Ok(starting.chain(running).collect())
     }
 }
+
+#[cfg(test)]
+mod tests;

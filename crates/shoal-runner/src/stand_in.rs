@@ -81,6 +81,9 @@ impl Fixture {
             opened: Mutex::default(),
             forgotten: Mutex::default(),
             spaces: Mutex::default(),
+            could_start: AtomicBool::new(true),
+            admitted: Mutex::default(),
+            executions: Mutex::default(),
         });
         let runner = runner(&root, &daemon).await;
         let record = daemon.repository.clone();
@@ -124,6 +127,48 @@ impl Fixture {
 
     pub(crate) fn repository(&self) -> &RepositoryId {
         &self.daemon.repository.id
+    }
+
+    /// Record the claim `id` of `job` in a workspace of its own named
+    /// `name`, whose runner launched at `launched_at` as `execution`.
+    pub(crate) async fn record_claim(
+        &self,
+        id: &str,
+        job: &QueuedJob,
+        launched_at: Option<crate::time::UnixTime>,
+        execution: Option<shoal_ids::execution_ids::ExecutionId>,
+    ) -> crate::jobs::ClaimedJob {
+        let workspace = self.record_workspace(id).await;
+        let claim = crate::jobs::ClaimedJob {
+            id: id.into(),
+            repository_id: self.repository().clone(),
+            workspace_id: workspace,
+            execution_id: execution,
+            launched_at,
+            job: job.clone(),
+            runner_id: None,
+        };
+        let row = claim.clone();
+        let job = serde_json::to_string(job).unwrap();
+        (self.runner.store)
+            .write(move |tx| {
+                tx.execute(
+                    "INSERT INTO ci_jobs(id,repository_id,workspace_id,execution_id,job,started_at,launched_at)
+                     VALUES (?1,?2,?3,?4,?5,0,?6)",
+                    rusqlite::params![
+                        row.id,
+                        row.repository_id,
+                        row.workspace_id,
+                        row.execution_id,
+                        job,
+                        row.launched_at
+                    ],
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        claim
     }
 
     /// Record a workspace of the repository named `name`, as a claimed
@@ -195,6 +240,12 @@ pub(crate) struct StandIn {
     pub(crate) forgotten: Mutex<Vec<RepositoryId>>,
     /// The spaces this machine has.
     pub(crate) spaces: Mutex<Vec<Space>>,
+    /// Whether a job could start beside those in use.
+    pub(crate) could_start: AtomicBool,
+    /// The job entries admission admitted.
+    pub(crate) admitted: Mutex<Vec<(QueueEntryId, RepositoryId, QueuedJob)>>,
+    /// The executions the daemon records.
+    pub(crate) executions: Mutex<crate::daemon::RecordedExecutions>,
 }
 
 impl StandIn {
@@ -340,9 +391,9 @@ impl Agents for StandIn {
         Box::pin(async { Box::new(()) as Box<dyn Send> })
     }
 
-    /// A job could always start.
     fn job_could_start(&self) -> BoxFuture<'_, Result<bool>> {
-        Box::pin(async { Ok(true) })
+        let could = self.could_start.load(Ordering::Relaxed);
+        Box::pin(async move { Ok(could) })
     }
 
     fn agent_spaces(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>> {
@@ -544,17 +595,15 @@ impl Records for StandIn {
         Ok(Vec::new())
     }
 
-    /// The stand-in's queue admits no jobs.
     fn admitted_jobs(
         &self,
         _: &Connection,
     ) -> Result<Vec<(QueueEntryId, RepositoryId, QueuedJob)>> {
-        Ok(Vec::new())
+        Ok(self.admitted.lock().unwrap().clone())
     }
 
-    /// The stand-in records no executions.
     fn recorded_executions(&self, _: &Connection) -> Result<crate::daemon::RecordedExecutions> {
-        Ok(Default::default())
+        Ok(self.executions.lock().unwrap().clone())
     }
 
     fn remove_queue_entry(&self, _: &Connection, _: &QueueEntryId) -> Result<()> {

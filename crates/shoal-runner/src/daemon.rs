@@ -285,7 +285,7 @@ impl<T> Daemon for T where
 }
 
 /// The executions the daemon records: their IDs and the spaces they run in.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct RecordedExecutions {
     pub ids: HashSet<ExecutionId>,
     pub spaces: HashSet<SpaceId>,

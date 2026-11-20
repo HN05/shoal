@@ -513,42 +513,6 @@ async fn the_cargo_presets_jobs_build_incrementally_as_its_seed_did() {
 }
 
 #[tokio::test]
-async fn waiting_jobs_are_read_every_minute_while_none_could_start() {
-    use shoal_runner::jobs::INTERVAL;
-    let fixture = fixture(vec![job("h1", 4, 1), job("h2", 5, 1)], "").await;
-    let manager = &fixture.manager;
-    let reads = || {
-        fixture
-            .server
-            .received()
-            .iter()
-            .filter(|request| {
-                request
-                    .line
-                    .starts_with("GET /api/v1/repos/team/repo/actions/runners/jobs?")
-            })
-            .count()
-    };
-    // Two running jobs fill max_jobs.
-    admit_and_claim(manager).await;
-    let claimed = manager.runner.claimed_jobs().await.unwrap();
-    assert_eq!(claimed.len(), 2);
-    for job in &claimed {
-        LAUNCHED.lock().unwrap().remove(&job.workspace_id);
-    }
-    assert!(!manager.job_could_start().await.unwrap());
-
-    // Half the interval leaves no read due, however slow the runner.
-    let read = reads();
-    manager.runner.jobs().age_waiting_read(INTERVAL / 2);
-    poll_waiting_jobs(manager).await;
-    assert_eq!(reads(), read);
-    manager.runner.jobs().age_waiting_read(INTERVAL);
-    poll_waiting_jobs(manager).await;
-    assert_eq!(reads(), read + 1);
-}
-
-#[tokio::test]
 async fn a_job_whose_checkout_fails_is_passed_over_and_its_workspace_removed() {
     let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
@@ -1783,111 +1747,6 @@ async fn removing_a_job_whose_execution_is_not_recorded_yet_cancels_its_run() {
 }
 
 #[tokio::test]
-async fn a_job_counts_as_just_started_until_its_runner_starts() {
-    use crate::daemon::capacity::{Activity, STAGGER};
-    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
-    let manager = &fixture.manager;
-    let ages = || async {
-        manager
-            .job_activities()
-            .await
-            .unwrap()
-            .into_iter()
-            .map(|activity| match activity {
-                Activity::Job { age, .. } => age,
-                other => panic!("{other:?}"),
-            })
-            .collect::<Vec<_>>()
-    };
-    refresh_waiting_jobs(manager).await;
-    manager.dispatch_queue().await.unwrap();
-    assert_eq!(ages().await, [std::time::Duration::ZERO]);
-    admit_and_claim(manager).await;
-    let claimed = manager.runner.claimed_jobs().await.unwrap();
-    LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
-    let id = claimed[0].id.clone();
-    let set = |sql: &'static str| {
-        let id = id.clone();
-        manager.store.run(move |db| {
-            db.execute(sql, [id])?;
-            Ok(())
-        })
-    };
-    // Its age counts from its runner's start, however long ago it was admitted.
-    set("UPDATE ci_jobs SET started_at=0,launched_at=strftime('%s','now')-600 WHERE id=?1")
-        .await
-        .unwrap();
-    assert!(ages().await[0] >= STAGGER);
-    set("UPDATE ci_jobs SET launched_at=NULL WHERE id=?1")
-        .await
-        .unwrap();
-    assert_eq!(ages().await, [std::time::Duration::ZERO]);
-}
-
-#[tokio::test]
-async fn a_job_whose_runner_ended_reserves_nothing_while_its_workspace_remains() {
-    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
-    let manager = &fixture.manager;
-    admit_and_claim(manager).await;
-    let claimed = manager.runner.claimed_jobs().await.unwrap();
-    let (_, started) = LAUNCHED
-        .lock()
-        .unwrap()
-        .remove(&claimed[0].workspace_id)
-        .unwrap();
-    let jobs = || async { manager.job_activities().await.unwrap().len() };
-    assert_eq!(jobs().await, 1);
-
-    manager
-        .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(0))
-        .await
-        .unwrap();
-    // No pass has removed the workspace, as when its removal fails.
-    assert!(
-        manager
-            .workspace_by_id(&claimed[0].workspace_id)
-            .await
-            .is_ok()
-    );
-    assert_eq!(jobs().await, 0);
-
-    // A claim whose runner is not recorded counts only while it runs.
-    let id = claimed[0].id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute("UPDATE ci_jobs SET execution_id=NULL WHERE id=?1", [id])?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    assert_eq!(jobs().await, 0);
-    assert!(manager.runner.jobs().begin_claim(&claimed[0].id));
-    assert_eq!(jobs().await, 1);
-    manager.runner.jobs().end_claim(&claimed[0].id);
-}
-
-#[tokio::test]
-async fn the_sweep_keeps_the_directory_of_a_recorded_claim() {
-    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
-    let manager = &fixture.manager;
-    admit_and_claim(manager).await;
-    let claimed = manager.runner.claimed_jobs().await.unwrap();
-    LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
-    let stray = manager.runner.job_directory(&"stray".into());
-    std::fs::create_dir_all(&stray).unwrap();
-    finish_ended_jobs(manager).await;
-    assert!(
-        manager
-            .runner
-            .job_directory(&claimed[0].id)
-            .join("token")
-            .exists()
-    );
-    assert!(!stray.exists());
-}
-
-#[tokio::test]
 async fn a_runner_gone_while_the_daemon_was_away_gives_its_job_up_once_nothing_of_it_runs() {
     use crate::process::identity::{Identity, capture};
     let fixture = fixture(vec![job("h1", 4, 1)], "").await;
@@ -2019,11 +1878,6 @@ pub(super) async fn claim_job(manager: &Manager, entry: &QueueEntry) {
 /// End the claimed jobs whose runner ended.
 pub(super) async fn finish_ended_jobs(manager: &Manager) {
     manager.runner.finish_ended_jobs(manager).await.unwrap();
-}
-
-/// Read the forge's waiting jobs when due.
-pub(super) async fn poll_waiting_jobs(manager: &Manager) {
-    manager.runner.poll_waiting_jobs(manager).await.unwrap();
 }
 
 mod single_use;
