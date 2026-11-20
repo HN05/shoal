@@ -143,6 +143,20 @@ fn an_outcome_takes_only_its_own_data() {
 }
 
 #[test]
+fn a_request_is_done_and_a_question_answered() {
+    let request = ThreadKind::Request;
+    assert_eq!(
+        Outcome::new(request, OutcomeKind::Done, None, None, None).unwrap(),
+        Outcome::Done
+    );
+    assert!(Outcome::new(request, OutcomeKind::Done, Some(1), None, None).is_err());
+    assert!(Outcome::new(request, OutcomeKind::Answered, None, None, None).is_err());
+    assert!(Outcome::new(ThreadKind::Question, OutcomeKind::Done, None, None, None).is_err());
+    let json = serde_json::to_value(Outcome::Done).unwrap();
+    assert_eq!(json, serde_json::json!({"outcome": "done"}));
+}
+
+#[test]
 fn a_bare_thread_number_names_the_caller_s_space() {
     let own: ThreadNumber = "4".parse().unwrap();
     assert_eq!(own, ThreadNumber::Own(4));

@@ -25,6 +25,9 @@ states!(
     ThreadKind: ValueEnum {
         /// Its opener asks, and its holder answers.
         Question => "question",
+        /// Its opener asks its holder to do something, such as implement
+        /// the code its posts point at, and accepts the work once done.
+        Request => "request",
     }
 );
 
@@ -32,6 +35,7 @@ states!(
     /// An outcome's name, as `shoal thread resolve` takes it.
     OutcomeKind: ValueEnum {
         Answered => "answered",
+        Done => "done",
         Duplicate => "duplicate",
         Withdrawn => "withdrawn",
         Closed => "closed",
@@ -75,6 +79,8 @@ pub enum Outcome {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         choice: Option<u32>,
     },
+    /// A request's work was made and its opener accepted it.
+    Done,
     /// Another thread asks the same.
     Duplicate { of: ItemNumber },
     /// Its opener no longer needs it.
@@ -103,6 +109,7 @@ impl Outcome {
         let reason = reason.filter(|reason| !reason.trim().is_empty());
         Ok(match (kind, choice, of, reason) {
             (OutcomeKind::Answered, choice, None, None) => Self::Answered { choice },
+            (OutcomeKind::Done, None, None, None) => Self::Done,
             (OutcomeKind::Duplicate, None, Some(of), None) => Self::Duplicate { of },
             (OutcomeKind::Withdrawn, None, None, reason) => Self::Withdrawn { reason },
             (OutcomeKind::Closed, ..) => {
@@ -115,6 +122,7 @@ impl Outcome {
     pub fn kind(&self) -> OutcomeKind {
         match self {
             Self::Answered { .. } => OutcomeKind::Answered,
+            Self::Done => OutcomeKind::Done,
             Self::Duplicate { .. } => OutcomeKind::Duplicate,
             Self::Withdrawn { .. } => OutcomeKind::Withdrawn,
             Self::Closed { .. } => OutcomeKind::Closed,
@@ -128,6 +136,7 @@ impl Outcome {
             Self::Answered {
                 choice: Some(choice),
             } => format!("answered with choice {choice}"),
+            Self::Done => "done".into(),
             Self::Duplicate { of } => format!("duplicate of {of}"),
             Self::Withdrawn { reason: None } => "withdrawn".into(),
             Self::Withdrawn {
@@ -148,6 +157,7 @@ impl OutcomeKind {
     fn data(self) -> &'static str {
         match self {
             Self::Answered => "only --choose",
+            Self::Done => "nothing",
             Self::Duplicate => "--of and nothing else",
             Self::Withdrawn => "only --reason",
             Self::Closed => "nothing",
@@ -156,10 +166,19 @@ impl OutcomeKind {
 }
 
 impl ThreadKind {
+    /// The outcome its opener settles it with once it got what it asked.
+    pub fn settled(self) -> OutcomeKind {
+        match self {
+            Self::Question => OutcomeKind::Answered,
+            Self::Request => OutcomeKind::Done,
+        }
+    }
+
     /// Whether a thread of this kind may end with `outcome`.
     pub fn takes(self, outcome: OutcomeKind) -> bool {
         match outcome {
             OutcomeKind::Answered => self == Self::Question,
+            OutcomeKind::Done => self == Self::Request,
             OutcomeKind::Duplicate | OutcomeKind::Withdrawn | OutcomeKind::Closed => true,
         }
     }

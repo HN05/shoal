@@ -123,7 +123,7 @@ pub(super) fn resolving(
         return Ok(Resolving::default());
     }
     if outcome.is_none() {
-        bail!("name an outcome: answered, duplicate or withdrawn; or reopen with --undo");
+        bail!("name an outcome: answered, done, duplicate or withdrawn; or reopen with --undo");
     }
     Ok(Resolving {
         outcome,

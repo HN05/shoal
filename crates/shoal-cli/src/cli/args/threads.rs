@@ -42,7 +42,7 @@ pub enum ThreadCommand {
     Resolve {
         /// Thread number, such as 3.2, or 2 for one of your own space.
         thread: ThreadNumber,
-        /// answered, duplicate or withdrawn.
+        /// answered (a question), done (a request), duplicate or withdrawn.
         #[arg(required_unless_present = "undo")]
         outcome: Option<OutcomeKind>,
         /// The number of the choice an answer settled on.

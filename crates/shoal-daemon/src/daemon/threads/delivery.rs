@@ -10,7 +10,7 @@ use rusqlite::{Transaction, params};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     space_names::SpaceName,
-    threads::{Holder, Post, Sender, Side, Thread},
+    threads::{Holder, Post, Sender, Side, Thread, ThreadKind},
 };
 
 use crate::daemon::{
@@ -290,12 +290,16 @@ impl Texts {
 /// What the party on `side` of `thread` does next.
 fn hint(thread: &Thread, side: Side) -> String {
     let number = thread.number;
-    match side {
-        Side::Holder => format!(
+    match (side, thread.kind) {
+        (Side::Holder, ThreadKind::Question) => format!(
             "Reply with `shoal send {number} \"<answer>\"`, `--choose N` picking a choice; pass it on with `shoal thread forward {number}`."
         ),
-        Side::Opener => format!(
-            "Reply with `shoal send {number} \"<text>\"`, or settle it with `shoal thread resolve {number} answered`."
+        (Side::Holder, ThreadKind::Request) => format!(
+            "Once it is done, say what you did with `shoal send {number} \"<text>\"`, or there why you cannot; pass it on with `shoal thread forward {number}`."
+        ),
+        (Side::Opener, kind) => format!(
+            "Reply with `shoal send {number} \"<text>\"`, or settle it with `shoal thread resolve {number} {}`.",
+            kind.settled()
         ),
     }
 }
