@@ -123,9 +123,10 @@ executions stay with the daemon, which the interface reaches.
 `shoal-links` holds the issues, PRs and CI runs spaces link: its `Links`
 service keeps the watches' running waits and the forge's remembered
 answers, builds the accounts requests go out as, finds where a request
-comes from and the repository it acts in, and reads the forge, while the
-spaces, the forge each host serves and permission checks stay with the
-daemon, which its interface reaches. Its record functions read and write
+comes from and the repository it acts in, reads the forge, and links
+issues to spaces as assigned with their forge assignees, while the
+spaces, the forge each host serves, permission checks and the agents'
+records stay with the daemon, which its interface reaches. Its record functions read and write
 what spaces link, which other subsystems call in their own transactions.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
 the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
