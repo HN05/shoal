@@ -347,7 +347,9 @@ fn a_child_s_thread_reaches_its_coordinator_on_another_machine() {
         "the hub names the thread as its machine does"
     );
     message_with(&hub, &coordinator, "Which database?");
-    hub.ok(&["send", &number, "SQLite"]);
+    // The coordinator replies from its own machine, which has no record of
+    // the child's space.
+    ok_in(&hub, &coordinator, &["send", &number, "SQLite"]);
     message_with(&laptop, &child, "SQLite");
 }
 

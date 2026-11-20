@@ -134,8 +134,13 @@ impl Manager {
         let post = picked(&thread, side, post)?;
         validate(&post)?;
         let poster = self.poster(caller, side).await?;
+        // A poster on another machine keeps its files in the thread's space.
         let files_space = match &poster.space {
-            Some((id, _)) => self.space(&SpaceSelector::id(id)).await?,
+            Some((id, _)) => self.find_space(id).await?,
+            None => None,
+        };
+        let files_space = match files_space {
+            Some(space) => space,
             None => self.space(&SpaceSelector::id(&thread.space_id)).await?,
         };
         let attacher = self.attacher(caller).await;
@@ -158,13 +163,11 @@ impl Manager {
         Ok(thread)
     }
 
-    /// Who posts for `caller` on `side`: its space, or the user.
+    /// Who posts for `caller` on `side`: its space, here or on another
+    /// machine, or the user.
     pub(super) async fn poster(&self, caller: Option<&Caller>, side: Side) -> Result<Poster> {
         let space = match caller {
-            Some(caller) => {
-                let space = self.space(&SpaceSelector::id(&caller.space_id)).await?;
-                Some((space.id, space.name))
-            }
+            Some(caller) => Some(self.speaker(caller).await?),
             None => None,
         };
         Ok(Poster { side, space })

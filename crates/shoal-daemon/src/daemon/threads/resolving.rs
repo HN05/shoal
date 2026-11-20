@@ -2,9 +2,8 @@
 //! the other side.
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::Transaction;
-use shoal_protocol::{
-    space_names::SpaceSelector,
-    threads::{Outcome, OutcomeKind, Post, Resolution, Sender, Side, Thread, ThreadNumber},
+use shoal_protocol::threads::{
+    Outcome, OutcomeKind, Post, Resolution, Sender, Side, Thread, ThreadNumber,
 };
 
 use super::{
@@ -46,10 +45,7 @@ impl Manager {
             ),
         };
         let by = match caller {
-            Some(caller) => self
-                .space(&SpaceSelector::id(&caller.space_id))
-                .await?
-                .label(),
+            Some(caller) => self.speaker(caller).await?.1.to_string(),
             None => "the user".to_owned(),
         };
         let id = thread.id;

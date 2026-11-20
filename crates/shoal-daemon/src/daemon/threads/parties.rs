@@ -4,7 +4,11 @@
 //! in, or one a space its scope reaches took part in; the user reads every
 //! thread and acts for either side.
 use anyhow::{Result, bail, ensure};
-use shoal_protocol::threads::{Holder, Sender, Side, Thread, ThreadNumber};
+use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::{
+    space_names::{SpaceName, SpaceSelector},
+    threads::{Holder, Sender, Side, Thread, ThreadNumber},
+};
 
 use super::records;
 use crate::daemon::{item_numbers::ItemNumber, manager::Manager, scope::Caller};
@@ -86,6 +90,20 @@ impl Manager {
             thread.party(Side::Opener),
             thread.party(Side::Holder)
         )
+    }
+
+    /// The space `caller` speaks as, by its ID and name: one of this
+    /// machine's, or one the hub lists on another machine, as a coordinator
+    /// there replying to a thread of a space here.
+    pub(super) async fn speaker(&self, caller: &Caller) -> Result<(SpaceId, SpaceName)> {
+        if let Some(space) = self.find_space(&caller.space_id).await? {
+            return Ok((space.id, space.name));
+        }
+        let selector = SpaceSelector::id(&caller.space_id);
+        match self.hub.machine_of(self, &selector).await {
+            Ok(Some((_, listed))) => Ok((listed.space.id, listed.space.name)),
+            _ => bail!("no space {} here or on the hub", caller.space_id),
+        }
     }
 
     /// Refuse `caller` resolving `thread` unless it is the opener's, or for
