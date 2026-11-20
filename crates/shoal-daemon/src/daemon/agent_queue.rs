@@ -30,7 +30,7 @@ pub(crate) use dispatch::Start;
 pub(crate) use state::{AgentQueue, OneShotAdmission, OneShotStop, RestoreLink, Serving};
 pub(crate) use store::last_seq;
 pub(crate) use wake::Grant;
-pub(crate) use worker::StoppedAgent;
+pub(crate) use worker::HasStoppedAgent;
 
 #[cfg(test)]
 pub(crate) mod tests;

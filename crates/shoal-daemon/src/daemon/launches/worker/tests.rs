@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     daemon::{
-        agent_queue::StoppedAgent,
+        agent_queue::HasStoppedAgent,
         test_support::{global_config, manager, repository},
     },
     execution::recovery,
@@ -63,7 +63,7 @@ async fn a_start_without_replace_is_refused_by_a_stopped_agent() {
         assert!(
             refused
                 .as_ref()
-                .is_err_and(|error| error.is::<StoppedAgent>()),
+                .is_err_and(|error| error.is::<HasStoppedAgent>()),
             "{refused:?}"
         );
     }
@@ -122,7 +122,7 @@ async fn a_creation_check_passes_a_workspace_with_a_stopped_agent() {
     assert!(
         started
             .as_ref()
-            .is_err_and(|error| error.is::<StoppedAgent>()),
+            .is_err_and(|error| error.is::<HasStoppedAgent>()),
         "{started:?}"
     );
 }

@@ -53,7 +53,7 @@ async fn a_queued_agent_refuses_another_worker() {
 /// an asleep agent a launch may replace.
 #[tokio::test]
 async fn an_agent_waiting_for_its_restore_refuses_another_worker() {
-    use super::StoppedAgent;
+    use super::HasStoppedAgent;
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     let workspace = create(&manager, &repo, "asleep").await;
@@ -68,7 +68,7 @@ async fn an_agent_waiting_for_its_restore_refuses_another_worker() {
     assert!(
         refused
             .as_ref()
-            .is_err_and(|error| error.is::<StoppedAgent>()),
+            .is_err_and(|error| error.is::<HasStoppedAgent>()),
         "{refused:?}"
     );
 
@@ -87,7 +87,7 @@ async fn an_agent_waiting_for_its_restore_refuses_another_worker() {
     assert!(
         refused
             .as_ref()
-            .is_err_and(|error| error.is::<StoppedAgent>()),
+            .is_err_and(|error| error.is::<HasStoppedAgent>()),
         "{refused:?}"
     );
 
@@ -176,7 +176,7 @@ async fn space_of(manager: &Manager, workspace: &Workspace) -> crate::model::Spa
 
 #[tokio::test]
 async fn a_stopped_agent_refuses_another_worker_until_it_is_resumed_or_forgotten() {
-    use super::StoppedAgent;
+    use super::HasStoppedAgent;
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     let workspace = create(&manager, &repo, "stopped").await;
@@ -185,7 +185,7 @@ async fn a_stopped_agent_refuses_another_worker_until_it_is_resumed_or_forgotten
     assert!(
         refused
             .as_ref()
-            .is_err_and(|error| error.is::<StoppedAgent>()),
+            .is_err_and(|error| error.is::<HasStoppedAgent>()),
         "{refused:?}"
     );
     std::fs::remove_file(record).unwrap();

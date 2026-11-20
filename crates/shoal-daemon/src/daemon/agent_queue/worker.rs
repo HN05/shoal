@@ -28,7 +28,7 @@ impl Manager {
             self.ensure_no_live_worker(space).await?;
         }
         if asleep || !recovery::agent_records(&self.paths, &space.id)?.is_empty() {
-            bail!(StoppedAgent::of(space));
+            bail!(HasStoppedAgent::of(space));
         }
         Ok(())
     }
@@ -179,9 +179,9 @@ impl std::error::Error for HasAgent {}
 /// The refusal of a launch in a space whose stopped or asleep agent it
 /// does not replace, which names how to resume or replace that agent.
 #[derive(Debug)]
-pub struct StoppedAgent(String);
+pub struct HasStoppedAgent(String);
 
-impl StoppedAgent {
+impl HasStoppedAgent {
     /// The refusal of a launch in `space`.
     fn of(space: &Space) -> Self {
         let (number, kind) = (space.number, space.kind());
@@ -191,13 +191,13 @@ impl StoppedAgent {
     }
 }
 
-impl std::fmt::Display for StoppedAgent {
+impl std::fmt::Display for HasStoppedAgent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
     }
 }
 
-impl std::error::Error for StoppedAgent {}
+impl std::error::Error for HasStoppedAgent {}
 
 #[cfg(test)]
 mod tests;
