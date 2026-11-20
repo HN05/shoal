@@ -411,6 +411,27 @@ fn operation_parses_without_arguments() {
 }
 
 #[test]
+fn import_moved_round_trips_its_ticket_and_resume() {
+    let ticket = shoal_ids::move_tickets::MoveTicket::generate();
+    for resume in [true, false] {
+        let InternalCommand::ImportMoved {
+            ticket: parsed,
+            no_resume,
+        } = parse(
+            Worker::ImportMoved {
+                ticket: &ticket,
+                resume,
+            },
+            true,
+        )
+        else {
+            panic!("expected import-moved worker");
+        };
+        assert_eq!((parsed, no_resume), (ticket.clone(), !resume));
+    }
+}
+
+#[test]
 fn proxy_report_round_trips_its_json() {
     let report = r#"{"report_upstream_reset":{"workspace":"w","execution":"e"}}"#;
     let InternalCommand::ProxyReport { report: parsed } =

@@ -1,10 +1,10 @@
-//! What `shoal move` prints.
+//! What `shoal move` and the imports of its packages print.
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
 use crate::output::{outputs, restore::Reopened};
-use shoal_protocol::transfer::MoveReport;
+use shoal_protocol::transfer::{ImportedMove, MoveReport};
 
 /// A package an import of several could not import.
 #[derive(Debug, Serialize, Deserialize)]
@@ -20,4 +20,4 @@ pub struct Imports {
     pub failed: Vec<ImportFailure>,
 }
 
-outputs!(Imports, MoveReport);
+outputs!(Imports, ImportedMove, MoveReport);

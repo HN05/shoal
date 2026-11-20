@@ -1,6 +1,7 @@
 //! The command lines that start Shoal's workers: the hidden `internal`
 //! commands the daemon, the execution wrapper and the CLI run in their own
 //! processes.
+use shoal_ids::move_tickets::MoveTicket;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::space_names::SpaceSelector;
@@ -28,6 +29,7 @@ pub const PUSH_GATE: &str = "push-gate";
 pub const GIT_CREDENTIAL: &str = "git-credential";
 pub const QUEUE_START: &str = "queue-start";
 pub const OPERATION: &str = "operation";
+pub const IMPORT_MOVED: &str = "import-moved";
 pub const PLACE: &str = "place";
 pub const LAUNCH: &str = "launch";
 pub const COPY_IGNORED: &str = "copy-ignored";
@@ -107,6 +109,14 @@ pub enum Worker<'a> {
     },
     /// Run the operation whose order the daemon writes to standard input.
     Operation,
+    /// Continue the spaces of the package another joined machine moves
+    /// here, which the daemon writes to standard input, their claims at the
+    /// hub carrying `ticket`, with their agents' restores queued when
+    /// `resume`.
+    ImportMoved {
+        ticket: &'a MoveTicket,
+        resume: bool,
+    },
     /// Start an admitted queue entry where its launching terminal would.
     QueueStart {
         entry: &'a str,
@@ -371,6 +381,12 @@ pub(crate) fn internal_command_for(
             args.extend_from_slice(command);
         }
         Worker::Operation => args.push(OPERATION.into()),
+        Worker::ImportMoved { ticket, resume } => {
+            args.extend([IMPORT_MOVED.into(), "--ticket".into(), ticket.into()]);
+            if !resume {
+                args.push("--no-resume".into());
+            }
+        }
         Worker::QueueStart { entry } => args.extend([QUEUE_START.into(), entry.into()]),
         Worker::Place {
             host,

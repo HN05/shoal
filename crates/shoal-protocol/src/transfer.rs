@@ -394,6 +394,20 @@ pub struct Arrived {
     pub queued: Vec<crate::model::QueueEntry>,
 }
 
+/// How the import of a package another joined machine moved here went.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum ImportedMove {
+    /// Its spaces opened here, its own as this says.
+    Arrived(Box<Arrived>),
+    /// Nothing was recorded, for `error`, so the spaces stay where they
+    /// were.
+    Refused { error: String },
+    /// The hub took this machine's claim, so the spaces are here, but
+    /// opening them failed after it, for `error`.
+    Failed { error: String },
+}
+
 /// A space a move failed to take, which stayed here unless its error says
 /// otherwise.
 #[derive(Debug, Clone, Serialize, Deserialize)]

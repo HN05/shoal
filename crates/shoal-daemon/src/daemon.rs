@@ -47,6 +47,7 @@ pub(crate) mod gate;
 mod git_logins;
 pub(crate) mod holds;
 pub(crate) mod hub;
+mod hub_moves;
 mod idle_sleep;
 pub(crate) mod idle_wakes;
 mod imported_sessions;

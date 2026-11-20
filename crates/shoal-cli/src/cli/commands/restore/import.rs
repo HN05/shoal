@@ -29,6 +29,9 @@ use crate::{
 use super::reopen;
 
 mod carried;
+mod moved;
+
+pub(in crate::cli::commands) use moved::import_moved;
 
 /// How `shoal restore --from` opens each space.
 pub(in crate::cli::commands) struct ImportOptions {

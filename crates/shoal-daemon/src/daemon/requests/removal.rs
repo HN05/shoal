@@ -34,7 +34,8 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         | RemovalMethod::AbsorbSpace(_)
         | RemovalMethod::RestoreSpace { .. }
         | RemovalMethod::ExportMovingSpace { .. }
-        | RemovalMethod::ImportPackage(_) => true,
+        | RemovalMethod::ImportPackage(_)
+        | RemovalMethod::ReceiveMove { .. } => true,
         RemovalMethod::Cleanup { dry_run, .. } => !dry_run,
         RemovalMethod::StopTargets
         | RemovalMethod::CheckStop { .. }
@@ -174,6 +175,12 @@ pub(super) async fn handle(
         }
         RemovalMethod::ImportPackage(import) => {
             return import_package(manager, *import, caller).await;
+        }
+        RemovalMethod::ReceiveMove { ticket, resume } => {
+            let manager = manager.clone();
+            return Ok(Answer::connection(move |stream, request_id, guard| {
+                manager.receive_move(stream, request_id, (ticket, resume), guard)
+            }));
         }
     }))
 }
@@ -337,7 +344,8 @@ impl Scoped for RemovalMethod {
             | RemovalMethod::ExportMovingSpace { .. }
             | RemovalMethod::EndMovedSpace { .. }
             | RemovalMethod::AbandonMove { .. }
-            | RemovalMethod::ImportPackage(_) => administer(manager, caller, self).await,
+            | RemovalMethod::ImportPackage(_)
+            | RemovalMethod::ReceiveMove { .. } => administer(manager, caller, self).await,
         }
     }
 }

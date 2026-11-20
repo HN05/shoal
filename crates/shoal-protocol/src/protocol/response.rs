@@ -318,6 +318,7 @@ response_bodies! {
     StoppedProcesses(crate::processes::Stopped),
     ExportedSpace(crate::transfer::ExportedSpace),
     ImportedPackage(crate::transfer::ImportedPackage),
+    ImportedMove(crate::transfer::ImportedMove),
     MoveAbandoned(crate::transfer::StoppedExecutions),
     DiffBase(DiffBase),
     Conflicts(ConflictCheck),

@@ -147,4 +147,13 @@ pub enum RemovalMethod {
     /// needs that are not here, record its spaces as removed here once the
     /// whole package checks out, and open its own space again.
     ImportPackage(Box<crate::transfer::PackageImport>),
+    /// Take the package of a move another joined machine sends on the
+    /// request's connection once the first reply asks for it, and continue
+    /// its spaces here as `shoal restore --from -` does, their claims at
+    /// the hub carrying `ticket`, with their agents' restores queued when
+    /// `resume`; answered with how the import went.
+    ReceiveMove {
+        ticket: shoal_ids::move_tickets::MoveTicket,
+        resume: bool,
+    },
 }

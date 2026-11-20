@@ -106,6 +106,7 @@ impl Operation {
             self,
             Self::Demo(DemoMethod::OpenDemoStream { .. })
                 | Self::Repository(RepositoryMethod::ReceiveCommits { .. })
+                | Self::Removal(RemovalMethod::ReceiveMove { .. })
                 | Self::Workspace(WorkspaceMethod::AttachSession { .. })
         ) {
             Forwarding::Duplex

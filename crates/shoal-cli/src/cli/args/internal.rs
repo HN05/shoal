@@ -208,6 +208,18 @@ pub enum InternalCommand {
     /// Run an operation the daemon started, reading its order on stdin.
     #[command(name = workers::OPERATION)]
     Operation,
+    /// Continue the spaces of the package another joined machine moves
+    /// here, on stdin, as `shoal restore --from -` does, and print how it
+    /// went as JSON; the daemon runs it.
+    #[command(name = workers::IMPORT_MOVED)]
+    ImportMoved {
+        /// The move's ticket, which the claims of its spaces carry.
+        #[arg(long)]
+        ticket: shoal_ids::move_tickets::MoveTicket,
+        /// Leave the agents stopped for a later shoal resume.
+        #[arg(long)]
+        no_resume: bool,
+    },
     /// Attach this terminal, which a user on another machine views, to an
     /// agent's session as `shoal attach` would there; the daemon runs it.
     #[command(name = workers::ATTACH)]
