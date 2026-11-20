@@ -61,15 +61,16 @@ impl Watch {
         self.task.abort();
         let mut read = self.read.lock().expect("scope reads do not panic");
         read.scope.as_ref()?;
-        let before = read.slice_kills;
-        if !read.update()
-            && code == KILLED
-            && matches!((before, slice_count()), (Some(before), Some(now)) if now > before)
-        {
-            read.memory.oom_kills = read.memory.oom_kills.max(1);
-        }
+        read.last(code, slice_count);
         Some(read.memory)
     }
+}
+
+/// Whether a command whose scope was gone at its last read was killed for
+/// memory: it ended with SIGKILL, `code`, while the slice's count of kills
+/// rose from `before`, at the previous read, to `now`.
+fn killed_with_the_slice(code: i32, before: Option<u64>, now: Option<u64>) -> bool {
+    code == KILLED && matches!((before, now), (Some(before), Some(now)) if now > before)
 }
 
 impl Read {
@@ -78,6 +79,16 @@ impl Read {
     fn find_scope(&mut self, pid: u32) {
         if self.scope.is_none() {
             self.scope = oom::scope_of(pid).ok().flatten();
+        }
+    }
+
+    /// Read the scope once more as its command ended with `code`: one gone
+    /// by then counts a kill when `slice_count`, the slice's count of kills
+    /// now, shows one since the previous read.
+    fn last(&mut self, code: i32, slice_count: impl FnOnce() -> Option<u64>) {
+        let before = self.slice_kills;
+        if !self.update() && killed_with_the_slice(code, before, slice_count()) {
+            self.memory.oom_kills = self.memory.oom_kills.saturating_add(1);
         }
     }
 

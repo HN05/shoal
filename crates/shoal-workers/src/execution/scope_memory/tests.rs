@@ -42,3 +42,23 @@ fn a_scope_keeps_its_highest_reading_and_its_last_count_once_gone() {
     assert!(!read.update());
     assert_eq!(read.memory.oom_kills, 2);
 }
+
+#[test]
+fn a_scope_gone_with_its_kill_adds_it_to_the_kills_read_before() {
+    let scope = tempfile::tempdir().unwrap();
+    let mut read = Read {
+        scope: Some(scope.path().to_owned()),
+        ..Read::default()
+    };
+    write_scope(scope.path(), 2, 1 << 30);
+    assert!(read.update());
+    read.slice_kills = Some(5);
+    drop(scope);
+    // Another end, or a slice that counted nothing new, names no kill.
+    read.last(1, || Some(6));
+    read.last(KILLED, || Some(5));
+    assert_eq!(read.memory.oom_kills, 2);
+    // The slice counted a third kill after the scope's last read.
+    read.last(KILLED, || Some(6));
+    assert_eq!(read.memory.oom_kills, 3);
+}
