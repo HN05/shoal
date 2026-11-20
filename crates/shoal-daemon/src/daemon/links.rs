@@ -300,7 +300,8 @@ impl Manager {
     ) -> Result<()> {
         let space = self.links.link_space(self, selector).await?;
         let id = &space.id;
-        let issue = kind != Some(ItemKind::Pr) && !self.issue_registrations(id).await?.is_empty();
+        let issue =
+            kind != Some(ItemKind::Pr) && !self.links.issue_registrations(id).await?.is_empty();
         let pr =
             kind != Some(ItemKind::Issue) && !matches!(self.pr_registration(id).await, Ok(None));
         ensure!(

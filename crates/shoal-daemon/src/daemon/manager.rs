@@ -131,6 +131,7 @@ impl Manager {
             paths.clone(),
         ));
         let links = Arc::new(shoal_links::Links::new(
+            store.clone(),
             config_state.clone(),
             Arc::new(super::links::records::LinkRecords),
         ));

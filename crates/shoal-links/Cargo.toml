@@ -23,6 +23,7 @@ shoal-forge-types = { workspace = true, features = ["rusqlite"] }
 shoal-ids = { workspace = true, features = ["rusqlite"] }
 shoal-protocol = { workspace = true, features = ["rusqlite"] }
 shoal-refs.workspace = true
+shoal-store.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
 
 [dev-dependencies]

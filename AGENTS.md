@@ -185,7 +185,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `shoal-forge`, `shoal-forge-types`, `shoal-ids`, `shoal-protocol`,
   `shoal-refs` and `shoal-store`; `shoal-links` on none but `shoal-core`,
   `shoal-daemon-base`, `shoal-forge`, `shoal-forge-types`, `shoal-ids`,
-  `shoal-protocol` and `shoal-refs`.
+  `shoal-protocol`, `shoal-refs` and `shoal-store`.
 - `crates/shoal-time` holds the wall-clock timestamp type,
   `crates/shoal-refs` the commit and branch name types, `crates/shoal-ids`
   the record IDs and numbers, and `crates/shoal-states` the macros that

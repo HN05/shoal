@@ -29,8 +29,6 @@ use shoal_links::issue::{
     assignees::{self as assignee_records, Dropped},
 };
 
-pub(crate) use shoal_protocol::links::issue::Registration;
-
 /// An open issue a new workspace is assigned.
 #[derive(Debug, Clone)]
 pub(crate) struct OpenIssue {
@@ -40,22 +38,6 @@ pub(crate) struct OpenIssue {
 }
 
 impl Manager {
-    /// The space's assigned issues in the order they were assigned.
-    pub async fn issue_registrations(&self, id: &SpaceId) -> Result<Vec<Registration>> {
-        let id = id.to_owned();
-        self.store
-            .read(move |tx| {
-                let issues = shoal_links::linked::assigned_issues(tx, &id)?.into_iter();
-                Ok(issues
-                    .map(|issue| Registration {
-                        url: issue.url,
-                        error: issue.error,
-                    })
-                    .collect())
-            })
-            .await
-    }
-
     /// Association is part of opening a workspace, before tracked setup starts.
     /// The issue joins the space's assigned issues as `assigner` assigns it;
     /// linking an assigned one again records a newly known title. An issue

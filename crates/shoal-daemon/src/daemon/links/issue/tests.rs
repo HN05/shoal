@@ -3,7 +3,7 @@ use crate::daemon::{
     events::{EventItem, EventKind},
     test_support::{git, manager, repository},
 };
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{links::issue::Registration, space_names::SpaceSelector};
 
 #[tokio::test]
 async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
@@ -130,7 +130,11 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
         |item| matches!(item, EventItem::Event(event) if event.details.kind == EventKind::Unlinked
                 && event.details.link.as_ref().is_some_and(|link| link.url == url))
     ));
-    let registrations = reopened.issue_registrations(&workspace.id).await.unwrap();
+    let registrations = reopened
+        .links
+        .issue_registrations(&workspace.id)
+        .await
+        .unwrap();
     assert_eq!(numbers(&registrations), [317]);
     let links = reopened.workspace_by_id(&workspace.id).await.unwrap().links;
     assert!(links.issues[0].title.is_none());
@@ -144,12 +148,23 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
         )
         .await
         .unwrap();
-    let registrations = reopened.issue_registrations(&workspace.id).await.unwrap();
+    let registrations = reopened
+        .links
+        .issue_registrations(&workspace.id)
+        .await
+        .unwrap();
     assert_eq!(numbers(&registrations), [317, 316]);
     reopened
         .clear_issue(&SpaceSelector::id(&workspace.id), None)
         .await
         .unwrap();
-    assert!((reopened.issue_registrations(&workspace.id).await.unwrap()).is_empty());
+    assert!(
+        (reopened
+            .links
+            .issue_registrations(&workspace.id)
+            .await
+            .unwrap())
+        .is_empty()
+    );
     reopened.store.shutdown().await;
 }

@@ -61,7 +61,7 @@ impl Manager {
                 integrated: completion.integrated,
             }));
         }
-        if !self.issue_registrations(id).await?.is_empty() {
+        if !self.links.issue_registrations(id).await?.is_empty() {
             return Ok(Some(CleanupReason::Issue));
         }
         Ok(None)

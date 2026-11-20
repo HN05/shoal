@@ -8,7 +8,10 @@ use shoal_core::refusal::{Reason, Refusal};
 use shoal_daemon_base::events::{self, EventKind};
 use shoal_forge_types::items::{link::ItemKind, reference::ItemRef};
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::model::{Assigner, IssueAssignee, Relation};
+use shoal_protocol::{
+    links::issue::Registration,
+    model::{Assigner, IssueAssignee, Relation},
+};
 
 use crate::Links;
 use assignees::Dropped;
@@ -38,6 +41,22 @@ pub fn assignees_of(db: &Connection, id: &SpaceId) -> rusqlite::Result<Vec<Issue
 }
 
 impl Links {
+    /// The space's assigned issues in the order they were assigned.
+    pub async fn issue_registrations(&self, id: &SpaceId) -> Result<Vec<Registration>> {
+        let id = id.to_owned();
+        self.store
+            .read(move |tx| {
+                let issues = crate::linked::assigned_issues(tx, &id)?.into_iter();
+                Ok(issues
+                    .map(|issue| Registration {
+                        url: issue.url,
+                        error: issue.error,
+                    })
+                    .collect())
+            })
+            .await
+    }
+
     /// Assign an issue within the caller's transaction, after those already
     /// assigned and in place of its opened or related link, retaining a known
     /// title when none is supplied and recording only a new association as

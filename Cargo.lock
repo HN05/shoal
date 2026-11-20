@@ -2686,6 +2686,7 @@ dependencies = [
  "shoal-ids",
  "shoal-protocol",
  "shoal-refs",
+ "shoal-store",
  "tokio",
 ]
 

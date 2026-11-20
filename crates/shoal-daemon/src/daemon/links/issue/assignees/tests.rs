@@ -214,7 +214,11 @@ async fn a_refused_assignment_warns_and_keeps_the_link() {
     assert!(warnings[0].contains("forbidden"), "{warnings:?}");
     // Linking it again tries again.
     assert!(fixture.link(workspace).await[0].contains("forbidden"));
-    let registrations = fixture.manager.issue_registrations(&workspace.id).await;
+    let registrations = fixture
+        .manager
+        .links
+        .issue_registrations(&workspace.id)
+        .await;
     assert_eq!(registrations.unwrap().len(), 1);
 }
 
