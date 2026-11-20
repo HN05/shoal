@@ -94,15 +94,8 @@ fn new_post(posting: Posting) -> Result<NewPost> {
 /// `number`.
 async fn in_chat(ctx: &Context, number: ThreadNumber) -> Result<i32> {
     let space = ui::select_space(ctx, None, Fallback::OwnWorkspace).await?;
-    let thread = threads::post_in_chat(&ctx.paths, space, number).await?;
-    ctx.emit(
-        &format!(
-            "Write your post as your final message and end your turn; it goes to thread {}.",
-            thread.number
-        ),
-        &thread,
-    )?;
-    Ok(0)
+    let marked = threads::post_in_chat(&ctx.paths, space, number).await?;
+    crate::cli::commands::send::in_chat::show(ctx, &marked)
 }
 
 /// Continue an earlier `send --wait` after the post `after` of the thread

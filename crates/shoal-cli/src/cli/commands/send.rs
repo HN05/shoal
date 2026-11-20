@@ -224,5 +224,7 @@ fn message_text(
     }
 }
 
+pub(in crate::cli) mod in_chat;
+
 #[cfg(test)]
 mod tests;

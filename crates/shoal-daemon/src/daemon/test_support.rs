@@ -88,6 +88,44 @@ pub async fn chat(
     manager.run_chat_agent(chat, None).await.unwrap()
 }
 
+/// Run a tracked agent in `workspace`, which coordinates the spaces below
+/// it; the execution it runs as.
+pub(crate) async fn track_agent(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+) -> shoal_ids::execution_ids::ExecutionId {
+    let execution = manager
+        .begin_execution(
+            workspace.id.as_str(),
+            None,
+            crate::daemon::executions::ExecutionKind::Command,
+            None,
+        )
+        .await
+        .unwrap();
+    let id = execution.plan.id.clone();
+    manager
+        .track_agent(
+            &id,
+            &shoal_protocol::executions::TrackedAgent::named("claude"),
+            &workspace.id,
+            &workspace.name,
+            false,
+            std::time::Duration::ZERO,
+        )
+        .await;
+    let working = crate::state::AgentState::Working;
+    (manager.set_agent_state(
+        &shoal_protocol::space_names::SpaceSelector::id(&workspace.id),
+        working,
+        Some(id.clone()),
+        None,
+    ))
+    .await
+    .unwrap();
+    id
+}
+
 /// Keep `session` as the one the agent running in the space `id` reported,
 /// as its hooks' report with its execution keeps it, leaving its turn state
 /// as it is.

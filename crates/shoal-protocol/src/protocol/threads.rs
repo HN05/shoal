@@ -43,7 +43,8 @@ pub enum ThreadMethod {
         from: Option<SpaceSelector>,
     },
     /// The caller's agent posts in the thread in its conversation this
-    /// turn: the turn's final message becomes the post.
+    /// turn: the turn's final message becomes the post. Answered with the
+    /// mark and the one it replaced.
     PostInChat {
         space: SpaceSelector,
         thread: ThreadNumber,

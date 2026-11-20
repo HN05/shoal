@@ -1,5 +1,5 @@
-//! The turn an agent marks, as one whose final message posts in a thread:
-//! the turn of the execution it runs as, a chat's as a workspace's.
+//! The turn an agent marks, as one whose final message goes out once it
+//! ends: the turn of the execution it runs as, a chat's as a workspace's.
 use anyhow::{Context, Result};
 use shoal_ids::execution_ids::ExecutionId;
 
@@ -16,7 +16,7 @@ impl Manager {
     ) -> Result<(ExecutionId, crate::agent::Agent)> {
         let refusal = || {
             format!(
-                "only an agent Shoal runs in {} posts in its chat",
+                "only an agent Shoal runs in {} writes in its chat",
                 space.name
             )
         };

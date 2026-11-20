@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::{
@@ -14,7 +14,7 @@ use crate::{
         manager::Manager,
         notifications::AlertKind,
         scope::{Caller, ScopedExecution},
-        test_support::{caller_in, manager, repository},
+        test_support::{caller_in, manager, repository, track_agent},
         workspace_files::Attacher,
     },
     model::Workspace,
@@ -77,36 +77,6 @@ pub(super) async fn tree() -> Tree {
         beside,
         agent,
     }
-}
-
-/// Run a tracked agent in `workspace`, which coordinates the spaces below
-/// it; the execution it runs as.
-async fn track_agent(manager: &Manager, workspace: &Workspace) -> ExecutionId {
-    let execution = manager
-        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
-        .await
-        .unwrap();
-    let id = execution.plan.id.clone();
-    manager
-        .track_agent(
-            &id,
-            &shoal_protocol::executions::TrackedAgent::named("claude"),
-            &workspace.id,
-            &workspace.name,
-            false,
-            Duration::ZERO,
-        )
-        .await;
-    let working = crate::state::AgentState::Working;
-    (manager.set_agent_state(
-        &SpaceSelector::id(&workspace.id),
-        working,
-        Some(id.clone()),
-        None,
-    ))
-    .await
-    .unwrap();
-    id
 }
 
 pub(super) fn caller(workspace: &Workspace) -> Caller {

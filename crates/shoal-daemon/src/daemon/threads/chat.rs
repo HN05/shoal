@@ -1,13 +1,12 @@
-//! Posts an agent makes in its conversation: it marks its turn with the
-//! thread, and the turn's final message becomes its post there. A prompt
-//! the user submits in that conversation answers the post: Shoal records
-//! it as the user's reply. An agent marks the turn of the execution it
-//! runs as, a chat's as a workspace's.
+//! Posts an agent makes in its conversation: the turn it marks with the
+//! thread (see [`crate::daemon::chat_marks`]) posts its final message
+//! there. A prompt the user submits in that conversation answers the post:
+//! Shoal records it as the user's reply.
 use anyhow::{Result, ensure};
-use rusqlite::{Connection, OptionalExtension as _, Transaction, params};
-use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
+use rusqlite::{Connection, Transaction};
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
-    space_names::SpaceSelector,
+    item_numbers::ItemNumber,
     threads::{Holder, NewPost, Post, Sender, Side, Thread, ThreadNumber},
 };
 
@@ -17,34 +16,14 @@ use super::{
     posting::{Attached, Poster, record_post},
     records,
 };
-use crate::daemon::{manager::Manager, scope::Caller};
+use crate::{
+    daemon::{manager::Manager, scope::Caller},
+    model::Space,
+};
 
-/// Mark the current turn of the agent `execution` runs as posting in the
-/// thread `thread` in its conversation, or clear the mark without one.
-fn set_mark(db: &Connection, execution: &ExecutionId, thread: Option<i64>) -> Result<()> {
-    match thread {
-        Some(thread) => db.execute(
-            "INSERT OR REPLACE INTO chat_marks(execution_id,thread_id) VALUES (?1,?2)",
-            params![execution, thread],
-        )?,
-        None => db.execute("DELETE FROM chat_marks WHERE execution_id=?1", [execution])?,
-    };
-    Ok(())
-}
-
-/// Clear the mark of the turn of the agent `execution` runs, returning the
-/// thread it named.
-fn take_mark(tx: &Transaction<'_>, execution: &ExecutionId) -> Result<Option<i64>> {
-    let thread: Option<i64> = tx
-        .query_row(
-            "SELECT thread_id FROM chat_marks WHERE execution_id=?1",
-            [execution],
-            |row| row.get(0),
-        )
-        .optional()?
-        .flatten();
-    set_mark(tx, execution, None)?;
-    Ok(thread)
+/// The number of the thread of record ID `id`.
+pub(crate) fn number_of(db: &Connection, id: i64) -> Result<ItemNumber> {
+    Ok(records::reread(db, id)?.number)
 }
 
 /// The reply in the chat that a prompt without text, or one too long for
@@ -55,9 +34,8 @@ const REPLIED: &str = "The user replied in the chat.";
 /// to the length and characters of posts. Without one, as from an agent
 /// whose hook does not pass it, the post points to the chat.
 fn in_chat(message: Option<&str>) -> NewPost {
-    let fallback = "The agent posted in its chat; attach to its session to read it.";
     NewPost {
-        text: chat_text(message, fallback),
+        text: chat_text(message, crate::daemon::chat_marks::WROTE_IN_CHAT),
         ..NewPost::default()
     }
 }
@@ -114,7 +92,7 @@ fn answered_in_chat(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<Vec<(Thr
 /// when the hook passed it, to each post it made there that its thread
 /// waits on. The party the post went to loses its unread alert of it, or
 /// hears of the reply once it read it.
-fn record_replies(
+pub(crate) fn record_replies(
     tx: &Transaction<'_>,
     space_id: &SpaceId,
     prompt: Option<&str>,
@@ -180,23 +158,14 @@ fn record_replies(
 }
 
 impl Manager {
-    /// Mark the current turn of `caller`'s agent in the space `selector`
-    /// names as posting in the thread `number` in its conversation, which
-    /// needs Shoal's hook that ends the agent's turns.
-    pub(crate) async fn mark_chat_post(
+    /// The thread `number` that the agent of `space`, as `caller`, marks
+    /// its turn to post in: an open one it opened or holds.
+    pub(crate) async fn chat_post_thread(
         &self,
         caller: Option<&Caller>,
-        selector: &SpaceSelector,
+        space: &Space,
         number: ThreadNumber,
     ) -> Result<Thread> {
-        let space = self.space(selector).await?;
-        let execution = caller.and_then(Caller::execution_id);
-        let (turn, agent) = self.agent_turn(&space, execution).await?;
-        let settings = self.space_settings(&space).await?;
-        ensure!(
-            settings.integration(&agent).reports_turn_ends(),
-            "agent {agent} has no Shoal hook that ends its turns; post with shoal send <thread> \"<text>\""
-        );
         let thread = self.readable_thread(caller, number).await?;
         // The turn's post goes in from the side the space itself takes,
         // which a space above the holder, posting with `send`, does not.
@@ -207,47 +176,23 @@ impl Manager {
             thread.number
         );
         ensure_open(&thread)?;
-        let id = thread.id;
-        self.store
-            .run(move |db| set_mark(db, &turn, Some(id)))
-            .await?;
         Ok(thread)
     }
 
-    /// Post the turn's `final_message` in the thread the agent `execution`
-    /// runs in the space `selector` names marked its turn with, consuming
-    /// the mark. The agent's turn ends either way, so a failure is only
-    /// logged.
-    pub(crate) async fn post_marked_chat(
+    /// Post `message`, the final message of a turn the agent of `space`
+    /// marked, in the thread of record ID `id`.
+    pub(crate) async fn post_marked(
         &self,
-        selector: &SpaceSelector,
-        execution: Option<&ExecutionId>,
-        final_message: Option<String>,
-    ) {
-        let Some(execution) = execution else {
-            return;
-        };
-        let posted = self.post_in_chat(selector, execution.to_owned(), final_message);
-        if let Err(error) = posted.await {
-            crate::daemon::log!("post of {selector} in its chat not recorded: {error:#}");
-        }
-    }
-
-    async fn post_in_chat(
-        &self,
-        selector: &SpaceSelector,
-        turn: ExecutionId,
+        space: &Space,
+        id: i64,
         message: Option<String>,
     ) -> Result<()> {
-        let space = self.space(selector).await?;
         let post = in_chat(message.as_deref());
         let removing = self.space_removals.clone();
+        let space = space.clone();
         let delivered = self
             .store
             .write(move |tx| {
-                let Some(id) = take_mark(tx, &turn)? else {
-                    return Ok(Delivered::default());
-                };
                 let thread = records::reread(tx, id)?;
                 // The thread may have gone to another holder since the turn
                 // was marked, which leaves the space no side to post from.
@@ -267,32 +212,6 @@ impl Manager {
                 let (_, delivered) =
                     record_post(tx, id, &poster, &post, Attached::default(), true, &removing)?;
                 Ok(delivered)
-            })
-            .await?;
-        self.announce_threads(delivered).await;
-        Ok(())
-    }
-
-    /// The user replied `prompt` in the conversation of the agent
-    /// `execution` runs in the space `selector` names: record their
-    /// interaction with it, clear the mark of a turn underway, and record
-    /// their reply to the posts its agents made there.
-    pub(crate) async fn reply_in_chat(
-        &self,
-        selector: &SpaceSelector,
-        execution: Option<&ExecutionId>,
-        prompt: Option<String>,
-    ) -> Result<()> {
-        self.note_interaction(selector).await;
-        let space = self.space(selector).await?;
-        let turn = execution.cloned();
-        let delivered = self
-            .store
-            .write(move |tx| {
-                if let Some(turn) = &turn {
-                    set_mark(tx, turn, None)?;
-                }
-                record_replies(tx, &space.id, prompt.as_deref())
             })
             .await?;
         self.announce_threads(delivered).await;

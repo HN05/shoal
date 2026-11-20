@@ -333,7 +333,7 @@ impl Manager {
             ),
             ..TurnEnding::ended()
         };
-        self.post_marked_chat(selector, execution.as_ref(), turn_end.final_message)
+        self.end_marked_turn(selector, execution.as_ref(), turn_end.final_message)
             .await;
         self.record_agent_state(selector, AgentState::Idle, execution, session, ending, made)
             .await

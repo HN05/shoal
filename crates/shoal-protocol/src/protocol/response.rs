@@ -336,6 +336,7 @@ response_bodies! {
     Alerts(Vec<Alert>),
     Cleared(crate::alerts::Cleared),
     SpaceThread(Box<crate::threads::Thread>),
+    ChatMarked(crate::chat_marks::ChatMarked),
     SpaceThreads(crate::threads::Listing),
     ReviewPieces(Vec<ReviewPiece>),
     ReviewId(crate::reviews::ReviewId),

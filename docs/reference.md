@@ -6994,12 +6994,14 @@ per space, until the references go with their thread.
 tracks in a workspace or runs as a chat's, post in its conversation, where the
 post reads as the agent wrote it; other agents are refused. It marks the
 agent's current turn, which a daemon restart keeps, and when the turn ends the
-`Stop` hook passes the turn's final message, which becomes the post. A prompt
+`Stop` hook passes the turn's final message, which becomes the post. A turn
+has one mark: another `--in-chat` in it replaces the earlier one, which the
+command names. A prompt
 you submit in the agent's chat, rather than one Shoal submits to wake or
 continue it, is your reply to each such post its thread waits on: Shoal
 records it as your post and takes back the post's unread alert, or tells the
 agent that held it of your reply. A turn without a final message, as from a
-hook that does not pass one, posts that the agent posted in its chat.
+hook that does not pass one, posts that the agent wrote in its chat.
 
 `shoal thread forward` gives a thread the caller holds to a space its scope
 reaches, or without `--space` up to the holder's coordinator, or you; never to

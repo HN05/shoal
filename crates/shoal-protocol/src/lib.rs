@@ -11,6 +11,7 @@ pub mod apps;
 pub mod assignments;
 pub mod attaching;
 pub mod branches;
+pub mod chat_marks;
 pub mod cleanup;
 pub mod code;
 pub mod config;

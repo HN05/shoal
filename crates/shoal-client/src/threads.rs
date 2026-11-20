@@ -1,6 +1,7 @@
 //! Threads: conversations between whoever opened one and whoever holds it.
 use anyhow::Result;
 use shoal_protocol::{
+    chat_marks::ChatMarked,
     code::NewCodeRef,
     files::NewFile,
     item_numbers::ItemNumber,
@@ -53,14 +54,13 @@ pub async fn post(
 }
 
 /// Mark the turn of `space`'s calling agent as posting its final message in
-/// the thread `thread`.
+/// the thread `thread`, with the mark it replaced.
 pub async fn post_in_chat(
     daemon: &impl Daemon,
     space: SpaceSelector,
     thread: ThreadNumber,
-) -> Result<Thread> {
-    let method = ThreadMethod::PostInChat { space, thread };
-    Ok(*request::<Box<Thread>>(daemon, method).await?)
+) -> Result<ChatMarked> {
+    request(daemon, ThreadMethod::PostInChat { space, thread }).await
 }
 
 /// Tell the daemon the user replied `prompt` in the conversation of
