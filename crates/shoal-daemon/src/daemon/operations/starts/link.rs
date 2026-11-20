@@ -3,16 +3,13 @@
 //! starter, and a new space whose issue cannot be linked is removed, since
 //! nothing ran in it yet.
 use anyhow::Result;
+use shoal_links::reads::checkouts::OpenIssue;
 use shoal_protocol::space_names::SpaceSelector;
 
 use super::home::Recorded;
 use crate::{
     daemon::{
-        links::issue::{AssignerOf, OpenIssue},
-        log,
-        manager::Manager,
-        notifications::AlertKind,
-        scope::Caller,
+        links::issue::AssignerOf, log, manager::Manager, notifications::AlertKind, scope::Caller,
     },
     forge::items::reference::ItemRef,
     model::{Assigner, Space},

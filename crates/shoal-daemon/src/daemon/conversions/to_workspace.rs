@@ -4,6 +4,7 @@
 use crate::daemon::links::issue::{Assigner, AssignerOf};
 use crate::forge::items::reference::ItemInput;
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::reads::checkouts::OpenIssue;
 use shoal_protocol::model::ByKind;
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -13,7 +14,6 @@ use super::Converting;
 use crate::{
     config::modes::ModeName,
     daemon::{
-        links::issue::OpenIssue,
         manager::Manager,
         operations::starts::{Preparing, Recorded},
         scope::Caller,
@@ -162,7 +162,8 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<Vec<String>> {
         let checkout = self.chat_checkout_path(chat).await?;
-        let OpenIssue { url, title, .. } = self.read_open_issue(&checkout, input).await?;
+        let OpenIssue { url, title, .. } =
+            self.links.read_open_issue(self, &checkout, input).await?;
         let selector = SpaceSelector::id(&chat.id);
         (self.set_issue(&selector, &url.into(), Some(title), Assigner::of(caller))).await
     }

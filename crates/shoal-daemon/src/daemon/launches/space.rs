@@ -5,6 +5,7 @@
 //! launch names a branch an existing workspace has, it starts that
 //! workspace's own agent, and where it names no branch or issue it begins
 //! as a chat.
+use shoal_links::reads::checkouts::OpenIssue;
 use shoal_protocol::progress::Blocker;
 use std::sync::Arc;
 
@@ -18,7 +19,6 @@ use super::shape::Shape;
 use crate::{
     config::modes::ModeName,
     daemon::{
-        links::issue::OpenIssue,
         manager::Manager,
         operations::starts::{
             Home, NewSpace, Opening, Preparing, SpaceStart, StartIssue, StartedSpace,
@@ -206,7 +206,7 @@ impl Manager {
         };
         crate::daemon::log!("issue {input} read without its title: {error:#}");
         let checkout = self.repository(repository.clone()).await?.path;
-        let (_, url) = self.issue_forge(&checkout, input).await?;
+        let (_, url) = self.links.issue_forge(self, &checkout, input).await?;
         Ok(StartIssue {
             url,
             title: None,

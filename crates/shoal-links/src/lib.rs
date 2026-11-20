@@ -9,7 +9,7 @@ mod memories;
 pub mod place;
 pub mod pr;
 mod raw;
-mod reads;
+pub mod reads;
 pub mod records;
 pub mod space;
 #[cfg(test)]

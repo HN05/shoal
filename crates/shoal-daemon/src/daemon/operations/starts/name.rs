@@ -49,7 +49,7 @@ impl Manager {
         };
         let read = async {
             let checkout = self.repository(repository.clone()).await?.path;
-            self.read_pull_title(&checkout, input).await
+            self.links.read_pull_title(self, &checkout, input).await
         };
         match read.await {
             Ok(title) => Some(title),

@@ -2,9 +2,8 @@
 use shoal_ids::space_ids::SpaceId;
 use shoal_links::space::LinkSpace;
 use shoal_protocol::space_names::SpaceSelector;
-use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use rusqlite::Connection;
 
 pub(crate) mod agent_settles;
@@ -16,26 +15,14 @@ use crate::{
     daemon::manager::Manager,
     forge::{
         ForgeRepo,
-        items::{
-            link::LinkKind,
-            reference::{ItemInput, ItemRef},
-        },
+        items::reference::{ItemInput, ItemRef},
     },
 };
 pub(crate) use assignees::AssignerOf;
-use shoal_forge::{RepoRequests, items::issue::IssueRequests};
 use shoal_links::issue::{
     agents::{self as agent_records},
     assignees::{self as assignee_records, Dropped},
 };
-
-/// An open issue a new workspace is assigned.
-#[derive(Debug, Clone)]
-pub(crate) struct OpenIssue {
-    pub url: ItemRef,
-    pub title: String,
-    pub labels: Vec<String>,
-}
 
 impl Manager {
     /// Association is part of opening a workspace, before tracked setup starts.
@@ -66,7 +53,10 @@ impl Manager {
     ) -> Result<Vec<String>> {
         let space = self.links.link_space(self, selector).await?;
         self.verify_space(&space).await?;
-        let (forge, url) = self.issue_forge(space.origin_path(), input).await?;
+        let (forge, url) = self
+            .links
+            .issue_forge(self, space.origin_path(), input)
+            .await?;
         let fresh = self
             .persist_issue_assignment(&space.id, &url, title, assigner)
             .await?;
@@ -130,7 +120,12 @@ impl Manager {
         let _guard = self.gates.lock_prs([&id]).await;
         let space = self.links.link_space(self, &SpaceSelector::id(&id)).await?;
         let selected = match input {
-            Some(input) => Some(self.issue_forge(space.origin_path(), input).await?.1),
+            Some(input) => Some(
+                self.links
+                    .issue_forge(self, space.origin_path(), input)
+                    .await?
+                    .1,
+            ),
             None => None,
         };
         let links = self.links.clone();
@@ -142,58 +137,6 @@ impl Manager {
         let mut warnings = self.release_assignees(dropped).await;
         warnings.extend(self.settle_issue_agents(&space, &removed).await);
         Ok(warnings)
-    }
-
-    /// The canonical URL, title and labels of the open issue `input` names in the
-    /// repository whose origin `checkout` has, read with the user's logins,
-    /// as `shoal start` reads it. A closed or unknown issue is refused.
-    pub(crate) async fn read_open_issue(
-        &self,
-        checkout: &Path,
-        input: &ItemInput,
-    ) -> Result<OpenIssue> {
-        let (forge, url) = self.issue_forge(checkout, input).await?;
-        let issue = forge
-            .open_issue_details(&self.links.user_account(), url.issue()?)
-            .await?;
-        Ok(OpenIssue {
-            url,
-            title: issue.item.title,
-            labels: issue.item.labels,
-        })
-    }
-
-    /// The title of the PR `input` names in the repository whose origin
-    /// `checkout` has.
-    pub(crate) async fn read_pull_title(
-        &self,
-        checkout: &Path,
-        input: &ItemInput,
-    ) -> Result<String> {
-        let remote = crate::repository::remote_url_from_path(checkout)
-            .await?
-            .context("PR lookup needs an origin remote")?;
-        let forge = self.forge(&remote).await?;
-        let pull = ItemRef::in_repository(&forge, LinkKind::Pr, input)?;
-        Ok(forge
-            .pull_request(&self.links.user_account(), &pull)
-            .await?
-            .title)
-    }
-
-    /// The forge of the repository whose origin `checkout` has, with the
-    /// number and canonical URL of the issue `input` names there.
-    pub(crate) async fn issue_forge(
-        &self,
-        checkout: &Path,
-        input: &ItemInput,
-    ) -> Result<(ForgeRepo, ItemRef)> {
-        let remote = crate::repository::remote_url_from_path(checkout)
-            .await?
-            .context("issue lookup needs an origin remote")?;
-        let forge = self.forge(&remote).await?;
-        let issue = ItemRef::in_repository(&forge, LinkKind::Issue, input)?;
-        Ok((forge, issue))
     }
 }
 
