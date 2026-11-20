@@ -8,6 +8,7 @@ mod control;
 mod definition;
 mod refresh;
 mod replacement;
+mod scope;
 mod shutdown;
 use control::{command, domain};
 use definition::{check_state_dir, text, write_definition};
