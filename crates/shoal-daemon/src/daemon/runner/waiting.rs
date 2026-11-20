@@ -11,7 +11,7 @@ use anyhow::Result;
 use rusqlite::params;
 use shoal_refs::BranchName;
 
-use super::{Registration, runner_labels};
+use super::Registration;
 use crate::{
     daemon::{log, manager::Manager},
     forge::{
@@ -24,6 +24,7 @@ use crate::{
 };
 use shoal_forge::{RepoRequests, ci::runner::RunnerRequests};
 use shoal_protocol::space_names::SpaceName;
+use shoal_runner::jobs::runner_labels;
 
 impl Manager {
     /// Read the forge's waiting jobs while one could start, and every

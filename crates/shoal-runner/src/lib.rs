@@ -1,6 +1,7 @@
-//! The daemon's triggers. [`Runner`] holds what they keep in memory and
-//! offers their operations; what they need of the rest of the daemon is the
-//! interface in [`daemon`].
+//! The daemon's triggers, and the CI jobs it runs for repositories' forges.
+//! [`Runner`] holds what the triggers keep in memory and offers their
+//! operations; what they need of the rest of the daemon is the interface in
+//! [`daemon`].
 use std::sync::Arc;
 
 use shoal_core::config;
@@ -9,6 +10,7 @@ use shoal_protocol::time;
 use shoal_store::Store;
 
 pub mod daemon;
+pub mod jobs;
 pub mod triggers;
 
 #[cfg(test)]
