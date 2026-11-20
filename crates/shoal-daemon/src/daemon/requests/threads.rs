@@ -102,12 +102,13 @@ pub(super) async fn handle(
 
 impl Scoped for ThreadMethod {
     /// A request naming a space acts within the caller's scope: a thread
-    /// opened or forwarded with a space, a listing, a link, the caller's
-    /// own chat. One naming a thread, or a wait in one, checks the caller
-    /// takes part in it, or reads it, as it is answered.
+    /// opened or forwarded with a space, here or on another machine, a
+    /// listing, a link, the caller's own chat. One naming a thread, or a
+    /// wait in one, checks the caller takes part in it, or reads it, as it
+    /// is answered.
     async fn scope(
         &mut self,
-        _manager: &Manager,
+        manager: &Manager,
         caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
         // A scoped caller acts as its own space.
@@ -119,9 +120,14 @@ impl Scoped for ThreadMethod {
             *from = None;
         }
         Ok(match self {
-            ThreadMethod::OpenThread { to, .. } | ThreadMethod::ForwardThread { to, .. } => {
-                to.as_mut()
+            // The thread stays on its own machine, whichever runs the space.
+            ThreadMethod::OpenThread { to: Some(to), .. }
+            | ThreadMethod::ForwardThread { to: Some(to), .. } => {
+                *to = SpaceSelector::id(&manager.reached_space(caller, to).await?);
+                None
             }
+            ThreadMethod::OpenThread { to: None, .. }
+            | ThreadMethod::ForwardThread { to: None, .. } => None,
             ThreadMethod::PostInChat { space, .. }
             | ThreadMethod::RepliedInChat { space, .. }
             | ThreadMethod::LinkThread { space, .. }

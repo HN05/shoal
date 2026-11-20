@@ -3010,7 +3010,9 @@ a state that comes from what Shoal records rather than a field of its own:
 holder's, else its outcome.
 
 A space opens a thread with its coordinator, else the user, or with a space
-below it; the user opens one with a space. An empty thread notifies no one
+below it; the user opens one with a space. A thread lives on the machine of
+the space it is numbered in, while its holder may run on any machine of the
+hub, which carries the posts between them. An empty thread notifies no one
 and keeps nothing, so `thread open` only reserves its number. Each post
 reaches the other side as an alert, through the alert delivery hooks already
 use, waking an idle agent; the alert is queued in the transaction that

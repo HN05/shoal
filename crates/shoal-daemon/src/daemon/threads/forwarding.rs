@@ -78,16 +78,16 @@ impl Manager {
         Ok(thread)
     }
 
-    /// Whom `thread` goes to next: the space `to` names, else its holder's
-    /// coordinator or the user; never its holder, nor the space that
-    /// opened it.
+    /// Whom `thread` goes to next: the space `to` names, here or on another
+    /// machine, else its holder's coordinator or the user; never its
+    /// holder, nor the space that opened it.
     async fn next_holder(
         &self,
         thread: &Thread,
         to: Option<&SpaceSelector>,
     ) -> Result<Option<SpaceId>> {
         let holder = match (to, &thread.holder) {
-            (Some(to), _) => Some(self.space(to).await?.id),
+            (Some(to), _) => Some(self.space_id_anywhere(to).await?),
             (None, Holder::Space(holder)) => self.coordinator_of(&holder.id).await?,
             (None, Holder::User) => {
                 bail!(

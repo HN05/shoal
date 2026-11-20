@@ -353,6 +353,62 @@ fn a_child_s_thread_reaches_its_coordinator_on_another_machine() {
     message_with(&laptop, &child, "SQLite");
 }
 
+#[test]
+fn a_coordinator_opens_a_thread_with_its_child_on_another_machine() {
+    let Tree {
+        hub,
+        laptop,
+        coordinator,
+        child,
+        ..
+    } = tree_across_machines();
+    working(&laptop, &child);
+    let open = ["thread", "open", "Which database?", "--space", &child];
+    let number = ok_in(&hub, &coordinator, &open)["number"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        number,
+        format!("{}.1", listed_number(&hub, &coordinator)),
+        "the thread is numbered in its opener's space"
+    );
+    ok_in(
+        &hub,
+        &coordinator,
+        &["send", &number, "Postgres or SQLite?"],
+    );
+    message_with(&laptop, &child, "Postgres or SQLite?");
+    // The child replies from its own machine, which has no record of the
+    // thread.
+    ok_in(&laptop, &child, &["send", &number, "SQLite"]);
+    message_with(&hub, &coordinator, "SQLite");
+}
+
+#[test]
+fn a_holder_forwards_a_thread_to_a_space_on_another_machine() {
+    let Tree {
+        hub,
+        laptop,
+        coordinator,
+        child,
+        ..
+    } = tree_across_machines();
+    working(&laptop, &child);
+    let asked = hub.ok(&["thread", "open", "Which cache?", "--space", &coordinator]);
+    let asked = asked["number"].as_str().unwrap();
+    hub.ok(&["send", asked, "Redis or memcached?"]);
+    let forward = ["thread", "forward", asked, "--space", &child];
+    ok_in(&hub, &coordinator, &forward);
+    message_with(&laptop, &child, "Which cache?");
+    ok_in(&laptop, &child, &["send", asked, "Redis"]);
+    wait_for("the child's answer in the thread", || {
+        let thread = hub.ok(&["view", "thread", asked]);
+        let last = thread["posts"].as_array()?.last()?.clone();
+        (last["text"] == "Redis" && last["space"]["id"] == child.as_str()).then_some(())
+    });
+}
+
 /// The number the hub lists the space `id` under.
 fn listed_number(hub: &Base, id: &str) -> u64 {
     let spaces = hub.ok(&["list"]);

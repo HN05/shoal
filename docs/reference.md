@@ -7022,7 +7022,8 @@ bare number names a thread of that space; elsewhere, and for an approval
 request, a number without its space, or one that names the other kind, is
 refused with the form or command to use. `--json` gives `space_number`, `item`
 and the `number` text. A thread keeps its number, resolved or not, until its
-space goes.
+space goes. It is kept on the machine of that space, while its holder may run
+on another machine of the hub.
 
 A space reads a thread it opened, holds or held, or that a space its scope
 reaches did, and you read every thread; reading delivers nothing. Any space

@@ -50,14 +50,18 @@ impl Manager {
         code: Vec<NewCodeRef>,
     ) -> Result<Thread> {
         crate::validate::message(&name).context("invalid thread name")?;
-        let target = match to {
-            Some(to) => Some(self.space(to).await?.id),
-            None => None,
-        };
-        let (opener, space_id, holder) = match (caller, target) {
-            (None, Some(target)) => (Sender::User, target.clone(), Some(target)),
+        let (opener, space_id, holder) = match (caller, to) {
+            // Numbered in the space it is opened with, on that space's
+            // machine, which takes a request for a space this one lacks.
+            (None, Some(to)) => {
+                let target = self.space(to).await?.id;
+                (Sender::User, target.clone(), Some(target))
+            }
             (None, None) => bail!("the user opens a thread with a space; name it with --space"),
-            (Some(caller), Some(target)) => {
+            // Numbered in the opener's space here, and held by a space here
+            // or on another machine.
+            (Some(caller), Some(to)) => {
+                let target = self.space_id_anywhere(to).await?;
                 ensure!(
                     target != caller.space_id,
                     "a space opens a thread with another space"
