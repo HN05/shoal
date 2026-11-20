@@ -1394,6 +1394,16 @@ esac
         .unwrap();
     assert!(!cleared.status.success(), "{}", printed(&cleared));
     assert!(!String::from_utf8_lossy(&cleared.stdout).contains("agent only"));
+    // Nor list every recipient's alerts.
+    let cleared = fixture
+        .command()
+        .args(["run", "--workspace", &fixture.id("asker"), "--", "sh", "-c"])
+        .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" --json alert list --all; exit $?"#)
+        .arg(support::shoal_binary())
+        .output()
+        .unwrap();
+    assert!(!cleared.status.success(), "{}", printed(&cleared));
+    assert!(!String::from_utf8_lossy(&cleared.stdout).contains("agent only"));
     assert_eq!(
         fixture
             .ok(&["alert", "list", "--unread"])

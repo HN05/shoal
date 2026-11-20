@@ -65,6 +65,7 @@ pub(super) async fn list(ctx: &Context, args: AlertListArgs) -> Result<i32> {
 /// Whose alerts `args` asks for: every recipient's, the space's it names,
 /// or else the caller's own.
 async fn listing(ctx: &Context, args: &AlertListArgs) -> Result<Listing> {
+    refuse_workspace_processes(ctx)?;
     if args.all {
         return Ok(Listing {
             to: AlertsFor::Every,
@@ -82,10 +83,7 @@ async fn listing(ctx: &Context, args: &AlertListArgs) -> Result<Listing> {
         true => AlertsFor::Space {
             space: delivery::own_space(ctx).await?,
         },
-        false => {
-            refuse_workspace_processes(ctx)?;
-            AlertsFor::User
-        }
+        false => AlertsFor::User,
     };
     Ok(Listing {
         to,
@@ -151,13 +149,13 @@ pub(super) async fn clear(ctx: &Context) -> Result<i32> {
     Ok(0)
 }
 
-/// The daemon refuses a scoped process the user's alerts unless its
-/// `notifications` permission allows them; this refuses a descendant that
-/// cleared its scope token, which the daemon would take for the user.
+/// The daemon reads and clears for a scoped process only the alerts its
+/// scope and `notifications` permission allow; this refuses a descendant
+/// that cleared its scope token, which the daemon would take for the user.
 fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
     ensure!(
         crate::env::is_scoped() || !crate::process::scoped::inherits_scope(&ctx.paths.state),
-        "workspace processes read and clear the user's alerts only with their scope token"
+        "workspace processes read and clear alerts only with their scope token"
     );
     Ok(())
 }
