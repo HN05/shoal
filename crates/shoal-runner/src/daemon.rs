@@ -14,14 +14,17 @@ use shoal_daemon_base::callers::Caller;
 use shoal_daemon_base::notifications::Coordinators;
 use shoal_forge::account::Account;
 use shoal_forge_types::{ForgeRepo, items::reference::ItemRef};
-use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_ids::{
+    execution_ids::ExecutionId, queue_entry_ids::QueueEntryId, repository_ids::RepositoryId,
+    space_ids::SpaceId,
+};
 use shoal_protocol::{
     config::permissions::PermissionKey,
     events::StoppedProcess,
     launches::{Launch, LaunchSource},
     model::{QueueEntry, QueuedJob, Repository, Space, Workspace, WorkspaceUsage},
     protocol::ItemContext,
-    space_names::SpaceName,
+    space_names::{SpaceName, SpaceSelector},
 };
 use shoal_refs::CommitId;
 
@@ -132,6 +135,10 @@ pub trait Spaces: Send + Sync {
 
     /// The workspace `id`.
     fn workspace_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Workspace>>;
+
+    /// The ID of the space `selector` names.
+    fn select_space_id<'a>(&'a self, selector: &'a SpaceSelector)
+    -> BoxFuture<'a, Result<SpaceId>>;
 }
 
 /// The executions of the runner's jobs.
@@ -142,6 +149,13 @@ pub trait Executions: Send + Sync {
         &'a self,
         id: &'a SpaceId,
     ) -> BoxFuture<'a, Result<Vec<StoppedProcess>>>;
+
+    /// Whether the daemon still records the execution `id`, running or
+    /// awaiting reattachment.
+    fn execution_recorded<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, Result<bool>>;
+
+    /// Whether the workspace `id` has any recorded execution, in any state.
+    fn workspace_has_executions<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;
 
     /// Stop the runner of the job workspace `id` for `reason`, saving
     /// nothing.

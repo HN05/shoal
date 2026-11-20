@@ -109,12 +109,13 @@ impl Manager {
         }
         let left = match shutdown.ends_jobs() {
             true => HashSet::new(),
-            false => self.job_workspaces().await,
+            false => self.runner.job_workspaces().await,
         };
         let stopped = self
             .stop_every_target(shutdown.moment(), &left, |space| async move {
                 // A CI job's run ends on its forge, before its runner stops.
-                self.cancel_job_before_stopping(&space, shutdown.job_stop())
+                self.runner
+                    .cancel_job_before_stopping(self, &space, shutdown.job_stop())
                     .await;
                 self.stop_keeping_restores(&SpaceSelector::id(&space), shutdown.request())
                     .await

@@ -363,7 +363,8 @@ impl Manager {
         self.reviews
             .stop_in_workspace(self, &worktree.workspace.id)
             .await;
-        self.cancel_job_before_stopping(&worktree.workspace.id, JobStop::Removal)
+        (self.runner)
+            .cancel_job_before_stopping(self, &worktree.workspace.id, JobStop::Removal)
             .await;
     }
 

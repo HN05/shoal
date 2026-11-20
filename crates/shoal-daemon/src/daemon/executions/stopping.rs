@@ -327,7 +327,7 @@ impl Manager {
         acknowledge_unproven: bool,
         launches: QueuedLaunches,
     ) -> Result<StoppedSpace> {
-        if let Some(run) = self.cancel_job_in(selector, JobStop::Stop).await? {
+        if let Some(run) = (self.runner.cancel_job_in(self, selector, JobStop::Stop)).await? {
             return Ok(StoppedSpace {
                 cancelled_run: Some(run),
                 ..StoppedSpace::default()

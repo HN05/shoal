@@ -94,7 +94,11 @@ impl Manager {
             // A CI job's runner would end once it saw its run cancelled,
             // after the daemon has gone; stop it now, as removal does,
             // also when the forge refused the cancellation.
-            if (self.cancel_job_before_stopping(&workspace, JobStop::DaemonStop)).await {
+            if (self
+                .runner
+                .cancel_job_before_stopping(self, &workspace, JobStop::DaemonStop))
+            .await
+            {
                 let request = StopRequest {
                     reason: "the Shoal daemon stopped".into(),
                     save: Save::Everything,

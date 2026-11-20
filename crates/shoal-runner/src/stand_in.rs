@@ -398,6 +398,16 @@ impl Spaces for StandIn {
     fn workspace_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Workspace>> {
         Box::pin(async move { anyhow::bail!("no workspace {id}") })
     }
+
+    /// A selector by ID names that space.
+    fn select_space_id<'a>(
+        &'a self,
+        selector: &'a shoal_protocol::space_names::SpaceSelector,
+    ) -> BoxFuture<'a, Result<SpaceId>> {
+        Box::pin(async move {
+            (selector.given_id().cloned()).ok_or_else(|| anyhow::anyhow!("no space {selector}"))
+        })
+    }
 }
 
 /// The stand-in runs no job processes.
@@ -411,6 +421,17 @@ impl crate::daemon::Executions for StandIn {
 
     fn stop_job_runner<'a>(&'a self, _: &'a SpaceId, _: String) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { Ok(()) })
+    }
+
+    fn execution_recorded<'a>(
+        &'a self,
+        _: &'a shoal_ids::execution_ids::ExecutionId,
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(false) })
+    }
+
+    fn workspace_has_executions<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(false) })
     }
 }
 

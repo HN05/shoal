@@ -23,7 +23,7 @@ use futures_util::future::BoxFuture;
 use rusqlite::{Connection, params};
 use shoal_forge::{RepoRequests, account::Account};
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
+use shoal_ids::{execution_ids::ExecutionId, queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceName;
 use shoal_runner::{
     daemon::{Forges, Spaces, WaitingEntry},
@@ -257,6 +257,17 @@ impl shoal_runner::daemon::Executions for Manager {
         })
     }
 
+    fn execution_recorded<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, Result<bool>> {
+        let id = id.to_owned();
+        Box::pin(self.store.run(move |db| {
+            crate::daemon::store::exists(db, "SELECT 1 FROM executions WHERE id=?1", [id])
+        }))
+    }
+
+    fn workspace_has_executions<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(Manager::workspace_has_executions(self, id))
+    }
+
     fn stop_job_runner<'a>(&'a self, id: &'a SpaceId, reason: String) -> BoxFuture<'a, Result<()>> {
         let request = StopRequest {
             reason,
@@ -288,6 +299,13 @@ impl Spaces for Manager {
 
     fn workspace_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Workspace>> {
         Box::pin(Manager::workspace_by_id(self, id))
+    }
+
+    fn select_space_id<'a>(
+        &'a self,
+        selector: &'a SpaceSelector,
+    ) -> BoxFuture<'a, Result<SpaceId>> {
+        Box::pin(async move { Ok(self.space(selector).await?.id) })
     }
 }
 

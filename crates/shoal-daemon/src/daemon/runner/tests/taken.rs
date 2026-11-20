@@ -199,8 +199,12 @@ async fn stopping_a_job_before_its_report_is_followed_cancels_the_reported_run()
     let manager = &fixture.manager;
     fixture.state.lock().unwrap().queued = vec![github_job(11, 1)];
     let (job, _) = report(manager, 2).await;
-    let cancelled = manager
-        .cancel_job_in(&SpaceSelector::id(&job.workspace_id), JobStop::Stop)
+    let cancelled = (manager.runner)
+        .cancel_job_in(
+            &**manager,
+            &SpaceSelector::id(&job.workspace_id),
+            JobStop::Stop,
+        )
         .await
         .unwrap();
     assert!(cancelled.unwrap().ends_with("/actions/runs/2"));
@@ -220,7 +224,11 @@ async fn a_stop_holding_the_claim_from_before_the_follow_cancels_the_reported_ru
     // The follow records run 2 and answers while the stop holds the claim
     // it read before.
     manager.runner.follow_taken_jobs(&**manager).await.unwrap();
-    let cancelled = manager.cancel_job_run(&stale).await.unwrap();
+    let cancelled = manager
+        .runner
+        .cancel_job_run(&**manager, &stale)
+        .await
+        .unwrap();
     assert!(cancelled.url().ends_with("/actions/runs/2"));
     assert_eq!(fixture.state.lock().unwrap().cancelled, ["2"]);
 }

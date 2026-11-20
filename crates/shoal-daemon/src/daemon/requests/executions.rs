@@ -78,7 +78,9 @@ pub(super) async fn handle(
             Body::RunningAgents(manager.visible_agents(caller, agents).await?)
         }
         ExecutionMethod::SessionSignalled { signal } => {
-            manager.cancel_job_for_signal(caller, signal).await?;
+            (manager.runner)
+                .cancel_job_for_signal(&**manager, caller, signal)
+                .await?;
             Body::Ok
         }
     }))

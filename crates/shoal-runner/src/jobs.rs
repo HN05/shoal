@@ -13,6 +13,7 @@ use tokio::{sync::Notify, time::Instant};
 
 use crate::{Runner, log};
 
+mod cancels;
 mod claimed;
 mod costs;
 mod linked;

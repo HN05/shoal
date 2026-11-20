@@ -1112,14 +1112,14 @@ async fn a_signal_to_a_jobs_wrapper_cancels_its_run_before_the_runner_stops() {
         }),
         ..wrapper.clone()
     };
-    manager
-        .cancel_job_for_signal(Some(&step), SessionSignal::Terminate)
+    (manager.runner)
+        .cancel_job_for_signal(&**manager, Some(&step), SessionSignal::Terminate)
         .await
         .unwrap();
     assert!(!cancelled(&fixture, 3));
 
-    manager
-        .cancel_job_for_signal(Some(&wrapper), SessionSignal::Terminate)
+    (manager.runner)
+        .cancel_job_for_signal(&**manager, Some(&wrapper), SessionSignal::Terminate)
         .await
         .unwrap();
     assert!(cancelled(&fixture, 3));
