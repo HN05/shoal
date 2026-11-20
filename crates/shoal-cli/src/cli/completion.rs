@@ -47,11 +47,47 @@ struct Typed {
     pool: Option<String>,
     /// `--all` is already on the line.
     all: bool,
+    /// What `shoal restore`'s line asks of the spaces it names.
+    restore: RestoreAction,
     /// Workspaces already named on the line, which are not offered again.
     named: Vec<String>,
     /// The selected command also governs inherited global workspace options.
     need: Option<Need>,
     settings: OnceLock<Settings>,
+}
+
+/// What a `shoal restore` line acts on, by the flags already on it.
+#[derive(Clone, Copy, Default)]
+enum RestoreAction {
+    /// Removed spaces, which it reopens.
+    #[default]
+    Reopen,
+    /// An existing workspace, for `--checkpoint`.
+    Checkpoint,
+    /// Spaces whose agent can resume, for `--discard-agent`.
+    Discard,
+}
+
+impl RestoreAction {
+    /// The action the flags of `matches` ask for.
+    fn of(matches: &clap::ArgMatches) -> Self {
+        let given = |id: &str| matches.try_contains_id(id).unwrap_or(false);
+        let discard = matches.try_get_one::<bool>("discard_agent").ok().flatten() == Some(&true);
+        match (given("checkpoint"), discard) {
+            (true, _) => Self::Checkpoint,
+            (false, true) => Self::Discard,
+            (false, false) => Self::Reopen,
+        }
+    }
+
+    /// The target `restore`'s spaces complete for this action.
+    fn target(self) -> Target {
+        match self {
+            Self::Reopen => Target::RemovedSpaces,
+            Self::Checkpoint => Target::Workspaces(Need::Checkpoint),
+            Self::Discard => Target::ResumeSpaces,
+        }
+    }
 }
 
 /// The configuration completion reads, from cwd when no workspace resolves.
@@ -82,7 +118,8 @@ enum Target {
     /// Workspaces described by what `shoal resume` brings back in them,
     /// then the stopped chats.
     ResumeSpaces,
-    /// The removed spaces `shoal restore` opens again.
+    /// The spaces `shoal restore` acts on: the removed ones it opens
+    /// again, or as [`RestoreAction`] says for the flags on the line.
     RemovedSpaces,
     Pools,
     Members,
@@ -129,6 +166,9 @@ pub fn command() -> Command {
             .unwrap_or_default();
         typed.pool = value(leaf, "pool");
         typed.all = leaf.try_get_one::<bool>("all").ok().flatten() == Some(&true);
+        if path == ["restore"] {
+            typed.restore = RestoreAction::of(leaf);
+        }
     }
     // Decoration reads every command's arguments, which are deferred until built.
     command.build();
@@ -331,6 +371,10 @@ impl Typed {
     fn complete(&self, target: Target, current: &OsStr) -> Vec<CompletionCandidate> {
         let Some(current) = current.to_str() else {
             return vec![];
+        };
+        let target = match target {
+            Target::RemovedSpaces => self.restore.target(),
+            target => target,
         };
         if matches!(target, Target::Commands) {
             return self

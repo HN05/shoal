@@ -329,3 +329,23 @@ fn rm_completes_spaces() {
         Some(Target::Spaces(Need::Any))
     );
 }
+
+#[test]
+fn restore_completes_the_spaces_its_flags_act_on() {
+    let target = |args: &[&str]| {
+        let mut command = crate::cli::Cli::command();
+        command.build();
+        let matches = command
+            .ignore_errors(true)
+            .try_get_matches_from([&["shoal", "restore"][..], args].concat())
+            .unwrap();
+        let (_, restore) = matches.subcommand().unwrap();
+        RestoreAction::of(restore).target()
+    };
+    assert_eq!(target(&[]), Target::RemovedSpaces);
+    assert_eq!(
+        target(&["--checkpoint"]),
+        Target::Workspaces(Need::Checkpoint)
+    );
+    assert_eq!(target(&["--discard-agent"]), Target::ResumeSpaces);
+}
