@@ -4,7 +4,7 @@
 use anyhow::Result;
 use std::ffi::OsString;
 
-use super::{commands, queue, reports};
+use super::reports::{self, Reporting};
 use crate::client::output::resume::{RestoredAgent, StartedRestores};
 use crate::{
     cli::{context::Context, terminal, ui},
@@ -13,6 +13,7 @@ use crate::{
     protocol::ConfigTarget,
 };
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_workers::resume::{commands, queue};
 
 /// Resume each space's stopped work, reporting it with what `resumed` holds
 /// already. Commands without an agent to receive them, as none restoring
@@ -29,8 +30,7 @@ pub(super) async fn run_all(
     let mut sessions = Vec::new();
     for (space, mut saved) in stopped {
         if !saved.restores_outside_wrappers() {
-            let _claims = commands::claim(&mut saved.commands);
-            match commands::report(ctx, &space, &saved.commands) {
+            match commands::report_claimed(&Reporting(ctx), &space, &mut saved.commands) {
                 Ok(report) => resumed.commands.push(report),
                 Err(error) => {
                     let failure = ui::failure(ctx, "resume", &space.name, &error);
@@ -133,7 +133,7 @@ async fn start_session(
     single: bool,
 ) -> Result<Started> {
     if session.waits_in_wrapper {
-        queue::queue(ctx, space, &session.id, true).await?;
+        queue::queue(&ctx.paths, space, &session.id, true).await?;
         return Ok(Started::InWrapper);
     }
     let target = ConfigTarget::Space(SpaceSelector::id(&space.id));

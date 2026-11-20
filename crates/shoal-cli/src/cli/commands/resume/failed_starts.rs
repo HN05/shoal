@@ -3,7 +3,6 @@
 //! `--now`, or in this terminal for `--focus`.
 use anyhow::Result;
 
-use super::permission_change;
 use super::targets::Selected;
 use crate::client::output::batch::Failure;
 use crate::{
@@ -94,7 +93,7 @@ pub(super) async fn retry_here(
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
     let launches = std::slice::from_ref(failed);
-    permission_change::apply(ctx, &[], launches, change).await?;
+    shoal_workers::resume::permissions::apply(&ctx.paths, &[], launches, change).await?;
     let retried =
         (crate::client::queue::retry(&ctx.paths, failed.id.clone(), RetryStart::Here)).await?;
     let _held = queued_agents::Hold::start(&ctx.paths, &retried.id).await;

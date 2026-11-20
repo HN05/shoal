@@ -1,0 +1,83 @@
+//! A resume's change to the permissions the resumed agents and chats and
+//! the failed launches queued again were given, which it makes in the
+//! records it restores or starts once nothing refuses it.
+use anyhow::Result;
+
+use crate::{
+    client::connection::CommandPaths,
+    config::permissions::PermissionChange,
+    model::{QueueEntry, Space},
+    protocol::SavedAgent,
+};
+use shoal_core::execution::recovery::Saved;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::space_names::SpaceSelector;
+
+/// Have the daemon make `change`, when given, to the permissions each agent
+/// and last session the `stopped` spaces keep and each of the `failed`
+/// launches was given, as their restores begin, so one that fails keeps it
+/// too; it changes none when it refuses one.
+pub async fn apply(
+    paths: &CommandPaths,
+    stopped: &[(Space, Saved)],
+    failed: &[QueueEntry],
+    change: Option<&PermissionChange>,
+) -> Result<()> {
+    let agents = stopped.iter().flat_map(|(space, saved)| {
+        (saved.agents.iter().chain(&saved.sessions)).map(|saved| SavedAgent {
+            workspace: SpaceSelector::id(&space.id),
+            execution: saved.id.clone(),
+        })
+    });
+    let launches = (failed.iter()).filter_map(|launch| Some(SpaceSelector::id(launch.space()?)));
+    let targets = PermissionTargets {
+        agents: agents.collect(),
+        launches: launches.collect(),
+    };
+    request(paths, targets, change).await
+}
+
+/// [`apply`] for the agent or last session `execution` of `space`.
+pub async fn apply_one(
+    paths: &CommandPaths,
+    space: &Space,
+    execution: &ExecutionId,
+    change: Option<&PermissionChange>,
+) -> Result<()> {
+    let agent = SavedAgent {
+        workspace: SpaceSelector::id(&space.id),
+        execution: execution.clone(),
+    };
+    let targets = PermissionTargets {
+        agents: vec![agent],
+        ..PermissionTargets::default()
+    };
+    request(paths, targets, change).await
+}
+
+/// What a change to the permissions given applies to, as the daemon names
+/// each.
+#[derive(Default)]
+struct PermissionTargets {
+    agents: Vec<SavedAgent>,
+    /// The spaces of failed launches.
+    launches: Vec<SpaceSelector>,
+}
+
+/// Have the daemon make `change`, when given, for the `targets` agents and
+/// waiting launches.
+async fn request(
+    paths: &CommandPaths,
+    targets: PermissionTargets,
+    change: Option<&PermissionChange>,
+) -> Result<()> {
+    let PermissionTargets { agents, launches } = targets;
+    match change {
+        Some(change) if !(agents.is_empty() && launches.is_empty()) => {
+            let change = change.clone();
+            crate::client::assignments::change_stopped_permissions(paths, agents, launches, change)
+                .await
+        }
+        _ => Ok(()),
+    }
+}

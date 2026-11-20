@@ -3,7 +3,8 @@
 use anyhow::{Result, ensure};
 use std::path::PathBuf;
 
-use super::{changed, commands, permission_change, picker, queue, reports, sessions, stale};
+use super::reports::{self, Reporting};
+use super::{changed, picker, queue, sessions};
 use crate::client::output::resume::StartedRestores;
 use crate::execution::recovery::RecordExt;
 use crate::{
@@ -19,6 +20,7 @@ use crate::{
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_workers::execution::Restored;
+use shoal_workers::resume::{commands, permissions, stale};
 
 /// Resume the stopped agent of the space `space` names, the `execution` one
 /// when given. The agent restores in this terminal when `here`, otherwise
@@ -49,8 +51,7 @@ pub(super) async fn run(
         .or_else(|| (saved.agents.len() == 1).then(|| &saved.agents[0].id));
     let active = active_executions(ctx, &space, recovery_id).await?;
     if saved.agents.is_empty() {
-        let _commands = commands::claim(&mut saved.commands);
-        let report = commands::report(ctx, &space, &saved.commands)?;
+        let report = commands::report_claimed(&Reporting(ctx), &space, &mut saved.commands)?;
         reports::commands_only(ctx, &report)?;
         return Ok(0);
     }
@@ -65,7 +66,7 @@ pub(super) async fn run(
         !active.contains(&selected_id),
         "selected execution is active or unknown; stop or reconcile it first"
     );
-    permission_change::apply_one(ctx, &space, &selected_id, change).await?;
+    permissions::apply_one(&ctx.paths, &space, &selected_id, change).await?;
     if !here {
         let session = (space, picked);
         return sessions::start_sessions(ctx, vec![session], true, StartedRestores::default())
@@ -95,7 +96,7 @@ async fn active_executions(
     }
     let selector = SpaceSelector::id(&space.id);
     let inspection = crate::client::workspaces::inspect(&ctx.paths, selector.clone()).await?;
-    stale::reconcile(ctx, &inspection, selected).await?;
+    stale::reconcile(&ctx.paths, &inspection, selected).await?;
     let inspection = crate::client::workspaces::inspect(&ctx.paths, selector).await?;
     Ok(inspection.executions.into_iter().map(|e| e.id).collect())
 }
@@ -112,7 +113,7 @@ pub(super) async fn continue_last_session(
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
     let picked = picker::select_agent(ctx, &saved.sessions, picker::session_label)?;
-    permission_change::apply_one(ctx, space, &picked.id, change).await?;
+    permissions::apply_one(&ctx.paths, space, &picked.id, change).await?;
     if !here {
         let session = (space.clone(), picked);
         return sessions::start_sessions(ctx, vec![session], true, StartedRestores::default())

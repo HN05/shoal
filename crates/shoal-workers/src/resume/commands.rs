@@ -2,16 +2,13 @@
 //! then reports them to the user or hands them to the restored agent.
 use anyhow::Result;
 
-use super::reports;
-use crate::client::output::resume::StoppedCommands;
-use crate::{
-    cli::context::Context,
-    execution::recovery::{self, RecoveryClaim, SavedCommand, consume},
-    model::Space,
-};
+use shoal_core::execution::recovery::{self, RecoveryClaim, SavedCommand, consume};
+
+use super::Resuming;
+use crate::{client::output::resume::StoppedCommands, model::Space};
 
 /// Only one restore reports a command; another holding its lock skips it.
-pub(super) fn claim(commands: &mut Vec<SavedCommand>) -> Vec<RecoveryClaim> {
+pub fn claim(commands: &mut Vec<SavedCommand>) -> Vec<RecoveryClaim> {
     let mut claims = Vec::new();
     commands.retain(|command| match recovery::claim(&command.path) {
         Ok(file) => {
@@ -23,9 +20,21 @@ pub(super) fn claim(commands: &mut Vec<SavedCommand>) -> Vec<RecoveryClaim> {
     claims
 }
 
-/// Without an agent to receive them, interrupted commands go to the user once.
-pub(super) fn report(
-    ctx: &Context,
+/// Report the stopped `commands` of `space` that no other restore holds
+/// to the user, as [`report`] does, claiming them meanwhile.
+pub fn report_claimed(
+    resuming: &impl Resuming,
+    space: &Space,
+    commands: &mut Vec<SavedCommand>,
+) -> Result<StoppedCommands> {
+    let _claims = claim(commands);
+    report(resuming, space, commands)
+}
+
+/// Without an agent to receive them, interrupted commands go to the user
+/// once, as `resuming` tells them.
+fn report(
+    resuming: &impl Resuming,
     space: &Space,
     commands: &[SavedCommand],
 ) -> Result<StoppedCommands> {
@@ -36,7 +45,7 @@ pub(super) fn report(
             .map(|command| command.argv.clone())
             .collect(),
     };
-    reports::stopped_commands(ctx, space, commands);
+    resuming.stopped_commands(space, commands);
     for command in commands {
         consume(&command.path)?;
     }
@@ -44,7 +53,7 @@ pub(super) fn report(
 }
 
 /// The first prompt of a restored session, naming the commands stopped with it.
-pub(super) fn handoff(commands: &[SavedCommand]) -> Option<String> {
+pub fn handoff(commands: &[SavedCommand]) -> Option<String> {
     if commands.is_empty() {
         return None;
     }

@@ -20,6 +20,7 @@ use anyhow::{Context as _, Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::saved::Queuing;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_workers::resume::{self, permissions};
 
 use targets::Selected;
 
@@ -305,7 +306,8 @@ async fn resume_each(
     if let Queuing::Daemon { .. } = queuing {
         stopped = daemon_startable(ctx, stopped, &mut alongside.reopened, &mut refused).await?;
     }
-    permission_change::apply(ctx, &stopped, &selected.failed_starts, change).await?;
+    let failed_starts = &selected.failed_starts;
+    permissions::apply(&ctx.paths, &stopped, failed_starts, change).await?;
     let now = matches!(queuing, Queuing::Here { now } | Queuing::Daemon { now } if now);
     let mut resumed = alongside.continue_turns(ctx).await;
     retry_failed_starts(ctx, &selected, &mut resumed, now).await;
@@ -339,7 +341,7 @@ async fn daemon_startable(
 ) -> Result<Vec<(Space, Saved)>> {
     let mut startable = Vec::new();
     for (space, saved) in stopped {
-        let starts = queue::ensure_daemon_starts_in(ctx, &space, &saved).await;
+        let starts = resume::queue::ensure_daemon_starts_in(&ctx.paths, &space, &saved).await;
         let opened = (reopened.iter_mut()).find(|opened| opened.space.id == space.id);
         match (starts, opened) {
             (Err(error), Some(opened)) => {
@@ -371,7 +373,6 @@ async fn present_space(ctx: &Context, selector: &SpaceSelector) -> Result<Space>
 }
 
 pub(in crate::cli::commands) mod changed;
-mod commands;
 pub(in crate::cli::commands) mod failed_starts;
 pub(in crate::cli::commands) mod permission_change;
 mod picker;
@@ -382,5 +383,4 @@ pub(in crate::cli::commands) mod reports;
 pub(in crate::cli::commands) mod saved;
 mod sessions;
 mod space;
-mod stale;
 pub(in crate::cli::commands) mod targets;

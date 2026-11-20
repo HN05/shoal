@@ -6,13 +6,31 @@ use std::fmt::Display;
 
 use crate::cli::commands::restore::reopen::ReopenedExt;
 use crate::client::output::{
+    batch::Failure,
     restore::Reopened,
     resume::{Queued, StartedRestores, StoppedCommands},
 };
 use crate::{
-    cli::context::Context, execution::recovery::SavedCommand, model::Space, state::QueueState,
+    cli::{context::Context, ui},
+    execution::recovery::SavedCommand,
+    model::Space,
+    state::QueueState,
 };
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_workers::resume::Resuming;
+
+/// What `shoal resume` tells the user as a resume goes.
+pub(in crate::cli::commands) struct Reporting<'a>(pub &'a Context);
+
+impl Resuming for Reporting<'_> {
+    fn stopped_commands(&self, space: &Space, commands: &[SavedCommand]) {
+        stopped_commands(self.0, space, commands);
+    }
+
+    fn failed(&self, space: &str, error: &anyhow::Error) -> Failure {
+        ui::failure(self.0, "resume", space, error)
+    }
+}
 
 /// Report that no space has anything to restore but what `first` reports,
 /// the workspaces reopened and the turns continued, as a restore that
@@ -141,7 +159,7 @@ pub(super) fn started(
 
 /// List the stopped `commands` of `space`, which no agent receives, in text
 /// output.
-pub(super) fn stopped_commands(ctx: &Context, space: &Space, commands: &[SavedCommand]) {
+fn stopped_commands(ctx: &Context, space: &Space, commands: &[SavedCommand]) {
     if !commands.is_empty() && !ctx.json {
         outln!("{}", command_list(space, commands));
     }

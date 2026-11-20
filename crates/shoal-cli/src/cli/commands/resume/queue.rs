@@ -1,22 +1,19 @@
 //! Queuing the restores of stopped agents, which the daemon starts as the
 //! agent limits allow, or at once with `--now`.
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 
+use super::reports::{self, Reporting};
 use super::targets::Selected;
-use super::{commands, permission_change, reports, stale};
 use crate::client::output::resume::Queued;
 use crate::{
-    cli::{context::Context, ui},
-    config::permissions::PermissionChange,
-    execution::recovery::Saved,
-    model::{QueueEntry, Space},
-    protocol::ConfigTarget,
-    terminal,
+    cli::context::Context, config::permissions::PermissionChange, execution::recovery::Saved,
+    model::Space,
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::saved::{Queuing, Restore};
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_workers::resume::{permissions, queue::ensure_daemon_starts};
 
 /// Queue the restores of the stopped agents and last sessions of the
 /// `selected` spaces this process's scope reaches, or of every such space
@@ -42,7 +39,7 @@ pub(super) async fn queue_below(
         }
         None => stopped_in_reach(ctx).await?,
     };
-    permission_change::apply(ctx, &stopped, &selected.failed_starts, change).await?;
+    permissions::apply(&ctx.paths, &stopped, &selected.failed_starts, change).await?;
     let mut resumed = alongside.continue_turns(ctx).await;
     super::retry_failed_starts(ctx, &selected, &mut resumed, now).await;
     queue_all(ctx, stopped, resumed, now).await
@@ -178,46 +175,15 @@ pub(super) async fn queue_space(
     };
     let stopped = vec![(space, saved)];
     if matches!(queuing, Queuing::Daemon { .. }) {
-        ensure_daemon_starts(ctx, &stopped).await?;
+        ensure_daemon_starts(&ctx.paths, &stopped).await?;
     }
-    permission_change::apply(ctx, &stopped, &[], change).await?;
+    permissions::apply(&ctx.paths, &stopped, &[], change).await?;
     queue_all(ctx, stopped, Queued::default(), now).await
 }
 
 /// What `workspace` saved.
 async fn saved(ctx: &Context, space: &Space) -> Result<Saved> {
     crate::client::saved::read(&ctx.paths, SpaceSelector::id(&space.id)).await
-}
-
-/// Refuse, before any is queued, the restores of `stopped` agents that the
-/// daemon would start from the background when no host can take them there;
-/// a waiting wrapper restores its agent where it stopped.
-pub(super) async fn ensure_daemon_starts(ctx: &Context, stopped: &[(Space, Saved)]) -> Result<()> {
-    for (space, saved) in stopped {
-        ensure_daemon_starts_in(ctx, space, saved).await?;
-    }
-    Ok(())
-}
-
-/// Refuse the restores of the agents `saved` keeps of `space` that the
-/// daemon would start from the background when no host can take them
-/// there.
-pub(super) async fn ensure_daemon_starts_in(
-    ctx: &Context,
-    space: &Space,
-    saved: &Saved,
-) -> Result<()> {
-    if !saved.restores_outside_wrappers() {
-        return Ok(());
-    }
-    let target = ConfigTarget::Space(SpaceSelector::id(&space.id));
-    let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
-    crate::terminal::queued::ensure_background(&settings).with_context(|| {
-        format!(
-            "cannot restore the agents of {} in the background; pass --focus to restore one here",
-            space.name
-        )
-    })
 }
 
 /// Queue the restore of every agent and last session `stopped` saves,
@@ -243,57 +209,9 @@ pub(super) async fn queue_all(
 }
 
 /// Queue the restore of every agent and last session `stopped` saves,
-/// starting each at once when `now`, and report the commands of workspaces
-/// without one that restores outside a waiting wrapper, going on after one
-/// fails, which it reports.
+/// starting each at once when `now`, telling the user of what fails as
+/// [`shoal_workers::resume::queue::queue_each`] goes.
 pub(super) async fn queue_each(ctx: &Context, stopped: Vec<(Space, Saved)>, now: bool) -> Queued {
-    let mut queued = Vec::new();
-    let mut commands = Vec::new();
-    let mut failed = Vec::new();
-    for (space, mut saved) in stopped {
-        if !saved.restores_outside_wrappers() {
-            let _claims = commands::claim(&mut saved.commands);
-            match commands::report(ctx, &space, &saved.commands) {
-                Ok(report) => commands.push(report),
-                Err(error) => failed.push(ui::failure(ctx, "resume", &space.name, &error)),
-            }
-        }
-        for saved in saved.agents.iter().chain(&saved.sessions) {
-            match queue(ctx, &space, &saved.id, now).await {
-                Ok(entry) => queued.push(entry),
-                Err(error) => failed.push(ui::failure(ctx, "resume", &space.name, &error)),
-            }
-        }
-    }
-    Queued {
-        queued,
-        commands,
-        failed,
-        ..Default::default()
-    }
-}
-
-/// Queue the restore of the agent stopped as `execution` in `space`, once
-/// an execution a daemon restart left unknown in a workspace is proven
-/// ended, starting it at once when `now`.
-pub(super) async fn queue(
-    ctx: &Context,
-    space: &Space,
-    execution: &ExecutionId,
-    now: bool,
-) -> Result<QueueEntry> {
-    if space.worktree().is_some() {
-        let selector = SpaceSelector::id(&space.id);
-        let inspection = crate::client::workspaces::inspect(&ctx.paths, selector).await?;
-        stale::reconcile(ctx, &inspection, Some(execution)).await?;
-    }
-    let execution = execution.to_owned();
-    crate::client::queue::restore(
-        &ctx.paths,
-        SpaceSelector::id(&space.id),
-        execution,
-        terminal::start_environment(),
-        now,
-    )
-    .await
+    let reporting = Reporting(ctx);
+    shoal_workers::resume::queue::queue_each(&ctx.paths, stopped, now, &reporting).await
 }

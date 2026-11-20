@@ -2,7 +2,7 @@
 //! rechecked that its recorded processes are gone.
 use anyhow::{Context as _, Result, ensure};
 
-use crate::{cli::context::Context, state::ExecutionState};
+use crate::{client::connection::CommandPaths, state::ExecutionState};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::recovery::ReconcileOptions;
 use shoal_protocol::space_names::SpaceSelector;
@@ -12,8 +12,8 @@ use shoal_protocol::status::Inspection;
 /// records are still safe to use once the daemon has rechecked that execution's
 /// recorded processes are gone, so make that repair part of the restore itself. An
 /// agent whose wrapper waits to restore it is stopped, not active.
-pub(super) async fn reconcile(
-    ctx: &Context,
+pub async fn reconcile(
+    paths: &CommandPaths,
     inspection: &Inspection,
     selected: Option<&ExecutionId>,
 ) -> Result<()> {
@@ -35,7 +35,7 @@ pub(super) async fn reconcile(
         return Ok(());
     }
     let reports = crate::client::recovery::reconcile(
-        &ctx.paths,
+        paths,
         Some(SpaceSelector::id(&inspection.workspace.id)),
         ReconcileOptions {
             repair: true,
