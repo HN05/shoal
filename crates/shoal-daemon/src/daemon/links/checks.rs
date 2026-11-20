@@ -89,7 +89,10 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<CheckLog> {
         validate_check_name(name)?;
-        let target = (self.selection_target(target, selection, true, caller)).await?;
+        let target = (self
+            .links
+            .selection_target(self, target, selection, true, caller))
+        .await?;
         let account = match target.own {
             true => self.links.agent_account(),
             false => self.links.elsewhere_account(Access::Read, caller),

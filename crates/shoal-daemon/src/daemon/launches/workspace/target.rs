@@ -169,7 +169,10 @@ impl Manager {
         (workspaces, fetches, caller): (&[Workspace], bool, Option<&Caller>),
     ) -> Result<()> {
         let context = self.launch_read_context(&repo.id, caller).await?;
-        let pull = self.pull_request(&context, &pull.into(), caller).await?;
+        let pull = self
+            .links
+            .pull_request(self, &context, &pull.into(), caller)
+            .await?;
         match fetches {
             true => workspace::pull_creation(workspaces, repo, pull, creation).await,
             false => pull_settled(workspaces, repo, &pull, creation),

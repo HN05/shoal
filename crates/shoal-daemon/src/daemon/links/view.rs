@@ -34,7 +34,8 @@ impl Manager {
     ) -> Result<Viewed> {
         let account = self.links.read_account(caller);
         let target = self
-            .selection_target(target, selection, true, caller)
+            .links
+            .selection_target(self, target, selection, true, caller)
             .await?;
         let items = self.view_selection(&target, selection, &account).await?;
         // Nothing to read, so no forge is needed, as for a local repository.
@@ -71,7 +72,10 @@ impl Manager {
             Some(space) => self.classify_number(space, selection, account).await?,
             None => selection.clone(),
         };
-        (self.target_selection(target, &selection, true, account)).await
+        (self
+            .links
+            .target_selection(self, target, &selection, true, account))
+        .await
     }
 
     /// `selection` with the kind of a number selected without one: the kind
@@ -86,7 +90,10 @@ impl Manager {
         let (None, Some(ItemInput::Number(number))) = (selection.kind, &selection.input) else {
             return Ok(selection.clone());
         };
-        let kind = self.space_number_kind(space, *number, account).await?;
+        let kind = self
+            .links
+            .space_number_kind(self, space, *number, account)
+            .await?;
         Ok(Selection {
             kind: Some(kind),
             input: selection.input.clone(),

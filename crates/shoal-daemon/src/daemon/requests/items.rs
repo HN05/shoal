@@ -59,18 +59,24 @@ pub(super) async fn handle(
             return Ok(Answer::pages(listed, Body::Items));
         }
         ItemMethod::Labels { target } => {
-            let labels = manager.labels(&target, caller).await;
+            let labels = manager.links.labels(&**manager, &target, caller).await;
             return Ok(Answer::pages(labels, Body::Labels));
         }
         ItemMethod::Reviewers { target, item } => {
-            let reviewers = manager.reviewers(&target, item, caller).await;
+            let reviewers = manager
+                .links
+                .reviewers(&**manager, &target, item, caller)
+                .await;
             return Ok(Answer::pages(reviewers, Body::Reviewers));
         }
-        ItemMethod::Capabilities { target } => {
-            Body::Capabilities(manager.capabilities(&target, caller).await?)
-        }
+        ItemMethod::Capabilities { target } => Body::Capabilities(
+            manager
+                .links
+                .capabilities(&**manager, &target, caller)
+                .await?,
+        ),
         ItemMethod::Reactions { target } => {
-            Body::Reactions(manager.reactions(&target, caller).await?)
+            Body::Reactions(manager.links.reactions(&**manager, &target, caller).await?)
         }
         ItemMethod::ReviewThread {
             target,
@@ -78,30 +84,41 @@ pub(super) async fn handle(
             comment,
         } => Body::Thread(
             manager
-                .review_thread(&target, item, comment, caller)
+                .links
+                .review_thread(&**manager, &target, item, comment, caller)
                 .await?,
         ),
-        ItemMethod::NumberKind { target, number } => {
-            Body::LinkKind(manager.number_kind(&target, number, caller).await?)
-        }
+        ItemMethod::NumberKind { target, number } => Body::LinkKind(
+            manager
+                .links
+                .number_kind(&**manager, &target, number, caller)
+                .await?,
+        ),
         ItemMethod::IssueDetails {
             context,
             item,
             closed,
         } => {
             let issue = manager
-                .issue_details(&context, &item, closed, caller)
+                .links
+                .issue_details(&**manager, &context, &item, closed, caller)
                 .await
                 .and_then(|issue| json_pieces(&issue));
             return Ok(Answer::pages(issue, Body::ViewPieces));
         }
         ItemMethod::IssueBlockers { context, item } => {
-            let blockers = manager.issue_blockers(&context, &item, caller).await;
+            let blockers = manager
+                .links
+                .issue_blockers(&**manager, &context, &item, caller)
+                .await;
             return Ok(Answer::pages(blockers, Body::Blockers));
         }
-        ItemMethod::PullRequest { context, item } => {
-            Body::PullRequest(manager.pull_request(&context, &item, caller).await?)
-        }
+        ItemMethod::PullRequest { context, item } => Body::PullRequest(
+            manager
+                .links
+                .pull_request(&**manager, &context, &item, caller)
+                .await?,
+        ),
         ItemMethod::ViewItems {
             target,
             selection,
@@ -118,14 +135,16 @@ pub(super) async fn handle(
             request: raw,
         } => {
             let response = manager
-                .forge_api(&target, &raw, caller)
+                .links
+                .forge_api(&**manager, &target, &raw, caller)
                 .await
                 .map(|response| protocol::text_pieces(&response.to_string()));
             return Ok(Answer::pages(response, Body::ApiResponse));
         }
         ItemMethod::ForgeDownload { target, url } => {
             let download = manager
-                .forge_download(&target, &url, caller)
+                .links
+                .forge_download(&**manager, &target, &url, caller)
                 .await
                 .map(protocol::DownloadPiece::split);
             return Ok(Answer::pages(download, Body::Downloaded));
@@ -188,7 +207,8 @@ pub(super) async fn handle(
             elsewhere,
         } => Body::SelectedItems(
             manager
-                .select_context_items(&target, &selection, elsewhere, caller)
+                .links
+                .select_context_items(&**manager, &target, &selection, elsewhere, caller)
                 .await?,
         ),
         ItemMethod::LinkItem {

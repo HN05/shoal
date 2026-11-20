@@ -6,8 +6,11 @@ use shoal_links::{daemon::Spaces, space::LinkSpace};
 
 use crate::{
     daemon::manager::Manager,
-    forge::items::{link::ItemKind, reference::ItemRef},
-    model::{Repository, Space},
+    forge::items::{
+        link::{ItemKind, Selection},
+        reference::ItemRef,
+    },
+    model::{Repository, Selected, Space},
     protocol::ItemContext,
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
@@ -40,5 +43,14 @@ impl Spaces for Manager {
             self.store
                 .run(move |db| super::wait::linked_items(db, &id, Some(kind))),
         )
+    }
+
+    fn select_items<'a>(
+        &'a self,
+        space: &'a LinkSpace,
+        selection: &'a Selection,
+        elsewhere: bool,
+    ) -> BoxFuture<'a, Result<Selected>> {
+        Box::pin(Manager::select_items(self, space, selection, elsewhere))
     }
 }

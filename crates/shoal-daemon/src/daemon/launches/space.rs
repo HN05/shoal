@@ -192,7 +192,11 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<StartIssue> {
         let context = self.launch_read_context(repository, caller).await?;
-        let error = match self.issue_details(&context, input, false, caller).await {
+        let error = match self
+            .links
+            .issue_details(self, &context, input, false, caller)
+            .await
+        {
             Ok(issue) => {
                 let (url, title, labels) = (issue.url, issue.title, issue.labels);
                 return Ok(OpenIssue { url, title, labels }.into());

@@ -59,12 +59,24 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
     };
 
     let read = manager
-        .forge_api(&context, &request(HttpMethod::Get), Some(&caller))
+        .links
+        .forge_api(
+            &*manager,
+            &context,
+            &request(HttpMethod::Get),
+            Some(&caller),
+        )
         .await
         .unwrap();
     assert_eq!(read, json!({"ok": true}));
     manager
-        .forge_api(&context, &request(HttpMethod::Patch), Some(&caller))
+        .links
+        .forge_api(
+            &*manager,
+            &context,
+            &request(HttpMethod::Patch),
+            Some(&caller),
+        )
         .await
         .unwrap_err();
     assert_eq!(sent(), ["GET /api/v3/repos/team/repo"]);
@@ -76,7 +88,13 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
     };
     permissions("propose").await.unwrap();
     let held = manager
-        .forge_api(&context, &request(HttpMethod::Patch), Some(&caller))
+        .links
+        .forge_api(
+            &*manager,
+            &context,
+            &request(HttpMethod::Patch),
+            Some(&caller),
+        )
         .await
         .unwrap_err();
     let crate::daemon::approvals::Undecided(proposed) = held.downcast().unwrap();
@@ -85,26 +103,50 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         .await
         .unwrap();
     manager
-        .forge_api(&context, &request(HttpMethod::Patch), Some(&caller))
+        .links
+        .forge_api(
+            &*manager,
+            &context,
+            &request(HttpMethod::Patch),
+            Some(&caller),
+        )
         .await
         .unwrap();
     assert_eq!(sent()[1], "PATCH /api/v3/repos/team/repo");
 
     permissions("direct").await.unwrap();
     manager
-        .forge_api(&context, &request(HttpMethod::Patch), Some(&caller))
+        .links
+        .forge_api(
+            &*manager,
+            &context,
+            &request(HttpMethod::Patch),
+            Some(&caller),
+        )
         .await
         .unwrap();
     assert_eq!(sent()[2], "PATCH /api/v3/repos/team/repo");
 
     // Another repository is only read, whatever the workspace's allows.
     let read = manager
-        .forge_api(&tool(&context), &request(HttpMethod::Get), Some(&caller))
+        .links
+        .forge_api(
+            &*manager,
+            &tool(&context),
+            &request(HttpMethod::Get),
+            Some(&caller),
+        )
         .await
         .unwrap();
     assert_eq!(read, json!({"ok": true}));
     manager
-        .forge_api(&tool(&context), &request(HttpMethod::Patch), Some(&caller))
+        .links
+        .forge_api(
+            &*manager,
+            &tool(&context),
+            &request(HttpMethod::Patch),
+            Some(&caller),
+        )
         .await
         .unwrap_err();
     let sent = sent();
@@ -165,11 +207,23 @@ async fn a_chats_agent_reads_as_its_account_and_writes_only_when_allowed() {
 
     // Its agent reads as the agent account, as a workspace's does.
     manager
-        .forge_api(&context, &request(HttpMethod::Get), Some(&caller))
+        .links
+        .forge_api(
+            &*manager,
+            &context,
+            &request(HttpMethod::Get),
+            Some(&caller),
+        )
         .await
         .unwrap();
     manager
-        .forge_api(&context, &request(HttpMethod::Patch), Some(&caller))
+        .links
+        .forge_api(
+            &*manager,
+            &context,
+            &request(HttpMethod::Patch),
+            Some(&caller),
+        )
         .await
         .unwrap_err();
     manager
@@ -180,16 +234,29 @@ async fn a_chats_agent_reads_as_its_account_and_writes_only_when_allowed() {
         .await
         .unwrap();
     manager
-        .forge_api(&context, &request(HttpMethod::Patch), Some(&caller))
+        .links
+        .forge_api(
+            &*manager,
+            &context,
+            &request(HttpMethod::Patch),
+            Some(&caller),
+        )
         .await
         .unwrap();
     manager
-        .forge_api(&tool(&context), &request(HttpMethod::Patch), Some(&caller))
+        .links
+        .forge_api(
+            &*manager,
+            &tool(&context),
+            &request(HttpMethod::Patch),
+            Some(&caller),
+        )
         .await
         .unwrap_err();
     // The user's own command in the chat sends with the user's login.
     manager
-        .forge_api(&context, &request(HttpMethod::Get), None)
+        .links
+        .forge_api(&*manager, &context, &request(HttpMethod::Get), None)
         .await
         .unwrap();
     let sent: Vec<_> = (server.received().into_iter())
@@ -248,7 +315,9 @@ async fn agents_download_from_their_forge_as_their_account() {
     let url = &format!("http://{host}/user-attachments/assets/abc");
 
     let download = manager
+        .links
         .forge_download(
+            &*manager,
             &ItemContext::space(SpaceSelector::id(&workspace.id)).into(),
             url,
             Some(&caller),
@@ -258,7 +327,9 @@ async fn agents_download_from_their_forge_as_their_account() {
     assert_eq!(download.content_type.as_deref(), Some("image/png"));
     assert_eq!(download.bytes, b"PNG");
     manager
+        .links
         .forge_download(
+            &*manager,
             &ItemContext::space(SpaceSelector::id(&workspace.id)).into(),
             "https://example.com/shot.png",
             Some(&caller),

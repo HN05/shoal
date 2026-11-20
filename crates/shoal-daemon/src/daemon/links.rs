@@ -12,6 +12,7 @@ mod listing;
 mod merge_path;
 mod merge_review;
 mod merge_warning;
+mod permissions;
 pub mod pr;
 pub mod proposals;
 mod pushes;
@@ -124,7 +125,7 @@ impl Manager {
     ) -> (Option<String>, Option<String>) {
         let read = async {
             let context = self.link_space(selector).await?.item_context();
-            let forge = self.context_forge(&context).await?;
+            let forge = self.links.context_forge(self, &context).await?;
             let item = ItemRef::in_repository(&forge, kind.into(), input)?;
             let account = self.links.read_account(caller);
             let current = forge.read(&account, kind, item.number().get()).await?;

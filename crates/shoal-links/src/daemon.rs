@@ -1,15 +1,19 @@
 //! What links need of the rest of the daemon, which implements it: the
-//! registered repositories and the spaces requests come from, and which
-//! forge each host serves.
+//! registered repositories and the spaces requests come from, which forge
+//! each host serves, and the permission a scoped caller acts with.
 use anyhow::Result;
 use futures_util::future::BoxFuture;
+use shoal_daemon_base::{callers::Caller, permitted_actions::Action};
 use shoal_forge_types::{
     ForgeRepo,
-    items::{link::ItemKind, reference::ItemRef},
+    items::{
+        link::{ItemKind, Selection},
+        reference::ItemRef,
+    },
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    model::{Repository, Space},
+    model::{Repository, Selected, Space},
     protocol::ItemContext,
     space_names::SpaceSelector,
 };
@@ -38,6 +42,27 @@ pub trait Spaces: Send + Sync {
         id: &'a SpaceId,
         kind: ItemKind,
     ) -> BoxFuture<'a, Result<Vec<ItemRef>>>;
+
+    /// The items `selection` names among the space's links, each with the
+    /// relations the space links it under. With `elsewhere`, an issue or
+    /// PR URL of another repository selects that item.
+    fn select_items<'a>(
+        &'a self,
+        space: &'a LinkSpace,
+        selection: &'a Selection,
+        elsewhere: bool,
+    ) -> BoxFuture<'a, Result<Selected>>;
+}
+
+/// The permission a scoped caller acts with.
+pub trait Permissions: Send + Sync {
+    /// Let `caller` take `action` as its space's permission for the
+    /// action's key allows; the user takes every action.
+    fn authorize_action<'a>(
+        &'a self,
+        caller: Option<&'a Caller>,
+        action: Action,
+    ) -> BoxFuture<'a, Result<()>>;
 }
 
 /// The forges repositories are on, by the forge each host serves.
@@ -59,6 +84,6 @@ pub trait Forges: Send + Sync {
 
 /// Everything links need of the daemon, which each of their operations
 /// that reaches beyond them takes.
-pub trait Daemon: Spaces + Forges {}
+pub trait Daemon: Spaces + Forges + Permissions {}
 
-impl<T> Daemon for T where T: Spaces + Forges {}
+impl<T> Daemon for T where T: Spaces + Forges + Permissions {}

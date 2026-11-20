@@ -2,27 +2,7 @@
 //! kind a bare number is, an issue's details and blockers, and a PR's head,
 //! reviewers and review threads.
 use anyhow::{Context, Result};
-use shoal_links::place::{Access, Place};
-use shoal_links::space::LinkSpace;
-use shoal_links::target::{ForgeTarget, NOTHING_LINKED};
-use shoal_protocol::progress::Blocker;
-
-use crate::{
-    daemon::{manager::Manager, scope::Caller},
-    forge::{
-        ForgeRepo, PullRequest,
-        capability::Capability,
-        items::{
-            issue::IssueDetails,
-            link::{ItemKind, LinkKind, Selection},
-            reference::{ItemInput, ItemRef},
-        },
-        numbers::CommentId,
-        review::{reviewers::Reviewer, thread::Thread},
-    },
-    model::{Selected, SelectedItem},
-    protocol::{ItemContext, RepoTarget},
-};
+use shoal_daemon_base::callers::Caller;
 use shoal_forge::{
     RepoRequests,
     account::Account,
@@ -30,8 +10,33 @@ use shoal_forge::{
     items::{action::ActionRequests, issue::IssueRequests},
     review::{reviewers::ReviewerRequests, thread::ThreadRequests},
 };
+use shoal_forge_types::{
+    ForgeRepo, PullRequest,
+    capability::Capability,
+    items::{
+        issue::IssueDetails,
+        link::{ItemKind, LinkKind, Selection},
+        reference::{ItemInput, ItemRef},
+    },
+    numbers::CommentId,
+    review::{reviewers::Reviewer, thread::Thread},
+};
+use shoal_protocol::{
+    model::{Selected, SelectedItem},
+    progress::Blocker,
+    protocol::{ItemContext, RepoTarget},
+};
 
-impl Manager {
+use crate::{
+    Links,
+    daemon::Daemon,
+    forges,
+    place::{Access, Place},
+    space::LinkSpace,
+    target::{ForgeTarget, NOTHING_LINKED},
+};
+
+impl Links {
     /// The items `selection` names in the `target` repository: in a space's
     /// own, where it may name linked ones, or elsewhere, where only a number
     /// or URL selects one and a number without a kind takes the one the
@@ -39,75 +44,57 @@ impl Manager {
     /// another repository selects that item.
     pub async fn select_context_items(
         &self,
+        daemon: &dyn Daemon,
         target: &RepoTarget,
         selection: &Selection,
         elsewhere: bool,
         caller: Option<&Caller>,
     ) -> Result<Selected> {
-        let account = self.links.read_account(caller);
-        let target = (self.selection_target(target, selection, elsewhere, caller)).await?;
-        let items = (self.target_selection(&target, selection, elsewhere, &account)).await?;
+        let account = self.read_account(caller);
+        let target = (self.selection_target(daemon, target, selection, elsewhere, caller)).await?;
+        let items =
+            (self.target_selection(daemon, &target, selection, elsewhere, &account)).await?;
         let path = (target.origin.as_ref()).map(|place| place.origin_path().to_owned());
         Ok(Selected { path, items })
     }
 
     /// The repository `target` names for reading what `selection` names,
     /// which with `elsewhere` may be another repository by its URL.
-    pub(in crate::daemon::links) async fn selection_target(
+    pub async fn selection_target(
         &self,
+        daemon: &dyn Daemon,
         target: &RepoTarget,
         selection: &Selection,
         elsewhere: bool,
         caller: Option<&Caller>,
     ) -> Result<ForgeTarget> {
         let named = match (&selection.input, elsewhere) {
-            (Some(input), true) => shoal_links::forges::of_input(self, input).await?,
+            (Some(input), true) => forges::of_input(daemon, input).await?,
             _ => None,
         };
-        (self
-            .links
-            .forge_target(self, target, named, Access::Read, caller))
-        .await
+        (self.forge_target(daemon, target, named, Access::Read, caller)).await
     }
 
     /// The items `selection` names in `target`: in a space's own
     /// repository, where it may name linked ones, otherwise the one its
     /// number or URL names.
-    pub(in crate::daemon::links) async fn target_selection(
+    pub async fn target_selection(
         &self,
+        daemon: &dyn Daemon,
         target: &ForgeTarget,
         selection: &Selection,
         elsewhere: bool,
         account: &Account,
     ) -> Result<Vec<SelectedItem>> {
         match target.own_place().and_then(Place::space) {
-            Some(space) => Ok(self.select_items(space, selection, elsewhere).await?.items),
+            Some(space) => Ok(daemon
+                .select_items(space, selection, elsewhere)
+                .await?
+                .items),
             None => Ok(vec![
-                self.unlinked_item(target.forge()?, selection, account)
-                    .await?,
+                unlinked_item(target.forge()?, selection, account).await?,
             ]),
         }
-    }
-
-    /// The item `selection` names by number or URL in `forge`, where nothing
-    /// is linked. A number without a kind takes the one the forge reports
-    /// for it.
-    async fn unlinked_item(
-        &self,
-        forge: &ForgeRepo,
-        selection: &Selection,
-        account: &Account,
-    ) -> Result<SelectedItem> {
-        let input = selection.input.as_ref().context(NOTHING_LINKED)?;
-        let kind = match (selection.kind, input) {
-            (Some(kind), _) => kind,
-            (None, ItemInput::Number(number)) => forge.item_kind(account, *number).await?.into(),
-            (None, ItemInput::Url(item)) => item.kind(),
-        };
-        Ok(SelectedItem {
-            url: ItemRef::in_repository(forge, kind, input)?,
-            relations: Vec::new(),
-        })
     }
 
     /// The kind of the item numbered `number` in the `target` repository:
@@ -115,32 +102,34 @@ impl Manager {
     /// otherwise the kind the forge reports for it.
     pub async fn number_kind(
         &self,
+        daemon: &dyn Daemon,
         target: &RepoTarget,
         number: u64,
         caller: Option<&Caller>,
     ) -> Result<LinkKind> {
-        let account = self.links.read_account(caller);
-        let target = (self
-            .links
-            .forge_target(self, target, None, Access::Read, caller))
-        .await?;
+        let account = self.read_account(caller);
+        let target = (self.forge_target(daemon, target, None, Access::Read, caller)).await?;
         match target.own_place().and_then(Place::space) {
-            Some(space) => self.space_number_kind(space, number, &account).await,
+            Some(space) => {
+                self.space_number_kind(daemon, space, number, &account)
+                    .await
+            }
             None => Ok(target.forge()?.item_kind(&account, number).await?.into()),
         }
     }
 
     /// The kind of the item numbered `number` linked to `space` under any
     /// relation, otherwise the kind the forge reports for it.
-    pub(in crate::daemon::links) async fn space_number_kind(
+    pub async fn space_number_kind(
         &self,
+        daemon: &dyn Daemon,
         space: &LinkSpace,
         number: u64,
         account: &Account,
     ) -> Result<LinkKind> {
         match linked_kind(space, number).await? {
             Some(kind) => Ok(kind),
-            None => Ok((shoal_links::forges::of_space(self, space).await?)
+            None => Ok((forges::of_space(daemon, space).await?)
                 .item_kind(account, number)
                 .await?
                 .into()),
@@ -151,15 +140,16 @@ impl Manager {
     /// number or URL, or with `closed` one in any state.
     pub async fn issue_details(
         &self,
+        daemon: &dyn Daemon,
         context: &ItemContext,
         item: &ItemInput,
         closed: bool,
         caller: Option<&Caller>,
     ) -> Result<IssueDetails> {
-        let forge = self.context_forge(context).await?;
+        let forge = self.context_forge(daemon, context).await?;
         let issue = ItemRef::in_repository(&forge, LinkKind::Issue, item)?;
         forge
-            .read_issue(&self.links.read_account(caller), &issue, closed)
+            .read_issue(&self.read_account(caller), &issue, closed)
             .await
     }
 
@@ -167,13 +157,14 @@ impl Manager {
     /// in the repository of `context`, by number or URL.
     pub async fn issue_blockers(
         &self,
+        daemon: &dyn Daemon,
         context: &ItemContext,
         item: &ItemInput,
         caller: Option<&Caller>,
     ) -> Result<Vec<Blocker>> {
-        let forge = self.context_forge(context).await?;
+        let forge = self.context_forge(daemon, context).await?;
         let issue = ItemRef::in_repository(&forge, LinkKind::Issue, item)?;
-        let account = self.links.read_account(caller);
+        let account = self.read_account(caller);
         let blockers = forge.open_issue_blockers(&account, issue.issue()?).await?;
         Ok((blockers.into_iter())
             .map(|issue| Blocker::Issue(issue.into()))
@@ -184,32 +175,30 @@ impl Manager {
     /// head is.
     pub async fn pull_request(
         &self,
+        daemon: &dyn Daemon,
         context: &ItemContext,
         item: &ItemInput,
         caller: Option<&Caller>,
     ) -> Result<PullRequest> {
-        let forge = self.context_forge(context).await?;
+        let forge = self.context_forge(daemon, context).await?;
         let pull = ItemRef::in_repository(&forge, LinkKind::Pr, item)?;
-        forge
-            .pull_request(&self.links.read_account(caller), &pull)
-            .await
+        forge.pull_request(&self.read_account(caller), &pull).await
     }
 
     /// Who the PR `item` names in the `target` repository, or the space's
     /// linked PR, can ask for a review.
     pub async fn reviewers(
         &self,
+        daemon: &dyn Daemon,
         target: &RepoTarget,
         item: Option<ItemInput>,
         caller: Option<&Caller>,
     ) -> Result<Vec<Reviewer>> {
-        let read = self
-            .links
-            .target_item(self, target, item, ItemKind::Pr, Access::Read, caller);
+        let read = self.target_item(daemon, target, item, ItemKind::Pr, Access::Read, caller);
         let (target, pull) = read.await?;
         let forge = target.forge()?;
         forge
-            .reviewers(&self.links.read_account(caller), pull.pull()?)
+            .reviewers(&self.read_account(caller), pull.pull()?)
             .await
     }
 
@@ -218,21 +207,40 @@ impl Manager {
     /// forge cannot resolve threads.
     pub async fn review_thread(
         &self,
+        daemon: &dyn Daemon,
         target: &RepoTarget,
         item: Option<ItemInput>,
         comment: CommentId,
         caller: Option<&Caller>,
     ) -> Result<Thread> {
-        let read = self
-            .links
-            .target_item(self, target, item, ItemKind::Pr, Access::Read, caller);
+        let read = self.target_item(daemon, target, item, ItemKind::Pr, Access::Read, caller);
         let (target, pull) = read.await?;
         let forge = target.forge()?;
         forge.require(Capability::ResolveThreads)?;
         forge
-            .thread(&self.links.read_account(caller), pull.pull()?, comment)
+            .thread(&self.read_account(caller), pull.pull()?, comment)
             .await
     }
+}
+
+/// The item `selection` names by number or URL in `forge`, where nothing
+/// is linked. A number without a kind takes the one the forge reports
+/// for it.
+async fn unlinked_item(
+    forge: &ForgeRepo,
+    selection: &Selection,
+    account: &Account,
+) -> Result<SelectedItem> {
+    let input = selection.input.as_ref().context(NOTHING_LINKED)?;
+    let kind = match (selection.kind, input) {
+        (Some(kind), _) => kind,
+        (None, ItemInput::Number(number)) => forge.item_kind(account, *number).await?.into(),
+        (None, ItemInput::Url(item)) => item.kind(),
+    };
+    Ok(SelectedItem {
+        url: ItemRef::in_repository(forge, kind, input)?,
+        relations: Vec::new(),
+    })
 }
 
 /// The kind of the item numbered `number` linked to `space` under any
@@ -249,7 +257,7 @@ async fn linked_kind(space: &LinkSpace, number: u64) -> Result<Option<LinkKind>>
     };
     // A number names an item of the space's repository; issues opened in
     // another one share its numbers.
-    let remote = crate::repository::remote_url_from_path(space.origin_path())
+    let remote = shoal_core::repository::remote_url_from_path(space.origin_path())
         .await?
         .context("item lookup needs an origin remote")?;
     linked.kind_of(&remote, number)

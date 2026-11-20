@@ -22,7 +22,8 @@ async fn a_stopped_chat_reads_in_its_repositorys_checkout() {
     manager.end_executions(&chat.id).await;
 
     let forge = manager
-        .context_forge(&ItemContext::space(SpaceSelector::id(&chat.id)))
+        .links
+        .context_forge(&*manager, &ItemContext::space(SpaceSelector::id(&chat.id)))
         .await
         .unwrap();
     assert!(forge == manager.forge(origin).await.unwrap());
@@ -43,7 +44,9 @@ async fn a_checkout_without_an_origin_selects_an_item_by_its_url() {
     };
 
     let selected = manager
+        .links
         .select_context_items(
+            &*manager,
             &ItemContext::Checkout(repo.id).into(),
             &selection,
             true,

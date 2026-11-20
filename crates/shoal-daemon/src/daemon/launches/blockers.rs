@@ -53,8 +53,14 @@ impl Manager {
             kind: Some(LinkKind::Issue),
             input: Some(input),
         };
-        let selected =
-            (self.select_context_items(&context.clone().into(), &selection, true, caller)).await?;
+        let selected = (self.links.select_context_items(
+            self,
+            &context.clone().into(),
+            &selection,
+            true,
+            caller,
+        ))
+        .await?;
         let issue = selected.items.into_iter().next();
         Ok(ItemInput::Url(
             anyhow::Context::context(issue, "no issue selected")?.url,
@@ -71,7 +77,11 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<Vec<Blocker>> {
         let context = self.launch_read_context(repository, caller).await?;
-        match self.issue_blockers(&context, issue, caller).await {
+        match self
+            .links
+            .issue_blockers(self, &context, issue, caller)
+            .await
+        {
             Ok(blockers) => Ok(blockers),
             Err(error) => {
                 crate::daemon::log!(

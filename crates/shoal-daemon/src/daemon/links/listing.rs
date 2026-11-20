@@ -21,7 +21,7 @@ impl Manager {
         search: &Search,
         caller: Option<&Caller>,
     ) -> Result<Vec<Item>> {
-        let forge = self.read_forge(target, caller).await?;
+        let forge = self.links.read_forge(self, target, caller).await?;
         forge
             .list(&self.links.read_account(caller), kind, search)
             .await
