@@ -2098,8 +2098,12 @@ report. The daemon decides each report from the space's records and sends it
 over the wrapper's existing connection whenever it changes, and the wrapper
 writes it in one write to the terminal it holds: the daemon never opens a
 terminal, since pty device names are reused and terminal I/O stays in the
-wrapper, and hooks write nothing there. The wrapper reports the agent's exit
-itself, also while the daemon is away. Reports go only to a terminal that
+wrapper, and hooks write nothing there. One write keeps a report whole
+beside the agent's own output, which the terminal never splits within a
+write; it can still fall between two writes of one escape sequence the agent
+draws, which garbles that frame until the agent next redraws, a cost Shoal
+accepts for status a terminal shows outside the agent's screen. The wrapper
+reports the agent's exit itself, also while the daemon is away. Reports go only to a terminal that
 answers the protocol's query: before it hands the terminal to the agent, the
 wrapper sends the query followed by a primary device attributes request,
 which every terminal answers, so a device attributes reply arriving first
