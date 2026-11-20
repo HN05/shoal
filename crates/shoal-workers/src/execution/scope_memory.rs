@@ -62,6 +62,14 @@ struct Read {
     slice_kills: Option<u64>,
 }
 
+/// A watch dropped unfinished, as when its command's registration fails,
+/// reads no more.
+impl Drop for Watch {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
 impl Watch {
     /// Read the scope of the command `pid` from `read`, the reads so far.
     fn start(pid: u32, read: Read) -> Self {
