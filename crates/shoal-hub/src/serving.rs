@@ -1,5 +1,5 @@
 //! The owning machine's side of a forwarded request: its daemon answers it
-//! through its own socket, as it answers its own callers' requests, under a
+//! as it answers its own callers' requests, under a
 //! scope token that stands for the caller the forwarding machine vouches
 //! for until the answer is read. The user's requests go as the user's; a
 //! space's go under that space's scope, which reaches what that space's
@@ -18,20 +18,13 @@ use anyhow::{Context as _, Result, bail};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     hub::routing::{Answered, Forwarded, Vouched},
-    protocol::{self, Forwarding, Method, Request},
+    protocol::{Forwarding, Method, Request},
     scope_tokens::ScopeToken,
     space_names::SpaceSelector,
-};
-use tokio::{
-    io::{AsyncBufReadExt as _, AsyncReadExt as _, AsyncWriteExt as _, BufReader},
-    net::unix::{OwnedReadHalf, OwnedWriteHalf},
 };
 
 use super::streams::{Incoming, Outgoing, Streams};
 use crate::{Hub, daemon::Daemon};
-
-/// The most bytes of a streamed answer read at once.
-const READ_BYTES: usize = 64 << 10;
 
 /// The callers that forwarded requests stand for while this machine
 /// answers them, by the scope token each request carries.
@@ -92,7 +85,11 @@ impl Hub {
     /// answers its own callers, refusing one that only the space's own
     /// machine runs, since it needs files or processes the caller's has
     /// not.
-    pub async fn serve_forwarded(&self, request: Forwarded) -> Result<Answered> {
+    pub async fn serve_forwarded(
+        &self,
+        daemon: &dyn Daemon,
+        request: Forwarded,
+    ) -> Result<Answered> {
         let Forwarded { caller, method, .. } = request;
         let method: Method =
             serde_json::from_value(method).context("unreadable forwarded request")?;
@@ -119,7 +116,7 @@ impl Hub {
             scope: Some(held.token.clone()),
             ..Request::new(method)
         };
-        let frames = self.answer_on_socket(&request).await;
+        let frames = daemon.answer(request).await;
         drop(held);
         Ok(Answered { frames: frames? })
     }
@@ -131,6 +128,7 @@ impl Hub {
     /// refused for any other request.
     pub fn serve_streamed(
         self: &Arc<Self>,
+        daemon: &Arc<dyn Daemon>,
         request: Forwarded,
         (streams, stream): (&Streams, u64),
     ) -> Result<()> {
@@ -138,64 +136,34 @@ impl Hub {
         let method: Method =
             serde_json::from_value(method).context("unreadable forwarded request")?;
         let ends = streams.answering(stream, duplex_method(&method)?);
-        let hub = self.clone();
-        tokio::spawn(async move { hub.stream_from_socket(caller, method, ends).await });
+        let (hub, daemon) = (self.clone(), daemon.clone());
+        tokio::spawn(async move { hub.stream_answer(&*daemon, caller, method, ends).await });
         Ok(())
     }
 
-    /// Write what this daemon answers `method` from `caller` with on its
-    /// own socket to `out`, ending it as the answer ends, until no one
-    /// reads `out` any longer, and pass what comes `up` to the socket. The
-    /// token stands for `caller` only until the answer starts, once the
-    /// request was decided: what its machine vouched then would otherwise
-    /// outlast what that machine vouches for its later requests, which it
-    /// checks against the scope as the answer goes on.
-    async fn stream_from_socket(
+    /// Write what this daemon answers `method` from `caller` with to `out`,
+    /// ending it as the answer ends, until no one reads `out` any longer,
+    /// and pass what comes `up` to the daemon. The token stands for
+    /// `caller` only until the answer starts, once the request was decided:
+    /// what its machine vouched then would otherwise outlast what that
+    /// machine vouches for its later requests, which it checks against the
+    /// scope as the answer goes on.
+    async fn stream_answer(
         &self,
+        daemon: &dyn Daemon,
         caller: Vouched,
         method: Method,
         (mut out, up): (Outgoing, Option<Incoming>),
     ) {
-        let mut held = Some(self.vouches.hold(caller));
+        let held = self.vouches.hold(caller);
         let request = Request {
-            scope: held.as_ref().map(|held| held.token.clone()),
+            scope: Some(held.token.clone()),
             ..Request::new(method)
         };
-        let streamed = async {
-            let stream = tokio::net::UnixStream::connect(&self.paths.socket)
-                .await
-                .context("could not reach this machine's daemon socket")?;
-            let (reader, mut writer) = stream.into_split();
-            protocol::write(&mut writer, &request).await?;
-            // The answer decides when the stream ends; what the caller
-            // writes ends it only by failing.
-            tokio::select! {
-                answered = pass_down(reader, &mut out, &mut held) => answered,
-                Err(error) = pass_up(up, writer) => Err(error),
-            }
-        };
-        let streamed: Result<()> = streamed.await;
-        drop(held);
+        let started = Box::new(move || drop(held));
+        let streamed = daemon.stream(request, &mut out, up, started).await;
         out.end(streamed.err().map(|error| format!("{error:#}")))
             .await;
-    }
-
-    /// The frames this daemon writes in answer to `request` on its own
-    /// socket, until it closes the connection.
-    async fn answer_on_socket(&self, request: &Request) -> Result<Vec<serde_json::Value>> {
-        let mut stream = tokio::net::UnixStream::connect(&self.paths.socket)
-            .await
-            .context("could not reach this machine's daemon socket")?;
-        protocol::write(&mut stream, request).await?;
-        let mut reader = BufReader::new(stream);
-        let mut frames = Vec::new();
-        loop {
-            let mut line = Vec::new();
-            if reader.read_until(b'\n', &mut line).await? == 0 {
-                return Ok(frames);
-            }
-            frames.push(serde_json::from_slice(&line).context("unreadable response frame")?);
-        }
     }
 
     /// Whether `selector` names `caller`'s own space where another machine
@@ -258,43 +226,4 @@ fn duplex_method(method: &Method) -> Result<bool> {
         Forwarding::Duplex => Ok(true),
         _ => bail!("only a request whose answer goes on is answered on a stream"),
     }
-}
-
-/// Write what the daemon answers on `socket` to `out`, until either ends,
-/// letting go of the vouch `held` once the answer starts.
-async fn pass_down(
-    mut socket: OwnedReadHalf,
-    out: &mut Outgoing,
-    held: &mut Option<Held<'_>>,
-) -> Result<()> {
-    let mut bytes = vec![0; READ_BYTES];
-    loop {
-        let read = tokio::select! {
-            read = socket.read(&mut bytes) => read?,
-            () = out.closed() => return Ok(()),
-        };
-        if read == 0 {
-            return Ok(());
-        }
-        *held = None;
-        out.write(&bytes[..read]).await?;
-    }
-}
-
-/// Write what the caller sends `up` a duplex stream to `socket`, closing
-/// its side for writing once the caller ends; with nothing sent up, as on
-/// a stream that is not duplex, never resolves. A socket that no longer
-/// takes what comes up, as once the daemon's answer ended, takes nothing
-/// more, and what the daemon still writes goes down.
-async fn pass_up(up: Option<Incoming>, mut socket: OwnedWriteHalf) -> Result<()> {
-    let Some(mut up) = up else {
-        return std::future::pending().await;
-    };
-    while let Some(bytes) = up.next().await? {
-        if socket.write_all(&bytes).await.is_err() {
-            return std::future::pending().await;
-        }
-    }
-    let _ = socket.shutdown().await;
-    std::future::pending().await
 }

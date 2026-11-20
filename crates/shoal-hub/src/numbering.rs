@@ -70,7 +70,10 @@ impl Hub {
     /// The numbers this machine holds without a space, as for a removed
     /// space's issue proposals, which no other machine's space may take.
     pub(super) async fn reserved_numbers(&self) -> Result<Vec<SpaceNumber>> {
-        self.store.read(reserved).await
+        let records = self.records.clone();
+        self.store
+            .read(move |tx| records.reserved_numbers(tx))
+            .await
     }
 
     /// Give new spaces the smallest number free here again, once this
@@ -124,17 +127,6 @@ fn above_highest(tx: &Transaction<'_>) -> Result<SpaceNumber> {
         [],
         |row| row.get(0),
     )?)
-}
-
-/// See [`Hub::reserved_numbers`].
-pub fn reserved(tx: &Transaction<'_>) -> Result<Vec<SpaceNumber>> {
-    let mut statement = tx.prepare(
-        "SELECT DISTINCT number FROM space_numbers
-            WHERE number NOT IN (SELECT number FROM spaces WHERE number IS NOT NULL)
-            ORDER BY number",
-    )?;
-    let numbers = statement.query_map([], |row| row.get(0))?;
-    Ok(numbers.collect::<rusqlite::Result<_>>()?)
 }
 
 /// Keep `number` for the imported space `id`.

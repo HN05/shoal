@@ -1,6 +1,7 @@
 use anyhow::{Context as _, Result};
 use rusqlite::{Transaction, params};
-use shoal_hub::numbering::{forget_unless_joined, keep_spares, next, reserved};
+use shoal_hub::daemon::Records as _;
+use shoal_hub::numbering::{forget_unless_joined, keep_spares, next};
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::{
     hub::numbering::{Numbering, Renumbering},
@@ -203,7 +204,7 @@ async fn a_machine_reserves_the_numbers_it_holds_without_a_space() -> Result<()>
                 )?;
             }
             spaces::records::remove(tx, &SpaceId::from("gone"))?;
-            reserved(tx)
+            super::super::HubRecords.reserved_numbers(tx)
         })
         .await?;
     assert_eq!(reserved, [SpaceNumber::new(1)]);

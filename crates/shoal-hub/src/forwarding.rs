@@ -173,7 +173,9 @@ impl Hub {
                 .await)
                 .map_err(|error| Refusal::wrap(Reason::MachineUnreachable, error));
         }
-        let sent = self.send_forwarded(daemon, machine, forwarded, delivery).await;
+        let sent = self
+            .send_forwarded(daemon, machine, forwarded, delivery)
+            .await;
         match sent.map_err(|error| unanswered(machine, space, error))? {
             Reply::Answered(answered) => Ok(Elsewhere::Answered(answered.frames)),
             Reply::Queued(queued) => Ok(Elsewhere::Queued(queued)),

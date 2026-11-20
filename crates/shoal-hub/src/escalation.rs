@@ -91,8 +91,10 @@ impl Hub {
             (offline.get(decider))
                 .is_some_and(|since| now.duration_since(created.max(*since)) >= after)
         };
-        self.store.write(forget_closed).await?;
-        for question in daemon.open_questions().await? {
+        let open = daemon.open_questions().await?;
+        let kept = open.clone();
+        self.store.write(move |tx| forget_closed(tx, &kept)).await?;
+        for question in open {
             let Some(coordinator) = self.remote_coordinator(daemon, &question.space_id).await
             else {
                 continue;
@@ -231,15 +233,23 @@ fn record_escalated(tx: &Transaction<'_>, question: &Question) -> Result<()> {
     Ok(())
 }
 
-/// Forget the escalations of questions that are no longer open.
-fn forget_closed(tx: &Transaction<'_>) -> Result<()> {
+/// Forget the escalations of questions that are no longer `open`.
+fn forget_closed(tx: &Transaction<'_>, open: &[Question]) -> Result<()> {
+    let open: Vec<_> = (open.iter())
+        .map(|question| {
+            (
+                &question.space_id,
+                question.number.item,
+                question.created_at,
+            )
+        })
+        .collect();
     tx.execute(
-        "DELETE FROM hub_escalated_questions WHERE NOT EXISTS (SELECT 1 FROM questions
-            WHERE questions.space_id=hub_escalated_questions.space_id
-                AND questions.number=hub_escalated_questions.number
-                AND questions.created_at=hub_escalated_questions.created_at
-                AND questions.closed_at IS NULL)",
-        [],
+        "DELETE FROM hub_escalated_questions WHERE NOT EXISTS (SELECT 1 FROM json_each(?1)
+            WHERE json_extract(value, '$[0]')=hub_escalated_questions.space_id
+                AND json_extract(value, '$[1]')=hub_escalated_questions.number
+                AND json_extract(value, '$[2]')=hub_escalated_questions.created_at)",
+        [serde_json::to_string(&open)?],
     )?;
     Ok(())
 }

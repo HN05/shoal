@@ -97,7 +97,7 @@ impl Hub {
         }
         let machine = self.hub_machine(&**daemon, machine).await?;
         if machine.hub {
-            self.serve_streamed(request, (streams, stream))?;
+            self.serve_streamed(daemon, request, (streams, stream))?;
             return Ok(Reply::Streaming);
         }
         let Some(calls) = self.links.calls(&machine.id) else {
@@ -187,7 +187,9 @@ impl Hub {
     /// availability.
     pub(super) async fn answer_hub_call(&self, daemon: &dyn Daemon, call: Call) -> Result<Reply> {
         match call {
-            Call::Serve { request } => Ok(Reply::Answered(self.serve_forwarded(request).await?)),
+            Call::Serve { request } => Ok(Reply::Answered(
+                self.serve_forwarded(daemon, request).await?,
+            )),
             Call::Tell { told } => {
                 // Boxed: delivering it may pass it up through this hub again.
                 Box::pin(self.deliver_told(daemon, told)).await?;
@@ -226,7 +228,7 @@ impl Hub {
             // Written on the hub's stream, whose number only its link knows.
             Call::ServeStream { request, stream } => {
                 let answering = (calls.streams(), stream);
-                (self.serve_streamed(request, answering)).map(|()| Reply::Streaming)
+                (self.serve_streamed(&daemon, request, answering)).map(|()| Reply::Streaming)
             }
             call => self.answer_hub_call(&*daemon, call).await,
         };

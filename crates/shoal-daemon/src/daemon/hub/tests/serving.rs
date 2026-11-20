@@ -99,7 +99,14 @@ async fn a_streamed_request_s_vouch_stands_for_its_caller_only_until_its_answer_
     let link = linked();
     let mut incoming = link.opener.streams().open();
     let answering = (link.writer.streams(), incoming.number());
-    manager.hub.serve_streamed(request, answering).unwrap();
+    manager
+        .hub
+        .serve_streamed(
+            &(manager.clone() as std::sync::Arc<dyn shoal_hub::daemon::Daemon>),
+            request,
+            answering,
+        )
+        .unwrap();
     let started = tokio::time::timeout(HANG, incoming.next()).await.unwrap();
     let started = String::from_utf8(started.unwrap().unwrap()).unwrap();
     assert!(started.contains("followed_session"), "{started}");
@@ -120,7 +127,7 @@ async fn a_request_whose_answer_goes_on_is_refused_where_answers_are_collected()
     let refused = daemon
         .manager
         .hub
-        .serve_forwarded(request)
+        .serve_forwarded(&*daemon.manager, request)
         .await
         .unwrap_err();
     assert!(refused.to_string().contains("stream"), "{refused:#}");

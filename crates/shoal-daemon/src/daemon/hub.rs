@@ -10,7 +10,7 @@ use anyhow::Result;
 use futures_util::future::BoxFuture;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use shoal_hub::daemon::{
-    About, Approvals, Apps, Messages, Receiver, Records, SpacePermissions, Spaces,
+    About, Approvals, Apps, Dispatch, Messages, Receiver, Records, SpacePermissions, Spaces,
 };
 
 use shoal_ids::repository_ids::RepositoryId;
@@ -20,7 +20,7 @@ use shoal_protocol::{
     config::permissions::Permissions,
     hub::{Member, routing::ChainedMode},
     model::{QueueEntry, Repository, RunningAgent, Space},
-    protocol::AppMethod,
+    protocol::{AppMethod, Request},
     questions::Question,
     saved::SavedSummary,
     space_names::{SpaceName, SpaceSelector},
@@ -205,6 +205,28 @@ impl Approvals for Manager {
     }
 }
 
+impl Dispatch for Manager {
+    fn answer(&self, request: Request) -> BoxFuture<'_, Result<Vec<serde_json::Value>>> {
+        Box::pin(socket::answer(&self.paths.socket, request))
+    }
+
+    fn stream<'a>(
+        &'a self,
+        request: Request,
+        out: &'a mut Outgoing,
+        up: Option<Incoming>,
+        started: Box<dyn FnOnce() + Send + 'a>,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(socket::stream(
+            &self.paths.socket,
+            request,
+            out,
+            up,
+            started,
+        ))
+    }
+}
+
 impl Apps for Manager {
     fn serve_app_request(
         self: Arc<Self>,
@@ -238,6 +260,16 @@ impl Records for HubRecords {
         tree::first_absent_above(db, id)
     }
 
+    fn reserved_numbers(&self, db: &Connection) -> Result<Vec<SpaceNumber>> {
+        let mut statement = db.prepare(
+            "SELECT DISTINCT number FROM space_numbers
+                WHERE number NOT IN (SELECT number FROM spaces WHERE number IS NOT NULL)
+                ORDER BY number",
+        )?;
+        let numbers = statement.query_map([], |row| row.get(0))?;
+        Ok(numbers.collect::<rusqlite::Result<_>>()?)
+    }
+
     fn space_number(
         &self,
         db: &Connection,
@@ -267,5 +299,6 @@ impl Records for HubRecords {
     }
 }
 
+mod socket;
 #[cfg(test)]
 mod tests;

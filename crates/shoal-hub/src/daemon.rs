@@ -17,14 +17,14 @@ use shoal_protocol::{
     hub::{Member, routing::ChainedMode},
     model::{QueueEntry, Repository, RunningAgent, Space},
     notifications::NotificationKind,
-    protocol::AppMethod,
+    protocol::{AppMethod, Request},
     questions::Question,
     saved::SavedSummary,
     space_names::{SpaceName, SpaceSelector},
 };
 use shoal_schedule::priority::Priority;
 
-use crate::streams::Outgoing;
+use crate::streams::{Incoming, Outgoing};
 
 /// The spaces of this machine the hub reads.
 pub trait Spaces: Send + Sync {
@@ -179,6 +179,24 @@ pub trait Approvals: Send + Sync {
     fn visible_queue(&self) -> BoxFuture<'_, Result<Vec<QueueEntry>>>;
 }
 
+/// The daemon's own answering of requests, which answers those another
+/// machine forwards here as it answers its own callers'.
+pub trait Dispatch: Send + Sync {
+    /// The frames the daemon answers `request` with.
+    fn answer(&self, request: Request) -> BoxFuture<'_, Result<Vec<serde_json::Value>>>;
+
+    /// Answer `request`, whose answer goes on, writing it to `out` as it
+    /// comes until either ends, and passing what comes `up` to the daemon;
+    /// `started` runs once the answer starts.
+    fn stream<'a>(
+        &'a self,
+        request: Request,
+        out: &'a mut Outgoing,
+        up: Option<Incoming>,
+        started: Box<dyn FnOnce() + Send + 'a>,
+    ) -> BoxFuture<'a, Result<()>>;
+}
+
 /// The app store, as a member's request of it reaches the hub.
 pub trait Apps: Send + Sync {
     /// Answer `member`'s request `method` of the app store, with `data`
@@ -194,12 +212,19 @@ pub trait Apps: Send + Sync {
 
 /// Everything the hub needs of the daemon, which each of its operations
 /// that reaches beyond it takes.
-pub trait Daemon: Spaces + SpacePermissions + Messages + Approvals + Apps + Coordinators {}
+pub trait Daemon:
+    Spaces + SpacePermissions + Messages + Approvals + Dispatch + Apps + Coordinators
+{
+}
 
-impl<T: Spaces + SpacePermissions + Messages + Approvals + Apps + Coordinators> Daemon for T {}
+impl<T> Daemon for T where
+    T: Spaces + SpacePermissions + Messages + Approvals + Dispatch + Apps + Coordinators
+{
+}
 
-/// The records of the spaces the hub reads and renumbers, in its own connection or transaction. Its methods run on
-/// the store's thread, so they are not futures.
+/// The records of the spaces the hub reads and renumbers, in its own
+/// connection or transaction. Its methods run on the store's thread, so
+/// they are not futures.
 pub trait Records: Send + Sync {
     /// The parent of the space `id`.
     fn parent_id(&self, db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>>;
@@ -212,6 +237,10 @@ pub trait Records: Send + Sync {
 
     /// The first space above the space `id` that this machine has not.
     fn first_absent_above(&self, db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>>;
+
+    /// The numbers this machine holds without a space, as for a removed
+    /// space's issue proposals.
+    fn reserved_numbers(&self, db: &Connection) -> Result<Vec<SpaceNumber>>;
 
     /// The name and number of the space `id`, while this machine has it.
     fn space_number(
