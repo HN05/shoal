@@ -187,8 +187,8 @@ async fn file_contents(path: &Path, contents: Option<String>) -> Result<Vec<u8>>
 fn ensure_has(path: &Path, bytes: &[u8], lines: Lines) -> Result<()> {
     ensure!(
         lines.start < lines.end,
-        "lines end after they start, from {} to {}",
-        lines.start,
+        "lines {}-{} end before they start",
+        lines.start + 1,
         lines.end
     );
     let count = line_count(bytes);

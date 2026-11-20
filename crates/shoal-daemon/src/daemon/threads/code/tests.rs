@@ -109,7 +109,7 @@ async fn code_outside_the_caller_s_scope_is_refused() {
         )
         .await;
     let refused = posted.unwrap_err().to_string();
-    assert!(refused.contains("end after they start"), "{refused}");
+    assert!(refused.contains("end before they start"), "{refused}");
 }
 
 #[tokio::test]
