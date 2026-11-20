@@ -121,12 +121,36 @@ fn ensure_fits(db: &Connection, space_id: &SpaceId) -> Result<()> {
 /// The bytes the unread alerts of the space `space_id` take as its agent
 /// receives them.
 fn delivered_bytes(db: &Connection, space_id: &SpaceId) -> Result<usize> {
-    Ok(serde_json::to_vec(&unread(db, space_id)?.alerts)?.len())
+    Ok(serde_json::to_vec(&all_unread(db, space_id)?.alerts)?.len())
 }
 
-/// The unread alerts of the space `space_id`, oldest first, as its agent
-/// reads them.
+/// The unread alerts of the space `space_id` its agent reads next, oldest
+/// first: as many as one delivery carries, leaving the rest unread for the
+/// next, as alerts a migration kept beyond the limit may need.
 pub(super) fn unread(db: &Connection, space_id: &SpaceId) -> Result<Unread> {
+    let mut unread = all_unread(db, space_id)?;
+    unread.alerts = one_delivery(unread.alerts)?;
+    Ok(unread)
+}
+
+/// The leading `alerts` that take at most [`MAX_UNREAD_BYTES`] as an agent
+/// receives them, and at least the first.
+fn one_delivery(mut alerts: Vec<Alert>) -> Result<Vec<Alert>> {
+    // A list's brackets and the commas between its alerts.
+    let mut bytes = 1;
+    for (taken, alert) in alerts.iter().enumerate() {
+        bytes += serde_json::to_vec(alert)?.len() + 1;
+        if bytes > MAX_UNREAD_BYTES && taken > 0 {
+            alerts.truncate(taken);
+            break;
+        }
+    }
+    Ok(alerts)
+}
+
+/// Every unread alert of the space `space_id`, oldest first, and whether
+/// one of them wakes its agent.
+fn all_unread(db: &Connection, space_id: &SpaceId) -> Result<Unread> {
     let mut statement = db.prepare(&format!(
         "SELECT {COLUMNS},a.wakes FROM {FROM}
             WHERE a.recipient_id=?1 AND a.read=0 ORDER BY a.id"

@@ -972,3 +972,40 @@ async fn an_upward_alert_s_longer_titles_count_toward_its_coordinator_s_queue() 
     assert!(up(long_titled_files(&temp)).await.is_err());
     assert_fits_one_delivery(&manager, &parent).await;
 }
+
+#[tokio::test]
+async fn a_backlog_beyond_the_limit_reaches_its_agent_over_several_deliveries() {
+    use crate::daemon::alerts::{self, AlertKind, NewAlert};
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager, &"🦀".repeat(40)).await;
+    // What an earlier release queued, which the migration keeps whatever
+    // it takes once each alert names its recipient.
+    let id = workspace.id.clone();
+    (manager.store)
+        .write(move |tx| {
+            for n in 0..50 {
+                let text = format!("{n}{}", "\t".repeat(500));
+                let alert = NewAlert::shoal(AlertKind::Message, Default::default(), text);
+                alerts::insert(tx, Some(&id), &alert, true, false)?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let to = SpaceSelector::id(&workspace.id);
+    let mut delivered = Vec::new();
+    for _ in 0..50 {
+        let unread = manager.unread_messages(&workspace.id).await.unwrap().alerts;
+        if unread.is_empty() {
+            break;
+        }
+        let bytes = serde_json::to_vec(&unread).unwrap().len();
+        assert!(bytes <= super::MAX_UNREAD_BYTES, "{bytes} bytes");
+        let ids: Vec<i64> = unread.iter().map(|alert| alert.id).collect();
+        (manager.mark_agent_messages_delivered(&to, ids.clone()))
+            .await
+            .unwrap();
+        delivered.extend(ids);
+    }
+    assert_eq!(delivered.len(), 50);
+}
