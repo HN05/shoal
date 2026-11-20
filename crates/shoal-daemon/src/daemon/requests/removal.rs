@@ -319,9 +319,9 @@ impl Scoped for RemovalMethod {
         }
         match self {
             // The check asks for the user's holds too, so a batch refuses
-            // before removing any.
+            // before removing any. It removes nothing, so it takes the
+            // caller's own space too, as a move of that space checks it.
             RemovalMethod::CheckRemoval { space, .. } => {
-                let space = manager.workspace_below(caller, space, REFUSAL).await?;
                 manager.authorize_held_removal(caller, space, false).await?;
                 Ok(Some(space))
             }

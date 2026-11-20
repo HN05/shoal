@@ -320,12 +320,13 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
             crate::daemon::requests::handle(server, method.into(), Some(scoped), None).await
         }
     };
-    for (target, allowed) in [
-        (child.id.as_str(), true),
-        (parent.id.as_str(), false),
-        (sibling.id.as_str(), false),
+    // A check removes nothing, so it takes the caller's own space too.
+    for (target, checks, removes) in [
+        (child.id.as_str(), true, true),
+        (parent.id.as_str(), true, false),
+        (sibling.id.as_str(), false, false),
     ] {
-        for mut method in [check(target), remove(target)] {
+        for (mut method, allowed) in [(check(target), checks), (remove(target), removes)] {
             let authorized =
                 crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
             assert_eq!(authorized.is_ok(), allowed, "{target}: {method:?}");
