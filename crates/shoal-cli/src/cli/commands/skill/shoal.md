@@ -693,6 +693,7 @@ shoal restore [workspace] --checkpoint [<number>]
 shoal cleanup spaces
 shoal cleanup --dry-run
 shoal cleanup caches
+shoal move <space> --machine <machine> --yes
 shoal move <space> --ssh <host> --yes
 shoal move <space> -o - --yes | ssh <host> shoal restore --from -
 ```
@@ -711,9 +712,11 @@ and with a number returns to one after keeping the current state in a new
 checkpoint, refusing while another command runs in the workspace. `cleanup spaces` removes every
 space automatic cleanup would remove without waiting for its idle delay;
 `--dry-run` lists those, kept branches and shared caches, and why each other
-space stays. `move --ssh` moves a space, with the spaces below it, to another machine and
-resumes its agents there unless `--no-resume`; with `--keep`, it copies them there as new
-ones and leaves them running here. The daemon runs a move, so it finishes even
+space stays. `move --machine` moves a space to another machine joined to the same hub,
+under its ID and number, leaving the spaces below it here below it unless `--recursive`;
+`move --ssh` moves it with the spaces below it to a machine `ssh` reaches. Both resume its
+agents there unless `--no-resume`; with `--keep`, they copy the spaces there as new ones
+and leave them running here. The daemon runs a move, so it finishes even
 after the command that started it goes.
 
 ## Branches

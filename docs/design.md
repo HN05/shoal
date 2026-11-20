@@ -201,7 +201,7 @@ space's agent; the space that held the number first keeps it. A machine
 reports the numbers it holds without a space, those of a removed space's
 issue proposals, with its spaces, and the hub gives them no other space. An import's
 claim of a space's ID also keeps its number for the claiming machine while
-the hub still lists the space, so `shoal move --ssh` keeps it; an exported
+the hub still lists the space, so `shoal move --machine` and `--ssh` keep it; an exported
 package imported after its source is gone takes a new one. A request for
 a space another machine owns goes from the caller's daemon through the hub
 to that machine, which decides it as its own caller's: no command is
@@ -4262,10 +4262,13 @@ chat's as a workspace's, unless `--no-resume` leaves them stopped, over SSH
 as from a file, so a move behaves the same whatever carries it. Import is a
 form of `shoal restore`, `--from` a package, since it opens removed spaces as
 a restore does. `shoal move` is one command whose destination is a flag,
-`--ssh` or `-o`, so the space selection, `--keep`, `--checkpoint` and
-`--recursive` mean the same for every destination and a new destination is
+`--ssh`, `--machine` or `-o`, so the space selection, `--keep`, `--checkpoint`
+and `--recursive` mean the same for every destination and a new destination is
 one more flag; each destination sets whether the spaces below go by default,
-and both flags are accepted with every one. Without a destination a terminal
+and both flags are accepted with every one. `--machine` leaves them by
+default, below the moved space, which keeps its ID on the other machine, so the
+hub routes their events there and they need no new parent; they are detached
+while its removal here runs, which would take them along, and linked again. Without a destination a terminal
 asks for one, and anything else is refused, so an archive reaches standard
 output only through `-o -`.
 Each package uses the lowest format version that reads it, so an older importer
@@ -4283,7 +4286,19 @@ differs by destination: `-o` writes the package where the daemon writes it,
 spaces once it copied the package, and `--ssh` pipes it into
 `ssh -o BatchMode=yes <host> shoal --json restore --from -`, so the other side
 stays a plain command and the key must work without a prompt, as Git's
-fetches need. The worker checks the spaces before any ends,
+fetches need. `--machine` streams it to the other machine's daemon over a
+duplex stream of the hub's links, which pipes it into `shoal internal
+import-moved`, the same restore path, so that side too is a plain command.
+That machine's claim of the space at the hub commits such a move: it claims
+the space before it records it, so a refused claim records nothing, and an
+error after the claim leaves the space there. Each recorded move holds a
+ticket its destination's claims carry; a source that cannot learn from the
+destination whether it claimed the space asks the hub to settle the move,
+which answers from its claims and owners and, when the destination has not
+claimed it, refuses that ticket's later claims, so an import still running
+there cannot take the space after its source restored it. While the hub
+cannot be asked, the source keeps the agents stopped and asks again instead
+of guessing, so the agents never run on both machines. The worker checks the spaces before any ends,
 and where ending them needs the user it ends nothing and asks, so the command,
 or an app, starts the move again with consent to what the question listed. A
 move request for another joined machine's space goes through the hub to that
@@ -4297,7 +4312,8 @@ moves it. A recorded move whose lock is free lost its worker, so the daemon
 finishes it from the phase its record reached instead of guessing, in a
 worker of its own: a package that left ends the spaces here, nothing that
 left moves again, and an import that may have happened leaves the agents
-stopped on both machines, as a dropped connection does. A worker that
+stopped on both machines, as a dropped connection does, except on a joined
+machine, where it settles at the hub. A worker that
 outlives a daemon restart finishes its move itself, losing only the reports
 its followers would have read.
 Moving a workspace is a removal there and a restore here:

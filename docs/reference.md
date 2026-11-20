@@ -1046,8 +1046,8 @@ first, as after that or when a machine joins with spaces of its own, takes
 the smallest number free on the hub, its threads and approval requests
 follow it as `S.N`, and its machine tells you and the space's agent the old
 and new numbers in a `space_renumbered` alert; the space that held the
-number first keeps it. A space `shoal move --ssh` moves between the hub's
-machines keeps its number; one `shoal move -o` wrote, imported after its
+number first keeps it. A space `shoal move --machine` or `--ssh` moves
+between the hub's machines keeps its number; one `shoal move -o` wrote, imported after its
 source is gone, takes a new one.
 
 The hub lists a space ID under one machine, the first that reported it. A
@@ -4774,6 +4774,7 @@ shoal move 5 -o plan.shoal                     # end the chat 5 and write it to 
 shoal restore --from topic.shoal               # continue it in the repository with the same origin
 shoal move 7 -o - | ssh other shoal restore --from -   # agents continue there
 shoal move 5 --ssh other                       # the same, once ssh reaches Shoal there
+shoal move 7 --machine server                  # move workspace 7 to the joined machine server
 shoal move --repo app --all -o moving          # end every space of app, a file per tree
 shoal move 7 8 -o moving                       # remove both, a file each unless 8 is below 7
 shoal move 7 --no-recursive -o topic.shoal     # leave the spaces below 7 here, one level up
@@ -4783,12 +4784,12 @@ shoal move 7                                   # ask for the destination
 shoal restore --from moving                    # continue every space written to moving
 ```
 
-`shoal move [space]...` takes one destination: `--ssh <host>` or
-`-o <file>`. Without one, on a terminal, it picks the spaces when none are
+`shoal move [space]...` takes one destination: `--ssh <host>`,
+`--machine <machine>` or `-o <file>`. Without one, on a terminal, it picks the spaces when none are
 named, then asks for the destination's kind, `SSH host` or `File`, and for the
 host or path, or only for the host given `--no-resume` or `--shoal`, after
 refusing the spaces, repository or `--checkpoint` it cannot take; without a
-terminal it is refused, naming both flags.
+terminal it is refused, naming each flag.
 
 The daemon runs the move, so it finishes even after the terminal that
 started it closes. It checks the spaces before it ends any, and where that ends spaces
@@ -4839,15 +4840,17 @@ already removed, as by cleanup, is exported from its removal record, which
 stays, with the records of the spaces its removal took, under the refusals that
 still apply, without another removal. The file's manifest names each record's `kind`, `workspace` or `chat`.
 
-`--no-recursive`, with either destination, leaves the spaces below here, where
-`--recursive`, the default, takes them, except those named too, which go
+`--no-recursive`, with any destination, leaves the spaces below here, where
+`--recursive`, the default except with `--machine`, takes them, except those named too, which go
 in the file where it carries the space above them; the chats in the worktree of
-a workspace it carries still go with it. Each space that stays keeps running and
-moves up one level, below the exported space's parent, or to the top level when
-that cannot take it, with the spaces below it; a workspace keeps its branch and
-the branch it builds on, which the removal keeps, and loses only its link to the
-exported workspace. The requests the exported spaces decided for those that stay
-pass to the nearest space above them with an agent, or to the user. A removed
+a workspace it carries still go with it. Each space that stays keeps running,
+with the spaces below it, and except on a move to a joined machine, which
+leaves it below the moved space, moves up one level, below the exported
+space's parent, or to the top level when that cannot take it; a workspace keeps
+its branch and the branch it builds on, which the removal keeps, and loses only
+its link to the exported workspace. The requests the exported spaces decided
+for those that moved up pass to the nearest space above them with an agent, or
+to the user. A removed
 space exports with its own record only; the records of the spaces its removal
 took stay here, and restoring one opens it at the top level.
 
@@ -4887,6 +4890,27 @@ builds on the copy's branch. Forks get session IDs of their own, so
 the original conversations never change. A copy of an earlier checkpoint warns at
 export and import that the agents' conversations describe work its files lack,
 and tells the agents so. `restore --from` refuses `--keep-sessions` for a copy.
+
+`shoal move [space]... --machine <machine>` moves spaces to another machine
+joined to the same hub, named or by the ID `shoal hub ls` shows, from any
+joined machine, where the machine that runs the spaces runs the move. Both
+machines must be online: a move to this machine or an offline one is refused
+before anything stops, naming when the hub last saw it. Only the named spaces
+and the chats in the worktree of each moving workspace move; `--recursive`
+takes the spaces below too, and the spaces that stay keep running below the
+moved space, which keeps its ID and number there. The package goes over the
+hub's links to that machine's daemon, which continues it as `shoal restore
+--from -` does, cloning a repository it lacks, and resumes its agents unless
+`--no-resume`. Its claim of the space at the hub commits the move: a machine
+that took none of the package leaves the spaces here, with their agents'
+restores queued, and once its claim stands the spaces are its own and end
+here, also when setting them up there fails, which the move reports and
+`shoal restore <id>` retries there. When that machine cannot say how its
+import went, as when the link drops, the move asks the hub whether it claimed
+the space; while the hub cannot be asked, the agents stay stopped here and the
+move asks again every 30 seconds, and once the hub answers, a machine that did
+not claim the space no longer can. `--keep` copies the spaces there as new
+spaces, without a claim. A removed space's record moves only to a file.
 
 `shoal restore --from <file>` hands an export, or standard input for `-`,
 refusing a terminal, to the daemon, which reads it whole, refusing an export

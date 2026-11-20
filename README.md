@@ -253,6 +253,7 @@ shoal restore                 # Pick a removed workspace or chat to open again
 shoal restore <id>            # Open a removed workspace or chat again, resuming its agents
 shoal restore 3 --checkpoint  # Pick one of the workspace's checkpoints
 shoal restore 3 --checkpoint 3 # Return the workspace to checkpoint 3
+shoal move 3 --machine desk   # Move the workspace or chat to a machine joined to the same hub
 shoal move 3 --ssh other      # Move the workspace or chat to another machine; its agents continue there
 shoal move 3 -o - | ssh other shoal restore --from - # The same through any pipe
 shoal move --repo app --all -o moving # Write every workspace and chat of app to a directory, a file each
