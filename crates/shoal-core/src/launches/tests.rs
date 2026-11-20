@@ -263,29 +263,23 @@ fn the_arguments_other_than_the_mode_decide_the_kind_they_fit() {
 }
 
 #[test]
-fn an_issues_labels_name_its_mode() {
-    let config = config::Issue {
-        required_labels: Vec::new(),
-        plan_label: Some("needs-plan".into()),
-        planned_label: Some("planned".into()),
-        assign: Default::default(),
-        area_prefix: None,
-    };
+fn an_items_labels_name_its_mode() {
+    let modes = [("plan", "needs-plan"), ("worker", "planned")];
     let mode = |labels: &[&str]| {
         let labels: Vec<String> = labels.iter().map(|label| (*label).into()).collect();
-        labelled_mode(&config, &labels)
+        labelled_mode(modes, &labels)
     };
-    assert_eq!(mode(&["type/bug", "planned"]), Some(ModeName::DEFAULT));
-    assert_eq!(mode(&["needs-plan"]), Some(ModeName::PLAN));
-    // A settled plan wins over a stale label asking for one.
-    assert_eq!(mode(&["needs-plan", "planned"]), Some(ModeName::DEFAULT));
-    assert_eq!(mode(&["type/bug"]), None);
-    let unset = config::Issue {
-        plan_label: None,
-        planned_label: None,
-        ..config
-    };
-    assert_eq!(labelled_mode(&unset, &["needs-plan".into()]), None);
+    assert_eq!(mode(&["type/bug", "planned"]), Ok(Some(ModeName::DEFAULT)));
+    assert_eq!(mode(&["needs-plan"]), Ok(Some(ModeName::PLAN)));
+    assert_eq!(mode(&["type/bug"]), Ok(None));
+    let several = mode(&["needs-plan", "planned"]).unwrap_err();
+    assert_eq!(
+        several.0,
+        [
+            (ModeName::PLAN, "needs-plan".to_owned()),
+            (ModeName::DEFAULT, "planned".to_owned())
+        ]
+    );
 }
 
 #[test]

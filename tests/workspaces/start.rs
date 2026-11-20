@@ -2940,7 +2940,7 @@ fn remove_guidance(text: &str) -> String {
 #[test]
 fn start_takes_the_mode_an_issues_labels_name() {
     let fixture = Fixture::with_config(Some(
-        "[issue]\nplan_label = 'needs-plan'\nplanned_label = 'planned'\n",
+        "[modes.plan]\nlabel = 'needs-plan'\n[modes.worker]\nlabel = 'planned'\n",
     ));
     forge_origin(&fixture);
     install_api_curl(&fixture.root.path().join("bin"));
@@ -3042,7 +3042,7 @@ fn start_takes_the_mode_an_issues_labels_name() {
 #[test]
 fn plan_mode_opens_a_chat_on_an_issue_that_needs_a_plan() {
     let fixture = Fixture::with_config(Some(
-        "[issue]\nplan_label = 'needs-plan'\nplanned_label = 'planned'\n",
+        "[modes.plan]\nlabel = 'needs-plan'\n[modes.worker]\nlabel = 'planned'\n",
     ));
     forge_origin(&fixture);
     // The agents' directory is on the terminal's PATH.

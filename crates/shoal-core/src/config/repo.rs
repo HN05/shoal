@@ -768,8 +768,8 @@ pub struct PrConfig {
     pub watch_merge_runs: Option<bool>,
 }
 
-/// The labels a new issue needs, the labels that say whether an issue's
-/// plan is settled, and whether a space's issues are assigned on the forge.
+/// The labels a new issue needs and whether a space's issues are assigned
+/// on the forge.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Issue)]
@@ -778,10 +778,6 @@ pub struct IssueConfig {
     /// inherited entries off.
     #[option(default = Vec::new())]
     pub required_labels: Option<Vec<String>>,
-    /// Marks an issue that needs a plan before anyone implements it.
-    pub plan_label: Option<String>,
-    /// Marks an issue whose body holds a settled plan.
-    pub planned_label: Option<String>,
     /// Whose accounts Shoal adds to the forge assignees of the issues
     /// spaces link as assigned.
     #[option(default = IssueAssign::default())]

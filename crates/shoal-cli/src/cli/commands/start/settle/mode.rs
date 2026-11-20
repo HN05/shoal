@@ -23,10 +23,9 @@ use crate::{
 
 /// The mode of `launch` as far as nothing needs asking: the one it names,
 /// off a terminal the [`launches::default_mode`], on one the plan mode for
-/// an issue to pick, which no other mode takes, or the mode the labels of
-/// the issue it names in the `found` repository call for under
-/// `settings` among the `modes` the start may take; otherwise one a
-/// terminal picks once the daemon has checked the rest.
+/// an issue to pick, which no other mode takes, or the [`item_mode`] of
+/// the issue it names in the `found` repository; otherwise one a terminal
+/// picks once the daemon has checked the rest.
 pub(super) async fn decided(
     ctx: &Context,
     launch: &Launch,
@@ -43,10 +42,10 @@ pub(super) async fn decided(
         return Ok(ModeChoice::Named(modes::ModeName::PLAN));
     }
     let labelled = match found {
-        Some(repo) => issue_mode(ctx, launch, repo, (settings, modes)).await?,
+        Some(repo) => item_mode(ctx, launch, repo, (settings, modes)).await?,
         None => None,
     };
-    Ok(labelled.map_or(ModeChoice::Pick, ModeChoice::Named))
+    Ok(labelled.unwrap_or(ModeChoice::Pick))
 }
 
 /// Refuse the copy and fork pickers that making the launch of `args`
@@ -147,30 +146,46 @@ pub(super) fn starts_workspace(
     Ok(configured.is_some_and(|mode| mode.kind == SpaceKind::Workspace))
 }
 
-/// The mode the labels of the issue `launch` names in `repo` call for
-/// under `settings`, by [`launches::labelled_mode`], among the `modes` the
-/// start may take; none without such an issue or a label to look for, or
-/// for arguments that fit one kind of space, whose picker the labels do
-/// not answer.
-async fn issue_mode(
+/// The mode the labels of the issue `launch` names in `repo` call for, by
+/// [`launches::labelled_mode`] among the [`labelled`] modes of `settings`;
+/// a pick on a terminal where they call for several, and refused off one;
+/// none without such an issue or a mode with a label it carries.
+async fn item_mode(
     ctx: &Context,
     launch: &Launch,
     repo: &Repository,
     (settings, modes): (&Effective, &ModeShapes),
-) -> Result<Option<modes::ModeName>> {
-    if launches::fitting_kind(launch).is_some() {
-        return Ok(None);
-    }
+) -> Result<Option<ModeChoice>> {
     let Some(input) = launches::named_issue(launch)? else {
         return Ok(None);
     };
-    if settings.issue.plan_label.is_none() && settings.issue.planned_label.is_none() {
+    let labelled = labelled(launch, settings, modes)?;
+    if labelled.is_empty() {
         return Ok(None);
     }
     let context = issues::read_context(ctx, repo).await?;
-    let issue = issues::load(ctx, context, input).await?;
-    let mode = launches::labelled_mode(&settings.issue, &issue.labels);
-    Ok(mode.filter(|mode| modes::get(modes, mode).is_ok()))
+    let issue = issues::load(ctx, context, input.clone()).await?;
+    match launches::labelled_mode(labelled, &issue.labels) {
+        Ok(mode) => Ok(mode.map(ModeChoice::Named)),
+        Err(_) if ui::can_pick(ctx) => Ok(Some(ModeChoice::Pick)),
+        Err(several) => anyhow::bail!("issue {input}: {several}"),
+    }
+}
+
+/// Each mode of `settings` with a label, by name with its label, among the
+/// `modes` the start may take that start the spaces the arguments of
+/// `launch` other than the mode [`fit`].
+fn labelled<'a>(
+    launch: &Launch,
+    settings: &'a Effective,
+    modes: &ModeShapes,
+) -> Result<Vec<(&'a str, &'a str)>> {
+    let fit = fit(launch)?;
+    let fits = |name: &str| modes.get(name).is_some_and(|shape| fit.admits(shape));
+    Ok((settings.modes.iter())
+        .filter(|(name, _)| fits(name))
+        .filter_map(|(name, mode)| Some((name.as_str(), mode.label.as_deref()?)))
+        .collect())
 }
 
 #[cfg(test)]

@@ -198,8 +198,8 @@ impl CreateArgs {
 #[derive(Debug, Default, Clone, Args)]
 pub struct StartArgs {
     /// The mode the agent starts in; on a terminal, a picker, which an issue
-    /// labelled [issue] planned_label or plan_label answers with worker or
-    /// plan when the arguments ask for neither kind of space; else worker.
+    /// carrying a mode's [modes.NAME] label answers with that mode; else
+    /// worker.
     #[arg(short = 'm', long)]
     pub mode: Option<crate::config::modes::ModeName>,
     /// Set a permission of the agent, as KEY=VALUE such as push=propose or
@@ -266,7 +266,7 @@ pub struct StartArgs {
     pub branch: Option<String>,
     /// The forge issue number or URL the agent starts on; a workspace's name
     /// derives from it. Without a value in plan mode, offers the open issues
-    /// labelled [issue] plan_label.
+    /// carrying the plan mode's label.
     #[arg(short = 'i', long, num_args = 0..=1, value_parser = issue_input)]
     pub issue: Option<Option<crate::forge::items::reference::ItemInput>>,
     /// Create this worktree at an exact new directory instead of the repository default.

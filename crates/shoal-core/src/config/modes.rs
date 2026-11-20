@@ -70,6 +70,9 @@ pub struct ModeConfig {
     /// Whether its agents take a heavy slot, wherever they run.
     #[option(default = Weight::Heavy)]
     pub weight: Option<Weight>,
+    /// The forge label of the issues and PRs `shoal start` starts in this
+    /// mode when it names none.
+    pub label: Option<String>,
 }
 
 shoal_states::states!(
@@ -110,6 +113,7 @@ pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
             SpaceKind::Chat => Weight::Light,
             SpaceKind::Workspace => Weight::Heavy,
         }),
+        label: None,
     };
     let focused = |mode: ModeConfig| ModeConfig {
         focus: Some(true),
@@ -303,10 +307,16 @@ fn built_in_permissions(name: &ModeName) -> PermissionsConfig {
     }
 }
 
-/// Refuse a mode that names a rule no layer defines, or a workspace without
-/// a repository, once they combine.
+/// Refuse a mode that names a rule no layer defines, a workspace without
+/// a repository, or a label another mode has, once they combine.
 pub fn check(modes: &BTreeMap<String, Mode>, rules: &BTreeMap<String, Rule>) -> Result<()> {
+    let mut labelled = BTreeMap::new();
     for (name, mode) in modes {
+        if let Some(label) = &mode.label
+            && let Some(first) = labelled.insert(label, name)
+        {
+            bail!("modes.{first} and modes.{name} both have label {label:?}; give each its own");
+        }
         ensure!(
             mode.repository || mode.kind == SpaceKind::Chat,
             "modes.{name}.repository = false needs kind = \"chat\": a workspace belongs to a \

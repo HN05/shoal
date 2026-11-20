@@ -7,7 +7,7 @@ use crate::{
         context::Context,
         output::{Palette, Style},
     },
-    config::modes::{self, ModeName, ModeShapes},
+    config::modes::{self, ModeName, ModeShape, ModeShapes},
     model::SpaceKind,
 };
 
@@ -26,6 +26,16 @@ pub enum ModeChoice {
 pub struct ModeFit {
     pub kind: Option<SpaceKind>,
     pub repository: Option<bool>,
+}
+
+impl ModeFit {
+    /// Whether a mode that starts the space `shape` describes fits.
+    pub fn admits(&self, shape: &ModeShape) -> bool {
+        self.kind.is_none_or(|kind| kind == shape.kind)
+            && self
+                .repository
+                .is_none_or(|repository| repository == shape.repository)
+    }
 }
 
 impl ModeChoice {
@@ -69,11 +79,8 @@ fn mode_entries(modes: &ModeShapes, fit: ModeFit, palette: Palette) -> Entries {
         _ => ModeName::DEFAULT,
     };
     let mut modes: Vec<_> = (modes.iter())
+        .filter(|(_, mode)| fit.admits(mode))
         .map(|(name, mode)| (name, mode.kind, mode.repository))
-        .filter(|(_, kind, repository)| {
-            fit.kind.is_none_or(|fit| fit == *kind)
-                && fit.repository.is_none_or(|fit| fit == *repository)
-        })
         .collect();
     modes.sort_by_key(|(name, _, _)| usual != name.as_str());
     let rows = modes

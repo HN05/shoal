@@ -3470,15 +3470,18 @@ act in and their permissions as that repository's config resolves them, and
 its proposals belong to that repository; it links nothing, since its links would name no one
 repository.
 
-Issues split by whether their plan is settled: `[issue] plan_label` marks one
-that needs the owner's choices and `planned_label` one whose body holds a plan
-an agent implements without asking. Both are repository configuration, so Shoal
-assumes no label scheme, and issues with neither stay outside the flow.
-The labels also answer the mode picker of a start on an issue, the worker for a
-planned issue and the plan mode for one that needs a plan, since the label
-already says which work comes next; an issue with neither still gets the
-picker. A start without a terminal keeps its default mode, so a script or
-agent that omits `--mode` gets the same space whatever the issue's labels.
+A mode may have a forge label, `[modes.NAME] label`, which says that an issue
+carrying it takes that mode next, such as the plan mode for one that needs the
+owner's choices and the worker for one whose body holds a plan an agent
+implements without asking. The label lives on the mode, so any mode, built in
+or the user's, joins the flow the same way; labels are configuration, so Shoal
+assumes no label scheme, ships none, and refuses two modes with the same
+label, and issues with no mode's label stay outside the flow.
+The labels answer the mode picker of a start on an issue, since the label
+already says which work comes next; an issue with no mode's label, or with the
+labels of several, still gets the picker. A start without a terminal keeps its
+default mode, so a script or agent that omits `--mode` gets the same space
+whatever the issue's labels.
 The plan mode settles a plan in a chat, not a workspace: planning changes no
 code, needs the user's attention and their authority to rewrite the issue, and
 the chat coordinates the implementing workspace when the user has it start

@@ -2322,8 +2322,7 @@ The agent's configured launcher runs in the registered checkout with the mode's
 rendered rules as its instructions. With `--issue`, the chat is assigned the
 issue and named after its title without asking, and the agent starts
 on it with the mode's instructions instead of waiting for you; without a value,
-`--issue` in the `plan` mode offers the open issues labelled `[issue]
-plan_label`. An agent with an
+`--issue` in the `plan` mode offers the open issues carrying its `label`. An agent with an
 `instructions` template (built in for Claude Code and Codex CLI) takes them
 apart from its first message and waits for yours; another receives them as its
 first message, through `{prompt}` or as its first argument, ending with a
@@ -2576,15 +2575,15 @@ later, which the daemon marks with its state directory as it does `.tmp`, and [`
 
 `shoal start --mode plan --issue [ISSUE]` starts a [chat](#chats) that settles
 an issue's plan with you before anyone implements it. Without an issue, a
-picker offers the open issues labelled `[issue] plan_label`. The agent checks
-the issue against the default branch, talks the open points through with you
-in the chat, then rewrites the issue's body with a Plan section, since an
-implementing agent receives only the body, swaps `plan_label` for
-`planned_label` where they are set, and opens follow-up issues for work the
-plan splits off. You start an agent on it when you want one, with
-`shoal start --issue`. On a terminal, `shoal start --issue ISSUE` without
-`--mode` starts this chat for an issue labelled `plan_label`. Both labels are
-[`[issue]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#issues) options.
+picker offers the open issues carrying the `plan` mode's
+[`label`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules).
+The agent checks the issue against the default branch, talks the open points
+through with you in the chat, then rewrites the issue's body with a Plan
+section, since an implementing agent receives only the body, swaps its mode's
+label for that of the mode that should carry out the plan, where modes have
+labels, and opens follow-up issues for work the plan splits off. You start an
+agent on it when you want one, with `shoal start --issue`, which takes the
+mode its labels call for.
 
 ### Agent queue
 
@@ -3104,10 +3103,10 @@ only the modes of the kind of space they ask for, a workspace for a branch,
 `--base` or another flag only a workspace takes, and only
 modes in a repository when they name a repository or issue or ask for a kind
 of space; when only one fits, the start takes it without asking, as it takes
-`plan` for `--issue` without a value, which no other mode accepts. When the
-arguments ask for neither kind of space, a start on an issue labelled `[issue]
-planned_label` takes `worker` and one labelled `plan_label` takes `plan`
-instead of the picker. A
+`plan` for `--issue` without a value, which no other mode accepts. A start
+on an issue carrying a mode's `label` takes that mode instead of the picker,
+among the modes that fit its other arguments; one carrying the labels of
+several opens the picker. A
 new agent in an existing space may start in another mode; a running agent's mode never changes. A space records the mode its agent started in, a workspace that of its
 latest agent, and restores and restarts keep it; `--json` gives it as `mode`,
 `shoal status` names it, and the rows of `shoal list`, `shoal inbox`, the

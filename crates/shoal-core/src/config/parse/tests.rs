@@ -57,6 +57,8 @@ fn removed_settings_are_refused() {
         let error = message(global(text).unwrap_err());
         assert!(error.contains(replacement), "{error}");
     }
+    let error = message(repository("[issue]\nplan_label = 'needs-plan'\n").unwrap_err());
+    assert!(error.contains("[modes.NAME]"), "{error}");
 }
 
 #[test]

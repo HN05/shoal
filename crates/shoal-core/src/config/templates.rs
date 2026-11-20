@@ -1,5 +1,5 @@
 //! Plain-text templates: substitute known fields once, never evaluate their values.
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::BTreeMap};
 
 use anyhow::{Context, Result};
 
@@ -231,7 +231,7 @@ pub fn brief(
 ) -> Result<Brief> {
     let resolved = place.mode(settings, mode)?;
     let fields = Fields::new(
-        settings,
+        (settings, mode),
         place,
         subject.and_then(|subject| subject.issue.as_ref()),
     );
@@ -253,7 +253,8 @@ pub fn system(
     place: Place<'_>,
     issue: Option<&IssueFields>,
 ) -> Result<String> {
-    system_text(settings, mode, place, &Fields::new(settings, place, issue))
+    let fields = Fields::new((settings, mode), place, issue);
+    system_text(settings, mode, place, &fields)
 }
 
 /// The facts of `place`, the space rules, then the rules of `mode`, with
@@ -322,7 +323,11 @@ fn join(parts: impl IntoIterator<Item = String>) -> String {
 struct Fields(Vec<(&'static str, String)>);
 
 impl Fields {
-    fn new(settings: &Settings, place: Place<'_>, issue: Option<&IssueFields>) -> Self {
+    fn new(
+        (settings, mode): (&Settings, &modes::ModeName),
+        place: Place<'_>,
+        issue: Option<&IssueFields>,
+    ) -> Self {
         let mut fields = match place {
             Place::Workspace {
                 workspace,
@@ -376,7 +381,7 @@ impl Fields {
                 ("{issue.url}", issue.url.clone()),
             ]);
         }
-        fields.push(("{relabel}", relabel(&settings.issue)));
+        fields.push(("{relabel}", relabel(&settings.modes, mode)));
         Self(fields)
     }
 
@@ -397,18 +402,26 @@ fn head_label(workspace: &Workspace) -> String {
     }
 }
 
-/// The sentence that swaps an issue's labels once its plan is settled.
-fn relabel(labels: &crate::config::Issue) -> String {
-    match (
-        labels.plan_label.as_deref(),
-        labels.planned_label.as_deref(),
-    ) {
-        (Some(plan), Some(planned)) => {
-            format!(" Then replace its `{plan}` label with `{planned}`.")
-        }
-        (Some(plan), None) => format!(" Then remove its `{plan}` label."),
-        (None, Some(planned)) => format!(" Then add the `{planned}` label."),
-        (None, None) => String::new(),
+/// The sentence that has an agent in `mode`, once it settles an issue's
+/// plan, swap the label of its own mode among `modes` for that of the mode
+/// that carries the plan out; empty while no mode has a label.
+fn relabel(modes: &BTreeMap<String, modes::Mode>, mode: &modes::ModeName) -> String {
+    let own = modes
+        .get(mode.as_str())
+        .and_then(|mode| mode.label.as_deref());
+    let others: Vec<_> = (modes.iter())
+        .filter(|(name, _)| *name != mode.as_str())
+        .filter_map(|(name, mode)| Some(format!("`{}` for `{name}`", mode.label.as_deref()?)))
+        .collect();
+    let carrying = format!(
+        "the label of the mode that should carry out the plan: {}",
+        others.join(", ")
+    );
+    match (own, others.is_empty()) {
+        (None, true) => String::new(),
+        (Some(own), true) => format!(" Then remove its `{own}` label."),
+        (Some(own), false) => format!(" Then replace its `{own}` label with {carrying}."),
+        (None, false) => format!(" Then add {carrying}."),
     }
 }
 

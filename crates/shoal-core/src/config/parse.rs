@@ -62,6 +62,14 @@ const REMOVED: &[(&[&str], &str)] = &[
         "machine.max_agents is now machine.max_heavy_agents",
     ),
     (
+        &["issue", "plan_label"],
+        "[issue] plan_label is gone: set label under [modes.NAME], such as [modes.plan] label = \"needs-plan\"",
+    ),
+    (
+        &["issue", "planned_label"],
+        "[issue] planned_label is gone: set label under [modes.NAME], such as [modes.worker] label = \"planned\"",
+    ),
+    (
         &["agent", "max_running"],
         "agent.max_running is now agent.max_heavy_running",
     ),

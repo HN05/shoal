@@ -275,14 +275,21 @@ fn plan_instructions_swap_only_configured_labels() {
             .first_message
             .unwrap()
     };
+    let labelled = "[modes.plan]\nlabel = 'needs-plan'\n[modes.worker]\nlabel = 'planned'\n\
+                    [modes.coordinate]\nlabel = 'split'\n";
+    let swap = first(labelled);
+    assert!(swap.contains("replace its `needs-plan` label"), "{swap}");
     assert!(
-        first("[issue]\nplan_label = 'needs-plan'\nplanned_label = 'planned'\n")
-            .contains("replace its `needs-plan` label with `planned`")
+        swap.contains("`split` for `coordinate`, `planned` for `worker`."),
+        "{swap}"
     );
+    let alone = first("[modes.plan]\nlabel = 'needs-plan'\n");
+    assert!(alone.contains("remove its `needs-plan` label"), "{alone}");
+    let add = first("[modes.worker]\nlabel = 'planned'\n");
     assert!(
-        first("[issue]\nplan_label = 'needs-plan'\n").contains("remove its `needs-plan` label")
+        add.contains("add the label") && add.contains("`planned` for `worker`."),
+        "{add}"
     );
-    assert!(first("[issue]\nplanned_label = 'planned'\n").contains("add the `planned` label"));
     assert!(!first("").contains("label"));
 }
 

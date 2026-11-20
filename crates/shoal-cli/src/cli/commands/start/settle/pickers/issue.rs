@@ -13,8 +13,8 @@ use crate::{
 };
 
 /// The issue a start in plan mode that asks for one without naming it
-/// plans, picked on a terminal among the open issues labelled `[issue]
-/// plan_label` of its `repository`, under its `settings`; a launch that
+/// plans, picked on a terminal among the open issues of its `repository`
+/// labelled with the plan mode's label under its `settings`; a launch that
 /// names one keeps it.
 pub(in crate::cli::commands::start::settle) async fn pick_plan_issue(
     ctx: &Context,
@@ -26,26 +26,29 @@ pub(in crate::cli::commands::start::settle) async fn pick_plan_issue(
     }
     let repo = repository.context("name the repository whose issue the plan settles")?;
     let mode = (launch.mode.clone()).unwrap_or(config::modes::ModeName::DEFAULT);
-    let issue = picked(ctx, repo, &settings.issue, &mode).await?;
+    let issue = picked(ctx, repo, settings, &mode).await?;
     launch.issue = Some(IssueChoice::Named(issue));
     Ok(())
 }
 
-/// In `mode` plan, the number of an open issue of `repo` labelled `[issue]
-/// plan_label`, picked; other modes start on a named issue only.
+/// In `mode` plan, the number of an open issue of `repo` labelled with the
+/// plan mode's label under `settings`, picked; other modes start on a
+/// named issue only.
 async fn picked(
     ctx: &Context,
     repo: &Repository,
-    labels: &config::Issue,
+    settings: &Effective,
     mode: &config::modes::ModeName,
 ) -> Result<ItemInput> {
     ensure!(
         *mode == config::modes::ModeName::PLAN,
         "--issue needs a number or URL outside plan mode"
     );
-    let label = labels.plan_label.as_deref().context(
-        "set [issue] plan_label to choose among the issues that need a plan, or name an issue",
-    )?;
+    let label = (settings.modes.get(mode.as_str()))
+        .and_then(|mode| mode.label.as_deref())
+        .context(
+            "set [modes.plan] label to choose among the issues that need a plan, or name an issue",
+        )?;
     let context = issues::read_context(ctx, repo).await?;
     let search = Search::labelled(label);
     let issues = client::list_items(&ctx.paths, context.into(), ItemKind::Issue, search).await?;

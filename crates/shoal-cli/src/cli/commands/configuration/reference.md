@@ -523,6 +523,7 @@ instructions = "Fix the findings of the latest review."
 focus = true             # Over terminal.focus for its launches; unset follows it
 idle_wake_minutes = 60   # Unset or 0 never wakes its agent
 weight = "heavy"         # "light": no heavy slot; default "heavy", "light" for the built-in chat modes
+label = "needs-fixes"    # Default: unset
 
 [modes.review-fixer.permissions]
 push = "propose"
@@ -545,7 +546,10 @@ stopped for load or on idle, and a `heavy` one's wait for a heavy slot and are; 
 built-in modes that start chats are light, so one set to `kind = "workspace"`
 stays so. A chat without a repository takes its mode's weight from the global
 config and counts toward `machine.max_heavy_agents` alone.
-`permissions` takes the keys of
+`label` is a forge label that starts an issue or PR carrying it in this mode
+when `shoal start` names none, as [modes and rules](../../../../../../docs/reference.md#modes-and-rules)
+describes; no two modes may have the same label, and the built-in modes have
+none. `permissions` takes the keys of
 [`[permissions]`](#permissions). `[rules.<name>]` sets a rule's `text`, which
 any mode can list; a mode naming a rule no layer defines is refused.
 
@@ -567,8 +571,9 @@ the space, `{head}`, what a workspace has checked out (`on branch fix` or `at
 commit 3f2a9c1 (PR #8)`), `{repo}` for a chat, `{workspace_number}` for a chat
 in a workspace's worktree, `{updates}`, how the agent receives issue and PR
 activity, `{issue.number}`, `{issue.title}` and `{issue.url}` of the subject's
-issue, and `{relabel}`, the sentence that swaps the `[issue]` `plan_label` for
-`planned_label`; unknown placeholders stay literal.
+issue, and `{relabel}`, the sentence that has the agent swap its own mode's
+`label` for that of the mode that should carry out its plan, naming each mode
+with a label; unknown placeholders stay literal.
 
 ### Permissions
 
@@ -1036,17 +1041,14 @@ takes a free port instead of suggesting one. See
 ```toml
 [issue]
 required_labels = ["type/"]  # Default: []
-plan_label = "needs-plan"    # Default: unset
-planned_label = "planned"    # Default: unset
 assign = "agent"             # "agent", "user", "both" or "none"
 area_prefix = "area/"        # Default: unset
 ```
 
 `required_labels` names entries that every new issue's labels must each start
 with, so `area/` takes any area label; see
-[repository conventions](../../../../../../docs/reference.md#repository-conventions). `plan_label`
-marks issues that need a plan and `planned_label` those whose plan is settled;
-see [planning issues](../../../../../../docs/reference.md#planning-issues). `assign` says whose
+[repository conventions](../../../../../../docs/reference.md#repository-conventions); a mode's
+`label` says which issues it starts. `assign` says whose
 accounts join the forge assignees of an issue a space links as assigned: the
 agent account while an agent works the issue, the user's own login for every
 assigned link, both, or none; see
