@@ -36,84 +36,20 @@ fn additional_hook_paths_are_validated_in_global_config() {
 }
 
 #[test]
-fn template_states_the_defaults_and_its_examples_are_valid() {
-    let paths = Paths::for_test("/home/test");
+fn the_template_sets_nothing() {
     assert!(PACKAGED.contains(&("default", TEMPLATE)));
+    // Each setting stays commented out, so every release's defaults apply.
+    let written: toml::Table = toml::from_str(TEMPLATE).unwrap();
+    assert!(written.is_empty(), "the template sets {written}");
+}
+
+#[test]
+fn every_setting_the_template_shows_is_valid() {
+    let paths = Paths::for_test("/home/test");
     for (name, text) in PACKAGED {
         Config::parse(text, &paths)
             .unwrap_or_else(|error| panic!("invalid packaged config {name}: {error:#}"));
     }
-    let written = Config::parse(TEMPLATE, &paths).unwrap();
-    let defaults = Config::default();
-    assert_eq!(
-        written.root_dir(&paths).unwrap(),
-        defaults.root_dir(&paths).unwrap()
-    );
-    assert_eq!(written.repository.agent.default, None);
-    // The template writes the built-in defaults out explicitly.
-    let written_effective = written.effective(&RepoConfig::default()).unwrap();
-    let default_effective = defaults.effective(&RepoConfig::default()).unwrap();
-    assert_eq!(
-        written.repository.cleanup.auto.enabled,
-        Some(default_effective.cleanup.auto.enabled)
-    );
-    assert_eq!(
-        written.repository.cleanup.auto.idle_minutes,
-        Some(default_effective.cleanup.auto.idle_minutes)
-    );
-    assert_eq!(
-        written.repository.cleanup.pr.enabled,
-        Some(default_effective.cleanup.pr.enabled)
-    );
-    assert_eq!(
-        written.repository.cleanup.merged.enabled,
-        Some(default_effective.cleanup.merged.enabled)
-    );
-    assert_eq!(
-        written.repository.cleanup.merged.idle_minutes,
-        Some(default_effective.cleanup.merged.idle_minutes)
-    );
-    assert_eq!(
-        written.repository.cleanup.restore.retention_days,
-        Some(default_effective.cleanup.restore.retention_days)
-    );
-    assert_eq!(
-        written.repository.cleanup.restore.archive_max_mb,
-        Some(default_effective.cleanup.restore.archive_max_mb)
-    );
-    assert_eq!(
-        (written.repository.ports.start, written.repository.ports.end),
-        (
-            Some(default_effective.ports.start),
-            Some(default_effective.ports.end)
-        )
-    );
-    assert_eq!(
-        written_effective.cleanup.auto.delay(),
-        default_effective.cleanup.auto.delay()
-    );
-    assert_eq!(
-        (
-            written.machine.simulators.max_booted,
-            written.machine.simulators.max_devices,
-            written.machine.simulators.idle_seconds,
-            written.machine.simulators.allow_any
-        ),
-        (
-            defaults.machine.simulators.max_booted,
-            defaults.machine.simulators.max_devices,
-            defaults.machine.simulators.idle_seconds,
-            defaults.machine.simulators.allow_any
-        )
-    );
-    assert!(
-        written.machine.simulators.default.is_none()
-            && written.machine.simulators.profiles.is_empty()
-    );
-    assert!(
-        written.repository.resources.is_empty() && written.repository.resource_pools.is_empty()
-    );
-    // Every commented example, uncommented, is a valid setting.
     let enabled: String = TEMPLATE
         .lines()
         .map(|line| match line.strip_prefix("# ") {

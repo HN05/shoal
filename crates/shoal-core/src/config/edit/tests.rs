@@ -14,6 +14,19 @@ fn edits_dotted_and_quoted_keys_without_losing_comments() {
 }
 
 #[test]
+fn settings_added_to_the_template_go_above_its_comments_in_order() {
+    let template = include_str!("../../../configs/default.toml");
+    let result = edit(template, "cleanup.auto.idle_minutes", Some("20")).unwrap();
+    let result = edit(&result, "agent.default", Some("claude")).unwrap();
+    let (settings, comments) = result.split_at(result.find("# ").unwrap());
+    assert_eq!(
+        settings,
+        "[cleanup.auto]\nidle_minutes = 20\n\n[agent]\ndefault = \"claude\"\n"
+    );
+    assert_eq!(comments, template);
+}
+
+#[test]
 fn handles_inline_tables_and_refuses_to_traverse_scalars() {
     let result = edit("codex = { model = 'fast' }\n", "codex.model", Some("slow")).unwrap();
     let parsed: toml::Value = toml::from_str(&result).unwrap();

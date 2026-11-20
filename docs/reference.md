@@ -136,8 +136,9 @@ without an installed service offers to run `shoal daemon install` in an interact
 current `PATH` for the service, so install runtime dependencies and any hook
 tools first. It also creates `~/.config/shoal/config.toml` (or
 `$XDG_CONFIG_HOME/shoal/config.toml`) from
-[default.toml](../crates/shoal-core/configs/default.toml), which states every default,
-never touching an existing file; `--dry-run` writes
+[default.toml](../crates/shoal-core/configs/default.toml), which shows every
+setting commented out with its default and sets none, so each release's
+defaults apply, never touching an existing file; `--dry-run` writes
 nothing. Installation prints
 the shell initialization hint only when neither `.bashrc` nor `.zshrc` (under
 `ZDOTDIR` when set) contains an active initialization command, and names the

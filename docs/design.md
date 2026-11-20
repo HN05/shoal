@@ -960,6 +960,11 @@ installation. A shared release-target table drives cross-builds,
 archive names and Homebrew platform selectors.
 Named configuration templates in `crates/shoal-core/configs/` are embedded at build time, so
 installation needs no source checkout or network access.
+The installed global config sets nothing: it shows every setting commented
+out with its default, since an installed file never changes, so a live value
+would pin the default of the release that wrote it and break the file once a
+later release renamed or removed that key. `shoal config set` adds a setting
+above the comments, which stay as its reference.
 Shoal owns the generated formula. One Forgejo Actions workflow releases: it
 bumps versions, validates, creates and merges a version PR under normal branch
 protection, tags the exact merged commit, publishes merged-PR notes excluding release
