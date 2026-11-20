@@ -209,3 +209,6 @@ pub(super) fn text(status: StatusCode, message: &str) -> Response<Body> {
     *response.status_mut() = status;
     response
 }
+
+#[cfg(test)]
+mod tests;

@@ -8,14 +8,12 @@ use tokio::{
     sync::Semaphore,
 };
 
-use shoal_hub::{
+use crate::{
+    Hub,
+    config::Config,
     identity::{Identity, KeyPair, nonce},
     listener, members,
-};
-
-use crate::{
-    config::Config,
-    daemon::{manager::Manager, test_daemon::HANG, test_support},
+    stand_in::{self, HANG, StandIn},
     time::UnixTime,
 };
 
@@ -43,37 +41,35 @@ async fn server() -> (SocketAddr, tokio::sync::mpsc::UnboundedReceiver<String>) 
 }
 
 /// The hub forwarding `/quay/` to `server`, with a paired device.
-async fn hub(server: SocketAddr) -> (tempfile::TempDir, Arc<Manager>, MemberId, Identity) {
-    let (root, manager) = test_support::manager().await;
-    forwarding(&manager, server);
+async fn hub(server: SocketAddr) -> (tempfile::TempDir, Arc<Hub>, MemberId, Identity) {
+    let root = tempfile::tempdir().unwrap();
+    let hub = forwarding(&root, server).await;
     let device = Identity::new(&KeyPair::generate().unwrap()).unwrap();
     let key = device.public.clone();
-    let member = (manager.store)
+    let member = (hub.store)
         .write(move |tx| members::join(tx, MemberKind::Device, "phone", &key))
         .await
         .unwrap();
-    (root, manager, member, device)
+    (root, hub, member, device)
 }
 
-/// Make `manager` the hub, forwarding `/quay/` to `server`.
-fn forwarding(manager: &Manager, server: SocketAddr) {
+/// The hub over the store in `root`, forwarding `/quay/` to `server`.
+async fn forwarding(root: &tempfile::TempDir, server: SocketAddr) -> Arc<Hub> {
     let config = format!(
         "[machine.hub]\nenabled = true\nlisten = \"127.0.0.1:0\"\n[machine.hub.forward]\n\"/quay/\" = \"{server}\"\n"
     );
-    manager
-        .config_state
-        .publish(Config::from_toml(&config).unwrap());
+    stand_in::hub(root, Config::from_toml(&config).unwrap()).await
 }
 
 /// The response the hub's listener gives `request`, its head and body.
-async fn respond(manager: &Arc<Manager>, request: String) -> String {
+async fn respond(hub: &Arc<Hub>, request: String) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
-    let manager = manager.clone();
+    let hub = hub.clone();
     tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
         let permit = Arc::new(Arc::new(Semaphore::new(1)).acquire_owned().await.unwrap());
-        listener::serve(manager.hub.clone(), manager, stream, permit).await;
+        listener::serve(hub, Arc::new(StandIn), stream, permit).await;
     });
     let mut client = TcpStream::connect(address).await.unwrap();
     client.write_all(request.as_bytes()).await.unwrap();
@@ -102,10 +98,10 @@ fn signed(member: &MemberId, key: &Identity, target: &str, nonce: &str) -> Strin
 #[tokio::test]
 async fn a_paired_device_s_signed_request_reaches_the_server_once() {
     let (address, mut heads) = server().await;
-    let (_root, manager, member, device) = hub(address).await;
+    let (root, hub, member, device) = hub(address).await;
     let fresh = nonce().to_string();
     let request = signed(&member, &device, "/quay/board?view=all", &fresh);
-    let response = respond(&manager, request.clone()).await;
+    let response = respond(&hub, request.clone()).await;
     assert!(response.starts_with("HTTP/1.1 200"), "{response}");
     assert!(response.ends_with("hi"), "{response}");
     let head = heads.recv().await.unwrap().to_lowercase();
@@ -113,11 +109,10 @@ async fn a_paired_device_s_signed_request_reaches_the_server_once() {
     assert!(head.contains(&format!("shoal-member: {member}")), "{head}");
     assert!(!head.contains(app_servers::SIGNATURE), "{head}");
     // The same request again, as whatever saw it might send it, and
-    // again once the hub's daemon restarted.
-    let replayed = respond(&manager, request.clone()).await;
+    // again once the hub restarted over the same store.
+    let replayed = respond(&hub, request.clone()).await;
     assert!(replayed.starts_with("HTTP/1.1 401"), "{replayed}");
-    let restarted = Manager::open(manager.paths.clone()).await.unwrap();
-    forwarding(&restarted, address);
+    let restarted = forwarding(&root, address).await;
     let replayed = respond(&restarted, request).await;
     assert!(replayed.starts_with("HTTP/1.1 401"), "{replayed}");
     assert!(heads.try_recv().is_err());
@@ -126,7 +121,7 @@ async fn a_paired_device_s_signed_request_reaches_the_server_once() {
 #[tokio::test]
 async fn a_request_no_paired_member_signed_never_reaches_the_server() {
     let (address, mut heads) = server().await;
-    let (_root, manager, member, device) = hub(address).await;
+    let (_root, hub, member, device) = hub(address).await;
     let stranger = Identity::new(&KeyPair::generate().unwrap()).unwrap();
     let unsigned = "GET /quay/ HTTP/1.1\r\nhost: hub\r\nconnection: close\r\n\r\n".to_owned();
     let unknown = signed(
@@ -149,22 +144,22 @@ async fn a_request_no_paired_member_signed_never_reaches_the_server() {
         ),
     );
     for request in [unsigned, unknown, forged, moved, doubled] {
-        let response = respond(&manager, request.clone()).await;
+        let response = respond(&hub, request.clone()).await;
         assert!(
             response.starts_with("HTTP/1.1 401"),
             "{request}\n{response}"
         );
     }
     let id = member.clone();
-    (manager.store)
+    (hub.store)
         .write(move |tx| members::revoke(tx, &id))
         .await
         .unwrap();
     let revoked = signed(&member, &device, "/quay/", &nonce().to_string());
-    let response = respond(&manager, revoked).await;
+    let response = respond(&hub, revoked).await;
     assert!(response.starts_with("HTTP/1.1 401"), "{response}");
     let elsewhere = signed(&member, &device, "/other/", &nonce().to_string());
-    let response = respond(&manager, elsewhere).await;
+    let response = respond(&hub, elsewhere).await;
     assert!(response.starts_with("HTTP/1.1 404"), "{response}");
     assert!(heads.try_recv().is_err());
 }
@@ -198,14 +193,14 @@ async fn read_head(stream: &mut TcpStream) -> String {
 
 #[tokio::test]
 async fn an_upgrade_carries_bytes_both_ways_and_holds_its_connection_s_permit() {
-    let (_root, manager, member, device) = hub(echo_server().await).await;
+    let (_root, hub, member, device) = hub(echo_server().await).await;
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let connections = Arc::new(Semaphore::new(1));
     let permit = Arc::new(connections.clone().acquire_owned().await.unwrap());
     tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
-        listener::serve(manager.hub.clone(), manager, stream, permit).await;
+        listener::serve(hub, Arc::new(StandIn), stream, permit).await;
     });
     let mut client = TcpStream::connect(address).await.unwrap();
     let request = signed(&member, &device, "/quay/live", &nonce().to_string())
