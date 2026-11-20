@@ -27,6 +27,7 @@ use crate::{
 use shoal_forge::{RepoRequests, ci::runner::JobCommand, test_support::Server};
 use shoal_protocol::resources::ResourceRequest;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_runner::daemon::Workspaces as _;
 
 /// A test launch's command and the execution standing in for it.
 type Launched = (JobCommand, StartedExecution);
@@ -381,9 +382,9 @@ pub(super) fn launched(workspace: &str) -> Launched {
 pub(super) async fn admit_and_claim(manager: &Manager) -> Vec<QueueEntry> {
     refresh_waiting_jobs(manager).await;
     manager.dispatch_queue().await.unwrap();
-    let admitted = manager.admitted_jobs().await.unwrap();
+    let admitted = admitted_jobs(manager).await;
     for entry in &admitted {
-        manager.claim_job(entry).await;
+        claim_job(manager, entry).await;
     }
     admitted
 }
@@ -623,7 +624,7 @@ async fn a_job_waits_while_its_permit_pool_is_full() {
     );
     // It waits a while before admission tries it again, held by the pool.
     manager.dispatch_queue().await.unwrap();
-    assert!(manager.admitted_jobs().await.unwrap().is_empty());
+    assert!(admitted_jobs(manager).await.is_empty());
     assert_eq!(
         job_entries(manager).await[0].held_by,
         Some(crate::model::HeldBy::Permits)
@@ -724,7 +725,7 @@ async fn turning_the_runner_off_withdraws_its_jobs_without_claiming_them() {
     refresh_waiting_jobs(manager).await;
     manager.dispatch_queue().await.unwrap();
     // Low free disk space admits one of them, more room both.
-    let admitted = manager.admitted_jobs().await.unwrap();
+    let admitted = admitted_jobs(manager).await;
     assert!(!admitted.is_empty());
     let id = fixture.repository.clone();
     manager
@@ -733,7 +734,7 @@ async fn turning_the_runner_off_withdraws_its_jobs_without_claiming_them() {
         .unwrap();
 
     // An admitted job leaves the queue unclaimed, and every other with it.
-    manager.claim_job(&admitted[0]).await;
+    claim_job(manager, &admitted[0]).await;
     assert!(job_entries(manager).await.is_empty());
     assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     let notifications = manager.notifications.list(false, 50).await.unwrap();
@@ -1371,10 +1372,10 @@ async fn a_job_admitted_as_the_system_shuts_down_waits_in_the_queue() {
     let manager = &fixture.manager;
     refresh_waiting_jobs(manager).await;
     manager.dispatch_queue().await.unwrap();
-    let admitted = manager.admitted_jobs().await.unwrap();
+    let admitted = admitted_jobs(manager).await;
     assert_eq!(admitted.len(), 1);
     manager.agent_queue.suspend(true).await;
-    manager.claim_job(&admitted[0]).await;
+    claim_job(manager, &admitted[0]).await;
     let waiting = job_entries(manager).await;
     assert_eq!(waiting.len(), 1);
     assert_eq!(waiting[0].state, QueueState::Queued);
@@ -1398,7 +1399,7 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
     let manager = &fixture.manager;
     refresh_waiting_jobs(manager).await;
     manager.dispatch_queue().await.unwrap();
-    let admitted = manager.admitted_jobs().await.unwrap();
+    let admitted = admitted_jobs(manager).await;
     assert_eq!(admitted.len(), 1);
     let entry = &admitted[0];
     let job = entry.job.as_deref().unwrap();
@@ -1409,8 +1410,8 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
     )
     .await
     .unwrap();
-    let workspace = manager
-        .create_claimed_workspace(entry, &forge, job)
+    let workspace = (manager.runner)
+        .create_claimed_workspace(&**manager, entry, &forge, job)
         .await
         .unwrap();
     let request = ResourceRequest {
@@ -1432,7 +1433,7 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
     // still admitted, is claimed again.
     finish_ended_jobs(manager).await;
     assert!(manager.workspace_by_id(&workspace.id).await.is_err());
-    manager.claim_job(entry).await;
+    claim_job(manager, entry).await;
     let claimed = manager.runner.claimed_jobs().await.unwrap();
     assert_eq!(claimed.len(), 1);
     assert_ne!(claimed[0].workspace_id, workspace.id);
@@ -1455,7 +1456,7 @@ async fn workspace_a_restart_caught_preparing(fixture: &Fixture) -> Workspace {
     let manager = &fixture.manager;
     refresh_waiting_jobs(manager).await;
     manager.dispatch_queue().await.unwrap();
-    let admitted = manager.admitted_jobs().await.unwrap();
+    let admitted = admitted_jobs(manager).await;
     let (entry, job) = (&admitted[0], admitted[0].job.as_deref().unwrap());
     let forge = crate::forge::ForgeRepo::resolve(
         &format!("http://{}/team/repo", fixture.server.host),
@@ -1463,8 +1464,8 @@ async fn workspace_a_restart_caught_preparing(fixture: &Fixture) -> Workspace {
     )
     .await
     .unwrap();
-    let recorded = manager
-        .record_claimed_workspace(entry, &forge, job)
+    let recorded = (manager.runner)
+        .record_claimed_workspace(&**manager, entry, &forge, job)
         .await
         .unwrap();
     let id = recorded.id().clone();
@@ -1866,6 +1867,16 @@ async fn removing_a_repository_deletes_its_runner_on_the_forge() {
 /// Bring the job entries in line with the jobs the forge lists as waiting.
 pub(super) async fn refresh_waiting_jobs(manager: &Manager) {
     manager.runner.refresh_waiting_jobs(manager).await.unwrap();
+}
+
+/// The job entries admission admitted.
+pub(super) async fn admitted_jobs(manager: &Manager) -> Vec<QueueEntry> {
+    manager.runner.admitted_jobs(manager).await.unwrap()
+}
+
+/// Claim the admitted job `entry`.
+pub(super) async fn claim_job(manager: &Manager, entry: &QueueEntry) {
+    manager.runner.claim_job(manager, entry).await;
 }
 
 /// End the claimed jobs whose runner ended.

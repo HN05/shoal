@@ -1,7 +1,7 @@
 //! PR jobs whose PR moved on, as the daemon's polls and claims meet them.
 use super::{
-    Fixture, admit_and_claim, fixture, hold_the_builds_permit, job, job_entries,
-    refresh_waiting_jobs,
+    Fixture, admit_and_claim, admitted_jobs, claim_job, fixture, hold_the_builds_permit, job,
+    job_entries, refresh_waiting_jobs,
 };
 use crate::{daemon::alerts::AlertKind, state::QueueState};
 
@@ -28,8 +28,8 @@ async fn cancel_failed(fixture: &Fixture) -> bool {
 /// Admit the queued jobs and claim each.
 async fn claim_admitted(manager: &crate::daemon::manager::Manager) {
     manager.dispatch_queue().await.unwrap();
-    for entry in manager.admitted_jobs().await.unwrap() {
-        manager.claim_job(&entry).await;
+    for entry in admitted_jobs(manager).await {
+        claim_job(manager, &entry).await;
     }
 }
 

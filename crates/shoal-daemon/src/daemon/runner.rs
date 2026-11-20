@@ -10,11 +10,10 @@
 //! ended give up their workspaces, admitted jobs are claimed, and the
 //! forge's waiting jobs are read while one could start, and every
 //! [`INTERVAL`] while none can.
-mod claims;
 mod ends;
+mod job_workspaces;
 
 pub(crate) use shoal_runner::jobs::JobStop;
-pub(crate) use shoal_runner::jobs::Registration;
 
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
@@ -99,7 +98,7 @@ async fn pass(manager: &Arc<Manager>) -> anyhow::Result<()> {
 /// Claim each admitted job no claim runs for yet, each in a task of its own
 /// that a daemon update waits for, and wake admission once it ends.
 async fn claim_admitted_jobs(manager: &Arc<Manager>) -> anyhow::Result<()> {
-    for entry in manager.admitted_jobs().await? {
+    for entry in manager.runner.admitted_jobs(&**manager).await? {
         if !manager.runner.jobs().begin_claim(&entry.id) {
             continue;
         }
@@ -107,7 +106,7 @@ async fn claim_admitted_jobs(manager: &Arc<Manager>) -> anyhow::Result<()> {
         let operation = manager.gates.owned_operation().await;
         tokio::spawn(async move {
             let _operation = operation;
-            manager.claim_job(&entry).await;
+            manager.runner.claim_job(&*manager, &entry).await;
             manager.runner.jobs().end_claim(&entry.id);
             manager.agent_queue.wake();
         });
@@ -207,6 +206,19 @@ impl shoal_runner::daemon::Records for RunnerRecords {
             recorded.spaces.insert(space);
         }
         Ok(recorded)
+    }
+
+    fn remove_queue_entry(&self, db: &Connection, id: &QueueEntryId) -> Result<()> {
+        db.execute("DELETE FROM agent_queue WHERE id=?1", [id])?;
+        Ok(())
+    }
+
+    fn return_job_entry(&self, db: &Connection, id: &QueueEntryId) -> Result<()> {
+        db.execute(
+            "UPDATE agent_queue SET state=?2 WHERE id=?1 AND state=?3",
+            params![id, QueueState::Queued, QueueState::Starting],
+        )?;
+        Ok(())
     }
 
     fn delete_waiting_entry(&self, db: &Connection, id: &QueueEntryId) -> Result<bool> {
@@ -319,27 +331,21 @@ impl shoal_runner::daemon::Executions for Manager {
         })
     }
 
+    fn launch_job_command<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+        log: std::path::PathBuf,
+        command: shoal_forge::ci::runner::JobCommand,
+    ) -> BoxFuture<'a, Result<ExecutionId>> {
+        Box::pin(Manager::launch_job_command(self, workspace, log, command))
+    }
+
     fn stop_job_runner<'a>(&'a self, id: &'a SpaceId, reason: String) -> BoxFuture<'a, Result<()>> {
         let request = StopRequest {
             reason,
             save: Save::Nothing,
         };
         Box::pin(async move { self.stop_space(&SpaceSelector::id(id), request).await })
-    }
-}
-
-impl shoal_runner::daemon::Workspaces for Manager {
-    fn move_job_workspace<'a>(
-        &'a self,
-        id: &'a SpaceId,
-        commit: &'a shoal_refs::CommitId,
-        reference: Option<&'a str>,
-    ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(Manager::move_job_workspace(self, id, commit, reference))
-    }
-
-    fn remove_job_workspace<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
-        Box::pin(Manager::remove_job_workspace(self, id))
     }
 }
 

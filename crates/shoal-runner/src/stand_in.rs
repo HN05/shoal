@@ -325,6 +325,15 @@ impl Agents for StandIn {
         Box::pin(async move { Ok(opened) })
     }
 
+    /// The stand-in's queue is never suspended.
+    fn queue_suspended(&self) -> bool {
+        false
+    }
+
+    fn lock_admission(&self) -> BoxFuture<'_, Box<dyn Send + '_>> {
+        Box::pin(async { Box::new(()) as Box<dyn Send> })
+    }
+
     /// A job could always start.
     fn job_could_start(&self) -> BoxFuture<'_, Result<bool>> {
         Box::pin(async { Ok(true) })
@@ -419,6 +428,15 @@ impl crate::daemon::Executions for StandIn {
         Box::pin(async { Ok(Vec::new()) })
     }
 
+    fn launch_job_command<'a>(
+        &'a self,
+        _: &'a Workspace,
+        _: std::path::PathBuf,
+        _: shoal_forge::ci::runner::JobCommand,
+    ) -> BoxFuture<'a, Result<shoal_ids::execution_ids::ExecutionId>> {
+        Box::pin(async { anyhow::bail!("the stand-in launches no job commands") })
+    }
+
     fn stop_job_runner<'a>(&'a self, _: &'a SpaceId, _: String) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { Ok(()) })
     }
@@ -464,6 +482,29 @@ impl crate::daemon::Workspaces for StandIn {
     fn remove_job_workspace<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { Ok(()) })
     }
+
+    fn record_job_workspace<'a>(
+        &'a self,
+        _: &'a RepositoryId,
+        _: (&'a str, shoal_protocol::space_names::SpaceName),
+        _: &'a shoal_refs::CommitId,
+        _: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<Box<dyn crate::daemon::RecordedJobWorkspace<'a> + 'a>>> {
+        Box::pin(async { anyhow::bail!("the stand-in records no job workspaces") })
+    }
+
+    fn workspace_settings<'a>(&'a self, _: &'a Workspace) -> BoxFuture<'a, Result<Effective>> {
+        Box::pin(async move { self.config.current().resolve(&self.layers()?) })
+    }
+
+    fn hold_permit<'a>(
+        &'a self,
+        _: &'a SpaceId,
+        _: &'a str,
+        _: &'a str,
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(true) })
+    }
 }
 
 /// No space has a coordinator, so every event reaches the user.
@@ -497,6 +538,14 @@ impl Records for StandIn {
     /// The stand-in records no executions.
     fn recorded_executions(&self, _: &Connection) -> Result<crate::daemon::RecordedExecutions> {
         Ok(Default::default())
+    }
+
+    fn remove_queue_entry(&self, _: &Connection, _: &QueueEntryId) -> Result<()> {
+        Ok(())
+    }
+
+    fn return_job_entry(&self, _: &Connection, _: &QueueEntryId) -> Result<()> {
+        Ok(())
     }
 
     /// Every entry still waits.

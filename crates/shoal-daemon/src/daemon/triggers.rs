@@ -88,6 +88,17 @@ impl Agents for Manager {
         Box::pin(Manager::started_launch(self, entry))
     }
 
+    fn queue_suspended(&self) -> bool {
+        self.agent_queue.suspended()
+    }
+
+    fn lock_admission(&self) -> BoxFuture<'_, Box<dyn Send + '_>> {
+        Box::pin(async move {
+            let guard: Box<dyn Send + '_> = Box::new(self.agent_queue.lock_admission().await);
+            guard
+        })
+    }
+
     fn job_could_start(&self) -> BoxFuture<'_, Result<bool>> {
         Box::pin(Manager::job_could_start(self))
     }

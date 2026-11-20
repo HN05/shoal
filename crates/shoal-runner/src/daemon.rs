@@ -4,6 +4,7 @@
 //! with, the forges the runner registers on, and the agent queue's rows it
 //! changes in its own transactions.
 use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -12,7 +13,7 @@ use rusqlite::Connection;
 use shoal_core::config::{Config, Effective, repo::ConfigLayers};
 use shoal_daemon_base::callers::Caller;
 use shoal_daemon_base::notifications::Coordinators;
-use shoal_forge::account::Account;
+use shoal_forge::{account::Account, ci::runner::JobCommand};
 use shoal_forge_types::{ForgeRepo, items::reference::ItemRef};
 use shoal_ids::{
     execution_ids::ExecutionId, queue_entry_ids::QueueEntryId, repository_ids::RepositoryId,
@@ -86,6 +87,13 @@ pub trait Agents: Send + Sync {
     /// Whether some CI job could start now beside the agents and jobs in
     /// use.
     fn job_could_start(&self) -> BoxFuture<'_, Result<bool>>;
+
+    /// Whether the agent queue is suspended, as the system shuts down.
+    fn queue_suspended(&self) -> bool;
+
+    /// Hold the agent queue's admission until the guard drops, so a
+    /// suspension waits for what admission records meanwhile.
+    fn lock_admission(&self) -> BoxFuture<'_, Box<dyn Send + '_>>;
 
     /// Launch `launch` as the user, through the operation `shoal start`
     /// uses, from `source`: the space it opens.
@@ -171,6 +179,16 @@ pub trait Executions: Send + Sync {
     /// Whether the workspace `id` has any recorded execution, in any state.
     fn workspace_has_executions<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;
 
+    /// Run `command` in `workspace` as a tracked execution that outlives
+    /// the daemon, and the service it runs as, with its output in `log`,
+    /// returning the execution's ID.
+    fn launch_job_command<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+        log: PathBuf,
+        command: JobCommand,
+    ) -> BoxFuture<'a, Result<ExecutionId>>;
+
     /// Stop the runner of the job workspace `id` for `reason`, saving
     /// nothing.
     fn stop_job_runner<'a>(&'a self, id: &'a SpaceId, reason: String) -> BoxFuture<'a, Result<()>>;
@@ -190,6 +208,44 @@ pub trait Workspaces: Send + Sync {
     /// Remove the job workspace `id` whatever it holds; its claim goes with
     /// it.
     fn remove_job_workspace<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>>;
+
+    /// Record a job workspace of `repository` in the directory and with the
+    /// name `names` gives, at `commit`, fetched by `reference` when it is
+    /// not there yet, before it is checked out, holding the repository's
+    /// Git gate until it is.
+    fn record_job_workspace<'a>(
+        &'a self,
+        repository: &'a RepositoryId,
+        names: (&'a str, SpaceName),
+        commit: &'a CommitId,
+        reference: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<Box<dyn RecordedJobWorkspace<'a> + 'a>>>;
+
+    /// The settings of the job workspace `workspace`.
+    fn workspace_settings<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+    ) -> BoxFuture<'a, Result<Effective>>;
+
+    /// Take one lease named `name` from `pool` for the job workspace `id`,
+    /// returning whether the pool had one; a pool that needs approval
+    /// fails, since a job cannot ask for it.
+    fn hold_permit<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        pool: &'a str,
+        name: &'a str,
+    ) -> BoxFuture<'a, Result<bool>>;
+}
+
+/// A job workspace recorded and not yet checked out, which holds its
+/// repository's Git gate until it is or it drops.
+pub trait RecordedJobWorkspace<'a>: Send {
+    /// The workspace's ID.
+    fn id(&self) -> &SpaceId;
+
+    /// Check the workspace out at its commit.
+    fn check_out(self: Box<Self>) -> BoxFuture<'a, Result<Workspace>>;
 }
 
 /// Everything the triggers and the runner need of the daemon, which each of
@@ -253,6 +309,12 @@ pub trait Records: Send + Sync {
     /// The executions the daemon records, running or awaiting
     /// reattachment.
     fn recorded_executions(&self, db: &Connection) -> Result<RecordedExecutions>;
+
+    /// Take the entry `id` out of the agent queue.
+    fn remove_queue_entry(&self, db: &Connection, id: &QueueEntryId) -> Result<()>;
+
+    /// Put the admitted entry `id` back in the queue, where it waits again.
+    fn return_job_entry(&self, db: &Connection, id: &QueueEntryId) -> Result<()>;
 
     /// Delete the entry `id` if it still waits, returning whether it did.
     fn delete_waiting_entry(&self, db: &Connection, id: &QueueEntryId) -> Result<bool>;
