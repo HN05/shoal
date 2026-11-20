@@ -313,7 +313,7 @@ impl Manager {
         }
         if let Removal::Merged { head } | Removal::Completed { head, .. } = removal {
             ensure!(
-                crate::daemon::links::pr::current_head(workspace).await? == head,
+                shoal_links::pr::current_head(workspace).await? == head,
                 "HEAD changed {}",
                 stage.change()
             );

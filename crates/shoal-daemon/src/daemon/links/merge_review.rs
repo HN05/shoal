@@ -8,7 +8,6 @@ use shoal_links::target::ForgeTarget;
 use shoal_refs::CommitId;
 use shoal_reviews::required::{Gate, Unreviewed};
 
-use super::pr::current_head;
 use crate::{
     daemon::{manager::Manager, scope::Caller},
     forge::{
@@ -24,6 +23,7 @@ use crate::{
     protocol::RepoTarget,
 };
 use shoal_forge::{RepoRequests, capability::CapabilityRequests};
+use shoal_links::pr::current_head;
 
 impl Manager {
     /// Hold a merge in `action` of the PR `input` names, or of `target`'s

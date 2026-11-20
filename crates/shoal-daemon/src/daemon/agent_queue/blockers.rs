@@ -8,6 +8,7 @@
 //! others.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
+use shoal_links::pr::current_head;
 use shoal_protocol::progress::Blocker;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::{BranchName, CommitId};
@@ -19,7 +20,6 @@ use rusqlite::{Connection, OptionalExtension, params};
 use crate::{
     daemon::{
         blockers,
-        links::pr::current_head,
         manager::Manager,
         store::{self, WORKSPACE_COLUMNS},
     },

@@ -97,7 +97,9 @@ impl Manager {
             }
             (Relation::Assigned, LinkKind::Pr) => {
                 let url = input.clone();
-                self.set_pr(selector, Action::Watch { url, title }).await
+                self.links
+                    .set_pr(self, selector, Action::Watch { url, title })
+                    .await
             }
             (Relation::Assigned, LinkKind::Ci) => bail!(
                 "a CI run cannot be assigned, because assigned items drive completion \
@@ -289,7 +291,7 @@ impl Manager {
         }
         if kind != Some(ItemKind::Issue) {
             let action = input.map_or(Action::Clear, |url| Action::Unwatch { url: url.clone() });
-            self.set_pr(selector, action).await?;
+            self.links.set_pr(self, selector, action).await?;
         }
         Ok(warnings)
     }

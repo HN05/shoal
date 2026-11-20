@@ -3,6 +3,7 @@ use crate::model::EventCause;
 use anyhow::{Context, Result, ensure};
 use rusqlite::OptionalExtension;
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::pr::current_head;
 use std::path::{Path, PathBuf};
 
 use crate::{
@@ -10,7 +11,7 @@ use crate::{
     daemon::{
         gates::{GuardMode, ResourceGuard},
         item_numbers::ItemNumber,
-        links::{pr::current_head, space::require_ready_space},
+        links::space::require_ready_space,
         manager::Manager,
         notifications::AlertKind,
         progress, threads, turn_retry, wake_timers,

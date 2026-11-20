@@ -39,7 +39,9 @@ async fn unwatch_removes_only_the_selected_pr_even_when_cleanup_is_disabled() {
         }).await.unwrap();
     assert!(
         manager
+            .links
             .set_pr(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 Action::Unwatch {
                     url: "https://github.com/team/repo/pull/3".parse().unwrap()
@@ -49,7 +51,9 @@ async fn unwatch_removes_only_the_selected_pr_even_when_cleanup_is_disabled() {
             .is_err()
     );
     manager
+        .links
         .set_pr(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             Action::Unwatch {
                 url: "https://github.com/team/repo/pull/1".parse().unwrap(),
@@ -63,7 +67,9 @@ async fn unwatch_removes_only_the_selected_pr_even_when_cleanup_is_disabled() {
                 if urls.iter().map(|url| url.url()).eq(["https://github.com/team/repo/pull/2"]))
     );
     manager
+        .links
         .set_pr(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             Action::Unwatch {
                 url: "2".parse().unwrap(),

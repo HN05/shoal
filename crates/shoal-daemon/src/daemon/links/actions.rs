@@ -458,7 +458,7 @@ impl Manager {
         let (workspace, _gate) = self.lock_pr_gate(selector).await?;
         let branch = workspace.require_branch("shoal pr open")?.clone();
         self.verify_worktree(&workspace).await?;
-        let head = super::pr::current_head(&workspace).await?;
+        let head = shoal_links::pr::current_head(&workspace).await?;
         let push = match push_held {
             true => Some(
                 self.held_push(&workspace, proposer.as_ref(), caller)
@@ -555,16 +555,18 @@ impl Manager {
     pub(super) async fn link_open_pull(&self, workspace: &Workspace, item: &Item) -> Result<()> {
         ensure_branch_head(workspace, item)?;
         let url = item.url.clone();
-        self.set_pr_gated(
-            &workspace.clone().into(),
-            super::pr::Action::Watch {
-                url: url.into(),
-                title: Some(item.title.clone()),
-            },
-            super::pr::WatchCheck::Known,
-        )
-        .await
-        .with_context(|| format!("{} is open, but linking it failed", item.url))
+        self.links
+            .set_pr_gated(
+                self,
+                &workspace.clone().into(),
+                super::pr::Action::Watch {
+                    url: url.into(),
+                    title: Some(item.title.clone()),
+                },
+                shoal_links::pr::WatchCheck::Known,
+            )
+            .await
+            .with_context(|| format!("{} is open, but linking it failed", item.url))
     }
 
     /// Whether `caller`'s `shoal pr open` would open a new PR that its
@@ -590,7 +592,7 @@ impl Manager {
         match existing {
             Some(_) => Ok(()),
             None => {
-                let head = super::pr::current_head(&workspace).await?;
+                let head = shoal_links::pr::current_head(&workspace).await?;
                 self.reviews
                     .require(self, &workspace, Gate::Pr, &head, caller)
                     .await
@@ -659,7 +661,7 @@ impl Manager {
                 .await
             }
             ItemKind::Pr => {
-                let check = super::pr::WatchCheck::Known;
+                let check = shoal_links::pr::WatchCheck::Known;
                 let title = Some(item.title.clone());
                 let watch = super::pr::Action::Watch {
                     url: url.into(),
@@ -669,7 +671,7 @@ impl Manager {
                     .links
                     .link_space(self, &SpaceSelector::id(space))
                     .await?;
-                self.set_pr_gated(&space, watch, check).await?;
+                self.links.set_pr_gated(self, &space, watch, check).await?;
                 Ok(Vec::new())
             }
         }

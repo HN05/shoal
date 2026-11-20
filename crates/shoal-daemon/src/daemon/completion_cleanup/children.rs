@@ -54,7 +54,7 @@ impl Manager {
         if self.file_access.stalled(&workspace.path).is_some() {
             return Ok(false);
         }
-        let head = crate::daemon::links::pr::current_head(&workspace);
+        let head = shoal_links::pr::current_head(&workspace);
         Ok((self
             .file_access
             .checked(&self.notifications, &workspace.path, head)

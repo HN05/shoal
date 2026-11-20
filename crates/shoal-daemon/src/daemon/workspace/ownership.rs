@@ -163,7 +163,7 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
         if on_branch {
-            crate::daemon::links::pr::current_head(&workspace).await?;
+            shoal_links::pr::current_head(&workspace).await?;
         }
         Ok(workspace)
     }

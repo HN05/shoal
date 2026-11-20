@@ -38,7 +38,12 @@ async fn completion_without_cleanup_blocks_idle_and_pr_cleanup_until_requested()
         .await
         .unwrap();
     manager
-        .set_pr(&SpaceSelector::id(&workspace.id), Action::Acknowledge)
+        .links
+        .set_pr(
+            &*manager,
+            &SpaceSelector::id(&workspace.id),
+            Action::Acknowledge,
+        )
         .await
         .unwrap();
     manager
@@ -293,7 +298,12 @@ async fn undone_withdraws_completion_without_blocking_cleanup() {
         .await
         .unwrap();
     manager
-        .set_pr(&SpaceSelector::id(&workspace.id), Action::Acknowledge)
+        .links
+        .set_pr(
+            &*manager,
+            &SpaceSelector::id(&workspace.id),
+            Action::Acknowledge,
+        )
         .await
         .unwrap();
     manager.sweep_prs().await.unwrap();
@@ -452,7 +462,12 @@ async fn threads_asked_after_done_retain_completion_and_pr_cleanup() {
     manager.sweep_completed().await.unwrap();
     assert!(workspace.path.exists());
     manager
-        .set_pr(&SpaceSelector::id(&workspace.id), Action::Acknowledge)
+        .links
+        .set_pr(
+            &*manager,
+            &SpaceSelector::id(&workspace.id),
+            Action::Acknowledge,
+        )
         .await
         .unwrap();
     manager.sweep_prs().await.unwrap();

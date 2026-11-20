@@ -249,7 +249,7 @@ pub(super) async fn handle(
             space: workspace,
             action,
         } => {
-            manager.set_pr(&workspace, action).await?;
+            manager.links.set_pr(&**manager, &workspace, action).await?;
             Body::Ok
         }
     }))

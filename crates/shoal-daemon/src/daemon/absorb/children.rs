@@ -5,16 +5,14 @@
 use anyhow::{Context as _, Result, ensure};
 use shoal_forge::account::Account;
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::pr::current_head;
 use shoal_refs::{BranchName, CommitId};
 
 use super::{code::Folded, parties::Parties};
 use crate::{
     daemon::{
         gates::PrGuard,
-        links::{
-            pr::current_head,
-            stack::{Onto, Restack},
-        },
+        links::stack::{Onto, Restack},
         manager::Manager,
         scope::Caller,
     },

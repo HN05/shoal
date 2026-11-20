@@ -2,10 +2,11 @@
 //! each refusal made before anything changes.
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::pr::current_head;
 
 use super::{code::Folded, records::TakenOver};
 use crate::{
-    daemon::{links::pr::current_head, manager::Manager, scope::Caller},
+    daemon::{manager::Manager, scope::Caller},
     git::{self, default_branch::DefaultBranchLookup},
     model::{Space, SpaceRef, Workspace},
     protocol::QueuedLaunches,

@@ -811,7 +811,8 @@ async fn pull_current(
     let Some(branch) = workspace.branch().cloned() else {
         return Ok(false);
     };
-    if proposed.pull.head != branch || super::pr::current_head(workspace).await? != proposed.commit
+    if proposed.pull.head != branch
+        || shoal_links::pr::current_head(workspace).await? != proposed.commit
     {
         return Ok(false);
     }

@@ -263,7 +263,12 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
             }
             EventCause::Pr => {
                 manager
-                    .set_pr(&SpaceSelector::id(&workspace.id), Action::Acknowledge)
+                    .links
+                    .set_pr(
+                        &*manager,
+                        &SpaceSelector::id(&workspace.id),
+                        Action::Acknowledge,
+                    )
                     .await
                     .unwrap();
                 manager.sweep_prs().await.unwrap();

@@ -14,7 +14,7 @@ use crate::{
         link::{ItemKind, Selection},
         reference::ItemRef,
     },
-    model::{Repository, Selected, Space},
+    model::{Repository, Selected, Space, Workspace},
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
@@ -59,6 +59,13 @@ impl Spaces for Manager {
 
     fn acting_settings<'a>(&'a self, space: &'a LinkSpace) -> BoxFuture<'a, Result<Effective>> {
         Box::pin(Manager::acting_settings(self, space))
+    }
+
+    fn workspace_settings<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+    ) -> BoxFuture<'a, Result<Effective>> {
+        Box::pin(Manager::workspace_settings(self, workspace))
     }
 
     fn space_agent<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<SpaceAgent>> {

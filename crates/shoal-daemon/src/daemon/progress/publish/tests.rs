@@ -129,9 +129,7 @@ impl Assigned {
             .create_workspace(&repo.id, "fix".into(), None, None, None)
             .await
             .unwrap();
-        let head = crate::daemon::links::pr::current_head(&workspace)
-            .await
-            .unwrap();
+        let head = shoal_links::pr::current_head(&workspace).await.unwrap();
         let pull = FakePull::start(&manager, head.as_str(), body, draft).await;
         git(
             &workspace.path,

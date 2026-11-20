@@ -46,7 +46,7 @@ impl Spaces for Manager {
     }
 
     fn head<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<CommitId>> {
-        Box::pin(super::links::pr::current_head(workspace))
+        Box::pin(shoal_links::pr::current_head(workspace))
     }
 
     fn diff_base<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<CommitId>> {

@@ -21,7 +21,7 @@ use shoal_forge_types::{
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    model::{Repository, Selected, Space},
+    model::{Repository, Selected, Space, Workspace},
     space_names::SpaceSelector,
 };
 
@@ -79,6 +79,10 @@ impl Spaces for StandIn {
     }
 
     fn acting_settings<'a>(&'a self, _: &'a LinkSpace) -> BoxFuture<'a, Result<Effective>> {
+        Box::pin(async { bail!(NOT_HERE) })
+    }
+
+    fn workspace_settings<'a>(&'a self, _: &'a Workspace) -> BoxFuture<'a, Result<Effective>> {
         Box::pin(async { bail!(NOT_HERE) })
     }
 

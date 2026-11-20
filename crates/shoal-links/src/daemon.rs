@@ -19,7 +19,7 @@ use shoal_forge_types::{
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    model::{Repository, Selected, Space},
+    model::{Repository, Selected, Space, Workspace},
     space_names::SpaceSelector,
 };
 
@@ -59,6 +59,12 @@ pub trait Spaces: Send + Sync {
 
     /// The settings of `space` in the repository it acts in.
     fn acting_settings<'a>(&'a self, space: &'a LinkSpace) -> BoxFuture<'a, Result<Effective>>;
+
+    /// The settings of `workspace`, read from its worktree.
+    fn workspace_settings<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+    ) -> BoxFuture<'a, Result<Effective>>;
 
     /// What the daemon records of the agent of the space `id`.
     fn space_agent<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<SpaceAgent>>;

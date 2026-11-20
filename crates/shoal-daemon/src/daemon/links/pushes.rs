@@ -350,7 +350,7 @@ async fn branch_push(
         remote: git::push_remote(&workspace.path, &branch).await?,
         url: None,
         destination: git::local_ref(&branch),
-        commit: Some(super::pr::current_head(workspace).await?),
+        commit: Some(shoal_links::pr::current_head(workspace).await?),
         replaces: None,
         agent,
     })
@@ -372,7 +372,7 @@ async fn push_current(workspace: &Workspace, request: &ApprovalRequest) -> Resul
     }
     match &push.commit {
         Some(commit) if push.destination == git::local_ref(&branch.into()) => {
-            Ok(super::pr::current_head(workspace).await? == *commit)
+            Ok(shoal_links::pr::current_head(workspace).await? == *commit)
         }
         _ => Ok(true),
     }

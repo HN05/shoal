@@ -4,6 +4,7 @@
 use crate::config::hooks::HookCommand;
 use crate::forge::items::reference::ItemRef;
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::pr::current_head;
 use shoal_links::space::LinkSpace;
 use std::path::Path;
 
@@ -13,11 +14,7 @@ use rusqlite::{Connection, params};
 use super::{gates::GuardMode, manager::Manager};
 use crate::{
     config::Effective,
-    daemon::{
-        links::{pr::current_head, space::require_ready_space},
-        notifications::AlertKind,
-        scope::Caller,
-    },
+    daemon::{links::space::require_ready_space, notifications::AlertKind, scope::Caller},
     forge::items::link::{ItemKind, LinkKind, Selection},
     hooks::{self, Hook, HookKind},
     model::{ReadyMarks, ReviewMark, SkippedPr},

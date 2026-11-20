@@ -5,12 +5,10 @@ use crate::model::EventCause;
 use anyhow::{Result, ensure};
 use rusqlite::params;
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::pr::current_head;
 use shoal_refs::{BranchName, CommitId};
 
-use super::{
-    pr::{RegistrationKind, current_head},
-    wait,
-};
+use super::{pr::RegistrationKind, wait};
 use crate::{
     daemon::{agent_messages, manager::Manager, workspace::record_base_changed},
     forge::{

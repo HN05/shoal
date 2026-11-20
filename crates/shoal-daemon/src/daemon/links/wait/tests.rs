@@ -2237,7 +2237,9 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
         .await
         .unwrap();
     manager
+        .links
         .set_pr(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             super::super::pr::Action::Clear,
         )
@@ -2493,7 +2495,9 @@ async fn cursors_survive_restart_are_workspace_owned_and_clear_on_unwatch() {
         1
     );
     restarted
+        .links
         .set_pr(
+            &*restarted,
             &SpaceSelector::id(&workspace.id),
             super::super::pr::Action::Clear,
         )
@@ -2534,7 +2538,9 @@ async fn cursors_survive_restart_are_workspace_owned_and_clear_on_unwatch() {
             .is_empty()
     );
     restarted
+        .links
         .set_pr(
+            &*restarted,
             &SpaceSelector::id(&workspace.id),
             super::super::pr::Action::Clear,
         )
@@ -2596,7 +2602,9 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
     let recorded = manager.record_activity(&workspace.id, observation, &all);
     assert!(recorded.await.unwrap().is_empty());
     manager
+        .links
         .set_pr(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             super::super::pr::Action::Clear,
         )

@@ -88,7 +88,7 @@ impl Manager {
                 url,
                 title: pr.title.clone(),
             };
-            if let Err(error) = self.set_pr(&SpaceSelector::id(to), watch).await {
+            if let Err(error) = self.links.set_pr(self, &SpaceSelector::id(to), watch).await {
                 warnings.push(format!("cannot link PR {}: {error:#}", pr.url));
             }
         }

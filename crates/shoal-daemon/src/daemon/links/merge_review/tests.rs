@@ -35,9 +35,7 @@ impl Fixture {
         let workspace = (manager.create_workspace(&repo_id, "topic".into(), None, None, None))
             .await
             .unwrap();
-        let head = crate::daemon::links::pr::current_head(&workspace)
-            .await
-            .unwrap();
+        let head = shoal_links::pr::current_head(&workspace).await.unwrap();
         let (sha, branch) = (head.to_string(), head_branch.to_owned());
         let server = shoal_forge::test_support::Server::start(move |_| {
             let pull = serde_json::json!({

@@ -248,7 +248,12 @@ async fn invalid_pr_record_does_not_block_other_workspace_cleanup() {
         .await
         .unwrap();
     manager
-        .set_pr(&SpaceSelector::id(&merged.id), Action::Acknowledge)
+        .links
+        .set_pr(
+            &*manager,
+            &SpaceSelector::id(&merged.id),
+            Action::Acknowledge,
+        )
         .await
         .unwrap();
     let id = invalid.id.clone();
@@ -970,7 +975,12 @@ async fn a_sweep_skips_workspaces_where_file_access_stalled_and_cleans_up_the_ot
             .unwrap();
         let merged = create("merged").await.unwrap();
         manager
-            .set_pr(&SpaceSelector::id(&merged.id), Action::Acknowledge)
+            .links
+            .set_pr(
+                &*manager,
+                &SpaceSelector::id(&merged.id),
+                Action::Acknowledge,
+            )
             .await
             .unwrap();
         let idle = create("idle").await.unwrap();
@@ -1271,7 +1281,12 @@ async fn pr_cleanup_passes_over_a_stacked_workspace_it_removed_earlier() {
         .await
         .unwrap();
     manager
-        .set_pr(&SpaceSelector::id(&stacked.id), Action::Acknowledge)
+        .links
+        .set_pr(
+            &*manager,
+            &SpaceSelector::id(&stacked.id),
+            Action::Acknowledge,
+        )
         .await
         .unwrap();
 

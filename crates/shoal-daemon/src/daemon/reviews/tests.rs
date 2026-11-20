@@ -394,9 +394,7 @@ async fn all_holds_the_users_own_commands_too() {
     use shoal_reviews::required::Gate;
     let fixture = fixture(&[], "require_for_pr = 'all'").await;
     let (manager, workspace) = (&fixture.manager, &fixture.workspace);
-    let head = crate::daemon::links::pr::current_head(workspace)
-        .await
-        .unwrap();
+    let head = shoal_links::pr::current_head(workspace).await.unwrap();
     let refused = manager
         .reviews
         .require(manager.as_ref(), workspace, Gate::Pr, &head, None)

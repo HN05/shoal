@@ -237,9 +237,7 @@ fn link_pull(database: &std::path::Path, id: &str, url: &str) {
 #[tokio::test]
 async fn a_confirmed_merge_keeps_the_pr_whose_warning_it_read() {
     let (_root, manager, workspace) = changed_on_both_sides().await;
-    let head = crate::daemon::links::pr::current_head(&workspace)
-        .await
-        .unwrap();
+    let head = shoal_links::pr::current_head(&workspace).await.unwrap();
     let database = manager.paths.database();
     let id = workspace.id.to_string();
     let host = std::sync::Arc::new(std::sync::OnceLock::<String>::new());

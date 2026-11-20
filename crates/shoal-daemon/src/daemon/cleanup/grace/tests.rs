@@ -96,7 +96,9 @@ async fn completion_cleanup_starts_the_grace_period_only_once_eligible() {
 async fn pr_cleanup_waits_for_the_grace_period() {
     let (_root, manager, workspace) = fixture().await;
     manager
+        .links
         .set_pr(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             crate::daemon::links::pr::Action::Acknowledge,
         )

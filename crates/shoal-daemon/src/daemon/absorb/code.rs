@@ -1,6 +1,7 @@
 //! What becomes of an absorbed space's code: its branch merged into the
 //! branch of the workspace that takes it, its uncommitted files carried
 //! over there as uncommitted changes, under the repository's Git gate.
+use shoal_links::pr::current_head;
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -8,7 +9,7 @@ use shoal_refs::{BranchName, CommitId};
 
 use super::parties::{Code, Parties};
 use crate::{
-    daemon::{links::pr::current_head, manager::Manager, workspace::squash_message},
+    daemon::{manager::Manager, workspace::squash_message},
     forge::items::action::MergeMethod,
     git::{
         fold::{self, Fold},

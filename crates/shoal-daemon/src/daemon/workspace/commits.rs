@@ -307,7 +307,7 @@ impl Manager {
             workspace.name,
             head.number
         );
-        let current = crate::daemon::links::pr::current_head(workspace).await?;
+        let current = shoal_links::pr::current_head(workspace).await?;
         anyhow::ensure!(
             current == start && git::status::porcelain(&workspace.path).await?.is_empty(),
             "workspace {} has commits or changes of its own since PR #{}'s earlier head; remove it to open the PR's new head",
@@ -351,7 +351,7 @@ impl Manager {
         reference: Option<&str>,
     ) -> Result<()> {
         self.verify_worktree(workspace).await?;
-        if crate::daemon::links::pr::current_head(workspace).await? == *commit {
+        if shoal_links::pr::current_head(workspace).await? == *commit {
             return Ok(());
         }
         fetch_job_commit(repo, commit, reference).await?;

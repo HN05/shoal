@@ -22,7 +22,7 @@ impl Manager {
             return Ok(false);
         }
         ensure!(
-            crate::daemon::links::pr::current_head(workspace).await? == completion.head,
+            shoal_links::pr::current_head(workspace).await? == completion.head,
             "HEAD changed after the assignment was marked done; retaining workspace"
         );
         Ok(true)
