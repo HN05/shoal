@@ -1890,6 +1890,83 @@ fn github_comment_edits_reach_inline_comments() {
     );
 }
 
+#[test]
+fn forgejo_comment_edits_attach_files_to_the_comment() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let [note, image, _] = attachment_files(&fixture);
+    let host = fixture.web.trim_end_matches("/team/project").to_owned();
+    let url = format!("{host}/attachments/1");
+    let comment = "repos/team/project/issues/comments/2";
+    let comments = json!({"body": [{"id": 2, "body": "Fixed", "user": {"login": "me"}}]});
+    fixture.respond(json!({
+        "GET settings/attachment": attachment_settings(true, ".png", 1),
+        "GET repos/team/project/issues/8": {"body": {"number": 8, "title": "Issue",
+            "state": "open", "body": "", "labels": [], "pull_request": null,
+            "user": {"login": "ann"}}},
+        "GET repos/team/project/issues/8/comments": comments,
+        "GET repos/team/project/issues/8/comments?limit=50&page=1": comments,
+        "GET user": {"body": {"login": "me"}},
+        format!("POST {comment}/assets?name=login.png"):
+            {"status": 201, "body": {"browser_download_url": url}},
+        format!("PATCH {comment}"): {"body": {"id": 2, "user": {"login": "me"}}},
+    }));
+    let edit = |body: &[&str]| {
+        let space = fixture.id("topic");
+        let args = ["issue", "comment", "8", "--space", &space, "--edit", "2"];
+        fixture.ok(&[&args[..], &["--attach", &image], body].concat());
+    };
+    edit(&["--body-file", &note]);
+    // Without a new body the files go after the current one.
+    edit(&[]);
+    let upload = json!([
+        format!("POST {comment}/assets?name=login.png"),
+        {"field": "attachment", "file": "login.png", "type": "image/png", "bytes": 3}
+    ]);
+    assert_eq!(
+        writes(&fixture),
+        [
+            upload.clone(),
+            json!([format!("PATCH {comment}"), {"body": format!("Before:\n\n![The error]({url})\n")}]),
+            upload,
+            json!([format!("PATCH {comment}"), {"body": format!("Fixed\n\n![login.png]({url})")}]),
+        ]
+    );
+}
+
+#[test]
+fn github_comment_edits_attach_files_uploaded_to_the_repository() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    let [_, image, _] = attachment_files(&fixture);
+    let uploads = "POST https://uploads.github.com/user-attachments/assets";
+    let url = "https://github.com/user-attachments/assets/1";
+    fixture.respond(json!({
+        "GET repos/team/project/issues/8": {"body": {"number": 8, "title": "Issue",
+            "state": "open", "body": "", "labels": [], "user": {"login": "ann"}}},
+        "GET repos/team/project/issues/8/comments?per_page=100&page=1":
+            {"body": [{"id": 4, "body": "Fixed", "user": {"login": "me"}, "created_at": "t1"}]},
+        "GET user": {"body": {"login": "me"}},
+        "GET repos/team/project": {"body": {"id": 42}},
+        format!("{uploads}?name=login.png&content_type=image%2Fpng&repository_id=42"):
+            {"body": {"url": url}},
+        "PATCH repos/team/project/issues/comments/4": {"body": {"id": 4}},
+    }));
+    let space = fixture.id("topic");
+    let args = ["issue", "comment", "8", "--space", &space, "--edit", "4"];
+    fixture.ok(&[&args[..], &["--attach", &image]].concat());
+    let mut writes = writes(&fixture);
+    writes.retain(|request| request[0] != "POST graphql");
+    assert_eq!(
+        writes,
+        [
+            json!([
+                format!("{uploads}?name=login.png&content_type=image%2Fpng&repository_id=42"),
+                {"file": "login.png", "type": "image/png", "bytes": 3}
+            ]),
+            json!(["PATCH repos/team/project/issues/comments/4", {"body": format!("Fixed\n\n![login.png]({url})")}]),
+        ]
+    );
+}
+
 /// `shots/login.png` and `shots/demo.mp4` under the fixture, and a body file
 /// beside them that references the image.
 fn attachment_files(fixture: &Fixture) -> [String; 3] {
