@@ -65,7 +65,7 @@ pub(in crate::cli::commands) async fn import(
         let package = Package::read(file, &options)
             .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
         let restored = package.open(ctx).await?;
-        let opened = restored_id(&restored).clone();
+        let opened = restored.id().clone();
         let reopened = reopen::finish_reopen(ctx, restored, "Imported", options.restore).await;
         let failed = carried::open(ctx, &package, &opened, options.restore).await;
         let code = reopened?;
@@ -176,14 +176,6 @@ impl Package {
     }
 }
 
-/// The ID of the space `restored` opened.
-fn restored_id(restored: &RestoredSpace) -> &SpaceId {
-    match restored {
-        RestoredSpace::Workspace(restored) => &restored.opened.workspace.id,
-        RestoredSpace::Chat(restored) => &restored.chat.id,
-    }
-}
-
 /// The export files `files` names, with each directory among them replaced
 /// by its `.shoal` files in name order.
 fn import_files(files: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
@@ -257,7 +249,7 @@ async fn import_one(
             return None;
         }
     };
-    let opened = restored_id(&restored).clone();
+    let opened = restored.id().clone();
     let mut reopened = match reopen::prepare_set_up(ctx, restored).await {
         Ok(reopened) => reopened,
         Err(error) => {

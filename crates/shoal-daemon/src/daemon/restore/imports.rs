@@ -39,10 +39,7 @@ impl Manager {
             .with_context(|| {
                 format!("the imported space is recorded as removed; shoal restore {id} retries")
             })?;
-        match &mut restored {
-            RestoredSpace::Workspace(workspace) => workspace.warnings.extend(warnings),
-            RestoredSpace::Chat(chat) => chat.warnings.extend(warnings),
-        }
+        restored.warnings_mut().extend(warnings);
         Ok(restored)
     }
 

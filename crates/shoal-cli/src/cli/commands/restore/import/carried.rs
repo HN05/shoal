@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context as _, Result};
 
 use super::super::reopen::{self, ReopenedExt};
-use super::{Package, restored_id};
+use super::Package;
 use crate::{
     cli::{context::Context, ui},
     model::RemovedSpace,
@@ -145,7 +145,7 @@ async fn open_one(
     };
     let restored = crate::client::transfer::import(&ctx.paths, space).await?;
     if package.copy {
-        copies.insert(id.clone(), restored_id(&restored).clone());
+        copies.insert(id.clone(), restored.id().clone());
     }
     let mut reopened = reopen::prepare_set_up(ctx, restored).await?;
     let post_setup = reopen::run_post_setup(ctx, &reopened).await;

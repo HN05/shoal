@@ -237,6 +237,24 @@ pub enum RestoredSpace {
     Chat(Box<RestoredChat>),
 }
 
+impl RestoredSpace {
+    /// The ID of the space it opened.
+    pub fn id(&self) -> &SpaceId {
+        match self {
+            Self::Workspace(restored) => &restored.opened.workspace.id,
+            Self::Chat(restored) => &restored.chat.id,
+        }
+    }
+
+    /// What its caller is warned of.
+    pub fn warnings_mut(&mut self) -> &mut Vec<String> {
+        match self {
+            Self::Workspace(restored) => &mut restored.warnings,
+            Self::Chat(restored) => &mut restored.warnings,
+        }
+    }
+}
+
 /// A chat `shoal restore` recorded again from its removal record, stopped,
 /// with its stopped agent and last session saved; the caller links its PRs
 /// and restores its agent.
