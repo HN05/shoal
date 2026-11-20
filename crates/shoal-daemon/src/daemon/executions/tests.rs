@@ -869,22 +869,42 @@ async fn an_agent_registering_during_an_update_is_refused_instead_of_waiting() {
     );
 }
 
+/// The error of a registration whose worktree did not verify.
+fn unverified() -> anyhow::Error {
+    anyhow::anyhow!("workspace directory is missing")
+}
+
 #[tokio::test]
 async fn a_registration_failing_while_an_operation_that_passes_holds_it_waits() {
     let (_root, manager, workspace) = fixture("exit 0").await;
-    let failed = || anyhow::anyhow!("workspace directory is missing");
-    assert!(
-        !(manager.reservation_refused(&failed(), &workspace.id))
-            .await
-            .unwrap()
-    );
+    let seen = Some(manager.lifecycle_generation(&workspace.id).await.unwrap());
+    let error = unverified();
+    let refused = || manager.reservation_refused(&error, &workspace.id, seen);
+    assert!(!refused().await.unwrap());
     // As when a move reserves the workspace after the start's first look.
     manager
         .reserve_lifecycle(&workspace.id, WorkspaceState::Reconciling)
         .await
         .unwrap();
+    assert!(refused().await.unwrap());
+}
+
+#[tokio::test]
+async fn a_registration_failing_after_an_operation_came_and_went_retries() {
+    let (_root, manager, workspace) = fixture("exit 0").await;
+    let seen = manager.lifecycle_generation(&workspace.id).await.unwrap();
+    // As when a checkpoint restore begins after the start's first look and
+    // returns the workspace to the same state before its registration fails.
+    manager
+        .reserve_lifecycle(&workspace.id, WorkspaceState::Restoring)
+        .await
+        .unwrap();
+    manager
+        .set_state(&workspace.id, WorkspaceState::Ready, None)
+        .await
+        .unwrap();
     assert!(
-        (manager.reservation_refused(&failed(), &workspace.id))
+        (manager.reservation_refused(&unverified(), &workspace.id, Some(seen)))
             .await
             .unwrap()
     );

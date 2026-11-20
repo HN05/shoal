@@ -375,8 +375,11 @@ is made when its preparation runs, which waited for what it waits for.
 A command, merge or unmerge whose start falls in such an update, or in any
 lifecycle operation that returns the workspace to ready or failed on its own,
 waits for it to end and is prepared again for the workspace it leaves: the
-window is Shoal's own, not a reason the command cannot run. Removal, a
-failure and setup, which may wait for other work first, still refuse it, as
+window is Shoal's own, not a reason the command cannot run. The store counts
+each workspace's lifecycle changes, so a start whose registration fails after
+such an operation came and went since its first look, which can leave the
+worktree unverifiable meanwhile, is prepared again too. Removal, a failure
+and setup, which may wait for other work first, still refuse it, as
 such an operation refuses an agent's registration, which holds the queue's
 admission that a stop of its workspace needs.
 The request answers once the workspace is recorded, so a

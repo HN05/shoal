@@ -1,6 +1,7 @@
 //! Workspace lifecycle reservation: holding a workspace in a transient
 //! state that excludes every other lifecycle operation, and recording the
-//! state it leaves it in, and waiting for such a state to pass.
+//! state it leaves it in, and waiting for such a state to pass or telling
+//! that one came and went.
 
 use super::super::{gates::GuardMode, manager::Manager};
 use crate::{daemon::store, state::WorkspaceState};
@@ -21,20 +22,38 @@ impl std::fmt::Display for Reserved {
 
 impl std::error::Error for Reserved {}
 
+/// How many times a workspace's lifecycle state has changed, which the
+/// store counts on each change.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Generation(i64);
+
+/// Where a workspace's lifecycle stands.
+struct Lifecycle {
+    state: WorkspaceState,
+    generation: Generation,
+}
+
 /// Refuse the workspace with [`Reserved`] while a lifecycle operation that
 /// passes holds it.
 pub(crate) fn ensure_unreserved(db: &Connection, id: &SpaceId) -> Result<()> {
-    match state(db, id)? {
-        Some(state) if state.passes() => Err(Reserved(state).into()),
+    match lifecycle(db, id)? {
+        Some(Lifecycle { state, .. }) if state.passes() => Err(Reserved(state).into()),
         _ => Ok(()),
     }
 }
 
-fn state(db: &Connection, id: &SpaceId) -> Result<Option<WorkspaceState>> {
+fn lifecycle(db: &Connection, id: &SpaceId) -> Result<Option<Lifecycle>> {
     Ok(db
-        .query_row("SELECT state FROM workspaces WHERE id=?1", [id], |row| {
-            row.get(0)
-        })
+        .query_row(
+            "SELECT state, lifecycle_generation FROM workspaces WHERE id=?1",
+            [id],
+            |row| {
+                Ok(Lifecycle {
+                    state: row.get(0)?,
+                    generation: Generation(row.get(1)?),
+                })
+            },
+        )
         .optional()?)
 }
 
@@ -77,33 +96,51 @@ impl Manager {
             .await
     }
 
-    /// Whether a lifecycle operation that passes holds the space `id`, which
-    /// a chat never is.
-    pub(crate) async fn reservation_holds(&self, id: &SpaceId) -> Result<bool> {
-        let id = id.to_owned();
-        let state = self.store.run(move |db| state(db, &id)).await?;
-        Ok(state.is_some_and(WorkspaceState::passes))
+    /// The lifecycle generation of the workspace `id`.
+    pub(crate) async fn lifecycle_generation(&self, id: &SpaceId) -> Result<Generation> {
+        match self.lifecycle(id).await? {
+            Some(lifecycle) => Ok(lifecycle.generation),
+            None => bail!("workspace no longer exists"),
+        }
+    }
+
+    /// Whether a lifecycle operation that passes holds the space `id` now,
+    /// or its lifecycle changed since it stood at `seen`, as one that came
+    /// and went changes it; a chat has none.
+    pub(crate) async fn reserved_since(
+        &self,
+        id: &SpaceId,
+        seen: Option<Generation>,
+    ) -> Result<bool> {
+        Ok(match self.lifecycle(id).await? {
+            Some(Lifecycle { state, generation }) => state.passes() || seen != Some(generation),
+            None => seen.is_some(),
+        })
     }
 
     /// Wait until no lifecycle operation that passes holds the workspace,
     /// giving up with the error `wanted` returns, which it asks each time
-    /// it looks.
+    /// it looks, and return the generation it then has.
     pub(crate) async fn await_reservation_end(
         &self,
         id: &SpaceId,
         wanted: impl Fn() -> Result<()>,
-    ) -> Result<()> {
+    ) -> Result<Generation> {
         // Subscribe before reading, so a change in between still wakes.
         let mut changed = self.store.watch_changes();
         loop {
             wanted()?;
-            let workspace = id.to_owned();
-            match self.store.run(move |db| state(db, &workspace)).await? {
+            match self.lifecycle(id).await? {
                 None => bail!("workspace no longer exists"),
-                Some(state) if state.passes() => changed.changed().await?,
-                Some(_) => return Ok(()),
+                Some(lifecycle) if lifecycle.state.passes() => changed.changed().await?,
+                Some(lifecycle) => return Ok(lifecycle.generation),
             }
         }
+    }
+
+    async fn lifecycle(&self, id: &SpaceId) -> Result<Option<Lifecycle>> {
+        let id = id.to_owned();
+        self.store.run(move |db| lifecycle(db, &id)).await
     }
 
     /// Move a ready or failed workspace into a transient lifecycle state,

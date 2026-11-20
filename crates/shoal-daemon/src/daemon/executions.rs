@@ -10,7 +10,7 @@ use super::{
     gates::{GuardMode, ResourceGuard},
     manager::Manager,
     places::ExecutionPlace,
-    workspace::reservation::{self, Reserved},
+    workspace::reservation::{self, Generation, Reserved},
 };
 use crate::daemon::log;
 use crate::refusal::{Reason, Refusal};
@@ -396,7 +396,8 @@ impl Manager {
     /// Prepare `record` in the space `selector` names and record it there,
     /// waiting out a lifecycle operation that holds the workspace for a
     /// while, such as an update an agent's start makes, and preparing it
-    /// again for the workspace that operation leaves.
+    /// again for the workspace that operation leaves, also when one came and
+    /// went while it registered.
     async fn register_unreserved(
         &self,
         selector: &SpaceSelector,
@@ -405,14 +406,14 @@ impl Manager {
         merge: Option<crate::model::MergeOptions>,
     ) -> Result<(SpaceId, PreparedExecution, RegisteredExecution)> {
         loop {
-            let (space_id, preparation) = self
+            let (space_id, seen, preparation) = self
                 .prepare_execution(selector, &record, caller, merge.clone())
                 .await?;
             let error = match self.register_execution(&space_id, record.clone()).await {
                 Ok(registered) => return Ok((space_id, preparation, registered)),
                 Err(error) => error,
             };
-            if !self.reservation_refused(&error, &space_id).await? {
+            if !self.reservation_refused(&error, &space_id, seen).await? {
                 return Err(error);
             }
             if !record.waits_out_reservations() {
@@ -424,19 +425,36 @@ impl Manager {
         }
     }
 
+    /// The lifecycle generation of the workspace `id` at the start's first
+    /// look, once no lifecycle operation that passes holds it where `record`
+    /// waits those out.
+    async fn first_look(&self, id: &SpaceId, record: &ExecutionRecord) -> Result<Generation> {
+        if record.waits_out_reservations() {
+            self.await_unreserved(id).await
+        } else {
+            self.lifecycle_generation(id).await
+        }
+    }
+
     /// Wait until no lifecycle operation that passes holds the workspace
     /// `id`, while the daemon accepts registrations: its own stop holds
     /// workspaces until the work it stops ends.
-    async fn await_unreserved(&self, id: &SpaceId) -> Result<()> {
+    async fn await_unreserved(&self, id: &SpaceId) -> Result<Generation> {
         (self.await_reservation_end(id, || self.executions.ensure_accepting())).await
     }
 
     /// Whether a lifecycle operation that passes refused the registration
-    /// in `space_id` that failed with `error`: one its transaction found, or
-    /// one that began after the start's first look, which may have left the
-    /// worktree unverifiable meanwhile.
-    async fn reservation_refused(&self, error: &anyhow::Error, space_id: &SpaceId) -> Result<bool> {
-        Ok(error.is::<Reserved>() || self.reservation_holds(space_id).await?)
+    /// in `space_id` that failed with `error`: one its transaction found,
+    /// one that holds the workspace now, or one that began and ended after
+    /// the start's first look found the generation `seen`, any of which may
+    /// have left the worktree unverifiable meanwhile.
+    async fn reservation_refused(
+        &self,
+        error: &anyhow::Error,
+        space_id: &SpaceId,
+        seen: Option<Generation>,
+    ) -> Result<bool> {
+        Ok(error.is::<Reserved>() || self.reserved_since(space_id, seen).await?)
     }
 
     /// Record `record` as an execution of the space `space_id`, with what
@@ -573,13 +591,15 @@ impl Manager {
         Ok(())
     }
 
+    /// Prepare `record` in the space `selector` names, returning that space
+    /// with its workspace's lifecycle generation at the start's first look.
     async fn prepare_execution(
         &self,
         selector: &SpaceSelector,
         record: &ExecutionRecord,
         caller: Option<&Caller>,
         merge: Option<crate::model::MergeOptions>,
-    ) -> Result<(SpaceId, PreparedExecution)> {
+    ) -> Result<(SpaceId, Option<Generation>, PreparedExecution)> {
         if let Some(wrapper) = &record.wrapper {
             ensure!(
                 process::alive(wrapper)?,
@@ -590,18 +610,17 @@ impl Manager {
             ByKind::Workspace(workspace) => {
                 // An operation that passes, such as a reclamation, may leave
                 // the worktree unverifiable until it ends; registration
-                // checks again in its transaction.
-                if record.waits_out_reservations() {
-                    self.await_unreserved(&workspace.id).await?;
-                }
+                // checks again in its transaction, and a failed one compares
+                // the generation with this.
+                let seen = self.first_look(&workspace.id, record).await?;
                 let preparation = self
                     .prepare_execution_kind(&workspace, record.kind, caller, merge)
                     .await?;
-                (workspace.id, preparation)
+                (workspace.id, Some(seen), preparation)
             }
             // A chat runs only its agent, which its registration checks, with
             // nothing to prepare.
-            ByKind::Chat(chat) => (chat.id, PreparedExecution::default()),
+            ByKind::Chat(chat) => (chat.id, None, PreparedExecution::default()),
         };
         Ok(preparation)
     }
