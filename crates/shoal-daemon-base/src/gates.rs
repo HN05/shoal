@@ -31,6 +31,7 @@ pub struct Gates {
     checkpoints: Mutex<()>,
     simulators: Mutex<()>,
     containers: Keyed<Mutex<()>>,
+    changes: Keyed<Mutex<()>>,
     proposal_files: Mutex<()>,
     announcements: Mutex<()>,
     git: Keyed<Mutex<()>>,
@@ -263,6 +264,12 @@ impl Gates {
     /// with the record each one changes.
     pub async fn lock_containers(&self, id: &SpaceId) -> OwnedMutexGuard<()> {
         self.containers.gate(id.as_str()).lock_owned().await
+    }
+
+    /// Serialize recording the changes of the space `id`'s agent, each of
+    /// which diffs against the snapshot its worktree's last one left.
+    pub async fn lock_changes(&self, id: &SpaceId) -> OwnedMutexGuard<()> {
+        self.changes.gate(id.as_str()).lock_owned().await
     }
 
     /// [`Self::lock_simulators`] when no transition is in progress.

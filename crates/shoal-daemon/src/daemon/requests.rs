@@ -6,6 +6,7 @@ mod approvals;
 mod apps;
 mod assignments;
 mod branches;
+mod changes;
 mod chats;
 mod ci;
 mod containers;
@@ -84,6 +85,7 @@ pub(super) async fn handle(
             operations::handle(&server.manager, method, caller, scope).await
         }
         Operation::Thread(method) => threads::handle(&server.manager, method, caller).await,
+        Operation::Change(method) => changes::handle(&server.manager, method, caller).await,
         Operation::Review(method) => reviews::handle(&server.manager, method, caller).await,
         Operation::Approval(method) => approvals::handle(&server.manager, method, caller).await,
         Operation::Port(method) => ports::handle(&server.manager, method, caller).await,

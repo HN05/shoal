@@ -109,7 +109,7 @@ impl Manager {
 /// `path` with symlinks resolved, as workspace records hold their paths;
 /// a file not yet on disk, such as an editor's new buffer, through its
 /// directory's.
-fn canonical(path: &Path) -> PathBuf {
+pub(in crate::daemon) fn canonical(path: &Path) -> PathBuf {
     if let Ok(path) = std::fs::canonicalize(path) {
         return path;
     }
@@ -122,7 +122,7 @@ fn canonical(path: &Path) -> PathBuf {
 }
 
 /// `path` relative to the worktree `root`, as Git names it.
-fn relative(root: &Path, path: &Path) -> Result<String> {
+pub(in crate::daemon) fn relative(root: &Path, path: &Path) -> Result<String> {
     let relative = (path.strip_prefix(root))
         .with_context(|| format!("{} is outside {}", path.display(), root.display()))?;
     let parts: Option<Vec<&str>> = relative.iter().map(|part| part.to_str()).collect();

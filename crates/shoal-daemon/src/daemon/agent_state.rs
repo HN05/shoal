@@ -669,6 +669,10 @@ fn save(tx: &rusqlite::Transaction<'_>, report: &Report) -> Result<Option<(Agent
     super::turn_retry::follow_state(tx, &report.space, report.state)?;
     crate::daemon::idle_wakes::sleep::follow_state(tx, &report.space, previous, report.state)?;
     super::engagement::follow_state(tx, &report.space, previous, report.state, report.at)?;
+    if report.state == AgentState::Idle {
+        // No hook reports the end of a command an idle agent left.
+        super::changes::records::end_commands(tx, &report.space)?;
+    }
     if !report.failed {
         let execution = report.execution.as_ref();
         super::turn_retry::unretried::follow_state(tx, execution, previous, report.state)?;

@@ -12,6 +12,7 @@ pub(super) mod records;
 mod versions;
 
 pub(super) use recording::NewCode;
+pub(in crate::daemon) use recording::{canonical, relative};
 
 /// `bytes` as text a reference keeps versions of: UTF-8 without NUL, of
 /// at most [`MAX_VERSIONED_LEN`] bytes.

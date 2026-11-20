@@ -1,11 +1,11 @@
 //! The request envelope and the method each request carries.
 use super::{
     AgentMethod, AlertMethod, AppMethod, ApprovalMethod, AssignmentMethod, BranchMethod,
-    ChatMethod, CiMethod, ContainerMethod, DaemonMethod, DemoMethod, ExecutionMethod, ExitRequest,
-    FileMethod, HoldMethod, HubMethod, ItemMethod, LaunchMethod, OperationMethod, PortMethod,
-    QueueMethod, Reattach, RecoveryMethod, RemovalMethod, RepositoryMethod, ResourceMethod,
-    ReviewMethod, SecretMethod, SimulatorMethod, SubscriptionMethod, ThreadMethod, TriggerMethod,
-    VERSION, WorkspaceMethod,
+    ChangeMethod, ChatMethod, CiMethod, ContainerMethod, DaemonMethod, DemoMethod, ExecutionMethod,
+    ExitRequest, FileMethod, HoldMethod, HubMethod, ItemMethod, LaunchMethod, OperationMethod,
+    PortMethod, QueueMethod, Reattach, RecoveryMethod, RemovalMethod, RepositoryMethod,
+    ResourceMethod, ReviewMethod, SecretMethod, SimulatorMethod, SubscriptionMethod, ThreadMethod,
+    TriggerMethod, VERSION, WorkspaceMethod,
 };
 use serde::{Deserialize, Serialize};
 
@@ -78,6 +78,7 @@ pub enum Operation {
     Alert(AlertMethod),
     Operations(OperationMethod),
     Thread(ThreadMethod),
+    Change(ChangeMethod),
     Review(ReviewMethod),
     Approval(ApprovalMethod),
     Port(PortMethod),
@@ -173,6 +174,7 @@ impl Operation {
             | Self::File(_)
             | Self::Ci(_)
             | Self::Branch(_)
+            | Self::Change(_)
             | Self::Approval(_)
             | Self::Port(_)
             | Self::Secret(_)
@@ -235,6 +237,7 @@ from_domains!(
     Alert(AlertMethod),
     Operations(OperationMethod),
     Thread(ThreadMethod),
+    Change(ChangeMethod),
     Review(ReviewMethod),
     Approval(ApprovalMethod),
     Port(PortMethod),

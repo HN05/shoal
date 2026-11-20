@@ -13,7 +13,7 @@ impl Manager {
     /// Point the ref of each of `spaces`, in the repository `repository`,
     /// at the versions its references keep now. A failure leaves the
     /// versions to the next expiry pass, which writes the refs again.
-    pub(in crate::daemon::threads) async fn keep_code_versions(
+    pub(in crate::daemon) async fn keep_code_versions(
         &self,
         repository: &RepositoryId,
         spaces: impl IntoIterator<Item = SpaceId>,

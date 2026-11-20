@@ -1,0 +1,254 @@
+use std::{fs, sync::Arc};
+
+use shoal_protocol::{
+    changes::{Change, ChangeAuthor, ChangeKind, Hunk, ToolChange},
+    space_names::SpaceSelector,
+};
+
+use super::records;
+use crate::{
+    daemon::{
+        manager::Manager,
+        scope::Caller,
+        test_support::{caller_in, manager, repository},
+    },
+    model::Workspace,
+};
+
+/// A workspace whose agent's changes Shoal records.
+pub(crate) struct Fixture {
+    _root: tempfile::TempDir,
+    pub(crate) manager: Arc<Manager>,
+    pub(crate) workspace: Workspace,
+    pub(crate) agent: Caller,
+}
+
+pub(crate) async fn fixture() -> Fixture {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "work".into(), None, None, None)
+        .await
+        .unwrap();
+    let agent = caller_in(&SpaceSelector::id(&workspace.id));
+    Fixture {
+        _root: root,
+        manager,
+        workspace,
+        agent,
+    }
+}
+
+impl Fixture {
+    pub(crate) fn write(&self, path: &str, contents: &str) {
+        fs::write(self.workspace.path.join(path), contents).unwrap();
+    }
+
+    pub(crate) async fn report(&self, change: ToolChange) -> Vec<Change> {
+        let recorded = self.manager.record_tool_change(&self.agent, change);
+        recorded.await.unwrap()
+    }
+
+    /// An edit tool's write of `contents` to `path`, whose hunks it reports.
+    pub(crate) async fn edit(&self, path: &str, before: &str, contents: &str) -> Vec<Change> {
+        self.write(path, contents);
+        let hunks = shoal_protocol::changes::diff(before, contents);
+        let path = self.workspace.path.join(path);
+        self.report(ToolChange::Edited { path, hunks }).await
+    }
+
+    /// A command that writes `contents` to `path`.
+    pub(crate) async fn command(&self, call: &str, path: &str, contents: &str) -> Vec<Change> {
+        self.report(ToolChange::Starts { call: call.into() }).await;
+        self.write(path, contents);
+        self.report(ToolChange::Ends { call: call.into() }).await
+    }
+
+    /// Every change recorded, as `number author kind path:lines`.
+    pub(crate) async fn recorded(&self) -> Vec<String> {
+        let changes = (self.manager.store)
+            .read(|tx| records::query(tx, "", [], records::change))
+            .await
+            .unwrap();
+        (changes.iter())
+            .map(|change| {
+                let (number, author, kind) = (change.number, change.author, change.kind);
+                format!("{number} {author} {kind} {}", change.latest)
+            })
+            .collect()
+    }
+}
+
+#[tokio::test]
+async fn an_edit_tool_s_hunks_are_its_agent_s_changes_numbered_in_its_space() {
+    let fixture = fixture().await;
+    let before = "a\nb\nc\nd\n";
+    fixture.write("parse.rs", before);
+    let mixed = fixture.edit("parse.rs", before, "a\nB\nc\nd\ne\n").await;
+    assert!(mixed.is_empty(), "{mixed:?}");
+    // Someone else changed the line the tool reports it wrote.
+    let hunks = vec![Hunk::created("written\n")];
+    fixture.write("other.rs", "rewritten\n");
+    let path = fixture.workspace.path.join("other.rs");
+    let mixed = fixture.report(ToolChange::Edited { path, hunks }).await;
+    assert_eq!(mixed[0].number, 3);
+    assert_eq!(
+        fixture.recorded().await,
+        [
+            "1 agent text parse.rs:2",
+            "2 agent text parse.rs:5",
+            "3 mixed text other.rs:1",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_command_s_change_is_its_agent_s_and_one_between_tool_calls_someone_else_s() {
+    let fixture = fixture().await;
+    fixture.write("lib.rs", "one\n");
+    fixture.command("1", "lib.rs", "one\ntwo\n").await;
+    // An edit tool's edit between commands stays the agent's.
+    fixture
+        .edit("lib.rs", "one\ntwo\n", "zero\none\ntwo\n")
+        .await;
+    fixture.write("notes.md", "the user's\n");
+    fixture
+        .command("2", "lib.rs", "zero\none\ntwo\nthree\n")
+        .await;
+    assert_eq!(
+        fixture.recorded().await,
+        [
+            "1 agent text lib.rs:2",
+            "2 agent text lib.rs:1",
+            "3 others text notes.md:1",
+            "4 agent text lib.rs:4",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_command_after_its_base_was_pruned_takes_a_new_one() {
+    let fixture = fixture().await;
+    fixture.write("lib.rs", "a\n");
+    fixture.command("1", "lib.rs", "a\nb\n").await;
+    // A prune deletes the snapshot, which no ref keeps.
+    let id = fixture.workspace.id.clone();
+    let gone = "5b825dc652cb6eb9a060e55bf8d69288fbee5905";
+    (fixture.manager.store)
+        .write(move |tx| records::set_base(tx, &id, gone))
+        .await
+        .unwrap();
+    fixture.edit("lib.rs", "a\nb\n", "a\nb\nc\n").await;
+    fixture.command("2", "lib.rs", "a\nb\nc\nd\n").await;
+    fixture.command("3", "lib.rs", "a\nb\nc\nd\ne\n").await;
+    assert_eq!(
+        fixture.recorded().await,
+        [
+            "1 agent text lib.rs:2",
+            "2 agent text lib.rs:3",
+            "3 agent text lib.rs:4",
+            "4 agent text lib.rs:5",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn an_edit_to_a_file_git_ignores_is_no_change() {
+    let fixture = fixture().await;
+    fixture.write(".gitignore", ".env\n");
+    fixture.command("1", "lib.rs", "a\n").await;
+    fixture.edit(".env", "", "TOKEN=1\n").await;
+    fixture.command("2", "lib.rs", "a\nb\n").await;
+    assert_eq!(
+        fixture.recorded().await,
+        ["1 agent text lib.rs:1", "2 agent text lib.rs:2"]
+    );
+}
+
+#[tokio::test]
+async fn the_user_s_edit_before_an_edit_tool_s_is_someone_else_s() {
+    let fixture = fixture().await;
+    fixture.command("1", "lib.rs", "a\nb\n").await;
+    // The user edits the file, then the agent's edit tool edits it too.
+    fixture.write("lib.rs", "a\nb\nuser\n");
+    fixture
+        .edit("lib.rs", "a\nb\nuser\n", "agent\na\nb\nuser\n")
+        .await;
+    fixture
+        .command("2", "lib.rs", "agent\na\nb\nuser\nmore\n")
+        .await;
+    assert_eq!(
+        fixture.recorded().await,
+        [
+            "1 agent text lib.rs:1-2",
+            "2 others text lib.rs:3",
+            "3 agent text lib.rs:1",
+            "4 agent text lib.rs:5",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn what_a_running_command_wrote_before_an_edit_stays_the_agent_s() {
+    let fixture = fixture().await;
+    fixture.command("1", "lib.rs", "a\n").await;
+    fixture
+        .report(ToolChange::Starts { call: "2".into() })
+        .await;
+    // The command writes the file, and an edit tool edits it meanwhile.
+    fixture.write("lib.rs", "a\ncommand\n");
+    fixture
+        .edit("lib.rs", "a\ncommand\n", "edit\na\ncommand\n")
+        .await;
+    fixture.report(ToolChange::Ends { call: "2".into() }).await;
+    assert_eq!(
+        fixture.recorded().await,
+        [
+            "1 agent text lib.rs:1",
+            "2 agent text lib.rs:2",
+            "3 agent text lib.rs:1",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_file_without_hunks_is_recorded_with_its_kind_and_size() {
+    let fixture = fixture().await;
+    fixture.write(".gitattributes", "*.lock linguist-generated\n");
+    fixture
+        .report(ToolChange::Starts { call: "1".into() })
+        .await;
+    fixture.write("Cargo.lock", "version = 4\n");
+    fs::write(fixture.workspace.path.join("logo.png"), b"\x89PNG\0").unwrap();
+    fixture.report(ToolChange::Ends { call: "1".into() }).await;
+    let changes = (fixture.manager.store)
+        .read(|tx| records::query(tx, "", [], records::change))
+        .await
+        .unwrap();
+    let files: Vec<(&str, ChangeKind, Option<u64>, ChangeAuthor)> = (changes.iter())
+        .map(|change| {
+            (
+                change.latest.path.as_str(),
+                change.kind,
+                change.size,
+                change.author,
+            )
+        })
+        .collect();
+    assert_eq!(
+        files,
+        [
+            (
+                "Cargo.lock",
+                ChangeKind::Generated,
+                Some(12),
+                ChangeAuthor::Agent
+            ),
+            ("logo.png", ChangeKind::Binary, Some(5), ChangeAuthor::Agent),
+        ]
+    );
+}
