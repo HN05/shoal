@@ -92,7 +92,7 @@ impl Manager {
         if assign.agent() {
             // The user's assignment names the others already.
             let others = !assign.user();
-            warnings.extend(self.assign_linked_agent(url, others).await);
+            warnings.extend(self.links.assign_linked_agent(self, url, others).await);
         }
         warnings
     }
@@ -139,7 +139,7 @@ impl Manager {
             .await?;
         self.signals.wake_cleanup();
         let mut warnings = self.links.release_assignees(self, dropped).await;
-        warnings.extend(self.settle_issue_agents(&space, &removed).await);
+        warnings.extend(self.links.settle_issue_agents(self, &space, &removed).await);
         Ok(warnings)
     }
 }

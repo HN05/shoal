@@ -2,7 +2,8 @@ use super::*;
 use crate::daemon::links::issue::test_support::{AGENT_TOKEN, Fixture, run_agent};
 use crate::daemon::{executions::ExecutionKind, workspace_files::Attacher};
 use crate::execution::recovery::RecordExt;
-use crate::model::Workspace;
+use crate::forge::items::reference::ItemRef;
+use crate::model::{Assigner, Workspace};
 use crate::paths::StateFiles;
 use crate::removal::{InspectionPolicy, UnsavedWork};
 use serde_json::json;
@@ -10,6 +11,7 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::assignments::Done;
 use shoal_protocol::executions::Stage;
 use shoal_protocol::executions::TrackedAgent;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A fixture whose agent account has a token, under `config`.
 async fn agents(names: &[&str], assignees: &[&str], config: &str) -> Fixture {
@@ -261,13 +263,18 @@ async fn a_chat_without_a_repository_settles_nothing() {
     let chat = crate::daemon::test_support::chat(manager, "setup", "chat", None, None).await;
     assert!(
         manager
-            .settle_space_agents(&chat.id)
+            .links
+            .settle_space_agents(&**manager, &chat.id)
             .await
             .unwrap()
             .is_none()
     );
     let space = manager.space(&SpaceSelector::id(&chat.id)).await.unwrap();
-    let removed = manager.settle_removed_agents(&space, &[]).await.unwrap();
+    let removed = manager
+        .links
+        .settle_removed_agents(&**manager, &space, &[])
+        .await
+        .unwrap();
     assert!(removed.is_empty());
 }
 

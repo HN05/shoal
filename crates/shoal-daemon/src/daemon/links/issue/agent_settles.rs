@@ -49,7 +49,7 @@ impl Manager {
     /// since the last time.
     pub(crate) async fn settle_requested_agents(&self) {
         for id in self.agent_settles.take() {
-            self.settle_agent_assignees(&id).await;
+            self.links.settle_agent_assignees(self, &id).await;
         }
     }
 }

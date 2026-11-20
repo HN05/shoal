@@ -1,11 +1,13 @@
 //! What links need of the rest of the daemon, which implements it: the
 //! registered repositories and the spaces requests come from, which forge
-//! each host serves, the permission a scoped caller acts with, and the
-//! spaces' state links check in their own transactions.
+//! each host serves, the permission a scoped caller acts with, the
+//! coordinators alerts about a space reach, and the spaces' state links
+//! check in their own transactions.
 use anyhow::Result;
 use futures_util::future::BoxFuture;
 use rusqlite::Connection;
-use shoal_daemon_base::{callers::Caller, permitted_actions::Action};
+use shoal_core::config::Effective;
+use shoal_daemon_base::{callers::Caller, notifications::Coordinators, permitted_actions::Action};
 use shoal_forge::updates::Edited;
 use shoal_forge_types::{
     ForgeRepo,
@@ -53,6 +55,22 @@ pub trait Spaces: Send + Sync {
         selection: &'a Selection,
         elsewhere: bool,
     ) -> BoxFuture<'a, Result<Selected>>;
+
+    /// The settings of `space` in the repository it acts in.
+    fn acting_settings<'a>(&'a self, space: &'a LinkSpace) -> BoxFuture<'a, Result<Effective>>;
+
+    /// What the daemon records of the agent of the space `id`.
+    fn space_agent<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<SpaceAgent>>;
+}
+
+/// What the daemon records of a space's agent, which settling the agent
+/// account on its issues reads.
+pub struct SpaceAgent {
+    /// Whether the space's work is done.
+    pub done: bool,
+    /// Whether it has an agent that runs, sleeps, is queued, restarts or
+    /// waits for a conversion to restart it.
+    pub present: bool,
 }
 
 /// The permission a scoped caller acts with.
@@ -85,9 +103,9 @@ pub trait Forges: Send + Sync {
 
 /// Everything links need of the daemon, which each of their operations
 /// that reaches beyond them takes.
-pub trait Daemon: Spaces + Forges + Permissions {}
+pub trait Daemon: Spaces + Forges + Permissions + Coordinators {}
 
-impl<T> Daemon for T where T: Spaces + Forges + Permissions {}
+impl<T> Daemon for T where T: Spaces + Forges + Permissions + Coordinators {}
 
 /// What links check of a space in their own transactions. Its methods run
 /// on the store's thread, so they are not futures.

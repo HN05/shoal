@@ -5,7 +5,13 @@ use std::collections::HashMap;
 
 use anyhow::{Result, bail};
 use futures_util::future::BoxFuture;
-use shoal_daemon_base::{callers::Caller, permitted_actions::Action};
+use shoal_core::config::Effective;
+use shoal_daemon_base::{
+    alerts::{NewAlert, Sent},
+    callers::Caller,
+    notifications::{Coordinators, Source},
+    permitted_actions::Action,
+};
 use shoal_forge_types::{
     ForgeRepo,
     items::{
@@ -20,7 +26,7 @@ use shoal_protocol::{
 };
 
 use crate::{
-    daemon::{Forges, Permissions, Spaces},
+    daemon::{Forges, Permissions, SpaceAgent, Spaces},
     space::LinkSpace,
 };
 
@@ -70,6 +76,20 @@ impl Spaces for StandIn {
         _: bool,
     ) -> BoxFuture<'a, Result<Selected>> {
         Box::pin(async { bail!(NOT_HERE) })
+    }
+
+    fn acting_settings<'a>(&'a self, _: &'a LinkSpace) -> BoxFuture<'a, Result<Effective>> {
+        Box::pin(async { bail!(NOT_HERE) })
+    }
+
+    fn space_agent<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<SpaceAgent>> {
+        Box::pin(async { bail!(NOT_HERE) })
+    }
+}
+
+impl Coordinators for StandIn {
+    fn tell<'a>(&'a self, _: NewAlert, _: bool, _: Source) -> BoxFuture<'a, Option<Sent>> {
+        Box::pin(async { None })
     }
 }
 

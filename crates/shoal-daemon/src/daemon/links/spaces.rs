@@ -2,9 +2,13 @@
 //! from, as links read them.
 use anyhow::Result;
 use futures_util::future::BoxFuture;
-use shoal_links::{daemon::Spaces, space::LinkSpace};
+use shoal_links::{
+    daemon::{SpaceAgent, Spaces},
+    space::LinkSpace,
+};
 
 use crate::{
+    config::Effective,
     daemon::manager::Manager,
     forge::items::{
         link::{ItemKind, Selection},
@@ -51,5 +55,13 @@ impl Spaces for Manager {
         elsewhere: bool,
     ) -> BoxFuture<'a, Result<Selected>> {
         Box::pin(Manager::select_items(self, space, selection, elsewhere))
+    }
+
+    fn acting_settings<'a>(&'a self, space: &'a LinkSpace) -> BoxFuture<'a, Result<Effective>> {
+        Box::pin(Manager::acting_settings(self, space))
+    }
+
+    fn space_agent<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<SpaceAgent>> {
+        Box::pin(Manager::issue_agent(self, id))
     }
 }
