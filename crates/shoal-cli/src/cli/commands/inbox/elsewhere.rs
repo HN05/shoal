@@ -46,7 +46,7 @@ pub(super) fn items(view: Option<&HubView>, keeps: impl Fn(&Listed) -> bool) -> 
     });
     let approvals = each().flat_map(|(remote, bare)| {
         (remote.space.approvals.iter())
-            .filter(|request| super::user_decides(request))
+            .filter(|request| request.waits_for_user())
             .map(|request| item(bare, Need::Approval(request.clone())))
     });
     let statuses = each()

@@ -106,6 +106,50 @@ fn sample(owner: &SpaceId, target: Target) -> ApprovalRequest {
 }
 
 #[tokio::test]
+async fn only_a_request_nothing_else_carries_out_waits_for_the_user() -> Result<()> {
+    let (_root, manager) = crate::daemon::test_support::manager().await;
+    manager
+        .store
+        .run(|db| {
+            owners(db)?;
+            let owner = SpaceId::from("owner");
+            let held = [
+                ("deciding", Some(GateStep::Deciding), None, None),
+                ("allowed", Some(GateStep::Allowed), None, None),
+                ("pushing", None, Some("push"), None),
+                ("routed", None, None, Some("other")),
+            ];
+            for (key, gate, operation, decider) in held {
+                let mut request = sample(
+                    &owner,
+                    Target::Resource {
+                        scope: Scope::Global,
+                        pool: key.into(),
+                    },
+                );
+                request.key = key.into();
+                request.gate = gate;
+                request.operation = operation.map(Into::into);
+                request.decider = decider.map(SpaceId::from);
+                save(db, &request)?;
+            }
+            assert!(oldest_for_user(db, &owner)?.is_none());
+            let mut asked = sample(
+                &owner,
+                Target::Resource {
+                    scope: Scope::Global,
+                    pool: "asked".into(),
+                },
+            );
+            asked.key = "asked".into();
+            save(db, &asked)?;
+            assert_eq!(oldest_for_user(db, &owner)?.unwrap().key, "asked");
+            Ok(())
+        })
+        .await
+}
+
+#[tokio::test]
 async fn current_lookup_isolates_names_and_ignores_unrelated_history() -> Result<()> {
     let (_root, manager) = crate::daemon::test_support::manager().await;
     manager.store.run(|db| {

@@ -394,6 +394,16 @@ pub enum GateStep {
 }
 
 impl ApprovalRequest {
+    /// Whether the user decides it now: it is pending, no space above its
+    /// own decides it, the gate is neither deciding nor carrying out its
+    /// allow, and no push the user approved is running.
+    pub fn waits_for_user(&self) -> bool {
+        self.status == DecisionStatus::Pending
+            && self.decider.is_none()
+            && !matches!(self.gate, Some(GateStep::Deciding | GateStep::Allowed))
+            && self.operation.is_none()
+    }
+
     /// The permissions that govern the request, each of which a coordinator
     /// needs as `direct` to approve it instead of a grant, and whose
     /// narrowest value sends it to the gate when it is `gate`; none for a

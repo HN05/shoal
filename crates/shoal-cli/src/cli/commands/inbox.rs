@@ -25,11 +25,7 @@ use crate::{
     model::{Chat, QueueEntry, ReviewMark, SpaceLinks, Workspace},
     state::{QueueState, WorkspaceState},
 };
-use shoal_protocol::{
-    approvals::{ApprovalRequest, DecisionStatus, GateStep},
-    hub::directory::HubView,
-    threads::Thread,
-};
+use shoal_protocol::{approvals::ApprovalRequest, hub::directory::HubView, threads::Thread};
 
 mod elsewhere;
 
@@ -265,17 +261,11 @@ fn decision_items(
         });
     let requests = requests
         .into_iter()
-        .filter(|request| user_decides(request) && (kept(&request.space_id) || detached(request)))
+        .filter(|request| {
+            request.waits_for_user() && (kept(&request.space_id) || detached(request))
+        })
         .map(|request| Item::Approval { request });
     threads.chain(requests).collect()
-}
-
-/// Whether the user decides `request` now: a pending request that no space
-/// above its own decides and no gate is deciding.
-fn user_decides(request: &ApprovalRequest) -> bool {
-    request.status == DecisionStatus::Pending
-        && request.decider.is_none()
-        && request.gate != Some(GateStep::Deciding)
 }
 
 /// The failed launches among `entries` of the `workspaces` and `chats`
