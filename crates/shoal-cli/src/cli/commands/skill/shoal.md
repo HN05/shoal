@@ -65,7 +65,8 @@ a workspace once the work is known. `--in <workspace>` starts that existing
 workspace's own agent instead of a new space, with the task after `--`, else on
 its issue, or a chat in its worktree in a chat mode such as `-m chat`; a workspace
 has one agent of its own, so starting another is refused while one runs,
-waits in the queue or is stopped there. `contribute` takes
+waits in the queue or is stopped there; `--replace` discards a stopped or
+asleep one and starts the new agent in its place. `contribute` takes
 the same URLs for a repository the user does not maintain: it clones it, forks
 it when the user cannot push there, and removes the clone once nothing of it is
 left.

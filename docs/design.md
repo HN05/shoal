@@ -3394,7 +3394,10 @@ what an agent may do. The daemon keeps the workspace's own agent one: it
 refuses to queue a launch in an existing workspace while that workspace's
 agent runs, waits in the queue or is stopped awaiting `shoal resume`, so the
 CLI, coordinators and apps get one answer; a last session gives way, since its
-agent ended on its own. It stays a chat, with its own identity, scope,
+agent ended on its own. A stopped or asleep agent gives way only to a start
+with `--replace`, which discards it through the same operation as
+`shoal restore --discard-agent`, so replacing needs the right to discard; a
+running one never does, so a start never cuts off a live turn. It stays a chat, with its own identity, scope,
 temporary directory and messages, and is not the workspace's child, since a
 child's threads and approvals go to its parent's agent while the user attends
 a chat; so Shoal commands it runs never act as the workspace's agent. Its scope

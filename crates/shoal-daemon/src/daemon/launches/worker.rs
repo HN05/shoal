@@ -1,5 +1,6 @@
 //! A launch that starts the worker of an existing workspace: its own agent,
-//! started as a new workspace's is, with no space created.
+//! started as a new workspace's is, with no space created, in place of its
+//! stopped agent where the launch replaces that.
 use anyhow::{Context as _, Result};
 use shoal_protocol::launches::{Launch, LaunchSource, SpaceChoice};
 use shoal_protocol::progress::Blocker;
@@ -21,7 +22,8 @@ impl Manager {
     /// Queue the worker `launch`, which `source` made, starts in `shape` in
     /// the workspace it names, on the workspace's issue unless it names a
     /// task, once what blocks it is done: the agent it names, else
-    /// `agent.default`, refused without either.
+    /// `agent.default`, refused without either. A launch that replaces the
+    /// workspace's stopped agent discards it first.
     pub(super) async fn launch_worker(
         &self,
         launch: Launch,
@@ -42,6 +44,10 @@ impl Manager {
             ScopeRefusal::of(allowed)?;
         }
         let blockers = self.worker_blockers(&workspace, &request, caller).await?;
+        if request.replace {
+            let space = self.space(&selector).await?;
+            self.replace_stopped_worker(&space).await?;
+        }
         let entry = self
             .queue_agent(&selector, request.launch, blockers, None)
             .await?;
@@ -51,8 +57,8 @@ impl Manager {
     /// Refuse what starting the worker `launch` names in `shape` for
     /// `caller` would refuse, as [`Self::launch_worker`] starts it, short
     /// of queuing it: a workspace outside a scoped caller's tree,
-    /// permissions it does not hold, and blockers no one knows; returns
-    /// the workspace.
+    /// permissions it does not hold, blockers no one knows, and an agent
+    /// of the workspace's own it does not replace; returns the workspace.
     pub(super) async fn check_worker(
         &self,
         launch: &Launch,
@@ -65,13 +71,48 @@ impl Manager {
             .context("the launch names no workspace")?;
         if let Some(caller) = caller {
             let (mode, given) = (Some(&shape.mode), &launch.permissions);
+            self.ensure_may_replace(caller, &mut selector, launch.replace)
+                .await?;
             self.worker_target(caller, &mut selector, mode, given)
                 .await?;
         }
         let workspace = self.workspace(&selector).await?;
         let repository = workspace.repository();
         (self.named_blockers(repository, &launch.blockers, caller)).await?;
+        self.check_takes_worker(launch, &workspace).await?;
         Ok(workspace)
+    }
+
+    /// Refuse the worker of `launch` in `workspace` while the workspace has
+    /// an agent of its own that the launch does not replace, as queuing it
+    /// refuses it.
+    pub(super) async fn check_takes_worker(
+        &self,
+        launch: &Launch,
+        workspace: &Workspace,
+    ) -> Result<()> {
+        let space = self.space(&SpaceSelector::id(&workspace.id)).await?;
+        match launch.replace {
+            true => self.ensure_no_live_worker(&space).await,
+            false => self.ensure_takes_worker(&space).await,
+        }
+    }
+
+    /// Refuse the scoped `caller` a launch that `replaces` the stopped
+    /// agent of the workspace `selector` names, unless it may discard
+    /// that agent: one of a space below its own.
+    async fn ensure_may_replace(
+        &self,
+        caller: &Caller,
+        selector: &mut SpaceSelector,
+        replaces: bool,
+    ) -> Result<()> {
+        if replaces {
+            const REFUSAL: &str =
+                "scoped processes replace stopped agents only in the spaces below theirs";
+            self.workspace_below(caller, selector, REFUSAL).await?;
+        }
+        Ok(())
     }
 
     /// Refuse the scoped `caller` a worker it may not start in the
@@ -84,6 +125,7 @@ impl Manager {
     ) -> Result<()> {
         let launch = &request.launch;
         let (mode, given) = (launch.mode.as_ref(), &launch.narrowing);
+        (self.ensure_may_replace(caller, selector, request.replace)).await?;
         let target = self.worker_target(caller, selector, mode, given).await?;
         if launch.now {
             (self.authorize_start_beyond_limits(caller, "start", target)).await?;
@@ -125,10 +167,12 @@ fn queued(workspace: Workspace, entry: crate::model::QueueEntry) -> Launched {
     }
 }
 
-/// A worker's launch, with what the launch names as blocking it.
+/// A worker's launch, with what the launch names as blocking it and
+/// whether it replaces the workspace's stopped agent.
 struct WorkerRequest {
     launch: LaunchRequest,
     blockers: Vec<String>,
+    replace: bool,
 }
 
 /// The worker `launch` asks for in `shape`, which `source` made.
@@ -136,5 +180,9 @@ fn worker_request(launch: Launch, shape: Shape, source: LaunchSource) -> WorkerR
     WorkerRequest {
         launch: super::space::agent_request(&launch, &shape.mode, source),
         blockers: launch.blockers,
+        replace: launch.replace,
     }
 }
+
+#[cfg(test)]
+mod tests;

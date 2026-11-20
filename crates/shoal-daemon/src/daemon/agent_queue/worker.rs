@@ -1,6 +1,7 @@
 //! The one worker a workspace has: a launch in an existing workspace starts
 //! its agent only while no other agent of its own runs, waits or is stopped
-//! there. Chats in its worktree are not its agents and never count.
+//! there, unless it replaces a stopped one. Chats in its worktree are not
+//! its agents and never count.
 use anyhow::{Result, bail};
 
 use crate::{daemon::manager::Manager, execution::recovery, model::Space};
@@ -9,11 +10,12 @@ use shoal_protocol::space_names::SpaceSelector;
 impl Manager {
     /// Refuse a launch in `space` while it has an agent of its own: a
     /// running one, one in the agent queue, or a stopped or asleep one
-    /// awaiting `shoal resume`. A last session, whose agent exited on its own, does not
+    /// awaiting `shoal resume`, which a launch that replaces it discards
+    /// first. A last session, whose agent exited on its own, does not
     /// count, since the new agent replaces it, nor does a start whose setup
     /// failed, whose place the agent left waiting takes. Requires the queue
     /// gate, which keeps another launch out until this one is recorded.
-    pub(super) async fn ensure_takes_worker(&self, space: &Space) -> Result<()> {
+    pub(in crate::daemon) async fn ensure_takes_worker(&self, space: &Space) -> Result<()> {
         self.ensure_no_live_worker(space).await?;
         if self.has_stopped_worker(space).await? {
             bail!(StoppedAgent::of(space));
@@ -21,15 +23,30 @@ impl Manager {
         Ok(())
     }
 
+    /// Discard the stopped or asleep agent of `space`, with its last
+    /// sessions and stopped commands, as `shoal restore --discard-agent`
+    /// does, so that a new agent can take its place; a running agent, or
+    /// one in the agent queue, is refused, so a start never cuts off a live
+    /// turn.
+    pub(in crate::daemon) async fn replace_stopped_worker(&self, space: &Space) -> Result<()> {
+        self.ensure_no_live_worker(space).await?;
+        let selector = SpaceSelector::id(&space.id);
+        if !self.saved_work(&selector).await?.is_empty() {
+            self.discard_stopped_agent(&selector, None).await?;
+        }
+        // An asleep agent's restore leaves the queue once its record goes.
+        self.forget_resolved_restores().await
+    }
+
     /// Refuse a launch in `space` while an agent of its own runs there or
-    /// waits in the agent queue.
-    async fn ensure_no_live_worker(&self, space: &Space) -> Result<()> {
+    /// waits in the agent queue, which a replacing launch refuses too.
+    pub(in crate::daemon) async fn ensure_no_live_worker(&self, space: &Space) -> Result<()> {
         let (number, kind) = (space.number, space.kind());
         if self.running_agent_workspaces().await.contains(&space.id)
             || self.recorded_agent_spaces().await?.contains(&space.id)
         {
             bail!(HasAgent(format!(
-                "{kind} {number} already has a running agent; attach to it with `shoal attach {number}`, restart it with `shoal restart {number}`, or start a chat beside it with `-m chat`"
+                "{kind} {number} already has a running agent; attach to it with `shoal attach {number}`, restart it with `shoal restart {number}`, stop it with `shoal stop {number}` to replace it, or start a chat beside it with `-m chat`"
             )));
         }
         let id = space.id.clone();
@@ -96,8 +113,8 @@ impl std::fmt::Display for HasAgent {
 
 impl std::error::Error for HasAgent {}
 
-/// The refusal of a launch in a space with a stopped or asleep agent,
-/// which names how to resume or discard that agent.
+/// The refusal of a launch in a space whose stopped or asleep agent it
+/// does not replace, which names how to resume or replace that agent.
 #[derive(Debug)]
 pub struct StoppedAgent(String);
 
@@ -106,7 +123,7 @@ impl StoppedAgent {
     fn of(space: &Space) -> Self {
         let (number, kind) = (space.number, space.kind());
         Self(format!(
-            "{kind} {number} has a stopped agent; resume it with `shoal resume {number}` or discard it with `shoal restore --discard-agent {number}`"
+            "{kind} {number} has a stopped agent; resume it with `shoal resume {number}`, or pass `--replace` to discard it and start a new one"
         ))
     }
 }

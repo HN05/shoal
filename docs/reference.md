@@ -2718,12 +2718,19 @@ that the `focus` setting does not send to the background, unless
 `--add-blocker` makes it wait for work.
 
 A workspace has one agent of its own. The daemon refuses a launch in an
-existing workspace, from any caller, while that workspace's agent runs, waits
-in the queue, including while a blocker holds it back, or is stopped awaiting `shoal resume`;
-the refusal names `shoal attach`, `shoal restart`, `shoal queue` or `shoal
-restore` as fits. A last session, whose agent exited on its own, does not
-count: the new agent replaces it. Chats in the workspace's worktree never
-count.
+existing workspace, from any caller, while that workspace's agent runs or waits
+in the queue, including while a blocker holds it back, naming `shoal attach`,
+`shoal restart`, `shoal stop` or `shoal queue` as fits. A stopped agent awaiting
+`shoal resume`, or an asleep one whose restore Shoal queued on its own, refuses
+it too, naming `shoal resume` and `--replace`, unless the start passes
+`--replace`: the launch then discards that agent, with its last sessions and
+stopped commands, as `shoal restore --discard-agent` does, and queues its own.
+`--replace` applies only to a start of a
+workspace's own agent, with `--in` or on a branch or issue the workspace has,
+so a chat in its worktree refuses it, and a scoped caller replaces only the
+agent of a space below its own, as it discards one. A last session, whose agent
+exited on its own, does not count: the new agent replaces it. Chats in the
+workspace's worktree never count.
 
 An agent's automatic restore waits in the same queue, ranked with launches,
 from when its processes stop, and waits for what the agent's stop calls for,

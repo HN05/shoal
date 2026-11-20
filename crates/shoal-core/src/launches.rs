@@ -110,6 +110,7 @@ pub fn workspace_flags(launch: &Launch) -> Vec<&'static str> {
         ("--add-blocker", !launch.blockers.is_empty()),
         ("--skip-setup", launch.skip_setup),
         ("--disposable", launch.disposable),
+        ("--replace", launch.replace),
     ]
     .into_iter()
     .filter_map(|(flag, set)| set.then_some(flag))
@@ -119,6 +120,10 @@ pub fn workspace_flags(launch: &Launch) -> Vec<&'static str> {
 /// Refuse what only a new workspace's branch takes in `launch`, which
 /// names no branch, so it begins as a chat.
 pub fn ensure_begins_as_chat(launch: &Launch) -> Result<()> {
+    ensure!(
+        !launch.replace,
+        "--replace replaces the stopped agent of an existing workspace; name it with --in"
+    );
     if let Some(flag) = workspace_flags(launch).first() {
         anyhow::bail!(
             "{flag} applies to a new workspace's branch; name the branch with --branch, since a start without one begins as a chat"

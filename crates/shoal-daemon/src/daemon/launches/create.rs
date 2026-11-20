@@ -123,6 +123,7 @@ fn ensure_creates(launch: &Launch) -> Result<()> {
         ("--now", launch.now),
         ("--here", launch.here),
         ("--in", launch.in_workspace.is_some()),
+        ("--replace", launch.replace),
         ("a task", !launch.task.is_empty() || launch.prompt.is_some()),
         ("a setup", launch.setup.is_some()),
     ];

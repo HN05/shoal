@@ -222,6 +222,11 @@ pub struct StartArgs {
         conflicts_with_all = ["branch", "path", "base", "git_profile", "skip_setup", "disposable", "copy", "checkpoint"]
     )]
     pub in_workspace: Option<Option<SpaceSelector>>,
+    /// Discard the stopped or asleep agent of the workspace the start goes
+    /// into, with --in or by its branch or issue, and start the new agent in
+    /// its place; a running agent stays.
+    #[arg(long)]
+    pub replace: bool,
     /// The space the new one goes below, by number or ID; defaults to the
     /// space this runs in, else none.
     #[arg(long, value_name = "SPACE")]
@@ -327,6 +332,7 @@ impl StartArgs {
             skip_setup: self.creation.skip_setup,
             disposable: self.creation.disposable,
             in_workspace: self.in_workspace.clone().map(SpaceChoice::from),
+            replace: self.replace,
             mode: self.mode.clone(),
             agent: self.agent.clone(),
             model: self.model.clone().into(),

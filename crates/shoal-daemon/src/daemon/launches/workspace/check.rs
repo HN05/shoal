@@ -17,7 +17,8 @@ impl Manager {
     /// would refuse, settled as [`Self::workspace_placement`] settles it
     /// short of fetching a PR's branches, and with what a picker has yet to
     /// choose left open; returns instead the existing workspace that has
-    /// the branch it names, which the start goes into.
+    /// the branch it names, which the start goes into, refusing one with an
+    /// agent of its own the launch does not replace.
     pub(in crate::daemon::launches) async fn check_workspace_placement(
         &self,
         launch: &Launch,
@@ -27,7 +28,10 @@ impl Manager {
             Settling::New(settled) => {
                 (self.check_settled(launch, *settled, caller).await).map(|()| None)
             }
-            Settling::Existing(workspace) => Ok(Some(*workspace)),
+            Settling::Existing(workspace) => {
+                self.check_takes_worker(launch, &workspace).await?;
+                Ok(Some(*workspace))
+            }
         }
     }
 

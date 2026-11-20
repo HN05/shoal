@@ -50,7 +50,7 @@ async fn a_queued_agent_refuses_another_worker() {
 
 /// An agent that waits for its restore holds its workspace's one agent,
 /// whether its wrapper or, once that is gone, the daemon restores it, as
-/// an asleep agent.
+/// an asleep agent a launch may replace.
 #[tokio::test]
 async fn an_agent_waiting_for_its_restore_refuses_another_worker() {
     use super::StoppedAgent;
@@ -84,6 +84,12 @@ async fn an_agent_waiting_for_its_restore_refuses_another_worker() {
             .is_err_and(|error| error.is::<StoppedAgent>()),
         "{refused:?}"
     );
+
+    // Replacing it takes its restore out of the queue.
+    let space = space_of(&manager, &workspace).await;
+    manager.replace_stopped_worker(&space).await.unwrap();
+    assert!(manager.queue_entries().await.unwrap().is_empty());
+    queue_worker(&manager, &workspace).await.unwrap();
 }
 
 /// Record a stopped agent of `workspace` awaiting `shoal resume`,
@@ -99,6 +105,14 @@ fn stopped_agent(manager: &Manager, workspace: &Workspace) -> std::path::PathBuf
         None,
     )
     .unwrap()
+}
+
+/// The space record of `workspace`, which a replacing launch reads.
+async fn space_of(manager: &Manager, workspace: &Workspace) -> crate::model::Space {
+    manager
+        .space(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap()
 }
 
 #[tokio::test]
@@ -117,6 +131,30 @@ async fn a_stopped_agent_refuses_another_worker_until_it_is_resumed_or_forgotten
     );
     std::fs::remove_file(record).unwrap();
     queue_worker(&manager, &workspace).await.unwrap();
+}
+
+#[tokio::test]
+async fn replacing_a_stopped_agent_discards_it_and_takes_a_worker() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let workspace = create(&manager, &repo, "stopped").await;
+    let record = stopped_agent(&manager, &workspace);
+    let space = space_of(&manager, &workspace).await;
+    manager.replace_stopped_worker(&space).await.unwrap();
+    assert!(!record.exists(), "the stopped agent's record stayed");
+    queue_worker(&manager, &workspace).await.unwrap();
+}
+
+#[tokio::test]
+async fn replacing_refuses_a_running_agent() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let workspace = create(&manager, &repo, "busy").await;
+    let _agent = connected_agent(&manager, &workspace).await;
+    let space = space_of(&manager, &workspace).await;
+    let refused = manager.replace_stopped_worker(&space).await;
+    let refused = format!("{:#}", refused.expect_err("a running agent was replaced"));
+    assert!(refused.contains("shoal stop"), "{refused}");
 }
 
 #[tokio::test]

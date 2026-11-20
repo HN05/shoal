@@ -73,7 +73,8 @@ shoal_states::open_enum! {
         /// Stopping needs the user to confirm that an execution Shoal cannot
         /// prove ended did.
         UnprovenStop => "unproven_stop",
-        /// The workspace a start goes into has a stopped or asleep agent.
+        /// The workspace a start goes into has a stopped or asleep agent,
+        /// which the start replaces only with `--replace`.
         StoppedAgent => "stopped_agent",
         /// The workspace, repository, link, thread or approval does not exist.
         NotFound => "not_found",
