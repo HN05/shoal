@@ -18,6 +18,7 @@ pub mod proposals;
 mod pushes;
 mod raw;
 mod reads;
+pub(crate) mod records;
 mod relink;
 mod revert;
 mod run_approval;
@@ -31,7 +32,7 @@ pub mod wait;
 
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use shoal_ids::space_ids::SpaceId;
 use shoal_links::place::Access;
 use shoal_links::space::LinkSpace;
@@ -50,6 +51,7 @@ use crate::{
         reference::{ItemInput, ItemRef},
     },
     model::{LinkedItem, Relation},
+    state::WorkspaceState,
 };
 use shoal_forge::{ci::run_view::RunViewRequests, items::action::ActionRequests};
 use shoal_protocol::links::{Linked, Unlinked};
@@ -246,19 +248,12 @@ impl Manager {
         id: &SpaceId,
         items: Vec<(Relation, LinkedItem)>,
     ) -> Result<()> {
-        let id = id.to_owned();
+        let (id, links) = (id.to_owned(), self.links.clone());
         self.store
             .write(move |tx| {
                 for (relation, item) in &items {
                     let title = item.title.as_deref();
-                    shoal_links::records::record(
-                        tx,
-                        &id,
-                        *relation,
-                        item.kind(),
-                        item.url.url(),
-                        title,
-                    )?;
+                    links.record(tx, &id, *relation, item.kind(), item.url.url(), title)?;
                 }
                 Ok(())
             })
@@ -274,17 +269,9 @@ impl Manager {
         kind: Option<LinkKind>,
         url: Option<ItemRef>,
     ) -> Result<usize> {
-        let id = id.to_owned();
+        let (id, links) = (id.to_owned(), self.links.clone());
         self.store
-            .write(move |tx| {
-                shoal_links::records::remove(
-                    tx,
-                    &id,
-                    relation,
-                    kind,
-                    url.as_ref().map(ItemRef::url),
-                )
-            })
+            .write(move |tx| links.remove(tx, &id, relation, kind, url.as_ref().map(ItemRef::url)))
             .await
     }
 
@@ -382,6 +369,43 @@ pub(crate) fn forget_assigned(
         events::record_link(db, id, EventKind::Unlinked, Relation::Assigned, kind, url)?;
     }
     Ok(())
+}
+
+/// Refuse changes while the workspace is removed or otherwise in transition,
+/// so a removal record taken during removal holds its final links; a chat
+/// takes them whenever it runs.
+pub(crate) fn ensure_accepts_links(db: &Connection, id: &SpaceId) -> Result<()> {
+    if space::is_chat(db, id)? {
+        return Ok(());
+    }
+    let state = state(db, id)?;
+    ensure!(
+        state.accepts_links(),
+        "workspace cannot change links while {state}"
+    );
+    Ok(())
+}
+
+/// Whether the workspace still exists and its state takes link changes now,
+/// or the chat still runs.
+pub(crate) fn accepts_links(db: &Connection, id: &SpaceId) -> Result<bool> {
+    if space::is_chat(db, id)? {
+        return Ok(true);
+    }
+    let state: Option<WorkspaceState> = db
+        .query_row("SELECT state FROM workspaces WHERE id=?1", [id], |row| {
+            row.get(0)
+        })
+        .optional()?;
+    Ok(state.is_some_and(WorkspaceState::accepts_links))
+}
+
+fn state(db: &Connection, id: &SpaceId) -> Result<WorkspaceState> {
+    Ok(
+        db.query_row("SELECT state FROM workspaces WHERE id=?1", [id], |row| {
+            row.get(0)
+        })?,
+    )
 }
 
 #[cfg(test)]

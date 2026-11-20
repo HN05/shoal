@@ -227,7 +227,7 @@ fn assign(
     title: Option<&str>,
     assigner: Assigner,
 ) -> Result<bool> {
-    shoal_links::records::ensure_accepts_links(db, id)?;
+    crate::daemon::links::ensure_accepts_links(db, id)?;
     let assigned = shoal_links::linked::assigned_urls(db, id)?
         .iter()
         .any(|issue| issue.url() == url);
@@ -261,7 +261,7 @@ fn unlink(
     id: &SpaceId,
     selected: Option<&str>,
 ) -> Result<(Vec<ItemRef>, Vec<Dropped>)> {
-    shoal_links::records::ensure_accepts_links(db, id)?;
+    crate::daemon::links::ensure_accepts_links(db, id)?;
     let mut removed = shoal_links::linked::assigned_urls(db, id)?;
     if let Some(url) = selected {
         removed.retain(|issue| issue.url() == url);

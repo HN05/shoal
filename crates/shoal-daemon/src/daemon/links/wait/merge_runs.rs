@@ -175,9 +175,9 @@ impl Manager {
             true => self.merge_runs(&lookup, now).await?,
             false => Vec::new(),
         };
-        let id = id.to_owned();
+        let (id, links) = (id.to_owned(), self.links.clone());
         self.store
-            .write(move |tx| record_merge_runs(tx, &id, lookup, &runs, now))
+            .write(move |tx| record_merge_runs(&links, tx, &id, lookup, &runs, now))
             .await
     }
 
@@ -422,6 +422,7 @@ fn unseen_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
 /// Link the `runs` of `lookup` the space `id` has not linked, and end the
 /// lookup at `now` once its window and the runs it linked are over.
 fn record_merge_runs(
+    links: &shoal_links::Links,
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
     mut lookup: MergeLookup,
@@ -429,10 +430,10 @@ fn record_merge_runs(
     now: UnixTime,
 ) -> Result<()> {
     // A space being removed takes no links; its lookup goes with it.
-    if !shoal_links::records::accepts_links(tx, id)? {
+    if !crate::daemon::links::accepts_links(tx, id)? {
         return Ok(());
     }
-    link_new_runs(tx, id, &mut lookup, runs)?;
+    link_new_runs(links, tx, id, &mut lookup, runs)?;
     let looked = lookup.looking;
     lookup.looking &= now < lookup.merged_at + LOOKUP_WINDOW;
     if lookup.looking || any_running(tx, id, &lookup.runs)? {
@@ -444,6 +445,7 @@ fn record_merge_runs(
 /// Link each of `runs` that `lookup` has not linked to the space `id`, and
 /// record it as the lookup's.
 fn link_new_runs(
+    links: &shoal_links::Links,
     db: &rusqlite::Connection,
     id: &SpaceId,
     lookup: &mut MergeLookup,
@@ -454,7 +456,7 @@ fn link_new_runs(
             continue;
         };
         if !lookup.runs.contains(&url) {
-            link_merge_run(db, id, &url, run.workflow.as_deref())?;
+            link_merge_run(links, db, id, &url, run.workflow.as_deref())?;
             lookup.runs.push(url);
         }
     }
@@ -488,14 +490,14 @@ fn end_lookup(
 /// Link the run at `url` of `workflow` to the space `id` as related, unless
 /// it links the run already.
 fn link_merge_run(
+    service: &shoal_links::Links,
     db: &rusqlite::Connection,
     id: &SpaceId,
     url: &ItemRef,
     workflow: Option<&str>,
 ) -> Result<()> {
     if !links(db, id, url)? {
-        let link = shoal_links::records::record;
-        link(db, id, Relation::Related, LinkKind::Ci, url.url(), workflow)?;
+        service.record(db, id, Relation::Related, LinkKind::Ci, url.url(), workflow)?;
     }
     Ok(())
 }

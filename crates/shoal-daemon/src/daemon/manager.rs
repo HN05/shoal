@@ -130,7 +130,10 @@ impl Manager {
             Arc::new(super::runner::RunnerRecords),
             paths.clone(),
         ));
-        let links = Arc::new(shoal_links::Links::new(config_state.clone()));
+        let links = Arc::new(shoal_links::Links::new(
+            config_state.clone(),
+            Arc::new(super::links::records::LinkRecords),
+        ));
         let reviews = Arc::new(shoal_reviews::Reviews::new(
             store.clone(),
             gates.clone(),

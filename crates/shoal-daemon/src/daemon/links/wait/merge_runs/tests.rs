@@ -595,11 +595,11 @@ async fn a_cursor_that_sees_the_merge_after_its_lookup_ended_starts_none() {
 async fn opening(watch: bool, runs: Value) -> Following {
     let following = following(watch, runs).await;
     let (id, pr) = (following.workspace.id.clone(), following.pr.clone());
+    let links = following.manager.links.clone();
     (following.manager.store)
         .run(move |db| {
             db.execute("DELETE FROM pr_cleanup WHERE space_id=?1", [&id])?;
-            let link = shoal_links::records::record;
-            link(db, &id, Relation::Opened, LinkKind::Pr, &pr, Some("Fix"))
+            links.record(db, &id, Relation::Opened, LinkKind::Pr, &pr, Some("Fix"))
         })
         .await
         .unwrap();

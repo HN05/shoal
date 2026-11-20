@@ -24,14 +24,16 @@ use shoal_daemon_base::config_state::ConfigState;
 /// The links' service, which `Manager` holds.
 pub struct Links {
     config: Arc<ConfigState>,
+    records: Arc<dyn daemon::Records>,
     memories: memories::ForgeMemories,
     waits: wait::ActiveWaits,
 }
 
 impl Links {
-    pub fn new(config: Arc<ConfigState>) -> Self {
+    pub fn new(config: Arc<ConfigState>, records: Arc<dyn daemon::Records>) -> Self {
         Self {
             config,
+            records,
             memories: Default::default(),
             waits: Default::default(),
         }

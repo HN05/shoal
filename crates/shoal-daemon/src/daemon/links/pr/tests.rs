@@ -199,10 +199,11 @@ async fn watching_a_related_pr_replaces_its_link_and_keeps_its_cursor() {
         .await
         .unwrap();
     let (id, url) = (workspace.id.clone(), "https://github.com/team/repo/pull/2");
+    let links = manager.links.clone();
     let counts = manager
         .store
         .write(move |tx| {
-            shoal_links::records::record(
+            links.record(
                 tx,
                 &id,
                 crate::model::Relation::Related,

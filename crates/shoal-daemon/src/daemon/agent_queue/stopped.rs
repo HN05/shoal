@@ -104,7 +104,7 @@ impl Restore {
 /// workspace or a chat, and its execution ended, since a recorded one runs
 /// or is unresolved, unless its wrapper waits to restore it.
 fn insert(tx: &rusqlite::Transaction<'_>, restore: &Restore) -> Result<()> {
-    if !shoal_links::records::is_chat(tx, &restore.target.id)? {
+    if !crate::daemon::links::space::is_chat(tx, &restore.target.id)? {
         crate::daemon::store::require_ready(tx, &restore.target.id)
             .context("restore agents in a ready workspace")?;
     }

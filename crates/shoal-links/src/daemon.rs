@@ -1,8 +1,10 @@
 //! What links need of the rest of the daemon, which implements it: the
 //! registered repositories and the spaces requests come from, which forge
-//! each host serves, and the permission a scoped caller acts with.
+//! each host serves, the permission a scoped caller acts with, and the
+//! spaces' state links check in their own transactions.
 use anyhow::Result;
 use futures_util::future::BoxFuture;
+use rusqlite::Connection;
 use shoal_daemon_base::{callers::Caller, permitted_actions::Action};
 use shoal_forge_types::{
     ForgeRepo,
@@ -85,3 +87,11 @@ pub trait Forges: Send + Sync {
 pub trait Daemon: Spaces + Forges + Permissions {}
 
 impl<T> Daemon for T where T: Spaces + Forges + Permissions {}
+
+/// What links check of a space in their own transactions. Its methods run
+/// on the store's thread, so they are not futures.
+pub trait Records: Send + Sync {
+    /// Refuse a change to the space `id`'s links while it takes none, as
+    /// while a workspace is removed.
+    fn ensure_accepts_links(&self, db: &Connection, id: &SpaceId) -> Result<()>;
+}

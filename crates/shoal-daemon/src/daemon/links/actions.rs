@@ -677,8 +677,9 @@ impl Manager {
     /// check takes no link changes, and the item exists either way.
     async fn record_created(&self, space: &SpaceId, kind: ItemKind, item: &Item) -> Result<bool> {
         let (id, url, title) = (space.to_owned(), item.url.clone(), item.title.clone());
+        let links = self.links.clone();
         self.store
-            .write(move |tx| record_opened(tx, &id, kind, url.url(), &title))
+            .write(move |tx| record_opened(&links, tx, &id, kind, url.url(), &title))
             .await
             .with_context(|| format!("{} was opened, but recording it failed", item.url))
     }
@@ -688,15 +689,16 @@ impl Manager {
 /// returning whether it was recorded, which a removal that started after the
 /// caller's check prevents.
 fn record_opened(
+    links: &shoal_links::Links,
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
     kind: ItemKind,
     url: &str,
     title: &str,
 ) -> Result<bool> {
-    let recorded = shoal_links::records::accepts_links(tx, id)?;
+    let recorded = crate::daemon::links::accepts_links(tx, id)?;
     if recorded {
-        shoal_links::records::record(tx, id, Relation::Opened, kind, url, Some(title))?;
+        links.record(tx, id, Relation::Opened, kind, url, Some(title))?;
     }
     Ok(recorded)
 }

@@ -80,7 +80,7 @@ impl Manager {
     async fn ensure_links_accepted(&self, id: &SpaceId) -> Result<()> {
         let id = id.to_owned();
         self.store
-            .run(move |db| shoal_links::records::ensure_accepts_links(db, &id))
+            .run(move |db| crate::daemon::links::ensure_accepts_links(db, &id))
             .await
     }
 
