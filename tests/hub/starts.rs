@@ -1,6 +1,8 @@
 //! Starts on another joined machine: `shoal start --machine` from a space
 //! on one machine creates a child there, cloning the repository where that
 //! machine has none of it.
+use std::{fs, os::unix::fs::PermissionsExt as _, path::Path};
+
 use serde_json::Value;
 
 use super::{
@@ -9,6 +11,7 @@ use super::{
     support::{
         fixture::{Base, home},
         git, git_with_identity, printed,
+        prompt::{self, AnswerOptions},
         wait::wait_for,
     },
 };
@@ -30,10 +33,16 @@ struct Machines {
 
 fn machines() -> Machines {
     // Only the laptop has the agent, which a start there checks.
-    let config = "[machine.hub]\nenabled = true\nlisten = \"127.0.0.1:0\"\n";
-    let hub = Base::start(home(), config, "app", &[]);
+    machines_with(("", &[]), "")
+}
+
+/// The [`machines`], with `hub` added to the hub's config and its files to
+/// its repository, and `laptop` to the laptop's config.
+fn machines_with((hub, files): (&str, &[(&str, &str)]), laptop: &str) -> Machines {
+    let config = format!("[machine.hub]\nenabled = true\nlisten = \"127.0.0.1:0\"\n{hub}");
+    let hub = Base::start(home(), &config, "app", files);
     let origin = give_origin(&hub);
-    let laptop = Base::start(home(), AGENT, "notes", &[]);
+    let laptop = Base::start(home(), &format!("{AGENT}{laptop}"), "notes", &[]);
     let laptop_id = join(&laptop, &hub, "laptop");
     let coordinator = workspace(&hub, "coordinator");
     ready_at(&laptop, &coordinator, &hub_machine(&hub));
@@ -66,6 +75,23 @@ fn on_laptop(machines: &Machines, name: &str, kind: &str) -> Value {
         let listed = machines.hub.ok(list);
         (listed.as_array().unwrap().iter())
             .find(|space| space["name"] == name && space["machine"] == machines.laptop_id.as_str())
+            .cloned()
+    })
+}
+
+/// The space named `name` of `kind` that the hub runs, as the laptop lists
+/// it from the hub's directory, which names a parent on another machine
+/// too, once it lists it.
+fn on_hub(machines: &Machines, name: &str, kind: &str) -> Value {
+    let hub = hub_machine(&machines.hub);
+    let list = match kind {
+        "chat" => &["list", "--chats"][..],
+        _ => &["list"][..],
+    };
+    wait_for("the space on the hub", || {
+        let listed = machines.laptop.ok(list);
+        (listed.as_array().unwrap().iter())
+            .find(|space| space["name"] == name && space["machine"] == hub.as_str())
             .cloned()
     })
 }
@@ -104,6 +130,30 @@ fn a_space_starts_a_child_chat_on_another_machine() {
     let machines = machines();
     let repo = machines.hub.repo.to_str().unwrap().to_owned();
     let started = start_in_coordinator(&machines, &[&repo, "--mode", "chat", "--name", "talk"]);
+    assert!(started.status.success(), "{}", printed(&started));
+    let chat = on_laptop(&machines, "talk", "chat");
+    assert_eq!(chat["parent"], machines.coordinator.as_str(), "{chat}");
+}
+
+#[test]
+fn a_start_on_another_machine_takes_a_mode_only_that_machine_defines() {
+    let machines = machines_with(("", &[]), "[modes.remote]\nkind = \"chat\"\n");
+    let repo = machines.hub.repo.to_str().unwrap().to_owned();
+    let started = start_in_coordinator(&machines, &[&repo, "--mode", "remote", "--name", "talk"]);
+    assert!(started.status.success(), "{}", printed(&started));
+    // That machine's mode starts a chat there.
+    let chat = on_laptop(&machines, "talk", "chat");
+    assert_eq!(chat["parent"], machines.coordinator.as_str(), "{chat}");
+}
+
+#[test]
+fn a_first_start_on_another_machine_takes_a_mode_its_repository_defines() {
+    // A mode only the hub's repository defines, which the laptop has not
+    // cloned yet.
+    let tracked = [(".shoal.toml", "[modes.remote]\nkind = \"chat\"\n")];
+    let machines = machines_with(("", &tracked), "");
+    let repo = machines.hub.repo.to_str().unwrap().to_owned();
+    let started = start_in_coordinator(&machines, &[&repo, "--mode", "remote", "--name", "talk"]);
     assert!(started.status.success(), "{}", printed(&started));
     let chat = on_laptop(&machines, "talk", "chat");
     assert_eq!(chat["parent"], machines.coordinator.as_str(), "{chat}");
@@ -252,4 +302,305 @@ fn a_space_carries_nothing_for_a_start_in_another_repository_than_its_own() {
     // The laptop registered nothing of it.
     let repositories = machines.laptop.ok(&["repo", "ls"]);
     assert_eq!(repositories.as_array().unwrap().len(), 1, "{repositories}");
+}
+
+#[test]
+fn a_start_on_a_terminal_below_another_machine_s_space_takes_that_space_s_repository() {
+    let machines = machines();
+    // A repository only the laptop has, with an origin the hub never cloned.
+    give_origin(&machines.laptop);
+    let notes = machines.laptop.repo.to_str().unwrap().to_owned();
+    let there = workspace_of(&machines.laptop, &notes, "there");
+    ready_at(&machines.hub, &there, &machines.laptop_id);
+    // On a terminal in the hub's own checkout, whose repository is another
+    // one.
+    let mut command = machines.hub.command();
+    command.current_dir(&machines.hub.repo);
+    let args = ["start", "--machine", "laptop", "--parent", &there];
+    let rest = ["--mode", "chat", "--name", "talk", "--agent", "pi"];
+    command.args([&args[..], &rest[..]].concat());
+    let (started, transcript) = prompt::answer(&mut command, "", AnswerOptions::default());
+    assert!(
+        started.status.success(),
+        "{}\n{transcript}",
+        printed(&started)
+    );
+    let chat = on_laptop(&machines, "talk", "chat");
+    assert_eq!(chat["parent"], there.as_str(), "{chat}");
+}
+
+#[test]
+fn a_start_below_another_machine_s_space_clones_its_repository_where_it_starts() {
+    // The hub starts the agent itself.
+    let machines = machines_with((AGENT, &[]), "");
+    // A repository only the laptop has, with an origin the hub never cloned.
+    give_origin(&machines.laptop);
+    let notes = machines.laptop.repo.to_str().unwrap().to_owned();
+    let there = workspace_of(&machines.laptop, &notes, "there");
+    ready_at(&machines.hub, &there, &machines.laptop_id);
+    let args = ["start", "--parent", &there, "--branch", "child"];
+    let started = (machines.hub).run(&[&args[..], &["--agent", "pi", "--json"]].concat());
+    assert!(started.status.success(), "{}", printed(&started));
+    let child = on_hub(&machines, "child", "workspace");
+    assert_eq!(child["parent"], there.as_str(), "{child}");
+    // The hub registered a clone of the laptop's repository for it.
+    let repositories = machines.hub.ok(&["repo", "ls"]);
+    let count = repositories.as_array().unwrap().len();
+    assert_eq!(count, 2, "{repositories}");
+}
+
+#[test]
+fn a_first_start_below_another_machine_s_space_takes_a_mode_its_repository_defines() {
+    let machines = machines_with((AGENT, &[]), "");
+    // A repository only the laptop has, whose tracked config defines a
+    // mode no machine's own config does.
+    let notes = &machines.laptop.repo;
+    fs::write(notes.join(".shoal.toml"), "[modes.custom]\n").unwrap();
+    git(notes, &["add", ".shoal.toml"]);
+    git_with_identity(notes, &["commit", "-q", "-m", "Add a mode"]);
+    give_origin(&machines.laptop);
+    let there = workspace_of(&machines.laptop, notes.to_str().unwrap(), "there");
+    ready_at(&machines.hub, &there, &machines.laptop_id);
+    let args = [
+        "start", "--parent", &there, "--mode", "custom", "--branch", "child",
+    ];
+    let started = (machines.hub).run(&[&args[..], &["--agent", "pi", "--json"]].concat());
+    assert!(started.status.success(), "{}", printed(&started));
+    let child = on_hub(&machines, "child", "workspace");
+    assert_eq!(child["parent"], there.as_str(), "{child}");
+}
+
+#[test]
+fn a_first_chat_below_another_machine_s_space_takes_an_agent_its_repository_defines() {
+    // Neither machine's own config has the agent.
+    let machines = machines_with(("", &[]), "");
+    let notes = &machines.laptop.repo;
+    let agent = "[agents.tracked]\ncommand = ['sh', '-c', 'exec sleep 600']\n";
+    fs::write(notes.join(".shoal.toml"), agent).unwrap();
+    git(notes, &["add", ".shoal.toml"]);
+    git_with_identity(notes, &["commit", "-q", "-m", "Add an agent"]);
+    give_origin(&machines.laptop);
+    let there = workspace_of(&machines.laptop, notes.to_str().unwrap(), "there");
+    ready_at(&machines.hub, &there, &machines.laptop_id);
+    let args = [
+        "start", "--parent", &there, "--mode", "chat", "--name", "talk",
+    ];
+    let rest = ["--agent", "tracked", "--json"];
+    let started = (machines.hub).run(&[&args[..], &rest[..]].concat());
+    assert!(started.status.success(), "{}", printed(&started));
+    let chat = on_hub(&machines, "talk", "chat");
+    assert_eq!(chat["parent"], there.as_str(), "{chat}");
+}
+
+#[test]
+fn a_space_cannot_clone_the_repository_of_a_space_outside_its_scope() {
+    let machines = machines_with((AGENT, &[]), "");
+    give_origin(&machines.laptop);
+    let notes = machines.laptop.repo.to_str().unwrap().to_owned();
+    let there = workspace_of(&machines.laptop, &notes, "there");
+    ready_at(&machines.hub, &there, &machines.laptop_id);
+    // The coordinator's scope reaches no space of the laptop's.
+    let token = scope_of(&machines.hub, &machines.coordinator);
+    let mut command = machines.hub.command();
+    command.env("SHOAL_SCOPE_TOKEN", &token);
+    let args = [
+        "start", "--parent", &there, "--branch", "child", "--agent", "pi", "--json",
+    ];
+    let started = machines.hub.output(command.args(args));
+    assert!(!started.status.success(), "{}", printed(&started));
+    let repositories = machines.hub.ok(&["repo", "ls"]);
+    let count = repositories.as_array().unwrap().len();
+    assert_eq!(count, 1, "{repositories}");
+}
+
+/// The ID of a ready workspace of the laptop's repository, which only the
+/// laptop has, with an origin no machine cloned, and which tracks
+/// `tracked` as its config when given.
+fn laptop_space(machines: &Machines, tracked: Option<&str>) -> String {
+    let notes = &machines.laptop.repo;
+    if let Some(tracked) = tracked {
+        fs::write(notes.join(".shoal.toml"), tracked).unwrap();
+        git(notes, &["add", ".shoal.toml"]);
+        git_with_identity(notes, &["commit", "-q", "-m", "Track a config"]);
+    }
+    give_origin(&machines.laptop);
+    let there = workspace_of(&machines.laptop, notes.to_str().unwrap(), "there");
+    ready_at(&machines.hub, &there, &machines.laptop_id);
+    there
+}
+
+/// A `shoal start` with `args` on a terminal in the hub, whose fake fzf
+/// picks `picked` and writes the rows it is given to the returned path.
+fn start_on_terminal(
+    machines: &Machines,
+    args: &[&str],
+    picked: &str,
+) -> (std::process::Output, String, std::path::PathBuf) {
+    let (bin, rows) = (
+        machines.hub.root.path().join("bin"),
+        machines.hub.root.path().join("rows"),
+    );
+    fake_fzf(&bin, &rows);
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let mut command = machines.hub.command();
+    command.env("PATH", path).env("SHOAL_TEST_PICK_ID", picked);
+    command.arg("start").args(args);
+    // A start from the user's terminal hands it to an agent it runs here.
+    let options = AnswerOptions {
+        controlling_terminal: true,
+        ..AnswerOptions::default()
+    };
+    let (output, transcript) = prompt::answer(&mut command, "", options);
+    (output, transcript, rows)
+}
+
+/// A fake fzf in `bin` that writes the rows it is given to `rows` and
+/// picks the one whose ID or label is `$SHOAL_TEST_PICK_ID`.
+fn fake_fzf(bin: &Path, rows: &Path) {
+    fs::create_dir_all(bin).unwrap();
+    let fzf = bin.join("fzf");
+    let script = format!(
+        "#!/bin/sh\ncat > '{}'\ncase \"$*\" in *--expect=*) printf '\\n';; esac\nawk -F '\\t' -v id=\"$SHOAL_TEST_PICK_ID\" '$1 == id || $2 == id {{ print }}' '{}'\n",
+        rows.display(),
+        rows.display()
+    );
+    fs::write(&fzf, script).unwrap();
+    fs::set_permissions(&fzf, fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+#[test]
+fn a_start_on_a_terminal_below_another_machine_s_space_picks_among_its_machine_s_modes() {
+    let machines = machines_with(("", &[]), "[modes.remote]\n");
+    let there = laptop_space(&machines, None);
+    let args = [
+        "--machine",
+        "laptop",
+        "--parent",
+        &there,
+        "--branch",
+        "child",
+        "--agent",
+        "pi",
+    ];
+    let (started, transcript, rows) = start_on_terminal(&machines, &args, "remote");
+    assert!(
+        started.status.success(),
+        "{}\n{transcript}",
+        printed(&started)
+    );
+    // The picker listed the mode only the laptop defines.
+    let listed = fs::read_to_string(&rows).unwrap_or_default();
+    assert!(listed.contains("remote"), "{listed}");
+    let child = on_laptop(&machines, "child", "workspace");
+    assert_eq!(child["parent"], there.as_str(), "{child}");
+}
+
+#[test]
+fn a_start_on_a_terminal_below_another_machine_s_space_refuses_its_arguments_before_a_picker() {
+    let machines = machines_with(("", &[]), "[modes.remote]\n");
+    let there = laptop_space(&machines, None);
+    let args = [
+        "--machine",
+        "laptop",
+        "--parent",
+        &there,
+        "--branch",
+        "bad..name",
+    ];
+    let (started, transcript, rows) = start_on_terminal(
+        &machines,
+        &[&args[..], &["--agent", "pi"]].concat(),
+        "remote",
+    );
+    assert!(
+        !started.status.success(),
+        "{}\n{transcript}",
+        printed(&started)
+    );
+    // The branch was refused before the mode picker opened.
+    assert!(!rows.exists(), "{transcript}");
+}
+
+#[test]
+fn a_start_on_a_terminal_below_another_machine_s_space_refuses_an_unknown_agent_before_a_picker() {
+    // The hub has two modes of a workspace, so a picker would open.
+    let machines = machines_with(("[modes.other]\n", &[]), "");
+    let there = laptop_space(&machines, None);
+    let args = [
+        "--parent", &there, "--branch", "child", "--agent", "missing",
+    ];
+    let (started, transcript, rows) = start_on_terminal(&machines, &args, "other");
+    assert!(
+        !started.status.success(),
+        "{}\n{transcript}",
+        printed(&started)
+    );
+    assert!(!rows.exists(), "{transcript}");
+}
+
+#[test]
+fn a_start_on_a_terminal_below_another_machine_s_space_picks_its_agent() {
+    // Two agents and no default, so the terminal picks one, which runs in
+    // it and exits at once.
+    let agents = "[agents.quick]\ncommand = ['true']\n[agents.other]\ncommand = ['true']\n";
+    let machines = machines_with((agents, &[]), "");
+    let there = laptop_space(&machines, None);
+    let args = ["--parent", &there, "--branch", "child"];
+    let (started, transcript, rows) = start_on_terminal(&machines, &args, "quick");
+    assert!(
+        started.status.success(),
+        "{}\n{transcript}",
+        printed(&started)
+    );
+    let listed = fs::read_to_string(&rows).unwrap_or_default();
+    assert!(listed.contains("other"), "{listed}");
+    let child = on_hub(&machines, "child", "workspace");
+    assert_eq!(child["parent"], there.as_str(), "{child}");
+}
+
+#[test]
+fn a_start_on_a_terminal_below_another_machine_s_space_refuses_an_unknown_blocker_before_a_picker()
+{
+    // The hub has two modes of a workspace, so a picker would open.
+    let machines = machines_with((&format!("{AGENT}[modes.other]\n"), &[]), "");
+    let there = laptop_space(&machines, None);
+    let args = ["--parent", &there, "--branch", "child", "--agent", "pi"];
+    let blocker = ["--add-blocker", "00000000-0000-0000-0000-000000000000"];
+    let (started, transcript, rows) =
+        start_on_terminal(&machines, &[&args[..], &blocker[..]].concat(), "other");
+    assert!(
+        !started.status.success(),
+        "{}\n{transcript}",
+        printed(&started)
+    );
+    assert!(!rows.exists(), "{transcript}");
+}
+
+#[test]
+fn a_start_below_another_machine_s_space_with_an_unknown_agent_clones_nothing() {
+    let machines = machines_with((AGENT, &[]), "");
+    let there = laptop_space(&machines, None);
+    let args = [
+        "start", "--parent", &there, "--branch", "child", "--agent", "missing", "--json",
+    ];
+    let started = machines.hub.run(&args);
+    assert!(!started.status.success(), "{}", printed(&started));
+    let repositories = machines.hub.ok(&["repo", "ls"]);
+    let count = repositories.as_array().unwrap().len();
+    assert_eq!(count, 1, "{repositories}");
+}
+
+#[test]
+fn a_start_below_another_machine_s_space_with_arguments_its_mode_refuses_clones_nothing() {
+    let machines = machines_with((AGENT, &[]), "");
+    let there = laptop_space(&machines, None);
+    // A chat takes no branch of its own.
+    let args = [
+        "start", "--parent", &there, "--mode", "chat", "--branch", "child",
+    ];
+    let started = (machines.hub).run(&[&args[..], &["--agent", "pi", "--json"]].concat());
+    assert!(!started.status.success(), "{}", printed(&started));
+    let repositories = machines.hub.ok(&["repo", "ls"]);
+    let count = repositories.as_array().unwrap().len();
+    assert_eq!(count, 1, "{repositories}");
 }

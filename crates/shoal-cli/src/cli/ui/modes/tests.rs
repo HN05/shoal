@@ -1,11 +1,8 @@
 use super::*;
 
-fn built_in() -> BTreeMap<String, Mode> {
-    crate::config::Config::default()
-        .resolve(&Default::default())
-        .unwrap()
-        .modes
-        .clone()
+fn built_in() -> ModeShapes {
+    let settings = crate::config::Config::default().resolve(&Default::default());
+    modes::shapes(&settings.unwrap().modes)
 }
 
 /// Each entry's mode and the space its label names.

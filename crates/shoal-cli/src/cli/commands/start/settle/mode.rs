@@ -6,11 +6,17 @@ use shoal_protocol::launches::{IssueChoice, Launch};
 use crate::{
     cli::{
         args::create::StartArgs,
-        commands::{issues, start::DaemonReads},
+        commands::{
+            issues,
+            start::{DaemonReads, start_modes},
+        },
         context::Context,
         ui::{self, ModeChoice, ModeFit},
     },
-    config::{Effective, modes},
+    config::{
+        Effective,
+        modes::{self, ModeShapes},
+    },
     launches,
     model::{Repository, SpaceKind},
 };
@@ -19,13 +25,13 @@ use crate::{
 /// off a terminal the [`launches::default_mode`], on one the plan mode for
 /// an issue to pick, which no other mode takes, or the mode the labels of
 /// the issue it names in the `found` repository call for under
-/// `settings`; otherwise one a terminal picks once the daemon has checked
-/// the rest.
+/// `settings` among the `modes` the start may take; otherwise one a
+/// terminal picks once the daemon has checked the rest.
 pub(super) async fn decided(
     ctx: &Context,
     launch: &Launch,
     found: Option<&Repository>,
-    settings: &Effective,
+    (settings, modes): (&Effective, &ModeShapes),
 ) -> Result<ModeChoice> {
     if let Some(mode) = &launch.mode {
         return Ok(ModeChoice::Named(mode.clone()));
@@ -37,7 +43,7 @@ pub(super) async fn decided(
         return Ok(ModeChoice::Named(modes::ModeName::PLAN));
     }
     let labelled = match found {
-        Some(repo) => issue_mode(ctx, launch, repo, settings).await?,
+        Some(repo) => issue_mode(ctx, launch, repo, (settings, modes)).await?,
         None => None,
     };
     Ok(labelled.map_or(ModeChoice::Pick, ModeChoice::Named))
@@ -59,24 +65,25 @@ pub(super) async fn ensure_located_fit(ctx: &Context, args: &StartArgs) -> Resul
         ..args.launch()
     };
     let settings = launches::shape::launch_settings(&DaemonReads(ctx), &launch).await?;
-    let kind = modes::get(&settings.modes, mode)?.kind;
+    let modes = start_modes(ctx, &launch, &settings).await?;
+    let kind = modes::get(&modes, mode)?.kind;
     super::arguments::ensure_flags_fit(args, kind, mode)
 }
 
-/// The mode `choice` names, else one picked under `settings` among those
-/// that start the kind of space the arguments of `launch` other than the
-/// mode fit, in a repository where they name one. A setup's mode is built
-/// in, which no config defines.
+/// The mode `choice` names, else one picked among the `modes` the start
+/// may take that start the kind of space the arguments of `launch` other
+/// than the mode fit, in a repository where they name one. A setup's mode
+/// is built in, which no config defines.
 pub(super) fn chosen(
     ctx: &Context,
     choice: ModeChoice,
     launch: &Launch,
-    settings: &Effective,
+    modes: &ModeShapes,
 ) -> Result<modes::ModeName> {
     if let (ModeChoice::Named(mode), Some(_)) = (&choice, launch.setup) {
         return Ok(mode.clone());
     }
-    choice.chosen(ctx, &settings.modes, fit(launch)?)
+    choice.chosen(ctx, modes, fit(launch)?)
 }
 
 /// The spaces a mode picked for `launch` must start: of the kind its
@@ -100,53 +107,56 @@ pub(super) fn requires_repository(launch: &Launch) -> Result<bool> {
         || launches::named_issue(launch)?.is_some())
 }
 
-/// The mode `mode` of `launch` under `settings`, which says what a
-/// terminal picks for it; none for a setup's, which its setup settles.
-pub(super) fn configured<'a>(
+/// The space `mode` of `launch` starts among the `modes` the start may
+/// take, which says what a terminal picks for it; none for a setup's,
+/// which its setup settles.
+pub(super) fn configured(
     launch: &Launch,
     mode: &modes::ModeName,
-    settings: &'a Effective,
-) -> Result<Option<&'a modes::Mode>> {
+    modes: &ModeShapes,
+) -> Result<Option<modes::ModeShape>> {
     match launch.setup {
         Some(_) => Ok(None),
-        None => modes::get(&settings.modes, mode).map(Some),
+        None => modes::get(modes, mode).copied().map(Some),
     }
 }
 
-/// Refuse what `launch` names that the kind of space `mode` starts under
-/// `settings` cannot take, before a picker asks for the rest; a setup's
-/// mode starts where its setup says.
+/// Refuse what `launch` names that the kind of space `mode` starts, among
+/// the `modes` the start may take, cannot take, before a picker asks for
+/// the rest; a setup's mode starts where its setup says.
 pub(super) fn ensure_fits(
     launch: &Launch,
     mode: &modes::ModeName,
-    settings: &Effective,
+    modes: &ModeShapes,
 ) -> Result<()> {
-    match configured(launch, mode, settings)? {
+    match configured(launch, mode, modes)? {
         Some(configured) => launches::ensure_fits(launch, &[], configured.kind, Some(mode)),
         None => Ok(()),
     }
 }
 
-/// Whether `mode` starts the agent of `launch` in a workspace under
-/// `settings`, where a terminal picks what the workspace starts from.
+/// Whether `mode`, among the `modes` the start may take, starts the agent
+/// of `launch` in a workspace, where a terminal picks what the workspace
+/// starts from.
 pub(super) fn starts_workspace(
     launch: &Launch,
     mode: &modes::ModeName,
-    settings: &Effective,
+    modes: &ModeShapes,
 ) -> Result<bool> {
-    let configured = configured(launch, mode, settings)?;
+    let configured = configured(launch, mode, modes)?;
     Ok(configured.is_some_and(|mode| mode.kind == SpaceKind::Workspace))
 }
 
 /// The mode the labels of the issue `launch` names in `repo` call for
-/// under `settings`, by [`launches::labelled_mode`]; none without such an
-/// issue or a label to look for, or for arguments that fit one kind of
-/// space, whose picker the labels do not answer.
+/// under `settings`, by [`launches::labelled_mode`], among the `modes` the
+/// start may take; none without such an issue or a label to look for, or
+/// for arguments that fit one kind of space, whose picker the labels do
+/// not answer.
 async fn issue_mode(
     ctx: &Context,
     launch: &Launch,
     repo: &Repository,
-    settings: &Effective,
+    (settings, modes): (&Effective, &ModeShapes),
 ) -> Result<Option<modes::ModeName>> {
     if launches::fitting_kind(launch).is_some() {
         return Ok(None);
@@ -160,7 +170,7 @@ async fn issue_mode(
     let context = issues::read_context(ctx, repo).await?;
     let issue = issues::load(ctx, context, input).await?;
     let mode = launches::labelled_mode(&settings.issue, &issue.labels);
-    Ok(mode.filter(|mode| modes::get(&settings.modes, mode).is_ok()))
+    Ok(mode.filter(|mode| modes::get(modes, mode).is_ok()))
 }
 
 #[cfg(test)]

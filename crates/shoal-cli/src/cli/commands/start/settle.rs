@@ -7,7 +7,11 @@ use anyhow::Result;
 use shoal_protocol::launches::Launch;
 
 use super::StartOptions;
-use crate::cli::{args::create::StartArgs, commands::start::DaemonReads, context::Context};
+use crate::cli::{
+    args::create::StartArgs,
+    commands::start::{DaemonReads, start_modes},
+    context::Context,
+};
 
 mod arguments;
 mod check;
@@ -43,13 +47,16 @@ pub(in crate::cli::commands) async fn settle(
     options: &StartOptions,
 ) -> Result<i32> {
     arguments::check(&mut launch)?;
+    repository::take_parents(ctx, &launch).await?;
     let found = repository::found(ctx, &mut launch).await?;
     let settings = crate::launches::shape::launch_settings(&DaemonReads(ctx), &launch).await?;
-    let choice = mode::decided(ctx, &launch, found.as_ref(), &settings).await?;
+    let modes = start_modes(ctx, &launch, &settings).await?;
+    let choice = mode::decided(ctx, &launch, found.as_ref(), (&settings, &modes)).await?;
     let (mut found, mut settings) = match choice.clone().named() {
         Some(mode) => {
-            mode::ensure_fits(&launch, &mode, &settings)?;
-            repository::settled(ctx, &mut launch, &mode, (found, settings)).await?
+            mode::ensure_fits(&launch, &mode, &modes)?;
+            let mode = (&mode, &modes);
+            repository::settled(ctx, &mut launch, mode, (found, settings)).await?
         }
         None => repository::required(ctx, &mut launch, (found, settings)).await?,
     };
@@ -58,11 +65,13 @@ pub(in crate::cli::commands) async fn settle(
     if let Some(workspace) = &checked {
         settings = check::workspace_settings(ctx, workspace).await?;
     }
-    let mode = mode::chosen(ctx, choice, &launch, &settings)?;
+    let modes = start_modes(ctx, &launch, &settings).await?;
+    let mode = mode::chosen(ctx, choice, &launch, &modes)?;
     launch.mode = Some(mode.clone());
-    mode::ensure_fits(&launch, &mode, &settings)?;
-    (found, settings) = repository::settled(ctx, &mut launch, &mode, (found, settings)).await?;
-    let worker = mode::starts_workspace(&launch, &mode, &settings)?;
+    mode::ensure_fits(&launch, &mode, &modes)?;
+    let settled = (&mode, &modes);
+    (found, settings) = repository::settled(ctx, &mut launch, settled, (found, settings)).await?;
+    let worker = mode::starts_workspace(&launch, &mode, &modes)?;
     if worker && checked.is_none() {
         pickers::pick_source(ctx, &mut launch, found.as_ref()).await?;
     }

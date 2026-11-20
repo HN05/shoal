@@ -12,12 +12,29 @@ use crate::{
         context::Context,
         ui,
     },
-    config::{Effective, modes::ModeName},
+    config::{
+        Effective,
+        modes::{ModeName, ModeShapes},
+    },
     forge::items::reference::ItemInput,
-    launches::LaunchReads,
+    launches::{LaunchReads, SpaceRepository},
     model::{Repository, SpaceKind},
     protocol::ConfigTarget,
 };
+
+/// Have this machine register the repository of the space `launch` goes
+/// below, where another machine runs that space in a repository this one
+/// has not registered and the start runs here, which the daemon refuses
+/// first what the launch would refuse there for; the start then settles in
+/// it as in any registered repository.
+pub(super) async fn take_parents(ctx: &Context, launch: &Launch) -> Result<()> {
+    match launch.parent {
+        Some(_) => {
+            crate::client::launches::take_parent_repository(&ctx.paths, launch.clone()).await
+        }
+        None => Ok(()),
+    }
+}
 
 /// The registered repository `launch` starts in, found without a picker:
 /// that of the workspace it names with `--in`, else the one it names,
@@ -45,19 +62,21 @@ pub(super) async fn found(ctx: &Context, launch: &mut Launch) -> Result<Option<R
     crate::launches::shape::launch_repository(&DaemonReads(ctx), launch).await
 }
 
-/// The repository a start in `mode` goes in and the settings its agent
-/// starts under, as the daemon reads them: none for a mode without a
-/// repository, under the global config's; for a chat in the worktree of
-/// the workspace `launch` names, the `found` repository under its own;
-/// else the `found` one with its `settings`, else one a terminal picks,
-/// which `launch` then names, under its own.
+/// The repository a start in `mode`, one of the `modes` it may take, goes
+/// in and the settings its agent starts under, as the daemon reads them:
+/// none for a mode without a repository, under the global config's; for a
+/// chat in the worktree of the workspace `launch` names, the `found`
+/// repository under its own; else the `found` one with its `settings`,
+/// else one a terminal picks, which `launch` then names, under its own,
+/// unless only the machine that starts it has the repository of the space
+/// it goes below.
 pub(super) async fn settled(
     ctx: &Context,
     launch: &mut Launch,
-    mode: &ModeName,
+    (mode, modes): (&ModeName, &ModeShapes),
     (found, settings): (Option<Repository>, Effective),
 ) -> Result<(Option<Repository>, Effective)> {
-    let configured = mode::configured(launch, mode, &settings)?;
+    let configured = mode::configured(launch, mode, modes)?;
     if configured.is_some_and(|mode| !mode.repository) {
         let settings = DaemonReads(ctx).settings(ConfigTarget::Global).await?;
         return Ok((None, settings));
@@ -69,7 +88,7 @@ pub(super) async fn settled(
         let settings = DaemonReads(ctx).settings(target).await?;
         return Ok((found, settings));
     }
-    if found.is_some() || configured.is_none() || !ui::can_pick(ctx) {
+    if found.is_some() || configured.is_none() || !picks(ctx, launch).await? {
         return Ok((found, settings));
     }
     let repo = pick(ctx, launch).await?;
@@ -87,7 +106,7 @@ pub(super) async fn required(
     launch: &mut Launch,
     (found, settings): (Option<Repository>, Effective),
 ) -> Result<(Option<Repository>, Effective)> {
-    if found.is_some() || !mode::requires_repository(launch)? || !ui::can_pick(ctx) {
+    if found.is_some() || !mode::requires_repository(launch)? || !picks(ctx, launch).await? {
         return Ok((found, settings));
     }
     let repo = pick(ctx, launch).await?;
@@ -104,6 +123,18 @@ pub(super) async fn chosen(ctx: &Context, launch: &mut Launch) -> Result<Reposit
         Some(repo) => Ok(repo),
         None => pick(ctx, launch).await,
     }
+}
+
+/// Whether a terminal picks the repository `launch` goes in where nothing
+/// names one: not below another machine's space in a repository this
+/// machine has not registered, whose machine the start goes to takes that
+/// space's, which no repository here stands in for.
+async fn picks(ctx: &Context, launch: &Launch) -> Result<bool> {
+    if !ui::can_pick(ctx) {
+        return Ok(false);
+    }
+    let parent = crate::launches::shape::parent_repository(&DaemonReads(ctx), launch).await?;
+    Ok(parent != SpaceRepository::Unregistered)
 }
 
 /// The current registered repository, else one a terminal picks, which

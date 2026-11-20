@@ -27,11 +27,12 @@ fn a_chat_mode_refuses_a_branch_before_any_picker() {
     let settings = crate::config::Config::default()
         .resolve(&Default::default())
         .unwrap();
+    let modes = crate::config::modes::shapes(&settings.modes);
     let launch = Launch {
         branch: Some("fix".into()),
         ..Launch::default()
     };
-    let error = ensure_fits(&launch, &"chat".into(), &settings).unwrap_err();
+    let error = ensure_fits(&launch, &"chat".into(), &modes).unwrap_err();
     assert!(error.to_string().starts_with("--branch "), "{error}");
-    ensure_fits(&launch, &"worker".into(), &settings).unwrap();
+    ensure_fits(&launch, &"worker".into(), &modes).unwrap();
 }

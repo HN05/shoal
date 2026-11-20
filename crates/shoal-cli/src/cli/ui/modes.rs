@@ -1,6 +1,4 @@
 //! The mode a start takes: named, or picked among the configured modes.
-use std::collections::BTreeMap;
-
 use anyhow::{Result, ensure};
 
 use super::{Entries, aligned, pick};
@@ -9,7 +7,7 @@ use crate::{
         context::Context,
         output::{Palette, Style},
     },
-    config::modes::{self, Mode, ModeName},
+    config::modes::{self, ModeName, ModeShapes},
     model::SpaceKind,
 };
 
@@ -43,12 +41,7 @@ impl ModeChoice {
     /// The mode of a start in the spaces `fit` allows: the named one, which
     /// `modes` must define, else one picked among those that start there,
     /// without asking when only one does.
-    pub fn chosen(
-        self,
-        ctx: &Context,
-        modes: &BTreeMap<String, Mode>,
-        fit: ModeFit,
-    ) -> Result<ModeName> {
+    pub fn chosen(self, ctx: &Context, modes: &ModeShapes, fit: ModeFit) -> Result<ModeName> {
         if let Self::Named(name) = self {
             modes::get(modes, &name)?;
             return Ok(name);
@@ -70,7 +63,7 @@ const MASTER: &str = "master";
 /// The picker's entries for the `modes` that start in the spaces `fit`
 /// allows: the usual mode of that kind first, so Enter keeps it, then the
 /// rest by name, each with the space it starts.
-fn mode_entries(modes: &BTreeMap<String, Mode>, fit: ModeFit, palette: Palette) -> Entries {
+fn mode_entries(modes: &ModeShapes, fit: ModeFit, palette: Palette) -> Entries {
     let usual = match fit.kind {
         Some(SpaceKind::Chat) => ModeName::CHAT,
         _ => ModeName::DEFAULT,

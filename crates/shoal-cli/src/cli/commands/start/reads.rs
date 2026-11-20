@@ -77,3 +77,16 @@ impl LaunchReads for DaemonReads<'_> {
         }
     }
 }
+
+/// The modes `launch` may take, each with the space it starts: as the
+/// machine it names defines them, else as this machine's `settings` do.
+pub(in crate::cli::commands) async fn start_modes(
+    ctx: &Context,
+    launch: &Launch,
+    settings: &Effective,
+) -> Result<ModeShapes> {
+    match launch.machine {
+        Some(_) => DaemonReads(ctx).launch_modes(launch).await,
+        None => Ok(crate::config::modes::shapes(&settings.modes)),
+    }
+}
