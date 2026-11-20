@@ -12,6 +12,7 @@ mod base;
 mod branches;
 mod capabilities;
 mod catalog;
+mod changes;
 mod ci;
 mod cleanup;
 mod config_setup;

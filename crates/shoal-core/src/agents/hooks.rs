@@ -2,7 +2,8 @@
 //! Code and Codex share: `shoal internal deliver` delivers unread alerts as
 //! context, `shoal internal agent-state` reports the turn
 //! state, `shoal internal subagent` the subagents it runs, and
-//! `shoal internal plan` the plan the agent's plan tools keep. Integrations
+//! `shoal internal plan` the plan the agent's plan tools keep, and
+//! `shoal internal change` what its tool calls change. Integrations
 //! choose the events and how the agent receives them.
 use serde_json::{Map, Value, json};
 
@@ -190,6 +191,32 @@ pub(crate) fn plan(
     });
     ("PostToolUse", group)
 }
+
+/// The group that reports what a tool call `matcher` selects of an agent
+/// with `integration` changes, before or after it, and prints what Shoal
+/// asks about the changes after one. It never fails, as [`state`] does
+/// not, and never blocks the call.
+pub(crate) fn changes(
+    shoal: &str,
+    integration: crate::ai::IntegrationKind,
+    matcher: Option<&str>,
+) -> Value {
+    let mut group = json!({ "hooks": [{
+        "type": "command",
+        "command": format!(
+            "{shoal} internal change --integration {} 2>/dev/null || true",
+            crate::shell::quote(&[integration.as_str()])
+        ),
+        "timeout": CHANGE_TIMEOUT.as_secs(),
+    }] });
+    if let Some(matcher) = matcher {
+        group["matcher"] = matcher.into();
+    }
+    group
+}
+
+/// How long a change hook may take: it snapshots the worktree.
+const CHANGE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// Hook groups collected under their events, in order.
 pub(crate) fn by_event(

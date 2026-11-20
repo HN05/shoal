@@ -200,6 +200,16 @@ pub trait Integration: Sync {
         None
     }
 
+    /// What `event`, from its hook before or after a tool call, reports
+    /// the call changes in its worktree; `None` for an agent without
+    /// change hooks or a call that changes no files.
+    fn tool_change(
+        &self,
+        _event: &serde_json::Value,
+    ) -> Option<shoal_protocol::changes::ToolChange> {
+        None
+    }
+
     /// The app that runs the agent's workspace sessions and chats detached
     /// from any terminal, in place of the tracked terminal launch and the
     /// chat run in place.

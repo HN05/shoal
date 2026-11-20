@@ -103,6 +103,10 @@ impl Integration for Codex {
         plan::change(event)
     }
 
+    fn tool_change(&self, event: &Value) -> Option<shoal_protocol::changes::ToolChange> {
+        changes::change(event)
+    }
+
     /// Ctrl-C, which quits Codex only when pressed again.
     fn interrupt_key(&self) -> Option<&'static str> {
         Some("\x03")
@@ -124,15 +128,23 @@ fn shoal_overrides(space: AgentSpace) -> std::io::Result<Vec<OsString>> {
 
 /// Codex takes each event's groups as a `-c hooks.<event>=` TOML value.
 /// Every agent reports its turn's state and its subagents; a workspace's
-/// agent also gets the hook that briefs its subagents about the workspace.
+/// agent also gets the hook that briefs its subagents about the workspace,
+/// and those that report what its tool calls change.
 fn config_overrides(space: AgentSpace) -> std::io::Result<Vec<OsString>> {
     let shoal = hooks::shoal()?;
     let subagents = space.workspace().map(|_| hooks::subagent(&shoal));
+    // Codex's matchers name its tools as it chooses; the report picks the
+    // calls that change files.
+    let changes = (space.workspace().into_iter()).flat_map(|_| {
+        ["PreToolUse", "PostToolUse"]
+            .map(|event| (event, hooks::changes(&shoal, IntegrationKind::Codex, None)))
+    });
     let groups = hooks::messages(&shoal)
         .chain(state_hooks(&shoal))
         .chain([hooks::plan(&shoal, IntegrationKind::Codex, plan::TOOLS)])
         .chain(hooks::subagent_reports(&shoal, IntegrationKind::Codex))
-        .chain(subagents);
+        .chain(subagents)
+        .chain(changes);
     Ok(hooks::by_event(groups)
         .into_iter()
         .flat_map(|(event, groups)| {
@@ -162,6 +174,7 @@ fn state_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
     ]
 }
 
+mod changes;
 mod layers;
 mod plan;
 mod provider;

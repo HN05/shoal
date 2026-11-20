@@ -376,6 +376,15 @@ pub(in crate::cli) fn subagent_change(
     integration(kind).subagent_change(event)
 }
 
+/// What `event`, from the change hook of an agent with integration
+/// `kind`, reports its tool call changes.
+pub(in crate::cli) fn tool_change(
+    kind: IntegrationKind,
+    event: &serde_json::Value,
+) -> Option<shoal_protocol::changes::ToolChange> {
+    integration(kind).tool_change(event)
+}
+
 /// The plan change that `event`, from the plan hook of an agent with
 /// integration `kind`, reports.
 pub(in crate::cli) fn plan_change(

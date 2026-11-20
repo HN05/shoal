@@ -22,7 +22,53 @@ fn a_chat_agent_runs_a_workspace_agents_hooks_without_the_subagent_brief() {
     assert!(chat_starts.contains("internal subagent --integration codex"));
     assert!(!chat_starts.contains("subagent-start"));
     assert!(workspace_starts.contains("subagent-start"));
-    assert_eq!(chat, workspace);
+    // A chat changes no files of its own.
+    assert_eq!(
+        hook_groups(&chat),
+        without_change_reports(hook_groups(&workspace))
+    );
+    assert_eq!(other_args(&chat), other_args(&workspace));
+}
+
+/// `args` without the `-c hooks.<event>=` overrides.
+fn other_args(args: &[OsString]) -> Vec<&OsString> {
+    let hooks =
+        |arg: Option<&OsString>| arg.is_some_and(|arg| arg.to_string_lossy().starts_with("hooks."));
+    (args.iter().enumerate())
+        .filter(|(at, arg)| !hooks(Some(arg)) && !(*arg == "-c" && hooks(args.get(at + 1))))
+        .map(|(_, arg)| arg)
+        .collect()
+}
+
+/// Each `-c hooks.<event>=` override's groups, by event.
+fn hook_groups(args: &[OsString]) -> BTreeMap<String, Vec<toml::Value>> {
+    (args.iter())
+        .filter_map(|arg| arg.to_str()?.strip_prefix("hooks.")?.split_once('='))
+        .map(|(event, groups)| {
+            let groups: toml::Value = toml::from_str(&format!("groups = {groups}")).unwrap();
+            (
+                event.to_owned(),
+                groups["groups"].as_array().unwrap().clone(),
+            )
+        })
+        .collect()
+}
+
+/// `groups` without the groups that report what tool calls change, and
+/// events left without any.
+fn without_change_reports(
+    groups: BTreeMap<String, Vec<toml::Value>>,
+) -> BTreeMap<String, Vec<toml::Value>> {
+    let reports = |group: &toml::Value| group.to_string().contains("internal change");
+    (groups.into_iter())
+        .map(|(event, groups)| {
+            (
+                event,
+                groups.into_iter().filter(|group| !reports(group)).collect(),
+            )
+        })
+        .filter(|(_, groups): &(String, Vec<toml::Value>)| !groups.is_empty())
+        .collect()
 }
 
 #[test]

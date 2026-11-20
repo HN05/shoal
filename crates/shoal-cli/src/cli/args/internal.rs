@@ -81,6 +81,15 @@ pub enum InternalCommand {
         #[arg(long)]
         space: Option<SpaceSelector>,
     },
+    /// Report what the tool call whose hook event of an agent with this
+    /// integration stdin carries changes, and print the changes Shoal could
+    /// not tell were the agent's as hook context; Shoal's agent hooks call
+    /// it before and after tool calls.
+    Change {
+        /// The integration whose hook event stdin carries.
+        #[arg(long)]
+        integration: crate::ai::IntegrationKind,
+    },
     /// Print the space's new alerts, item activity and leftover processes as
     /// hook context, reading the hook event on stdin and never failing the
     /// agent; Shoal's agent hooks run it after tool calls and when a prompt

@@ -68,6 +68,13 @@ fn a_chat_agent_runs_a_workspace_agents_hooks_without_what_needs_a_worktree() {
     for event in ["WorktreeCreate", "WorktreeRemove"] {
         assert!(shared.remove(event).is_some(), "{event}");
     }
+    // A chat changes no files of its own.
+    for event in ["PreToolUse", "PostToolUse", "PostToolUseFailure"] {
+        let groups = shared[event].as_array_mut().unwrap();
+        let reports = |group: &Value| group.to_string().contains("internal change");
+        assert!(groups.iter().any(reports), "{event}");
+        groups.retain(|group| !reports(group));
+    }
     // Every agent reports its subagents' starts; a workspace's also briefs
     // them.
     let brief = shared["SubagentStart"].as_array_mut().unwrap().pop();
@@ -83,7 +90,10 @@ fn claude_codes_own_timer_tools_are_refused_with_shoals_timer() {
     for space in [AgentSpace::Chat, WORKSPACE.into()] {
         let settings = settings_of(&Claude.hook_args(space, false).unwrap());
         let groups = settings["hooks"]["PreToolUse"].as_array().unwrap();
-        let [group] = groups.as_slice() else {
+        let refusals: Vec<&Value> = (groups.iter())
+            .filter(|group| !group.to_string().contains("internal change"))
+            .collect();
+        let [group] = refusals.as_slice() else {
             panic!("{groups:?}");
         };
         let matcher = group["matcher"].as_str().unwrap();

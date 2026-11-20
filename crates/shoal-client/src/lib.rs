@@ -11,6 +11,7 @@ pub mod apps;
 pub mod assignments;
 pub mod attaching;
 pub mod branches;
+pub mod changes;
 pub mod chats;
 pub mod ci;
 pub mod connection;

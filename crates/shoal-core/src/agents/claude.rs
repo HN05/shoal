@@ -141,6 +141,10 @@ impl Integration for Claude {
     fn plan_change(&self, event: &Value) -> Option<shoal_protocol::progress::ProgressChange> {
         plan::change(event)
     }
+
+    fn tool_change(&self, event: &Value) -> Option<shoal_protocol::changes::ToolChange> {
+        changes::change(event)
+    }
 }
 
 /// One `--settings` carries every hook; Claude Code merges it with the user's
@@ -159,11 +163,16 @@ fn settings(space: AgentSpace) -> std::io::Result<Vec<OsString>> {
         Some(_) => subagent_hooks(&shoal),
         None => Vec::new(),
     };
+    let changes = workspace
+        .map(|_| change_hooks(&shoal))
+        .into_iter()
+        .flatten();
     let groups = hooks::messages(&shoal)
         .chain(state_hooks(&shoal))
         .chain([hooks::plan(&shoal, IntegrationKind::Claude, plan::TOOLS)])
         .chain(hooks::subagent_reports(&shoal, IntegrationKind::Claude))
         .chain(subagents)
+        .chain(changes)
         .chain(wake_hooks(&shoal))
         .chain([timers::refused()]);
     let mut settings = json!({
@@ -268,6 +277,18 @@ fn state_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
     ]
 }
 
+/// The groups that report what a workspace's agent's tool calls change:
+/// a snapshotted tool before it runs and after it ends, failed or not,
+/// and an edit tool after it ends.
+fn change_hooks(shoal: &str) -> [(&'static str, Value); 3] {
+    let group = |matcher| hooks::changes(shoal, IntegrationKind::Claude, Some(matcher));
+    [
+        ("PreToolUse", group(changes::SNAPSHOTTED)),
+        ("PostToolUse", group(changes::CHANGING)),
+        ("PostToolUseFailure", group(changes::SNAPSHOTTED)),
+    ]
+}
+
 /// How long a worktree hook may take: creating one runs the child's setup.
 const WORKTREE_TIMEOUT_SECS: u64 = 60 * 60;
 
@@ -329,6 +350,7 @@ const CUSTOM_HEADERS: &str = "ANTHROPIC_CUSTOM_HEADERS";
 /// lifetime is set elsewhere.
 const PROMPT_CACHE_1H: &str = "ENABLE_PROMPT_CACHING_1H";
 
+mod changes;
 mod plan;
 mod prompt_cache;
 mod settings;
