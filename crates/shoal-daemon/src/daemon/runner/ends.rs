@@ -309,7 +309,7 @@ impl Manager {
     pub(super) async fn cancel_job_run(&self, job: &ClaimedJob) -> Result<ItemRef> {
         let forge = self.item_forge(&job.job.run.url).await?;
         let account = self.user_account();
-        let url = self.reported_run_url(&forge, job);
+        let url = self.runner.reported_run_url(&forge, job);
         let run = forge.find_run(&account, &url, CiAction::Cancel).await?;
         forge
             .act_on_run(&account, &run, CiAction::Cancel, false)

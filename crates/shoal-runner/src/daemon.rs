@@ -22,6 +22,7 @@ use shoal_protocol::{
     protocol::ItemContext,
     space_names::SpaceName,
 };
+use shoal_refs::CommitId;
 
 /// The registered repositories, and the config the daemon reads for them.
 pub trait Repositories: Send + Sync {
@@ -132,11 +133,29 @@ pub trait Spaces: Send + Sync {
     fn workspace_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Workspace>>;
 }
 
+/// The workspaces the runner's jobs run in.
+pub trait Workspaces: Send + Sync {
+    /// Move the job workspace `id` to `commit`, fetched by `reference` when
+    /// it is not there yet.
+    fn move_job_workspace<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        commit: &'a CommitId,
+        reference: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<()>>;
+}
+
 /// Everything the triggers and the runner need of the daemon, which each of
 /// their operations that reaches beyond them takes.
-pub trait Daemon: Repositories + Agents + Permissions + Forges + Spaces + Coordinators {}
+pub trait Daemon:
+    Repositories + Agents + Permissions + Forges + Spaces + Workspaces + Coordinators
+{
+}
 
-impl<T> Daemon for T where T: Repositories + Agents + Permissions + Forges + Spaces + Coordinators {}
+impl<T> Daemon for T where
+    T: Repositories + Agents + Permissions + Forges + Spaces + Workspaces + Coordinators
+{
+}
 
 /// A job waiting in the agent queue for admission.
 pub struct WaitingEntry {

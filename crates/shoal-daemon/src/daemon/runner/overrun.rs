@@ -54,7 +54,7 @@ impl Manager {
             return Ok(None);
         }
         let forge = self.item_forge(&job.job.run.url).await?;
-        let url = self.reported_run_url(&forge, job);
+        let url = self.runner.reported_run_url(&forge, job);
         if self.runner.jobs().take_run_read(&job.id)
             && !(forge.view_run(&self.user_account(), &url).await?.state).unfinished()
         {

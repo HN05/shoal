@@ -21,6 +21,7 @@ mod queue;
 mod registration;
 mod single_use;
 mod superseded;
+mod taken;
 mod waiting;
 
 pub use claimed::ClaimedJob;

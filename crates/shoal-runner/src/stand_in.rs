@@ -400,6 +400,18 @@ impl Spaces for StandIn {
     }
 }
 
+/// The stand-in's job workspaces never move.
+impl crate::daemon::Workspaces for StandIn {
+    fn move_job_workspace<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        _: &'a shoal_refs::CommitId,
+        _: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move { anyhow::bail!("job workspace {id} cannot move") })
+    }
+}
+
 /// No space has a coordinator, so every event reaches the user.
 impl Coordinators for StandIn {
     fn tell<'a>(&'a self, _: NewAlert, _: bool, _: Source) -> BoxFuture<'a, Option<Sent>> {

@@ -1875,4 +1875,5 @@ pub(super) async fn poll_waiting_jobs(manager: &Manager) {
 
 mod single_use;
 mod superseded;
+mod taken;
 mod waiting;

@@ -13,7 +13,6 @@
 mod claims;
 mod ends;
 mod overrun;
-mod taken;
 
 pub(crate) use shoal_runner::jobs::JobStop;
 pub(crate) use shoal_runner::jobs::Registration;
@@ -84,7 +83,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
 async fn pass(manager: &Arc<Manager>) -> anyhow::Result<()> {
     manager.runner.sample_job_usage(&**manager).await?;
     manager.finish_ended_jobs().await?;
-    manager.follow_taken_jobs().await?;
+    manager.runner.follow_taken_jobs(&**manager).await?;
     manager.runner.release_idle_runners(&**manager).await?;
     claim_admitted_jobs(manager).await?;
     manager.runner.poll_waiting_jobs(&**manager).await
@@ -237,6 +236,17 @@ impl Forges for Manager {
 
     fn item_forge<'a>(&'a self, item: &'a ItemRef) -> BoxFuture<'a, Result<ForgeRepo>> {
         Box::pin(Manager::item_forge(self, item))
+    }
+}
+
+impl shoal_runner::daemon::Workspaces for Manager {
+    fn move_job_workspace<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        commit: &'a shoal_refs::CommitId,
+        reference: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(Manager::move_job_workspace(self, id, commit, reference))
     }
 }
 

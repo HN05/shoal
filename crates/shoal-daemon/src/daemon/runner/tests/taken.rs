@@ -1,3 +1,4 @@
+//! The job a runner registered for one job took, as the daemon follows it.
 use serde_json::json;
 
 use super::*;
@@ -6,9 +7,10 @@ use crate::daemon::{
     runner::tests::{admit_and_claim, github_fixture, github_job, launched},
     test_support::git,
 };
-use crate::forge::numbers::JobId;
+use crate::forge::numbers::{JobId, RunId};
 use shoal_forge::ci::runner::RunnerRequests;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_runner::jobs::ClaimedJob;
 
 /// Claim GitHub's job 11 of run 1 and report, as its runner's hook does,
 /// that the runner took a job of `run`, returning the claim and the job's
@@ -40,7 +42,7 @@ async fn a_job_of_the_claimed_run_goes_on_and_its_claim_names_it() {
         state.taken.insert(1, taken(12, 1, "docs"));
     }
     let (job, directory) = report(manager, 1).await;
-    manager.follow_taken_jobs().await.unwrap();
+    manager.runner.follow_taken_jobs(&**manager).await.unwrap();
     assert!(directory.join("prepared").exists());
     let claimed = manager.runner.claimed_jobs().await.unwrap().remove(0);
     assert_eq!(
@@ -64,7 +66,7 @@ async fn a_job_of_another_run_waits_until_its_workspace_is_at_that_runs_commit()
         state.taken.insert(2, taken(21, 2, "rust"));
     }
     let (job, directory) = report(manager, 2).await;
-    manager.follow_taken_jobs().await.unwrap();
+    manager.runner.follow_taken_jobs(&**manager).await.unwrap();
     assert!(directory.join("prepared").exists());
     let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     assert_eq!(
@@ -86,7 +88,7 @@ async fn a_workspace_that_cannot_move_fails_the_job() {
     let manager = &fixture.manager;
     fixture.state.lock().unwrap().queued = vec![github_job(11, 1)];
     let (job, directory) = report(manager, 3).await;
-    manager.follow_taken_jobs().await.unwrap();
+    manager.runner.follow_taken_jobs(&**manager).await.unwrap();
     assert!(directory.join("refused").exists());
     // Run 3 cannot be read, and stopping the job still cancels it.
     let claimed = manager.runner.claimed_jobs().await.unwrap().remove(0);
@@ -109,7 +111,7 @@ async fn a_job_of_the_claimed_run_keeps_the_checkout_its_steps_made() {
         &workspace.path,
         &["checkout", "-q", "--detach", &fixture.topic],
     );
-    manager.follow_taken_jobs().await.unwrap();
+    manager.runner.follow_taken_jobs(&**manager).await.unwrap();
     assert!(directory.join("prepared").exists());
     assert_eq!(
         git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
@@ -123,7 +125,7 @@ async fn a_job_whose_commit_cannot_be_fetched_still_names_its_run() {
     let manager = &fixture.manager;
     fixture.state.lock().unwrap().queued = vec![github_job(11, 1)];
     let (job, directory) = report(manager, 4).await;
-    manager.follow_taken_jobs().await.unwrap();
+    manager.runner.follow_taken_jobs(&**manager).await.unwrap();
     assert!(directory.join("refused").exists());
     // Stopping the job cancels the run it took, not the claimed one.
     let claimed = manager.runner.claimed_jobs().await.unwrap().remove(0);
@@ -141,7 +143,7 @@ async fn a_job_whose_name_cannot_be_read_still_runs_at_its_runs_commit() {
     let manager = &fixture.manager;
     fixture.state.lock().unwrap().queued = vec![github_job(11, 1)];
     let (job, directory) = report(manager, 5).await;
-    manager.follow_taken_jobs().await.unwrap();
+    manager.runner.follow_taken_jobs(&**manager).await.unwrap();
     assert!(directory.join("prepared").exists());
     let claimed = manager.runner.claimed_jobs().await.unwrap().remove(0);
     assert!(claimed.job.run.url.url().ends_with("/actions/runs/5"));
@@ -170,9 +172,19 @@ async fn a_report_recorded_before_a_restart_still_moves_the_workspace() {
         .job_run(&manager.user_account(), RunId::new(2))
         .await
         .unwrap();
-    manager.record_taken_job(&job.id, &recorded).await.unwrap();
+    let (id, recorded) = (job.id.clone(), serde_json::to_string(&recorded).unwrap());
+    (manager.store)
+        .run(move |db| {
+            db.execute(
+                "UPDATE ci_jobs SET job=?2 WHERE id=?1",
+                rusqlite::params![id, recorded],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
 
-    manager.follow_taken_jobs().await.unwrap();
+    manager.runner.follow_taken_jobs(&**manager).await.unwrap();
     assert!(directory.join("prepared").exists());
     let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     assert_eq!(
@@ -207,7 +219,7 @@ async fn a_stop_holding_the_claim_from_before_the_follow_cancels_the_reported_ru
     let (stale, _) = report(manager, 2).await;
     // The follow records run 2 and answers while the stop holds the claim
     // it read before.
-    manager.follow_taken_jobs().await.unwrap();
+    manager.runner.follow_taken_jobs(&**manager).await.unwrap();
     let cancelled = manager.cancel_job_run(&stale).await.unwrap();
     assert!(cancelled.url().ends_with("/actions/runs/2"));
     assert_eq!(fixture.state.lock().unwrap().cancelled, ["2"]);
