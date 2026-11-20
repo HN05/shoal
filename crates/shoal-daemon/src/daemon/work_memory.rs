@@ -55,22 +55,30 @@ pub(super) async fn run(manager: std::sync::Arc<Manager>) {
         return;
     }
     let mut config = manager.config_state.watch();
-    // Tried once per limit; a failure waits for the next change.
-    let mut tried = None;
+    // The cap the slice has from this daemon; a failure leaves it as it was
+    // and is tried again on the next reload.
+    let mut applied = None;
     loop {
         let cap = limit(&config.borrow_and_update()).map(Cap::of);
-        if tried != Some(cap) {
-            tried = Some(cap);
+        if applied != Some(cap) {
             match (work::cap_memory(cap).await, cap) {
-                (Ok(()), Some(cap)) => log!(
-                    "work memory capped: throttled above {} bytes, killed above {}",
-                    cap.high,
-                    cap.max
-                ),
+                (Ok(()), _) => {
+                    if let Some(cap) = cap {
+                        log!(
+                            "work memory capped: throttled above {} bytes, killed above {}",
+                            cap.high,
+                            cap.max
+                        );
+                    }
+                    applied = Some(cap);
+                }
                 (Err(error), Some(_)) => log!("work memory not capped: {error:#}"),
-                // Without a limit, a slice that cannot be read has no cap
-                // Shoal gave it.
-                (_, None) => {}
+                (Err(error), None) if matches!(applied, Some(Some(_))) => {
+                    log!("work memory cap not lifted: {error:#}");
+                }
+                // Without a limit, a slice this daemon never capped that
+                // cannot be read, as without systemd, has no cap to lift.
+                (Err(_), None) => {}
             }
         }
         if config.changed().await.is_err() {
