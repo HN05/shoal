@@ -517,3 +517,20 @@ async fn one_shot_runs_count_in_the_work_memory_in_the_slice_or_beside_it() {
         })
     );
 }
+
+#[tokio::test(start_paused = true)]
+async fn samples_say_once_when_they_begin_to_miss_containers() {
+    let start = Instant::now();
+    let mut usages = WorkspaceUsages::default();
+    let mut record = |containers: ContainerReadings| {
+        usages.record(Ok(sample(start, [process(10, 1, "a", 0)])), containers)
+    };
+    let failed = || Ok(vec![("a".into(), Err(anyhow::anyhow!("no such project")))]);
+    let missed = record(failed()).unwrap();
+    assert!(missed.contains("workspace a"), "{missed}");
+    // A failure that goes on says nothing more.
+    assert_eq!(record(failed()), None);
+    assert_eq!(record(Ok(Vec::new())), None);
+    // Once read again, a new failure, here of the runtime, says so again.
+    assert!(record(Err(anyhow::anyhow!("timed out"))).is_some());
+}

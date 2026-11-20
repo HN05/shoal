@@ -21,6 +21,20 @@ impl Manager {
         }
     }
 
+    /// Tell the user that the work's memory cannot be read under a limit,
+    /// since `missed`, the containers a sample could not read, so nothing
+    /// starts or recovers until it can.
+    pub(crate) async fn warn_of_unread_work(&self, missed: &str) {
+        if limit(&self.config()).is_none() {
+            return;
+        }
+        let message = format!(
+            "Shoal's work memory cannot be read under memory_limit, so no agent starts and no stopped agent recovers, until every running container project can be read: {missed}; start the container runtime, or stop the workspace's containers with shoal release containers --space <workspace>"
+        );
+        let kind = crate::daemon::alerts::AlertKind::LoadWarning;
+        self.notify(None, kind, message).await;
+    }
+
     /// The user's limit on Shoal's work, with what the latest usage sample
     /// counts of it, which protection and admission count as the machine's
     /// memory; none without a limit.

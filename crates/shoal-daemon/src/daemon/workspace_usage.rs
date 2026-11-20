@@ -118,13 +118,17 @@ pub(crate) struct WorkspaceUsages {
     /// The latest sample read every project's containers it tried, so its
     /// memory holds all of theirs.
     containers_complete: bool,
+    /// The samples have missed containers since the one that said so, which
+    /// says it once until a sample reads them all again.
+    missing_containers: bool,
 }
 
 impl WorkspaceUsages {
     /// Add a sample with what the workspaces' containers used meanwhile. A
     /// failed or late one forgets the previous sample, so no CPU use spans a
-    /// gap in what was measured.
-    fn record(&mut self, sample: Result<Sample>, containers: ContainerReadings) {
+    /// gap in what was measured. Returns why its containers could not all
+    /// be read, when the samples began to miss them with this one.
+    fn record(&mut self, sample: Result<Sample>, containers: ContainerReadings) -> Option<String> {
         match sample {
             Ok(sample) => {
                 let previous = self
@@ -132,9 +136,13 @@ impl WorkspaceUsages {
                     .take()
                     .filter(|previous| sample.time.duration_since(previous.time) <= STALE);
                 self.usage = usage(previous.as_ref(), &sample, &mut self.pending);
-                let containers = self.read_containers(containers);
+                let (containers, missed) = self.read_containers(containers);
                 add_containers(&mut self.usage, containers, previous.is_some());
                 self.latest = Some(sample);
+                let began = !self.containers_complete
+                    && !std::mem::replace(&mut self.missing_containers, true);
+                self.missing_containers &= !self.containers_complete;
+                began.then(|| missed.join("; "))
             }
             Err(error) => {
                 // Once per gap: a platform without readings would repeat it forever.
@@ -142,14 +150,18 @@ impl WorkspaceUsages {
                     log!("workspace usage: {error:#}");
                 }
                 self.usage.clear();
+                None
             }
         }
     }
 
     /// The containers' usage that was read, logging each workspace's failure
     /// once: a runtime that cannot be read leaves its workspaces' usage as
-    /// their processes'.
-    fn read_containers(&mut self, readings: ContainerReadings) -> Vec<(SpaceId, ContainerUsage)> {
+    /// their processes'. With it, why each reading failed.
+    fn read_containers(
+        &mut self,
+        readings: ContainerReadings,
+    ) -> (Vec<(SpaceId, ContainerUsage)>, Vec<String>) {
         self.containers_complete = false;
         let readings = match readings {
             Ok(readings) => readings,
@@ -157,12 +169,15 @@ impl WorkspaceUsages {
                 if !std::mem::replace(&mut self.containers_unreadable, true) {
                     log!("container usage: {error:#}");
                 }
-                return Vec::new();
+                return (
+                    Vec::new(),
+                    vec![format!("the container runtime: {error:#}")],
+                );
             }
         };
         self.containers_unreadable = false;
         self.containers_complete = readings.iter().all(|(_, reading)| reading.is_ok());
-        let mut read = Vec::new();
+        let (mut read, mut missed) = (Vec::new(), Vec::new());
         for (workspace, reading) in readings {
             match reading {
                 Ok(usage) => {
@@ -173,10 +188,13 @@ impl WorkspaceUsages {
                     if self.unread_containers.insert(workspace.clone()) {
                         log!("container usage of {workspace}: {error:#}");
                     }
+                    missed.push(format!(
+                        "the containers of workspace {workspace}: {error:#}"
+                    ));
                 }
             }
         }
-        read
+        (read, missed)
     }
 
     /// The processes of the latest sample, which the next one follows until
@@ -414,9 +432,10 @@ pub(super) async fn run(manager: Arc<Manager>) {
             sample(&manager, tracked),
             manager.leases.container_usage(CONTAINER_READ_LIMIT)
         );
-        manager
-            .usage
-            .with_workspaces(|usages| usages.record(sample, containers));
+        let missed = (manager.usage).with_workspaces(|usages| usages.record(sample, containers));
+        if let Some(missed) = missed {
+            manager.warn_of_unread_work(&missed).await;
+        }
         tokio::select! {
             () = manager.leases.containers_started() => {}
             () = tokio::time::sleep(SAMPLE_INTERVAL) => {}
