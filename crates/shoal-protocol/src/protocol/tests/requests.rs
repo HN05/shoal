@@ -235,7 +235,7 @@ const REQUESTS: &[&str] = &[
     r#"{"replied_in_chat":{"space":"fix","prompt":"Use SQLite"}}"#,
     r#"{"forward_thread":{"thread":6,"to":"part","note":"You built the cache"}}"#,
     r#"{"resolve_thread":{"thread":6,"outcome":"duplicate","of":{"space_number":2,"item":1,"number":"2.1"}}}"#,
-    r#"{"list_threads":{"space":"fix","state":"open"}}"#,
+    r#"{"list_threads":{"space":"fix","state":"open","for_user":true}}"#,
     r#"{"show_thread":{"thread":{"space_number":2,"item":6,"number":"2.6"}}}"#,
     r#"{"link_thread":{"space":"fix","thread":{"space_number":2,"item":6,"number":"2.6"}}}"#,
     r#"{"unlink_thread":{"space":"fix","thread":{"space_number":2,"item":6,"number":"2.6"}}}"#,

@@ -126,7 +126,22 @@ pub async fn list(
     space: Option<SpaceSelector>,
     state: ThreadState,
 ) -> Result<Listing> {
-    request(daemon, ThreadMethod::ListThreads { space, state }).await
+    let method = ThreadMethod::ListThreads {
+        space,
+        state,
+        for_user: false,
+    };
+    request(daemon, method).await
+}
+
+/// The open threads the caller may read whose turn is the user's.
+pub async fn for_user(daemon: &impl Daemon) -> Result<Listing> {
+    let method = ThreadMethod::ListThreads {
+        space: None,
+        state: ThreadState::Open,
+        for_user: true,
+    };
+    request(daemon, method).await
 }
 
 /// The thread `thread`.

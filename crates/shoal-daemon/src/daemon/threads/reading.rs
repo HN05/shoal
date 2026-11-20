@@ -39,11 +39,13 @@ fn newest_that_fit(mut threads: Vec<Thread>) -> Result<Listing> {
 
 impl Manager {
     /// The threads the space `selector` names takes part in, else every
-    /// thread, in `state`, the newest that fit one response.
+    /// thread, in `state`, only those whose turn is the user's with
+    /// `for_user`, the newest that fit one response.
     pub async fn threads(
         &self,
         selector: Option<&SpaceSelector>,
         state: ThreadState,
+        for_user: bool,
     ) -> Result<Listing> {
         let space = match selector {
             Some(selector) => Some(self.space(selector).await?.id),
@@ -58,6 +60,9 @@ impl Manager {
             .store
             .run(move |db| records::of_space(db, space.as_ref(), kept))
             .await?;
+        let threads = (threads.into_iter())
+            .filter(|thread| !for_user || thread.waits_for_user())
+            .collect();
         newest_that_fit(threads)
     }
 

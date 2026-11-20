@@ -28,7 +28,7 @@ use crate::{
 use shoal_protocol::{
     approvals::{ApprovalRequest, DecisionStatus, GateStep},
     hub::directory::HubView,
-    threads::{Thread, ThreadState},
+    threads::Thread,
 };
 
 mod elsewhere;
@@ -90,8 +90,7 @@ impl Inbox {
         // keeps its threads.
         let mut chats = spaces.into_chats();
         chats.retain(|chat| filter.keeps_chat(chat));
-        let open = crate::client::threads::list(&ctx.paths, None, ThreadState::Open).await?;
-        let threads = (open.threads.into_iter()).filter(Thread::waits_for_user);
+        let threads = crate::client::threads::for_user(&ctx.paths).await?.threads;
         let requests = crate::client::approvals::list(&ctx.paths, None).await?;
         let detached = |request: &ApprovalRequest| {
             !existing.contains(&request.space_id)

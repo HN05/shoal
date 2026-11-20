@@ -441,6 +441,29 @@ async fn a_post_from_a_side_lost_meanwhile_is_refused() {
 }
 
 #[tokio::test]
+async fn the_user_s_threads_list_past_larger_newer_threads() {
+    let tree = tree().await;
+    let manager = &tree.manager;
+    let asked = open(manager, None, Some(&tree.beside)).await;
+    send(manager, Some(&caller(&tree.beside)), &asked, "Which port?").await;
+    // Newer threads that wait for spaces fill a response on their own.
+    let long = "x".repeat(shoal_protocol::threads::MAX_POST_LEN);
+    for space in [&tree.child, &tree.sibling] {
+        let thread = open(manager, None, Some(space)).await;
+        while (manager.post_to_thread(None, full(&thread), post(&long), Vec::new()))
+            .await
+            .is_ok()
+        {}
+    }
+    let open = shoal_protocol::threads::ThreadState::Open;
+    let all = manager.threads(None, open, false).await.unwrap();
+    assert!(!all.threads.iter().any(|thread| thread.id == asked.id));
+    let mine = manager.threads(None, open, true).await.unwrap();
+    let numbers: Vec<_> = mine.threads.iter().map(|thread| thread.number).collect();
+    assert_eq!(numbers, [asked.number]);
+}
+
+#[tokio::test]
 async fn the_opener_resolves_its_thread_and_takes_back_an_unread_notice() {
     let tree = tree().await;
     let manager = &tree.manager;

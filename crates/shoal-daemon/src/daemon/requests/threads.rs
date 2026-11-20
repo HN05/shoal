@@ -79,9 +79,11 @@ pub(super) async fn handle(
                 manager.resolve_thread(acting.as_ref(), number, outcome, choice, of, reason);
             thread(resolved.await?)
         }
-        ThreadMethod::ListThreads { space, state } => {
-            Body::SpaceThreads(manager.threads(space.as_ref(), state).await?)
-        }
+        ThreadMethod::ListThreads {
+            space,
+            state,
+            for_user,
+        } => Body::SpaceThreads(manager.threads(space.as_ref(), state, for_user).await?),
         ThreadMethod::ShowThread { thread: number } => {
             thread(manager.thread(caller, number).await?)
         }

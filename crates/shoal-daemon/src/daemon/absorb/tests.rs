@@ -239,7 +239,11 @@ async fn a_forced_squash_takes_the_open_threads_of_work_that_is_not_done() {
 
     assert_eq!(absorbed.threads.len(), 1);
     let listing = manager
-        .threads(Some(&SpaceSelector::id(&parent.id)), ThreadState::Open)
+        .threads(
+            Some(&SpaceSelector::id(&parent.id)),
+            ThreadState::Open,
+            false,
+        )
         .await
         .unwrap();
     assert_eq!(listing.threads.len(), 1);

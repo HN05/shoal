@@ -77,11 +77,14 @@ pub enum ThreadMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         from: Option<SpaceSelector>,
     },
-    /// The threads the space takes part in, else those the caller may read.
+    /// The threads the space takes part in, else those the caller may read,
+    /// only those whose turn is the user's with `for_user`.
     ListThreads {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         space: Option<SpaceSelector>,
         state: ThreadState,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        for_user: bool,
     },
     /// One thread by number.
     ShowThread { thread: ThreadNumber },
