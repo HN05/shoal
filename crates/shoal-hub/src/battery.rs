@@ -44,9 +44,12 @@ fn powers_system_from_battery(class: &std::path::Path) -> bool {
     })
 }
 
+/// IOKit's power-source query, with IOKit and Core Foundation loaded at run
+/// time, so that the binary links only libSystem: the release cross-builds
+/// macOS against an SDK without Apple frameworks.
 #[cfg(target_os = "macos")]
 mod iokit {
-    use std::ffi::{c_char, c_void};
+    use std::ffi::{CStr, c_char, c_void};
 
     type CFTypeRef = *const c_void;
     type CFIndex = isize;
@@ -54,75 +57,146 @@ mod iokit {
     /// `kCFStringEncodingUTF8`.
     const UTF8: u32 = 0x0800_0100;
 
-    #[link(name = "IOKit", kind = "framework")]
-    unsafe extern "C" {
-        fn IOPSCopyPowerSourcesInfo() -> CFTypeRef;
-        fn IOPSCopyPowerSourcesList(blob: CFTypeRef) -> CFTypeRef;
-        fn IOPSGetPowerSourceDescription(blob: CFTypeRef, source: CFTypeRef) -> CFTypeRef;
-    }
+    const IOKIT: &CStr = c"/System/Library/Frameworks/IOKit.framework/IOKit";
+    const CORE_FOUNDATION: &CStr =
+        c"/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation";
 
-    #[link(name = "CoreFoundation", kind = "framework")]
-    unsafe extern "C" {
-        fn CFArrayGetCount(array: CFTypeRef) -> CFIndex;
-        fn CFArrayGetValueAtIndex(array: CFTypeRef, index: CFIndex) -> CFTypeRef;
-        fn CFDictionaryGetValue(dictionary: CFTypeRef, key: CFTypeRef) -> CFTypeRef;
-        fn CFStringCreateWithCString(
+    /// The IOKit and Core Foundation functions the query calls.
+    struct Functions {
+        copy_power_sources_info: unsafe extern "C" fn() -> CFTypeRef,
+        copy_power_sources_list: unsafe extern "C" fn(blob: CFTypeRef) -> CFTypeRef,
+        get_power_source_description:
+            unsafe extern "C" fn(blob: CFTypeRef, source: CFTypeRef) -> CFTypeRef,
+        array_get_count: unsafe extern "C" fn(array: CFTypeRef) -> CFIndex,
+        array_get_value_at_index:
+            unsafe extern "C" fn(array: CFTypeRef, index: CFIndex) -> CFTypeRef,
+        dictionary_get_value:
+            unsafe extern "C" fn(dictionary: CFTypeRef, key: CFTypeRef) -> CFTypeRef,
+        string_create_with_c_string: unsafe extern "C" fn(
             allocator: CFTypeRef,
             text: *const c_char,
             encoding: u32,
-        ) -> CFTypeRef;
-        fn CFEqual(one: CFTypeRef, other: CFTypeRef) -> u8;
-        fn CFRelease(object: CFTypeRef);
+        ) -> CFTypeRef,
+        equal: unsafe extern "C" fn(one: CFTypeRef, other: CFTypeRef) -> u8,
+        release: unsafe extern "C" fn(object: CFTypeRef),
+    }
+
+    impl Functions {
+        /// The functions, none when a framework or one of its symbols fails
+        /// to load.
+        fn load() -> Option<Self> {
+            let iokit = Library::open(IOKIT)?;
+            let core_foundation = Library::open(CORE_FOUNDATION)?;
+            // SAFETY: each type is the C signature of the symbol it names.
+            unsafe {
+                Some(Self {
+                    copy_power_sources_info: iokit.function(c"IOPSCopyPowerSourcesInfo")?,
+                    copy_power_sources_list: iokit.function(c"IOPSCopyPowerSourcesList")?,
+                    get_power_source_description: iokit
+                        .function(c"IOPSGetPowerSourceDescription")?,
+                    array_get_count: core_foundation.function(c"CFArrayGetCount")?,
+                    array_get_value_at_index: core_foundation
+                        .function(c"CFArrayGetValueAtIndex")?,
+                    dictionary_get_value: core_foundation.function(c"CFDictionaryGetValue")?,
+                    string_create_with_c_string: core_foundation
+                        .function(c"CFStringCreateWithCString")?,
+                    equal: core_foundation.function(c"CFEqual")?,
+                    release: core_foundation.function(c"CFRelease")?,
+                })
+            }
+        }
+    }
+
+    /// A framework `dlopen` loaded, never closed, so that the functions read
+    /// from it stay valid.
+    struct Library(*mut c_void);
+
+    impl Library {
+        fn open(path: &CStr) -> Option<Self> {
+            // SAFETY: `path` is NUL-terminated.
+            let handle = unsafe { libc::dlopen(path.as_ptr(), libc::RTLD_LAZY | libc::RTLD_LOCAL) };
+            (!handle.is_null()).then_some(Self(handle))
+        }
+
+        /// The function `name` names, none when the library lacks it.
+        ///
+        /// # Safety
+        ///
+        /// `F` is a function pointer type matching the symbol's signature.
+        unsafe fn function<F: Copy>(&self, name: &CStr) -> Option<F> {
+            const {
+                assert!(size_of::<F>() == size_of::<*mut c_void>());
+            }
+            // SAFETY: the handle came from `dlopen`; `name` is NUL-terminated.
+            let symbol = unsafe { libc::dlsym(self.0, name.as_ptr()) };
+            // SAFETY: the caller guarantees `F` is the symbol's function type,
+            // which has a pointer's size.
+            (!symbol.is_null()).then(|| unsafe { std::mem::transmute_copy(&symbol) })
+        }
     }
 
     /// A Core Foundation object this code owns, released when dropped.
-    struct Owned(CFTypeRef);
+    struct Owned<'a> {
+        object: CFTypeRef,
+        functions: &'a Functions,
+    }
 
-    impl Owned {
+    impl<'a> Owned<'a> {
         /// `object`, from a Copy or Create function, none for null.
-        fn new(object: CFTypeRef) -> Option<Self> {
-            (!object.is_null()).then_some(Self(object))
+        fn new(functions: &'a Functions, object: CFTypeRef) -> Option<Self> {
+            (!object.is_null()).then_some(Self { object, functions })
         }
 
-        fn string(text: &std::ffi::CStr) -> Option<Self> {
+        fn string(functions: &'a Functions, text: &CStr) -> Option<Self> {
             // SAFETY: `text` is NUL-terminated; a null allocator is the default.
-            Self::new(unsafe { CFStringCreateWithCString(std::ptr::null(), text.as_ptr(), UTF8) })
+            let object = unsafe {
+                (functions.string_create_with_c_string)(std::ptr::null(), text.as_ptr(), UTF8)
+            };
+            Self::new(functions, object)
         }
     }
 
-    impl Drop for Owned {
+    impl Drop for Owned<'_> {
         fn drop(&mut self) {
             // SAFETY: the object came from a Copy or Create function and is
             // released once.
-            unsafe { CFRelease(self.0) }
+            unsafe { (self.functions.release)(self.object) }
         }
     }
 
     /// Whether a power source's `Type` is `InternalBattery`, as
-    /// `kIOPSTypeKey` and `kIOPSInternalBatteryType` spell them.
+    /// `kIOPSTypeKey` and `kIOPSInternalBatteryType` spell them; false when
+    /// IOKit or Core Foundation fails to load.
     pub(super) fn internal_battery() -> bool {
-        let (Some(key), Some(battery)) =
-            (Owned::string(c"Type"), Owned::string(c"InternalBattery"))
-        else {
+        Functions::load().is_some_and(|functions| lists_internal_battery(&functions))
+    }
+
+    fn lists_internal_battery(functions: &Functions) -> bool {
+        let (Some(key), Some(battery)) = (
+            Owned::string(functions, c"Type"),
+            Owned::string(functions, c"InternalBattery"),
+        ) else {
             return false;
         };
         // SAFETY: each Copy result is owned and released; the description
         // and the values read from it belong to the blob, which outlives them.
         unsafe {
-            let Some(blob) = Owned::new(IOPSCopyPowerSourcesInfo()) else {
+            let Some(blob) = Owned::new(functions, (functions.copy_power_sources_info)()) else {
                 return false;
             };
-            let Some(sources) = Owned::new(IOPSCopyPowerSourcesList(blob.0)) else {
+            let Some(sources) =
+                Owned::new(functions, (functions.copy_power_sources_list)(blob.object))
+            else {
                 return false;
             };
-            (0..CFArrayGetCount(sources.0)).any(|index| {
-                let source = CFArrayGetValueAtIndex(sources.0, index);
-                let description = IOPSGetPowerSourceDescription(blob.0, source);
+            (0..(functions.array_get_count)(sources.object)).any(|index| {
+                let source = (functions.array_get_value_at_index)(sources.object, index);
+                let description = (functions.get_power_source_description)(blob.object, source);
                 if description.is_null() {
                     return false;
                 }
-                let kind = CFDictionaryGetValue(description, key.0);
-                !kind.is_null() && CFEqual(kind, battery.0) != 0
+                let kind = (functions.dictionary_get_value)(description, key.object);
+                !kind.is_null() && (functions.equal)(kind, battery.object) != 0
             })
         }
     }
