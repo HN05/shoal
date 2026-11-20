@@ -1,7 +1,16 @@
 //! Whether sustained healthy readings let protection-stopped agents restore.
 //! Each stop, reload or unsafe reading starts a new epoch, so readings taken
-//! before it no longer admit a restore.
-use std::sync::atomic::{AtomicU64, Ordering};
+//! before it no longer admit a restore. The demos protection restarted wait
+//! for such readings too before it restarts them again, since a demo's
+//! wrapper runs it again at once.
+use shoal_ids::execution_ids::ExecutionId;
+use std::{
+    collections::HashSet,
+    sync::{
+        Mutex, PoisonError,
+        atomic::{AtomicU64, Ordering},
+    },
+};
 
 use tokio::sync::watch;
 
@@ -11,6 +20,8 @@ pub struct OverloadRecovery {
     /// in, if its latest readings were.
     ready: watch::Sender<Option<u64>>,
     epoch: AtomicU64,
+    /// The demos restarted since healthy readings were last published.
+    restarted_demos: Mutex<HashSet<ExecutionId>>,
 }
 
 impl OverloadRecovery {
@@ -28,7 +39,27 @@ impl OverloadRecovery {
     /// Publish whether the monitor's readings in `epoch` were sustained and
     /// healthy.
     pub fn publish(&self, ready: Option<u64>) {
+        if ready.is_some_and(|ready| ready == self.epoch()) {
+            self.restarted_demos().clear();
+        }
         self.ready.send_replace(ready);
+    }
+
+    /// Record that protection restarted the demo `execution`.
+    pub(crate) fn demo_restarted(&self, execution: &ExecutionId) {
+        self.restarted_demos().insert(execution.clone());
+    }
+
+    /// Whether protection restarted the demo `execution` since healthy
+    /// readings were last published.
+    pub(crate) fn restarted_demo(&self, execution: &ExecutionId) -> bool {
+        self.restarted_demos().contains(execution)
+    }
+
+    fn restarted_demos(&self) -> std::sync::MutexGuard<'_, HashSet<ExecutionId>> {
+        self.restarted_demos
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
     }
 
     pub(crate) fn watch(&self) -> watch::Receiver<Option<u64>> {

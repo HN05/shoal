@@ -538,14 +538,36 @@ thrashes, so the threshold came with the OOM, if at all. Pressure stall
 information is the main signal; a measure of RAM and swap in use together is
 the backstop, for an allocation too fast to stall first and for kernels
 without it. Either signal counts: critical when either is, safe only when both
-are. Stall stops work only once it has held, so one burst stops nothing. Stop connected tracked
-agents through their execution wrappers, preserving work and leases, in the
-agent queue's rank reversed: the agent the user interacted with longest ago, or
+are. Stall stops work only once it has held, so one burst stops nothing. Protection stops work in one stop order, by
+what a stop loses, which `shoal-schedule` computes beside the queue order from
+the same snapshot, so one policy defines both: CI jobs first, newest first,
+since a rerun loses nothing and the newest has done the least; then demos,
+which Shoal restarts; then connected tracked agents, stopped through their
+execution wrappers, preserving work and leases. An agent comes only after
+every running agent below it in the space tree, light ones included, so a
+coordinator never stops while its children work. Among the agents free to
+go, heavy ones go before light ones, then the queue's rank reversed: the
+agent the user interacted with longest ago, or
 never, first, since the user is likely working with the one they touched last,
 then idle ones, since an idle agent loses no
 turn, and working ones only when no idle one is left, each the lowest priority
 and rank first, so the work the queue would start last gives way first; within
-a space the agent idle longest, or the newest working one. Whether a terminal
+a space the agent idle longest, or the newest working one. The daemon, places
+and workers are never in it. Each consumer takes the first entry that frees what
+it needs: load the first holding memory worth freeing, passing over a light
+agent or a space with negligible memory for its own sake; disk every agent;
+making room an idle agent with a slot and no running agent below it, since
+putting an idle agent to sleep must never stop working ones. Stopping an agent
+stops every running agent below it first. A CI job load stops ends as one whose
+runner outlived its run does and reruns on its forge once readings recover,
+through the queue's normal admission, so load never costs a job, only time. On
+Linux the kernel's OOM killer follows the same order: it picks its victim by
+`oom_score_adj`, which left alone put the daemon's service at 200 above agents'
+builds at 100, so it killed a small shoal process before a large rustc. The
+daemon maps places in the order onto scores from 900 down to 200 and lowers its
+own to the floor its service manager allows without privilege, which differs
+between machines, so the unit cannot state one; a CI job's scope has the kernel
+kill the whole job, which fails anyway, and so frees all of it. Whether a terminal
 shows an agent plays no part, since a host such as Herdr may count every agent
 as shown and a user who attaches may walk away. An idle agent with a running subagent, which
 its hooks report, or processes outside its process group counts as working,
@@ -889,7 +911,9 @@ the executable and `PATH` the installed one starts, and reloading systemd withou
 file `shoal daemon install` wrote, and a definition in a system directory would
 need root and a distribution package. The unit and every scope Shoal starts set
 `OOMPolicy=continue`, so an OOM kill ends only the process it chose and the
-daemon's own death alone fails the service.
+daemon's own death alone fails the service, except that a CI job's scope has
+the kernel kill all of it with any one of its processes, as overload
+protection describes.
 Every process the daemon starts in a session of its own runs, with what it
 starts, in a transient systemd scope of its own in the service's slice, which
 `workers::detached_command` adds through the launcher the managed daemon finds
@@ -1790,7 +1814,12 @@ worker does, so the service manager's stop of the service leaves it running
 too. A job ends only on the forge's word, so stopping it, as `shoal daemon
 stop` and a system shutdown do, cancels its run there, as does its wrapper
 through the daemon, which keeps the forge's login, when a logout's or a
-shutdown's signal reaches it, and protection leaves it running; once the forge has finished the run,
+shutdown's signal reaches it, and disk protection leaves it running. Load
+protection alone ends a job without
+cancelling its run, which would end the run's other jobs too: it stops the
+job's processes and its runner, the forge fails the job once the runner
+reports the stopped step or gives up on the runner, and the job reruns once
+the run has finished, so the PR's check shows the job failed until then. Once the forge has finished the run,
 a runner that outlives it by a grace period, held open by a process a step
 left, is Shoal's to end with every process of the job's workspace. Every space that links a run's PR, and the workspace that owns its branch, lists the job in its status, and a
 waiting one with what holds it back, but

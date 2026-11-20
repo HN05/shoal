@@ -127,6 +127,10 @@ impl Runs for Forgejo {
 
     /// Forgejo reruns failed jobs one by one; one run accepts several job
     /// reruns in a row, also while it runs again.
+    fn rerun_job_endpoint(&self, job: JobId) -> Result<String> {
+        Ok(format!("actions/jobs/{job}/rerun"))
+    }
+
     fn run_operation(&self, run: &Run, action: CiAction, failed: bool) -> Result<RunOperation> {
         let id = run.id;
         Ok(match (action, failed) {

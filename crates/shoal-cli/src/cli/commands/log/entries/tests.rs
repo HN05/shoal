@@ -82,17 +82,19 @@ fn details_name_what_each_entry_is_about() {
         details(
             serde_json::json!({"kind": "job_ended", "job": {"name": "rust",
             "run": "https://forge.example/team/repo/actions/runs/2765",
+            "reason": "its runner outlived its finished run",
             "stopped": [{"pid": 41, "command": "sh -c loop"}, {"pid": 42, "command": "sleep 60"}]}})
         ),
-        "rust, run 2765; stopped 41 sh -c loop, 42 sleep 60"
+        "rust, run 2765; its runner outlived its finished run; stopped 41 sh -c loop, 42 sleep 60"
     );
     assert_eq!(
         details(
             serde_json::json!({"kind": "job_ended", "job": {"name": "rust",
             "run": "https://forge.example/team/repo/actions/runs/2765",
+            "reason": "stopped for critical memory pressure",
             "stopped": [{"pid": 41, "command": "sh -c loop"}], "omitted": 3}})
         ),
-        "rust, run 2765; stopped 41 sh -c loop, 3 more"
+        "rust, run 2765; stopped for critical memory pressure; stopped 41 sh -c loop, 3 more"
     );
 }
 

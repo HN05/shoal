@@ -18,7 +18,7 @@ use shoal_forge_types::{
         run_action::Run,
         run_view::{RunFilter, RunJob},
     },
-    numbers::RunNumber,
+    numbers::{JobId, RunNumber},
 };
 
 /// How the forge starts, lists and reads workflow runs and their jobs,
@@ -84,6 +84,10 @@ pub(crate) trait Runs: Backend {
     /// The requests that apply `action` to `run`; `failed` reruns only its
     /// failed jobs.
     fn run_operation(&self, run: &Run, action: CiAction, failed: bool) -> Result<RunOperation>;
+
+    /// The endpoint under the repository that reruns the job `job` alone
+    /// once its run has finished.
+    fn rerun_job_endpoint(&self, job: JobId) -> Result<String>;
 
     /// The endpoint under the repository that approves `run`, where the
     /// forge approves runs.

@@ -78,7 +78,7 @@ async fn a_space_whose_agent_cannot_restart_is_skipped_with_why() {
 
     track(&manager, &workspace, &custom.plan.id, "claude", true).await;
     manager
-        .stop_agent_for_overload("critical memory pressure")
+        .stop_for_overload(crate::daemon::overload::Pressure::Memory)
         .await;
     let reason = skipped(&manager, &workspace).await;
     assert!(reason.contains("critical memory pressure"), "{reason}");

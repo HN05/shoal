@@ -11,6 +11,7 @@ fn a_job_end_lists_what_fits_in_a_frame_and_counts_the_rest() {
     let ended = ended_job(
         "rust".into(),
         "https://forge.example/runs/6".into(),
+        "its runner outlived its finished run".into(),
         stopped,
     );
     assert_eq!(ended.stopped.len() + ended.omitted, 300);

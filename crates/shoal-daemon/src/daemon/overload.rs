@@ -1,5 +1,8 @@
-//! Stop one connected agent after sustained machine pressure, then let the
-//! machine recover before evaluating another. Work and leases stay owned.
+//! Stop work after sustained machine pressure, one entry of the stop order
+//! at a time, then let the machine recover before evaluating another. Work
+//! and leases stay owned.
+mod stops;
+
 use std::{sync::Arc, time::Duration};
 use tokio::time::Instant;
 
@@ -10,6 +13,23 @@ use super::{
     warnings::{self, Signal, Warnings},
 };
 use crate::daemon::log;
+
+/// What a sample found the machine short of.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pressure {
+    Memory,
+    Cpu,
+}
+
+impl Pressure {
+    /// Why protection stops work for it.
+    pub fn reason(self) -> &'static str {
+        match self {
+            Self::Memory => "critical memory pressure",
+            Self::Cpu => "sustained CPU overload",
+        }
+    }
+}
 
 #[derive(Default)]
 struct Sustained {
@@ -93,7 +113,7 @@ impl Monitor {
         settings: &crate::config::overload::Overload,
         memory: Option<MemoryPressure>,
         cpu: anyhow::Result<load::CpuTicks>,
-    ) -> Option<&'static str> {
+    ) -> Option<Pressure> {
         if self
             .last_observation
             .replace(now)
@@ -132,9 +152,9 @@ impl Monitor {
             settings.cpu.sustained_seconds,
         );
         if memory {
-            Some("critical memory pressure")
+            Some(Pressure::Memory)
         } else if cpu {
-            Some("sustained CPU overload")
+            Some(Pressure::Cpu)
         } else {
             None
         }
@@ -229,7 +249,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
         let readings = Readings::take(settings, settings.cpu.enabled || admission, &manager);
         let now = Instant::now();
         publish_busy_cpu(&manager, now, settings, admission, &readings.cpu);
-        let reason = monitor.reason(now, settings, readings.memory, readings.cpu);
+        let pressure = monitor.reason(now, settings, readings.memory, readings.cpu);
         // Decide before awaiting warnings, so a reload meanwhile cannot pair
         // these readings with its new epoch.
         let epoch = manager.overload_recovery.epoch();
@@ -240,8 +260,8 @@ pub(super) async fn run(manager: Arc<Manager>) {
         for (signal, message) in monitor.warnings(now, settings, readings.memory) {
             warned.warn(&manager, now, signal, &message).await;
         }
-        if let Some(reason) = reason
-            && manager.stop_agent_for_overload(reason).await
+        if let Some(pressure) = pressure
+            && manager.stop_for_overload(pressure).await
         {
             monitor = Monitor::default();
             drop(operation);

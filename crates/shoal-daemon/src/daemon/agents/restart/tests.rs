@@ -199,7 +199,7 @@ async fn restart_refuses_agents_it_cannot_restore_without_stopping_them() {
     track(&manager, &workspace, &custom.plan.id, "custom", false).await;
     track(&manager, &workspace, &stopped.plan.id, "claude", true).await;
     manager
-        .stop_agent_for_overload("critical memory pressure")
+        .stop_for_overload(crate::daemon::overload::Pressure::Memory)
         .await;
     assert!(*stopped.stop.borrow());
 

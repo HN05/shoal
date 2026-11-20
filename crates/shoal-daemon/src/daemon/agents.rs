@@ -7,6 +7,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::model::ByKind;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_schedule::stopping::{Stop, StopOrder};
 use std::{
     collections::{HashMap, HashSet},
     time::{Duration, Instant},
@@ -14,11 +15,12 @@ use std::{
 use tokio::sync::{OwnedRwLockReadGuard, watch};
 
 use super::{
-    agent_queue::{Grant, OneShotStop, RestoreLink},
+    agent_queue::{Grant, RestoreLink},
     agent_turns::Turn,
     capacity::Activity,
     gates::GuardMode,
     manager::Manager,
+    overload::Pressure,
 };
 pub(crate) use crate::model::Protection;
 
@@ -37,6 +39,7 @@ mod input;
 mod interrupts;
 mod make_room;
 mod restart;
+mod stop_order;
 mod stops;
 pub use restart::RestartWaits;
 pub(crate) use restart::{Renewals, forget_ended_renewals};
@@ -939,20 +942,22 @@ impl Manager {
         Ok(agents.into_keys().collect())
     }
 
-    /// Stop one agent under `reason`: the newest one-shot run first, which
-    /// has no session to lose and starts over once readings are healthy.
-    pub async fn stop_agent_for_overload(&self, reason: &str) -> bool {
-        if self.agent_queue.stop_oneshots(OneShotStop::Newest) > 0 {
-            log!("{reason}: stopped a one-shot agent run");
-            return true;
-        }
-        !self
-            .stop_agents(&Protection::load(reason), Select::One)
+    /// Stop the first heavy agent of the stop order whose stop frees what
+    /// `pressure` presses, as `turns` read its turn, after every agent below
+    /// it, returning whether any stopped.
+    pub(crate) async fn stop_agent_for_overload(
+        &self,
+        pressure: Pressure,
+        turns: HashMap<ExecutionId, Turn>,
+    ) -> bool {
+        let protection = Protection::load(pressure.reason());
+        !(self.stop_agents_by_turn(&protection, Select::One(pressure), turns))
             .await
             .is_empty()
     }
 
-    /// Stop every running agent, since any of them may be writing.
+    /// Stop every running agent, since any of them may be writing, each
+    /// after the agents below it.
     pub async fn stop_agents_for_disk_space(&self, protection: &Protection) -> Vec<StoppedAgent> {
         self.stop_agents(protection, Select::All).await
     }
@@ -964,7 +969,7 @@ impl Manager {
 
     /// The agents' turns as protection reads them; without them every agent
     /// counts as working, as one without hooks does.
-    async fn protection_turns(&self) -> HashMap<ExecutionId, Turn> {
+    pub(crate) async fn protection_turns(&self) -> HashMap<ExecutionId, Turn> {
         self.agent_turns().await.unwrap_or_else(|error| {
             log!("agent turns unavailable to protection: {error:#}");
             HashMap::new()
@@ -973,7 +978,8 @@ impl Manager {
 
     /// Stop the agents `select` picks by `turns`. One picked idle stops only
     /// while no turn started since `turns` were read, so `select` picks
-    /// again by the turns read then, a few times at most.
+    /// again by the turns read then, a few times at most. An agent that does
+    /// not stop keeps every agent above it running.
     async fn stop_agents_by_turn(
         &self,
         protection: &Protection,
@@ -983,10 +989,23 @@ impl Manager {
         let mut stopped = Vec::new();
         for _ in 0..PROTECTION_CHOICES {
             let mut raced = false;
-            for (id, turn) in self.choose_stops(select, &turns).await {
-                match self.protect(&id, protection, turn, None).await {
+            let (order, chosen) = self.choose_stops(select, &turns).await;
+            // The spaces whose agent did not stop, which keep those above.
+            let mut kept: Vec<&SpaceId> = Vec::new();
+            for stop in &chosen {
+                let Some(id) = stop.agent() else {
+                    continue;
+                };
+                if kept.iter().any(|space| order.is_below(space, &stop.space)) {
+                    continue;
+                }
+                let turn = turns.get(id).copied();
+                match self.protect(id, protection, turn, None).await {
                     Some(agent) => stopped.push(agent),
-                    None => raced |= turn.is_some_and(|turn| turn.idle()),
+                    None => {
+                        raced |= turn.is_some_and(|turn| turn.idle());
+                        kept.push(&stop.space);
+                    }
                 }
             }
             if !raced {
@@ -1003,67 +1022,26 @@ impl Manager {
         stopped
     }
 
-    /// The running agents `select` picks by `turns`, each with its turn.
+    /// The stop order by `turns`, and the agents of it `select` picks, in
+    /// the order they stop.
     async fn choose_stops(
         &self,
         select: Select,
         turns: &HashMap<ExecutionId, Turn>,
-    ) -> Vec<(ExecutionId, Option<Turn>)> {
-        // Without the modes every agent counts as heavy, as before weights.
-        let light = self.light().await.unwrap_or_else(|error| {
-            log!("agent weights unavailable to protection: {error:#}");
-            Default::default()
-        });
-        let ranks = self.protection_ranks().await;
-        let interactions = self.interactions().await.unwrap_or_else(|error| {
-            log!("interactions unavailable to protection: {error:#}");
-            Default::default()
-        });
-        self.executions
-            .with_agents(|agents| {
-                let running =
-                    agents
-                        .iter()
-                        .filter(|(_, agent)| agent.running())
-                        .map(|(id, agent)| Running {
-                            id,
-                            space: &agent.workspace_id,
-                            started: agent.started,
-                            interacted_at: interactions.get(&agent.workspace_id).copied(),
-                        });
-                let selected: Vec<ExecutionId> = match select {
-                    // Load stops heavy agents, a workspace's or a chat's.
-                    Select::One => {
-                        let heavy = running.filter(|agent| !light.execution(agent.id));
-                        first_to_stop(heavy, turns, &ranks)
-                            .into_iter()
-                            .cloned()
-                            .collect()
-                    }
-                    Select::All => running.map(|agent| agent.id.clone()).collect(),
-                };
-                selected
-                    .into_iter()
-                    .map(|id| {
-                        let turn = turns.get(&id).copied();
-                        (id, turn)
-                    })
-                    .collect()
-            })
-            .await
-    }
-
-    /// Where each running agent's space ranks, first first, as the agent
-    /// queue would start them; without the rank every space ranks alike.
-    async fn protection_ranks(&self) -> HashMap<SpaceId, usize> {
-        let spaces = self.running_agent_workspaces().await;
-        let ranked = self.ranked_spaces(&spaces).await.unwrap_or_else(|error| {
-            log!("queue rank unavailable to protection: {error:#}");
-            Vec::new()
-        });
-        (ranked.into_iter().enumerate())
-            .map(|(place, (space, _))| (space, place))
-            .collect()
+    ) -> (StopOrder, Vec<Stop>) {
+        let order = self.stop_order(turns).await;
+        let stops: Vec<Stop> = match select {
+            Select::One(pressure) => (order.stops().iter())
+                .find(|stop| stop.agent().is_some() && self.frees(stop, pressure))
+                .map(|stop| order.with_agents_below(stop))
+                .unwrap_or_default(),
+            Select::All => order.stops().iter().collect(),
+        }
+        .into_iter()
+        .filter(|stop| stop.agent().is_some())
+        .cloned()
+        .collect();
+        (order, stops)
     }
 
     /// Stop the agent of `id`, chosen in `turn`, for `protection`: save the
@@ -1236,43 +1214,10 @@ const PROTECTION_CHOICES: usize = 3;
 
 #[derive(Clone, Copy)]
 enum Select {
-    /// The heavy agent [`first_to_stop`] picks, for load.
-    One,
+    /// The first agent of the stop order whose stop frees what the
+    /// pressure presses, with the agents below it.
+    One(Pressure),
     All,
-}
-
-/// A running agent protection may stop.
-struct Running<'a> {
-    id: &'a ExecutionId,
-    space: &'a SpaceId,
-    started: Instant,
-    /// When the user last interacted with it.
-    interacted_at: Option<crate::time::UnixTime>,
-}
-
-/// Of the `running` agents, the one whose stop costs the least, by the
-/// queue's rank in reverse: the one the user interacted with longest ago,
-/// or never, then an idle one, then the space that `ranks` places last, the
-/// lowest priority and rank; within a space the one idle longest, otherwise
-/// the newest, which has the least progress to lose.
-fn first_to_stop<'a>(
-    running: impl Iterator<Item = Running<'a>>,
-    turns: &HashMap<ExecutionId, Turn>,
-    ranks: &HashMap<SpaceId, usize>,
-) -> Option<&'a ExecutionId> {
-    running
-        .min_by_key(|agent| {
-            let idle = turns.get(agent.id).filter(|turn| turn.idle());
-            let place = ranks.get(agent.space).copied().unwrap_or(usize::MAX);
-            (
-                agent.interacted_at,
-                idle.is_none(),
-                std::cmp::Reverse(place),
-                idle.map(|turn| turn.since),
-                std::cmp::Reverse(agent.started),
-            )
-        })
-        .map(|agent| agent.id)
 }
 
 /// An agent asked to stop for protection.

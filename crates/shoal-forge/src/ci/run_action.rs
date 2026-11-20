@@ -22,6 +22,17 @@ use shoal_forge_types::{
     raw::HttpMethod,
 };
 
+/// What became of a job [`RunActionRequests::rerun_job`] was to rerun.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JobRerun {
+    /// The forge reruns it.
+    Rerun,
+    /// Its run has yet to finish, so it cannot be rerun yet.
+    Unfinished,
+    /// It passed, or its run no longer has it, so it needs no rerun.
+    Settled,
+}
+
 /// The requests that apply an action to a run.
 pub(crate) enum RunOperation {
     /// POST to this endpoint under the repository's.
@@ -96,6 +107,27 @@ impl ForgeRepo {
             url: run.url.clone(),
             action,
         })
+    }
+
+    /// Rerun the job `id` of the run `url` once the run has finished with
+    /// it failed or cancelled. A later attempt of the job has an ID of its
+    /// own, so a run without `id` needs no rerun of it.
+    pub async fn rerun_job(&self, account: &Account, url: &ItemRef, id: JobId) -> Result<JobRerun> {
+        let run = self.find_run(account, url, CiAction::Rerun).await?;
+        if run.state.unfinished() {
+            return Ok(JobRerun::Unfinished);
+        }
+        let jobs = self.jobs_of(account, &run).await?;
+        let Some(job) = jobs.iter().find(|job| job.id == id) else {
+            return Ok(JobRerun::Settled);
+        };
+        if !job.state.rerunnable() {
+            return Ok(JobRerun::Settled);
+        }
+        let endpoint = self.kind().rerun_job_endpoint(job.id)?;
+        (self.post(account, &endpoint).await)
+            .with_context(|| format!("could not rerun job {}", job.name))?;
+        Ok(JobRerun::Rerun)
     }
 
     /// Rerun each failed job of `run` at the endpoint its ID gives. A rerun

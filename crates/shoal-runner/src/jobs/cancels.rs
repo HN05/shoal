@@ -124,7 +124,10 @@ impl Runner {
     }
 
     /// The job claimed in the workspace `workspace_id`, if any.
-    async fn workspace_claim(&self, workspace_id: &SpaceId) -> Result<Option<ClaimedJob>> {
+    pub(super) async fn workspace_claim(
+        &self,
+        workspace_id: &SpaceId,
+    ) -> Result<Option<ClaimedJob>> {
         Ok((self.claimed_jobs().await?)
             .into_iter()
             .find(|job| job.workspace_id == *workspace_id))

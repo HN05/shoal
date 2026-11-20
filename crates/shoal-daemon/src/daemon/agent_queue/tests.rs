@@ -496,7 +496,7 @@ async fn protection_stopped_agents_keep_their_slot_without_load() {
     ));
     assert!(
         manager
-            .stop_agent_for_overload("critical memory pressure")
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
             .await
     );
     // Until its processes are proven stopped the agent's load may still show.
@@ -555,7 +555,7 @@ pub(super) async fn stopped_agents(
     for (id, _) in &agents {
         assert!(
             manager
-                .stop_agent_for_overload("critical memory pressure")
+                .stop_for_overload(crate::daemon::overload::Pressure::Memory)
                 .await
         );
         manager.queue_agent_restore(id).await.unwrap();
@@ -1165,7 +1165,7 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
         .unwrap();
     assert!(
         manager
-            .stop_agent_for_overload("critical memory pressure")
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
             .await
     );
     manager.queue_agent_restore(&execution).await.unwrap();
@@ -1245,7 +1245,7 @@ async fn a_message_to_every_agent_restores_an_idle_stopped_agent() {
         .unwrap();
     assert!(
         manager
-            .stop_agent_for_overload("critical memory pressure")
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
             .await
     );
     manager.queue_agent_restore(&execution).await.unwrap();
@@ -1276,7 +1276,7 @@ async fn a_wrappers_link_carries_its_restore_without_a_wait_in_flight() {
     let (execution, _stop) = connected_agent(&manager, &loaded).await;
     assert!(
         manager
-            .stop_agent_for_overload("critical memory pressure")
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
             .await
     );
     manager.queue_agent_restore(&execution).await.unwrap();
@@ -1318,7 +1318,7 @@ async fn a_restored_agent_ends_its_turn_and_an_update_reaches_it() {
     report(working).await.unwrap();
     assert!(
         manager
-            .stop_agent_for_overload("critical memory pressure")
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
             .await
     );
     manager.queue_agent_restore(&execution).await.unwrap();
@@ -1522,7 +1522,7 @@ async fn protection_stops_oneshot_runs_which_wait_for_recovery_to_run_again() {
     // Protection stops the run before any agent.
     assert!(
         manager
-            .stop_agent_for_overload("critical memory pressure")
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
             .await
     );
     assert_eq!(stops.load(std::sync::atomic::Ordering::SeqCst), 1);
@@ -1531,7 +1531,7 @@ async fn protection_stops_oneshot_runs_which_wait_for_recovery_to_run_again() {
     manager.agent_queue.hold_oneshot(&repo.id);
     assert!(
         !manager
-            .stop_agent_for_overload("critical memory pressure")
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
             .await
     );
     assert_eq!(manager.agent_queue.stop_oneshots(OneShotStop::All), 0);

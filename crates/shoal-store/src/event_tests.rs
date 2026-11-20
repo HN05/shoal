@@ -140,6 +140,7 @@ fn remove_schema_objects(db: &Connection) -> Result<()> {
     // One transaction syncs the whole removal once instead of every statement.
     let tx = db.unchecked_transaction()?;
     let db: &Connection = &tx;
+    db.execute_batch(include_str!("ci_job_reruns_undo.sql"))?;
     db.execute_batch(include_str!("alerts_undo.sql"))?;
     db.execute_batch(include_str!("lifecycle_generations_undo.sql"))?;
     db.execute_batch(include_str!("demo_viewers_undo.sql"))?;
@@ -405,6 +406,25 @@ fn stored_chat_events_lose_their_path_and_branch() -> Result<()> {
             }
         ]
     );
+    Ok(())
+}
+
+#[test]
+fn a_stored_job_end_takes_the_reason_shoal_ended_it_for() -> Result<()> {
+    let mut db = Connection::open_in_memory()?;
+    migrate_to(&mut db, 249)?;
+    let ended = serde_json::json!({"kind": "job_ended", "space_id": "w",
+        "space_kind": "workspace", "repository_id": "repo", "name": "job", "path": "/job",
+        "branch": null, "cause": null, "error": null,
+        "job": {"name": "rust", "run": "https://forge.example/team/repo/actions/runs/2765",
+            "stopped": []}});
+    db.execute(
+        "INSERT INTO space_events(space_id,record) VALUES ('w',?1)",
+        [ended.to_string()],
+    )?;
+    migrate(&mut db)?;
+    let job = journal(&db)?.remove(0).job.unwrap();
+    assert_eq!(job.reason, "its runner outlived its finished run");
     Ok(())
 }
 

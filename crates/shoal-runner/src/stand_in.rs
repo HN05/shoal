@@ -332,6 +332,10 @@ impl Agents for StandIn {
         false
     }
 
+    fn readings_recovered(&self) -> bool {
+        true
+    }
+
     fn lock_admission(&self) -> BoxFuture<'_, Box<dyn Send + '_>> {
         Box::pin(async { Box::new(()) as Box<dyn Send> })
     }
@@ -437,6 +441,17 @@ impl crate::daemon::Executions for StandIn {
         _: shoal_forge::ci::runner::JobCommand,
     ) -> BoxFuture<'a, Result<shoal_ids::execution_ids::ExecutionId>> {
         Box::pin(async { anyhow::bail!("the stand-in launches no job commands") })
+    }
+
+    fn interrupt_job_processes<'a>(
+        &'a self,
+        _: &'a SpaceId,
+        first: BoxFuture<'a, Result<()>>,
+    ) -> BoxFuture<'a, Result<Vec<shoal_protocol::events::StoppedProcess>>> {
+        Box::pin(async {
+            first.await?;
+            Ok(Vec::new())
+        })
     }
 
     fn stop_job_runner<'a>(&'a self, _: &'a SpaceId, _: String) -> BoxFuture<'a, Result<()>> {

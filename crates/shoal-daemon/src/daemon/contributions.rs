@@ -210,6 +210,7 @@ fn recorded_use(db: &Connection, id: &RepositoryId) -> Result<bool> {
         UNION ALL SELECT 1 FROM agent_queue WHERE repository_id=?1
         UNION ALL SELECT 1 FROM access_requests WHERE repository_id=?1 AND active=1
         UNION ALL SELECT 1 FROM kept_branches WHERE repository_id=?1
+        UNION ALL SELECT 1 FROM ci_job_reruns WHERE repository_id=?1
         UNION ALL SELECT 1 FROM checkpoints
             WHERE repository_id=?1 AND expires_at > unixepoch()
         UNION ALL SELECT 1 FROM removed_spaces

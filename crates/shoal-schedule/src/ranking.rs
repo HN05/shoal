@@ -25,6 +25,7 @@ use shoal_time::UnixTime;
 use super::{
     scheduler::{Ranked, Scheduler},
     snapshot::{Carries, Edge, Entry, Node, Snapshot, Space, Steps, Work},
+    stopping::StopOrder,
 };
 
 /// How long an entry waits to rise one tier.
@@ -95,6 +96,20 @@ impl<L: Lead> Scheduler for Ranking<L> {
         (ranked.into_iter())
             .map(|(id, rank)| (id, rank.priority))
             .collect()
+    }
+
+    /// The running agents' spaces take their place among each other as
+    /// their agents would start.
+    fn stop_order(&self, snapshot: &Snapshot) -> StopOrder {
+        let mut spaces: Vec<SpaceId> = (snapshot.running.agents.iter())
+            .map(|agent| agent.space.clone())
+            .collect();
+        spaces.sort();
+        spaces.dedup();
+        let ranked: Vec<SpaceId> = (self.spaces_in_order(snapshot, &spaces).into_iter())
+            .map(|(id, _)| id)
+            .collect();
+        StopOrder::new(&snapshot.running, &ranked)
     }
 }
 

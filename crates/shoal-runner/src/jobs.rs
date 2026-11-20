@@ -23,6 +23,7 @@ mod listing;
 mod load;
 mod overrun;
 mod passes;
+mod protection;
 mod queue;
 mod registration;
 mod single_use;
@@ -89,6 +90,8 @@ pub struct Runners {
     claiming: Mutex<HashSet<QueueEntryId>>,
     /// The runs of the running jobs, by queue entry.
     runs: Mutex<HashMap<QueueEntryId, RunCheck>>,
+    /// When the runs of the jobs protection stopped were last read.
+    reruns_read: Mutex<Option<Instant>>,
     /// Admission admitted a job, or one ended.
     wake: Notify,
     /// Held while a claim writes a job's files and while the sweep of
@@ -170,6 +173,17 @@ impl Runners {
 
     pub fn claiming(&self, entry: &QueueEntryId) -> bool {
         lock(&self.claiming).contains(entry)
+    }
+
+    /// Whether the runs of the jobs protection stopped are to be read, which
+    /// marks them read: as often as a running job's run.
+    pub fn take_reruns_read(&self) -> bool {
+        let mut read = lock(&self.reruns_read);
+        let due = read.is_none_or(|read| read.elapsed() >= RUN_READ_INTERVAL);
+        if due {
+            *read = Some(Instant::now());
+        }
+        due
     }
 
     /// Whether the run of the running job `entry` is to be read, which
@@ -277,6 +291,8 @@ pub enum JobStop {
     Removal,
     /// Its runner outliving its finished run.
     Overrun,
+    /// Load protection, for the pressure it names.
+    Overload(&'static str),
     /// A signal ending its wrapper's session, as a logout or a shutdown
     /// sends.
     Signal(SessionSignal),
@@ -291,6 +307,7 @@ impl std::fmt::Display for JobStop {
             Self::SystemShutdown => f.write_str("the system shutting down"),
             Self::Removal => f.write_str("its workspace's removal"),
             Self::Overrun => f.write_str("its runner outliving its finished run"),
+            Self::Overload(pressure) => f.write_str(pressure),
             Self::Signal(signal) => write!(f, "{signal} to its wrapper"),
         }
     }

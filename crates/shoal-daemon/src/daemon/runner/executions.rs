@@ -32,6 +32,18 @@ impl shoal_runner::daemon::Executions for Manager {
         })
     }
 
+    fn interrupt_job_processes<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        first: BoxFuture<'a, Result<()>>,
+    ) -> BoxFuture<'a, Result<Vec<StoppedProcess>>> {
+        Box::pin(async move {
+            let workspace = self.workspace_by_id(id).await?;
+            let processes = Selection::Processes;
+            (self.stop_workspace_untracked_after(&workspace, processes, None, first)).await
+        })
+    }
+
     fn execution_recorded<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, Result<bool>> {
         let id = id.to_owned();
         Box::pin(self.store.run(move |db| {

@@ -145,6 +145,30 @@ impl Manager {
         self.forget_execution(&execution.id).await
     }
 
+    /// Stop the verified processes of the demo `execution` runs, whose
+    /// wrapper runs its command again, freeing what it held, short of its
+    /// viewer, which outlives the demo's runs; returns whether any ran.
+    pub(crate) async fn restart_demo_command(&self, execution: &ExecutionId) -> Result<bool> {
+        // A viewer spawning meanwhile is spared once recorded.
+        let spawning = self.viewers.spawn_lock(execution);
+        let _spawning = spawning.lock().await;
+        let query = execution.clone();
+        let record = self
+            .store
+            .run(move |db| crate::daemon::store::find_execution(db, &query))
+            .await?;
+        let Some(record) = record else {
+            return Ok(false);
+        };
+        let scan = process::scan(HashSet::from([record.id.clone()])).await?;
+        let mut processes = self.inspect_execution(&record, &scan).await?;
+        if let Some(viewer) = self.running_viewer(execution).await? {
+            processes.spare_group(viewer.process.pid);
+        }
+        processes.stop_owned().await?;
+        Ok(!processes.owned.is_empty())
+    }
+
     /// Ask the connected wrappers among `executions` to stop, returning the
     /// rest. Native scans run after the connection map is released, as a
     /// workspace stop runs them.

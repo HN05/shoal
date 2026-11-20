@@ -123,6 +123,10 @@ impl Runs for GitHub {
         repo.job_log(account, location).await
     }
 
+    fn rerun_job_endpoint(&self, job: JobId) -> Result<String> {
+        Ok(format!("actions/jobs/{job}/rerun"))
+    }
+
     fn run_operation(&self, run: &Run, action: CiAction, failed: bool) -> Result<RunOperation> {
         let id = run.id;
         Ok(RunOperation::Post(match (action, failed) {

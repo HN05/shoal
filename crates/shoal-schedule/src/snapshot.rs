@@ -1,6 +1,6 @@
 //! What a scheduler reads: the waiting entries, the spaces they and the
-//! work waiting on them belong to, and what waits on what, as the daemon
-//! found them.
+//! work waiting on them belong to, what waits on what, and the running work
+//! it may stop, as the daemon found them.
 use std::{
     cmp::Ordering,
     collections::{BTreeMap, HashMap},
@@ -9,6 +9,7 @@ use std::{
 use crate::{
     priority::Priority,
     rank::{Dependency, Tier},
+    stopping::Running,
 };
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_time::UnixTime;
@@ -24,6 +25,8 @@ pub struct Snapshot {
     /// The areas the workspaces of each repository occupy, each with the
     /// workspaces holding it.
     pub occupied: HashMap<RepositoryId, Occupied>,
+    /// The running work the stop order holds.
+    pub running: Running,
 }
 
 /// The areas a repository's workspaces occupy, each with the workspaces

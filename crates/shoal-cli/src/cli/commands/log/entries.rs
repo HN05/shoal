@@ -413,7 +413,7 @@ fn job(event: &EventDetails) -> String {
     let Some(job) = &event.job else {
         return String::new();
     };
-    let ended = format!("{}, {}", job.name, reference(&job.run));
+    let ended = format!("{}, {}; {}", job.name, reference(&job.run), job.reason);
     if job.stopped.is_empty() {
         return ended;
     }

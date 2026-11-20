@@ -54,10 +54,14 @@ async fn a_protection_stop_is_recorded_until_the_agent_runs_again() {
     let (root, manager) = manager().await;
     let execution = idle_agent(&manager, &root).await;
     let id = &execution.plan.id;
-    assert!(manager.stop_agent_for_overload("memory pressure").await);
+    assert!(
+        manager
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
+            .await
+    );
     assert!(*execution.stop.borrow());
     let stop = recorded(&manager, id).await.unwrap();
-    assert_eq!(stop.reason, "memory pressure");
+    assert_eq!(stop.reason, "critical memory pressure");
     assert_eq!(manager.agent_overload(id).await, Some(stop));
     // The recorded stop refuses another.
     let restart = manager.restart_agent(id, true, None).await.unwrap_err();
@@ -73,7 +77,11 @@ async fn a_stop_request_cancels_the_recorded_stop() {
     let (root, manager) = manager().await;
     let execution = idle_agent(&manager, &root).await;
     let id = &execution.plan.id;
-    assert!(manager.stop_agent_for_overload("memory pressure").await);
+    assert!(
+        manager
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
+            .await
+    );
     let connections = manager.executions.connections().await;
     assert!(
         connections
@@ -94,7 +102,11 @@ async fn a_stop_that_loses_leaves_the_winners_handoff() {
     let (root, manager) = manager().await;
     let execution = idle_agent(&manager, &root).await;
     let id = &execution.plan.id;
-    assert!(manager.stop_agent_for_overload("memory pressure").await);
+    assert!(
+        manager
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
+            .await
+    );
     let lost = manager
         .protect(id, &Protection::load("disk space"), None, None)
         .await;
@@ -105,7 +117,10 @@ async fn a_stop_that_loses_leaves_the_winners_handoff() {
         .unwrap();
     let path = crate::execution::recovery::record_path(&manager.paths, &workspace, id);
     let record = Record::load(&path).unwrap().unwrap();
-    assert_eq!(record.stop_reason.as_deref(), Some("memory pressure"));
+    assert_eq!(
+        record.stop_reason.as_deref(),
+        Some("critical memory pressure")
+    );
 }
 
 #[tokio::test]
@@ -113,7 +128,11 @@ async fn a_resume_after_a_stop_request_leaves_the_agent_stopped() {
     let (root, manager) = manager().await;
     let execution = idle_agent(&manager, &root).await;
     let id = &execution.plan.id;
-    assert!(manager.stop_agent_for_overload("memory pressure").await);
+    assert!(
+        manager
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
+            .await
+    );
     let connections = manager.executions.connections().await;
     assert!(
         connections
@@ -140,7 +159,11 @@ async fn a_load_stop_the_store_cannot_record_still_stops_the_agent() {
         })
         .await
         .unwrap();
-    assert!(manager.stop_agent_for_overload("memory pressure").await);
+    assert!(
+        manager
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
+            .await
+    );
     assert!(*execution.stop.borrow());
     let request = manager.executions.stop_request(id).await.unwrap();
     assert_eq!(request.save, crate::daemon::executions::Save::Everything);
@@ -158,7 +181,7 @@ async fn a_stop_recorded_beside_a_restart_leaves_the_restart_its_stop() {
             agent.restarts.current = Some(super::restart::Restart::new(false, None));
         })
         .await;
-    let protection = Protection::load("memory pressure");
+    let protection = Protection::load("critical memory pressure");
     assert!(
         manager
             .record_agent_stop(id, &protection, None)

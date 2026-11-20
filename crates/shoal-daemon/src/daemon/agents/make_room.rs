@@ -1,10 +1,10 @@
 //! Put idle agents to sleep to make room for queued work, before their wait
 //! for the user ends or where `[sleep]` keeps them running: while an entry
 //! waits for a slot or memory, an agent idle for the least wait whose
-//! priority is no higher than the entry's goes to sleep, lowest rank first,
-//! and only one that holds a slot for an entry waiting for one. One the user
-//! is engaged with stays running, as do light agents, a workspace's or a
-//! chat's. A woken agent reports no idle turn until it has worked one, so it
+//! priority is no higher than the entry's goes to sleep, first in the stop
+//! order first, and only one that holds a slot for an entry waiting for
+//! one. One the user is engaged with stays running, as do light agents, a
+//! workspace's or a chat's, and one with a running agent below it. A woken agent reports no idle turn until it has worked one, so it
 //! finishes that turn before it can sleep for room again.
 use shoal_ids::{execution_ids::ExecutionId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_schedule::priority::Priority;
@@ -16,6 +16,7 @@ use super::{
     Manager, Protection, ProtectionExt,
     idle_stop::{Candidate, Chosen},
 };
+use crate::daemon::agent_turns::Turn;
 use crate::{
     config::MachineLimit, daemon::engagement::FLOOR, model::HeldBy, state::QueueState,
     time::UnixTime,
@@ -118,18 +119,31 @@ impl Manager {
     }
 
     /// The `candidates` not already `chosen` that may sleep for room at
-    /// `now`, lowest rank first: heavy agents, a workspace's or a chat's,
-    /// idle for the least wait, that the user is not engaged with.
+    /// `now`, in stop order: heavy agents, a workspace's or a chat's, idle
+    /// for the least wait, that the user is not engaged with and that no
+    /// running agent works below.
     async fn sleepers<'a>(
         &self,
         candidates: &'a [Candidate],
         chosen: &HashMap<ExecutionId, Chosen>,
         now: UnixTime,
     ) -> Result<Vec<Sleeper<'a>>> {
+        let turns: HashMap<ExecutionId, Turn> = (candidates.iter())
+            .map(|candidate| (candidate.execution.clone(), candidate.turn))
+            .collect();
+        let order = self.stop_order(&turns).await;
         let mut eligible = Vec::new();
-        for candidate in candidates {
+        for stop in order.stops() {
+            let Some(candidate) = (stop.agent()).and_then(|id| {
+                candidates
+                    .iter()
+                    .find(|candidate| candidate.execution == *id)
+            }) else {
+                continue;
+            };
             let settling = candidate.turn.since + FLOOR > now;
-            if chosen.contains_key(&candidate.execution) || candidate.light || settling {
+            let below = order.with_agents_below(stop).len() > 1;
+            if chosen.contains_key(&candidate.execution) || candidate.light || settling || below {
                 continue;
             }
             if !self.engaged(&candidate.workspace_id).await? {
@@ -139,22 +153,16 @@ impl Manager {
         let ids: Vec<SpaceId> = (eligible.iter())
             .map(|candidate| candidate.workspace_id.clone())
             .collect();
-        let ranked = self.ranked_spaces(&ids).await?;
+        let priorities: HashMap<SpaceId, Priority> =
+            self.ranked_spaces(&ids).await?.into_iter().collect();
         let mut sleepers = Vec::new();
-        for (id, priority) in ranked.into_iter().rev() {
-            let Some(at) = eligible
-                .iter()
-                .position(|candidate| candidate.workspace_id == id)
-            else {
-                continue;
-            };
-            let candidate = eligible.remove(at);
-            let space = self.space_by_id(&id).await?;
+        for candidate in eligible {
+            let space = self.space_by_id(&candidate.workspace_id).await?;
             sleepers.push(Sleeper {
                 candidate,
                 repository: space.repository_id.as_ref().cloned(),
                 holds_slot: !space.done(),
-                priority,
+                priority: (priorities.get(&candidate.workspace_id).copied()).unwrap_or_default(),
             });
         }
         Ok(sleepers)

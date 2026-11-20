@@ -59,8 +59,10 @@ pub mod links;
 mod logs;
 pub(crate) mod lost_reports;
 pub mod manager;
+#[cfg(target_os = "linux")]
+mod oom_scores;
 pub(crate) mod operations;
-mod overload;
+pub(crate) mod overload;
 mod overload_recovery;
 mod ownership;
 #[cfg(any(test, feature = "test-support"))]
@@ -187,6 +189,9 @@ pub async fn run(
     let mut ownership = Ownership::acquire(&paths, managed, handoff)?;
     let startup = startup::Startup::begin(ownership.listen()?);
     log!("shoal daemon listening on {}", paths.socket.display());
+    // Before it starts any place or worker, which keep its score.
+    #[cfg(target_os = "linux")]
+    oom_scores::lower_own_score();
     let manager = start(&startup, &paths).await?;
     if managed {
         crate::service::apart::start_apart_from_service().await;
@@ -228,6 +233,8 @@ pub async fn run(
     );
     spawn_supervised(&mut background, &manager, "overload monitor", overload::run);
     spawn_supervised(&mut background, &manager, "disk monitor", disk::run);
+    #[cfg(target_os = "linux")]
+    spawn_supervised(&mut background, &manager, "OOM scores", oom_scores::run);
     spawn_supervised(
         &mut background,
         &manager,

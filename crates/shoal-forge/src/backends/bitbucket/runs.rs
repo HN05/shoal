@@ -19,7 +19,7 @@ use shoal_forge_types::{
         run_action::Run,
         run_view::{RunFilter, RunJob},
     },
-    numbers::RunNumber,
+    numbers::{JobId, RunNumber},
     raw::HttpMethod,
 };
 
@@ -84,6 +84,10 @@ impl Runs for Bitbucket {
         _job: &RunJob,
     ) -> Result<String> {
         Err(capability::unsupported(self, Capability::ReadJobLogs))
+    }
+
+    fn rerun_job_endpoint(&self, _job: JobId) -> Result<String> {
+        Err(capability::unsupported(self, CiAction::Rerun.capability()))
     }
 
     fn run_operation(&self, _run: &Run, action: CiAction, _failed: bool) -> Result<RunOperation> {

@@ -184,7 +184,7 @@ async fn stop_agent_in(
         .unwrap();
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     wait_paused(manager, workspace).await;

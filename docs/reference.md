@@ -172,7 +172,8 @@ How the daemon exits decides what becomes of tracked agents and commands:
   worker the daemon starts in a session of its own has left. On Linux each
   such worker, such as the wrapper of an agent or a CI job, runs with what it
   starts in a transient systemd scope of its own in the service's slice, with
-  `OOMPolicy=continue`, where systemd 254 or later and a user bus start one
+  `OOMPolicy=continue`, though a CI job's ends whole with any process the
+  kernel's OOM killer takes, where systemd 254 or later and a user bus start one
   when the daemon starts; otherwise it runs in the service's control group,
   which systemd's stop ends. Wrappers of releases before reattachment stop
   instead, and `shoal daemon restart` names the `shoal resume` of the spaces
@@ -226,12 +227,47 @@ then suggests `shoal resume --all`.
 
 ### Overload protection
 
-At critical memory pressure, the daemon asks one connected tracked agent
-of a mode that is not [light](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules) to stop, in the
-[agent queue's](#queue-order) order reversed: the one you
-[interacted](#sleep) with longest ago, or never, then an idle one before a
-working one, then the one whose space ranks last, lowest priority first; within
-a space the one idle longest, otherwise the newest.
+At critical memory pressure, or sustained CPU overload where CPU protection is
+on, the daemon stops one entry of the stop order, the running work in the order
+a stop of it loses least, first first:
+
+1. CI jobs this machine runs, newest first: a rerun loses nothing.
+2. [Demos](#demos), whose commands Shoal runs again.
+3. Agents, a workspace's or a chat's, each only after every running agent
+   below its space, so a coordinator never stops while its children work.
+   Among the agents free to go, one of a mode that is not
+   [light](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules)
+   goes before a light one, then, in the [agent queue's](#queue-order) order
+   reversed, the one you [interacted](#sleep) with longest ago, or never, then
+   an idle one before a working one, then the one whose space ranks last,
+   lowest priority first; within a space the one idle longest, otherwise the
+   newest.
+
+It stops the first entry whose stop frees what the pressure presses: a CI job
+always, so agents stop only once no job runs; a demo or an agent of a mode that
+is not light, under memory pressure only where its space's processes use at
+least 64 MiB at the latest usage sample, or have none sampled. A
+light agent never stops for its own sake, but stopping an agent first stops
+every running agent below it, light ones included. A running
+[reviewer](#local-reviews) stops before any of them. A stopped CI job ends as
+one whose runner outlived its run does: Shoal stops its workspace's processes,
+then its runner, and its end in the workspace's [log](#space-log) says what it was
+stopped for. Once readings have recovered, as an agent's restore needs below,
+Shoal reruns the job on its forge as soon as its run has finished there, and the
+job waits in the [queue](#agent-queue) as any other; one whose run allows no
+rerun within a day records a `runner_failed` alert.
+
+On Linux the kernel's OOM killer follows the same order. The daemon lowers its
+own `oom_score_adj` at startup to that of the service manager that started it,
+the lowest it may set without privilege, which the places and workers it starts
+keep, and every 10 seconds gives each entry's processes the score of its place,
+900 for the first entry down to 200 for the last: those carrying its
+execution's identity, short of its wrapper, and for a CI job every process of
+the scope its runner runs in, whose kernel kill of one process ends the whole
+job. A command a wrapper starts begins at 200, so what it starts scores above
+Shoal's own before the daemon places it. Within one score the kernel takes the
+largest process first.
+
 An agent is idle when its
 hooks last reported a finished turn, it runs no [subagent](#agent-state), and
 none of its processes run outside its process group, such as a background
@@ -244,9 +280,9 @@ information, for `memory.sustained_seconds`. Stall shows a machine thrashing
 while memory in use still looks short of full; memory in use catches an
 allocation that reaches the kernel's OOM killer before any stall builds up, and
 alone measures a kernel without pressure stall information. macOS uses native
-critical pressure. The wrapper terminates the process
+critical pressure. The wrapper terminates the agent's process
 group through its normal grace period. The monitor waits for the cooldown before
-resampling and stopping another agent if pressure persists. It retains workspaces, execution recovery records and resource
+resampling and stopping another entry if pressure persists. It retains workspaces, execution recovery records and resource
 leases and records an `agent_stopped` alert.
 Ordinary commands, desktop handoffs and disconnected executions are not selected.
 Monitoring does not guarantee that the OS will never reach its OOM limit.
@@ -265,7 +301,7 @@ cleanup disabled keeps its workspaces. Removals record `workspace_removed`
 alerts and the `disk_space` event cause; a pass that cannot free enough
 space, or fails, repeats at most every 30 seconds. While space stays below
 `disk.stop_free_gib` after cleanup, whether or not it failed, the daemon stops every running agent as
-memory protection does, then every other tracked execution as `shoal stop` does,
+memory protection does, each after the agents below it, then every other tracked execution as `shoal stop` does,
 including ones started later, recording `agent_stopped` alerts, or
 `stop_failed` when stopping fails. Agents restore under the recovery rules below
 once `disk.cleanup_free_gib` is available; otherwise free disk space, then run
@@ -661,7 +697,8 @@ approvals given for the session or a `/model` switch, does not carry over.
 
 While an entry in the [agent queue](#agent-queue) waits for a heavy slot or memory,
 Shoal makes room for it: for each such entry in queue order, it puts to sleep
-the lowest-ranked idle agent whose priority is no higher than the entry's, of
+the idle agent first in the [stop order](#overload-protection) with no running
+agent below it whose priority is no higher than the entry's, of
 the entry's repository when that repository's `agent.max_heavy_running` holds
 it, and for an entry that waits for a heavy slot one that holds one, which a
 done space's agent does not. That reaches the agents still waiting for you

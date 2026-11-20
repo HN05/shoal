@@ -71,6 +71,15 @@ fn each_forge_acts_on_a_run_its_own_way() -> Result<()> {
         endpoint(forgejo, CiAction::Cancel, false)?,
         "actions/runs/9/cancel"
     );
+    // A job reruns alone, never with the run's other failed jobs.
+    let job = |remote: &str| -> Result<String> {
+        ForgeRepo::parse(remote)?
+            .kind()
+            .rerun_job_endpoint(JobId::new(7))
+    };
+    assert_eq!(job(github)?, "actions/jobs/7/rerun");
+    assert_eq!(job("https://gitlab.com/team/repo")?, "jobs/7/retry");
+    assert_eq!(job(forgejo)?, "actions/jobs/7/rerun");
     Ok(())
 }
 
@@ -263,5 +272,72 @@ fn only_a_run_the_forge_reports_successful_passes() -> Result<()> {
     };
     assert!(read("https://codeberg.org/team/repo", forgejo("success"))?.passed());
     assert!(!read("https://codeberg.org/team/repo", forgejo("skipped"))?.passed());
+    Ok(())
+}
+
+/// A Forgejo server whose run 12 is in `run`, with the jobs `jobs` of
+/// names and statuses, numbered from 1, that records what it is asked.
+fn forgejo_run(
+    run: &'static str,
+    jobs: Vec<(&'static str, &'static str)>,
+) -> crate::test_support::Server {
+    crate::test_support::Server::start(move |request| {
+        let body = if request.line.contains("/version") {
+            json!({"version": "17.0.1+gitea-1.22.0"})
+        } else if request.line.contains("/jobs?") || request.line.contains("/runs/9331/jobs") {
+            let listed: Vec<_> = (jobs.iter().enumerate())
+                .map(|(index, (name, status))| {
+                    json!({"id": index + 1, "name": name, "run_id": 9331, "status": status})
+                })
+                .collect();
+            json!(listed)
+        } else if request.line.starts_with("POST") {
+            return (204, Vec::new(), Vec::new());
+        } else {
+            json!({"workflow_runs": [{"id": 9331, "index_in_repo": 12, "prettyref": "topic",
+                    "workflow_id": "ci.yml", "commit_sha": "123", "status": run}]})
+        };
+        (200, Vec::new(), body.to_string().into())
+    })
+}
+
+/// The POST requests `server` received.
+fn posts(server: &crate::test_support::Server) -> Vec<String> {
+    (server.received().into_iter())
+        .map(|request| request.line)
+        .filter(|line| line.starts_with("POST"))
+        .collect()
+}
+
+#[tokio::test]
+async fn a_stopped_job_reruns_alone_once_its_run_finished() -> Result<()> {
+    use crate::test_support::{agent_on, repo_on};
+    use shoal_forge_types::backends::ForgeKind;
+    let rerun = |server: &crate::test_support::Server, id: u64| {
+        let forgejo = repo_on(server, ForgeKind::Forgejo, "team/repo");
+        let url = ItemRef::numbered(&forgejo, LinkKind::Ci, 12).unwrap();
+        let account = agent_on(server, "agent");
+        async move { forgejo.rerun_job(&account, &url, JobId::new(id)).await }
+    };
+    let jobs = vec![
+        ("build", "failure"),
+        ("test", "failure"),
+        ("lint", "success"),
+    ];
+
+    let running = forgejo_run("running", jobs.clone());
+    assert_eq!(rerun(&running, 2).await?, JobRerun::Unfinished);
+    assert!(posts(&running).is_empty());
+
+    let finished = forgejo_run("failure", jobs);
+    assert_eq!(rerun(&finished, 2).await?, JobRerun::Rerun);
+    assert_eq!(
+        posts(&finished),
+        ["POST /api/v1/repos/team/repo/actions/jobs/2/rerun"]
+    );
+    assert_eq!(rerun(&finished, 3).await?, JobRerun::Settled);
+    // A later attempt of the job has an ID of its own.
+    assert_eq!(rerun(&finished, 9).await?, JobRerun::Settled);
+    assert_eq!(posts(&finished).len(), 1);
     Ok(())
 }

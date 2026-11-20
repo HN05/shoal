@@ -70,7 +70,7 @@ async fn interrupt_while_protected(interruption: Interruption, stop: impl AsyncF
 async fn stop_for_memory(manager: &Manager) {
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
 }
@@ -113,7 +113,7 @@ async fn update_restart_discards_a_stop_that_never_reached_the_agent() {
         &workspace.id,
         &id,
         &shoal_protocol::executions::TrackedAgent::named("fixture"),
-        Some("test memory pressure"),
+        Some("critical memory pressure"),
         None,
     )
     .unwrap();

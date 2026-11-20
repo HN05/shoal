@@ -145,7 +145,7 @@ async fn a_review_protection_stops_is_queued_again() {
     }
     assert!(
         manager
-            .stop_agent_for_overload("critical memory pressure")
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
             .await
     );
     while manager

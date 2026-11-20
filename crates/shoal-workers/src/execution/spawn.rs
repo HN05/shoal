@@ -347,6 +347,7 @@ pub(super) fn spawn(
         _ => (Stdio::inherit(), Stdio::inherit(), Stdio::inherit()),
     };
     restore_terminal_stops(&mut process);
+    shoal_core::process::oom::start_at_last(&mut process);
     if let Some(terminal) = terminal {
         terminal.hand_over_at_start(&mut process);
     }

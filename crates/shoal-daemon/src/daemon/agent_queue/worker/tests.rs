@@ -58,7 +58,7 @@ async fn an_agent_waiting_for_its_restore_refuses_another_worker() {
     let (execution, _stop) = connected_agent(&manager, &workspace).await;
     assert!(
         manager
-            .stop_agent_for_overload("critical memory pressure")
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
             .await
     );
     manager.queue_agent_restore(&execution).await.unwrap();

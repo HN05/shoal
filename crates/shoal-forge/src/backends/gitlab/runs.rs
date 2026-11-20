@@ -124,6 +124,10 @@ impl Runs for GitLab {
             .await
     }
 
+    fn rerun_job_endpoint(&self, job: JobId) -> Result<String> {
+        Ok(format!("jobs/{job}/retry"))
+    }
+
     /// GitLab retries only a pipeline's failed and cancelled jobs.
     fn run_operation(&self, run: &Run, action: CiAction, _failed: bool) -> Result<RunOperation> {
         let id = run.id;

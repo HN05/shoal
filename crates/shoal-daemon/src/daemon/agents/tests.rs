@@ -8,6 +8,7 @@ use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
 use crate::model::PortRequest;
 use crate::model::Space;
+use crate::model::Workspace;
 use futures_util::FutureExt;
 use shoal_protocol::assignments::Done;
 use shoal_protocol::space_names::SpaceSelector;
@@ -219,7 +220,7 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
             .await;
         assert!(
             manager
-                .stop_agent_for_overload("critical memory pressure")
+                .stop_for_overload(crate::daemon::overload::Pressure::Memory)
                 .await
         );
         let record = crate::execution::recovery::record_path(&manager.paths, &workspace.id, id);
@@ -311,7 +312,7 @@ async fn inspection_and_agent_list_report_an_agent_awaiting_its_restore() {
 
     assert!(
         manager
-            .stop_agent_for_overload("critical memory pressure")
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
             .await
     );
     let protection = Some(Protection::load("critical memory pressure"));
@@ -381,7 +382,7 @@ async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
         .await;
     assert!(
         manager
-            .stop_agent_for_overload("critical memory pressure")
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
             .await
     );
     assert!(*second.stop.borrow());
@@ -410,7 +411,7 @@ async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
     drop(first.stop);
     assert!(
         !manager
-            .stop_agent_for_overload("critical memory pressure")
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
             .await
     );
     manager
@@ -498,7 +499,7 @@ async fn overload_stops_idle_agents_lowest_rank_first_before_working_ones() {
     ] {
         assert!(
             manager
-                .stop_agent_for_overload("critical memory pressure")
+                .stop_for_overload(crate::daemon::overload::Pressure::Memory)
                 .await
         );
         assert!(stopped(index), "agent {index} stops next");
@@ -571,7 +572,7 @@ async fn overload_stops_the_agent_the_user_interacted_with_longest_ago_first() {
     for index in [2, 1, 0] {
         assert!(
             manager
-                .stop_agent_for_overload("critical memory pressure")
+                .stop_for_overload(crate::daemon::overload::Pressure::Memory)
                 .await
         );
         assert!(*executions[index].stop.borrow(), "agent {index} stops next");
@@ -616,7 +617,7 @@ async fn a_turn_reported_after_protection_read_the_turns_counts_as_working() {
     let stopped = manager
         .stop_agents_by_turn(
             &Protection::load("critical memory pressure"),
-            Select::One,
+            Select::One(crate::daemon::overload::Pressure::Memory),
             turns,
         )
         .await;
@@ -738,7 +739,7 @@ async fn load_stops_a_heavy_chats_agent() {
     let (root, manager) = manager().await;
     let execution = chat_agent(&manager, root.path(), "pair").await;
 
-    let stopped = manager.stop_agent_for_overload("critical memory pressure");
+    let stopped = manager.stop_for_overload(crate::daemon::overload::Pressure::Memory);
 
     assert!(stopped.await);
     assert!(*execution.stop.borrow());
@@ -753,7 +754,7 @@ async fn load_leaves_a_light_chats_agent_running_while_disk_space_stops_it() {
 
     assert!(
         !manager
-            .stop_agent_for_overload("critical memory pressure")
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
             .await
     );
     assert!(!*execution.stop.borrow());
@@ -761,4 +762,131 @@ async fn load_leaves_a_light_chats_agent_running_while_disk_space_stops_it() {
     let stopped = manager.stop_agents_for_disk_space(&protection).await;
     assert_eq!(stopped.len(), 1);
     assert!(*execution.stop.borrow());
+}
+
+/// Track an agent of `mode` in `workspace`, reporting `state`.
+async fn agent_in(
+    manager: &Manager,
+    workspace: &Workspace,
+    mode: &str,
+    state: crate::state::AgentState,
+) -> crate::daemon::executions::StartedExecution {
+    let execution = manager
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    let agent = shoal_protocol::executions::TrackedAgent {
+        mode: mode.into(),
+        ..shoal_protocol::executions::TrackedAgent::named("claude")
+    };
+    (manager.track_agent(
+        &execution.plan.id,
+        &agent,
+        &workspace.id,
+        &workspace.name,
+        true,
+        Duration::ZERO,
+    ))
+    .await;
+    let selected = SpaceSelector::id(&workspace.id);
+    (manager.set_agent_state(&selected, state, Some(execution.plan.id.clone()), None))
+        .await
+        .unwrap();
+    execution
+}
+
+/// A coordinator idle in a workspace, never interacted with, and a child
+/// workspace below it.
+async fn coordinator_and_child(
+    manager: &Manager,
+    root: &std::path::Path,
+) -> (Workspace, Workspace) {
+    let repo = repository(root, "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "coordinator".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .create_child(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    (parent, child)
+}
+
+/// Load stops a child's working agent before its coordinator's, which
+/// would go first on its own, being idle.
+#[tokio::test]
+async fn load_stops_a_coordinator_only_after_the_agents_below_it() {
+    use crate::state::AgentState;
+    let (root, manager) = manager().await;
+    let (parent, child) = coordinator_and_child(&manager, root.path()).await;
+    let coordinator = agent_in(&manager, &parent, "worker", AgentState::Idle).await;
+    let worker = agent_in(&manager, &child, "worker", AgentState::Working).await;
+    manager
+        .record_interaction(&child.id, crate::time::UnixTime::now())
+        .await
+        .unwrap();
+
+    let memory = crate::daemon::overload::Pressure::Memory;
+    assert!(manager.stop_for_overload(memory).await);
+    assert!(*worker.stop.borrow());
+    assert!(!*coordinator.stop.borrow());
+    assert!(manager.stop_for_overload(memory).await);
+    assert!(*coordinator.stop.borrow());
+}
+
+/// Load never stops a light agent for its own sake, but stopping the heavy
+/// coordinator above it stops it first.
+#[tokio::test]
+async fn load_stops_a_light_agent_below_the_heavy_one_it_stops() {
+    use crate::state::AgentState;
+    let (root, manager) = manager().await;
+    let (parent, child) = coordinator_and_child(&manager, root.path()).await;
+    let coordinator = agent_in(&manager, &parent, "worker", AgentState::Working).await;
+    let light = agent_in(&manager, &child, "chat", AgentState::Working).await;
+
+    let stopped = (manager.stop_agents_by_turn(
+        &Protection::load("critical memory pressure"),
+        Select::One(crate::daemon::overload::Pressure::Memory),
+        manager.agent_turns().await.unwrap(),
+    ))
+    .await;
+    let order: Vec<_> = stopped.iter().map(|agent| agent.id.clone()).collect();
+    assert_eq!(order, [light.plan.id.clone(), coordinator.plan.id.clone()]);
+}
+
+/// An agent recorded below a coordinator whose wrapper has yet to
+/// reconnect, as after a daemon restart, keeps the coordinator running.
+#[tokio::test]
+async fn load_leaves_a_coordinator_running_above_an_agent_it_cannot_reach() {
+    use crate::state::AgentState;
+    let (root, manager) = manager().await;
+    let (parent, child) = coordinator_and_child(&manager, root.path()).await;
+    let coordinator = agent_in(&manager, &parent, "worker", AgentState::Idle).await;
+    let unreached = manager
+        .begin_agent_execution(child.id.as_str())
+        .await
+        .unwrap();
+    // Recorded as the daemon that tracked it left it.
+    let id = unreached.plan.id.clone();
+    (manager.store)
+        .run(move |db| {
+            db.execute("UPDATE executions SET agent='claude' WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    let memory = crate::daemon::overload::Pressure::Memory;
+    assert!(!manager.stop_for_overload(memory).await);
+    assert!(!*coordinator.stop.borrow());
 }

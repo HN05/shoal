@@ -688,7 +688,7 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
     let monitor = manager.gates.operation().await;
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     drop(monitor);
@@ -739,7 +739,7 @@ async fn a_waiting_wrapper_restores_its_agent_under_a_permission_change() {
     wait_started(&manager, &workspace).await;
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     wait_paused(&manager, &workspace).await;
@@ -784,7 +784,7 @@ async fn a_restore_its_wrapper_fails_to_start_waits_in_the_agent_queue() {
         .id;
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     wait_paused(&manager, &workspace).await;
@@ -840,7 +840,7 @@ async fn an_idle_agent_waiting_for_an_update_lets_a_daemon_update_through() {
     let monitor = manager.gates.operation().await;
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     drop(monitor);
@@ -909,7 +909,7 @@ async fn a_waiting_agent_whose_terminal_closes_leaves_its_restore_to_the_queue()
     let monitor = manager.gates.operation().await;
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     drop(monitor);
@@ -1000,7 +1000,7 @@ async fn overload_stops_commands_outside_the_agent_group_and_restores_it() {
     let (launched, background) = launch_with_background(&manager, &workspace).await;
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     wait_paused(&manager, &workspace).await;
@@ -1021,7 +1021,7 @@ async fn overload_without_recovery_stops_commands_outside_the_agent_group() {
     let (launched, background) = launch_with_background(&manager, &workspace).await;
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     bounded(launched).await.unwrap().unwrap();
@@ -1045,7 +1045,7 @@ async fn cancelling_a_restore_still_stops_commands_outside_the_agent_group() {
     let (launched, background) = launch_with_background(&manager, &workspace).await;
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     // Disabling recovery cancels the restore however far the pause has come.
@@ -1086,7 +1086,7 @@ async fn unproven_stop_keeps_the_agent_waiting_until_proof_then_restores_it() {
     record_group(&manager, &workspace, None).await;
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     bounded(async {
@@ -1127,7 +1127,7 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
     wait_started(&manager, &workspace).await;
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     wait_paused(&manager, &workspace).await;
@@ -1163,7 +1163,7 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
         record,
         serde_json::json!({
             "agent": "fixture",
-            "stop_reason": "test memory pressure",
+            "stop_reason": "critical memory pressure",
             "stage": "stopped",
             "mode": "worker",
             "for_load": true,
@@ -1203,7 +1203,7 @@ async fn failed_restore_expansion_does_not_block_launch_or_manual_recovery_recor
     wait_started(&manager, &workspace).await;
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     bounded(launched).await.unwrap().unwrap();
@@ -1227,7 +1227,7 @@ async fn refused_recovery_finishes_the_stopped_execution_and_retains_manual_reco
     wait_started(&manager, &workspace).await;
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     wait_paused(&manager, &workspace).await;
@@ -1267,7 +1267,7 @@ async fn a_done_workspace_does_not_restore_its_stopped_agent() {
         .unwrap();
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     bounded(launched).await.unwrap().unwrap();
@@ -1296,7 +1296,7 @@ async fn resuming_a_done_workspaces_agent_lets_a_later_stop_restore_it() {
         .unwrap();
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     bounded(launched).await.unwrap().unwrap();
@@ -1314,7 +1314,7 @@ async fn resuming_a_done_workspaces_agent_lets_a_later_stop_restore_it() {
     wait_withdrawn(&manager, &workspace).await;
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     wait_paused(&manager, &workspace).await;
@@ -1399,7 +1399,7 @@ async fn an_automatic_restore_in_a_new_wrapper_keeps_the_completion() {
         .unwrap();
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     bounded(launched).await.unwrap().unwrap();
@@ -1485,7 +1485,7 @@ async fn finishing_the_assignment_cancels_a_waiting_restore() {
     wait_started(&manager, &workspace).await;
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     wait_paused(&manager, &workspace).await;
@@ -1524,7 +1524,11 @@ async fn disabling_recovery_while_an_agent_waits_finishes_it_with_a_restore_reco
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
-    assert!(manager.stop_agent_for_overload("test pressure").await);
+    assert!(
+        manager
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
+            .await
+    );
     wait_paused(&manager, &workspace).await;
     // Load never recovers here: disabling alone must end the wait.
     set_recovery(&manager, false).await;
@@ -1541,7 +1545,11 @@ async fn enabling_recovery_applies_to_an_agent_started_without_it() {
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     set_recovery(&manager, true).await;
-    assert!(manager.stop_agent_for_overload("test pressure").await);
+    assert!(
+        manager
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
+            .await
+    );
     wait_paused(&manager, &workspace).await;
     publish_recovery(&manager);
     bounded(launched).await.unwrap().unwrap();
@@ -1559,7 +1567,7 @@ async fn recovery_disconnect_closes_the_connection_without_forgetting_ownership(
     wait_started(&manager, &workspace).await;
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     wait_paused(&manager, &workspace).await;
@@ -1588,7 +1596,7 @@ async fn recovery_disconnect_closes_the_connection_without_forgetting_ownership(
     let reopened = Manager::open(manager.paths.clone()).await.unwrap();
     assert!(
         !reopened
-            .stop_agent_for_overload("test overload after restart")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     assert!(
@@ -1694,13 +1702,13 @@ async fn load_never_stops_a_light_agent() {
     wait_started(&manager, &workspace).await;
     assert!(
         !manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     configure_fixture(&manager, settings).await;
     assert!(
         manager
-            .stop_agent_for_overload("test memory pressure")
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     wait_paused(&manager, &workspace).await;

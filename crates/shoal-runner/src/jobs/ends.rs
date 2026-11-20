@@ -6,8 +6,11 @@
 //! word: stopping it, removing its workspace while it runs, or a signal
 //! ending its wrapper's session cancels its run there, and the forge's
 //! runner then stops it, or Shoal or the wrapper does once the runner
-//! outlives the run or the signal. Shoal's log names what stopped each
-//! runner.
+//! outlives the run or the signal. Only load protection ends a job without
+//! cancelling its run, which would end the run's other jobs too: the forge
+//! fails the job once its runner reports the stopped step, or gives up on
+//! the stopped runner, and Shoal reruns the job once the run has finished.
+//! Shoal's log names what stopped each runner.
 use anyhow::Result;
 use shoal_daemon_base::alerts::{About, NewAlert};
 use shoal_ids::{execution_ids::ExecutionId, queue_entry_ids::QueueEntryId};

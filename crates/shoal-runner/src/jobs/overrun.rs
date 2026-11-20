@@ -33,7 +33,8 @@ impl Runner {
         let reason = "its CI job's run finished on the forge".to_owned();
         daemon.stop_job_runner(&job.workspace_id, reason).await?;
         self.log_job_stop(job, JobStop::Overrun, "its run had finished");
-        let ended = ended_job(job.job.job.name.clone(), run, stopped);
+        let reason = "its runner outlived its finished run".into();
+        let ended = ended_job(job.job.job.name.clone(), run, reason, stopped);
         record_job_ended(&self.store, &job.workspace_id, ended).await;
         Ok(true)
     }
@@ -58,14 +59,20 @@ impl Runner {
     }
 }
 
-/// The event of the job `name` of `run` that Shoal ended after stopping
-/// `stopped`.
-fn ended_job(name: String, run: String, mut stopped: Vec<StoppedProcess>) -> JobEndedEvent {
+/// The event of the job `name` of `run` that Shoal ended for `reason`
+/// after stopping `stopped`.
+pub(super) fn ended_job(
+    name: String,
+    run: String,
+    reason: String,
+    mut stopped: Vec<StoppedProcess>,
+) -> JobEndedEvent {
     let omitted = stopped.len().saturating_sub(LISTED);
     stopped.truncate(LISTED);
     JobEndedEvent {
         name,
         run,
+        reason,
         stopped,
         omitted,
     }

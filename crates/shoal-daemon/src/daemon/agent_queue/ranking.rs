@@ -1,7 +1,8 @@
 //! Ranking the queue: the snapshot the rank reads, from the store, from
 //! what the daemon keeps in memory and from the repositories' settings, the
-//! policy `machine.schedule` names, the waiting entries in its order, and
-//! spaces in the order their agents would start.
+//! policy `machine.schedule` names, the waiting entries in its order,
+//! spaces in the order their agents would start, and running work in the
+//! order it stops.
 use std::collections::{HashMap, hash_map};
 
 use anyhow::Result;
@@ -18,6 +19,7 @@ use shoal_schedule::{
     ranking::Ranking,
     scheduler::{Ranked, Scheduler},
     snapshot::Snapshot,
+    stopping::{Running, StopOrder},
 };
 
 mod areas;
@@ -39,6 +41,17 @@ impl Manager {
     pub(crate) async fn ranked_spaces(&self, ids: &[SpaceId]) -> Result<Vec<(SpaceId, Priority)>> {
         let snapshot = self.ranking_snapshot().await?;
         Ok(scheduler(self.config().machine.schedule).spaces_in_order(&snapshot, ids))
+    }
+
+    /// The `running` work in the order the policy stops it; without the
+    /// queue's rank, its agents' spaces rank alike.
+    pub(crate) async fn order_stops(&self, running: Running) -> StopOrder {
+        let mut snapshot = self.ranking_snapshot().await.unwrap_or_else(|error| {
+            crate::daemon::log!("queue rank unavailable to the stop order: {error:#}");
+            Snapshot::default()
+        });
+        snapshot.running = running;
+        scheduler(self.config().machine.schedule).stop_order(&snapshot)
     }
 
     /// What ranking reads now.
@@ -108,6 +121,7 @@ fn snapshot(
         edges: edges::waits(tx, leases)?,
         now: UnixTime::now(),
         occupied: HashMap::new(),
+        running: Default::default(),
     })
 }
 

@@ -45,6 +45,10 @@ impl Agents for Manager {
         self.agent_queue.suspended()
     }
 
+    fn readings_recovered(&self) -> bool {
+        self.overload_recovery.published().is_some()
+    }
+
     fn lock_admission(&self) -> BoxFuture<'_, Box<dyn Send + '_>> {
         Box::pin(async move {
             let guard: Box<dyn Send + '_> = Box::new(self.agent_queue.lock_admission().await);

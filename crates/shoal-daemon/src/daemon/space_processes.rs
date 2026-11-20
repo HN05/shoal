@@ -94,6 +94,20 @@ impl Manager {
         selection: Selection,
         requester: Option<Identity>,
     ) -> Result<Vec<StoppedProcess>> {
+        let first = std::future::ready(Ok(()));
+        (self.stop_workspace_untracked_after(workspace, selection, requester, first)).await
+    }
+
+    /// [`Self::stop_workspace_untracked`], once `first` has run under the
+    /// reserved lifecycle, before anything is signaled; a `first` that fails
+    /// signals nothing.
+    pub(crate) async fn stop_workspace_untracked_after(
+        &self,
+        workspace: &Workspace,
+        selection: Selection,
+        requester: Option<Identity>,
+        first: impl Future<Output = Result<()>>,
+    ) -> Result<Vec<StoppedProcess>> {
         if workspace.preparation_waits.is_some() {
             return Ok(Vec::new());
         }
@@ -101,18 +115,30 @@ impl Manager {
             .reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
         let stopped = async {
-            let verified = off_runtime::is_dir(&workspace.path).await?
-                && self.verify_worktree(workspace).await.is_ok();
-            let space = crate::model::Space::from(workspace.clone());
-            let space = self
-                .space_ties(&space, WorktreeTies::when(verified))
-                .await?;
-            self.stop_untracked(space, selection, requester).await
+            first.await?;
+            (self.stop_reserved_untracked(workspace, selection, requester)).await
         }
         .await;
         self.set_state(&workspace.id, reserved, workspace.error.clone())
             .await?;
         stopped
+    }
+
+    /// [`Self::stop_untracked`] for `workspace`, whose lifecycle the caller
+    /// reserved.
+    async fn stop_reserved_untracked(
+        &self,
+        workspace: &Workspace,
+        selection: Selection,
+        requester: Option<Identity>,
+    ) -> Result<Vec<StoppedProcess>> {
+        let verified = off_runtime::is_dir(&workspace.path).await?
+            && self.verify_worktree(workspace).await.is_ok();
+        let space = crate::model::Space::from(workspace.clone());
+        let space = self
+            .space_ties(&space, WorktreeTies::when(verified))
+            .await?;
+        self.stop_untracked(space, selection, requester).await
     }
 
     /// What ties processes to `space`: its identity, its temporary directory

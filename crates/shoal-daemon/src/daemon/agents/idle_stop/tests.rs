@@ -808,6 +808,43 @@ async fn an_agent_the_user_is_away_from_sleeps_to_make_room_for_queued_work() {
     assert!(!*with_user.stop.borrow(), "the user is engaged with it");
 }
 
+/// An idle agent with a working agent below it stays running when queued
+/// work waits for room, so a coordinator never sleeps while its children
+/// work.
+#[tokio::test]
+async fn an_agent_with_a_working_agent_below_it_does_not_sleep_for_room() {
+    let (root, manager) = manager().await;
+    manager.publish_config(crate::test_support::global_config(
+        "[machine]\nmax_heavy_agents = 2\n[machine.overload.disk]\nenabled = false",
+    ));
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    (manager.write_local_config(&repo.id, Some("[sleep]\nenabled = false\n".into())))
+        .await
+        .unwrap();
+    let (parent, coordinator) = agent(&manager, &repo.id, "coordinator", IDLE).await;
+    let working = Setup {
+        state: AgentState::Working,
+        ..IDLE
+    };
+    let (child, worker) = agent(&manager, &repo.id, "child", working).await;
+    let (above, below) = (parent.id.clone(), child.id.clone());
+    (manager.store)
+        .run(move |db| crate::daemon::tree::set_parent(db, &below, Some(&above)))
+        .await
+        .unwrap();
+    let queued = crate::daemon::agent_queue::tests::request(&manager, &repo, "later", false);
+    manager.queue_add(queued.await).await.unwrap();
+    manager.dispatch_queue().await.unwrap();
+
+    manager.stop_idle_agents(later()).await.unwrap();
+    assert!(!*coordinator.stop.borrow(), "its child works below it");
+    assert!(!*worker.stop.borrow());
+}
+
 #[tokio::test]
 async fn no_agent_sleeps_for_a_slot_the_machine_does_not_have() {
     let (root, manager) = manager().await;

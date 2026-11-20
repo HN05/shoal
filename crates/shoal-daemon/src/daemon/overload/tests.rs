@@ -160,7 +160,7 @@ fn memory_in_use_stops_at_once_and_stall_once_it_holds() {
     let mut monitor = Monitor::default();
     assert_eq!(
         monitor.reason(start, &settings, Some(CRITICAL), ticks()),
-        Some("critical memory pressure")
+        Some(Pressure::Memory)
     );
     let mut monitor = Monitor::default();
     let mut at = start;
@@ -170,7 +170,7 @@ fn memory_in_use_stops_at_once_and_stall_once_it_holds() {
     }
     assert_eq!(
         monitor.reason(at, &settings, Some(STALLED), ticks()),
-        Some("critical memory pressure")
+        Some(Pressure::Memory)
     );
     // A failed reading restarts the stall's window.
     assert_eq!(monitor.reason(at + poll, &settings, None, ticks()), None);
@@ -232,7 +232,7 @@ fn cpu_is_opt_in_and_requires_continuous_samples() {
             Some(CALM),
             ticks(4)
         ),
-        Some("sustained CPU overload")
+        Some(Pressure::Cpu)
     );
     assert_eq!(
         monitor.reason(
@@ -251,7 +251,7 @@ fn cpu_is_opt_in_and_requires_continuous_samples() {
             Some(CRITICAL),
             ticks(5)
         ),
-        Some("critical memory pressure")
+        Some(Pressure::Memory)
     );
 }
 

@@ -120,8 +120,11 @@ pub(super) async fn fixture(jobs: Vec<Value>, settings: &str) -> Fixture {
             let mut waiting = run(number.parse().unwrap(), "pull_request", &pushed, json!({}));
             waiting["status"] = json!("waiting");
             json!({"workflow_runs": [waiting]})
+        } else if line == "GET /api/v1/repos/team/repo/actions/runs/6/jobs" {
+            json!([{"id": 8, "name": "rust", "run_id": 6, "status": "failure"}])
         } else if line == "POST /api/v1/repos/team/repo/actions/runs/3/cancel"
             || line == "POST /api/v1/repos/team/repo/actions/runs/2/cancel"
+            || line == "POST /api/v1/repos/team/repo/actions/jobs/8/rerun"
         {
             return (204, Vec::new(), Vec::new());
         } else if line == "POST /api/v1/repos/team/repo/actions/runs/8/cancel" {
@@ -1364,6 +1367,140 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
         .collect();
     assert_eq!(stopped, [(pid, "sleep 600")]);
     assert_eq!(logged_stops(manager), [JobStop::Overrun]);
+}
+
+/// A heavy agent running in a new workspace of `repository`.
+async fn heavy_agent(manager: &Manager, repository: &RepositoryId) -> StartedExecution {
+    let workspace = manager
+        .create_workspace(repository, "agent".into(), None, None, None)
+        .await
+        .unwrap();
+    let execution = manager
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    let agent = shoal_protocol::executions::TrackedAgent::named("claude");
+    (manager.track_agent(
+        &execution.plan.id,
+        &agent,
+        &workspace.id,
+        &workspace.name,
+        true,
+        std::time::Duration::ZERO,
+    ))
+    .await;
+    execution
+}
+
+/// Load protection ends the running job before any agent, records why,
+/// and reruns it on the forge once readings recover.
+#[tokio::test]
+async fn load_protection_ends_a_job_before_agents_and_reruns_it_once_readings_recover() {
+    use crate::daemon::events::EventItem;
+    use crate::daemon::overload::Pressure;
+    use crate::protocol::{self, Control, ExecutionEvent};
+    let fixture = fixture(vec![job("h6", 8, 6)], "").await;
+    let manager = &fixture.manager;
+    admit_and_claim(manager).await;
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
+    let ConnectedRunner {
+        mut connection,
+        executing,
+    } = connect_runner(manager, &claimed[0].workspace_id, false).await;
+    let agent = heavy_agent(manager, &fixture.repository).await;
+
+    let stopping = tokio::spawn({
+        let manager = manager.clone();
+        async move { manager.stop_for_overload(Pressure::Memory).await }
+    });
+    let control: Control = read(&mut connection).await;
+    assert!(matches!(&control, Control::Stop { .. }), "{control:?}");
+    let event = ExecutionEvent::Finished { exit_code: 143 };
+    protocol::write(connection.get_mut(), &event).await.unwrap();
+    let control: Control = read(&mut connection).await;
+    assert!(matches!(control, Control::Finished { .. }), "{control:?}");
+    executing.await.unwrap().unwrap();
+    assert!(stopping.await.unwrap());
+    assert!(!*agent.stop.borrow(), "agents stop only once no job runs");
+    assert_eq!(
+        logged_stops(manager),
+        [JobStop::Overload(Pressure::Memory.reason())]
+    );
+    let reasons: Vec<_> = manager
+        .space_events(None, 1000)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter_map(|item| match item {
+            EventItem::Event(event) => event.details.job.map(|job| job.reason),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(reasons, ["stopped for critical memory pressure"]);
+
+    let rerun = "POST /api/v1/repos/team/repo/actions/jobs/8/rerun";
+    let reruns = || {
+        (fixture.server.received().iter())
+            .filter(|request| request.line == rerun)
+            .count()
+    };
+    manager.runner.rerun_stopped_jobs(&**manager).await.unwrap();
+    assert_eq!(reruns(), 0, "readings have yet to recover");
+    let recovery = &manager.overload_recovery;
+    recovery.publish(Some(recovery.epoch()));
+    manager.runner.rerun_stopped_jobs(&**manager).await.unwrap();
+    manager.runner.rerun_stopped_jobs(&**manager).await.unwrap();
+    assert_eq!(reruns(), 1);
+}
+
+/// A stop another lifecycle operation of the job's workspace refuses
+/// interrupts nothing, so it leaves the job no rerun of protection's.
+#[tokio::test]
+async fn a_refused_load_stop_leaves_a_job_no_rerun() {
+    let fixture = fixture(vec![job("h6", 8, 6)], "").await;
+    let manager = &fixture.manager;
+    admit_and_claim(manager).await;
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
+    let workspace = claimed[0].workspace_id.clone();
+    let _runner = connect_runner(manager, &workspace, false).await;
+    manager
+        .reserve_lifecycle(&workspace, WorkspaceState::Removing)
+        .await
+        .unwrap();
+
+    let memory = crate::daemon::overload::Pressure::Memory.reason();
+    (manager
+        .runner
+        .stop_job_for_overload(&**manager, &workspace, memory))
+    .await
+    .unwrap_err();
+    let reruns: i64 = manager
+        .store
+        .run(|db| Ok(db.query_row("SELECT COUNT(*) FROM ci_job_reruns", [], |row| row.get(0))?))
+        .await
+        .unwrap();
+    assert_eq!(reruns, 0);
+}
+
+/// A job whose runner's execution ended, while its workspace's removal
+/// waits, holds nothing, so load stops an agent instead.
+#[tokio::test]
+async fn load_protection_passes_over_a_job_whose_runner_ended() {
+    let fixture = fixture(vec![job("h6", 8, 6)], "").await;
+    let manager = &fixture.manager;
+    admit_and_claim(manager).await;
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
+    let execution = claimed[0]
+        .execution_id
+        .clone()
+        .expect("the claim runs its runner");
+    manager.forget_execution(&execution).await.unwrap();
+    let agent = heavy_agent(manager, &fixture.repository).await;
+
+    let memory = crate::daemon::overload::Pressure::Memory;
+    assert!(manager.stop_for_overload(memory).await);
+    assert!(*agent.stop.borrow());
+    assert!(logged_stops(manager).is_empty());
 }
 
 #[tokio::test]

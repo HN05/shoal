@@ -868,6 +868,15 @@ CREATE TABLE alerts (
     CHECK(sender <> 'space' OR space_id IS NOT NULL)
 );
 
+CREATE TABLE ci_job_reruns (
+    run_url TEXT NOT NULL,
+    job_id INTEGER NOT NULL,
+    job_name TEXT NOT NULL,
+    repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    stopped_at INTEGER NOT NULL,
+    PRIMARY KEY(run_url, job_id)
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);

@@ -94,6 +94,10 @@ pub trait Agents: Send + Sync {
     /// Whether the agent queue is suspended, as the system shuts down.
     fn queue_suspended(&self) -> bool;
 
+    /// Whether the machine's readings have recovered from the load that
+    /// protection stopped work for.
+    fn readings_recovered(&self) -> bool;
+
     /// Hold the agent queue's admission until the guard drops, so a
     /// suspension waits for what admission records meanwhile.
     fn lock_admission(&self) -> BoxFuture<'_, Box<dyn Send + '_>>;
@@ -191,6 +195,16 @@ pub trait Executions: Send + Sync {
         log: PathBuf,
         command: JobCommand,
     ) -> BoxFuture<'a, Result<ExecutionId>>;
+
+    /// Stop every process of the job workspace `id` but its runner as
+    /// [`Self::stop_job_processes`] does, under a reserved lifecycle that
+    /// `first` runs in before anything is signaled, so another lifecycle
+    /// operation refuses both.
+    fn interrupt_job_processes<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        first: BoxFuture<'a, Result<()>>,
+    ) -> BoxFuture<'a, Result<Vec<StoppedProcess>>>;
 
     /// Stop the runner of the job workspace `id` for `reason`, saving
     /// nothing.

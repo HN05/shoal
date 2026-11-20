@@ -1190,7 +1190,7 @@ async fn an_agent_waiting_for_its_restore_keeps_its_workspaces_activity() {
         .await;
     assert!(
         manager
-            .stop_agent_for_overload("critical memory pressure")
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
             .await
     );
     let delegated = manager.delegated_spaces(&parent.id).await.unwrap();

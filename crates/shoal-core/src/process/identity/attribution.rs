@@ -62,6 +62,17 @@ pub async fn scan(ids: HashSet<ExecutionId>) -> Result<Scan> {
     scan_marked(Marker::Execution, ids).await
 }
 
+/// Live same-user processes carrying one of the execution markers `ids`,
+/// each paired with the execution it carries.
+pub async fn scan_executions(ids: HashSet<ExecutionId>) -> Result<Vec<(ExecutionId, Identity)>> {
+    let scan = scan(ids).await?;
+    Ok(scan
+        .processes
+        .into_iter()
+        .map(|p| (p.owner, p.identity))
+        .collect())
+}
+
 /// Live same-user processes carrying the identity of chat `id`: its agent
 /// and what the agent started with its environment.
 pub async fn scan_chat(id: &SpaceId) -> Result<Vec<Identity>> {

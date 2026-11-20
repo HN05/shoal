@@ -351,3 +351,25 @@ async fn a_scoped_caller_resumes_a_hold_only_where_it_administers_directly() {
         assert_eq!(authorized.is_ok(), allowed, "{mode}");
     }
 }
+
+/// A CI job protection stopped keeps its contribution until its rerun.
+#[tokio::test]
+async fn a_contribution_stays_while_a_stopped_job_waits_to_rerun() {
+    let (root, manager) = manager().await;
+    let repo = contribution(&manager, root.path()).await;
+    let id = repo.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO ci_job_reruns(run_url,job_id,job_name,repository_id,stopped_at)
+                 VALUES ('https://forge.example/team/repo/actions/runs/6',8,'rust',?1,0)",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.sweep_contributions().await.unwrap();
+    assert!(registered(&manager, &repo).await);
+}
