@@ -46,6 +46,7 @@ async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
             None,
             false,
             None,
+            0,
         )
         .await;
     manager
@@ -73,6 +74,7 @@ async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
             Some(143),
             true,
             None,
+            0,
         )
         .await;
     manager
@@ -258,6 +260,7 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
                 Some(143),
                 false,
                 Some((id, "critical memory pressure")),
+                0,
             )
             .await;
         let events = manager.notifications.list(false, 1).await.unwrap();

@@ -247,8 +247,9 @@ impl Agent {
 impl Manager {
     /// Tell the user, or the coordinator, that the agent of `space` exited
     /// with `exit_code`, `complete` when its processes are proven stopped,
-    /// or stopped for `overload`. A chat's agent that exits cleanly tells
-    /// no one: the user saw it end.
+    /// or stopped for `overload`, naming the `oom_kills` the kernel's OOM
+    /// killer made in its scope. A chat's agent that exits cleanly, without
+    /// any, tells no one: the user saw it end.
     pub(crate) async fn notify_agent_exit(
         &self,
         space: &crate::model::Space,
@@ -256,8 +257,9 @@ impl Manager {
         exit_code: Option<i32>,
         complete: bool,
         overload: Option<(&ExecutionId, &str)>,
+        oom_kills: u64,
     ) {
-        let clean = overload.is_none() && complete && exit_code.is_some();
+        let clean = overload.is_none() && complete && exit_code.is_some() && oom_kills == 0;
         if clean && space.kind() == crate::model::SpaceKind::Chat {
             return;
         }
@@ -301,6 +303,12 @@ impl Manager {
                     space.number
                 ),
             }
+        };
+        let message = match oom_kills {
+            0 => message,
+            kills => format!(
+                "{message}; the kernel's OOM killer killed {kills} of its processes for memory"
+            ),
         };
         self.notify_space(&space.name, &space.id, AlertKind::AgentExited, message)
             .await;

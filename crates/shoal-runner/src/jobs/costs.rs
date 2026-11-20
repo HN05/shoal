@@ -5,7 +5,7 @@
 //! run.
 use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
-use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId};
 use shoal_protocol::model::QueuedJob;
 
 use super::ClaimedJob;
@@ -29,19 +29,24 @@ impl Runner {
             let Some(usage) = daemon.workspace_usage(&job.workspace_id) else {
                 continue;
             };
-            let memory = i64::try_from(usage.memory_bytes).unwrap_or(i64::MAX);
-            self.store
-                .run(move |db| {
-                    db.execute(
-                        "UPDATE ci_jobs SET peak_memory=max(coalesce(peak_memory,0),?2)
-                         WHERE id=?1",
-                        params![job.id, memory],
-                    )?;
-                    Ok(())
-                })
-                .await?;
+            self.raise_job_peak(&job.id, usage.memory_bytes).await?;
         }
         Ok(())
+    }
+
+    /// Raise the peak memory of the claimed job `id` to `memory` bytes.
+    pub(super) async fn raise_job_peak(&self, id: &QueueEntryId, memory: u64) -> Result<()> {
+        let (id, memory) = (id.clone(), i64::try_from(memory).unwrap_or(i64::MAX));
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE ci_jobs SET peak_memory=max(coalesce(peak_memory,0),?2)
+                     WHERE id=?1",
+                    params![id, memory],
+                )?;
+                Ok(())
+            })
+            .await
     }
 
     /// Keep the peak memory of the ended `job` as its latest run, unless no

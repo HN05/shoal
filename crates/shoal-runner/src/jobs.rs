@@ -21,6 +21,7 @@ mod ends;
 mod linked;
 mod listing;
 mod load;
+mod memory;
 mod overrun;
 mod passes;
 mod protection;

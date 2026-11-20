@@ -321,6 +321,17 @@ macOS, where the kernel does not enforce the limit, it is the memory the
 latest usage sample counts for every space's processes and containers, and
 without a sample nothing starts.
 
+The wrapper reads its command's scope every second while it runs and once as
+it ends: how many processes the kernel's OOM killer killed there, and the
+most memory the scope held, counted as the slice's is. A CI job's peak raises
+the memory its [cost](#runner) counts, and its kills add a `job_ended` entry
+to its workspace's [log](#space-log) naming them, such as a build's compiler
+killed for memory. An agent's kills show in its `agent_exited` or
+`agent_stopped` entry, as `oom_kills`, and in the alert its exit sends. A
+scope the kernel killed whole is gone before its last read, so a command it
+ended with SIGKILL counts a kill when the slice counted one since the
+previous read.
+
 When space available to unprivileged processes on a filesystem holding
 workspaces or daemon state falls below `disk.cleanup_free_gib`, the daemon
 deletes the Xcode data there that removing a workspace of a repository using
@@ -6492,10 +6503,12 @@ a [chat](#chats) that opened it returned it to you.
 under its own ID. `agent_started`, `agent_stopped` (Shoal or a stop request
 stopped it) and `agent_exited` (it exited on its own) events add `agent`
 with its `name`, `execution_id` and `exit_code`, null for a start or stop
-and when the wrapper reported none; a start that carries out a launch adds
-its `source`, `{"kind": "manual"}` for `shoal start`'s. Thread events add
-`thread` with its `number` and `name`, a post's `sender` and `text`, a forward's
-`to`, and a resolution's `outcome`, none when the thread was reopened.
+and when the wrapper reported none, and for a stop or exit `oom_kills`, how
+many of its processes the kernel's OOM killer killed, when any; a start that
+carries out a launch adds its `source`, `{"kind": "manual"}` for `shoal
+start`'s. Thread events add `thread` with its `number` and `name`, a post's
+`sender` and `text`, a forward's `to`, and a resolution's `outcome`, none
+when the thread was reopened.
 `approval_requested` and `approval_decided` events add `approval` with its
 `number`, `target`, `subject` and `status`. `gate_decided` events add `gate`
 with its `number`, `subject`, `verdict` (`allow`, `deny`, `escalate` or
@@ -6506,8 +6519,9 @@ with its `message`. `progress_changed` events add `progress` as
 both are cleared. `child_created` and `child_removed` events, in the log of
 the space above, add `child` with its `id`, `name`, `kind` and a workspace's
 `branch`.
-`job_ended` events, when Shoal ended a [CI job](#runner) whose runner outlived
-its run, add `job` with the job's `name`, its `run`'s URL and the processes it
+`job_ended` events, when Shoal ended a [CI job](#runner), or the kernel's OOM
+killer killed processes of one, add `job` with the job's `name`, its `run`'s
+URL, the `reason` it ended for, and the processes Shoal
 `stopped` before the runner, each with its `pid` and `command`, the first 20
 of them, and `omitted`, how many more, when there were more.
 `demo_started` events, when a [demo](#demos)'s command first runs, and

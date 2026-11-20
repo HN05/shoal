@@ -585,7 +585,14 @@ the limit as the machine's memory, and read the slice's own stall, so Shoal
 warns and stops work before the kernel throttles it; the slice's memory
 leaves out its page cache, which throttling reclaims first and which would
 otherwise read as full. macOS has no such control, so there the limit holds
-only through protection and admission, on the usage Shoal samples. Whether a terminal
+only through protection and admission, on the usage Shoal samples. The
+wrapper, not the daemon, reads its command's scope, since it learns of the
+command's end first, and polls it rather than watching it: a scope the kernel
+kills whole is gone in moments however it is watched, so a SIGKILL that comes
+with a kill counted on the slice since the last read names the kill instead.
+A scope's peak is read as what it holds beside its page cache, not from
+`memory.peak`, which counts the cache a build reads and would make every job
+look as large as the files it touched. Whether a terminal
 shows an agent plays no part, since a host such as Herdr may count every agent
 as shown and a user who attaches may walk away. An idle agent with a running subagent, which
 its hooks report, or processes outside its process group counts as working,

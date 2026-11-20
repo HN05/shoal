@@ -158,8 +158,9 @@ states!(EventKind {
     /// The chat became a workspace, or the workspace a chat, as its
     /// `space_kind` says, with the fields of the kind it became.
     Converted => "converted",
-    /// Shoal ended the workspace's CI job, whose runner kept running after
-    /// the forge finished the job's run.
+    /// The workspace's CI job ended other than as its run said: Shoal
+    /// ended it, or the kernel's OOM killer killed processes of it, as its
+    /// `reason` says.
     JobEnded => "job_ended",
     /// No CI run of the default branch started for the merge commit of a
     /// PR the space watched merge within the time Shoal looked for one.
@@ -401,6 +402,10 @@ pub struct AgentEvent {
     /// The code an agent exited with; null when its wrapper disconnected
     /// without reporting one, and for a start or stop.
     pub exit_code: Option<i32>,
+    /// How many processes of the agent's scope the kernel's OOM killer
+    /// killed while it ran, on an exit or stop.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub oom_kills: u64,
     /// What made the launch a start carries out; absent for a stop, an
     /// exit, and a start that restores an agent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -477,7 +482,7 @@ pub struct JobEndedEvent {
     pub name: String,
     /// The web URL of the run it belongs to.
     pub run: String,
-    /// Why Shoal ended it.
+    /// Why it ended.
     pub reason: String,
     /// The processes of the job's workspace Shoal stopped before its runner,
     /// as many as fit.
@@ -487,8 +492,8 @@ pub struct JobEndedEvent {
     pub omitted: usize,
 }
 
-fn is_zero(count: &usize) -> bool {
-    *count == 0
+fn is_zero<T: Default + PartialEq>(count: &T) -> bool {
+    *count == T::default()
 }
 
 /// The longest command a leftover or a stopped process keeps, so a

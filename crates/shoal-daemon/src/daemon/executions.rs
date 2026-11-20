@@ -298,6 +298,7 @@ impl Manager {
                 name,
                 execution_id: Some(id.clone()),
                 exit_code: Some(0),
+                oom_kills: 0,
             };
             let kind = crate::daemon::events::EventKind::AgentExited;
             crate::daemon::events::record_agent(&self.store, &execution.space_id, kind, ended)

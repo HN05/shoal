@@ -272,12 +272,16 @@ fn started(event: &EventDetails) -> String {
 }
 
 fn exit(event: &EventDetails) -> String {
-    match &event.agent {
-        Some(agent) => match agent.exit_code {
-            Some(code) => format!("{}, exit code {code}", agent.name),
-            None => format!("{}, no exit code", agent.name),
-        },
-        None => String::new(),
+    let Some(agent) = &event.agent else {
+        return String::new();
+    };
+    let exit = match agent.exit_code {
+        Some(code) => format!("{}, exit code {code}", agent.name),
+        None => format!("{}, no exit code", agent.name),
+    };
+    match agent.oom_kills {
+        0 => exit,
+        kills => format!("{exit}, {kills} killed for memory"),
     }
 }
 

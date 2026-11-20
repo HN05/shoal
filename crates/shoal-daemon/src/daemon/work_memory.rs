@@ -1,6 +1,10 @@
-//! The memory limit of Shoal's work, `[machine] memory_limit`: what it
-//! comes to on this machine, and on Linux the cap the daemon gives the work
-//! slice from it, at startup and whenever the config changes it.
+//! The memory of Shoal's work: the limit `[machine] memory_limit` comes to
+//! on this machine, on Linux the cap the daemon gives the work slice from
+//! it, at startup and whenever the config changes it, and what the scope of
+//! an ended command in the slice recorded.
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::protocol::ScopeMemory;
+
 use super::{log, manager::Manager};
 use crate::{
     config::{Config, memory_limit::MemoryLimit},
@@ -8,6 +12,15 @@ use crate::{
 };
 
 impl Manager {
+    /// Keep what the scope of the ended execution `id` recorded of its
+    /// `memory`: a CI job's runner's raises the job's peak memory and names
+    /// its kills in the job's end, which a failure to record only logs.
+    pub(crate) async fn record_scope_memory(&self, id: &ExecutionId, memory: ScopeMemory) {
+        if let Err(error) = self.runner.record_job_memory(id, memory).await {
+            log!("runner: memory of execution {id}: {error:#}");
+        }
+    }
+
     /// The user's limit on Shoal's work, with what the latest usage sample
     /// counts of it, which protection and admission count as the machine's
     /// memory; none without a limit.

@@ -22,6 +22,7 @@ async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
         name: "claude".into(),
         execution_id: Some(execution.into()),
         exit_code,
+        oom_kills: 0,
     };
     let recorded = [
         (EventKind::AgentStarted, agent("e1", None)),

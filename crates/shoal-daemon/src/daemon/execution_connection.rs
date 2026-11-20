@@ -28,7 +28,7 @@ use super::{
 use crate::{
     model::{Protection, Space},
     process::identity::Identity,
-    protocol::{self, Body, Control, ErrorCode, ExecutionEvent, Reattach, Response},
+    protocol::{self, Body, Control, ErrorCode, ExecutionEvent, Reattach, Response, ScopeMemory},
 };
 use registration::Registered;
 use shoal_protocol::space_names::SpaceSelector;
@@ -85,6 +85,9 @@ struct Connected {
     /// What made the launch whose queue entry the agent took over, which
     /// its start records.
     source: Option<LaunchSource>,
+    /// What the command's scope recorded of its memory, as the wrapper
+    /// reported with its end.
+    memory: Option<ScopeMemory>,
 }
 
 /// How the wrapper's connection ended.
@@ -175,6 +178,7 @@ pub(super) async fn reattach(
         stop,
         records: None,
         source: None,
+        memory: None,
     };
     serve(
         stream,
@@ -301,6 +305,7 @@ async fn relay(
         stopped,
         stop,
         source,
+        memory,
         ..
     } = execution;
     let reattach = *reattach;
@@ -405,8 +410,12 @@ async fn relay(
                 drop(operation);
                 manager.close_left_places(&space.id, left).await;
             }
-            ExecutionEvent::Finished { exit_code, .. } => {
+            ExecutionEvent::Finished {
+                exit_code,
+                memory: reported,
+            } => {
                 *stopped = sent_stop;
+                *memory = reported;
                 return Ok(Ended::Finished(exit_code));
             }
             ExecutionEvent::ChildExited => {
@@ -684,8 +693,13 @@ async fn finish(
         started,
         resuming,
         stopped,
+        memory,
         ..
     } = execution;
+    if let Some(memory) = memory {
+        manager.record_scope_memory(&execution_id, memory).await;
+    }
+    let oom_kills = memory.map_or(0, |memory| memory.oom_kills);
     let mut overload_reason = if agent.is_some() {
         manager
             .agent_overload(&execution_id)
@@ -758,7 +772,10 @@ async fn finish(
             true => (EventKind::AgentStopped, None),
             false => (EventKind::AgentExited, code),
         };
-        let ended = agent_event(agent, &execution_id, code);
+        let ended = AgentEvent {
+            oom_kills,
+            ..agent_event(agent, &execution_id, code)
+        };
         crate::daemon::events::record_agent(&manager.store, &space.id, kind, ended).await;
         manager
             .notify_agent_exit(
@@ -769,6 +786,7 @@ async fn finish(
                 overload_reason
                     .as_deref()
                     .map(|reason| (&execution_id, reason)),
+                oom_kills,
             )
             .await;
     }
@@ -799,6 +817,7 @@ fn agent_event(agent: &TrackedAgent, id: &ExecutionId, exit_code: Option<i32>) -
         name: agent.name.clone(),
         execution_id: Some(id.to_owned()),
         exit_code,
+        oom_kills: 0,
         source: None,
     }
 }
