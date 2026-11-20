@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 
 use super::{Prepared, carried, records};
+use crate::refusal::{Reason, Refusal};
 use crate::{
     daemon::{executions::StopRequest, manager::Manager},
     model::Space,
@@ -21,29 +22,34 @@ use crate::{
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
+/// What a move packs a space for: its `destination`, the spaces below it
+/// that go with it as `carrying` says, and the `unsaved` work the caller
+/// saw that its end may delete; `again` packs again under the move's
+/// record, as only the move's finisher does.
+pub struct MovePacking {
+    pub unsaved: UnsavedWork,
+    pub destination: MoveDestination,
+    pub carrying: Carrying,
+    pub again: bool,
+}
+
 impl Manager {
-    /// Record the move of the space `selector` names, with the spaces
-    /// below it that `carrying` carries, to `destination`, letting it
-    /// delete the `unsaved` work the caller saw, then stop their agents,
-    /// saving their sessions, and write them for another Shoal to the new
-    /// file of the space's package there, leaving them here: each workspace
-    /// at a new checkpoint, which the record keeps for
-    /// [`Self::end_moved_space`]. A move already recorded, as one a
-    /// restarted daemon finishes, packs again under its record.
+    /// Record the move of the space `selector` names as `packing` says,
+    /// then stop the agents of it and the spaces that go with it, saving
+    /// their sessions, and write them for another Shoal to the new file of
+    /// the space's package there, leaving them here: each workspace at a
+    /// new checkpoint, which the record keeps for [`Self::end_moved_space`].
     pub async fn export_moving_space(
         &self,
         selector: &SpaceSelector,
-        unsaved: UnsavedWork,
-        destination: &MoveDestination,
-        carrying: &Carrying,
+        packing: MovePacking,
     ) -> Result<ExportedSpace> {
         let space = self.running_space(selector).await?;
+        let destination = &packing.destination;
         let file = self.move_package(&space.id, destination)?;
         crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
-        let mut record = self
-            .record_space_move(&space, unsaved, destination, carrying)
-            .await?;
-        let prepared = self.prepare_moving(space, carrying).await?;
+        let mut record = self.record_space_move(&space, &packing).await?;
+        let prepared = self.prepare_moving(space, &packing.carrying).await?;
         let exported = self.write_prepared(prepared, file).await?;
         record.checkpoints = exported.manifest.checkpoints();
         // A file holds the package once written; another machine, or the
@@ -127,26 +133,23 @@ impl Manager {
         self.store.read(records::all).await
     }
 
-    /// Record the move of `space` and the spaces below it that `carrying`
-    /// carries to `destination`, with the stopped work they saved so far,
-    /// before any agent stops; a move already recorded for it in its first
-    /// phase goes on under its record.
-    async fn record_space_move(
-        &self,
-        space: &Space,
-        unsaved: UnsavedWork,
-        destination: &MoveDestination,
-        carrying: &Carrying,
-    ) -> Result<MoveRecord> {
-        let id = space.id.clone();
-        if let Some(recorded) = self.store.read(move |db| records::read(db, &id)).await? {
-            anyhow::ensure!(
-                recorded.phase == MovePhase::Packing,
-                "the move of {} already wrote its package; it finishes from there",
-                space.name
-            );
-            return Ok(recorded);
+    /// Record the move of `space` and the spaces below it as `packing`
+    /// says, with the stopped work they saved so far, before any agent
+    /// stops; its finisher packs a move recorded in its first phase again
+    /// under its record, and any other move of a space with one is refused.
+    async fn record_space_move(&self, space: &Space, packing: &MovePacking) -> Result<MoveRecord> {
+        if let Some(recorded) = self.move_record(&space.id).await? {
+            if packing.again && recorded.phase == MovePhase::Packing {
+                return Ok(recorded);
+            }
+            return Err(move_in_progress(space).into());
         }
+        let MovePacking {
+            unsaved,
+            destination,
+            carrying,
+            ..
+        } = packing;
         let carried = self.carried_by(&space.id, carrying).await?;
         let mut saved_before = StoppedExecutions::new();
         for moving in std::iter::once(space).chain(&carried) {
@@ -158,7 +161,7 @@ impl Manager {
             space: space.id.clone(),
             destination: destination.clone(),
             carrying: carrying.clone(),
-            unsaved,
+            unsaved: unsaved.clone(),
             phase: MovePhase::Packing,
             checkpoints: Default::default(),
             saved_before,
@@ -250,4 +253,15 @@ impl Manager {
         }
         Prepared::of(self, record, records, settings).await
     }
+}
+
+/// The refusal of a move of `space` while another move of it is recorded.
+fn move_in_progress(space: &Space) -> Refusal {
+    Refusal::new(
+        Reason::MoveInProgress,
+        format!(
+            "a move of {} is recorded; Shoal finishes it, then it can move again",
+            space.name
+        ),
+    )
 }

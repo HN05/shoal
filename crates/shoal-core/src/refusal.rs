@@ -25,6 +25,8 @@ pub enum Reason {
     /// A write or deletion of an app's entry names a revision the entry is
     /// no longer at.
     StaleRevision,
+    /// A move of the space is recorded, which its worker or Shoal finishes.
+    MoveInProgress,
 }
 
 #[derive(Debug)]
@@ -124,6 +126,7 @@ impl Reason {
             Self::NotImported => ErrorCode::NotImported,
             Self::MachineUnreachable => ErrorCode::MachineUnreachable,
             Self::StaleRevision => ErrorCode::StaleRevision,
+            Self::MoveInProgress => ErrorCode::MoveInProgress,
         }
     }
 

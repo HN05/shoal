@@ -113,6 +113,9 @@ shoal_states::open_enum! {
         /// An operation needs the caller's consent first, which its failure
         /// asks for.
         Unconfirmed => "unconfirmed",
+        /// A move of the space is recorded, which its worker or Shoal
+        /// finishes before another can start.
+        MoveInProgress => "move_in_progress",
     }
 }
 
@@ -137,6 +140,7 @@ impl ErrorCode {
                 | Self::MachineUnreachable
                 | Self::StaleRevision
                 | Self::Unconfirmed
+                | Self::MoveInProgress
         )
     }
 }

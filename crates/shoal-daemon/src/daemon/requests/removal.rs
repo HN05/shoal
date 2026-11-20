@@ -12,6 +12,7 @@ use super::super::{
     manager::Manager,
     restore::PackageInput,
     scope::{Caller, Scoped},
+    spaces::MovePacking,
 };
 use crate::{
     model::StoppedSpace,
@@ -155,11 +156,16 @@ pub(super) async fn handle(
             unsaved,
             destination,
             carrying,
-        } => Body::ExportedSpace(
-            manager
-                .export_moving_space(&space, unsaved, &destination, &carrying)
-                .await?,
-        ),
+            again,
+        } => {
+            let packing = MovePacking {
+                unsaved,
+                destination,
+                carrying,
+                again,
+            };
+            Body::ExportedSpace(manager.export_moving_space(&space, packing).await?)
+        }
         RemovalMethod::EndMovedSpace { space } => {
             Body::RemovalResult(manager.end_moved_space(&space).await?)
         }

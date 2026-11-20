@@ -443,8 +443,13 @@ pub async fn move_to_file(
     crate::transfer::ExportedSpace,
     crate::removal::RemovalResult,
 )> {
-    let destination = crate::transfer::MoveDestination::File { path: file };
-    let packing = manager.export_moving_space(selector, unsaved, &destination, carrying);
+    let packing = crate::daemon::spaces::MovePacking {
+        unsaved,
+        destination: crate::transfer::MoveDestination::File { path: file },
+        carrying: carrying.clone(),
+        again: false,
+    };
+    let packing = manager.export_moving_space(selector, packing);
     let exported = match packing.await {
         Ok(exported) => exported,
         Err(error) => {

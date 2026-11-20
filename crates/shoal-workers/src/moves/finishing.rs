@@ -35,6 +35,7 @@ pub async fn finish(
         carrying: record.carrying.clone(),
         unsaved: record.unsaved.clone(),
         file: (record.destination).package(&record.space, &paths.move_packages()),
+        again: true,
     };
     let finished = finish_locked(paths, &record, &moving, steps).await;
     lock.release();

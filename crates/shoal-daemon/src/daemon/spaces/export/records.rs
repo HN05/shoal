@@ -6,6 +6,7 @@ use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 
 use crate::daemon::store;
+use crate::refusal::{Reason, Refusal};
 use crate::time::UnixTime;
 use crate::transfer::{MovePhase, MoveRecord};
 use shoal_ids::space_ids::SpaceId;
@@ -15,10 +16,10 @@ const COLUMNS: &str = "space_id,destination,carrying,unsaved,phase,checkpoints,s
 /// Record `record`, the move of its space, refusing a space another move
 /// already takes.
 pub(super) fn insert(tx: &Transaction<'_>, record: &MoveRecord) -> Result<()> {
-    anyhow::ensure!(
-        read(tx, &record.space)?.is_none(),
-        "another move takes this space; wait for it to end"
-    );
+    if read(tx, &record.space)?.is_some() {
+        let message = "another move of this space is recorded; Shoal finishes it first";
+        return Err(Refusal::new(Reason::MoveInProgress, message).into());
+    }
     tx.execute(
         "INSERT INTO space_moves(space_id,destination,carrying,unsaved,phase,checkpoints,
             saved_before,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",

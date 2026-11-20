@@ -50,6 +50,7 @@ pub(crate) fn workspace_ids(
 pub(crate) mod done;
 mod environment;
 mod export;
+pub(crate) use export::MovePacking;
 mod find;
 mod hooks;
 mod listing;

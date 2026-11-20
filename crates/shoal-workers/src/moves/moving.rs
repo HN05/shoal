@@ -17,7 +17,7 @@ use super::{
 use crate::{
     client::{connection::CommandPaths, output::batch::Failure},
     model::Space,
-    protocol::operations::Step,
+    protocol::{ErrorCode, RemoteError, operations::Step},
     resume::{Resuming, queue::queue_each},
 };
 use shoal_core::execution::recovery::{SavedCommand, SavedSession};
@@ -38,6 +38,9 @@ pub(super) struct Moving<'a> {
     pub(super) carrying: Carrying,
     pub(super) unsaved: UnsavedWork,
     pub(super) file: PathBuf,
+    /// Whether it packs again under its move's record, as the move's
+    /// finisher does.
+    pub(super) again: bool,
 }
 
 /// Move the `checked` space, with the spaces it carries, as `order` says,
@@ -58,6 +61,7 @@ pub(super) async fn move_one(
         carrying: order.carrying(),
         unsaved: checked.unsaved(),
         file,
+        again: false,
     };
     if let MoveDestination::Client { .. } = moving.destination {
         let exported = pack(paths, &moving, steps).await?;
@@ -93,10 +97,13 @@ async fn pack(
     let space = SpaceSelector::id(&moving.id);
     let (unsaved, carrying) = (moving.unsaved.clone(), moving.carrying.clone());
     let destination = moving.destination.clone();
+    let again = moving.again;
     let packing =
-        crate::client::transfer::export_moving(paths, space, unsaved, destination, carrying);
+        crate::client::transfer::export_moving(paths, space, unsaved, destination, carrying, again);
     match packing.await {
         Ok(exported) => Ok(exported),
+        // That move is another's to finish.
+        Err(error) if refused_as(&error, ErrorCode::MoveInProgress) => Err(error),
         Err(error) => Err(stays_here(paths, &moving.id, error).await),
     }
 }
@@ -184,6 +191,13 @@ async fn deliver(
             Err(maybe_there(paths, id, remote.host(), error).await)
         }
     }
+}
+
+/// Whether the daemon refused `error`'s request with `code`.
+fn refused_as(error: &anyhow::Error, code: ErrorCode) -> bool {
+    error
+        .downcast_ref::<RemoteError>()
+        .is_some_and(|refusal| refusal.code == code)
 }
 
 /// `error`, which left it unknown whether `holder`, another machine or

@@ -235,9 +235,13 @@ async fn an_import_whose_carried_space_is_here_records_nothing() {
     // The child arrives first on its own, as a move that left it running.
     let file = source.path().join("child.shoal");
     let selector = SpaceSelector::id(&child);
-    let destination = MoveDestination::File { path: file.clone() };
-    let unsaved = UnsavedWork::default();
-    (exporting.export_moving_space(&selector, unsaved, &destination, &Carrying::Subtree))
+    let packing = crate::daemon::spaces::MovePacking {
+        unsaved: UnsavedWork::default(),
+        destination: MoveDestination::File { path: file.clone() },
+        carrying: Carrying::Subtree,
+        again: false,
+    };
+    (exporting.export_moving_space(&selector, packing))
         .await
         .unwrap();
     import_file(&importing, Some(&target_repo), &fs::read(file).unwrap())

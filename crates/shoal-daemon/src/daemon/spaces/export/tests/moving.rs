@@ -5,6 +5,7 @@ use super::Import;
 use super::transfer::{exporter, import, importer, packaged_workspace};
 use crate::daemon::notifications::AlertKind;
 use crate::daemon::restore::SpaceImport;
+use crate::daemon::spaces::MovePacking;
 use crate::protocol::operations::{Ended, OperationKind, Outcome};
 use crate::refusal::Reason;
 use crate::{
@@ -46,11 +47,13 @@ async fn export_deleting(
     unsaved: UnsavedWork,
 ) -> (ExportedSpace, Vec<u8>) {
     let file = directory.join("moving.shoal");
-    let destination = MoveDestination::File { path: file.clone() };
-    let exported = manager
-        .export_moving_space(space, unsaved, &destination, &Carrying::Subtree)
-        .await
-        .unwrap();
+    let packing = MovePacking {
+        unsaved,
+        destination: MoveDestination::File { path: file.clone() },
+        carrying: Carrying::Subtree,
+        again: false,
+    };
+    let exported = manager.export_moving_space(space, packing).await.unwrap();
     (exported, fs::read(file).unwrap())
 }
 
@@ -134,13 +137,28 @@ async fn a_move_is_recorded_with_its_package_until_it_ends() {
     // The agent stopped earlier is no agent the move stopped.
     let saved = &record.saved_before[&workspace.id];
     assert!(saved.contains(&ExecutionId::from("stopped-agent")));
-    // The space is the move's until it ends.
-    let again = source.path().join("again.shoal");
-    let destination = MoveDestination::File { path: again };
-    let unsaved = UnsavedWork::default();
-    let carrying = Carrying::Subtree;
-    let refused = exporting.export_moving_space(&selector, unsaved, &destination, &carrying);
-    assert!(refused.await.is_err());
+    // The space is the move's until it ends: another move is refused,
+    // and so is packing again, which only waits for a move in its first
+    // phase, and either leaves the move as it was.
+    for again in [false, true] {
+        let packing = MovePacking {
+            unsaved: UnsavedWork::default(),
+            destination: MoveDestination::File {
+                path: source.path().join("again.shoal"),
+            },
+            carrying: Carrying::Subtree,
+            again,
+        };
+        let refused = exporting.export_moving_space(&selector, packing).await;
+        assert_eq!(
+            Reason::of(&refused.unwrap_err()),
+            Some(Reason::MoveInProgress)
+        );
+        assert_eq!(
+            recorded(&exporting, &workspace.id).await,
+            Some(record.clone())
+        );
+    }
 
     exporting.end_moved_space(&selector).await.unwrap();
     assert!(recorded(&exporting, &workspace.id).await.is_none());
@@ -171,10 +189,23 @@ async fn a_move_recorded_before_its_package_was_written_packs_again_under_its_re
         .unwrap();
 
     let selector = SpaceSelector::id(&workspace.id);
-    let unsaved = UnsavedWork::default();
-    let carrying = Carrying::Subtree;
-    let packing = exporting.export_moving_space(&selector, unsaved, &destination, &carrying);
-    let exported = packing.await.unwrap();
+    let packing = |again| MovePacking {
+        unsaved: UnsavedWork::default(),
+        destination: destination.clone(),
+        carrying: Carrying::Subtree,
+        again,
+    };
+    // Only the move's finisher packs again under its record.
+    let refused = exporting
+        .export_moving_space(&selector, packing(false))
+        .await;
+    assert_eq!(
+        Reason::of(&refused.unwrap_err()),
+        Some(Reason::MoveInProgress)
+    );
+    let exported = (exporting.export_moving_space(&selector, packing(true)))
+        .await
+        .unwrap();
     let record = recorded(&exporting, &workspace.id).await.unwrap();
     assert_eq!(record.phase, MovePhase::Delivered);
     assert_eq!(record.checkpoints, exported_checkpoints(&exported));

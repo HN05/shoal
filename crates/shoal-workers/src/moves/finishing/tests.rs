@@ -50,6 +50,7 @@ async fn left_move(
         unsaved.clone(),
         destination.clone(),
         carrying.clone(),
+        false,
     );
     packing.await.unwrap();
     let phase = match destination {

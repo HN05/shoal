@@ -40,19 +40,22 @@ pub async fn export_removed(
 /// carries to `destination`, which may delete the `unsaved` work the caller
 /// saw, then stop their agents, saving their sessions, and package them
 /// into the file the destination takes, leaving them here until
-/// [`end_moved`] ends them or [`abandon_move`] forgets the move.
+/// [`end_moved`] ends them or [`abandon_move`] forgets the move; `again`
+/// packs again under the move's record, as only its finisher does.
 pub async fn export_moving(
     daemon: &impl Daemon,
     space: SpaceSelector,
     unsaved: UnsavedWork,
     destination: MoveDestination,
     carrying: Carrying,
+    again: bool,
 ) -> Result<ExportedSpace> {
     let method = RemovalMethod::ExportMovingSpace {
         space,
         unsaved,
         destination,
         carrying,
+        again,
     };
     request(daemon, method).await
 }

@@ -130,6 +130,10 @@ pub enum RemovalMethod {
         destination: crate::transfer::MoveDestination,
         #[serde(default)]
         carrying: crate::transfer::Carrying,
+        /// Pack again under the move's record, as only the move's finisher
+        /// does; any other move of a space with one is refused.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        again: bool,
     },
     /// End `space` here with the spaces below it that its recorded move
     /// carries, once the destination has their package, as the move's
