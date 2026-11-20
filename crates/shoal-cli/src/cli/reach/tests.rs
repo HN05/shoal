@@ -37,3 +37,10 @@ fn a_command_that_attaches_files_offers_only_this_machine_s_spaces() {
     assert!(reaches(&["shoal", "done"]));
     assert!(!reaches(&["shoal", "done", "--attach", "report.md"]));
 }
+
+#[test]
+fn a_view_of_a_local_review_offers_only_this_machine_s_spaces() {
+    assert!(reaches(&["shoal", "view"]));
+    assert!(reaches(&["shoal", "view", "pr"]));
+    assert!(!reaches(&["shoal", "view", "review"]));
+}
