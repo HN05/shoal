@@ -8,14 +8,12 @@ use anyhow::{Context, Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use std::time::Duration;
-use tokio::{
-    net::unix::OwnedWriteHalf,
-    sync::{OwnedRwLockReadGuard, mpsc, watch},
-};
+use tokio::sync::{OwnedRwLockReadGuard, mpsc, watch};
 
 use super::{
     agent_queue::{Grant, RestoreLink},
     agents::{Pause, Protection},
+    execution_connection::Controls,
     executions::StopRequest,
     manager::Manager,
 };
@@ -24,7 +22,7 @@ use crate::{
     config::permissions::PermissionsConfig,
     execution::recovery,
     model::PortReservation,
-    protocol::{self, Control, ExecutionEvent, timing},
+    protocol::{Control, ExecutionEvent, timing},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -83,7 +81,7 @@ impl Cancel {
 /// restore back, when its release reads that, the narrowing its agent runs
 /// under, and whether it restores the agent under another.
 pub(super) struct Wrapper<'a> {
-    pub notices: Option<&'a mut OwnedWriteHalf>,
+    pub notices: Option<&'a Controls>,
     pub runs_under: Option<PermissionsConfig>,
     pub takes_narrowing: bool,
 }
@@ -174,7 +172,7 @@ async fn restart(
     resumes: Resumes<'_>,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     stop: &mut watch::Receiver<bool>,
-    notices: Option<&mut OwnedWriteHalf>,
+    notices: Option<&Controls>,
 ) -> Result<Action> {
     let (manager, execution_id) = (resumes.manager, resumes.execution_id);
     let action = restart_once_stopped(resumes, incoming, stop, notices).await;
@@ -192,7 +190,7 @@ async fn restart_once_stopped(
     resumes: Resumes<'_>,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     stop: &mut watch::Receiver<bool>,
-    notices: Option<&mut OwnedWriteHalf>,
+    notices: Option<&Controls>,
 ) -> Result<Action> {
     let (manager, execution_id, workspace_id) =
         (resumes.manager, resumes.execution_id, resumes.workspace_id);
@@ -327,7 +325,7 @@ async fn await_stopped(
     execution_id: &ExecutionId,
     workspace_id: &SpaceId,
     stopped: Pause,
-    notices: Option<&mut OwnedWriteHalf>,
+    notices: Option<&Controls>,
 ) -> Result<()> {
     let Pause::Unproven(issue) = stopped else {
         return Ok(());
@@ -348,10 +346,10 @@ async fn await_stopped(
 
 /// Tell a waiting wrapper whose release reads it what `issue` holds its
 /// restore back, for its terminal.
-async fn tell_restore_waits(notices: Option<&mut OwnedWriteHalf>, issue: String) {
+async fn tell_restore_waits(notices: Option<&Controls>, issue: String) {
     if let Some(wrapper) = notices {
         // A lost connection ends the wait through the wrapper's events.
-        let _ = protocol::write(wrapper, &Control::RestoreWaits { issue }).await;
+        let _ = wrapper.send(&Control::RestoreWaits { issue }).await;
     }
 }
 

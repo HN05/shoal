@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, ensure};
 use tokio::{
-    net::{UnixStream, unix::OwnedWriteHalf},
+    net::UnixStream,
     sync::{OwnedRwLockReadGuard, mpsc, watch},
     task::JoinSet,
 };
@@ -241,14 +241,17 @@ async fn serve(
     readers.spawn(read_execution_events(reader, events));
     let mut handoff_claimed = false;
     let mut unattachable = (!execution.started || execution.awaiting_restore).then_some(operation);
+    let responded = match &response {
+        Some(response) => protocol::write(&mut writer, response).await,
+        None => Ok(()),
+    };
+    let controls = Controls::new(writer);
     let result = async {
-        if let Some(response) = &response {
-            protocol::write(&mut writer, response).await?;
-        }
+        responded?;
         relay(
             manager,
             &mut execution,
-            &mut writer,
+            &controls,
             &mut incoming,
             &mut handoff_claimed,
             &mut unattachable,
@@ -301,7 +304,7 @@ async fn serve(
     finish(
         manager,
         execution,
-        writer,
+        controls,
         result,
         handoff_claimed,
         operation,
@@ -314,7 +317,7 @@ async fn serve(
 async fn relay(
     manager: &Manager,
     execution: &mut Connected,
-    writer: &mut OwnedWriteHalf,
+    controls: &Controls,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     handoff_claimed: &mut bool,
     unattachable: &mut Option<OwnedRwLockReadGuard<()>>,
@@ -375,7 +378,7 @@ async fn relay(
                                     *unattachable = recovery.update_hold;
                                 }
                             }
-                            protocol::write(writer, &control).await?;
+                            controls.send(&control).await?;
                             if matches!(control, Control::Detach) {
                                 return Ok(Ended::Detached);
                             }
@@ -435,7 +438,7 @@ async fn relay(
                     .await;
                 }
                 memory.started();
-                protocol::write(writer, &Control::Started).await?;
+                controls.send(&Control::Started).await?;
                 // A slow host close holds back no daemon update; a stop
                 // that arrives meanwhile waits in `stop` until it returns.
                 drop(operation);
@@ -468,7 +471,7 @@ async fn relay(
                         }
                     }
                 };
-                protocol::write(writer, &control).await?;
+                controls.send(&control).await?;
                 *unattachable = Some(operation);
             }
             // A wake that crossed the restore it asks for, or reached a
@@ -487,7 +490,7 @@ async fn relay(
                 });
                 let control = register_again(manager, execution_id, &space.id, place).await;
                 sent_stop |= matches!(control, Control::Stop { .. });
-                protocol::write(writer, &control).await?;
+                controls.send(&control).await?;
                 *unattachable = Some(operation);
             }
             ExecutionEvent::Paused { memory: reported } => {
@@ -522,7 +525,7 @@ async fn relay(
                     *unattachable = manager.gates.try_owned_operation();
                 }
                 let wrapper = execution_recovery::Wrapper {
-                    notices: hears_restore_waits.then_some(&mut *writer),
+                    notices: hears_restore_waits.then_some(controls),
                     runs_under: agent.as_ref().map(|agent| agent.narrowing),
                     takes_narrowing: *takes_narrowing,
                 };
@@ -557,14 +560,14 @@ async fn relay(
                             executable,
                             narrowing,
                         };
-                        protocol::write(writer, &resume).await?;
+                        controls.send(&resume).await?;
                     }
                     // The next daemon continues the wait once the wrapper reattaches.
                     Action::Stop(_) if reattach && manager.executions.shutting_down() => {
-                        protocol::write(writer, &Control::Detach).await?;
+                        controls.send(&Control::Detach).await?;
                         return Ok(Ended::Detached);
                     }
-                    Action::Stop(cancel) => protocol::write(writer, &cancel.control()).await?,
+                    Action::Stop(cancel) => controls.send(&cancel.control()).await?,
                     Action::Finished(exit_code) => {
                         *stopped = true;
                         return Ok(Ended::Finished(exit_code));
@@ -717,7 +720,7 @@ fn requested_stop(request: Option<StopRequest>, stopping: Stopping<'_>) -> Contr
 async fn finish(
     manager: &Manager,
     execution: Connected,
-    mut writer: OwnedWriteHalf,
+    controls: Controls,
     result: Result<i32>,
     handoff_claimed: bool,
     _operation: OwnedRwLockReadGuard<()>,
@@ -834,7 +837,7 @@ async fn finish(
             .await;
     }
     let acknowledged = if result.is_ok() {
-        protocol::write(&mut writer, &Control::Finished { complete }).await
+        controls.send(&Control::Finished { complete }).await
     } else {
         Ok(())
     };
@@ -881,7 +884,10 @@ async fn read_execution_events(
     }
 }
 
+mod controls;
 mod registration;
+
+pub(super) use controls::Controls;
 
 #[cfg(test)]
 mod tests;
