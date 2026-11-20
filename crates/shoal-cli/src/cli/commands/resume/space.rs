@@ -58,9 +58,10 @@ pub(super) async fn here(
     execution: Option<ExecutionId>,
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
+    let space = super::present_space(ctx, &space).await?;
     let reporting = Reporting(ctx);
     let execution = execution.as_ref();
-    let choice = resume::space::choose(&ctx.paths, &space, execution, change, &reporting);
+    let choice = resume::space::choose(&ctx.paths, space, execution, change, &reporting);
     match choice.await? {
         Choice::Commands(report) => {
             reports::commands_only(ctx, &report)?;

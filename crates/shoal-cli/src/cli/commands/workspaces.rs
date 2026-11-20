@@ -10,7 +10,6 @@ mod removal;
 mod run;
 mod setup;
 mod unmerge;
-mod waiting;
 
 pub(super) use adopt::adopt;
 pub(super) use branch_rename::rename_branch;
@@ -24,7 +23,6 @@ pub(super) use setup::{
     SetUp, follow_setup, run_post_setup, settle_setup, setup, setup_workspace, skip_setup,
 };
 pub(super) use unmerge::unmerge;
-pub(super) use waiting::awaits_setup;
 
 /// Where the workspace's worktree is, for messages: `on branch <branch> at
 /// <path>`, or `at <commit> in <path>` with what a workspace at a commit was

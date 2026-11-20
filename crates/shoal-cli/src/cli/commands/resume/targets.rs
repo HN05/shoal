@@ -2,17 +2,11 @@
 //! alike, or every space with a stopped agent for `--all`; without a space,
 //! the current workspace when its agent can resume, else those picked among
 //! the spaces whose agent can resume, or else a list of them.
-use anyhow::{Result, bail};
-use shoal_protocol::model::ByKind;
+use anyhow::Result;
 
 use crate::client::output::resume::{Resumable, ResumableSpace};
 use crate::{
-    cli::{
-        args::SpaceTargets,
-        commands::{queued_agents, workspaces},
-        context::Context,
-        ui,
-    },
+    cli::{args::SpaceTargets, commands::queued_agents, context::Context, ui},
     model::{QueueEntry, Spaces},
     state::QueueState,
 };
@@ -91,14 +85,7 @@ impl Selected {
     pub async fn refuse_failed_setups(&self, ctx: &Context) -> Result<()> {
         for selector in self.spaces.iter().flatten() {
             let space = super::present_space(ctx, selector).await?;
-            let (name, number) = (space.name.clone(), space.number);
-            if let ByKind::Workspace(_) = space.by_kind() {
-                let inspection =
-                    crate::client::workspaces::inspect(&ctx.paths, selector.clone()).await?;
-                if workspaces::awaits_setup(&inspection) {
-                    bail!("the setup of {name} failed; retry it with `shoal setup {number}`");
-                }
-            }
+            shoal_workers::resume::space::refuse_failed_setup(&ctx.paths, &space).await?;
         }
         Ok(())
     }

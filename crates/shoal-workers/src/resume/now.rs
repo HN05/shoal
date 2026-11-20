@@ -15,6 +15,7 @@ use crate::{
         output::resume::{Queued, StartedRestores, StoppedCommands},
     },
     config::permissions::PermissionChange,
+    model::Space,
     places::Launcher,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -39,18 +40,21 @@ pub enum Resumed {
     Commands(StoppedCommands),
 }
 
-/// Resume the stopped agent or last session of the space `space` names at
-/// once, the `execution` one when given, as `starter` starts it, making
+/// Resume the stopped agent or last session of the space `selector` names
+/// at once, the `execution` one when given, as `starter` starts it, making
 /// `change` when given; `resuming` picks among several and tells the user
-/// what no agent receives and what fails.
+/// what no agent receives and what fails. A workspace whose setup failed is
+/// refused, naming `shoal setup`.
 pub async fn now(
     paths: &CommandPaths,
     starter: Starter,
-    space: &SpaceSelector,
+    selector: &SpaceSelector,
     execution: Option<&ExecutionId>,
     change: Option<&PermissionChange>,
     resuming: &impl Resuming,
 ) -> Result<Resumed> {
+    let space = space::present_space(paths, selector).await?;
+    space::refuse_failed_setup(paths, &space).await?;
     match starter {
         Starter::Caller(launcher) => {
             let choice = space::choose(paths, space, execution, change, resuming).await?;
@@ -82,17 +86,16 @@ async fn start(
     Ok(Resumed::Starts(starts))
 }
 
-/// Queue the restores of the stopped agents and last sessions of the space
-/// `space` names, only `execution`'s when given, for the daemon to start at
-/// once, making `change` when given.
+/// Queue the restores of the stopped agents and last sessions of `space`,
+/// only `execution`'s when given, for the daemon to start at once, making
+/// `change` when given.
 async fn queue_now(
     paths: &CommandPaths,
-    space: &SpaceSelector,
+    space: Space,
     execution: Option<&ExecutionId>,
     change: Option<&PermissionChange>,
     resuming: &impl Resuming,
 ) -> Result<Queued> {
-    let space = space::present_space(paths, space).await?;
     let saved = space::saved(paths, &space, execution).await?;
     let stopped = vec![(space, saved)];
     queue::ensure_daemon_starts(paths, &stopped).await?;

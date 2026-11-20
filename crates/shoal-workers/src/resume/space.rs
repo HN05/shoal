@@ -12,8 +12,10 @@ use crate::{
     },
     config::permissions::PermissionChange,
     model::Space,
+    state::WorkspaceState,
 };
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::status::Inspection;
 
 /// What one space's stopped work comes to for a resume of it.
 pub enum Choice {
@@ -39,18 +41,17 @@ pub struct Restore {
     pub commands: Vec<SavedCommand>,
 }
 
-/// Choose the stopped agent of the space `selector` names to restore, the
-/// `execution` one when given, else its only one or one `resuming` picks,
-/// or else its last session, making `change` when given; one whose wrapper
-/// waits to restore it starts there at once.
+/// Choose the stopped agent of `space` to restore, the `execution` one when
+/// given, else its only one or one `resuming` picks, or else its last
+/// session, making `change` when given; one whose wrapper waits to restore
+/// it starts there at once.
 pub async fn choose(
     paths: &CommandPaths,
-    selector: &SpaceSelector,
+    space: Space,
     execution: Option<&ExecutionId>,
     change: Option<&PermissionChange>,
     resuming: &impl Resuming,
 ) -> Result<Choice> {
-    let space = present_space(paths, selector).await?;
     let mut saved = saved(paths, &space, execution).await?;
     if saved.agents.is_empty() && !saved.sessions.is_empty() {
         let picked = picker::select_agent(resuming, &saved.sessions, picker::session_label)?;
@@ -99,6 +100,35 @@ impl Restore {
     ) -> Result<Choice> {
         permissions::apply_one(paths, &self.space, &self.picked.id, change).await?;
         Ok(Choice::Restore(Box::new(self)))
+    }
+}
+
+/// Refuse `space` when it is a workspace whose setup failed or never
+/// started, naming `shoal setup`, which retries it before the agent waiting
+/// for it starts; a chat has no setup.
+pub async fn refuse_failed_setup(paths: &CommandPaths, space: &Space) -> Result<()> {
+    if !space.kind().has_worktree() {
+        return Ok(());
+    }
+    let inspection =
+        crate::client::workspaces::inspect(paths, SpaceSelector::id(&space.id)).await?;
+    ensure!(
+        !awaits_setup(&inspection),
+        "the setup of {} failed; retry it with `shoal setup {}`",
+        space.name,
+        space.number
+    );
+    Ok(())
+}
+
+/// Whether the inspected workspace waits for a retried setup: its setup
+/// failed, or never started and runs in no execution, as when the daemon
+/// refused it.
+fn awaits_setup(inspection: &Inspection) -> bool {
+    match inspection.workspace.state {
+        WorkspaceState::Failed => true,
+        WorkspaceState::Preparing => inspection.executions.is_empty(),
+        _ => false,
     }
 }
 
