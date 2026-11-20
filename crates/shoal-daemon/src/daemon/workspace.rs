@@ -41,7 +41,6 @@ use rusqlite::OptionalExtension;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::status::Inspection;
-use std::collections::HashSet;
 
 impl Manager {
     pub async fn list_workspaces(&self) -> Result<Vec<Workspace>> {
@@ -54,17 +53,6 @@ impl Manager {
         let root = root.cloned();
         self.store
             .run(move |db| workspaces_within(db, root.as_ref()))
-            .await
-    }
-
-    pub async fn workspace_ids(&self) -> Result<HashSet<SpaceId>> {
-        self.store
-            .run(|db| {
-                Ok(db
-                    .prepare("SELECT id FROM spaces WHERE kind='workspace'")?
-                    .query_map([], |row| row.get(0))?
-                    .collect::<rusqlite::Result<_>>()?)
-            })
             .await
     }
 

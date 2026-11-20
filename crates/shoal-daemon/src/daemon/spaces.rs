@@ -26,6 +26,14 @@ pub(crate) fn space_name(db: &rusqlite::Connection, id: &SpaceId) -> Result<Opti
         .optional()?)
 }
 
+/// The IDs of every space, a workspace's or a chat's.
+pub(crate) fn space_ids(db: &rusqlite::Connection) -> Result<std::collections::HashSet<SpaceId>> {
+    Ok(db
+        .prepare("SELECT id FROM spaces")?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// The IDs of the workspaces of `repository`, or of every workspace.
 pub(crate) fn workspace_ids(
     db: &rusqlite::Connection,

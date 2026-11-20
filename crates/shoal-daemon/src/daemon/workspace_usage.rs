@@ -1,6 +1,6 @@
-//! What each workspace's processes use, sampled on a fixed cadence, and at
-//! once when a workspace's containers start, from the processes carrying its
-//! identity, with what its containers use.
+//! What each space's processes use, a workspace's or a chat's, sampled on a
+//! fixed cadence, and at once when a workspace's containers start, from the
+//! processes carrying its identity, with what its containers use.
 use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::{HashMap, HashSet},
@@ -352,10 +352,12 @@ pub(super) async fn run(manager: Arc<Manager>) {
     }
 }
 
-/// The workspaces' processes, and those of `tracked` that have exited
+/// Every space's processes, and those of `tracked` that have exited
 /// unreaped, whose environment no scan can read.
 async fn sample(manager: &Manager, tracked: Vec<(SpaceId, Identity)>) -> Result<Sample> {
-    let ids = manager.workspace_ids().await?;
+    let ids = (manager.store)
+        .read(|db| crate::daemon::spaces::space_ids(db))
+        .await?;
     let running = identity::scan_workspaces(ids).await?;
     let found: HashSet<&Identity> = running.iter().map(|(_, identity)| identity).collect();
     let missed: Vec<_> = tracked
