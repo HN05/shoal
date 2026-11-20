@@ -135,3 +135,51 @@ async fn shutdown_stops_connected_executions_and_refuses_new_ones() {
         .unwrap();
     bounded(shutdown).await.unwrap();
 }
+
+/// An agent wrapper that a disconnected execution's process started, as a
+/// scoped `start --here` runs one, carries that execution's marker but is
+/// another execution's: the stop leaves it running and counts it as no
+/// survivor.
+#[tokio::test]
+async fn a_disconnected_stop_leaves_an_agent_wrapper_its_process_started() -> Result<()> {
+    let (_root, manager, workspace) = fixture("true").await;
+    let starter = manager
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .await?;
+    let id = starter.plan.id.clone();
+    let mut command = crate::daemon::test_support::marked_child();
+    command.env(crate::env::EXECUTION_ID, &id).process_group(0);
+    let mut wrapper = crate::daemon::test_support::spawn_marked_child(&mut command);
+    let identity = process::capture(wrapper.id().context("wrapper PID")?)?.context("wrapper")?;
+    let agent = manager
+        .begin_execution(
+            workspace.id.as_str(),
+            Some(identity.clone()),
+            ExecutionKind::Command,
+            None,
+        )
+        .await?;
+    let agent_id = agent.plan.id.clone();
+    (manager.store)
+        .run(move |db| {
+            db.execute(
+                "UPDATE executions SET agent='claude' WHERE id=?1",
+                [agent_id],
+            )?;
+            Ok(())
+        })
+        .await?;
+    let execution = (manager.workspace_executions(&workspace.id).await?)
+        .into_iter()
+        .find(|execution| execution.id == id)
+        .context("the starter's execution")?;
+
+    let stopped = (manager.stop_disconnected(&execution, StopPolicy::Acknowledged)).await;
+    let running = process::alive(&identity)?;
+    wrapper.kill().await?;
+    stopped?;
+    assert!(running);
+    let left = manager.workspace_executions(&workspace.id).await?;
+    assert!(left.iter().all(|execution| execution.id != id));
+    Ok(())
+}

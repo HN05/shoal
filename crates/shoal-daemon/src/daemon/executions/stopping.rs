@@ -12,7 +12,10 @@ use crate::{
     },
     fsutil::off_runtime,
     model::{Execution, PreparationWait, QueueEntry, Space, StoppedSpace, Workspace},
-    process::identity::{self as process, Identity},
+    process::{
+        execution::Processes,
+        identity::{self as process, Identity},
+    },
     protocol::{QueuedLaunches, timing},
     state::{ExecutionState, WorkspaceState},
 };
@@ -554,15 +557,14 @@ impl Manager {
         execution: &Execution,
         policy: StopPolicy,
     ) -> Result<()> {
-        let scan = process::scan(HashSet::from([execution.id.clone()])).await?;
-        let processes = self.inspect_execution(execution, &scan).await?;
+        let processes = self.execution_processes(execution).await?;
         processes.stop().await?;
-        let after = process::scan(HashSet::from([execution.id.clone()])).await?;
+        let after = self.execution_processes(execution).await?;
         ensure!(
-            after.processes.is_empty(),
+            after.owned.is_empty(),
             "processes of execution {} survived stopping: {}",
             execution.id,
-            pids(after.processes.iter().map(|process| &process.identity))
+            pids(&after.owned)
         );
         if policy == StopPolicy::ForRemoval {
             return Ok(());
@@ -573,7 +575,6 @@ impl Manager {
             execution.id,
             pids(&processes.group_candidates)
         );
-        let after = self.inspect_execution(execution, &after).await?;
         ensure!(
             !after.has_survivors(),
             "execution {} still has processes after stopping; check them, then run shoal stop again",
@@ -595,6 +596,14 @@ impl Manager {
             self.ensure_directory_unused(&execution.space_id).await?;
         }
         self.forget_execution(&execution.id).await
+    }
+
+    /// The processes of `execution` now. What runs below another
+    /// execution's agent wrapper, such as the agent a `start --here` among
+    /// them runs, is that agent's, though it carries this execution's marker.
+    async fn execution_processes(&self, execution: &Execution) -> Result<Processes> {
+        let scan = process::scan(HashSet::from([execution.id.clone()])).await?;
+        self.inspect_execution(execution, &scan).await
     }
 
     /// Fail while processes use the worktree of the space `id`: an
