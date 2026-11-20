@@ -4373,8 +4373,9 @@ mergeable. An
 unfiltered watch without a linked PR runs the `conflicts` check on each poll as a
 cursor item named by the branch, so work without a PR still learns of conflicts. It
 leaves out conflicts with a target that already has HEAD's changes, as merged cleanup
-decides, since merging could only repeat them, and those of a completion marked
-integrated at HEAD; `conflicts` still reports them. A
+decides, since merging could only repeat them; `conflicts` still reports them. Once
+the assignment is done, neither the watch nor the background poll checks the branch:
+the work is finished, and a failed check would only wake its agent. A
 linked PR leaves ordinary conflicts to the forge, avoiding duplicate reports, and
 the watch and the background poll check the branch beside it only for files
 changed on both sides, which no forge reports, and only where the repository

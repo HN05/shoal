@@ -2792,6 +2792,56 @@ async fn a_stalled_worktree_fails_the_background_branch_check_at_once() {
 }
 
 #[tokio::test]
+async fn a_done_workspace_checks_its_branch_no_more() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "finished".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .write_local_config(&repo.id, Some("[cleanup.done]\nenabled = false\n".into()))
+        .await
+        .unwrap();
+    register_watch(&manager, &workspace.id, PR.as_str()).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    manager
+        .mark_space_done(&selector, Done::default(), &Attacher::User)
+        .await
+        .unwrap();
+    // A stalled worktree would fail the check, waking the agent.
+    tokio::time::pause();
+    let stalled = manager
+        .file_access
+        .checked(
+            &manager.notifications,
+            &workspace.path,
+            std::future::pending::<Result<()>>(),
+        )
+        .await;
+    tokio::time::resume();
+    assert!(stalled.is_err());
+
+    let space = manager.link_space(&selector).await.unwrap();
+    let _ = manager.poll_space_item_activity(&space).await;
+    let queued = manager
+        .queued_updates(&Space::from(workspace.clone()), None)
+        .await
+        .unwrap();
+    let branch = workspace.branch().map(BranchName::as_str);
+    assert!(
+        !queued
+            .iter()
+            .any(|update| Some(update.url.as_str()) == branch),
+        "{queued:?}"
+    );
+}
+
+#[tokio::test]
 async fn branch_conflicts_with_a_target_that_has_heads_changes_are_not_reported() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");

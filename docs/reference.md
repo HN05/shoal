@@ -4880,8 +4880,7 @@ false. It first stops the space's [demos](#demos) unless `--keep-demos` leaves
 them running until cleanup. `--integrated` records that another branch has the
 work under new commits, as after a cherry-pick or a rebase that edited them: until
 HEAD moves, commits no remote or default branch has no longer keep the workspace
-from completion cleanup, and the [watch](#linked-items-and-cleanup) stops reporting its
-branch conflicts. Uncommitted files still keep it, and removal keeps its branch.
+from completion cleanup. Uncommitted files still keep it, and removal keeps its branch.
 `status` shows it as integrated elsewhere. `--attach FILE`, repeated for up to
 64 files, hands back files such as a report: Shoal copies each, of at most 100 MiB, into
 the workspace's [attached files](#attached-files) as a result, the completion
@@ -5956,11 +5955,12 @@ persists across new ones.
 An unfiltered `shoal watch` without a linked PR also returns when the workspace
 branch newly conflicts with the default target of `shoal conflicts`, naming the
 branch and the conflicted paths, unless that target already has HEAD's changes as
-[removal](#remove-a-space) decides merges or the assignment is done at HEAD
-with `--integrated`; with nothing linked, it waits for that alone. With a linked
+[removal](#remove-a-space) decides merges; with nothing linked, it waits for that
+alone. With a linked
 PR, whose forge reports its conflicts, the watch and the agent's deliveries
 report only the files [changed on both sides](#conflicts), such as
-`Changed on both sides with main: src/version.rs`.
+`Changed on both sides with main: src/version.rs`. Once the assignment is done,
+its work is finished and the branch is checked no more.
 A new [alert](#alerts) ends a watch at once, ahead of item
 activity, even when the watch would otherwise fail for lack of linked items.
 Each update includes its item URL, kind and message; a comment update counts the

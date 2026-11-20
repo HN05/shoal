@@ -106,7 +106,7 @@ impl Manager {
         let items = self.item_activity(items, selection).await;
         let mut observations = Vec::new();
         if let Some(branch) = branch {
-            observations.extend(self.branch_observation(id, branch, report).await);
+            observations.extend(self.branch_observation(&space, branch, report).await);
         }
         match items {
             Ok(items) => {
@@ -148,18 +148,23 @@ impl Manager {
         self.fit_response(own_batch(id, updates), 0).await
     }
 
-    /// The local check of the workspace `id`'s `branch` as `report` keeps
-    /// it, or none when it could report nothing: a linked PR leaves conflicts
-    /// to the forge, and the repository lists no sensitive files.
+    /// The local check of the workspace `space`'s `branch` as `report` keeps
+    /// it, or none when it could report nothing: its assignment is done, so
+    /// its work is finished and a failed check must not wake its agent, or a
+    /// linked PR leaves conflicts to the forge and the repository lists no
+    /// sensitive files.
     pub(super) async fn branch_observation(
         &self,
-        id: &SpaceId,
+        space: &LinkSpace,
         branch: String,
         report: BranchReport,
     ) -> Option<(String, Snapshot)> {
+        if space.done() {
+            return None;
+        }
         let only_sensitive = report == BranchReport::ChangedOnBothSides;
         let check = self
-            .watched_conflicts(&SpaceSelector::id(id), only_sensitive)
+            .watched_conflicts(&SpaceSelector::id(&space.id), only_sensitive)
             .await;
         Some((branch, branch_conflicts(check.transpose()?, report)))
     }

@@ -119,7 +119,7 @@ impl Manager {
         let branch = space
             .branch()
             .filter(|_| report == BranchReport::ChangedOnBothSides)?;
-        self.branch_observation(&space.id, branch.to_owned(), report)
+        self.branch_observation(space, branch.to_owned(), report)
             .await
     }
 

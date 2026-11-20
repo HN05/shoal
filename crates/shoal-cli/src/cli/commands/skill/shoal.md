@@ -640,7 +640,7 @@ failures.
 
 `--integrated <workspace>` records that another branch has that workspace's
 work under new commits: until its HEAD moves, its unpushed commits no longer
-keep it, and its conflict watch stops. `--undo` withdraws a recorded
+keep it. `--undo` withdraws a recorded
 completion; associations and watches stay, closed questions stay closed, and
 cleanup proceeds as if `done` had not run.
 
@@ -720,7 +720,8 @@ otherwise the local default branch, or the branch named, without touching the
 worktree; exit 1 lists the conflicting paths. It also lists a file the
 repository marks as holding a number each change picks, such as a migration,
 under "Changed on both sides" when both branches changed it. Without a watched
-PR, the watch reports a `merge_conflict` when the check newly fails.
+PR, the watch reports a `merge_conflict` when the check newly fails, until the
+space is done.
 `branch base set` records that a workspace builds on another's branch.
 `branch ls` lists the forge's branches of the space's repository, or the one
 `--repo` names, with each one's head commit and date, whether it is the
