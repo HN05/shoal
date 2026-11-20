@@ -919,6 +919,11 @@ CREATE TABLE space_moves (
     created_at INTEGER NOT NULL
 );
 
+CREATE TABLE hub_move_fences (
+    ticket TEXT PRIMARY KEY,
+    settled_at INTEGER NOT NULL
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);

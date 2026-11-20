@@ -37,6 +37,7 @@
 use serde::{Deserialize, Serialize};
 use shoal_ids::{
     member_ids::MemberId,
+    move_tickets::MoveTicket,
     space_ids::{SpaceId, SpaceNumber},
 };
 use shoal_states::states;
@@ -338,9 +339,25 @@ pub enum Call {
     Owner { space: SpaceId },
     /// A machine's claim of the space `space`, which it imports as another
     /// machine moves it here: its report of the space takes the ID over.
-    /// Answered with [`Reply::Claimed`] and the number the space keeps, if
-    /// the hub lists it.
-    Claim { space: SpaceId },
+    /// One that carries the `ticket` of a move through the hub is refused
+    /// once that move's source settled it unclaimed. Answered with
+    /// [`Reply::Claimed`] and the number the space keeps, if the hub lists
+    /// it.
+    Claim {
+        space: SpaceId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ticket: Option<MoveTicket>,
+    },
+    /// The source's settling of its move `ticket` of the space `space` to
+    /// the machine `machine`, once it cannot learn from that machine
+    /// whether the move arrived. Answered with [`Reply::Settled`]: whether
+    /// that machine claimed the space or owns it; when it did not, its
+    /// claims that carry the ticket are refused from then on.
+    Settle {
+        space: SpaceId,
+        machine: MemberId,
+        ticket: MoveTicket,
+    },
     /// A request for a space the machine `machine` owns, which the hub
     /// passes to it, or answers itself for its own machine; a device's goes
     /// as the user's, whatever it vouches. Answered with
@@ -406,6 +423,7 @@ pub enum Reply {
     Directory(Directory),
     Owner(Option<super::Member>),
     Claimed(Option<SpaceNumber>),
+    Settled(bool),
     Answered(Answered),
     /// The answer goes on the stream the call named.
     Streaming,

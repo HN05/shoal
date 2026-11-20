@@ -99,9 +99,18 @@ impl Hub {
                         .await?,
                 )
             }
-            Call::Claim { space } => {
+            Call::Claim { space, ticket } => {
                 ensure_machine(member)?;
-                Reply::Claimed(self.record_space_claim(&member.id, &space).await?)
+                let ticket = ticket.as_ref();
+                Reply::Claimed(self.record_space_claim(&member.id, &space, ticket).await?)
+            }
+            Call::Settle {
+                space,
+                machine,
+                ticket,
+            } => {
+                ensure_machine(member)?;
+                Reply::Settled(self.record_settled_move(&space, &machine, &ticket).await?)
             }
             Call::Describe { description } => {
                 ensure_machine(member)?;

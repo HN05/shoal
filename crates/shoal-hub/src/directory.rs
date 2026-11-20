@@ -5,6 +5,7 @@ use anyhow::Result;
 use shoal_daemon_base::notifications::About;
 use shoal_ids::{
     member_ids::MemberId,
+    move_tickets::MoveTicket,
     space_ids::{SpaceId, SpaceNumber},
 };
 use shoal_protocol::alerts::AlertKind;
@@ -16,6 +17,7 @@ use shoal_protocol::hub::{
 
 use crate::{Hub, daemon::Daemon};
 
+mod fences;
 mod numbers;
 mod records;
 
@@ -67,18 +69,38 @@ impl Hub {
 
     /// Record that the machine `member` claims the space `id`, which it
     /// imports as another machine moves it there, and return the number
-    /// the space keeps there, if the directory lists it.
+    /// the space keeps there, if the directory lists it; refused for the
+    /// `ticket` of a move through the hub that its source settled.
     pub(super) async fn record_space_claim(
         &self,
         member: &MemberId,
         id: &SpaceId,
+        ticket: Option<&MoveTicket>,
     ) -> Result<Option<SpaceNumber>> {
-        let (member, id) = (member.clone(), id.clone());
+        let (member, id, ticket) = (member.clone(), id.clone(), ticket.cloned());
         self.store
             .write(move |tx| {
+                if let Some(ticket) = &ticket {
+                    fences::ensure_unsettled(tx, ticket)?;
+                }
                 records::claim(tx, &member, &id)?;
                 numbers::keep_for_claim(tx, &member, &id)
             })
+            .await
+    }
+
+    /// Settle the move `ticket` of the space `id` to the machine `member`:
+    /// whether that machine claimed it; when not, its later claims with the
+    /// ticket are refused.
+    pub(super) async fn record_settled_move(
+        &self,
+        id: &SpaceId,
+        member: &MemberId,
+        ticket: &MoveTicket,
+    ) -> Result<bool> {
+        let (id, member, ticket) = (id.clone(), member.clone(), ticket.clone());
+        (self.store)
+            .write(move |tx| fences::settle(tx, &id, &member, &ticket))
             .await
     }
 

@@ -196,7 +196,7 @@ pub(super) fn owner_seen_by(
 }
 
 /// Whether `member` claims the space `id`.
-fn claimed_by(tx: &Transaction<'_>, id: &SpaceId, member: &MemberId) -> Result<bool> {
+pub(super) fn claimed_by(tx: &Transaction<'_>, id: &SpaceId, member: &MemberId) -> Result<bool> {
     Ok(tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM hub_space_claims WHERE space_id=?1 AND member_id=?2)",
         params![id, member],
