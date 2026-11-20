@@ -8,7 +8,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_links::pr::current_head;
 use shoal_refs::{BranchName, CommitId};
 
-use super::{pr::RegistrationKind, wait};
+use super::pr::RegistrationKind;
 use crate::{
     daemon::{agent_messages, manager::Manager, workspace::record_base_changed},
     forge::{
@@ -422,20 +422,20 @@ fn record_restack(tx: &rusqlite::Transaction<'_>, stacked: &Stacked, tell: Tell)
     }
     record_base_changed(tx, id, stacked.cause)?;
     for update in updates {
-        wait::queue_update(tx, id, update)?;
+        shoal_links::wait::changes::queue_update(tx, id, update)?;
     }
     if let Some(message) = message {
         let kind = crate::daemon::alerts::AlertKind::BaseChanged;
         agent_messages::queue_shoal_message(tx, id, kind, &message)?;
     }
     for (url, edited) in retargeted {
-        let change = wait::OwnChange {
+        let change = shoal_links::wait::changes::OwnChange {
             url: url.url(),
             authored: Vec::new(),
             state: None,
             edited,
         };
-        wait::record_own_change(tx, id, change)?;
+        shoal_links::wait::changes::record_own_change(tx, id, change)?;
     }
     Ok(())
 }

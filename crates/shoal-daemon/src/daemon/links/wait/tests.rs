@@ -8,6 +8,7 @@ use std::{
 use anyhow::Result;
 use rusqlite::params;
 use serde_json::{Value, json};
+use shoal_links::wait::changes::{OwnChange, queue_update, record_own_change};
 
 use super::{
     branch_report::{BranchReport, branch_conflicts},

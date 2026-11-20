@@ -8,13 +8,13 @@
 //! cursors keep it for a later sweep.
 use anyhow::Result;
 
-use super::activity::acknowledge_deliveries;
 use crate::{
     daemon::{agent_messages::MAX_UNREAD_BYTES, hub::Event, log, manager::Manager},
     forge::updates::Update,
     model::SpaceRef,
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::wait::changes::acknowledge_deliveries;
 use shoal_protocol::validate::shorten;
 
 /// The bytes one event of a space's activity may take: a share of what a

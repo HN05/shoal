@@ -1,7 +1,6 @@
 //! What links check of a space in their own transactions.
 use anyhow::Result;
 use rusqlite::Connection;
-use shoal_forge::updates::Edited;
 use shoal_ids::space_ids::SpaceId;
 use shoal_links::daemon::Records;
 
@@ -19,9 +18,5 @@ impl Records for LinkRecords {
 
     fn require_ready_space(&self, db: &Connection, id: &SpaceId) -> Result<()> {
         super::space::require_ready_space(db, id)
-    }
-
-    fn record_shoal_change(&self, db: &Connection, url: &str, edited: &Edited) -> Result<()> {
-        super::wait::record_shoal_change(db, url, edited)
     }
 }

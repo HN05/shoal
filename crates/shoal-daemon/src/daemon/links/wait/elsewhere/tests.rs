@@ -1,10 +1,7 @@
 use anyhow::Result;
 use serde_json::json;
 
-use super::super::{
-    activity::queue_update,
-    tests::{CHILD_PR, GRANDCHILD_PR},
-};
+use super::super::tests::{CHILD_PR, GRANDCHILD_PR};
 use super::{super::test_support::register_watch, EVENT_LIMIT};
 use crate::{
     daemon::{
@@ -16,6 +13,7 @@ use crate::{
     state::AgentState,
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::wait::changes::queue_update;
 use shoal_protocol::{
     hub::{link::Call, routing::Told},
     space_names::SpaceSelector,

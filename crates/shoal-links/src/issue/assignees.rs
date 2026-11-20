@@ -19,7 +19,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::model::{Assigner, IssueAssignee};
 
-use crate::{Links, daemon::Daemon};
+use crate::{Links, daemon::Daemon, wait::changes::record_shoal_change};
 
 /// Who a caller assigns an issue to a space as.
 pub trait AssignerOf {
@@ -164,9 +164,9 @@ impl Links {
         if edited.is_empty() {
             return;
         }
-        let (issue, records) = (url.clone(), self.records.clone());
+        let issue = url.clone();
         let recorded = (self.store)
-            .write(move |tx| records.record_shoal_change(tx, issue.url(), &edited))
+            .write(move |tx| record_shoal_change(tx, issue.url(), &edited))
             .await;
         if let Err(error) = recorded {
             log!("Shoal's assignee change of {url} not recorded: {error:#}");

@@ -7,13 +7,10 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_links::issue::assignees::AssignerOf;
 use shoal_links::place::{Access, Place};
 use shoal_links::space::LinkSpace;
+use shoal_links::wait::changes::OwnChange;
 use shoal_refs::BranchName;
 
-use super::{
-    issue::Assigner,
-    proposals::OpenOutcome,
-    wait::{OwnChange, record_received_change},
-};
+use super::{issue::Assigner, proposals::OpenOutcome, wait::record_received_change};
 use crate::{
     config::{permissions::Opening, resolve::Effective},
     daemon::{events, manager::Manager, scope::Caller},

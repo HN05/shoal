@@ -5,24 +5,21 @@ use rusqlite::OptionalExtension;
 
 use super::{
     branch_report::{BranchReport, branch_report, watches_branch},
-    cursor::{
-        all_pending, cursor_record, cursor_spaces, pending_updates, save_cursor_record,
-        save_pending,
-    },
+    cursor::{cursor_record, save_cursor_record},
     items::{NO_LINKED_ITEMS, followed_items, links_kind},
     merge_runs::{MergeTarget, follow_reported_merge},
     start::PollStart,
 };
 use crate::{
     daemon::{links::space::require_ready_space, manager::Manager},
-    forge::{
-        items::{item::ItemState, link::Selection},
-        updates::Update,
-    },
+    forge::{items::link::Selection, updates::Update},
     time::UnixTime,
 };
-use shoal_forge::updates::{Edited, Snapshot};
+use shoal_forge::updates::Snapshot;
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::wait::changes::{
+    OwnChange, acknowledge_deliveries, pending_on_cursor, record_own_change,
+};
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
@@ -221,54 +218,6 @@ fn checked_branch(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<Stri
         .flatten())
 }
 
-/// A change the workspace's agent made to `url` through Shoal, which its
-/// watches do not report back: the comments, replies or reviews it posted,
-/// the state it set and the details it edited.
-#[derive(Clone)]
-pub(crate) struct OwnChange<'a> {
-    pub url: &'a str,
-    pub authored: Vec<String>,
-    pub state: Option<ItemState>,
-    pub edited: Edited,
-}
-
-/// Record `change` on the workspace's cursor. The caller holds the workspace's
-/// PR gate from before the change, so no poll that observed it can record it
-/// first.
-pub(crate) fn record_own_change(
-    db: &rusqlite::Connection,
-    workspace_id: &SpaceId,
-    change: OwnChange<'_>,
-) -> Result<()> {
-    let mut record = cursor_record(db, workspace_id, change.url)?.unwrap_or_default();
-    record.adopt_own_change(change.authored, change.state, &change.edited);
-    save_cursor_record(db, workspace_id, change.url, &record)
-}
-
-/// Record `edited`, a change Shoal made to the item at `url` on its own,
-/// such as an assignee it added, on every space's cursor of the item, so
-/// no watch reports it. The caller holds the gate a poll checks for such a
-/// change from before it.
-pub(in crate::daemon::links) fn record_shoal_change(
-    db: &rusqlite::Connection,
-    url: &str,
-    edited: &Edited,
-) -> Result<()> {
-    if edited.is_empty() {
-        return Ok(());
-    }
-    for id in cursor_spaces(db, url)? {
-        let change = OwnChange {
-            url,
-            authored: Vec::new(),
-            state: None,
-            edited: edited.clone(),
-        };
-        record_own_change(db, &id, change)?;
-    }
-    Ok(())
-}
-
 /// Record `change`, which the space `id` made, on its cursor and on those of
 /// the spaces below it whose activity its agent receives and that follow the
 /// item, so none of its deliveries reports the change back. A space below
@@ -293,48 +242,4 @@ pub(super) fn follows(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Res
     Ok(followed_items(db, id, None)?
         .iter()
         .any(|followed| followed.url() == url))
-}
-
-/// Queue an update for the workspace's next watch of `update.url`, ahead of
-/// newly observed activity.
-pub(in crate::daemon::links) fn queue_update(
-    db: &rusqlite::Connection,
-    workspace_id: &SpaceId,
-    update: Update,
-) -> Result<()> {
-    let mut pending = pending_updates(db, workspace_id, &update.url)?;
-    let url = update.url.clone();
-    pending.push(update);
-    save_pending(db, workspace_id, &url, &pending)
-}
-
-/// Remove `deliveries` from the pending updates of the workspaces `ids`;
-/// updates queued after them stay pending.
-pub(super) fn acknowledge_deliveries(
-    db: &rusqlite::Connection,
-    ids: &[SpaceId],
-    deliveries: &[String],
-) -> Result<()> {
-    for (id, url, mut pending) in all_pending(db, ids)? {
-        let count = pending.len();
-        pending.retain(|update| !deliveries.contains(&update.delivery));
-        if pending.len() != count {
-            save_pending(db, &id, &url, &pending)?;
-        }
-    }
-    Ok(())
-}
-
-/// The updates pending on the cursor of the space `id` for the items at
-/// `urls`.
-fn pending_on_cursor(
-    db: &rusqlite::Connection,
-    id: &SpaceId,
-    urls: &[String],
-) -> Result<Vec<Update>> {
-    Ok(all_pending(db, std::slice::from_ref(id))?
-        .into_iter()
-        .filter(|(_, url, _)| urls.contains(url))
-        .flat_map(|(_, _, pending)| pending)
-        .collect())
 }
