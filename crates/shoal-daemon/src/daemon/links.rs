@@ -39,13 +39,7 @@ use shoal_links::space::LinkSpace;
 use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
-    daemon::{
-        events::{self, EventKind},
-        links::pr::Action,
-        manager::Manager,
-        ready_marks,
-        scope::Caller,
-    },
+    daemon::{links::pr::Action, manager::Manager, scope::Caller},
     forge::items::{
         link::{ItemKind, LinkKind},
         reference::{ItemInput, ItemRef},
@@ -352,23 +346,6 @@ fn nothing(kind: Option<LinkKind>) -> String {
         Some(kind) => format!("no {kind} is"),
         None => "nothing is".into(),
     }
-}
-
-/// Drop what assigned items kept while linked, their replay cursors and review
-/// marks, and journal each as unlinked.
-pub(crate) fn forget_assigned(
-    db: &Connection,
-    id: &SpaceId,
-    kind: ItemKind,
-    urls: &[ItemRef],
-) -> Result<()> {
-    let urls: Vec<String> = urls.iter().map(ToString::to_string).collect();
-    shoal_links::records::forget_activity(db, id, &urls)?;
-    ready_marks::forget(db, id, &urls)?;
-    for url in &urls {
-        events::record_link(db, id, EventKind::Unlinked, Relation::Assigned, kind, url)?;
-    }
-    Ok(())
 }
 
 /// Refuse changes while the workspace is removed or otherwise in transition,

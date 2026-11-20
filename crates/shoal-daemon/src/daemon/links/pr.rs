@@ -107,8 +107,9 @@ impl Manager {
             titled,
         );
         let (id, added) = (space.id.to_owned(), change.added.clone());
+        let links = self.links.clone();
         (self.store)
-            .write(move |tx| record_change(tx, &id, change))
+            .write(move |tx| record_change(&links, tx, &id, change))
             .await?;
         self.start_linked_watches_gated(&space.id, added).await;
         self.signals.wake_cleanup();
@@ -503,8 +504,8 @@ impl RegistrationChange {
     /// replaces the PR's opened or related link, and every watch added or
     /// dropped is journaled as an assigned PR link change. A title the caller
     /// knows replaces the recorded one.
-    fn apply(&self, db: &Connection, id: &SpaceId) -> Result<()> {
-        super::forget_assigned(db, id, ItemKind::Pr, &self.removed)?;
+    fn apply(&self, links: &shoal_links::Links, db: &Connection, id: &SpaceId) -> Result<()> {
+        links.forget_assigned(db, id, ItemKind::Pr, &self.removed)?;
         titles::forget(db, id, &self.removed)?;
         store_registration(db, id, self.registration.as_ref())?;
         for url in &self.added {
@@ -609,12 +610,13 @@ pub(crate) fn origin<'a>(
 /// that finds it ready: a removed space has no registration to change, and
 /// writing one would outlive it.
 fn record_change(
+    links: &shoal_links::Links,
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
     change: RegistrationChange,
 ) -> Result<()> {
     require_ready_space(tx, id)?;
-    change.apply(tx, id)
+    change.apply(links, tx, id)
 }
 
 #[cfg(test)]

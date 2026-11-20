@@ -4,7 +4,10 @@
 use anyhow::{Result, bail, ensure};
 use rusqlite::Connection;
 use shoal_daemon_base::events::{self, EventKind};
-use shoal_forge_types::items::link::LinkKind;
+use shoal_forge_types::items::{
+    link::{ItemKind, LinkKind},
+    reference::ItemRef,
+};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::Relation;
 
@@ -126,5 +129,23 @@ impl Links {
         let urls: Vec<String> = removed.into_iter().map(|(_, url)| url).collect();
         forget_activity(db, id, &urls)?;
         Ok(urls.len())
+    }
+
+    /// Drop what assigned items kept while linked, their replay cursors and review
+    /// marks, and journal each as unlinked.
+    pub fn forget_assigned(
+        &self,
+        db: &Connection,
+        id: &SpaceId,
+        kind: ItemKind,
+        urls: &[ItemRef],
+    ) -> Result<()> {
+        let urls: Vec<String> = urls.iter().map(ToString::to_string).collect();
+        forget_activity(db, id, &urls)?;
+        self.records.forget_ready_marks(db, id, &urls)?;
+        for url in &urls {
+            events::record_link(db, id, EventKind::Unlinked, Relation::Assigned, kind, url)?;
+        }
+        Ok(())
     }
 }

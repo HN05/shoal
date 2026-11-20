@@ -3,6 +3,7 @@ use crate::{
     daemon::test_support::{git, manager, repository},
     model::LinkedItem,
 };
+use shoal_daemon_base::events::EventKind;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::events::{EventItem, LinkEvent};
 use shoal_protocol::space_names::SpaceSelector;

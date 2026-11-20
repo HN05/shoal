@@ -1,11 +1,10 @@
 //! Persist issue associations.
-use crate::refusal::{Reason, Refusal};
 use shoal_ids::space_ids::SpaceId;
 use shoal_links::space::LinkSpace;
 use shoal_protocol::space_names::SpaceSelector;
 use std::path::Path;
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use rusqlite::Connection;
 
 pub(crate) mod agent_settles;
@@ -14,14 +13,11 @@ mod assignees;
 
 pub(crate) use crate::model::{Assigner, IssueAssignee};
 use crate::{
-    daemon::{
-        events::{self, EventKind},
-        manager::Manager,
-    },
+    daemon::manager::Manager,
     forge::{
         ForgeRepo,
         items::{
-            link::{ItemKind, LinkKind},
+            link::LinkKind,
             reference::{ItemInput, ItemRef},
         },
     },
@@ -134,9 +130,9 @@ impl Manager {
         title: Option<String>,
         assigner: Assigner,
     ) -> Result<bool> {
-        let (id, url) = (id.to_owned(), url.clone());
+        let (id, url, links) = (id.to_owned(), url.clone(), self.links.clone());
         self.store
-            .write(move |tx| assign(tx, &id, url.url(), title.as_deref(), assigner))
+            .write(move |tx| links.assign(tx, &id, url.url(), title.as_deref(), assigner))
             .await
     }
 
@@ -155,9 +151,10 @@ impl Manager {
             Some(input) => Some(self.issue_forge(space.origin_path(), input).await?.1),
             None => None,
         };
+        let links = self.links.clone();
         let (removed, dropped) = self
             .store
-            .write(move |tx| unlink(tx, &id, selected.as_ref().map(ItemRef::url)))
+            .write(move |tx| links.unlink(tx, &id, selected.as_ref().map(ItemRef::url)))
             .await?;
         self.signals.wake_cleanup();
         let mut warnings = self.release_assignees(dropped).await;
@@ -216,73 +213,6 @@ impl Manager {
         let issue = ItemRef::in_repository(&forge, LinkKind::Issue, input)?;
         Ok((forge, issue))
     }
-}
-
-/// Assign an issue within the caller's transaction, after those already
-/// assigned and in place of its opened or related link, retaining a known
-/// title when none is supplied and recording only a new association as
-/// linked. Once an agent assigns it, it stays an agent's. Returns whether
-/// the forge has yet to show the link: no assignee is recorded for it, as
-/// for a new one or one whose assignment failed.
-fn assign(
-    db: &Connection,
-    id: &SpaceId,
-    url: &str,
-    title: Option<&str>,
-    assigner: Assigner,
-) -> Result<bool> {
-    crate::daemon::links::ensure_accepts_links(db, id)?;
-    let assigned = shoal_links::linked::assigned_urls(db, id)?
-        .iter()
-        .any(|issue| issue.url() == url);
-    let assignee: Option<String> = db.query_row(
-        "INSERT INTO space_issue(space_id,url,title,linked_by) VALUES (?1,?2,?3,?4)
-         ON CONFLICT(space_id,url) DO UPDATE SET title=COALESCE(excluded.title,title),
-            linked_by=CASE WHEN excluded.linked_by=?5 THEN ?5 ELSE linked_by END
-         RETURNING assignee",
-        rusqlite::params![id, url, title, assigner, Assigner::Agent],
-        |row| row.get(0),
-    )?;
-    if !assigned {
-        shoal_links::records::drop_recorded(db, id, url, None)?;
-        events::record_link(
-            db,
-            id,
-            EventKind::Linked,
-            crate::model::Relation::Assigned,
-            ItemKind::Issue,
-            url,
-        )?;
-    }
-    Ok(assignee.is_none())
-}
-
-/// Remove the space's issue `selected` names, which must be assigned, or
-/// else every assigned issue, along with what their links kept, returning
-/// the issues removed and the user's assignees the space stood for.
-fn unlink(
-    db: &Connection,
-    id: &SpaceId,
-    selected: Option<&str>,
-) -> Result<(Vec<ItemRef>, Vec<Dropped>)> {
-    crate::daemon::links::ensure_accepts_links(db, id)?;
-    let mut removed = shoal_links::linked::assigned_urls(db, id)?;
-    if let Some(url) = selected {
-        removed.retain(|issue| issue.url() == url);
-        ensure!(
-            !removed.is_empty(),
-            Refusal::new(Reason::NotFound, format!("issue is not linked: {url}"))
-        );
-    }
-    super::forget_assigned(db, id, ItemKind::Issue, &removed)?;
-    let dropped = assignee_records::dropped(db, id, &removed)?;
-    for url in &removed {
-        db.execute(
-            "DELETE FROM space_issue WHERE space_id=?1 AND url=?2",
-            rusqlite::params![id, url.url()],
-        )?;
-    }
-    Ok((removed, dropped))
 }
 
 /// The user's assignees the space `id` stands for on every issue it links
