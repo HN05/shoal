@@ -29,3 +29,10 @@ fn a_device_s_launch_goes_to_the_machine_it_names_else_the_default() {
         None
     );
 }
+
+#[test]
+fn a_device_s_read_of_a_launch_s_modes_goes_where_the_launch_would() {
+    let mut modes = json!({"launch_modes": {"launch": {}}});
+    let target = launch_machine(&mut modes, Some("desk".into())).unwrap();
+    assert_eq!(target.as_deref(), Some("desk"));
+}

@@ -263,7 +263,7 @@ below another machine's space, on whichever machine, in a repository that
 machine has not registered, clones the URL of its origin, which the
 parent's machine reports to the hub beside the key repositories match by,
 and reads its modes under the config that repository tracks, which the
-parent's machine reads for it. A device's start, which is on no machine, goes to the machine its launch
+parent's machine reads for it. A device's start, which is on no machine, and its read of the modes it may start in go to the machine its launch
 names, else to the hub's `[machine.hub] default_machine`, else to the
 machine the device sent it to. The space tree may span
 machines, as when a space moves without its parent or starts elsewhere: what a space passes up reaches the nearest space

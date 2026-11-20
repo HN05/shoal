@@ -236,18 +236,25 @@ impl Hub {
     }
 }
 
-/// The machine the launch `method` names, taken from it, else `default`;
-/// none for any other request.
+/// The machine the launch `method` names, or the read of the modes it
+/// starts in, which goes where the launch would, taken from it, else
+/// `default`; none for any other request.
 fn launch_machine(
     method: &mut serde_json::Value,
     default: Option<String>,
 ) -> Result<Option<String>> {
     let parsed = serde_json::from_value::<Operation>(method.clone());
-    let Ok(Operation::Launch(LaunchMethod::Launch { mut launch })) = parsed else {
-        return Ok(None);
+    let (mut launch, rebuilt): (_, fn(_) -> LaunchMethod) = match parsed {
+        Ok(Operation::Launch(LaunchMethod::Launch { launch })) => {
+            (launch, |launch| LaunchMethod::Launch { launch })
+        }
+        Ok(Operation::Launch(LaunchMethod::LaunchModes { launch })) => {
+            (launch, |launch| LaunchMethod::LaunchModes { launch })
+        }
+        _ => return Ok(None),
     };
     let named = launch.machine.take().or(default);
-    *method = serde_json::to_value(Operation::Launch(LaunchMethod::Launch { launch }))?;
+    *method = serde_json::to_value(Operation::Launch(rebuilt(launch)))?;
     Ok(named)
 }
 
