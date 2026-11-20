@@ -20,14 +20,16 @@ use super::{
 use crate::daemon::{manager::Manager, scope::Caller};
 
 /// Mark the current turn of the agent `execution` runs as posting in the
-/// thread `thread` in its conversation, or clear the mark without one;
-/// whether that changed the mark.
-fn set_mark(db: &Connection, execution: &ExecutionId, thread: Option<i64>) -> Result<bool> {
-    let changed = db.execute(
-        "UPDATE executions SET chat_thread=?2 WHERE id=?1 AND chat_thread IS NOT ?2",
-        params![execution, thread],
-    )?;
-    Ok(changed > 0)
+/// thread `thread` in its conversation, or clear the mark without one.
+fn set_mark(db: &Connection, execution: &ExecutionId, thread: Option<i64>) -> Result<()> {
+    match thread {
+        Some(thread) => db.execute(
+            "INSERT OR REPLACE INTO chat_marks(execution_id,thread_id) VALUES (?1,?2)",
+            params![execution, thread],
+        )?,
+        None => db.execute("DELETE FROM chat_marks WHERE execution_id=?1", [execution])?,
+    };
+    Ok(())
 }
 
 /// Clear the mark of the turn of the agent `execution` runs, returning the
@@ -35,7 +37,7 @@ fn set_mark(db: &Connection, execution: &ExecutionId, thread: Option<i64>) -> Re
 fn take_mark(tx: &Transaction<'_>, execution: &ExecutionId) -> Result<Option<i64>> {
     let thread: Option<i64> = tx
         .query_row(
-            "SELECT chat_thread FROM executions WHERE id=?1",
+            "SELECT thread_id FROM chat_marks WHERE execution_id=?1",
             [execution],
             |row| row.get(0),
         )

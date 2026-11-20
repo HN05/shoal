@@ -8,7 +8,7 @@ CREATE TABLE repositories (
 
 CREATE TABLE executions (
             id TEXT PRIMARY KEY, space_id TEXT NOT NULL, state TEXT NOT NULL
-        , wrapper TEXT, child TEXT, group_id INTEGER, scope_token TEXT, origin TEXT, agent TEXT, agent_execution TEXT, model TEXT, effort TEXT, mode TEXT, narrowing TEXT, chat_thread INTEGER REFERENCES threads(id) ON DELETE SET NULL);
+        , wrapper TEXT, child TEXT, group_id INTEGER, scope_token TEXT, origin TEXT, agent TEXT, agent_execution TEXT, model TEXT, effort TEXT, mode TEXT, narrowing TEXT);
 
 CREATE TABLE ports (
             workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -845,7 +845,7 @@ CREATE TABLE alerts (
     attachments TEXT NOT NULL DEFAULT '[]',
     wakes INTEGER NOT NULL DEFAULT 1 CHECK(wakes IN (0,1)),
     for_user INTEGER NOT NULL DEFAULT 0 CHECK(for_user IN (0,1)),
-    read INTEGER NOT NULL DEFAULT 0 CHECK(read IN (0,1)),
+    read INTEGER NOT NULL DEFAULT 0 CHECK(read IN (0,1)), in_chat INTEGER NOT NULL DEFAULT 0 CHECK(in_chat IN (0,1)),
     CHECK(sender <> 'space' OR space_id IS NOT NULL)
 );
 
@@ -957,6 +957,13 @@ CREATE TABLE pending_moves (
     move_order TEXT NOT NULL,
     operation_id TEXT,
     created_at INTEGER NOT NULL
+);
+
+CREATE TABLE chat_marks (
+    execution_id TEXT PRIMARY KEY REFERENCES executions(id) ON DELETE CASCADE,
+    thread_id INTEGER REFERENCES threads(id) ON DELETE CASCADE,
+    alert TEXT,
+    CHECK((thread_id IS NULL) <> (alert IS NULL))
 );
 
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;

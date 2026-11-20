@@ -763,6 +763,9 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
     if version >= 259 {
         db.execute_batch(include_str!("pending_moves.sql"))?;
     }
+    if version >= 260 {
+        db.execute_batch(include_str!("chat_marks.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -4142,9 +4145,8 @@ question','',NULL,'[]',NULL,NULL,NULL,NULL,0,1,'[]'),
         .query_map([], |r| r.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     assert_eq!(kinds, ["thread_posted", "thread_posted"]);
-    let marked: Option<i64> =
-        db.query_row("SELECT chat_thread FROM executions", [], |r| r.get(0))?;
-    assert_eq!(marked, None);
+    let marked: i64 = db.query_row("SELECT COUNT(*) FROM chat_marks", [], |r| r.get(0))?;
+    assert_eq!(marked, 0);
     // Queued answers post in their threads; an accepted recommendation the
     // user was not shown has no text to post.
     let queued: Vec<String> = db
@@ -4172,5 +4174,30 @@ question','',NULL,'[]',NULL,NULL,NULL,NULL,0,1,'[]'),
         [],
     )?;
     assert_eq!(db.last_insert_rowid(), 8);
+    Ok(())
+}
+
+#[test]
+fn a_turn_marked_with_a_thread_keeps_its_mark_beside_alert_marks() -> Result<()> {
+    let mut db = historical_database(259)?;
+    db.execute_batch(
+        "INSERT INTO threads(id,space_id,number,kind,name,created_at,opener)
+            VALUES (3,'workspace',1,'question','Which database?',1,'space');
+         INSERT INTO executions(id,space_id,state,chat_thread)
+            VALUES ('marked','workspace','running',3);",
+    )?;
+    migrate(&mut db)?;
+    let marks = db
+        .prepare("SELECT execution_id,thread_id,alert FROM chat_marks")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .collect::<rusqlite::Result<Vec<(String, Option<i64>, Option<String>)>>>()?;
+    assert_eq!(marks, [("marked".into(), Some(3), None)]);
+    // A mark names a thread or an alert, never both, and goes with its
+    // thread.
+    let both = "INSERT INTO chat_marks(execution_id,thread_id,alert) VALUES ('execution',3,'{}')";
+    assert!(db.execute(both, []).is_err());
+    db.execute("DELETE FROM threads WHERE id=3", [])?;
+    let left: i64 = db.query_row("SELECT COUNT(*) FROM chat_marks", [], |r| r.get(0))?;
+    assert_eq!(left, 0);
     Ok(())
 }
