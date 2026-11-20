@@ -13,12 +13,20 @@ use shoal_protocol::space_names::SpaceSelector;
 /// repository whose origin is the URL of a bare repository beside it, with
 /// the directory both are in and that URL.
 async fn exported_worker() -> (tempfile::TempDir, Vec<u8>, String) {
+    exported_worker_with(|origin| format!("file://{origin}")).await
+}
+
+/// [`exported_worker`] with the origin `named` names by the bare
+/// repository's path.
+async fn exported_worker_with(
+    named: impl FnOnce(&str) -> String,
+) -> (tempfile::TempDir, Vec<u8>, String) {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let origin = root.path().join("origin.git");
     let origin = origin.to_str().unwrap();
     git(root.path(), &["init", "-q", "--bare", "-b", "main", origin]);
-    let url = format!("file://{origin}");
+    let url = named(origin);
     git(&path, &["remote", "add", "origin", &url]);
     git(&path, &["push", "-q", "-u", "origin", "main"]);
     git(&path, &["remote", "set-head", "origin", "main"]);
@@ -51,6 +59,18 @@ async fn an_import_clones_the_repository_it_lacks_from_its_origin() {
     let selector = SpaceSelector::id(imported.restored.id());
     let opened = importing.space(&selector).await.unwrap();
     assert_eq!(opened.repository_id, Some(cloned.id));
+}
+
+#[tokio::test]
+async fn an_import_clones_an_origin_named_by_its_path() {
+    let (_source, bytes, path) = exported_worker_with(str::to_owned).await;
+    let (_target, importing) = manager().await;
+
+    import_file(&importing, None, &bytes).await.unwrap();
+
+    let [cloned] = importing.repositories().await.unwrap().try_into().unwrap();
+    assert_eq!(cloned.source, format!("file://{path}"));
+    assert_ne!(cloned.path, path);
 }
 
 #[tokio::test]

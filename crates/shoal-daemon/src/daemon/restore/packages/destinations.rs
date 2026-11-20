@@ -1,7 +1,7 @@
 //! The repositories a package's spaces go to: the registered one the import
 //! names for its own space, else the one with each space's origin, which
 //! the import registers as a clone of that origin when none here has it.
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::Path};
 
 use anyhow::{Context, Result};
 
@@ -100,10 +100,20 @@ impl Manager {
         match self.repository(selector).await {
             Ok(repository) => Ok(repository.id),
             Err(error) if caller.is_none() && NotRegistered::refused(&error) => {
-                let cloned = self.register_repository(origin.into(), None, None).await?;
+                let source = clone_source(origin).into();
+                let cloned = self.register_repository(source, None, None).await?;
                 Ok(cloned.id)
             }
             Err(error) => Err(error),
         }
+    }
+}
+
+/// The source that registers a clone of `origin`: a local path as its
+/// `file:` URL, since registering a path takes it as a checkout in place.
+fn clone_source(origin: String) -> String {
+    match Path::new(&origin).is_absolute() {
+        true => format!("file://{origin}"),
+        false => origin,
     }
 }
