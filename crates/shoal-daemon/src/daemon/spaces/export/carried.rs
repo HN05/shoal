@@ -13,7 +13,7 @@ use shoal_ids::space_ids::SpaceId;
 impl Manager {
     /// The spaces that go with the space `id` as `carrying` says, each
     /// after its parent and the workspace whose worktree it works in.
-    pub(super) async fn carried_by(&self, id: &SpaceId, carrying: &Carrying) -> Result<Vec<Space>> {
+    pub(crate) async fn carried_by(&self, id: &SpaceId, carrying: &Carrying) -> Result<Vec<Space>> {
         let spaces = self.present_spaces().await?;
         let placed: Vec<Placed<'_>> = spaces.iter().map(Placed::space).collect();
         let carried = crate::transfer::carried_spaces(&placed, id, carrying);

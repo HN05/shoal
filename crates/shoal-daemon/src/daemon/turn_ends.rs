@@ -40,6 +40,9 @@ impl Manager {
         if let Err(error) = self.restart_finished_turns().await {
             log!("restarts: {error:#}");
         }
+        if let Err(error) = self.start_moves_after_turns().await {
+            log!("moves after turns: {error:#}");
+        }
     }
 
     /// Whether the agent of the space `id` ended its turn: it reported

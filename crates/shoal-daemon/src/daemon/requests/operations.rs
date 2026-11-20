@@ -9,6 +9,7 @@ use super::super::{
     answer::{Answer, OperationGuard},
     conversions::WorkspaceConversion,
     manager::Manager,
+    moves::MoveStart,
     operations::{
         Entry,
         starts::{Child, Opening, Preparing},
@@ -63,7 +64,12 @@ pub(super) async fn handle(
             }));
         }
         OperationMethod::StartMove { order, env } => {
-            let id = manager.start_move(*order, env, caller).await?;
+            let id = match manager.start_move(*order, env, caller).await? {
+                MoveStart::Started(id) => id,
+                MoveStart::AfterTurn(deferred) => {
+                    return Ok(Answer::Body(Body::MoveAfterTurn(deferred)));
+                }
+            };
             let entry = manager.operation(&id, caller).await?;
             // Another machine's move is followed there as it goes, its
             // token here standing for its caller only while it starts.

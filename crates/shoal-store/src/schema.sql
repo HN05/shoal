@@ -952,6 +952,13 @@ CREATE TABLE thread_code (
         AND (start IS NULL) = (latest_start IS NULL))
 );
 
+CREATE TABLE pending_moves (
+    space_id TEXT PRIMARY KEY REFERENCES spaces(id) ON DELETE CASCADE,
+    move_order TEXT NOT NULL,
+    operation_id TEXT,
+    created_at INTEGER NOT NULL
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);

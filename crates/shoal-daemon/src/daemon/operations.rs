@@ -325,8 +325,10 @@ impl Manager {
             Report::Ended(ended) => {
                 self.keep_preparation_end(&entry.workspace, id, &ended)
                     .await;
-                if entry.kind == OperationKind::FinishMove {
-                    self.tell_finished_move(&ended).await;
+                match entry.kind {
+                    OperationKind::FinishMove => self.tell_finished_move(&ended).await,
+                    OperationKind::Move => self.tell_move_after_turn(id, &ended).await,
+                    _ => {}
                 }
                 entry.update(|state| state.reported = Some(ended));
             }

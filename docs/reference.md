@@ -4925,7 +4925,10 @@ not claim the space no longer can. `--keep` copies the spaces there as new
 spaces, without a claim. A removed space's record moves only to a file. A
 space's agent moves every space its scope reaches there, chats included,
 with no permission key, also from another joined machine, and ends one the
-user holds as its `user_holds` permission allows.
+user holds as its `user_holds` permission allows. A move that would stop its
+own agent, as of its own space or the workspace its chat runs in, starts once
+that agent's turn ends, and the agent continues on the other machine from its
+session; one that leaves the space here tells the agent why.
 
 `shoal restore --from <file>` hands an export, or standard input for `-`,
 refusing a terminal, to the daemon, which reads it whole, refusing an export

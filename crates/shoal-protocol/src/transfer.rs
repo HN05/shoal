@@ -413,6 +413,14 @@ pub enum ImportedMove {
     Failed { error: String },
 }
 
+/// A move to a joined machine that would stop the agent that asked for
+/// it, which starts once that agent's turn ends.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeferredMove {
+    /// The space whose agent's turn it waits for.
+    pub space: SpaceId,
+}
+
 shoal_states::states!(
     /// How the hub settled a move through it whose arrival its source
     /// could not learn from the destination.

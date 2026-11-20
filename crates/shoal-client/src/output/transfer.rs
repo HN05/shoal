@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::output::{outputs, restore::Reopened};
-use shoal_protocol::transfer::{ImportedMove, MoveReport};
+use shoal_protocol::transfer::{DeferredMove, ImportedMove, MoveReport};
 
 /// A package an import of several could not import.
 #[derive(Debug, Serialize, Deserialize)]
@@ -20,4 +20,4 @@ pub struct Imports {
     pub failed: Vec<ImportFailure>,
 }
 
-outputs!(Imports, ImportedMove, MoveReport);
+outputs!(DeferredMove, Imports, ImportedMove, MoveReport);

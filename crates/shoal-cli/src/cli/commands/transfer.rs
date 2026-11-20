@@ -12,9 +12,9 @@ use anyhow::{Result, ensure};
 
 use super::operations::Lines;
 use crate::cli::{args::transfer::MoveArgs, context::Context, ui};
-use crate::client::operations::Following;
+use crate::client::operations::{Following, MoveStarted};
 use crate::protocol::operations::{Ended, Failure};
-use crate::transfer::{Consent, MoveDestination, MoveOrder, MoveReport};
+use crate::transfer::{Consent, DeferredMove, MoveDestination, MoveOrder, MoveReport};
 
 /// The file name that reads or writes the standard streams.
 pub(super) const STANDARD_STREAM: &str = "-";
@@ -44,6 +44,7 @@ pub(super) async fn run(ctx: &Context, args: MoveArgs) -> Result<i32> {
                 ensure!(ui::confirm(ctx, &question, "--yes")?, "move canceled");
                 order.consent = Some(Consent::Answered(question));
             }
+            Moved::AfterTurn(deferred) => return after_turn(ctx, &deferred),
         }
     };
     if let Some(streaming) = streaming {
@@ -54,10 +55,12 @@ pub(super) async fn run(ctx: &Context, args: MoveArgs) -> Result<i32> {
 }
 
 /// How a move the daemon ran ended: what it did, or the question it asks
-/// before it ends anything.
+/// before it ends anything; or that it waits for the end of the turn of
+/// the agent it stops.
 enum Moved {
     Done(MoveReport),
     Asks(String),
+    AfterTurn(DeferredMove),
 }
 
 /// Start `order` in the daemon of its spaces' machine and follow it to its
@@ -68,13 +71,24 @@ async fn follow(ctx: &Context, order: MoveOrder) -> Result<Moved> {
         _ => Lines::Command,
     };
     let env = crate::env::without_secrets();
-    let (id, mut following) = Following::start_move(&ctx.paths, order, env).await?;
+    let (id, mut following) = match Following::start_move(&ctx.paths, order, env).await? {
+        MoveStarted::Following(id, following) => (id, following),
+        MoveStarted::AfterTurn(deferred) => return Ok(Moved::AfterTurn(deferred)),
+    };
     let ended = super::operations::show(ctx, (&id, lines), async || following.next().await).await?;
     match ended {
         Ended::Succeeded(outcome) => Ok(Moved::Done(MoveReport::try_from(*outcome)?)),
         Ended::Failed(Failure::Unconfirmed { question }) => Ok(Moved::Asks(question)),
         Ended::Failed(failure) => Err(crate::operations::error(failure)),
     }
+}
+
+/// Report that the move starts once the turn of the agent it stops,
+/// the caller's, ends.
+fn after_turn(ctx: &Context, deferred: &DeferredMove) -> Result<i32> {
+    let message = "The move starts once this turn ends, since it stops your agent, whose session then continues where the space goes";
+    ctx.emit(message, deferred)?;
+    Ok(0)
 }
 
 /// Report the move that `report` describes, exiting 1 when any space

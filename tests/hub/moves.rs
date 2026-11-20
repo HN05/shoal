@@ -200,3 +200,19 @@ fn a_space_s_agent_moves_the_spaces_below_it_with_no_permission() {
             .any(|space| space["id"] == outside)
     );
 }
+
+#[test]
+fn a_space_s_own_move_waits_for_its_agent_s_turn_then_goes() {
+    let (hub, laptop, _desk, _laptop_id, desk_id) = machines("");
+    give_origin(&laptop);
+    let work = workspace(&laptop, "work");
+    let mut command = laptop.command();
+    command.env("SHOAL_SCOPE_TOKEN", scope_of(&laptop, &work));
+    let output = laptop.output(command.args(["move", &work, "--machine", "desk", "--json"]));
+
+    assert!(output.status.success(), "{}", printed(&output));
+    let deferred: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(deferred["space"], work.as_str(), "{deferred}");
+    // No agent runs there, so its turn has ended and the move goes.
+    listed(&hub, &work, &desk_id);
+}

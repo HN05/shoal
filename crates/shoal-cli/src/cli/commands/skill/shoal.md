@@ -728,6 +728,7 @@ space automatic cleanup would remove without waiting for its idle delay;
 `--dry-run` lists those, kept branches and shared caches, and why each other
 space stays. `move --machine` moves a space to another machine joined to the same hub,
 under its ID and number, leaving the spaces below it here below it unless `--recursive`;
+an agent's move of its own space there starts once its turn ends and it continues there.
 `move --ssh` moves it with the spaces below it to a machine `ssh` reaches. Both resume its
 agents there unless `--no-resume`; with `--keep`, they copy the spaces there as new ones
 and leave them running here. The daemon runs a move, so it finishes even

@@ -11,7 +11,7 @@ use shoal_protocol::protocol::{
     Body, OperationMethod, Responses,
     operations::{Ended, OperationEvent, OperationSpec, Report, Started},
 };
-use shoal_protocol::transfer::MoveOrder;
+use shoal_protocol::transfer::{DeferredMove, MoveOrder};
 
 /// What following an operation reports, ending in `E`, how it ended.
 #[derive(Debug, Clone)]
@@ -57,22 +57,34 @@ impl Following {
     }
 }
 
+/// How a move started.
+pub enum MoveStarted {
+    /// Its operation of this ID runs, followed from its start.
+    Following(String, Box<Following>),
+    /// It starts once the turn of the agent it would stop ends.
+    AfterTurn(DeferredMove),
+}
+
 impl Following {
     /// Start the move `order` with `env` on the machine of its spaces and
-    /// follow it from its start, returning its ID with it.
+    /// follow it from its start, returning its ID with it, unless it waits
+    /// for the turn of the agent it would stop.
     pub async fn start_move(
         daemon: &impl Daemon,
         order: MoveOrder,
         env: BTreeMap<String, String>,
-    ) -> Result<(String, Self)> {
+    ) -> Result<MoveStarted> {
         let method = OperationMethod::StartMove {
             order: Box::new(order),
             env: Some(env),
         };
         let (stream, body) = connection::open_buffered(daemon, method).await?;
+        if let Body::MoveAfterTurn(deferred) = body {
+            return Ok(MoveStarted::AfterTurn(deferred));
+        }
         let Started { id } = Started::try_from(body)?;
         let stream = Responses::new(stream);
-        Ok((id, Self { stream }))
+        Ok(MoveStarted::Following(id, Box::new(Self { stream })))
     }
 }
 

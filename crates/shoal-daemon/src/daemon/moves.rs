@@ -10,7 +10,7 @@ use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use super::{log, manager::Manager, notifications::AlertKind, scope::Caller};
 use crate::protocol::operations::{Ended, OperationSpec, Outcome};
-use crate::transfer::{MoveDestination, MoveLock, MoveOrder, MoveReport};
+use crate::transfer::{DeferredMove, MoveDestination, MoveLock, MoveOrder, MoveReport};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// How often the daemon looks for recorded moves whose worker went.
@@ -32,28 +32,37 @@ pub(crate) async fn finish_interrupted(manager: Arc<Manager>) {
 
 impl Manager {
     /// Start `order` in a worker that acts with `caller`'s scope, in `env`
-    /// when given, returning the operation's ID, once every space it takes
-    /// is here: live, or for a file a removed one. A space another machine
-    /// has refuses it, naming that space, which the hub forwards it for, as
-    /// does a joined machine to move to that is this one or offline.
+    /// when given, once every space it takes is here: live, or for a file a
+    /// removed one. A space another machine has refuses it, naming that
+    /// space, which the hub forwards it for, as does a joined machine to
+    /// move to that is this one or offline. A move to a joined machine that
+    /// would stop `caller`'s agent waits for its turn to end instead.
     pub(crate) async fn start_move(
         &self,
         order: MoveOrder,
         env: Option<BTreeMap<String, String>>,
         caller: Option<&Caller>,
-    ) -> Result<String> {
+    ) -> Result<MoveStart> {
         ensure!(!order.spaces.is_empty(), "a move takes at least one space");
         for ordered in &order.spaces {
             self.ensure_movable(ordered, &order.destination).await?;
         }
         if let MoveDestination::Machine(destination) = &order.destination {
             self.receiving_machine(&destination.machine).await?;
+            if let Some(caller) = caller
+                && self.move_stops_caller(caller, &order).await?
+            {
+                return Ok(MoveStart::AfterTurn(
+                    self.move_after_turn(caller, order).await?,
+                ));
+            }
         }
         let first = order.spaces[0].clone();
         let spec = OperationSpec::Move {
             order: Box::new(order),
         };
-        self.spawn_operation(first, spec, env, caller).await
+        let started = self.spawn_operation(first, spec, env, caller).await?;
+        Ok(MoveStart::Started(started))
     }
 
     /// Refuse a space `id` that is not here to move to `destination`: a
@@ -141,6 +150,14 @@ impl Manager {
         }
         self.administer(caller, order, repository).await
     }
+}
+
+/// How a move started.
+pub(crate) enum MoveStart {
+    /// In the operation of this ID.
+    Started(String),
+    /// Once the turn of the agent it would stop ends.
+    AfterTurn(DeferredMove),
 }
 
 /// What the user hears of the moves `report` finished after their worker
