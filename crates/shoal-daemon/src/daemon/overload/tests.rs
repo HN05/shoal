@@ -99,29 +99,48 @@ async fn changed_thresholds_restart_the_recovery_window() {
     monitor.abort();
 }
 
-#[tokio::test]
-async fn a_reload_withdraws_published_readiness_until_a_new_window() {
+/// Publish a calm config, then `tighten` it once recovery is ready: the
+/// reload withdraws readiness until a new window has passed.
+async fn a_reload_withdraws_readiness(tighten: fn(&mut crate::config::Config)) {
     let (_root, manager) = crate::daemon::test_support::manager().await;
-    let config = |memory_used_percent| {
+    let calm = || {
         let mut config = crate::config::Config::default();
         config.machine.overload.memory.enabled = false;
         config.machine.overload.disk.enabled = false;
-        config.machine.overload.recovery.memory_used_percent = memory_used_percent;
         config
     };
-    manager.publish_config(config(85));
+    let mut tightened = calm();
+    tighten(&mut tightened);
+    manager.publish_config(calm());
     let mut ready = manager.overload_recovery.watch();
     tokio::time::pause();
     let monitor = tokio::spawn(run(manager.clone()));
     wait_published(&mut ready).await;
-    // Tightening a threshold withdraws readiness before any agent can use it.
-    manager.publish_config(config(75));
+    // Tightening withdraws readiness before any agent can use it.
+    manager.publish_config(tightened);
     assert_eq!(*ready.borrow_and_update(), None);
     let reloaded = Instant::now();
     wait_published(&mut ready).await;
     let window = Duration::from_secs(manager.config().machine.overload.recovery.sustained_seconds);
     assert!(reloaded.elapsed() >= window);
     monitor.abort();
+}
+
+#[tokio::test]
+async fn a_reload_of_a_threshold_withdraws_published_readiness_until_a_new_window() {
+    a_reload_withdraws_readiness(|config| {
+        config.machine.overload.recovery.memory_used_percent = 75;
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn a_reload_of_the_memory_limit_withdraws_published_readiness_until_a_new_window() {
+    a_reload_withdraws_readiness(|config| {
+        config.machine.memory_limit =
+            Some(crate::config::memory_limit::MemoryLimit::Bytes(8 << 30));
+    })
+    .await;
 }
 
 const CALM: MemoryPressure = MemoryPressure {

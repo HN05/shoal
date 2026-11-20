@@ -207,10 +207,11 @@ impl Manager {
     }
 
     /// Make `config` the one later operations read. Changed overload
-    /// settings withdraw recovery readiness before anything can read them, so
-    /// a waiting agent needs a fresh healthy interval under the new thresholds.
+    /// settings or memory limit withdraw recovery readiness before anything
+    /// can read them, so a waiting agent needs a fresh healthy interval under
+    /// the new thresholds.
     pub fn publish_config(&self, config: Config) {
-        if config.machine.overload != self.config().machine.overload {
+        if super::overload::protection_changed(&self.config(), &config) {
             self.overload_recovery.reset();
         }
         super::forge_hosts::learn_forge_pins(&self.config().machine.forges, &config.machine.forges);

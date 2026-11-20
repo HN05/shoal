@@ -248,7 +248,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
         // the old thresholds. Publication already withdrew readiness, and
         // earlier readings do not count toward the new thresholds.
         let current = manager.config();
-        let changed = current.machine.overload != config.machine.overload;
+        let changed = protection_changed(&config, &current);
         config = current;
         if changed {
             monitor = Monitor::default();
@@ -279,6 +279,13 @@ pub(super) async fn run(manager: Arc<Manager>) {
             tokio::time::sleep(Duration::from_secs(settings.cooldown_seconds)).await;
         }
     }
+}
+
+/// Whether `new` measures load against other levels than `old`: its overload
+/// settings or the memory limit on Shoal's work changed.
+pub(super) fn protection_changed(old: &crate::config::Config, new: &crate::config::Config) -> bool {
+    old.machine.overload != new.machine.overload
+        || old.machine.memory_limit != new.machine.memory_limit
 }
 
 /// Give job admission this sample's CPU ticks while `admission` reads
