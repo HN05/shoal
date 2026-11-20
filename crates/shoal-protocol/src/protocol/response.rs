@@ -226,6 +226,7 @@ response_bodies! {
     Launched(super::Launched),
     CheckedLaunch(Option<Workspace>),
     LaunchModes(crate::config::modes::ModeShapes),
+    LabelledMode(crate::launches::LabelledMode),
     TrackedConfig(String),
     Triggers(Vec<crate::triggers::TriggerStatus>),
     Trigger(crate::triggers::TriggerStatus),

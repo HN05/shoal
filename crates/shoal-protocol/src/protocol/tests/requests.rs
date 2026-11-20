@@ -146,6 +146,7 @@ const REQUESTS: &[&str] = &[
     r#"{"check_launch":{"launch":{"target":"app","base":"main","issue":{"named":"https://forge.example/team/app/issues/42"}}}}"#,
     r#"{"check_creation":{"launch":{"target":"app","branch":"fix","mode":"worker"}}}"#,
     r#"{"launch_modes":{"launch":{"target":"app","machine":"laptop"}}}"#,
+    r#"{"labelled_mode":{"launch":{"target":"https://forge.example/team/app/issues/42"}}}"#,
     r#"{"take_parent_repository":{"launch":{"branch":"fix","parent":"7"}}}"#,
     r#""chat_root""#,
     // The agent queue.

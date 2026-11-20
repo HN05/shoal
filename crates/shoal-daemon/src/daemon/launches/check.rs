@@ -160,7 +160,7 @@ impl Manager {
     /// implies one without a picker: the repository of the workspace it
     /// names with `--in`, the one it names, refused when none is
     /// registered, else as [`launches::shape::launch_repository`] finds it.
-    async fn checked_repository(
+    pub(super) async fn checked_repository(
         &self,
         launch: &Launch,
         caller: Option<&Caller>,

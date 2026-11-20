@@ -3118,7 +3118,8 @@ only the modes of the kind of space they ask for, a workspace for a branch,
 modes in a repository when they name a repository or issue or ask for a kind
 of space; when only one fits, the start takes it without asking. A start
 on an issue or PR carrying a mode's `label` takes that mode, with or without a
-terminal, among the modes that fit its other arguments; one carrying the
+terminal, among the modes that fit its other arguments, as a
+[trigger](#triggers)'s launch without a mode does; one carrying the
 labels of several opens the picker on a terminal and is refused without one. A
 new agent in an existing space may start in another mode; a running agent's mode never changes. A space records the mode its agent started in, a workspace that of its
 latest agent, and restores and restarts keep it; `--json` gives it as `mode`,

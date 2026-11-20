@@ -70,8 +70,8 @@ pub struct ModeConfig {
     /// Whether its agents take a heavy slot, wherever they run.
     #[option(default = Weight::Heavy)]
     pub weight: Option<Weight>,
-    /// The forge label of the issues and PRs `shoal start` starts in this
-    /// mode when it names none.
+    /// The forge label of the issues and PRs a launch starts in this mode
+    /// when it names none.
     pub label: Option<String>,
 }
 

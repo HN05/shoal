@@ -27,6 +27,7 @@ impl Operation {
                     LaunchMethod::CheckLaunch { .. }
                         | LaunchMethod::CheckCreation { .. }
                         | LaunchMethod::LaunchModes { .. }
+                        | LaunchMethod::LabelledMode { .. }
                 )
                 | Self::Ci(
                     CiMethod::CheckLog { .. }

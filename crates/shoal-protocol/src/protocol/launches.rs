@@ -38,6 +38,11 @@ pub enum LaunchMethod {
     /// joined machine the launch names answers through the hub. Answers
     /// with [`super::Body::LaunchModes`].
     LaunchModes { launch: Box<Launch> },
+    /// The mode the labels of the issue or PR `launch` names call for
+    /// among the modes it may start in that fit its other arguments, which
+    /// a launch that names no mode takes. Answers with
+    /// [`super::Body::LabelledMode`].
+    LabelledMode { launch: Box<Launch> },
     /// Register the repository of the space `launch` goes below, which
     /// another machine runs in a repository this one has not registered,
     /// as a clone of the URL that machine reports, as a launch does first,
@@ -56,6 +61,7 @@ impl LaunchMethod {
             Self::CheckLaunch { .. }
             | Self::CheckCreation { .. }
             | Self::LaunchModes { .. }
+            | Self::LabelledMode { .. }
             | Self::TakeParentRepository { .. } => Lifetime::Reply,
         }
     }

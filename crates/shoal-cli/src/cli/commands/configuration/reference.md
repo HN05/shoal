@@ -547,7 +547,8 @@ built-in modes that start chats are light, so one set to `kind = "workspace"`
 stays so. A chat without a repository takes its mode's weight from the global
 config and counts toward `machine.max_heavy_agents` alone.
 `label` is a forge label that starts an issue or PR carrying it in this mode
-when `shoal start` names none, as [modes and rules](../../../../../../docs/reference.md#modes-and-rules)
+when its launch names none, such as `shoal start` without `--mode` or a
+trigger without `mode`, as [modes and rules](../../../../../../docs/reference.md#modes-and-rules)
 describes; no two modes may have the same label, and the built-in modes have
 none. `permissions` takes the keys of
 [`[permissions]`](#permissions). `[rules.<name>]` sets a rule's `text`, which

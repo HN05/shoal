@@ -18,6 +18,7 @@ mod chat;
 mod check;
 mod create;
 mod elsewhere;
+mod labels;
 mod setup;
 mod shape;
 mod space;

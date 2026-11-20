@@ -4,7 +4,7 @@
 use anyhow::Result;
 use shoal_protocol::launches::{LabelledMode, Launch, SeveralModes};
 
-use super::{fitting_kind, named_issue, names_repository};
+use super::{fitting_kind, named_issue, named_pull, names_repository};
 use crate::{
     config::modes::{ModeName, ModeShape, ModeShapes},
     model::SpaceKind,
@@ -47,6 +47,12 @@ pub fn requires_repository(launch: &Launch) -> Result<bool> {
         || fitting_kind(launch).is_some()
         || names_repository(launch)?
         || named_issue(launch)?.is_some())
+}
+
+/// Whether `launch` names the issue or PR whose labels may call for its
+/// mode.
+pub fn names_item(launch: &Launch) -> Result<bool> {
+    Ok(named_pull(launch).is_some() || named_issue(launch)?.is_some())
 }
 
 /// Each of `modes` with a label, by name with its label, that starts the

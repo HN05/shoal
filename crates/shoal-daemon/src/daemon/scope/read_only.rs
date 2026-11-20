@@ -23,6 +23,7 @@ fn takes_more_than_it_reads(operation: &Operation) -> bool {
                 LaunchMethod::CheckLaunch { .. }
                     | LaunchMethod::CheckCreation { .. }
                     | LaunchMethod::LaunchModes { .. }
+                    | LaunchMethod::LabelledMode { .. }
             )
             | Operation::Execution(ExecutionMethod::CheckMerge | ExecutionMethod::CheckUnmerge)
             | Operation::Removal(

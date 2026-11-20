@@ -3,7 +3,7 @@
 //! from what the launch names and the settings that apply to it.
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::launches::Launch;
+use shoal_protocol::launches::{LabelledMode, Launch};
 
 use crate::{
     config::modes::{self, ModeName, ModeShapes},
@@ -31,13 +31,16 @@ impl Shape {
 
 impl Manager {
     /// The shape of `launch` for `caller`: in the mode it names, else the
-    /// [`launches::default_mode`], the kind of space that mode starts in.
+    /// [`Self::unnamed_launch_mode`], the kind of space that mode starts in.
     pub(super) async fn launch_shape(
         &self,
         launch: &Launch,
         caller: Option<&Caller>,
     ) -> Result<Shape> {
-        let mode = (launch.mode.clone()).unwrap_or_else(|| launches::default_mode(launch));
+        let mode = match launch.mode.clone() {
+            Some(mode) => mode,
+            None => self.unnamed_launch_mode(launch, caller).await?,
+        };
         launches::ensure_mode_fits(launch, &mode)?;
         let (kind, repository) = self.launch_kind(launch, &mode, caller).await?;
         Ok(Shape {
@@ -45,6 +48,21 @@ impl Manager {
             mode,
             repository,
         })
+    }
+
+    /// The mode of `launch`, which names none, for `caller`: the one the
+    /// labels of the issue or PR it names call for, refused where they call
+    /// for several, else the [`launches::default_mode`].
+    async fn unnamed_launch_mode(
+        &self,
+        launch: &Launch,
+        caller: Option<&Caller>,
+    ) -> Result<ModeName> {
+        match self.labelled_launch_mode(launch, caller).await? {
+            LabelledMode::Called(mode) => Ok(mode),
+            LabelledMode::Several(several) => Err(several.into()),
+            LabelledMode::Unlabelled => Ok(launches::default_mode(launch)),
+        }
     }
 
     /// The kind of space `launch` creates in `mode`, which must exist, for

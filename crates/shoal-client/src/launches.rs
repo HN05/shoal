@@ -1,10 +1,15 @@
 //! Agent launches: the request that starts an agent as a launch asks, and
 //! the one that checks a launch of a new workspace before a picker asks,
-//! and the one that reads the modes it may start in.
+//! and those that read the modes it may start in and the one its item's
+//! labels call for.
 use anyhow::Result;
 use shoal_protocol::config::modes::ModeShapes;
 use shoal_protocol::protocol::LaunchMethod;
-use shoal_protocol::{launches::Launch, model::Workspace, protocol::Launched};
+use shoal_protocol::{
+    launches::{LabelledMode, Launch},
+    model::Workspace,
+    protocol::Launched,
+};
 
 use crate::connection::{Daemon, request};
 
@@ -36,6 +41,13 @@ pub async fn check_creation(daemon: &impl Daemon, launch: Launch) -> Result<Opti
 pub async fn modes(daemon: &impl Daemon, launch: Launch) -> Result<ModeShapes> {
     let launch = Box::new(launch);
     request(daemon, LaunchMethod::LaunchModes { launch }).await
+}
+
+/// The mode the labels of the issue or PR `launch` names call for, which
+/// the daemon starts a launch that names no mode in.
+pub async fn labelled_mode(daemon: &impl Daemon, launch: Launch) -> Result<LabelledMode> {
+    let launch = Box::new(launch);
+    request(daemon, LaunchMethod::LabelledMode { launch }).await
 }
 
 /// Have this machine register the repository of the space `launch` goes
