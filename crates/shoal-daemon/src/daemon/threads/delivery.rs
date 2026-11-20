@@ -202,6 +202,8 @@ impl Texts {
         if let Some(reason) = &post.post.reason {
             agent.push_str(&format!("\nReason: {reason}"));
         }
+        let reader = Party::of(thread, to);
+        agent.push_str(&code_lines(post, reader.as_ref()));
         agent.push_str(&format!("\n{}", hint(thread, to)));
         Self {
             kind: AlertKind::ThreadPosted,
@@ -210,8 +212,8 @@ impl Texts {
         }
     }
 
-    /// `post` in `thread`, for a space that linked it.
-    pub(super) fn linked(thread: &Thread, post: &Post) -> Self {
+    /// `post` in `thread`, for the space `linker` that linked it.
+    pub(super) fn linked(thread: &Thread, post: &Post, linker: &Party) -> Self {
         let text = format!(
             "Thread {} ({}), which you linked, {}: {}",
             thread.number,
@@ -219,13 +221,14 @@ impl Texts {
             post.author(),
             post.post.text
         );
+        let agent = format!("{text}{}", code_lines(post, Some(linker)));
         Self {
             kind: AlertKind::ThreadPosted,
             user: crate::validate::shorten(
                 text.replace(['\n', '\t'], " "),
                 crate::validate::MAX_MESSAGE_LEN,
             ),
-            agent: crate::validate::shorten(text, crate::validate::MAX_AGENT_MESSAGE_LEN),
+            agent: crate::validate::shorten(agent, crate::validate::MAX_AGENT_MESSAGE_LEN),
         }
     }
 
@@ -242,8 +245,10 @@ impl Texts {
             forward.author()
         );
         let mut agent = format!("{heading}\nIt reads:");
+        let reader = Party::of(thread, Side::Holder);
         for post in thread.posts.iter().filter(|post| post.speaks()) {
             agent.push_str(&format!("\n{}: {}", post.author(), post.post.text));
+            agent.push_str(&code_lines(post, reader.as_ref()));
         }
         agent.push_str(&format!("\n{}", hint(thread, Side::Holder)));
         Self {
@@ -285,6 +290,21 @@ impl Texts {
             user: crate::validate::shorten(text, crate::validate::MAX_MESSAGE_LEN),
         }
     }
+}
+
+/// The places in code `post` points at, each on lines of its own with its
+/// snippet, naming the space whose worktree it is in unless that is
+/// `reader`'s.
+fn code_lines(post: &Post, reader: Option<&Party>) -> String {
+    let mut lines = String::new();
+    for code in &post.code {
+        lines.push_str(&format!("\nCode: {}", code.place()));
+        if reader != Some(&Party::Space(code.space.id.clone())) {
+            lines.push_str(&format!(" in {}", code.space.label()));
+        }
+        lines.push_str(&code.snippet_lines("    "));
+    }
+    lines
 }
 
 /// What the party on `side` of `thread` does next.
@@ -336,15 +356,9 @@ pub(super) fn deliver_post(
     for linker in super::records::linkers(tx, thread.id)? {
         let reached = party == Some(Party::Space(linker.clone()));
         if !reached && Some(&linker) != sender {
-            let texts = Texts::linked(thread, post);
-            deliver(
-                tx,
-                thread,
-                Some(post),
-                &Party::Space(linker),
-                texts,
-                delivered,
-            )?;
+            let linker = Party::Space(linker);
+            let texts = Texts::linked(thread, post, &linker);
+            deliver(tx, thread, Some(post), &linker, texts, delivered)?;
         }
     }
     Ok(())

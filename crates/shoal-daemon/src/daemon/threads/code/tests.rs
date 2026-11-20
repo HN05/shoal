@@ -5,7 +5,7 @@ use shoal_protocol::{
     threads::{ThreadKind, ThreadNumber},
 };
 
-use super::super::tests::{caller, full, open, post, tree};
+use super::super::tests::{alerts, caller, full, open, post, tree};
 use crate::{git, model::Workspace};
 
 const PARSER: &str = "fn parse() {\n    tokens()\n}\n\nfn tokens() {}\n";
@@ -50,6 +50,10 @@ async fn a_post_s_code_reaches_the_other_side_at_its_lines_with_its_snippet() {
         Some("fn parse() {\n    tokens()\n}")
     );
     assert_eq!(code.state, CodeState::Unchanged);
+    let received = alerts(manager, &tree.parent).await;
+    let code_line = format!("Code: parse.rs:1-3 in {}", code.space.label());
+    assert!(received[0].contains(&code_line), "{received:?}");
+    assert!(received[0].contains("\n        tokens()"), "{received:?}");
 
     // The space's ref keeps the version the reference points at.
     let repository = tree.child.repository_id.clone().unwrap();
@@ -117,6 +121,9 @@ async fn a_thread_opened_about_code_posts_it_at_once_from_a_buffer() {
     };
     assert_eq!(opening.post.text, "Implement lex");
     assert_eq!(opening.code[0].snippet.as_deref(), Some("    todo!()"));
+    // The holder's own worktree needs no space named.
+    let received = alerts(manager, &tree.child).await;
+    assert!(received[0].contains("Code: lexer.rs:2\n"), "{received:?}");
     let shown = manager.thread(None, ThreadNumber::Full(opened.number));
     assert_eq!(shown.await.unwrap().posts[0].code.len(), 1);
 }
