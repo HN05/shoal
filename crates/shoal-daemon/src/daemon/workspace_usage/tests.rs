@@ -41,6 +41,7 @@ fn sample(
         time,
         processes: processes.into_iter().collect(),
         unreaped: HashSet::new(),
+        in_work_slice: HashSet::new(),
     }
 }
 
@@ -452,5 +453,23 @@ async fn a_chats_processes_count_in_the_sampled_work_memory() {
     let now = Instant::now();
     let chat_memory = usages.get(&chat.id, now).unwrap().memory_bytes;
     assert!(chat_memory > 0);
-    assert!(usages.memory(now).unwrap() >= chat_memory);
+    assert!(usages.memory(now).unwrap().all >= chat_memory);
+}
+
+#[tokio::test(start_paused = true)]
+async fn work_outside_the_slice_is_told_apart_from_work_in_it() {
+    let start = Instant::now();
+    let in_slice = process(10, 1, "a", 0);
+    let mut sampled = sample(start, [in_slice.clone(), process(20, 1, "b", 0)]);
+    sampled.in_work_slice.insert(in_slice.0);
+    let mut usages = WorkspaceUsages::default();
+    usages.record(Ok(sampled), Ok(Vec::new()));
+    assert_eq!(
+        usages.memory(start),
+        Some(SampledWork {
+            all: 2048,
+            outside_slice: 1024
+        })
+    );
+    assert_eq!(usages.memory(start + STALE + SAMPLE_INTERVAL), None);
 }

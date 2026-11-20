@@ -12,3 +12,27 @@ fn work_reads_against_its_limit() {
     // Work past its limit leaves nothing.
     assert_eq!(work.against(1200).available, 0);
 }
+
+#[test]
+fn work_outside_the_slice_counts_beside_it() {
+    let work = WorkLimit {
+        limit: 1000,
+        sampled: Some(SampledWork {
+            all: 700,
+            outside_slice: 300,
+        }),
+    };
+    // One command started in the slice, another directly beside it.
+    let slice = Slice {
+        used: 600,
+        stall: None,
+    };
+    assert_eq!(work.used(Some(slice)).unwrap().0, 900);
+    // Before the slice exists, the sample counts all of it.
+    assert_eq!(work.used(None).unwrap().0, 700);
+    let unsampled = WorkLimit {
+        sampled: None,
+        ..work
+    };
+    assert!(unsampled.used(None).is_err());
+}

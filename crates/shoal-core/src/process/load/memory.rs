@@ -2,7 +2,7 @@ use anyhow::{Context, Result, ensure};
 
 mod work;
 
-pub use work::WorkLimit;
+pub use work::{SampledWork, WorkLimit};
 
 /// Memory in bytes: all of it, and what new work can use without pushing
 /// other memory out. On Linux the machine's both count swap.

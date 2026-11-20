@@ -29,3 +29,11 @@ fn the_slice_lies_below_the_users_service_manager() {
         );
     }
 }
+
+#[test]
+fn a_process_in_a_scope_of_the_slice_is_in_it() {
+    let scoped = "0::/user.slice/user-1000.slice/user@1000.service/shoal.slice/shoal-work.slice/run-p1-i2.scope\n";
+    let terminal = "0::/user.slice/user-1000.slice/user@1000.service/app.slice/rex.service/t-1\n";
+    assert!(in_slice(scoped));
+    assert!(!in_slice(terminal));
+}

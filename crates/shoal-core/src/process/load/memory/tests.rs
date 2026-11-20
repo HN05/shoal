@@ -144,7 +144,11 @@ fn work_past_its_limit_presses_however_calm_the_machine() {
         limit: 1000,
         sampled,
     };
-    let reading = memory(&LEVELS, Some(work(Some(2000)))).unwrap();
+    let sampled = SampledWork {
+        all: 2000,
+        outside_slice: 2000,
+    };
+    let reading = memory(&LEVELS, Some(work(Some(sampled)))).unwrap();
     assert_eq!(reading.work.map(|work| work.available), Some(0));
     assert!(reading.pressure.critical && reading.pressure.warning && !reading.pressure.safe);
     // Without a sample there is no reading to admit work on.

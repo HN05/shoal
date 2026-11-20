@@ -16,6 +16,7 @@ use crate::{
     model::WorkspaceUsage,
     process::{
         identity::{self, Identity},
+        load::SampledWork,
         usage::{self, Reading},
     },
 };
@@ -43,6 +44,20 @@ struct Sample {
     /// Processes that exited but whose parent has not reaped them, so their
     /// time has not reached it yet. They use no memory and are not counted.
     unreaped: HashSet<Identity>,
+    /// Processes running in the work slice, whose memory the slice reads.
+    in_work_slice: HashSet<Identity>,
+}
+
+impl Sample {
+    /// The memory of its processes in the work slice.
+    fn in_work_slice_memory(&self) -> u64 {
+        (self.in_work_slice.iter())
+            .filter(|identity| !self.unreaped.contains(*identity))
+            .filter_map(|identity| self.processes.get(identity))
+            .fold(0, |total, (_, reading)| {
+                total.saturating_add(reading.memory)
+            })
+    }
 }
 
 #[derive(Default)]
@@ -131,13 +146,20 @@ impl WorkspaceUsages {
     }
 
     /// The memory every space's processes and containers held at the latest
-    /// sample, while sampling has not stalled.
-    pub(crate) fn memory(&self, now: Instant) -> Option<u64> {
+    /// sample, and what of it ran outside the work slice, while sampling has
+    /// not stalled.
+    pub(crate) fn memory(&self, now: Instant) -> Option<SampledWork> {
         let latest = self.latest.as_ref()?;
         if now.duration_since(latest.time) > STALE {
             return None;
         }
-        Some((self.usage.values()).fold(0, |total, usage| total.saturating_add(usage.memory_bytes)))
+        let all = (self.usage.values()).fold(0u64, |total, usage| {
+            total.saturating_add(usage.memory_bytes)
+        });
+        Some(SampledWork {
+            all,
+            outside_slice: all.saturating_sub(latest.in_work_slice_memory()),
+        })
     }
 
     /// The latest usage of the workspace `id`, while it has processes or
@@ -364,7 +386,15 @@ async fn sample(manager: &Manager, tracked: Vec<(SpaceId, Identity)>) -> Result<
         .into_iter()
         .filter(|(_, identity)| !found.contains(identity))
         .collect();
-    tokio::task::spawn_blocking(move || read(running, missed, usage::read, state))
+    let reading = move || {
+        let mut sample = read(running, missed, usage::read, state)?;
+        sample.in_work_slice = (sample.processes.keys())
+            .filter(|identity| crate::service::work::holds(identity.pid))
+            .cloned()
+            .collect();
+        Ok(sample)
+    };
+    tokio::task::spawn_blocking(reading)
         .await
         .context("workspace usage worker failed")?
 }
@@ -423,6 +453,7 @@ fn read(
         time: Instant::now(),
         processes,
         unreaped,
+        in_work_slice: HashSet::new(),
     })
 }
 

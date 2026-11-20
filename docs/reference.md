@@ -316,7 +316,9 @@ the kernel throttles it: the work's memory against the limit, and on Linux
 the slice's own stall, at the same levels as the machine's, press as the
 machine's do, and a start fits only where both leave room. On Linux the
 work's memory is what the slice holds that reclaim cannot free, its page
-cache aside, with what it swapped out; before the slice exists, and on
+cache aside, with what it swapped out, and the memory the latest usage
+sample counts for work running outside it, as a command whose scope could
+not start; before the slice exists, and on
 macOS, where the kernel does not enforce the limit, it is the memory the
 latest usage sample counts for every space's processes and containers, and
 without a sample nothing starts.

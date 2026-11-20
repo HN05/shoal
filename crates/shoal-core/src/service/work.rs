@@ -49,6 +49,19 @@ pub fn control_group() -> Option<PathBuf> {
     )
 }
 
+/// Whether the process `pid` runs in the slice; false once it is gone.
+pub fn holds(pid: u32) -> bool {
+    std::fs::read_to_string(format!("/proc/{pid}/cgroup")).is_ok_and(|groups| in_slice(&groups))
+}
+
+/// Whether the control groups `groups` of a process place it in the slice.
+fn in_slice(groups: &str) -> bool {
+    let slice = format!("/shoal.slice/{SLICE}/");
+    (groups.lines())
+        .filter_map(|line| line.strip_prefix("0::"))
+        .any(|path| path.contains(&slice))
+}
+
 /// The control group of user `uid`'s service manager, relative to the
 /// hierarchy's root: the part of `own`, this process's control groups, up
 /// to it where this process runs below it, as in a terminal or a service,
