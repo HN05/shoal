@@ -51,7 +51,11 @@ impl Manager {
         if let Err(error) = self.reopen_threads(id, CloseCause::Removal).await {
             warnings.push(format!("its threads stay closed: {error:#}"));
         }
-        warnings.extend(self.relink_space(id, &removed.links, caller).await);
+        warnings.extend(
+            self.links
+                .relink_space(self, id, &removed.links, caller)
+                .await,
+        );
         let session_files = self.restore_agents(&removed, id, &mut warnings).await;
         if removed.saved_no_agent() {
             warnings.push(format!(

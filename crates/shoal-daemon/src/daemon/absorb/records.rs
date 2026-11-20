@@ -81,7 +81,7 @@ impl Manager {
             .run(move |db| Ok(linked::space_links(db, &id)?))
             .await?;
         self.unlink_all(from, &links).await?;
-        let mut warnings = self.relink_space(to, &links, caller).await;
+        let mut warnings = self.links.relink_space(self, to, &links, caller).await;
         for pr in &links.prs {
             let url = pr.url.clone().into();
             let watch = Action::Watch {

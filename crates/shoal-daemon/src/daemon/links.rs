@@ -17,7 +17,6 @@ mod pushes;
 mod raw;
 mod reads;
 pub(crate) mod records;
-mod relink;
 mod revert;
 mod run_approval;
 mod runs;

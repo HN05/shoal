@@ -9,7 +9,7 @@ mod agents;
 mod assignees;
 
 use crate::forge::items::reference::ItemRef;
-pub(crate) use crate::model::{Assigner, IssueAssignee};
+pub(crate) use crate::model::Assigner;
 pub(crate) use assignees::AssignerOf;
 use shoal_links::issue::{
     agents::{self as agent_records},

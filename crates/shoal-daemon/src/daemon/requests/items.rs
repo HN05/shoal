@@ -55,7 +55,10 @@ pub(super) async fn handle(
             kind,
             search,
         } => {
-            let listed = manager.list_items(&target, kind, &search, caller).await;
+            let listed = manager
+                .links
+                .list_items(&**manager, &target, kind, &search, caller)
+                .await;
             return Ok(Answer::pages(listed, Body::Items));
         }
         ItemMethod::Labels { target } => {
@@ -230,7 +233,10 @@ pub(super) async fn handle(
                 .await?
                 .id
                 .to_owned();
-            let warnings = manager.relink_space(&id, &links, caller).await;
+            let warnings = manager
+                .links
+                .relink_space(&**manager, &id, &links, caller)
+                .await;
             Body::Linked(shoal_protocol::links::Linked {
                 title_error: None,
                 warnings,

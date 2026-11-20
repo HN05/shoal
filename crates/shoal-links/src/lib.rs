@@ -12,6 +12,7 @@ pub mod pr;
 mod raw;
 pub mod reads;
 pub mod records;
+mod relink;
 pub mod space;
 #[cfg(test)]
 mod stand_in;

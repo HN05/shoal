@@ -2,27 +2,27 @@
 //! moved chat brings them: its assigned issues as whoever assigned each,
 //! with the user's assignments Shoal had added, and its opened and related
 //! items. The caller links its PRs.
-use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::space_names::SpaceSelector;
+use std::sync::Arc;
 
-use crate::{
-    daemon::{
-        links::issue::{AssignerOf, IssueAssignee},
-        manager::Manager,
-        scope::Caller,
-    },
-    forge::items::reference::ItemRef,
-    model::{Assigner, LinkedItem, Relation, SpaceLinks},
+use shoal_daemon_base::callers::Caller;
+use shoal_forge_types::items::reference::ItemRef;
+use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::{
+    model::{Assigner, IssueAssignee, LinkedItem, Relation, SpaceLinks},
+    space_names::SpaceSelector,
 };
 
-impl Manager {
+use crate::{Links, daemon::Daemon};
+
+impl Links {
     /// Link `links` to the space `id` again. For the user, each assigned
     /// issue is assigned to the space as it was, by the user or an agent,
     /// and Shoal takes on the user's assignments it had added; a scoped
     /// `caller` assigns each as an agent and takes on none. Each failure
     /// becomes a warning.
-    pub(crate) async fn relink_space(
-        &self,
+    pub async fn relink_space(
+        self: &Arc<Self>,
+        daemon: &dyn Daemon,
         id: &SpaceId,
         links: &SpaceLinks,
         caller: Option<&Caller>,
@@ -35,19 +35,15 @@ impl Manager {
         for issue in &links.issues {
             let (selector, input) = (SpaceSelector::id(id), issue.url.clone().into());
             let assigner = assigned_as(carried, &issue.url, caller);
-            match (self
-                .links
-                .set_issue(self, &selector, &input, issue.title.clone(), assigner))
-            .await
-            {
+            match (self.set_issue(daemon, &selector, &input, issue.title.clone(), assigner)).await {
                 Ok(assigned) => warnings.extend(assigned),
                 Err(error) => warnings.push(format!("cannot link issue {}: {error:#}", issue.url)),
             }
         }
-        if let Err(error) = self.links.claim_assignees(id, carried.to_vec()).await {
+        if let Err(error) = self.claim_assignees(id, carried.to_vec()).await {
             warnings.push(format!("cannot record the issues' assignees: {error:#}"));
         }
-        warnings.extend(self.relink_recorded(id, links, caller).await);
+        warnings.extend(self.relink_recorded(daemon, id, links, caller).await);
         warnings
     }
 
@@ -56,13 +52,14 @@ impl Manager {
     /// through the link it would make, under the checks of its scope.
     /// Returns a warning for each failure.
     async fn relink_recorded(
-        &self,
+        self: &Arc<Self>,
+        daemon: &dyn Daemon,
         id: &SpaceId,
         links: &SpaceLinks,
         caller: Option<&Caller>,
     ) -> Vec<String> {
         let Some(caller) = caller else {
-            return match self.links.record_items(id, recorded(links)).await {
+            return match self.record_items(id, recorded(links)).await {
                 Ok(()) => Vec::new(),
                 Err(error) => vec![format!("cannot link opened and related items: {error:#}")],
             };
@@ -70,8 +67,8 @@ impl Manager {
         let mut warnings = Vec::new();
         for (relation, item) in recorded(links) {
             let (selector, input) = (SpaceSelector::id(id), item.url.clone().into());
-            let linked = self.links.link_item(
-                self,
+            let linked = self.link_item(
+                daemon,
                 &selector,
                 item.kind(),
                 &input,
@@ -94,7 +91,8 @@ fn assigned_as(carried: &[IssueAssignee], url: &ItemRef, caller: Option<&Caller>
         .any(|assignee| assignee.url == *url && assignee.account == Assigner::Agent);
     match agents {
         true => Assigner::Agent,
-        false => Assigner::of(caller),
+        false if caller.is_some() => Assigner::Agent,
+        false => Assigner::User,
     }
 }
 

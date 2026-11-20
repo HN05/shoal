@@ -10,6 +10,7 @@ use crate::{Links, daemon::Daemon, place::Access};
 
 pub mod checkouts;
 mod items;
+mod listing;
 mod repository;
 
 impl Links {

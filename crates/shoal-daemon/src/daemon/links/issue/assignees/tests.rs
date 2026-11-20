@@ -150,9 +150,12 @@ async fn a_scoped_relink_takes_on_no_assignment() {
         read_only: false,
         vouched: None,
     };
-    let warnings = (fixture
-        .manager
-        .relink_space(&workspace.id, &links, Some(&caller)))
+    let warnings = (fixture.manager.links.relink_space(
+        &*fixture.manager,
+        &workspace.id,
+        &links,
+        Some(&caller),
+    ))
     .await;
     assert!(warnings.is_empty(), "{warnings:?}");
     // The login was there already and the claim was ignored, so nothing
@@ -181,7 +184,10 @@ async fn a_scoped_relink_checks_its_related_items_as_links_do() {
         vouched: None,
     };
     let manager = &fixture.manager;
-    let warnings = (manager.relink_space(&workspace.id, &links, Some(&caller))).await;
+    let warnings = (manager
+        .links
+        .relink_space(&**manager, &workspace.id, &links, Some(&caller)))
+    .await;
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     let related = |workspace: Workspace| workspace.links.related.len();
     assert_eq!(
@@ -190,9 +196,11 @@ async fn a_scoped_relink_checks_its_related_items_as_links_do() {
     );
     // The user's relink, as a restore makes, records it as it was.
     assert!(
-        (manager.relink_space(&workspace.id, &links, None))
-            .await
-            .is_empty()
+        (manager
+            .links
+            .relink_space(&**manager, &workspace.id, &links, None))
+        .await
+        .is_empty()
     );
     assert_eq!(
         related(manager.workspace_by_id(&workspace.id).await.unwrap()),

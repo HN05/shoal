@@ -162,7 +162,12 @@ async fn a_relinked_agents_assignment_puts_the_agent_account_on_again() {
         }],
         ..Default::default()
     };
-    let warnings = (fixture.manager.relink_space(&workspace.id, &links, None)).await;
+    let warnings =
+        (fixture
+            .manager
+            .links
+            .relink_space(&*fixture.manager, &workspace.id, &links, None))
+        .await;
     assert!(warnings.is_empty(), "{warnings:?}");
     assert_eq!(fixture.change_tokens(), ["token agent"]);
 }
