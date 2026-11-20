@@ -91,3 +91,19 @@ async fn a_move_that_left_its_space_here_tells_its_agent_once_it_ended() {
         .unwrap();
     assert_eq!(told.len(), 1);
 }
+
+#[test]
+fn a_carried_space_hears_the_failure_of_the_space_that_carried_it() {
+    let (chat, worker): (SpaceId, SpaceId) = ("chat".into(), "worker".into());
+    let report = crate::transfer::MoveReport {
+        moved: Vec::new(),
+        failed: vec![crate::transfer::MoveFailure {
+            id: worker,
+            name: "worker".into(),
+            error: "it changed since its package was written".into(),
+        }],
+    };
+    let ended = Ended::Succeeded(Box::new(Outcome::Moved(report)));
+    let told = stayed_message(&chat, &ended);
+    assert!(told.contains("it changed since"), "{told}");
+}

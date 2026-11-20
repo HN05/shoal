@@ -162,8 +162,10 @@ fn stayed_message(space: &SpaceId, ended: &Ended) -> String {
     match ended {
         Ended::Succeeded(outcome) => match outcome.as_ref() {
             Outcome::Moved(report) => {
-                let failed = report.failed.iter().find(|failed| failed.id == *space);
-                match failed {
+                // A space the move carried with one it took fails with that
+                // one, which the report lists in its place.
+                let own = report.failed.iter().find(|failed| failed.id == *space);
+                match own.or(report.failed.first()) {
                     Some(failed) => format!("Your space did not move: {}", failed.error),
                     None => "Your space stayed on this machine while the spaces it moved went"
                         .to_owned(),
