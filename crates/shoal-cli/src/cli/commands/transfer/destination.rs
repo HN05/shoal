@@ -45,7 +45,8 @@ enum Kind {
 
 /// The spaces `args` names with the destination it names, or without one
 /// the destination the user picks on a terminal, once the spaces and
-/// repository it names exist, after picking the spaces when it names none.
+/// repository it names exist and a checkpoint names one space, after
+/// picking the spaces when it names none.
 pub(super) async fn choose(
     ctx: &Context,
     args: &MoveArgs,
@@ -61,8 +62,13 @@ pub(super) async fn choose(
         true => names,
         false => ui::select_spaces(ctx, names, true).await?,
     };
+    export::copy::ensure_one_at_checkpoint(names.len(), args.checkpoint)?;
     let several = all || names.len() > 1;
-    let destination = pick(ctx, several).await?;
+    let destination = match args.no_resume || args.shoal.is_some() {
+        // Only a move over SSH takes them.
+        true => ssh_host(ctx)?,
+        false => pick(ctx, several).await?,
+    };
     Ok((names, destination))
 }
 
@@ -71,20 +77,29 @@ pub(super) async fn choose(
 async fn pick(ctx: &Context, several: bool) -> Result<Destination> {
     let kinds = [(Kind::Ssh, "SSH host"), (Kind::File, "File")];
     match ui::pick_choice(ctx, "Destination> ", &kinds)? {
-        Kind::Ssh => Ok(Destination::Ssh(ui::input(ctx, "SSH host")?)),
-        Kind::File => {
-            let prompt = match several {
-                true => "Directory",
-                false => "File",
-            };
-            ui::input_until(ctx, prompt, None, |path| async move {
-                ensure!(
-                    path != STANDARD_STREAM,
-                    "name a file; only -o - writes to standard output"
-                );
-                Ok(Destination::File(PathBuf::from(path)))
-            })
-            .await
-        }
+        Kind::Ssh => ssh_host(ctx),
+        Kind::File => file(ctx, several).await,
     }
+}
+
+/// The SSH host the user types.
+fn ssh_host(ctx: &Context) -> Result<Destination> {
+    Ok(Destination::Ssh(ui::input(ctx, "SSH host")?))
+}
+
+/// The file the user types, a directory for `several` spaces, never
+/// standard output, which only `-o -` writes.
+async fn file(ctx: &Context, several: bool) -> Result<Destination> {
+    let prompt = match several {
+        true => "Directory",
+        false => "File",
+    };
+    ui::input_until(ctx, prompt, None, |path| async move {
+        ensure!(
+            path != STANDARD_STREAM,
+            "name a file; only -o - writes to standard output"
+        );
+        Ok(Destination::File(PathBuf::from(path)))
+    })
+    .await
 }

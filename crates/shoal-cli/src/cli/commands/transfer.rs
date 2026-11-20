@@ -56,13 +56,7 @@ pub(super) async fn run(ctx: &Context, args: MoveArgs) -> Result<i32> {
             let remote = ssh::Remote::new(host, args.shoal, !args.no_resume);
             ssh::run(ctx, remote, moving).await
         }
-        Destination::File(path) => {
-            ensure!(
-                !args.no_resume && args.shoal.is_none(),
-                "--no-resume and --shoal apply only to a move over SSH"
-            );
-            to_file(ctx, path, moving).await
-        }
+        Destination::File(path) => to_file(ctx, path, moving).await,
     }
 }
 

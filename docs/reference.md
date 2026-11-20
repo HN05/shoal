@@ -4628,7 +4628,9 @@ shoal restore --from moving                    # continue every space written to
 `shoal move [space]...` takes one destination: `--ssh <host>` or
 `-o <file>`. Without one, on a terminal, it picks the spaces when none are
 named, then asks for the destination's kind, `SSH host` or `File`, and for the
-host or path; without a terminal it is refused, naming both flags.
+host or path, or only for the host given `--no-resume` or `--shoal`, after
+refusing the spaces, repository or `--checkpoint` it cannot take; without a
+terminal it is refused, naming both flags.
 
 `shoal move [space] -o <file>` ends a workspace or chat here and writes
 it to a new file, or to standard output for `-`, refusing a

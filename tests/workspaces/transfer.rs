@@ -830,6 +830,8 @@ fn a_move_without_a_destination_asks_for_one_on_a_terminal() {
     let workspace = fixture.add("asked");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     let id = fixture.id("asked");
+    fixture.add("other");
+    let other = fixture.id("other");
 
     let refused = fixture.run(&["move", &id]);
     assert!(!refused.status.success(), "{}", printed(&refused));
@@ -840,12 +842,15 @@ fn a_move_without_a_destination_asks_for_one_on_a_terminal() {
         printed(&refused)
     );
     assert!(path.exists());
-    // A space or repository that does not exist is refused before the picker.
-    for missing in [
+    // A space or repository that does not exist, or a checkpoint of several
+    // spaces, is refused before the picker.
+    let checkpoint = ["move", &id, &other, "--keep", "--checkpoint", "1"];
+    for invalid in [
         &["move", "999"][..],
         &["move", "--repo", "missing", "--all"],
+        &checkpoint,
     ] {
-        let (refused, rows) = fixture.pick(missing, "1", "unused\n");
+        let (refused, rows) = fixture.pick(invalid, "1", "unused\n");
         assert!(!refused.status.success(), "{}", printed(&refused));
         assert!(rows.is_empty(), "{rows}");
     }
