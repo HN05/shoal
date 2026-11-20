@@ -28,8 +28,8 @@ use super::{
     numbers::reroute,
     support::{
         fixture::{Base, home},
-        install_test_script, ports, pty,
-        wait::wait_for,
+        install_test_script, ports, printed, pty,
+        wait::{try_wait_for, wait_for},
         zmx::PASSTHROUGH_ZMX,
     },
 };
@@ -105,11 +105,27 @@ fn laptop_demo(hub: &Base) -> (Base, String, String) {
             .as_str()
             .unwrap(),
     );
-    wait_for("the demo to listen", || {
-        path.join("listening").exists().then_some(())
-    });
+    let listening = try_wait_for(|| path.join("listening").exists().then_some(()));
+    assert!(
+        listening.is_some(),
+        "timed out waiting for the demo to listen\n{}",
+        demo_state(&laptop, &space)
+    );
     listed(hub, &space, &laptop_id);
     (laptop, space, laptop_id)
+}
+
+/// How `laptop` lists `space`'s demos and what its demo `site` shows, which
+/// say why the demo did not listen: a wrapper that ended or restarts, or
+/// the command's error.
+fn demo_state(laptop: &Base, space: &str) -> String {
+    let listing = laptop.run(&["--json", "demo", "ls", "--workspace", space]);
+    let screen = laptop.run(&["demo", "screen", "site", "--workspace", space]);
+    format!(
+        "demo ls: {}\ndemo screen: {}",
+        printed(&listing),
+        printed(&screen)
+    )
 }
 
 fn selected(space: &str) -> SpaceSelector {
