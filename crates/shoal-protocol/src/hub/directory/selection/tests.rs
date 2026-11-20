@@ -76,3 +76,14 @@ fn a_listed_space_names_its_machine_or_else_its_id() {
     assert_eq!(name("work"), "laptop");
     assert_eq!(name("build"), "m-server");
 }
+
+#[test]
+fn an_agent_that_sleeps_elsewhere_counts_as_one_that_runs() {
+    let view = view();
+    let runs = |id: &str| {
+        (view.listed(&SpaceId::from(id.to_owned())).unwrap().space).agent_runs_or_sleeps()
+    };
+    assert!(runs("talk"));
+    assert!(runs("nap"));
+    assert!(!runs("quiet"));
+}

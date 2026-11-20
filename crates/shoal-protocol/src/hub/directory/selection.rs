@@ -31,7 +31,7 @@ impl Offered {
 impl SpaceSummary {
     /// Whether its agent runs, or sleeps in a wrapper that keeps running
     /// while Shoal stopped the agent until something wakes it.
-    fn agent_runs_or_sleeps(&self) -> bool {
+    pub fn agent_runs_or_sleeps(&self) -> bool {
         self.running.is_some() || self.status == ListStatus::Asleep
     }
 }

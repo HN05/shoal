@@ -131,7 +131,7 @@ pub(in crate::cli::commands) async fn request_name(
 }
 
 /// The space `rename --request` asks, by its ID, with whether an agent runs
-/// there to ask.
+/// or sleeps there to ask.
 struct AskedSpace {
     selector: SpaceSelector,
     label: String,
@@ -159,7 +159,7 @@ async fn asked_space(ctx: &Context, selector: &SpaceSelector) -> Result<AskedSpa
         selector: SpaceSelector::id(&space.id),
         label: shoal_protocol::space_names::label(space.number, &space.name),
         number: space.number,
-        running: space.running.is_some(),
+        running: space.agent_runs_or_sleeps(),
     })
 }
 
