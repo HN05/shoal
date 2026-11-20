@@ -76,13 +76,29 @@ impl Manager {
                 order: Box::new(order),
             };
             match self.spawn_operation(first, spec, None, Some(&caller)).await {
-                Ok(id) => self.store.write(move |tx| started(tx, &space, &id)).await?,
+                Ok(id) => self.record_started(&space, &id).await?,
                 Err(error) => {
                     self.forget_move_after_turn(&space).await;
                     let text = format!("The move of your space did not start: {error:#}");
                     self.tell_mover(&space, text).await;
                 }
             }
+        }
+        Ok(())
+    }
+
+    /// Record that the operation `id` runs the move recorded for `space`,
+    /// telling its agent how it went when it ended before this could.
+    async fn record_started(&self, space: &SpaceId, id: &str) -> Result<()> {
+        let (recorded, operation) = (space.clone(), id.to_owned());
+        (self.store)
+            .write(move |tx| started(tx, &recorded, &operation))
+            .await?;
+        let ending = (self.operation(id, None).await)
+            .ok()
+            .and_then(|entry| entry.ending());
+        if let Some(ended) = ending {
+            self.tell_move_after_turn(id, &ended).await;
         }
         Ok(())
     }

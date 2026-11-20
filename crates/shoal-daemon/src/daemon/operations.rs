@@ -191,6 +191,12 @@ impl Entry {
         });
     }
 
+    /// How it ended, or how its worker reported it ends, once either came.
+    pub(crate) fn ending(&self) -> Option<Ended> {
+        let state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        state.ended.clone().or_else(|| state.reported.clone())
+    }
+
     /// Whether its worker has yet to end it.
     pub(crate) fn running(&self) -> bool {
         let state = self.state.lock().unwrap_or_else(PoisonError::into_inner);

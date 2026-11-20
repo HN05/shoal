@@ -33,8 +33,9 @@ states!(AlertKind {
     AgentResumed => "agent_resumed",
     /// A daemon restart left a stopped agent's processes uncertain.
     RecoveryBlocked => "recovery_blocked",
-    /// Shoal finished a move whose worker went before it ended, as when the
-    /// machine restarted during it.
+    /// A move ended where no command followed it to its end: one Shoal
+    /// finished after its worker went, or one that waited for the turn of
+    /// the agent it stops.
     MoveFinished => "move_finished",
     /// A space moved here from another joined machine, which its agent
     /// hears as it continues here.
