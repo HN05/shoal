@@ -1326,7 +1326,7 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
     manager
         .runner
         .jobs()
-        .backdate_finished_runs(super::overrun::GRACE);
+        .backdate_finished_runs(shoal_runner::jobs::GRACE);
     let finishing = tokio::spawn({
         let manager = manager.clone();
         async move { manager.finish_ended_jobs().await }

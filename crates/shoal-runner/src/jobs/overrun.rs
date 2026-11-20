@@ -7,41 +7,34 @@
 use std::time::Duration;
 
 use anyhow::Result;
-
-use super::JobStop;
-use crate::daemon::{
-    events::{JobEndedEvent, StoppedProcess},
-    executions::{Save, StopRequest},
-    manager::Manager,
-    space_processes::Selection,
-};
+use shoal_daemon_base::events::record_job_ended;
 use shoal_forge::ci::{run_view::RunViewRequests, runner::took_job};
-use shoal_protocol::space_names::SpaceSelector;
-use shoal_runner::jobs::ClaimedJob;
+use shoal_protocol::events::{JobEndedEvent, StoppedProcess};
+
+use super::{ClaimedJob, JobStop};
+use crate::{Runner, daemon::Daemon};
 
 /// How long a runner may run after the forge finished its job's run, as it
 /// reports the job's end.
-pub(super) const GRACE: Duration = Duration::from_secs(60);
+pub const GRACE: Duration = Duration::from_secs(60);
 
 /// The most stopped processes a job's end lists, so its event fits in a
 /// protocol frame; it counts the rest.
 const LISTED: usize = 20;
 
-impl Manager {
+impl Runner {
     /// End `job`, whose runner still runs, once it has outlived the job's
     /// run on the forge by [`GRACE`], returning whether it did.
-    pub(super) async fn end_overrun_job(&self, job: &ClaimedJob) -> Result<bool> {
-        let Some(run) = self.outlived_run(job).await? else {
+    pub async fn end_overrun_job(&self, daemon: &dyn Daemon, job: &ClaimedJob) -> Result<bool> {
+        let Some(run) = self.outlived_run(daemon, job).await? else {
             return Ok(false);
         };
-        let workspace = self.workspace_by_id(&job.workspace_id).await?;
-        let stopped = self
-            .stop_workspace_untracked(&workspace, Selection::Processes, None)
-            .await?;
-        self.stop_job_runner(job).await?;
+        let stopped = daemon.stop_job_processes(&job.workspace_id).await?;
+        let reason = "its CI job's run finished on the forge".to_owned();
+        daemon.stop_job_runner(&job.workspace_id, reason).await?;
         self.log_job_stop(job, JobStop::Overrun, "its run had finished");
         let ended = ended_job(job.job.job.name.clone(), run, stopped);
-        crate::daemon::events::record_job_ended(&self.store, &job.workspace_id, ended).await;
+        record_job_ended(&self.store, &job.workspace_id, ended).await;
         Ok(true)
     }
 
@@ -49,30 +42,19 @@ impl Manager {
     /// [`GRACE`], reading the run on the forge when due. A runner registered
     /// for one job that has taken none may still take one of another run,
     /// so it outlives nothing.
-    async fn outlived_run(&self, job: &ClaimedJob) -> Result<Option<String>> {
-        if job.runner_id.is_some() && !took_job(&self.runner.job_directory(&job.id)) {
+    async fn outlived_run(&self, daemon: &dyn Daemon, job: &ClaimedJob) -> Result<Option<String>> {
+        if job.runner_id.is_some() && !took_job(&self.job_directory(&job.id)) {
             return Ok(None);
         }
-        let forge = self.item_forge(&job.job.run.url).await?;
-        let url = self.runner.reported_run_url(&forge, job);
-        if self.runner.jobs().take_run_read(&job.id)
-            && !(forge.view_run(&self.user_account(), &url).await?.state).unfinished()
+        let forge = daemon.item_forge(&job.job.run.url).await?;
+        let url = self.reported_run_url(&forge, job);
+        if self.jobs.take_run_read(&job.id)
+            && !(forge.view_run(&daemon.user_account(), &url).await?.state).unfinished()
         {
-            self.runner.jobs().run_finished(&job.id);
+            self.jobs.run_finished(&job.id);
         }
-        let outlived =
-            (self.runner.jobs().finished_for(&job.id)).is_some_and(|since| since >= GRACE);
+        let outlived = (self.jobs.finished_for(&job.id)).is_some_and(|since| since >= GRACE);
         Ok(outlived.then(|| url.to_string()))
-    }
-
-    /// Stop the runner of `job`, saving nothing: its run is over.
-    async fn stop_job_runner(&self, job: &ClaimedJob) -> Result<()> {
-        let request = StopRequest {
-            reason: "its CI job's run finished on the forge".into(),
-            save: Save::Nothing,
-        };
-        self.stop_space(&SpaceSelector::id(&job.workspace_id), request)
-            .await
     }
 }
 

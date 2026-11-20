@@ -17,6 +17,7 @@ use shoal_forge_types::{ForgeRepo, items::reference::ItemRef};
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     config::permissions::PermissionKey,
+    events::StoppedProcess,
     launches::{Launch, LaunchSource},
     model::{QueueEntry, QueuedJob, Repository, Space, Workspace, WorkspaceUsage},
     protocol::ItemContext,
@@ -133,6 +134,20 @@ pub trait Spaces: Send + Sync {
     fn workspace_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Workspace>>;
 }
 
+/// The executions of the runner's jobs.
+pub trait Executions: Send + Sync {
+    /// Stop every process of the job workspace `id` but its runner,
+    /// leftovers whose parent is gone included, returning what it stopped.
+    fn stop_job_processes<'a>(
+        &'a self,
+        id: &'a SpaceId,
+    ) -> BoxFuture<'a, Result<Vec<StoppedProcess>>>;
+
+    /// Stop the runner of the job workspace `id` for `reason`, saving
+    /// nothing.
+    fn stop_job_runner<'a>(&'a self, id: &'a SpaceId, reason: String) -> BoxFuture<'a, Result<()>>;
+}
+
 /// The workspaces the runner's jobs run in.
 pub trait Workspaces: Send + Sync {
     /// Move the job workspace `id` to `commit`, fetched by `reference` when
@@ -148,12 +163,19 @@ pub trait Workspaces: Send + Sync {
 /// Everything the triggers and the runner need of the daemon, which each of
 /// their operations that reaches beyond them takes.
 pub trait Daemon:
-    Repositories + Agents + Permissions + Forges + Spaces + Workspaces + Coordinators
+    Repositories + Agents + Permissions + Forges + Spaces + Workspaces + Executions + Coordinators
 {
 }
 
 impl<T> Daemon for T where
-    T: Repositories + Agents + Permissions + Forges + Spaces + Workspaces + Coordinators
+    T: Repositories
+        + Agents
+        + Permissions
+        + Forges
+        + Spaces
+        + Workspaces
+        + Executions
+        + Coordinators
 {
 }
 

@@ -12,7 +12,6 @@
 //! [`INTERVAL`] while none can.
 mod claims;
 mod ends;
-mod overrun;
 
 pub(crate) use shoal_runner::jobs::JobStop;
 pub(crate) use shoal_runner::jobs::Registration;
@@ -32,8 +31,16 @@ use shoal_runner::{
 };
 use tokio::time::Instant;
 
+use shoal_protocol::space_names::SpaceSelector;
+
 use crate::{
-    daemon::{log, manager::Manager},
+    daemon::{
+        events::StoppedProcess,
+        executions::{Save, StopRequest},
+        log,
+        manager::Manager,
+        space_processes::Selection,
+    },
     forge::{ForgeRepo, items::reference::ItemRef},
     model::{QueuedJob, Repository, Space, Workspace, WorkspaceUsage},
     state::{QueueKind, QueueState},
@@ -236,6 +243,26 @@ impl Forges for Manager {
 
     fn item_forge<'a>(&'a self, item: &'a ItemRef) -> BoxFuture<'a, Result<ForgeRepo>> {
         Box::pin(Manager::item_forge(self, item))
+    }
+}
+
+impl shoal_runner::daemon::Executions for Manager {
+    fn stop_job_processes<'a>(
+        &'a self,
+        id: &'a SpaceId,
+    ) -> BoxFuture<'a, Result<Vec<StoppedProcess>>> {
+        Box::pin(async move {
+            let workspace = self.workspace_by_id(id).await?;
+            (self.stop_workspace_untracked(&workspace, Selection::Processes, None)).await
+        })
+    }
+
+    fn stop_job_runner<'a>(&'a self, id: &'a SpaceId, reason: String) -> BoxFuture<'a, Result<()>> {
+        let request = StopRequest {
+            reason,
+            save: Save::Nothing,
+        };
+        Box::pin(async move { self.stop_space(&SpaceSelector::id(id), request).await })
     }
 }
 

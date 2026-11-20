@@ -11,12 +11,13 @@ use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId};
 use shoal_protocol::protocol::SessionSignal;
 use tokio::{sync::Notify, time::Instant};
 
-use crate::Runner;
+use crate::{Runner, log};
 
 mod claimed;
 mod costs;
 mod linked;
 mod listing;
+mod overrun;
 mod queue;
 mod registration;
 mod single_use;
@@ -26,12 +27,25 @@ mod waiting;
 
 pub use claimed::ClaimedJob;
 pub use costs::JobCost;
+pub use overrun::GRACE;
 pub use registration::Registration;
 
 impl Runner {
     /// What the runner keeps between passes.
     pub fn jobs(&self) -> &Runners {
         &self.jobs
+    }
+
+    /// Record in Shoal's log that `cause` stopped the runner of `job`, with
+    /// the `outcome` for its run.
+    pub fn log_job_stop(&self, job: &ClaimedJob, cause: JobStop, outcome: &str) {
+        log!(
+            "runner: {} of run {} stopped by {cause}; {outcome}",
+            job.job.job.name,
+            job.job.run.url
+        );
+        #[cfg(any(test, feature = "test-support"))]
+        (self.jobs.stops.lock().unwrap()).push((job.workspace_id.clone(), cause));
     }
 }
 

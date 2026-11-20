@@ -28,9 +28,7 @@ use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
 /// later deliveries.
 const LISTED_AT_ONCE: usize = 10;
 
-/// The longest command a leftover or a stopped process keeps, so a
-/// delivery or an event stays small.
-pub(crate) const COMMAND_LIMIT: usize = 300;
+pub(crate) use shoal_protocol::events::COMMAND_LIMIT;
 
 /// What the last sweep found, by space.
 #[derive(Default)]

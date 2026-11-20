@@ -400,6 +400,20 @@ impl Spaces for StandIn {
     }
 }
 
+/// The stand-in runs no job processes.
+impl crate::daemon::Executions for StandIn {
+    fn stop_job_processes<'a>(
+        &'a self,
+        _: &'a SpaceId,
+    ) -> BoxFuture<'a, Result<Vec<shoal_protocol::events::StoppedProcess>>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn stop_job_runner<'a>(&'a self, _: &'a SpaceId, _: String) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+}
+
 /// The stand-in's job workspaces never move.
 impl crate::daemon::Workspaces for StandIn {
     fn move_job_workspace<'a>(

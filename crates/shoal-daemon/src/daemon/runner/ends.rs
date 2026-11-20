@@ -107,10 +107,13 @@ impl Manager {
     /// could not end, or whose run could not be read, is tried again on a
     /// later pass.
     async fn ended_overrun_job(&self, job: &ClaimedJob) -> bool {
-        self.end_overrun_job(job).await.unwrap_or_else(|error| {
-            crate::daemon::log!("runner: {}: {error:#}", job.job.job.name);
-            false
-        })
+        self.runner
+            .end_overrun_job(self, job)
+            .await
+            .unwrap_or_else(|error| {
+                crate::daemon::log!("runner: {}: {error:#}", job.job.job.name);
+                false
+            })
     }
 
     /// Record the execution running in the workspace of `job`, whose claim
@@ -273,23 +276,6 @@ impl Manager {
             .find(|job| job.workspace_id == *workspace_id))
     }
 
-    /// Record in Shoal's log that `cause` stopped the runner of `job`, with
-    /// the `outcome` for its run.
-    pub(super) fn log_job_stop(&self, job: &ClaimedJob, cause: JobStop, outcome: &str) {
-        crate::daemon::log!(
-            "runner: {} of run {} stopped by {cause}; {outcome}",
-            job.job.job.name,
-            job.job.run.url
-        );
-        #[cfg(test)]
-        self.runner
-            .jobs()
-            .stops
-            .lock()
-            .unwrap()
-            .push((job.workspace_id.clone(), cause));
-    }
-
     /// Cancel `job`'s run as `cause` stops its runner, recording in Shoal's
     /// log what stopped it and whether the run was cancelled, returning the
     /// cancelled run's URL.
@@ -299,7 +285,7 @@ impl Manager {
             Ok(_) => "cancelled its run".to_owned(),
             Err(error) => format!("could not cancel its run: {error:#}"),
         };
-        self.log_job_stop(job, cause, &outcome);
+        self.runner.log_job_stop(job, cause, &outcome);
         cancelled
     }
 

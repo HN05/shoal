@@ -475,6 +475,10 @@ fn is_zero(count: &usize) -> bool {
     *count == 0
 }
 
+/// The longest command a leftover or a stopped process keeps, so a
+/// delivery or an event stays small.
+pub const COMMAND_LIMIT: usize = 300;
+
 /// A process Shoal stopped, as a person recognizes it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoppedProcess {
