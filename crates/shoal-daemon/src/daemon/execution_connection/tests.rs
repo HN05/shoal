@@ -179,9 +179,15 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
             shutdown: false
         }
     ));
-    protocol::write(legacy.get_mut(), &ExecutionEvent::Finished { exit_code: 0 })
-        .await
-        .unwrap();
+    protocol::write(
+        legacy.get_mut(),
+        &ExecutionEvent::Finished {
+            exit_code: 0,
+            memory: None,
+        },
+    )
+    .await
+    .unwrap();
     assert!(matches!(
         read(&mut legacy).await,
         Control::Finished { complete: true }
@@ -257,7 +263,10 @@ async fn running_executions_leave_daemon_operations_idle() {
     // A command exiting meanwhile reports to the replacement daemon.
     protocol::write(
         wrapper_side.get_mut(),
-        &ExecutionEvent::Finished { exit_code: 0 },
+        &ExecutionEvent::Finished {
+            exit_code: 0,
+            memory: None,
+        },
     )
     .await
     .unwrap();
@@ -336,7 +345,10 @@ async fn a_wrapper_registers_again_from_where_it_runs() {
     assert_eq!(executions[0].origin, Some(origin));
     protocol::write(
         wrapper_side.get_mut(),
-        &ExecutionEvent::Finished { exit_code: 0 },
+        &ExecutionEvent::Finished {
+            exit_code: 0,
+            memory: None,
+        },
     )
     .await
     .unwrap();

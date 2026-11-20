@@ -31,16 +31,30 @@ fn text_pieces_fit_frames_and_keep_characters_whole() {
 #[tokio::test]
 async fn buffered_execution_reads_preserve_adjacent_frames() {
     let (mut writer, reader) = tokio::io::duplex(1024);
-    write(&mut writer, &ExecutionEvent::Finished { exit_code: 7 })
-        .await
-        .unwrap();
-    write(&mut writer, &ExecutionEvent::Finished { exit_code: 8 })
-        .await
-        .unwrap();
+    write(
+        &mut writer,
+        &ExecutionEvent::Finished {
+            exit_code: 7,
+            memory: None,
+        },
+    )
+    .await
+    .unwrap();
+    write(
+        &mut writer,
+        &ExecutionEvent::Finished {
+            exit_code: 8,
+            memory: None,
+        },
+    )
+    .await
+    .unwrap();
     let mut reader = BufReader::new(reader);
     for expected in [7, 8] {
         let event: ExecutionEvent = read_buffered(&mut reader).await.unwrap();
-        assert!(matches!(event, ExecutionEvent::Finished { exit_code } if exit_code == expected));
+        assert!(
+            matches!(event, ExecutionEvent::Finished { exit_code, .. } if exit_code == expected)
+        );
     }
 }
 

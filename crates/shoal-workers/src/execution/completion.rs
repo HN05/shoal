@@ -11,6 +11,7 @@ use super::{
     link::{Link, Received},
 };
 use crate::protocol::{Control, ExecutionEvent, timing};
+use shoal_protocol::protocol::ScopeMemory;
 
 /// The command exited, but the daemon retained its unresolved execution.
 #[derive(Debug)]
@@ -30,15 +31,24 @@ impl std::fmt::Display for SetupVerificationFailure {
 
 impl std::error::Error for SetupVerificationFailure {}
 
-/// Report the exit code, resending it to a reattached daemon when the
-/// previous one went away before acknowledging it.
-pub(super) async fn report_completion(link: &mut Link, code: i32, mode: &Mode) -> Result<bool> {
+/// Report the exit code, with what the command's scope recorded of its
+/// `memory`, resending it to a reattached daemon when the previous one went
+/// away before acknowledging it.
+pub(super) async fn report_completion(
+    link: &mut Link,
+    code: i32,
+    memory: Option<ScopeMemory>,
+    mode: &Mode,
+) -> Result<bool> {
     loop {
         if !link.is_attached() {
             await_reattachment(link).await?;
         }
-        link.send(&ExecutionEvent::Finished { exit_code: code })
-            .await?;
+        link.send(&ExecutionEvent::Finished {
+            exit_code: code,
+            memory,
+        })
+        .await?;
         let exchange = async {
             loop {
                 match link.recv().await? {

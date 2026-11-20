@@ -19,7 +19,7 @@ use super::{
     Mode,
     link::{Link, Received, Refused},
     pause::Halt,
-    recovery,
+    recovery, scope_memory,
     signal_report::SignalReport,
     spawn::{AgentLaunch, spawn},
 };
@@ -30,6 +30,7 @@ use crate::{
     protocol::{Control, ExecutionEvent, timing},
 };
 use shoal_core::execution::{DetachedLaunch, Terminal, exit_code, report_launch};
+use shoal_protocol::protocol::ScopeMemory;
 
 #[derive(Debug)]
 pub(super) enum Outcome {
@@ -46,6 +47,13 @@ pub(super) enum Outcome {
 }
 
 impl Outcome {
+    /// The code the command ended with.
+    pub(super) fn code(&self) -> i32 {
+        match self {
+            Self::Exited(code) | Self::Stopped { code, .. } | Self::Paused { code, .. } => *code,
+        }
+    }
+
     /// A command that ended by itself or by a signal, paused when `halt`
     /// names the end of the session it ran in.
     fn ended(status: ExitStatus, halt: Option<Halt>) -> Self {
@@ -121,7 +129,8 @@ pub(super) struct Saving<'a, F> {
 }
 
 /// Launch the command, register its process group, and wait for it to exit or
-/// for a stop request.
+/// for a stop request, with what its scope recorded of its memory where it
+/// ran in one of its own.
 pub(super) async fn supervise(
     link: &mut Link,
     paths: &Paths,
@@ -130,47 +139,46 @@ pub(super) async fn supervise(
     mode: &Mode,
     auth: Option<&AgentLaunch>,
     saving: Saving<'_, impl Fn(&Halt)>,
-) -> Result<Outcome> {
+) -> Result<(Outcome, Option<ScopeMemory>)> {
     let signals = ExecutionSignals::new()?;
+    let launcher = launcher(mode).await;
     let (mut child, group, _terminal, _scope) =
-        register_child(link, paths, plan, command, mode, auth, saving.restored_from).await?;
+        spawn_registered_child(paths, plan, command, mode, auth, launcher)?;
+    register_child(link, plan, mode, &group, saving.restored_from).await?;
+    let watch = (!launcher.is_empty()).then(|| scope_memory::Watch::start(group.pid()));
     let report = SignalReport { paths, plan };
     let outcome = wait_for_child(link, &mut child, &group, signals, saving.ending, report).await?;
     // A command owns its process group; descendants do not outlive its lease.
     drop(group);
-    Ok(outcome)
+    let memory = watch.and_then(|watch| watch.finish(outcome.code()));
+    Ok((outcome, memory))
 }
 
-/// Spawn a child as the terminal's foreground job and register its process
-/// group with the daemon.
-async fn register_child(
-    link: &mut Link,
-    paths: &Paths,
-    plan: &ExecutionPlan,
-    command: &[OsString],
-    mode: &Mode,
-    auth: Option<&AgentLaunch>,
-    recovery_record: Option<&Path>,
-) -> Result<(
-    Child,
-    ProcessGroup,
-    Option<Terminal>,
-    process::scoped::Records,
-)> {
-    let launcher = match mode.is_work() {
+/// The command the child of `mode` starts through: Shoal's work runs in
+/// the work slice, where a scope can start.
+async fn launcher(mode: &Mode) -> &'static [OsString] {
+    match mode.is_work() {
         true => shoal_core::service::work::launcher().await,
         false => &[],
-    };
-    let (child, group, terminal, scope) =
-        spawn_registered_child(paths, plan, command, mode, auth, launcher)?;
-    let restored = matches!(mode, Mode::Recovery { .. }) || recovery_record.is_some();
-    let records = restored_records(mode, recovery_record);
-    register_process(link, &group, restored, &records).await?;
-    consume_recovery_records(&records)?;
-    report_detached_launch(plan, mode, &group)?;
-    Ok((child, group, terminal, scope))
+    }
 }
 
+/// Register the process group of the child `mode` started with the daemon.
+async fn register_child(
+    link: &mut Link,
+    plan: &ExecutionPlan,
+    mode: &Mode,
+    group: &ProcessGroup,
+    recovery_record: Option<&Path>,
+) -> Result<()> {
+    let restored = matches!(mode, Mode::Recovery { .. }) || recovery_record.is_some();
+    let records = restored_records(mode, recovery_record);
+    register_process(link, group, restored, &records).await?;
+    consume_recovery_records(&records)?;
+    report_detached_launch(plan, mode, group)
+}
+
+/// Spawn a child as the terminal's foreground job.
 fn spawn_registered_child(
     paths: &Paths,
     plan: &ExecutionPlan,

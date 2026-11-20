@@ -84,7 +84,8 @@ pub use triggers::TriggerMethod;
 pub use version::VERSION;
 pub use workspaces::{CommitStart, CopySource, CreationOptions, PullHead, WorkspaceMethod};
 pub use wrapper::{
-    Control, ExecutionEvent, RESTORE_WAITS, RESUME_NARROWING, Reattach, default_resumes_when,
+    Control, ExecutionEvent, RESTORE_WAITS, RESUME_NARROWING, Reattach, ScopeMemory,
+    default_resumes_when,
 };
 
 #[cfg(test)]

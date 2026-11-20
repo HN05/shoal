@@ -405,7 +405,7 @@ async fn relay(
                 drop(operation);
                 manager.close_left_places(&space.id, left).await;
             }
-            ExecutionEvent::Finished { exit_code } => {
+            ExecutionEvent::Finished { exit_code, .. } => {
                 *stopped = sent_stop;
                 return Ok(Ended::Finished(exit_code));
             }

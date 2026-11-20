@@ -133,7 +133,10 @@ impl Running {
             )
             .await
             .expect_err("an execution registered while the daemon stops work");
-        let finished = ExecutionEvent::Finished { exit_code: 143 };
+        let finished = ExecutionEvent::Finished {
+            exit_code: 143,
+            memory: None,
+        };
         protocol::write(self.connection.get_mut(), &finished)
             .await
             .unwrap();
@@ -225,7 +228,10 @@ async fn a_restart_and_a_signal_after_a_system_shutdown_stop_leave_work_alone() 
     bounded(signaled).await;
     assert!(running.queued_restore().await);
     // The connection still runs: the next control answers its exit.
-    let finished = ExecutionEvent::Finished { exit_code: 0 };
+    let finished = ExecutionEvent::Finished {
+        exit_code: 0,
+        memory: None,
+    };
     protocol::write(running.connection.get_mut(), &finished)
         .await
         .unwrap();

@@ -126,7 +126,10 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
         .space_state(&workspace.id)
         .join(format!("{}.restore-request.json", plan.id));
     std::fs::write(&request, "{}").unwrap();
-    let finished = ExecutionEvent::Finished { exit_code: 143 };
+    let finished = ExecutionEvent::Finished {
+        exit_code: 143,
+        memory: None,
+    };
     protocol::write(connection.get_mut(), &finished)
         .await
         .unwrap();

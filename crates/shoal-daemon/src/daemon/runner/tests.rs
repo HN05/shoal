@@ -1232,7 +1232,10 @@ async fn daemon_exit_with_runner(job: Value, cancelling: Cancelling) -> Fixture 
     });
     let control: Control = read(&mut connection).await;
     assert!(matches!(&control, Control::Pause { .. }), "{control:?}");
-    let event = ExecutionEvent::Finished { exit_code: 143 };
+    let event = ExecutionEvent::Finished {
+        exit_code: 143,
+        memory: None,
+    };
     protocol::write(connection.get_mut(), &event).await.unwrap();
     let control: Control = read(&mut connection).await;
     assert!(matches!(control, Control::Finished { .. }), "{control:?}");
@@ -1303,7 +1306,10 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
     assert!(matches!(&control, Control::Stop { .. }), "{control:?}");
     // The runner is stopped only once the processes its steps left are.
     assert!(!identity::alive(&left.0).unwrap());
-    let event = ExecutionEvent::Finished { exit_code: 143 };
+    let event = ExecutionEvent::Finished {
+        exit_code: 143,
+        memory: None,
+    };
     protocol::write(connection.get_mut(), &event).await.unwrap();
     let control: Control = read(&mut connection).await;
     assert!(matches!(control, Control::Finished { .. }), "{control:?}");
@@ -1379,7 +1385,10 @@ async fn load_protection_ends_a_job_before_agents_and_reruns_it_once_readings_re
     });
     let control: Control = read(&mut connection).await;
     assert!(matches!(&control, Control::Stop { .. }), "{control:?}");
-    let event = ExecutionEvent::Finished { exit_code: 143 };
+    let event = ExecutionEvent::Finished {
+        exit_code: 143,
+        memory: None,
+    };
     protocol::write(connection.get_mut(), &event).await.unwrap();
     let control: Control = read(&mut connection).await;
     assert!(matches!(control, Control::Finished { .. }), "{control:?}");

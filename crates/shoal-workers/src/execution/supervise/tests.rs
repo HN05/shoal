@@ -72,14 +72,14 @@ async fn adjacent_controls_child() {
             protocol::read_buffered::<ExecutionEvent>(&mut server)
                 .await
                 .unwrap(),
-            ExecutionEvent::Finished { exit_code: 143 }
+            ExecutionEvent::Finished { exit_code: 143, .. }
         ));
         protocol::write(server.get_mut(), &Control::Finished { complete: true })
             .await
             .unwrap();
     };
     let wrapper = async {
-        let outcome = supervise(
+        let (outcome, _) = supervise(
             &mut link,
             &paths,
             &plan,
@@ -109,7 +109,7 @@ async fn adjacent_controls_child() {
                 if reason == "the workspace is being removed"
         ));
         assert!(
-            report_completion(&mut link, 143, &Mode::Command { record: false })
+            report_completion(&mut link, 143, None, &Mode::Command { record: false })
                 .await
                 .unwrap()
         );
@@ -197,7 +197,7 @@ async fn acknowledge_finish(daemon: &mut BufReader<UnixStream>, expected: i32) {
         .await
         .unwrap();
     assert!(
-        matches!(event, ExecutionEvent::Finished { exit_code } if exit_code == expected),
+        matches!(event, ExecutionEvent::Finished { exit_code, .. } if exit_code == expected),
         "{event:?}"
     );
     protocol::write(daemon.get_mut(), &Control::Finished { complete: true })
@@ -264,7 +264,7 @@ async fn reattachment_child() {
         acknowledge_finish(&mut daemon, 143).await;
     };
     let wrapper = async {
-        let outcome = supervise(
+        let (outcome, _) = supervise(
             &mut link,
             &paths,
             &plan,
@@ -279,7 +279,11 @@ async fn reattachment_child() {
             outcome,
             Outcome::Stopped { code: 143, reason } if reason == "the workspace is being removed"
         ));
-        assert!(report_completion(&mut link, 143, &mode).await.unwrap());
+        assert!(
+            report_completion(&mut link, 143, None, &mode)
+                .await
+                .unwrap()
+        );
     };
     tokio::join!(restarted, wrapper);
 
@@ -302,7 +306,7 @@ async fn reattachment_child() {
         acknowledge_finish(&mut daemon, 7).await;
     };
     let wrapper = async {
-        let outcome = supervise(
+        let (outcome, _) = supervise(
             &mut link,
             &paths,
             &plan,
@@ -314,7 +318,7 @@ async fn reattachment_child() {
         .await
         .unwrap();
         assert!(matches!(outcome, Outcome::Exited(7)));
-        assert!(report_completion(&mut link, 7, &mode).await.unwrap());
+        assert!(report_completion(&mut link, 7, None, &mode).await.unwrap());
     };
     tokio::join!(crashed, wrapper);
 
@@ -334,7 +338,7 @@ async fn reattachment_child() {
             .unwrap();
     };
     let wrapper = async {
-        let outcome = supervise(
+        let (outcome, _) = supervise(
             &mut link,
             &paths,
             &plan,
@@ -405,6 +409,7 @@ async fn ended_session_child() {
             unsaved(),
         )
         .await
+        .map(|(outcome, _)| outcome)
         .unwrap()
     };
     let ((), outcome) = tokio::join!(hangup, wrapper);
@@ -437,6 +442,7 @@ async fn ended_session_child() {
             unsaved(),
         )
         .await
+        .map(|(outcome, _)| outcome)
         .unwrap()
     };
     let ((), outcome) = tokio::join!(started, wrapper);
@@ -488,6 +494,7 @@ async fn ended_session_child() {
             },
         )
         .await
+        .map(|(outcome, _)| outcome)
         .unwrap()
     };
     let ((), outcome) = tokio::join!(shutdown, wrapper);
@@ -569,7 +576,11 @@ async fn signal_report_child() {
         acknowledge_start(&mut daemon).await;
         terminate_once_ready(&ready).await;
     };
-    let wrapper = supervise(&mut link, &paths, &plan, &command, &mode, None, unsaved());
+    let wrapper = async {
+        supervise(&mut link, &paths, &plan, &command, &mode, None, unsaved())
+            .await
+            .map(|(outcome, _)| outcome)
+    };
     let ((), outcome) = tokio::join!(signal, wrapper);
     assert_eq!(terminated(&outcome.unwrap()), Some(4));
 
@@ -605,7 +616,11 @@ async fn signal_report_child() {
         };
         protocol::write(stream.get_mut(), &response).await.unwrap();
     };
-    let wrapper = supervise(&mut link, &paths, &plan, &command, &mode, None, unsaved());
+    let wrapper = async {
+        supervise(&mut link, &paths, &plan, &command, &mode, None, unsaved())
+            .await
+            .map(|(outcome, _)| outcome)
+    };
     let ((), outcome) = tokio::join!(signal, wrapper);
     assert_eq!(terminated(&outcome.unwrap()), Some(3));
 }
@@ -676,6 +691,7 @@ async fn terminal_child() {
             unsaved(),
         )
         .await
+        .map(|(outcome, _)| outcome)
         .unwrap()
     };
     let ((), outcome) = tokio::join!(registration, wrapper);

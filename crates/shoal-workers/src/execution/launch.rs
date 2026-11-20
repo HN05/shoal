@@ -33,6 +33,7 @@ use crate::{
     workers::{Worker, internal_command},
 };
 use shoal_protocol::approvals::Undecided;
+use shoal_protocol::protocol::ScopeMemory;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// A tracked execution the daemon recorded, with the command it runs next and
@@ -47,6 +48,8 @@ pub(super) struct TrackedLaunch {
     record: Option<PathBuf>,
     /// The agent, as the execution registered it.
     agent: Option<super::TrackedAgent>,
+    /// What the scopes of its runs recorded of their memory.
+    memory: Option<ScopeMemory>,
 }
 
 pub(super) async fn run_tracked(
@@ -137,7 +140,7 @@ impl TrackedLaunch {
         let _waker = wake.map(|wake| wake::start(paths, &self.plan, wake));
         let _input = self.input(paths);
         let (plan, recovery) = (&self.plan, self.recovery.as_ref());
-        supervise(
+        let (outcome, memory) = supervise(
             &mut self.link,
             paths,
             plan,
@@ -149,7 +152,17 @@ impl TrackedLaunch {
                 ending: |stop: &Halt| save_ending_agent(paths, plan, mode, recovery, stop),
             },
         )
-        .await
+        .await?;
+        self.add_run_memory(memory);
+        Ok(outcome)
+    }
+
+    /// Add what a run's scope recorded of its `memory` to the earlier runs'.
+    fn add_run_memory(&mut self, memory: Option<ScopeMemory>) {
+        self.memory = match (self.memory, memory) {
+            (Some(earlier), Some(run)) => Some(earlier.and(run)),
+            (earlier, run) => earlier.or(run),
+        };
     }
 
     /// What follows a run, `ran` long, that ended with `outcome`: the exit
@@ -333,7 +346,7 @@ impl TrackedLaunch {
         let code = result.as_ref().copied().unwrap_or(1);
         // Report only after child/process-group cleanup. A lost connection never
         // grants the daemon permission to assume processes stopped.
-        let report = report_completion(&mut self.link, code, mode).await;
+        let report = report_completion(&mut self.link, code, self.memory, mode).await;
         if mode.is_setup() {
             report?;
         } else if let Err(error) = report {
@@ -397,6 +410,7 @@ pub(super) async fn prepare_tracked_launch(
         recovery,
         record: None,
         agent,
+        memory: None,
     })
 }
 
@@ -454,6 +468,7 @@ async fn prepare_taken_over_launch(
         recovery: Some(recovery),
         record,
         agent: Some(agent),
+        memory: None,
     })
 }
 
@@ -479,7 +494,7 @@ async fn prepare_restore(
 /// Report the end of a registered execution whose launch failed with `error`,
 /// which lets the daemon forget it, and return the error.
 async fn fail_launch(link: &mut Link, mode: &Mode, error: anyhow::Error) -> anyhow::Error {
-    if let Err(report) = report_completion(link, 1, mode).await {
+    if let Err(report) = report_completion(link, 1, None, mode).await {
         eprintln!("warning: unable to report execution completion: {report:#}");
     }
     error

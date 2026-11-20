@@ -14,6 +14,7 @@ mod mode;
 mod own_group;
 mod pause;
 mod restore;
+mod scope_memory;
 mod signal_report;
 mod spawn;
 mod supervise;

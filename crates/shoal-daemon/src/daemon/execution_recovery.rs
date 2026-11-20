@@ -250,7 +250,7 @@ async fn interrupted(
         tokio::select! {
             biased;
             event = incoming.recv() => match event.context("execution disconnected")?? {
-                ExecutionEvent::Finished { exit_code } => return Ok(Action::Finished(exit_code)),
+                ExecutionEvent::Finished { exit_code, .. } => return Ok(Action::Finished(exit_code)),
                 ExecutionEvent::Wake => {
                     // A key on the agent's sleep screen is the user's.
                     manager.record_agent_interaction(execution_id).await;

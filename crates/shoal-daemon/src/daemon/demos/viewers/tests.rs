@@ -670,7 +670,10 @@ async fn a_demo_that_ends_while_its_viewer_cannot_be_proven_stopped_keeps_its_re
     assert!(matches!(control, Control::Started));
     let demo = listed(&manager, &workspace.id).await;
     let _helper = unprovable_viewer(&manager, temp.path(), &demo).await;
-    let finished = ExecutionEvent::Finished { exit_code: 0 };
+    let finished = ExecutionEvent::Finished {
+        exit_code: 0,
+        memory: None,
+    };
     crate::protocol::write(wrapper_side.get_mut(), &finished)
         .await
         .unwrap();

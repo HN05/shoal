@@ -73,6 +73,10 @@ pub enum ExecutionEvent {
     },
     Finished {
         exit_code: i32,
+        /// What the scope the command ran in recorded of its memory, where
+        /// it ran in one of its own.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        memory: Option<ScopeMemory>,
     },
     Paused,
     /// The user woke the agent whose restore the wrapper waits for, in the
@@ -90,6 +94,27 @@ pub enum ExecutionEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         origin: Option<Box<crate::sessions::Origin>>,
     },
+}
+
+/// What the scope a tracked command ran in recorded of its memory, over
+/// every run of it, as a demo's restarts make.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScopeMemory {
+    /// How many of its processes the kernel's OOM killer killed.
+    pub oom_kills: u64,
+    /// The most memory it held that reclaim could not free, with what it
+    /// swapped out, in bytes, as the wrapper read it.
+    pub peak: u64,
+}
+
+impl ScopeMemory {
+    /// What `self` and `other`, the records of two runs, recorded together.
+    pub fn and(self, other: Self) -> Self {
+        Self {
+            oom_kills: self.oom_kills.saturating_add(other.oom_kills),
+            peak: self.peak.max(other.peak),
+        }
+    }
 }
 
 /// Daemon → wrapper messages during an execution.
