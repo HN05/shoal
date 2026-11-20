@@ -624,8 +624,7 @@ are gone, with the snippet as it was. `thread open --code` posts the
 references at once, in an opening post named as the thread.
 
 A `question` asks for an answer; a `request` asks the holder to do
-something, such as implement the code it points at. The holder posts once
-it is done, or why it cannot be.
+something, such as implement the code it points at.
 
 The holder forwards a thread down, to a space it reaches, or up, to its
 coordinator or the user; the new holder reads what came before and receives

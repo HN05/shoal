@@ -6924,8 +6924,7 @@ sides. `shoal thread open` records an empty thread with a free-text name of one
 line and a kind, `question` by default or `request`, and prints its number;
 with `--code` it also makes its opening post, whose text is the name, pointing
 at that code. A question asks for an answer, and a request asks its holder to
-do something, such as implement the code it points at: the holder posts once
-it is done, or why it cannot be. From a space it
+do something, such as implement the code it points at. From a space it
 goes to the space's [coordinator](#child-workspaces), else to you, or with
 `--space` to a space the caller's scope reaches; from your terminal it goes to
 the space `--space` names, else the current or a picked one. An empty thread
