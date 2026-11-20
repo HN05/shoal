@@ -167,7 +167,7 @@ impl Operation {
             ) | Self::Assignment(
                 AssignmentMethod::MarkDone { .. }
                     | AssignmentMethod::UndoDone { .. }
-                    | AssignmentMethod::ForgetStoppedWork { .. }
+                    | AssignmentMethod::DiscardStoppedAgent { .. }
                     | AssignmentMethod::ChangeStoppedPermissions { .. }
             ) | Self::Removal(
                 RemovalMethod::CheckStop { .. }

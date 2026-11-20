@@ -6,7 +6,7 @@ use std::fmt::Display;
 
 use crate::cli::commands::restore::reopen::ReopenedExt;
 use crate::client::output::restore::{
-    ForgottenWork, Queued, Reopened, SetUp, StartedRestores, StoppedCommands,
+    DiscardedAgents, Queued, Reopened, SetUp, StartedRestores, StoppedCommands,
 };
 use crate::{
     cli::context::Context, execution::recovery::SavedCommand, model::Space, state::QueueState,
@@ -158,15 +158,12 @@ pub(super) fn started(
     })
 }
 
-/// Report the `forgotten` work of the workspaces `names` lists.
-pub(super) fn forgotten(ctx: &Context, forgotten: &ForgottenWork, names: &[&str]) -> Result<()> {
-    ctx.show(forgotten, |forgotten| {
-        reopened_lines(ctx, &forgotten.reopened);
+/// Report the agents `discarded` of the spaces `names` lists.
+pub(super) fn discarded(ctx: &Context, discarded: &DiscardedAgents, names: &[&str]) -> Result<()> {
+    ctx.show(discarded, |discarded| {
+        reopened_lines(ctx, &discarded.reopened);
         if !names.is_empty() {
-            outln!(
-                "Forgot stopped agents and commands for {}",
-                names.join(", ")
-            );
+            outln!("Discarded the agents of {}", names.join(", "));
         }
     })
 }

@@ -25,10 +25,10 @@ pub enum AssignmentMethod {
         selection: crate::forge::items::link::Selection,
         draft: Option<bool>,
     },
-    /// Forget the workspace's stopped work, only `execution`'s when given,
-    /// or else its last session.
-    ForgetStoppedWork {
-        workspace: SpaceSelector,
+    /// Discard the space's stopped agent, last sessions and stopped
+    /// commands, only `execution`'s when given.
+    DiscardStoppedAgent {
+        space: SpaceSelector,
         execution: Option<ExecutionId>,
     },
     /// Make `change` to the permissions each of the stopped `agents` and

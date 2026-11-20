@@ -3276,7 +3276,7 @@ as use, a queued restore as a queued agent and its saved stopped work as a
 workspace's, and takes the idle time of merged cleanup from when its agent
 stopped. `shoal restore` resolves each target to a space in one lookup over the
 shared namespace, so its picker, `--all` and a list of names act on chats as on
-workspaces, and `--forget` forgets a chat's stopped work as a workspace's.
+workspaces, and `--discard-agent` discards a chat's stopped agent as a workspace's.
 Starts, renames and removals are journal events, and its agent's starts and
 stops are logged as a workspace agent's. A workspace a chat opens is its child in the one tree of
 spaces, unless it was created below a workspace, where it stays; reopening

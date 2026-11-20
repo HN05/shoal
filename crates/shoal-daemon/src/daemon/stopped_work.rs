@@ -4,7 +4,7 @@
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
-pub use shoal_protocol::executions::Forgotten;
+pub use shoal_protocol::executions::DiscardedAgent;
 
 use super::manager::Manager;
 use crate::daemon::scope::Caller;
@@ -78,13 +78,13 @@ impl Manager {
         Ok(())
     }
 
-    /// Forget the space's stopped agents, last sessions and commands, only
+    /// Discard the space's stopped agents, last sessions and commands, only
     /// the one of `execution` when given.
-    pub async fn forget_stopped_work(
+    pub async fn discard_stopped_agent(
         &self,
         selector: &SpaceSelector,
         execution: Option<ExecutionId>,
-    ) -> Result<Forgotten> {
+    ) -> Result<DiscardedAgent> {
         let space = self.space(selector).await?;
         let mut saved = Saved::load(&self.paths, &space.id)?;
         if let Some(execution) = &execution {
@@ -100,7 +100,7 @@ impl Manager {
         let executions = recovery::forget_saved(&saved, active)?;
         // The saved sessions are files, so no stored change announces it.
         self.signals.agent_changed();
-        Ok(Forgotten {
+        Ok(DiscardedAgent {
             space: space.name.clone(),
             executions,
         })

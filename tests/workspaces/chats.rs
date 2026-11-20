@@ -106,7 +106,7 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
     let id = chat["id"].as_str().unwrap();
     let tmp_dir = PathBuf::from(fs::read_to_string(home.join("chat-tmpdir")).unwrap().trim());
 
-    // A workspace process neither restores nor forgets it, even with its
+    // A workspace process neither restores nor discards it, even with its
     // scope token cleared.
     fixture.add("worker");
     let output = fixture
@@ -119,7 +119,7 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
             "sh",
             "-c",
         ])
-        .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" restore talk --forget; exit $?"#)
+        .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" restore talk --discard-agent; exit $?"#)
         .arg(support::shoal_binary())
         .output()
         .unwrap();
@@ -183,12 +183,12 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
         )
         .unwrap();
     };
-    // The chat stays, its stopped agent forgotten, so the next round
+    // The chat stays, its stopped agent discarded, so the next round
     // removes it before it starts another.
-    let forgotten_both = |fixture: &Fixture, chat: &str, forgotten: &Value| {
-        let forgotten = forgotten["forgotten"].as_array().unwrap();
-        assert_eq!(forgotten.len(), 2, "{forgotten:?}");
-        assert!(forgotten.contains(&"worker-agent".into()), "{forgotten:?}");
+    let discarded_both = |fixture: &Fixture, chat: &str, discarded: &Value| {
+        let discarded = discarded["discarded"].as_array().unwrap();
+        assert_eq!(discarded.len(), 2, "{discarded:?}");
+        assert!(discarded.contains(&"worker-agent".into()), "{discarded:?}");
         let chats = fixture.ok(&["list", "--chats"]);
         assert_eq!(chats[0]["running"], false, "{chats}");
         fixture.ok(&["rm", "--wait", chat, "--yes"]);
@@ -197,22 +197,22 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
     let worker = fixture.add("worker");
     stop_agent(&fixture, &worker);
     // A list naming a chat and a workspace acts on both.
-    let forgotten = fixture.ok(&["restore", &chat, &fixture.id("worker"), "--forget"]);
-    forgotten_both(&fixture, &chat, &forgotten);
+    let discarded = fixture.ok(&["restore", &chat, &fixture.id("worker"), "--discard-agent"]);
+    discarded_both(&fixture, &chat, &discarded);
     // `--all` takes the stopped chats too.
     let chat = save_chat(&mut fixture);
     stop_agent(&fixture, &worker);
-    forgotten_both(
+    discarded_both(
         &fixture,
         &chat,
-        &fixture.ok(&["restore", "--all", "--forget"]),
+        &fixture.ok(&["restore", "--all", "--discard-agent"]),
     );
     // The picker offers the stopped chats after the workspaces with stopped
     // work, then the removed chats.
     let chat = save_chat(&mut fixture);
     stop_agent(&fixture, &worker);
     let both = format!("{chat} {}", worker["id"].as_str().unwrap());
-    let (output, rows) = fixture.pick(&["restore", "--forget"], &both, "");
+    let (output, rows) = fixture.pick(&["restore", "--discard-agent"], &both, "");
     assert!(output.status.success(), "{}", printed(&output));
     let rows = rows.lines().collect::<Vec<_>>();
     assert_eq!(rows.len(), 4, "{rows:?}");
@@ -2721,6 +2721,23 @@ fn a_chats_failed_launch_restores_only_with_its_agent() {
         .map(|entry| entry["space_id"].as_str().unwrap())
         .collect();
     assert_eq!(queued, [chat.as_str()], "{restored}");
+}
+
+/// `--discard-agent` drops a chat's failed launch from the queue and keeps
+/// the chat.
+#[test]
+fn discarding_a_chats_agent_drops_its_failed_launch() {
+    let fixture = failed_chat_launch();
+    let chats = fixture.ok(&["list", "--chats"]);
+    let chat = chats[0]["id"].as_str().unwrap().to_owned();
+
+    let discarded = fixture.ok(&["restore", &chat, "--discard-agent"]);
+    let launches: Vec<_> = (discarded["launches"].as_array().unwrap().iter())
+        .map(|entry| entry["space_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(launches, [chat.as_str()], "{discarded}");
+    assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["list", "--chats"])[0]["id"], chat.as_str());
 }
 
 /// A failed chat launch the restore picker chooses queues again, as one

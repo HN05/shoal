@@ -610,7 +610,7 @@ pub(super) async fn live(manager: &Manager) -> Vec<crate::model::QueueEntry> {
     entries
 }
 
-/// Forget a stopped agent as `shoal restore --forget` does once its wrapper ended.
+/// Discard a stopped agent as `shoal restore --discard-agent` does once its wrapper ended.
 async fn forget(manager: &Manager, workspace: &crate::model::Workspace, execution: &ExecutionId) {
     // No marked process belongs to the agent. A host scan would also count
     // every same-user process whose environment it cannot read, such as

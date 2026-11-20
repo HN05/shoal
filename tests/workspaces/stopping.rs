@@ -345,12 +345,12 @@ fn resume_all_skips_the_agents_of_done_workspaces() {
     assert_eq!(queued.len(), 1, "{all}");
     assert_eq!(queued[0]["name"], "active", "{all}");
     assert_eq!(queued[0]["state"], "starting", "{all}");
-    // Forgetting still forgets the done workspace's stopped agent.
-    let forgotten = fixture.ok(&["restore", "--all", "--forget"]);
+    // Discarding still discards the done workspace's stopped agent.
+    let discarded = fixture.ok(&["restore", "--all", "--discard-agent"]);
     assert_eq!(
-        forgotten["forgotten"],
+        discarded["discarded"],
         serde_json::json!(["active-agent", "finished-agent"]),
-        "{forgotten}"
+        "{discarded}"
     );
 }
 
@@ -398,7 +398,7 @@ fn resuming_several_goes_on_after_one_fails() {
 }
 
 #[test]
-fn a_parent_forgets_only_the_stopped_work_of_its_children() {
+fn a_parent_discards_only_the_stopped_agents_of_its_children() {
     let fixture = Fixture::new();
     fixture.add("parent");
     fixture.add("other");
@@ -417,8 +417,8 @@ fn a_parent_forgets_only_the_stopped_work_of_its_children() {
     };
     let records = ["parent", "other", "child"].map(save_agent);
     for args in [
-        &["restore", &fixture.id("parent"), "--forget"][..],
-        &["restore", &fixture.id("other"), "--forget"],
+        &["restore", &fixture.id("parent"), "--discard-agent"][..],
+        &["restore", &fixture.id("other"), "--discard-agent"],
         &["restore", &fixture.id("other")],
         // Starting regardless of the limits is the user's.
         &["restore", &fixture.id("child"), "--now"],
@@ -438,7 +438,7 @@ fn a_parent_forgets_only_the_stopped_work_of_its_children() {
             "sh",
             "-c",
         ])
-        .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" restore other --forget; exit $?"#)
+        .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" restore other --discard-agent; exit $?"#)
         .arg(support::shoal_binary())
         .output()
         .unwrap();
@@ -460,10 +460,10 @@ fn a_parent_forgets_only_the_stopped_work_of_its_children() {
     assert!(!output.status.success(), "{}", printed(&output));
     assert!(records.iter().all(|record| record.exists()));
     // Every space below it is the parent's, whoever stopped its agent.
-    let output = scoped_command(&fixture, "parent", &["restore", "--all", "--forget"]);
+    let output = scoped_command(&fixture, "parent", &["restore", "--all", "--discard-agent"]);
     assert!(output.status.success(), "{}", printed(&output));
-    let forgotten: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(forgotten["forgotten"], serde_json::json!(["child-agent"]));
+    let discarded: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(discarded["discarded"], serde_json::json!(["child-agent"]));
     assert!(!records[2].exists());
     assert!(records[..2].iter().all(|record| record.exists()));
 }

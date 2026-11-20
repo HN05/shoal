@@ -15,9 +15,19 @@ use crate::{
 use shoal_protocol::protocol::RetryStart;
 
 /// Move the selected spaces with a failed launch from `selected`'s spaces
-/// to its failed starts.
-pub(in crate::cli::commands) async fn take(ctx: &Context, selected: &mut Selected) -> Result<()> {
+/// to its failed starts; with every space selected, take every failed
+/// launch when `every`, otherwise none.
+pub(in crate::cli::commands) async fn take(
+    ctx: &Context,
+    selected: &mut Selected,
+    every: bool,
+) -> Result<()> {
     let Some(selectors) = selected.spaces.take() else {
+        if every {
+            let entries = queued_agents::entries(ctx).await?.into_iter();
+            let failed = entries.filter(|entry| entry.state == QueueState::Failed);
+            selected.failed_starts = failed.collect();
+        }
         return Ok(());
     };
     let entries = queued_agents::entries(ctx).await?;

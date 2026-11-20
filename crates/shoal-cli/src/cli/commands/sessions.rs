@@ -301,7 +301,7 @@ impl Target {
         };
         let now = super::resume::Options {
             execution: None,
-            forget: false,
+            discard: false,
             no_resume: false,
             now: true,
             focus: false,

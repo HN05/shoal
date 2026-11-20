@@ -93,7 +93,10 @@ async fn a_stopped_agent_refuses_another_worker_until_it_is_resumed_or_forgotten
     )
     .unwrap();
     let refused = refusal(queue_worker(&manager, &workspace).await);
-    assert!(refused.contains("shoal restore --forget"), "{refused}");
+    assert!(
+        refused.contains("shoal restore --discard-agent"),
+        "{refused}"
+    );
     std::fs::remove_file(record).unwrap();
     queue_worker(&manager, &workspace).await.unwrap();
 }

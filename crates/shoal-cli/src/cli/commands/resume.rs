@@ -2,7 +2,7 @@
 //! below carry out. Restores use saved agent identity and today's restore
 //! configuration; they queue unless asked to start now, a chat's starting
 //! at once, a workspace whose setup failed retries it before the agent
-//! waiting for it starts, and `--forget` forgets the stopped work instead.
+//! waiting for it starts, and `--discard-agent` discards the stopped agent instead.
 use crate::client::output::{
     batch::Failure,
     restore::{Queued, Reopened, StartedRestores},
@@ -24,8 +24,9 @@ use crate::cli::commands::restore::targets::Selected;
 pub struct Options {
     /// The one stopped execution of a space to restore.
     pub execution: Option<ExecutionId>,
-    /// Forget the stopped work instead of restoring it.
-    pub forget: bool,
+    /// Discard the stopped agents, last sessions, stopped commands and
+    /// failed launches instead of restoring them.
+    pub discard: bool,
     /// Restore everything but the agents, which stay saved.
     pub no_resume: bool,
     /// Start the restores at once, regardless of the agent limits.
@@ -58,15 +59,16 @@ pub(in crate::cli::commands) async fn restore(
 ) -> Result<i32> {
     let scoped = crate::process::scoped::inherits_scope(&ctx.paths.state);
     let change = options.change.as_ref();
-    let restores_agents = !options.forget && !options.no_resume;
-    let whole = named && !options.forget && options.execution.is_none();
+    let restores_agents = !options.discard && !options.no_resume;
+    let whole = named && !options.discard && options.execution.is_none();
     if whole {
         setups::take_failed(ctx, &mut selected).await?;
     }
-    // A failed launch restores whether the command line named its space or
-    // a picker chose it.
-    if !options.forget && options.execution.is_none() {
-        failed_starts::take(ctx, &mut selected).await?;
+    // A failed launch restores, or is discarded, whether the command line
+    // named its space or a picker chose it; `--discard-agent --all` takes
+    // every one.
+    if options.execution.is_none() {
+        failed_starts::take(ctx, &mut selected, options.discard).await?;
     }
     let turns = match whole && !options.no_resume {
         true => interrupted_turns(ctx, &mut selected, change.is_some()).await?,
@@ -184,7 +186,7 @@ async fn restore_selected(
 ) -> Result<i32> {
     let Options {
         execution,
-        forget,
+        discard,
         now,
         focus,
         change,
@@ -197,8 +199,8 @@ async fn restore_selected(
     // launch, restores with it.
     let alone = alongside.is_empty() && selected.failed_starts.is_empty();
     match (selected.spaces.as_deref(), setups) {
-        (Some([space]), []) if forget && alone => {
-            forget::forget_work(ctx, space.clone(), execution).await
+        (Some([space]), []) if discard && alone => {
+            discard::discard_one(ctx, space.clone(), execution).await
         }
         (Some([space]), []) if focus => {
             let first = reports::first(ctx, alongside.continue_turns(ctx).await)?;
@@ -225,7 +227,7 @@ async fn restore_selected(
         _ => {
             let restore = Restore {
                 execution,
-                forget,
+                discard,
                 queuing,
                 change,
             };
@@ -300,8 +302,8 @@ async fn interrupted_turns(
 
 /// Refuse a restore in a process below a scoped one that cleared its scope
 /// token: a scoped process only queues the restores of the agents of the
-/// spaces its scope reaches, which the daemon starts, or forgets their
-/// stopped work.
+/// spaces its scope reaches, which the daemon starts, or discards their
+/// stopped agents.
 pub(in crate::cli::commands) fn ensure_queued() -> Result<()> {
     // The daemon checks that each space is in the caller's scope, which
     // needs the scope token: a process that cleared it stays refused.
@@ -316,7 +318,7 @@ pub(in crate::cli::commands) fn ensure_queued() -> Result<()> {
 struct Restore<'a> {
     /// The one stopped execution of the one space selected to restore.
     execution: Option<ExecutionId>,
-    forget: bool,
+    discard: bool,
     queuing: Queuing,
     change: Option<&'a PermissionChange>,
 }
@@ -324,8 +326,8 @@ struct Restore<'a> {
 /// Restore the `selected` spaces together, reporting them at once with
 /// what it does `alongside`: retry the failed setups, and queue the
 /// restores of the stopped agents and the agents waiting for those setups,
-/// making `change` when given, start them as `queuing` says, or forget the
-/// stopped work for `forget`.
+/// making `change` when given, start them as `queuing` says, or discard the
+/// stopped agent for `discard`.
 async fn restore_each(
     ctx: &Context,
     selected: Selected,
@@ -334,22 +336,23 @@ async fn restore_each(
 ) -> Result<i32> {
     let Restore {
         execution,
-        forget,
+        discard,
         queuing,
         change,
     } = restore;
-    let mut stopped = saved::stopped(ctx, &selected, forget).await?;
+    let mut stopped = saved::stopped(ctx, &selected, discard).await?;
     if let Some(execution) = &execution {
         for (_, saved) in &mut stopped {
             saved.retain_execution(execution, true);
         }
     }
     if stopped.is_empty() && selected.setups.is_empty() && selected.failed_starts.is_empty() {
-        let started = forget || queuing == Queuing::Here { now: true };
+        let started = discard || queuing == Queuing::Here { now: true };
         return reports::nothing(ctx, alongside.continue_turns(ctx).await, started);
     }
-    if forget {
-        return forget::forget_each(ctx, &stopped, alongside.reopened).await;
+    if discard {
+        return discard::discard_each(ctx, &stopped, &selected.failed_starts, alongside.reopened)
+            .await;
     }
     let mut refused = Vec::new();
     if let Queuing::Daemon { .. } = queuing {
@@ -437,8 +440,8 @@ async fn present_space(ctx: &Context, selector: &SpaceSelector) -> Result<Space>
 
 pub(in crate::cli::commands) mod changed;
 mod commands;
+mod discard;
 pub(in crate::cli::commands) mod failed_starts;
-mod forget;
 pub(in crate::cli::commands) mod permission_change;
 mod picker;
 mod places;

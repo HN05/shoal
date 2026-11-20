@@ -1354,7 +1354,7 @@ fn a_removed_chat_moves_from_its_removal_record() {
     let removed = fixture.ok(&["restore"])["removed"].clone();
     assert_eq!(removed[0]["workspace_id"], id.as_str(), "{removed}");
     // The record stays here, so the import elsewhere opens the chat again.
-    fixture.ok(&["restore", &id, "--forget"]);
+    fixture.ok(&["restore", &id, "--discard-agent"]);
     fixture.ok(&["rm", "--wait", &id, "--yes"]);
     import_continues_the_chat(&fixture, file, &id);
 }

@@ -281,12 +281,12 @@ pub struct UpstreamLimit {
     pub until: Option<crate::time::UnixTime>,
 }
 
-/// What `shoal restore --forget` forgot in a workspace.
+/// What `shoal restore --discard-agent` discarded in a space.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Forgotten {
+pub struct DiscardedAgent {
     /// The name of the space that saved it.
     pub space: SpaceName,
-    /// The execution IDs of the forgotten stopped agents, last sessions and
+    /// The execution IDs of the discarded stopped agents, last sessions and
     /// commands.
     pub executions: Vec<ExecutionId>,
 }

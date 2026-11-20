@@ -171,7 +171,7 @@ shoal questions <S.N> --answer "<answer or choice number>"
 shoal stop <child>                  # --skip-children stops only the child
 shoal stop --interrupt <child>      # Cancel its agent's turn, keeping it running
 shoal restart <child>               # Its agent, a workspace's or a chat's
-shoal restore <child>               # --forget forgets the saved session
+shoal restore <child>               # --discard-agent discards the saved session
 shoal files <child>
 shoal absorb <child> [--into <space>] [-X squash] [--force]
 ```

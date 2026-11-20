@@ -4,7 +4,7 @@
 //! record, and the daemon takes over one whose waiting wrapper is gone. Each
 //! waits as its agent's record says and leaves the queue once its
 //! agent registers, or while waiting once what it restores is gone, as after
-//! `shoal restore --now` or `--forget`. A restart's restore starts at once, in
+//! `shoal restore --now` or `--discard-agent`. A restart's restore starts at once, in
 //! the slot its agent kept.
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
@@ -670,7 +670,7 @@ impl Manager {
     }
 
     /// Forget the waiting restores whose stopped agent's record is gone, as
-    /// after `shoal restore --now` or `--forget`.
+    /// after `shoal restore --now` or `--discard-agent`.
     pub(super) async fn forget_resolved_restores(&self) -> Result<()> {
         let waiting = self.store.run(|db| waiting_restores(db)).await?;
         let resolved = resolved_restores(&self.paths, waiting);

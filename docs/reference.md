@@ -390,7 +390,7 @@ restores the spaces its scope reaches but its own, workspaces and chats alike:
 its own space and those below it, or every space for a [master
 session](#master-session). It stops them with `shoal stop <space>` or `--all`,
 `--yes` included, restarts their agents with `shoal restart <space>`, `--all`
-or a picker, forgets their stopped work with `shoal restore --forget`, and
+or a picker, discards their stopped agents with `shoal restore --discard-agent`, and
 queues with `shoal restore <space>`, `--all` or the current space the restores
 of their stopped agents, whoever stopped them, which the daemon starts
 detached, and start them regardless of the limits, with `--now` or
@@ -529,8 +529,8 @@ at once regardless of the limits; restore reports the entries as a restore witho
 background, such a restore, with or without `--now`, is refused before anything
 is restored, naming `--focus` to restore one agent here. `-f`/`--focus` restores one agent in the current terminal at once,
 regardless of the limits.
-Use `--forget` to forget the workspace's stopped agents, last sessions and commands, every
-workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
+Use `--discard-agent` to discard the stopped agent, last sessions, stopped commands and failed launch of the space, every
+space's with `--all`, or the `--execution` one, without launching anything or touching files, branch or worktree, allowing normal idle cleanup again.
 `--no-resume` restores everything but the agents, which stay saved: it reopens a
 removed workspace and retries a failed setup, leaving the agent waiting for it
 in the queue as `shoal setup` does, and with nothing else to restore reports
@@ -544,7 +544,7 @@ interrupted turn continues, since it keeps the launch it runs under. A wrapper
 waiting to restore its agent restores it under them; one of a release before
 that leaves the agent stopped for a restore in a new wrapper.
 A stopped [chat's](#chats) agent restores as a workspace's does, without
-waiting for a heavy slot, and `--forget` forgets its stopped work. A running
+waiting for a heavy slot, and `--discard-agent` discards its stopped agent. A running
 chat has nothing to restore. `--all` never reopens removed workspaces.
 When a stopped agent's execution is unknown, after a daemon restart or a stop
 Shoal could not prove, the daemon forgets it once its wrapper has exited and none
@@ -2537,7 +2537,7 @@ done, its restore waits in the queue or its mode is
 [light](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules), which starts it at once beside the agent
 limits and whatever memory is in use, though critical or missing readings and
 low disk hold it as they hold every start; `shoal done`, the agent's exit,
-`restore --forget` and removal free it.
+`restore --discard-agent` and removal free it.
 A [local review](#local-reviews)'s reviewer uses no slot, so no count limits
 reviews, but its memory counts while it runs and a queued review waits for
 room and disk as an agent's start does, ranked with the workspace it reviews.
@@ -4565,7 +4565,7 @@ keeps the workspace's ID, takes an ID of its own with the checkpoints, which
 sessions as it restores a stopped space's, queued unless `--now` or `--focus`, under
 `--permission`; one it cannot restore is reported and stays saved, and the workspace
 stays open. `--no-resume` keeps them saved for a later `shoal restore`, keeping the
-workspace from idle cleanup as stopped work does, and `--forget` forgets them.
+workspace from idle cleanup as stopped work does, and `--discard-agent` discards them.
 An agent whose session another space here holds, running or stopped, starts
 from a fork of it, as a [copy](#copies)'s does, with a warning naming that
 space; this holds for a chat's restore too. A branch that no longer contains

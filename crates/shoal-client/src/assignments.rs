@@ -1,5 +1,5 @@
 //! A space's assignment: marking it done or ready for review, and
-//! forgetting the stopped work it leaves.
+//! discarding the stopped agent it leaves.
 use anyhow::Result;
 use shoal_protocol::assignments::Done;
 
@@ -10,7 +10,7 @@ use crate::{
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
-    executions::Forgotten,
+    executions::DiscardedAgent,
     model::{Completion, ReadyOutcome, ReviewMark},
     protocol::AssignmentMethod,
 };
@@ -55,17 +55,14 @@ pub async fn clear_ready(
     request(daemon, method).await
 }
 
-/// Forget `workspace`'s stopped work and last sessions, only `execution`'s
-/// when given.
-pub async fn forget_stopped_work(
+/// Discard `space`'s stopped agent, last sessions and stopped commands,
+/// only `execution`'s when given.
+pub async fn discard_stopped_agent(
     daemon: &impl Daemon,
-    workspace: SpaceSelector,
+    space: SpaceSelector,
     execution: Option<ExecutionId>,
-) -> Result<Forgotten> {
-    let method = AssignmentMethod::ForgetStoppedWork {
-        workspace,
-        execution,
-    };
+) -> Result<DiscardedAgent> {
+    let method = AssignmentMethod::DiscardStoppedAgent { space, execution };
     request(daemon, method).await
 }
 

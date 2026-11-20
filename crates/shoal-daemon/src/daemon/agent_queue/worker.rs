@@ -35,7 +35,7 @@ impl Manager {
         }
         if !recovery::agent_records(&self.paths, &space.id)?.is_empty() {
             bail!(HasAgent(format!(
-                "{kind} {number} has a stopped agent; restore it with `shoal restore {number}` or forget it with `shoal restore --forget {number}`"
+                "{kind} {number} has a stopped agent; restore it with `shoal restore {number}` or discard it with `shoal restore --discard-agent {number}`"
             )));
         }
         Ok(())

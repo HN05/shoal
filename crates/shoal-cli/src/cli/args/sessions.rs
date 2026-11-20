@@ -50,27 +50,28 @@ pub enum SessionsCommand {
             long,
             value_name = "N",
             num_args = 0..=1,
-            conflicts_with_all = ["all", "execution", "forget", "no_resume", "now", "focus", "permissions"]
+            conflicts_with_all = ["all", "execution", "discard_agent", "no_resume", "now", "focus", "permissions"]
         )]
         checkpoint: Option<Option<CheckpointNumber>>,
         /// Select a stopped execution when the workspace has several records.
         #[arg(long, conflicts_with = "all")]
         execution: Option<ExecutionId>,
-        /// Forget the saved agents and commands instead of restoring them.
+        /// Discard the stopped agent, last sessions, stopped commands and failed launch instead
+        /// of restoring them, which leaves the files, branch and worktree as they are.
         #[arg(long)]
-        forget: bool,
+        discard_agent: bool,
         /// Restore everything but the agents, which stay saved for a later restore: open a
         /// removed workspace again, or the spaces --from reads, or retry a failed setup, whose
         /// waiting agent stays queued.
-        #[arg(long, conflicts_with_all = ["forget", "now", "focus", "permissions"])]
+        #[arg(long, conflicts_with_all = ["discard_agent", "now", "focus", "permissions"])]
         no_resume: bool,
         /// Start at once regardless of the agent limits, where each agent
         /// stopped or in the background.
-        #[arg(long, conflicts_with = "forget")]
+        #[arg(long, conflicts_with = "discard_agent")]
         now: bool,
         /// Restore one agent in this terminal at once, regardless of the
         /// agent limits.
-        #[arg(short = 'f', long, conflicts_with_all = ["forget", "all"])]
+        #[arg(short = 'f', long, conflicts_with_all = ["discard_agent", "all"])]
         focus: bool,
         /// Set a permission of the restored agents and chats, as KEY=VALUE
         /// such as push=direct, whatever their mode allows; KEY=mode drops
@@ -80,7 +81,7 @@ pub enum SessionsCommand {
             long = "permission",
             value_name = "KEY=VALUE",
             value_parser = permission_assignment,
-            conflicts_with_all = ["forget", "all", "queue_entry"]
+            conflicts_with_all = ["discard_agent", "all", "queue_entry"]
         )]
         permissions: Vec<crate::config::permissions::PermissionChange>,
         /// The queue entry whose slot the restored agent takes, for the
@@ -337,7 +338,7 @@ pub struct ImportArgs {
     #[arg(
         long,
         value_name = "FILE",
-        conflicts_with_all = ["space", "all", "checkpoint", "execution", "forget", "now", "focus", "permissions"]
+        conflicts_with_all = ["space", "all", "checkpoint", "execution", "discard_agent", "now", "focus", "permissions"]
     )]
     pub from: Vec<PathBuf>,
     /// Repository to restore into, when it does not share the written repository's origin.

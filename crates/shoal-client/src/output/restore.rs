@@ -57,10 +57,15 @@ pub struct StartedRestores {
     pub failed: Vec<Failure>,
 }
 
-/// The executions a restore forgot instead.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ForgottenWork {
-    pub forgotten: Vec<ExecutionId>,
+/// The stopped agents, last sessions, stopped commands and failed launches
+/// `shoal restore --discard-agent` discarded.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DiscardedAgents {
+    /// The executions of the stopped agents, last sessions and commands.
+    pub discarded: Vec<ExecutionId>,
+    /// The failed launches.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub launches: Vec<QueueEntry>,
     /// The removed spaces it opened again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reopened: Vec<Reopened>,
@@ -121,7 +126,7 @@ outputs!(
     StoppedCommands,
     SetUp,
     StartedRestores,
-    ForgottenWork,
+    DiscardedAgents,
     Queued,
     Reopened,
     Restorable

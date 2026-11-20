@@ -662,7 +662,7 @@ async fn discarding_a_stopped_session_reaches_a_subscription() {
     snapshot(&mut subscription).await;
     daemon
         .manager
-        .forget_stopped_work(&SpaceSelector::id(&workspace.id), None)
+        .discard_stopped_agent(&SpaceSelector::id(&workspace.id), None)
         .await
         .unwrap();
     until(

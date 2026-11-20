@@ -118,7 +118,7 @@ fn restore_reopens_a_removed_workspace_with_its_unsaved_files() {
     let workspace = fixture.id("Scratch notes");
     for args in [
         &[workspace.as_str(), workspace.as_str(), "--checkpoint", "2"][..],
-        &[workspace.as_str(), "--checkpoint", "2", "--forget"],
+        &[workspace.as_str(), "--checkpoint", "2", "--discard-agent"],
         &[workspace.as_str(), "--checkpoint", "--now"],
         &["--all", "--checkpoint"],
     ] {
@@ -360,11 +360,11 @@ fn restoring_a_removed_workspace_without_agents_keeps_them_for_a_later_restore()
 }
 
 #[test]
-fn restoring_a_removed_workspace_with_forget_drops_its_agents() {
+fn restoring_a_removed_workspace_with_discard_agent_drops_its_agents() {
     let removed = RemovedWithAgent::new();
-    let (restored, reopened) = removed.restore(&["--forget"]);
+    let (restored, reopened) = removed.restore(&["--discard-agent"]);
     assert_eq!(
-        restored["forgotten"],
+        restored["discarded"],
         serde_json::json!([removed.execution]),
         "{restored}"
     );
