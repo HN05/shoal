@@ -2,7 +2,11 @@
 //! settings and records as the daemon has them now.
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::executions::TrackedAgent;
-use std::{ffi::OsString, path::Path};
+use std::{
+    borrow::Cow,
+    ffi::{OsStr, OsString},
+    path::Path,
+};
 
 use anyhow::Result;
 
@@ -10,6 +14,7 @@ use crate::{
     agent::{Agent, ModelChoice},
     agents::AgentHome,
     client::connection::CommandPaths,
+    config::named_commands::{self, Commands},
     model::ExecutionSpace,
     protocol::ConfigTarget,
 };
@@ -19,14 +24,14 @@ use shoal_core::execution::recovery::{
 use shoal_protocol::space_names::SpaceSelector;
 
 /// What a restore command of agent `name` in `home` is built from: the
-/// message it continues with and the arguments that keep its model and
+/// message it opens with, if any, and the arguments that keep its model and
 /// effort.
 struct RestoreCommand<'a> {
     paths: &'a CommandPaths,
     settings: &'a crate::config::Effective,
     name: &'a Agent,
     home: AgentHome<'a>,
-    prompt: &'a std::ffi::OsStr,
+    prompt: Option<&'a OsStr>,
     model_args: Vec<OsString>,
     /// The arguments that give the agent its mode's rules again, which only
     /// its built-in resume arguments carry.
@@ -38,46 +43,65 @@ impl RestoreCommand<'_> {
     /// and proxy arguments, and whether it carries the prompt. It is the
     /// user's own, so Shoal adds no rules to it.
     async fn configured(self, argv: &[String]) -> Result<(Vec<OsString>, bool)> {
-        let mut command = crate::homes::expand(
-            self.paths,
-            self.home,
-            &self.settings.resume_commands,
-            self.name.name(),
-            vec![],
-            &[("{prompt}", self.prompt)],
-        )
-        .await?;
+        let carries = self.prompt.is_some() && argv.iter().any(|arg| arg.contains(PROMPT));
+        let commands = self.commands(&self.settings.resume_commands);
+        let mut command = self.expand(&commands, vec![]).await?;
         crate::agents::insert_options(&mut command, self.model_args);
         // Without Shoal's hooks it still goes through the agent's proxy.
         crate::agents::with_proxy_args(self.settings, self.name, &mut command);
-        Ok((command, argv.iter().any(|arg| arg.contains("{prompt}"))))
+        Ok((command, carries))
     }
 
     /// The agent's launcher with `resume_args`, its model, effort, rules and
-    /// its space's arguments, and the prompt.
-    async fn resumed(self, mut args: Vec<OsString>) -> Result<Vec<OsString>> {
-        args.extend(self.model_args);
-        args.extend(self.instruction_args);
+    /// its space's arguments, and the prompt, if any.
+    async fn resumed(mut self, mut args: Vec<OsString>) -> Result<Vec<OsString>> {
+        args.extend(std::mem::take(&mut self.model_args));
+        args.extend(std::mem::take(&mut self.instruction_args));
         args.extend(crate::homes::args(self.paths, self.home, self.settings, self.name).await?);
         let takes_field = self
             .settings
             .launchers
             .get(self.name.name())
-            .is_some_and(|argv| argv.iter().any(|arg| arg.contains("{prompt}")));
-        if !takes_field {
-            args.push(self.prompt.to_owned());
+            .is_some_and(|argv| argv.iter().any(|arg| arg.contains(PROMPT)));
+        if let Some(prompt) = self.prompt.filter(|_| !takes_field) {
+            args.push(prompt.to_owned());
         }
+        let commands = self.commands(&self.settings.launchers);
+        self.expand(&commands, args).await
+    }
+
+    /// `commands`, the agent's among them, without the arguments that are
+    /// exactly `{prompt}` when there is no prompt to put there.
+    fn commands<'c>(&self, commands: &'c Commands) -> Cow<'c, Commands> {
+        match self.prompt {
+            Some(_) => Cow::Borrowed(commands),
+            None => Cow::Owned(named_commands::without_argument(
+                commands,
+                self.name.name(),
+                PROMPT,
+            )),
+        }
+    }
+
+    /// The agent's command among `commands` with `args`, its prompt in
+    /// place of `{prompt}`, or nothing without one.
+    async fn expand(&self, commands: &Commands, args: Vec<OsString>) -> Result<Vec<OsString>> {
+        let prompt = self.prompt.unwrap_or_default();
+        let fields = [(PROMPT, prompt)];
         crate::homes::expand(
             self.paths,
             self.home,
-            &self.settings.launchers,
+            commands,
             self.name.name(),
             args,
-            &[("{prompt}", self.prompt)],
+            &fields,
         )
         .await
     }
 }
+
+/// The placeholder a restore command takes its prompt at.
+const PROMPT: &str = "{prompt}";
 
 /// The agent a restore continues: its name, the model and effort it ran
 /// with, the mode and narrowing it started with, and the session it
@@ -166,7 +190,7 @@ pub async fn resolve<'a>(
         settings: &settings,
         name: &name,
         home,
-        prompt: std::ffi::OsStr::new(&message),
+        prompt: Some(OsStr::new(&message)),
         // A restore runs with what the agent ran with, or not at all, so
         // the record stays for once its templates take the values again.
         model_args: crate::agents::model_args(&settings, &name, restored.model)?,

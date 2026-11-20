@@ -54,3 +54,13 @@ fn built_in_names_are_valid_for_explicit_run() {
         assert!(config::repo::parse(&config).is_ok(), "{config}");
     }
 }
+
+#[test]
+fn a_placeholder_left_out_drops_only_its_whole_arguments() {
+    let commands = super::Commands::from([(
+        "resume".to_owned(),
+        vec!["run".into(), "{prompt}".into(), "--say={prompt}".into()],
+    )]);
+    let without = super::without_argument(&commands, "resume", "{prompt}");
+    assert_eq!(without["resume"], ["run", "--say={prompt}"]);
+}

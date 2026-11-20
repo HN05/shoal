@@ -109,6 +109,16 @@ pub fn substitute_outside_workspace(
     Ok(substitute(argv, fields, args))
 }
 
+/// `commands` with every argument of `name`'s command that is exactly
+/// `placeholder` left out, for a run that has no value to put there.
+pub fn without_argument(commands: &Commands, name: &str, placeholder: &str) -> Commands {
+    let mut commands = commands.clone();
+    if let Some(argv) = commands.get_mut(name) {
+        argv.retain(|arg| arg != placeholder);
+    }
+    commands
+}
+
 /// Render each argument once, putting `args` at `{args}` or after the command.
 pub fn substitute(
     argv: &[String],
