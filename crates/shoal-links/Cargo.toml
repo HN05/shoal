@@ -26,4 +26,5 @@ shoal-refs.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
 
 [dev-dependencies]
+shoal-ids = { workspace = true, features = ["test-support"] }
 tokio = { workspace = true, features = ["macros", "rt", "test-util"] }
