@@ -67,8 +67,17 @@ impl PairingCode {
     /// The command that installs the hub's version on a computer without
     /// Shoal and joins it with this code.
     pub fn installer(&self) -> String {
-        format!("curl -fsSL {}{INSTALL_PATH} | sh -s -- '{self}'", self.url)
+        let script = quoted(&format!("{}{INSTALL_PATH}", self.url));
+        format!(
+            "curl -fsSL {script} | sh -s -- {}",
+            quoted(&self.to_string())
+        )
     }
+}
+
+/// `text` as one word of a POSIX shell command.
+fn quoted(text: &str) -> String {
+    format!("'{}'", text.replace('\'', r"'\''"))
 }
 
 text_key!(PairingCode);

@@ -2680,6 +2680,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "shlex",
  "shoal-config-derive",
  "shoal-forge-types",
  "shoal-ids",

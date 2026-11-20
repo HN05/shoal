@@ -62,6 +62,20 @@ fn a_pairing_code_reads_back_what_it_writes() {
 }
 
 #[test]
+fn the_installer_line_passes_the_url_and_code_as_one_word_each() {
+    let code = PairingCode {
+        url: url("https://host/a&b'c"),
+        key: PublicKey::try_from([7u8; 32].as_slice())
+            .unwrap()
+            .fingerprint(),
+        code: "ABC".into(),
+    };
+    let words = shlex::split(&code.installer()).unwrap();
+    assert_eq!(words[2], "https://host/a&b'c/install");
+    assert_eq!(words.last().unwrap(), &code.to_string());
+}
+
+#[test]
 fn a_pairing_code_needs_its_code_and_key() {
     let key = PublicKey::try_from([7u8; 32].as_slice())
         .unwrap()
