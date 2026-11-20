@@ -325,6 +325,8 @@ impl Agents for StandIn {
         Box::pin(async move { Ok(opened) })
     }
 
+    fn wake_admission(&self) {}
+
     /// The stand-in's queue is never suspended.
     fn queue_suspended(&self) -> bool {
         false

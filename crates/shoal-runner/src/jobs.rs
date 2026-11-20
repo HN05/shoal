@@ -22,6 +22,7 @@ mod linked;
 mod listing;
 mod load;
 mod overrun;
+mod passes;
 mod queue;
 mod registration;
 mod single_use;
@@ -33,6 +34,7 @@ pub use claimed::ClaimedJob;
 pub use costs::JobCost;
 pub use load::JobLoad;
 pub use overrun::GRACE;
+pub use passes::run;
 pub use registration::Registration;
 
 impl Runner {

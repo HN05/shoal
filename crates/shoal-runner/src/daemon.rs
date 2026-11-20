@@ -88,6 +88,9 @@ pub trait Agents: Send + Sync {
     /// use.
     fn job_could_start(&self) -> BoxFuture<'_, Result<bool>>;
 
+    /// Have admission look at the agent queue again, as once a claim ends.
+    fn wake_admission(&self);
+
     /// Whether the agent queue is suspended, as the system shuts down.
     fn queue_suspended(&self) -> bool;
 

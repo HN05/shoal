@@ -88,6 +88,10 @@ impl Agents for Manager {
         Box::pin(Manager::started_launch(self, entry))
     }
 
+    fn wake_admission(&self) {
+        self.agent_queue.wake();
+    }
+
     fn queue_suspended(&self) -> bool {
         self.agent_queue.suspended()
     }
