@@ -4,7 +4,8 @@ use shoal_protocol::transfer::{Carrying, ExportedSpace, ImportedPackage, Package
 use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::{Context, Result};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::net::UnixStream;
 
 use crate::connection::{Daemon, open_buffered, request};
 use shoal_protocol::repository::Selector;
@@ -113,18 +114,34 @@ pub async fn import_streamed(
         sessions,
     };
     let method = RemovalMethod::ImportPackage(Box::new(import));
-    let (mut stream, asked) = open_buffered(daemon, method).await?;
+    let (stream, asked) = open_buffered(daemon, method).await?;
     <()>::try_from(asked)?;
-    let read = send_package(package, stream.get_mut()).await;
-    // A daemon that refuses the package answers before reading all of it.
-    let imported = match protocol::read_response(&mut stream).await {
-        Ok(response) => ImportedPackage::try_from(response.body),
-        Err(error) => Err(error),
-    };
+    let (read, answer) = exchange(package, stream).await;
+    let imported = answer.and_then(|response| ImportedPackage::try_from(response.body));
     match read {
         Ok(()) => imported,
         Err(read) => imported.map_err(|refused| refused.context(format!("{read:#}"))),
     }
+}
+
+/// Send `package` to the daemon on `stream` as [`send_package`] does while
+/// reading its answer, which ends the sending once it arrives, since a
+/// daemon that refuses the package answers before reading all of it; the
+/// error reading `package`, and the answer.
+async fn exchange(
+    package: &mut (impl AsyncRead + Unpin),
+    stream: BufReader<UnixStream>,
+) -> (Result<()>, Result<protocol::Response>) {
+    let (answering, mut sending) = tokio::io::split(stream);
+    let mut answering = BufReader::new(answering);
+    // Never cancelled, so no part of the answer it reads is lost.
+    let answer = protocol::read_response(&mut answering);
+    tokio::pin!(answer);
+    let read = tokio::select! {
+        answer = &mut answer => return (Ok(()), answer),
+        read = send_package(package, &mut sending) => read,
+    };
+    (read, answer.await)
 }
 
 /// Send what `package` holds to the daemon on `stream` until it ends, the
