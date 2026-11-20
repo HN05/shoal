@@ -58,17 +58,18 @@ pub(super) fn comment(
     posted: &'static str,
 ) -> Result<(Action, &'static str)> {
     let (body, attachments) = read_content(body, files)?;
-    if let Some(comment) = edit {
-        let body = body.context("editing a comment needs --body or --body-file")?;
-        return Ok((
-            Action::EditComment(CommentEdit { comment, body }),
-            "Comment edited",
-        ));
-    }
     ensure!(
         body.is_some() || !attachments.is_empty(),
         "a comment needs --body, --body-file or --attach"
     );
+    if let Some(comment) = edit {
+        let edit = CommentEdit {
+            comment,
+            body,
+            attachments,
+        };
+        return Ok((Action::EditComment(edit), "Comment edited"));
+    }
     let action = Action::Comment {
         body: body.unwrap_or_default(),
         attachments,

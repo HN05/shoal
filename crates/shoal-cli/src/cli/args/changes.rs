@@ -275,7 +275,7 @@ pub enum PrCommand {
         #[command(flatten)]
         files: AttachArgs,
         /// Replace the body of this comment or inline comment instead, by its ID as `shoal view` shows it.
-        #[arg(long, value_name = "ID", conflicts_with = "attach")]
+        #[arg(long, value_name = "ID")]
         edit: Option<CommentId>,
     },
     /// Review a PR: a body, comments on lines of its diff and a verdict.
@@ -394,7 +394,7 @@ pub enum IssueCommand {
         #[command(flatten)]
         files: AttachArgs,
         /// Replace the body of this comment instead, by its ID as `shoal view` shows it.
-        #[arg(long, value_name = "ID", conflicts_with = "attach")]
+        #[arg(long, value_name = "ID")]
         edit: Option<CommentId>,
     },
     /// Add a reaction to an issue or one of its comments, or remove it.

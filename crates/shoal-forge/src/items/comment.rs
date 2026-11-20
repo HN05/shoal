@@ -7,6 +7,7 @@ use crate::{
     backends::{Activity, Items},
     items::{
         action::{Acted, ActionRequests},
+        attach::{AttachSteps, Holder},
         reaction::Subject,
     },
     transport::api::TransportRequests,
@@ -76,14 +77,16 @@ impl ForgeRepo {
     /// `account` wrote, and return the item, which the edit does not
     /// change, with the comment's activity key. The item, the comment and
     /// its author are checked before anything is sent, and a comment that
-    /// already says `edit.body` is left unchanged, so its key does not
-    /// wait for a change that never comes.
+    /// already says the new body is left unchanged, so its key does not
+    /// wait for a change that never comes. `per_item` is whether the forge
+    /// keeps the edit's checked attachments with the comment.
     pub(crate) async fn edit_own_comment(
         &self,
         account: &Account,
         kind: ItemKind,
         number: u64,
         edit: &CommentEdit,
+        per_item: bool,
     ) -> Result<Acted> {
         let item = self.read(account, kind, number).await?.item;
         let found = self
@@ -91,10 +94,11 @@ impl ForgeRepo {
             .await?;
         self.ensure_own(account, kind, number, &found, edit.comment)
             .await?;
-        let authored = if found.body == edit.body {
+        let body = self.edited_body(account, &found, edit, per_item).await?;
+        let authored = if found.body == body {
             Vec::new()
         } else {
-            self.replace_body(account, kind, number, &found, &edit.body)
+            self.replace_body(account, kind, number, &found, &body)
                 .await?
         };
         Ok(Acted {
@@ -102,6 +106,27 @@ impl ForgeRepo {
             authored,
             edited: Edited::default(),
         })
+    }
+
+    /// The body `edit` gives comment `found`, its own or else the comment's
+    /// current one, with the edit's attachments uploaded and embedded.
+    async fn edited_body(
+        &self,
+        account: &Account,
+        found: &Found,
+        edit: &CommentEdit,
+        per_item: bool,
+    ) -> Result<String> {
+        let body = edit.body.as_deref().unwrap_or(&found.body);
+        if edit.attachments.is_empty() {
+            return Ok(body.to_owned());
+        }
+        let holder = if per_item {
+            Holder::Comment(edit.comment)
+        } else {
+            Holder::Repository
+        };
+        self.attach(account, holder, body, &edit.attachments).await
     }
 
     /// Refuse a comment that the login of `account` did not write, which

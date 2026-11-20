@@ -1,4 +1,5 @@
 use super::*;
+use shoal_forge_types::items::attach::Attachment;
 use shoal_forge_types::review::view::{Comment, Review, ReviewComment};
 
 #[test]
@@ -67,11 +68,20 @@ fn comments_list_discussion_then_inline_comments_with_their_authors_and_bodies()
 }
 
 #[test]
-fn an_edit_needs_a_body() {
-    let edit = |body: &str| CommentEdit {
+fn an_edit_needs_a_body_or_an_attachment() {
+    let edit = |body: Option<&str>, attached: &[&str]| CommentEdit {
         comment: CommentId::new(3),
-        body: body.into(),
+        body: body.map(str::to_owned),
+        attachments: (attached.iter())
+            .map(|path| Attachment {
+                path: path.into(),
+                alt: None,
+            })
+            .collect(),
     };
-    assert!(edit("Fixed").validate().is_ok());
-    assert!(edit(" \n").validate().is_err());
+    assert!(edit(Some("Fixed"), &[]).validate().is_ok());
+    assert!(edit(Some(" \n"), &[]).validate().is_err());
+    assert!(edit(Some(" \n"), &["shot.png"]).validate().is_ok());
+    assert!(edit(None, &["shot.png"]).validate().is_ok());
+    assert!(edit(None, &[]).validate().is_err());
 }

@@ -124,6 +124,7 @@ impl ForgeRepo {
         action.validate(kind)?;
         // Refused before anything is read or posted.
         self.require_all(action.needs(kind))?;
+        let per_item = self.check_uploads(account, action.attachments()).await?;
         match action {
             Action::Review(review) => {
                 return self
@@ -136,11 +137,11 @@ impl ForgeRepo {
                 return Box::pin(self.react(account, kind, number, change)).await;
             }
             Action::EditComment(edit) => {
-                return Box::pin(self.edit_own_comment(account, kind, number, edit)).await;
+                return Box::pin(self.edit_own_comment(account, kind, number, edit, per_item))
+                    .await;
             }
             _ => {}
         }
-        let per_item = self.check_uploads(account, action.attachments()).await?;
         let current = self.read(account, kind, number).await?;
         let before = ItemDetails::of(&current);
         let (action, pending) = self

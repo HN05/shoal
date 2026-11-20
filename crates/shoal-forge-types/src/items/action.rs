@@ -269,6 +269,7 @@ impl Action {
         match self {
             Self::Edit(edit) => &edit.attachments,
             Self::Comment { attachments, .. } => attachments,
+            Self::EditComment(edit) => &edit.attachments,
             _ => &[],
         }
     }
