@@ -49,7 +49,8 @@ impl Unretried {
 }
 
 /// Drop the space's retry and note that `execution`'s turn `failure` ended
-/// went unretried, together. Whether the note is new.
+/// went unretried, together, keeping the latest failure of a run of them.
+/// Whether the note is new.
 fn record(
     tx: &rusqlite::Transaction<'_>,
     space_id: &SpaceId,
@@ -57,11 +58,13 @@ fn record(
     failure: TurnFailure,
 ) -> Result<bool> {
     cancel(tx, space_id)?;
-    let noted = tx.execute(
-        "INSERT OR IGNORE INTO execution_unretried_turns(execution_id,failure) VALUES (?1,?2)",
+    let noted = self::failure(tx, execution)?.is_some();
+    tx.execute(
+        "INSERT INTO execution_unretried_turns(execution_id,failure) VALUES (?1,?2)
+         ON CONFLICT(execution_id) DO UPDATE SET failure=excluded.failure",
         rusqlite::params![execution, failure],
     )?;
-    Ok(noted > 0)
+    Ok(!noted)
 }
 
 /// The failure that ended the unretried turn of `execution`, until its agent

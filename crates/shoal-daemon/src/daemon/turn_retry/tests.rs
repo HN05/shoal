@@ -391,6 +391,14 @@ async fn a_failed_turn_with_retry_off_is_told_once_until_a_turn_goes_through() {
     report(&manager, &workspace, execution.as_str(), AgentState::Idle).await;
     fail(&manager, &workspace, execution.as_str(), TurnFailure::Other).await;
     assert_eq!(turn_failures(&manager).await, Vec::<String>::new());
+    // The space's status names the latest failure of the run.
+    let id = execution.clone();
+    let failure = manager
+        .store
+        .run(move |db| super::unretried::failure(db, &id))
+        .await
+        .unwrap();
+    assert_eq!(failure, Some(TurnFailure::Other));
 
     // Once a turn ends normally, the next failed one is told again.
     report(
