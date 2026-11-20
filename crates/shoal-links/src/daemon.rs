@@ -98,4 +98,8 @@ pub trait Records: Send + Sync {
     /// Forget the ready marks the space `id` holds on the items at `urls`,
     /// which it no longer links.
     fn forget_ready_marks(&self, db: &Connection, id: &SpaceId, urls: &[String]) -> Result<()>;
+
+    /// Refuse a change to the links, cursor or marks of the space `id`
+    /// while it is not ready, as a removed space is not.
+    fn require_ready_space(&self, db: &Connection, id: &SpaceId) -> Result<()>;
 }

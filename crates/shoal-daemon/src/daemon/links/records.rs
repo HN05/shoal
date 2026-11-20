@@ -15,4 +15,8 @@ impl Records for LinkRecords {
     fn forget_ready_marks(&self, db: &Connection, id: &SpaceId, urls: &[String]) -> Result<()> {
         crate::daemon::ready_marks::forget(db, id, urls)
     }
+
+    fn require_ready_space(&self, db: &Connection, id: &SpaceId) -> Result<()> {
+        super::space::require_ready_space(db, id)
+    }
 }

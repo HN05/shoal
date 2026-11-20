@@ -1,6 +1,7 @@
 use super::*;
 use serde_json::json;
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::pr::RegistrationChange;
 use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
@@ -174,7 +175,7 @@ async fn a_chat_removed_before_its_pr_link_is_written_keeps_none() {
     let links = manager.links.clone();
     let refused = manager
         .store
-        .write(move |tx| record_change(&links, tx, &SpaceId::from("removed-chat"), change))
+        .write(move |tx| links.record_change(tx, &SpaceId::from("removed-chat"), change))
         .await;
     assert!(refused.is_err());
     assert!(
@@ -223,7 +224,7 @@ async fn watching_a_related_pr_replaces_its_link_and_keeps_its_cursor() {
                 },
                 error: None,
             };
-            RegistrationChange::new(None, Some(watch), None).apply(&links, tx, &id)?;
+            links.record_change(tx, &id, RegistrationChange::new(None, Some(watch), None))?;
             let count = |table: &str| -> rusqlite::Result<i64> {
                 let query = format!("SELECT COUNT(*) FROM {table} WHERE space_id=?1");
                 tx.query_row(&query, [&id], |row| row.get(0))

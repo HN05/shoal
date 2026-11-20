@@ -1,26 +1,20 @@
 //! Persisted opt-in PR watches and manual merge acknowledgements.
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::OptionalExtension;
 use shoal_ids::space_ids::SpaceId;
-use shoal_links::pr::{titles, watched_urls};
 use shoal_links::space::LinkSpace;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::CommitId;
 
 use crate::{
     daemon::{
-        events::{self, EventKind},
-        forge_hosts::ForgeHosts,
-        gates::PrGuard,
-        links::space::require_ready_space,
-        manager::Manager,
-        spaces::removal_notices::Cleanup,
+        forge_hosts::ForgeHosts, gates::PrGuard, manager::Manager, spaces::removal_notices::Cleanup,
     },
     forge::{
         ForgeRepo,
         items::{
-            link::{ItemKind, LinkKind},
+            link::LinkKind,
             reference::{ItemInput, ItemRef},
         },
         review::status::PrStatus,
@@ -101,7 +95,7 @@ impl Manager {
             }
             Action::Acknowledge => (Some(self.merge_acknowledgement(space).await?), None),
         };
-        let change = RegistrationChange::new(
+        let change = shoal_links::pr::RegistrationChange::new(
             previous.as_ref(),
             kind.map(|kind| Registration { kind, error: None }),
             titled,
@@ -109,7 +103,7 @@ impl Manager {
         let (id, added) = (space.id.to_owned(), change.added.clone());
         let links = self.links.clone();
         (self.store)
-            .write(move |tx| record_change(&links, tx, &id, change))
+            .write(move |tx| links.record_change(tx, &id, change))
             .await?;
         self.start_linked_watches_gated(&space.id, added).await;
         self.signals.wake_cleanup();
@@ -464,84 +458,6 @@ impl Manager {
     }
 }
 
-/// A space's PR registration replacing its previous one, with the title
-/// the caller knows of the PR it watches.
-struct RegistrationChange {
-    registration: Option<Registration>,
-    added: Vec<ItemRef>,
-    removed: Vec<ItemRef>,
-    title: Option<(ItemRef, String)>,
-}
-
-impl RegistrationChange {
-    fn new(
-        previous: Option<&Registration>,
-        registration: Option<Registration>,
-        title: Option<(ItemRef, String)>,
-    ) -> Self {
-        let before = watched_urls(previous);
-        let after = watched_urls(registration.as_ref());
-        let added = after
-            .iter()
-            .filter(|url| !before.contains(url))
-            .cloned()
-            .collect();
-        let removed = before
-            .iter()
-            .filter(|url| !after.contains(url))
-            .cloned()
-            .collect();
-        Self {
-            registration,
-            added,
-            removed,
-            title,
-        }
-    }
-
-    /// Store the registration within the caller's transaction. A dropped watch
-    /// takes its replay cursors, review mark and title with it, an added one
-    /// replaces the PR's opened or related link, and every watch added or
-    /// dropped is journaled as an assigned PR link change. A title the caller
-    /// knows replaces the recorded one.
-    fn apply(&self, links: &shoal_links::Links, db: &Connection, id: &SpaceId) -> Result<()> {
-        links.forget_assigned(db, id, ItemKind::Pr, &self.removed)?;
-        titles::forget(db, id, &self.removed)?;
-        store_registration(db, id, self.registration.as_ref())?;
-        for url in &self.added {
-            shoal_links::records::drop_recorded(db, id, url.url(), None)?;
-            events::record_link(
-                db,
-                id,
-                EventKind::Linked,
-                crate::model::Relation::Assigned,
-                ItemKind::Pr,
-                url.url(),
-            )?;
-        }
-        if let Some((url, title)) = &self.title {
-            titles::record(db, id, url.url(), title)?;
-        }
-        Ok(())
-    }
-}
-
-fn store_registration(
-    db: &Connection,
-    id: &SpaceId,
-    registration: Option<&Registration>,
-) -> Result<()> {
-    match registration {
-        Some(registration) => db.execute(
-            "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)
-             ON CONFLICT(space_id) DO UPDATE SET record=excluded.record",
-            rusqlite::params![id, serde_json::to_string(registration)?],
-        )?,
-        None => db.execute("DELETE FROM pr_cleanup WHERE space_id=?1", [id])?,
-    };
-    Ok(())
-}
-
 /// The workspace's HEAD: its branch's commit, checking it is still on the
 /// branch, or for a workspace at a commit its detached HEAD, checking it is
 /// still detached.
@@ -604,19 +520,6 @@ pub(crate) fn origin<'a>(
         Ok(remote) => remote.as_deref().context(missing),
         Err(error) => Err(anyhow::anyhow!("{error:#}")),
     }
-}
-
-/// Apply `change` to the PR registration of the space `id` in a transaction
-/// that finds it ready: a removed space has no registration to change, and
-/// writing one would outlive it.
-fn record_change(
-    links: &shoal_links::Links,
-    tx: &rusqlite::Transaction<'_>,
-    id: &SpaceId,
-    change: RegistrationChange,
-) -> Result<()> {
-    require_ready_space(tx, id)?;
-    change.apply(links, tx, id)
 }
 
 #[cfg(test)]
