@@ -730,6 +730,9 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
     if version >= 247 {
         db.execute_batch(include_str!("demo_viewers.sql"))?;
     }
+    if version >= 248 {
+        db.execute_batch(include_str!("lifecycle_generations.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"

@@ -112,13 +112,6 @@ CREATE TABLE demos (
     UNIQUE(workspace_id,name)
 );
 
-CREATE TABLE demo_viewers (
-    execution_id TEXT PRIMARY KEY REFERENCES demos(execution_id) ON DELETE CASCADE,
-    port INTEGER NOT NULL,
-    process TEXT NOT NULL,
-    serving INTEGER NOT NULL CHECK(serving IN (0,1))
-);
-
 CREATE TABLE session_cleanup (
     id TEXT PRIMARY KEY,
     host TEXT NOT NULL,
@@ -866,7 +859,14 @@ CREATE TABLE "workspaces" (
     starting_index TEXT
 , pending_plan TEXT
         CHECK(pending_plan IS NOT NULL OR (base_commit IS NOT NULL AND git_dir IS NOT NULL))
-        CHECK(base_ref IS NULL OR base_commit IS NOT NULL));
+        CHECK(base_ref IS NULL OR base_commit IS NOT NULL), lifecycle_generation INTEGER NOT NULL DEFAULT 0);
+
+CREATE TABLE demo_viewers (
+    execution_id TEXT PRIMARY KEY REFERENCES demos(execution_id) ON DELETE CASCADE,
+    port INTEGER NOT NULL,
+    process TEXT NOT NULL,
+    serving INTEGER NOT NULL CHECK(serving IN (0,1))
+);
 
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
@@ -1370,4 +1370,9 @@ END;
 CREATE TRIGGER workspace_restart_removed AFTER DELETE ON workspaces
 WHEN OLD.id NOT IN (SELECT id FROM chats) BEGIN
     DELETE FROM agent_restarts WHERE space_id=OLD.id;
+END;
+
+CREATE TRIGGER workspace_lifecycle_changed AFTER UPDATE OF state ON workspaces
+WHEN NEW.state IS NOT OLD.state BEGIN
+    UPDATE workspaces SET lifecycle_generation=lifecycle_generation+1 WHERE id=NEW.id;
 END;
