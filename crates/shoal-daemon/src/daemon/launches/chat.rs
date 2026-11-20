@@ -11,7 +11,6 @@ use super::{
     space::{PlacedHome, Placement},
 };
 use crate::{
-    config::modes::ModeName,
     daemon::{
         manager::Manager,
         operations::starts::{Home, StartIssue},
@@ -56,7 +55,7 @@ impl Manager {
             launch.issue.clone(),
             in_workspace,
         )?;
-        let issue = named_issue(issue, &shape.mode, picks)?;
+        let issue = named_issue(issue, picks)?;
         let home = (self.launch_chat_home(launch, shape, (named, issue.as_ref()), caller)).await?;
         // A named parent is never the workspace the chat runs in; one it
         // leaves out is the caller's own space, wherever the chat runs.
@@ -154,19 +153,11 @@ fn ensure_chat_takes(launch: &Launch, shape: &Shape) -> Result<()> {
     Ok(())
 }
 
-/// The issue a chat in `mode` starts on: one the launch names, since a
-/// pick needs a terminal, which leaves it open where it `picks`.
-fn named_issue(
-    issue: Option<ItemChoice>,
-    mode: &ModeName,
-    picks: bool,
-) -> Result<Option<ItemInput>> {
+/// The issue a chat starts on: one the launch names, since a pick needs a
+/// terminal, which leaves it open where it `picks`.
+fn named_issue(issue: Option<ItemChoice>, picks: bool) -> Result<Option<ItemInput>> {
     match issue {
         Some(ItemChoice::Pick) => {
-            ensure!(
-                *mode == ModeName::PLAN,
-                "--issue needs a number or URL outside plan mode"
-            );
             ensure!(
                 picks,
                 "missing issue; pass --issue <number or URL> in non-interactive mode"

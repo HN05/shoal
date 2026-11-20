@@ -1,7 +1,7 @@
 //! The mode a start's agent starts in: named, else the one its PR's or
 //! issue's labels call for, else on a terminal a picked one, else the default mode.
 use anyhow::Result;
-use shoal_protocol::launches::{ItemChoice, Launch};
+use shoal_protocol::launches::Launch;
 
 use crate::{
     cli::{
@@ -23,9 +23,8 @@ use crate::{
 };
 
 /// The mode of `launch` as far as nothing needs asking: the one it names,
-/// on a terminal the plan mode for an issue to pick, which no other mode
-/// takes, else the [`item_mode`] of the PR or issue it names in the
-/// `found` repository; otherwise one a terminal picks once the daemon has checked
+/// else the [`item_mode`] of the PR or issue it names in the `found`
+/// repository; otherwise one a terminal picks once the daemon has checked
 /// the rest, and off one the [`launches::default_mode`].
 pub(super) async fn decided(
     ctx: &Context,
@@ -36,15 +35,11 @@ pub(super) async fn decided(
     if let Some(mode) = &launch.mode {
         return Ok(ModeChoice::Named(mode.clone()));
     }
-    let picks = ui::can_pick(ctx);
-    if picks && launch.issue == Some(ItemChoice::Pick) {
-        return Ok(ModeChoice::Named(modes::ModeName::PLAN));
-    }
     let labelled = match found {
         Some(repo) => item_mode(ctx, launch, repo, (settings, modes)).await?,
         None => None,
     };
-    Ok(labelled.unwrap_or_else(|| match picks {
+    Ok(labelled.unwrap_or_else(|| match ui::can_pick(ctx) {
         true => ModeChoice::Pick,
         false => ModeChoice::Named(launches::default_mode(launch)),
     }))

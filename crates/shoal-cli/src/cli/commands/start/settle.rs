@@ -1,6 +1,7 @@
 //! The one way every start settles its launch before sending it, whatever
-//! space the daemon starts it in: what refuses comes before what asks, and
-//! the mode before the pickers it decides. Only the daemon decides the
+//! space the daemon starts it in: the issue or PR it asks for, whose labels
+//! may decide the mode, then what refuses before what asks, and the mode
+//! before the pickers it decides. Only the daemon decides the
 //! kind of space; this process reads what a mode says only to choose which
 //! pickers the launch leaves open.
 use anyhow::Result;
@@ -38,7 +39,8 @@ pub(in crate::cli::commands) async fn start(ctx: &Context, args: StartArgs) -> R
 
 /// Settle `launch`, made where the start is made, and start it, placing
 /// its agent as `options` ask: refuse what its arguments alone refuse,
-/// find its repository and settings without asking, decide its mode where
+/// find its repository and settings without asking, pick the issue or PR
+/// it asks for without naming, decide its mode where
 /// nothing needs asking and check its agent, have the daemon refuse
 /// what it would refuse, asking on a terminal about a stopped agent the
 /// launch does not replace, then pick on a terminal what the launch leaves
@@ -52,6 +54,7 @@ pub(in crate::cli::commands) async fn settle(
     repository::take_parents(ctx, &launch).await?;
     let found = repository::found(ctx, &mut launch).await?;
     let settings = launch_settings(ctx, &launch).await?;
+    let (found, settings) = pickers::pick_items(ctx, &mut launch, (found, settings)).await?;
     let modes = start_modes(ctx, &launch, &settings).await?;
     let choice = mode::decided(ctx, &launch, found.as_ref(), (&settings, &modes)).await?;
     let (mut found, mut settings) = match choice.clone().named() {
@@ -90,7 +93,6 @@ pub(in crate::cli::commands) async fn settle(
     {
         return Ok(code);
     }
-    pickers::pick_plan_issue(ctx, &mut launch, (found.as_ref(), &settings)).await?;
     pickers::pick_agent(ctx, &mut launch, &settings)?;
     let issue_linked = worker && check::issue_linked(checked.as_ref());
     super::place(ctx, launch, issue_linked, &settings, options).await

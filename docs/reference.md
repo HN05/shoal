@@ -1210,7 +1210,9 @@ names the issue's number, title and URL, includes its description when it has
 one, and points to `shoal view` for comments and later edits; options after
 `--` go to the agent. Codex uses CLI mode for issue prompts.
 
-PR links, and `--pr` with a PR's number or URL, open its head branch against
+PR links, and `--pr` with a PR's number or URL, or without one a PR a
+terminal picks among the open ones, those carrying the `label` of the mode
+`--mode` names where it has one, open its head branch against
 the refreshed remote base, reusing an
 owned workspace when present, and link the PR once the workspace is ready; a
 refused link only warns. A PR from a fork, which has no branch in the
@@ -2323,7 +2325,8 @@ The agent's configured launcher runs in the registered checkout with the mode's
 rendered rules as its instructions. With `--issue`, the chat is assigned the
 issue and named after its title without asking, and the agent starts
 on it with the mode's instructions instead of waiting for you; without a value,
-`--issue` in the `plan` mode offers the open issues carrying its `label`. An agent with an
+`--issue` offers the open issues, those carrying the mode's `label` where it
+has one. An agent with an
 `instructions` template (built in for Claude Code and Codex CLI) takes them
 apart from its first message and waits for yours; another receives them as its
 first message, through `{prompt}` or as its first argument, ending with a
@@ -3103,8 +3106,7 @@ the picker lists first.
 only the modes of the kind of space they ask for, a workspace for a branch,
 `--base` or another flag only a workspace takes, and only
 modes in a repository when they name a repository or issue or ask for a kind
-of space; when only one fits, the start takes it without asking, as it takes
-`plan` for `--issue` without a value, which no other mode accepts. A start
+of space; when only one fits, the start takes it without asking. A start
 on an issue or PR carrying a mode's `label` takes that mode, with or without a
 terminal, among the modes that fit its other arguments; one carrying the
 labels of several opens the picker on a terminal and is refused without one. A

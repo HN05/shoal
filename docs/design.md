@@ -3483,7 +3483,10 @@ agent starting work on an issue means the same as the user; a script that
 wants a fixed mode passes `--mode`. An item with no mode's label gets the
 picker on a terminal and the default mode without one; one with the labels of
 several gets the picker on a terminal and is refused without one, naming them,
-since no default is right.
+since no default is right. A bare `--issue` or `--pr` picks the item first,
+among those carrying the label of the mode `--mode` names where it has one,
+so its labels can decide the mode when none is named; a named mode alone
+never opens that picker.
 The plan mode settles a plan in a chat, not a workspace: planning changes no
 code, needs the user's attention and their authority to rewrite the issue, and
 the chat coordinates the implementing workspace when the user has it start

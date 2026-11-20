@@ -3087,8 +3087,10 @@ fn a_start_off_a_terminal_takes_the_mode_an_issues_labels_name() {
     );
 }
 
-#[test]
-fn a_start_on_a_pr_number_takes_its_branch_and_the_mode_its_labels_name() {
+/// A fixture whose mode `fixer` starts a workspace for PRs labelled
+/// `fix-review` and the plan mode a chat for `needs-plan`, with PR 7 of
+/// the branch `fix` carrying both labels, and the recording agent `pi`.
+fn labelled_pull() -> Fixture {
     let fixture = Fixture::with_config(Some(
         "[modes.fixer]\nkind = 'workspace'\nlabel = 'fix-review'\n\
          [modes.plan]\nlabel = 'needs-plan'\n",
@@ -3106,6 +3108,12 @@ fn a_start_on_a_pr_number_takes_its_branch_and_the_mode_its_labels_name() {
     pull["labels"] = serde_json::json!([{"name": "fix-review"}, {"name": "needs-plan"}]);
     script_api(fixture.root.path(), "repos/team/project/pulls/7", &pull);
     install_recording_agent(&fixture, "pi");
+    fixture
+}
+
+#[test]
+fn a_start_on_a_pr_number_takes_its_branch_and_the_mode_its_labels_name() {
+    let fixture = labelled_pull();
     let args = [
         "--json", "start", "--wait", "--pr", "7", "--agent", "pi", "--here",
     ];
@@ -3116,6 +3124,29 @@ fn a_start_on_a_pr_number_takes_its_branch_and_the_mode_its_labels_name() {
     assert_eq!(workspace["branch"], "fix", "{workspace}");
     let status = fixture.ok(&["status", workspace["id"].as_str().unwrap()]);
     assert_eq!(status["workspace"]["mode"], "fixer", "{status}");
+}
+
+#[test]
+fn a_bare_pr_offers_the_open_prs_carrying_the_named_modes_label() {
+    let fixture = labelled_pull();
+    script_api(
+        fixture.root.path(),
+        "repos/team/project/issues?type=pulls&state=open&labels=fix-review&limit=50&page=1",
+        &serde_json::json!([{"number": 7, "title": "PR 7", "state": "open", "body": "",
+            "labels": [{"name": "fix-review"}], "pull_request": {"merged": false},
+            "html_url": "https://forge.example/team/project/pulls/7"}]),
+    );
+    let (output, rows) = fixture.pick_in(
+        &fixture.repo,
+        &[
+            "start", "--wait", "--mode", "fixer", "--pr", "--agent", "pi", "--here",
+        ],
+        "7",
+        "",
+    );
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(rows.contains("PR 7"), "{rows}");
+    assert_eq!(started_in(&fixture), (true, false));
 }
 
 #[test]
@@ -3143,6 +3174,13 @@ fn plan_mode_opens_a_chat_on_an_issue_that_needs_a_plan() {
         fixture.root.path(),
         "repos/team/project/issues?type=issues&state=open&labels=needs-plan&limit=50&page=1",
         &serde_json::json!([issue(12, "Clarify retries"), issue(9, "Pick a cache")]),
+    );
+    let mut unplanned = issue(3, "Track releases");
+    unplanned["labels"] = serde_json::json!([]);
+    script_api(
+        fixture.root.path(),
+        "repos/team/project/issues?type=issues&state=open&limit=50&page=1",
+        &serde_json::json!([issue(12, "Clarify retries"), unplanned]),
     );
     let plan = |args: &[&str], agent: &str| {
         install_recording_agent(&fixture, agent);
@@ -3178,12 +3216,14 @@ fn plan_mode_opens_a_chat_on_an_issue_that_needs_a_plan() {
     ] {
         assert!(args[0].contains(expected), "{expected}: {}", args[0]);
     }
-    // Without an issue, the open issues labelled as needing a plan are
-    // offered; only the plan mode takes that, so no mode is asked for.
+    // Without an issue, the plan mode offers the open issues carrying its
+    // label.
     install_recording_agent(&fixture, "pi");
     let (output, rows) = fixture.pick_in(
         &fixture.repo,
-        &["start", "--wait", "--issue", "--agent", "pi", "--here"],
+        &[
+            "start", "--wait", "--mode", "plan", "--issue", "--agent", "pi", "--here",
+        ],
         "12",
         "",
     );
@@ -3193,7 +3233,20 @@ fn plan_mode_opens_a_chat_on_an_issue_that_needs_a_plan() {
         "{rows}"
     );
     assert!(chat_args(&fixture)[0].contains("Clarify retries"));
-    // Outside plan mode, --issue names one.
+    // Without a mode, every open issue is offered, and the picked one's
+    // labels decide the mode without asking for one.
+    install_recording_agent(&fixture, "pi");
+    let (output, rows) = fixture.pick_in(
+        &fixture.repo,
+        &["start", "--wait", "--issue", "--agent", "pi", "--here"],
+        "12",
+        "",
+    );
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(rows.contains("Track releases"), "{rows}");
+    assert!(!rows.contains("worker"), "{rows}");
+    assert!(chat_args(&fixture)[0].contains("Clarify retries"));
+    // Off a terminal, --issue names one.
     let output = fixture
         .command()
         .args(["start", "--mode", "chat", "--issue", "--agent", "pi"])
@@ -3860,9 +3913,6 @@ fn an_issue_start_refuses_a_workspace_that_cannot_reopen_before_prompting() {
     assert!(!failed.status.success(), "{}", printed(&failed));
     let args = ["start", repo, "--mode", "worker", "--issue", "37"];
     fixture.assert_refused_before_prompting(&args, "is failed");
-    // Outside plan mode a start names its issue rather than picking one.
-    let bare = ["start", repo, "--mode", "worker", "--issue"];
-    fixture.assert_refused_before_prompting(&bare, "outside plan mode");
 }
 
 /// A copy's start in a repository named by a number, which beside a branch

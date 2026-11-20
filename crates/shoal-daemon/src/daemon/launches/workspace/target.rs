@@ -38,7 +38,7 @@ impl Manager {
     ) -> Result<Target> {
         let issue = match &launch.issue {
             Some(ItemChoice::Pick) => {
-                anyhow::bail!("--issue needs a number or URL outside plan mode")
+                anyhow::bail!("--issue needs a number or URL; a terminal picks one without it")
             }
             Some(ItemChoice::Named(issue)) => Some(issue.clone()),
             None => None,

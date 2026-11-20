@@ -265,12 +265,13 @@ pub struct StartArgs {
     #[arg(long, value_name = "NAME")]
     pub branch: Option<String>,
     /// The forge issue number or URL the agent starts on; a workspace's name
-    /// derives from it. Without a value in plan mode, offers the open issues
-    /// carrying the plan mode's label.
+    /// derives from it. Without a value, offers the open issues, those
+    /// carrying the label of the mode --mode names where it has one.
     #[arg(short = 'i', long, num_args = 0..=1, value_parser = issue_input)]
     pub issue: Option<Option<crate::forge::items::reference::ItemInput>>,
     /// The forge PR number or URL whose branch a new workspace starts on, as
-    /// a PR link does.
+    /// a PR link does. Without a value, offers the open PRs, those carrying
+    /// the label of the mode --mode names where it has one.
     #[arg(long, num_args = 0..=1, value_parser = pull_input)]
     pub pr: Option<Option<crate::forge::items::reference::ItemInput>>,
     /// Create this worktree at an exact new directory instead of the repository default.

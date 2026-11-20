@@ -1,11 +1,11 @@
-//! What a terminal picks of what a settled launch leaves open: what a new
-//! workspace starts from, the issue a plan settles, and the agent.
+//! What a terminal picks of what a settled launch leaves open: the issue
+//! or PR it asks for, what a new workspace starts from, and the agent.
 mod agent;
-mod issue;
+mod item;
 mod source;
 
 pub(in crate::cli::commands) use agent::check_model;
 pub(super) use agent::{check_agent, pick_agent};
-pub(super) use issue::pick_plan_issue;
+pub(super) use item::pick_items;
 pub(super) use source::pick_source;
 pub(in crate::cli::commands) use source::pick_start_source;

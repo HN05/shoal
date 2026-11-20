@@ -345,9 +345,10 @@ fn start_takes_an_optional_in_and_issue_and_refuses_flags_its_space_cannot_use()
         };
         Ok::<_, clap::Error>(*start)
     };
-    // Without a value, --issue in plan mode offers the issues needing a plan.
+    // Without a value, --issue and --pr offer the open ones.
     let plan = start(&["--mode", "plan", "--issue"]).unwrap();
     assert_eq!(plan.issue, Some(None));
+    assert_eq!(start(&["--pr"]).unwrap().pr, Some(None));
     let inside = start(&["--in", "--mode", "chat"]).unwrap();
     assert_eq!(inside.in_workspace, Some(None));
     // A positional issue reaches the start, which refuses a repository.
