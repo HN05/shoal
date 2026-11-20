@@ -379,7 +379,7 @@ pub(super) fn launched(workspace: &str) -> Launched {
 
 /// Queue the forge's waiting jobs, admit them and claim each admitted one.
 pub(super) async fn admit_and_claim(manager: &Manager) -> Vec<QueueEntry> {
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(manager).await;
     manager.dispatch_queue().await.unwrap();
     let admitted = manager.admitted_jobs().await.unwrap();
     for entry in &admitted {
@@ -406,7 +406,7 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
     let admitted = admit_and_claim(manager).await;
     assert_eq!(admitted.len(), 1);
     // The forge lists the job until its runner takes it, which queues it no more.
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(manager).await;
     assert!(job_entries(manager).await.is_empty());
     let claimed = manager.claimed_jobs().await.unwrap();
     assert_eq!(claimed.len(), 1);
@@ -537,10 +537,10 @@ async fn waiting_jobs_are_read_every_minute_while_none_could_start() {
     // Half the interval leaves no read due, however slow the runner.
     let read = reads();
     manager.runner.jobs().age_waiting_read(INTERVAL / 2);
-    manager.poll_waiting_jobs().await.unwrap();
+    poll_waiting_jobs(manager).await;
     assert_eq!(reads(), read);
     manager.runner.jobs().age_waiting_read(INTERVAL);
-    manager.poll_waiting_jobs().await.unwrap();
+    poll_waiting_jobs(manager).await;
     assert_eq!(reads(), read + 1);
 }
 
@@ -572,7 +572,7 @@ async fn a_job_whose_checkout_fails_is_passed_over_and_its_workspace_removed() {
         "{workspaces:?}"
     );
     // The forge still lists it, but the runner leaves it to others.
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(manager).await;
     assert!(job_entries(manager).await.is_empty());
 }
 
@@ -721,7 +721,7 @@ async fn a_jobs_directory_goes_however_its_workspace_went() {
 async fn turning_the_runner_off_withdraws_its_jobs_without_claiming_them() {
     let fixture = fixture(vec![job("h1", 4, 1), job("h2", 5, 1)], "").await;
     let manager = &fixture.manager;
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(manager).await;
     manager.dispatch_queue().await.unwrap();
     // Low free disk space admits one of them, more room both.
     let admitted = manager.admitted_jobs().await.unwrap();
@@ -744,12 +744,12 @@ async fn turning_the_runner_off_withdraws_its_jobs_without_claiming_them() {
         "{notifications:?}"
     );
     // So do waiting ones once the runners are checked.
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(manager).await;
     manager
         .write_local_config(&id, Some("[runner]\nenabled = true\n".into()))
         .await
         .unwrap();
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(manager).await;
     assert_eq!(job_entries(manager).await.len(), 2);
     manager
         .write_local_config(&id, Some("[runner]\nenabled = false\n".into()))
@@ -1357,7 +1357,7 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
 async fn a_job_admitted_as_the_system_shuts_down_waits_in_the_queue() {
     let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(manager).await;
     manager.dispatch_queue().await.unwrap();
     let admitted = manager.admitted_jobs().await.unwrap();
     assert_eq!(admitted.len(), 1);
@@ -1384,7 +1384,7 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
     )
     .await;
     let manager = &fixture.manager;
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(manager).await;
     manager.dispatch_queue().await.unwrap();
     let admitted = manager.admitted_jobs().await.unwrap();
     assert_eq!(admitted.len(), 1);
@@ -1441,7 +1441,7 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
 /// but still preparing.
 async fn workspace_a_restart_caught_preparing(fixture: &Fixture) -> Workspace {
     let manager = &fixture.manager;
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(manager).await;
     manager.dispatch_queue().await.unwrap();
     let admitted = manager.admitted_jobs().await.unwrap();
     let (entry, job) = (&admitted[0], admitted[0].job.as_deref().unwrap());
@@ -1649,7 +1649,7 @@ async fn a_job_counts_as_just_started_until_its_runner_starts() {
             })
             .collect::<Vec<_>>()
     };
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(manager).await;
     manager.dispatch_queue().await.unwrap();
     assert_eq!(ages().await, [std::time::Duration::ZERO]);
     admit_and_claim(manager).await;
@@ -1845,4 +1845,15 @@ async fn removing_a_repository_deletes_its_runner_on_the_forge() {
     );
 }
 
+/// Bring the job entries in line with the jobs the forge lists as waiting.
+pub(super) async fn refresh_waiting_jobs(manager: &Manager) {
+    manager.runner.refresh_waiting_jobs(manager).await.unwrap();
+}
+
+/// Read the forge's waiting jobs when due.
+pub(super) async fn poll_waiting_jobs(manager: &Manager) {
+    manager.runner.poll_waiting_jobs(manager).await.unwrap();
+}
+
 mod superseded;
+mod waiting;

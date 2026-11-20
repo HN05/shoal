@@ -1,5 +1,8 @@
 //! PR jobs whose PR moved on, as the daemon's polls and claims meet them.
-use super::{Fixture, admit_and_claim, fixture, hold_the_builds_permit, job, job_entries};
+use super::{
+    Fixture, admit_and_claim, fixture, hold_the_builds_permit, job, job_entries,
+    refresh_waiting_jobs,
+};
 use crate::{daemon::notifications::NotificationKind, state::QueueState};
 
 /// Move PR 12 past the commit its runs wait at.
@@ -34,7 +37,7 @@ async fn claim_admitted(manager: &crate::daemon::manager::Manager) {
 async fn a_claimed_job_whose_pr_moved_on_has_its_run_cancelled_without_a_workspace() {
     let fixture = fixture(vec![job("old", 4, 2)], "").await;
     let manager = &fixture.manager;
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(manager).await;
     move_pull_on(&fixture);
 
     claim_admitted(manager).await;
@@ -51,7 +54,7 @@ async fn a_claimed_job_whose_pr_moved_on_has_its_run_cancelled_without_a_workspa
             .all(|workspace| !workspace.name.starts_with("ci-"))
     );
     // The forge still lists it, but the runner leaves it to others.
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(manager).await;
     assert!(job_entries(manager).await.is_empty());
     assert!(!cancel_failed(&fixture).await);
 }
@@ -71,13 +74,13 @@ async fn a_queued_job_held_back_whose_pr_moved_on_leaves_the_queue_at_the_next_p
     move_pull_on(&fixture);
     let head = "GET /api/v1/repos/team/repo/pulls/12";
     let heads_read = received(&fixture, head);
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(manager).await;
     // One read of the PR's head and one cancel of the run serve both jobs.
     assert_eq!(received(&fixture, head) - heads_read, 1);
     let cancel = "POST /api/v1/repos/team/repo/actions/runs/2/cancel";
     assert_eq!(received(&fixture, cancel), 1);
     assert!(job_entries(manager).await.is_empty());
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(manager).await;
     assert!(job_entries(manager).await.is_empty());
     assert!(!cancel_failed(&fixture).await);
 }
@@ -88,7 +91,7 @@ async fn a_queued_job_whose_run_the_forge_does_not_cancel_is_passed_over_with_a_
     let manager = &fixture.manager;
     move_pull_on(&fixture);
 
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(manager).await;
     assert!(job_entries(manager).await.is_empty());
     let notifications = manager.notifications.list(false, 50).await.unwrap();
     let run = format!("http://{}/team/repo/actions/runs/8", fixture.server.host);
@@ -100,7 +103,7 @@ async fn a_queued_job_whose_run_the_forge_does_not_cancel_is_passed_over_with_a_
         "{notifications:?}"
     );
     // The forge still lists it, but the runner leaves it to others.
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(manager).await;
     assert!(job_entries(manager).await.is_empty());
 }
 
@@ -110,7 +113,7 @@ async fn a_pr_whose_head_cannot_be_read_keeps_its_jobs_queued_and_the_rest_of_th
     let manager = &fixture.manager;
     move_pull_on(&fixture);
 
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(manager).await;
     let waiting = job_entries(manager).await;
     let handles: Vec<_> = (waiting.iter())
         .map(|entry| entry.job.as_ref().unwrap().job.handle.as_str())
@@ -122,7 +125,7 @@ async fn a_pr_whose_head_cannot_be_read_keeps_its_jobs_queued_and_the_rest_of_th
 async fn a_job_admitted_while_its_pr_is_checked_is_left_to_its_claim() {
     let fixture = fixture(vec![job("old", 4, 2)], "").await;
     let manager = &fixture.manager;
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(manager).await;
     let waiting = job_entries(manager).await.remove(0);
 
     manager.dispatch_queue().await.unwrap();

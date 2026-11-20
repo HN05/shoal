@@ -296,6 +296,11 @@ impl Agents for StandIn {
         Box::pin(async move { Ok(opened) })
     }
 
+    /// A job could always start.
+    fn job_could_start(&self) -> BoxFuture<'_, Result<bool>> {
+        Box::pin(async { Ok(true) })
+    }
+
     fn agent_spaces(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>> {
         let agents = self.agents.lock().unwrap().clone();
         Box::pin(async move { Ok(agents) })
@@ -388,6 +393,21 @@ impl Records for StandIn {
     /// Every entry still waits.
     fn delete_waiting_entry(&self, _: &Connection, _: &QueueEntryId) -> Result<bool> {
         Ok(true)
+    }
+
+    /// The stand-in's queue holds no jobs.
+    fn forget_unlisted_job_entries(
+        &self,
+        _: &Connection,
+        _: &RepositoryId,
+        _: &HashSet<String>,
+    ) -> Result<HashSet<String>> {
+        Ok(HashSet::new())
+    }
+
+    /// The stand-in's queue keeps no jobs.
+    fn queue_job(&self, _: &Connection, _: &RepositoryId, _: &QueuedJob) -> Result<()> {
+        Ok(())
     }
 
     /// The stand-in's queue holds no jobs.

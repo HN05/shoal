@@ -17,12 +17,11 @@ mod listing;
 mod overrun;
 mod single_use;
 mod taken;
-mod waiting;
 
 pub(crate) use shoal_runner::jobs::JobStop;
 pub(crate) use shoal_runner::jobs::Registration;
 
-use std::{sync::Arc, time::Duration};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use futures_util::future::BoxFuture;
@@ -30,6 +29,7 @@ use rusqlite::{Connection, params};
 use shoal_forge::{RepoRequests, account::Account};
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::space_names::SpaceName;
 use shoal_runner::{
     daemon::{Forges, Spaces, WaitingEntry},
     jobs::INTERVAL,
@@ -90,7 +90,7 @@ async fn pass(manager: &Arc<Manager>) -> anyhow::Result<()> {
     manager.follow_taken_jobs().await?;
     manager.release_idle_runners().await?;
     claim_admitted_jobs(manager).await?;
-    manager.poll_waiting_jobs().await
+    manager.runner.poll_waiting_jobs(&**manager).await
 }
 
 /// Claim each admitted job no claim runs for yet, each in a task of its own
@@ -175,6 +175,50 @@ impl shoal_runner::daemon::Records for RunnerRecords {
 
     fn delete_waiting_entry(&self, db: &Connection, id: &QueueEntryId) -> Result<bool> {
         super::agent_queue::actions::delete_waiting(db, id)
+    }
+
+    fn forget_unlisted_job_entries(
+        &self,
+        db: &Connection,
+        repository: &RepositoryId,
+        listed: &HashSet<String>,
+    ) -> Result<HashSet<String>> {
+        let entries = db
+            .prepare(
+                "SELECT id,json_extract(job,'$.job.handle'),state FROM agent_queue
+                 WHERE repository_id=?1 AND kind=?2",
+            )?
+            .query_map(params![repository, QueueKind::Job], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?
+            .collect::<rusqlite::Result<Vec<(String, String, QueueState)>>>()?;
+        let mut kept = HashSet::new();
+        for (id, handle, state) in entries {
+            if state == QueueState::Queued && !listed.contains(&handle) {
+                db.execute("DELETE FROM agent_queue WHERE id=?1", [id])?;
+            } else {
+                kept.insert(handle);
+            }
+        }
+        Ok(kept)
+    }
+
+    fn queue_job(&self, db: &Connection, repository: &RepositoryId, job: &QueuedJob) -> Result<()> {
+        let name = SpaceName::derive(&format!("ci-{}-{}", job.job.name, job.job.id), "workspace");
+        db.execute(
+            "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,job)
+             VALUES (?1,?2,?3,?4,'',?5,?6,?7)",
+            params![
+                QueueEntryId::generate(),
+                QueueKind::Job,
+                repository,
+                name,
+                QueueState::Queued,
+                crate::time::UnixTime::now(),
+                serde_json::to_string(job)?,
+            ],
+        )?;
+        Ok(())
     }
 }
 

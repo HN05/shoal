@@ -75,6 +75,10 @@ pub trait Agents: Send + Sync {
     /// The spaces whose agent runs or waits in the agent queue.
     fn agent_spaces(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>>;
 
+    /// Whether some CI job could start now beside the agents and jobs in
+    /// use.
+    fn job_could_start(&self) -> BoxFuture<'_, Result<bool>>;
+
     /// Launch `launch` as the user, through the operation `shoal start`
     /// uses, from `source`: the space it opens.
     fn launch(
@@ -152,4 +156,18 @@ pub trait Records: Send + Sync {
 
     /// Delete the entry `id` if it still waits, returning whether it did.
     fn delete_waiting_entry(&self, db: &Connection, id: &QueueEntryId) -> Result<bool>;
+
+    /// Delete `repository`'s waiting job entries whose handles are not
+    /// among `listed`, returning the handles of those it keeps: listed,
+    /// or admitted.
+    fn forget_unlisted_job_entries(
+        &self,
+        db: &Connection,
+        repository: &RepositoryId,
+        listed: &HashSet<String>,
+    ) -> Result<HashSet<String>>;
+
+    /// Queue `job` of `repository` behind the work already waiting; its
+    /// rank decides when it starts.
+    fn queue_job(&self, db: &Connection, repository: &RepositoryId, job: &QueuedJob) -> Result<()>;
 }

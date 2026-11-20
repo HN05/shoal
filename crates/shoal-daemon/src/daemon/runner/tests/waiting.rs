@@ -1,3 +1,4 @@
+//! The forge's waiting jobs as the daemon's polls queue them.
 use crate::forge::{
     ci::runner::{JobRun, Trigger},
     numbers::PullNumber,
@@ -5,15 +6,20 @@ use crate::forge::{
 use shoal_ids::space_ids::SpaceId;
 use std::sync::{Arc, Mutex};
 
+use rusqlite::params;
 use serde_json::{Value, json};
 
 use super::*;
 use crate::{
-    daemon::test_support::{configure, git, manager, repository},
+    daemon::{
+        runner::RunnerRecords,
+        test_support::{configure, git, manager, repository},
+    },
     forge::backends::ForgeKind,
-    model::QueueEntry,
+    model::{QueueEntry, QueuedJob},
 };
 use shoal_forge::test_support::Server;
+use shoal_runner::daemon::Records as _;
 
 /// A Forgejo whose waiting jobs are `jobs`, each in the run its `run_id`
 /// names: run 1 for PR 12, run 2 on branch `topic`.
@@ -125,7 +131,7 @@ async fn waiting_jobs_join_the_queue_linked_to_their_workspace_until_the_forge_d
         .unwrap();
 
     // Jobs arrive in the order the forge queued them, each with its run.
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(&manager).await;
     let queued = jobs(&manager).await;
     assert_eq!(handles(&queued), ["a", "b"]);
     let first = queued[0].job.as_ref().unwrap();
@@ -141,7 +147,7 @@ async fn waiting_jobs_join_the_queue_linked_to_their_workspace_until_the_forge_d
     assert_eq!(second.space_ids, std::slice::from_ref(&topic.id));
 
     // Polling again queues nothing twice.
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(&manager).await;
     assert_eq!(handles(&jobs(&manager).await), ["a", "b"]);
 
     // A passed-over job stays with the forge for other runners.
@@ -149,12 +155,12 @@ async fn waiting_jobs_join_the_queue_linked_to_their_workspace_until_the_forge_d
         .queue_remove(&manager.queued("ci-rust-4").await, None)
         .await
         .unwrap();
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(&manager).await;
     assert_eq!(handles(&jobs(&manager).await), ["b"]);
 
     // Jobs another runner took leave the queue, and so does what was passed over.
     listed.lock().unwrap().clear();
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(&manager).await;
     assert!(jobs(&manager).await.is_empty());
     let passed: i64 = manager
         .store
@@ -227,8 +233,8 @@ async fn a_job_ranks_with_its_workspace_ahead_of_that_workspaces_restore() {
     manager
         .store
         .write(move |tx| {
-            queue_job(tx, &id, &unlinked)?;
-            queue_job(tx, &id, &linked)
+            RunnerRecords.queue_job(tx, &id, &unlinked)?;
+            RunnerRecords.queue_job(tx, &id, &linked)
         })
         .await
         .unwrap();
@@ -244,27 +250,6 @@ async fn a_job_ranks_with_its_workspace_ahead_of_that_workspaces_restore() {
     let place = |name: &str| order.iter().position(|entry| entry == name).unwrap();
     assert!(place("ci-linked-1") < place("restore"));
     assert_eq!(order.last().map(String::as_str), Some("ci-unlinked-1"));
-}
-
-#[test]
-fn only_a_run_on_the_known_default_branch_is_on_it() {
-    let run = |trigger| JobRun {
-        url: "https://forge.example/team/repo/actions/runs/1"
-            .parse()
-            .unwrap(),
-        workflow: None,
-        commit: "abc".into(),
-        trigger,
-        reference: None,
-    };
-    let main = run(Trigger::Branch("main".into()));
-    assert!(on_branch(&main, Some("main")));
-    assert!(!on_branch(&main, None));
-    assert!(!on_branch(
-        &run(Trigger::Branch("topic".into())),
-        Some("main")
-    ));
-    assert!(!on_branch(&run(Trigger::Other), Some("main")));
 }
 
 #[tokio::test]
@@ -312,7 +297,7 @@ async fn a_waiting_job_serves_the_workspace_that_links_its_pr_after_it_queued() 
         })
         .await
         .unwrap();
-    manager.refresh_waiting_jobs().await.unwrap();
+    refresh_waiting_jobs(&manager).await;
     let entry = jobs(&manager).await.remove(0);
     assert!(entry.job.as_ref().unwrap().space_ids.is_empty());
 

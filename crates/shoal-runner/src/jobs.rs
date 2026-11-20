@@ -17,6 +17,7 @@ mod linked;
 mod queue;
 mod registration;
 mod superseded;
+mod waiting;
 
 pub use registration::Registration;
 

@@ -84,6 +84,10 @@ impl Agents for Manager {
         Box::pin(Manager::started_launch(self, entry))
     }
 
+    fn job_could_start(&self) -> BoxFuture<'_, Result<bool>> {
+        Box::pin(Manager::job_could_start(self))
+    }
+
     fn agent_spaces(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>> {
         Box::pin(async move {
             let mut spaces = self.recorded_agent_spaces().await?;
