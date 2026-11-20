@@ -1,4 +1,5 @@
 //! The daemon's answers to [`RepositoryMethod`] requests, and who may send them.
+use shoal_daemon_base::permitted_actions::Action;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -7,7 +8,6 @@ use super::super::{
     answer::Answer,
     contribution_holds,
     manager::Manager,
-    permissions::Action,
     scope::{Caller, Scoped},
 };
 use crate::{

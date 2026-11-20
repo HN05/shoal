@@ -3,6 +3,7 @@
 //! code run, so it is the user's decision, or a scoped caller's as its
 //! `ci_approve` permission allows, as the agent account.
 use anyhow::{Context, Result};
+use shoal_daemon_base::permitted_actions::Action;
 
 use super::{
     place::{Access, Place},
@@ -10,7 +11,7 @@ use super::{
 };
 use crate::{
     config::permissions::PermissionKey,
-    daemon::{events, manager::Manager, permissions::Action, scope::Caller},
+    daemon::{events, manager::Manager, scope::Caller},
     forge::{
         ci::approval::RunsApproved,
         items::{

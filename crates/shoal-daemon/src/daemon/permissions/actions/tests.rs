@@ -4,11 +4,11 @@ use crate::{
     config::permissions::PermissionKey,
     daemon::{
         approvals::{DecisionStatus, Target, Undecided},
-        permissions::Action,
         scope::Caller,
         test_support::{chat, manager, repository},
     },
 };
+use shoal_daemon_base::permitted_actions::Action;
 
 fn caller(space: &shoal_ids::space_ids::SpaceId) -> Caller {
     Caller {

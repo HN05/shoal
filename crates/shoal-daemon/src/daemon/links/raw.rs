@@ -4,10 +4,11 @@
 //! write to its own repository.
 use anyhow::Result;
 use serde_json::Value;
+use shoal_daemon_base::permitted_actions::Action;
 
 use crate::{
     config::permissions::PermissionKey,
-    daemon::{links::place::Access, manager::Manager, permissions::Action, scope::Caller},
+    daemon::{links::place::Access, manager::Manager, scope::Caller},
     forge::{
         ForgeRepo,
         download::Download,

@@ -1,4 +1,5 @@
 //! The daemon's answers to [`ItemMethod`] requests, and who may send them.
+use shoal_daemon_base::permitted_actions;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result, bail};
@@ -6,7 +7,6 @@ use anyhow::{Context as _, Result, bail};
 use super::super::{
     answer::Answer,
     manager::Manager,
-    permissions,
     scope::{Caller, Scoped},
 };
 use crate::{
@@ -262,7 +262,7 @@ impl Scoped for ItemMethod {
                 let subject = manager.bind_merge(target, item.clone(), action, caller);
                 let subject = subject.await?;
                 (manager.gate_pull_merge(target, item.clone(), action, Some(caller))).await?;
-                let merge = permissions::Action::new(PermissionKey::Merge, subject)
+                let merge = permitted_actions::Action::new(PermissionKey::Merge, subject)
                     .in_repository(repository);
                 manager.authorize_action(Some(caller), merge).await?;
                 Some(target_selector(target)?)

@@ -7,13 +7,14 @@
 //! Git deletes it with that commit as its lease, so the forge keeps one
 //! that a push moved after the checks.
 use anyhow::{Context, Result, bail};
+use shoal_daemon_base::permitted_actions::Action;
 use shoal_refs::BranchName;
 
 use super::ReadBranches;
 use crate::{
     branches::{DeletedBranch, ListedBranch, SpaceWork},
     config::permissions::PermissionKey,
-    daemon::{links::place::Access, manager::Manager, permissions::Action, scope::Caller},
+    daemon::{links::place::Access, manager::Manager, scope::Caller},
     git,
     protocol::RepoTarget,
 };

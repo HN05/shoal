@@ -1,6 +1,7 @@
 //! The daemon's answers to [`DaemonMethod`] and exit requests, and who may
 //! send them.
 use anyhow::Result;
+use shoal_daemon_base::permitted_actions::Action;
 use shoal_protocol::scope_tokens::ScopeToken;
 use tokio::net::UnixStream;
 
@@ -10,7 +11,6 @@ use super::super::{
     daemon_exit::Ending,
     exit_wait::{self, Quiet},
     manager::Manager,
-    permissions::Action,
     scope::{self, Caller, Scoped},
     shutdown_stop::StoppedSpaces,
 };

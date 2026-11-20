@@ -1,5 +1,6 @@
 //! Reading alerts: listing those for the user, a space or every recipient a
 //! caller may read, and marking those a caller read.
+use shoal_daemon_base::permitted_actions::Action;
 use std::collections::{BTreeMap, HashSet};
 
 use anyhow::{Result, ensure};
@@ -10,7 +11,7 @@ use shoal_protocol::{protocol::AlertsFor, space_names::SpaceSelector};
 use super::{Alert, COLUMNS, FROM};
 use crate::{
     config::permissions::PermissionKey,
-    daemon::{manager::Manager, permissions::Action, scope::Caller},
+    daemon::{manager::Manager, scope::Caller},
 };
 
 /// What reading the user's alerts takes from a scoped caller.

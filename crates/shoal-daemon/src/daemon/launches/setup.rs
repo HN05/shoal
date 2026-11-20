@@ -2,11 +2,12 @@
 //! launches whose agent starts in the setup mode, which administers a
 //! repository's config or the global config.
 use anyhow::{Context as _, Result};
+use shoal_daemon_base::permitted_actions::Action;
 use shoal_protocol::launches::{Launch, Setup};
 
 use crate::{
     config::permissions::PermissionKey,
-    daemon::{manager::Manager, permissions::Action, scope::Caller},
+    daemon::{manager::Manager, scope::Caller},
     launches,
 };
 

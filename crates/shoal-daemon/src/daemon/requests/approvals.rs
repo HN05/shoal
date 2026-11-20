@@ -1,4 +1,5 @@
 //! The daemon's answers to [`ApprovalMethod`] requests, and who may send them.
+use shoal_daemon_base::permitted_actions::Action;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -8,7 +9,6 @@ use super::super::{
     approvals::ApprovalRequest,
     item_numbers::ItemNumber,
     manager::Manager,
-    permissions::Action,
     scope::{Caller, Scoped, denied, inspect_owner},
 };
 use crate::protocol::{ApprovalMethod, Body};

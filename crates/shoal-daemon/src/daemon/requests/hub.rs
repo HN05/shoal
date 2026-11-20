@@ -3,6 +3,7 @@
 //! their scope reaches them, a space updates the hub as its `daemon`
 //! permission allows, and only the user changes the members, joins or
 //! leaves.
+use shoal_daemon_base::permitted_actions::Action;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -11,7 +12,6 @@ use shoal_protocol::{hub::directory::HubView, space_names::SpaceSelector};
 use super::super::{
     answer::Answer,
     manager::Manager,
-    permissions::Action,
     scope::{Caller, Scoped},
 };
 use crate::{

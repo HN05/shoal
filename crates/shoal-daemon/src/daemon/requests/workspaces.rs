@@ -1,4 +1,5 @@
 //! The daemon's answers to [`WorkspaceMethod`] requests, and who may send them.
+use shoal_daemon_base::permitted_actions::Action;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result, ensure};
@@ -7,7 +8,6 @@ use tokio::net::UnixStream;
 use super::super::{
     answer::{Answer, OperationGuard},
     manager::Manager,
-    permissions::Action,
     scope::{Caller, Scoped, denied},
     workspace,
 };

@@ -1,6 +1,7 @@
 //! The named checks and views that confine a scoped caller to what its
 //! scope allows.
 use anyhow::{Context, Result, ensure};
+use shoal_daemon_base::permitted_actions::Action;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use std::collections::HashMap;
@@ -8,9 +9,7 @@ use std::collections::HashMap;
 use super::Caller;
 use crate::{
     config::permissions::PermissionKey,
-    daemon::{
-        approvals::ApprovalRequest, item_numbers::ItemNumber, manager::Manager, permissions::Action,
-    },
+    daemon::{approvals::ApprovalRequest, item_numbers::ItemNumber, manager::Manager},
     model::{QueueEntry, Repository, RunningAgent, Space, SpaceTarget},
     protocol::operations::WorkspaceStart,
     repository::Selector,

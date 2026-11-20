@@ -4,11 +4,12 @@
 //! text.
 use anyhow::Result;
 use serde::Serialize;
+use shoal_daemon_base::permitted_actions::Action;
 use shoal_refs::CommitId;
 
 use crate::{
     config::permissions::PermissionKey,
-    daemon::{links::place::Access, manager::Manager, permissions, scope::Caller},
+    daemon::{links::place::Access, manager::Manager, scope::Caller},
     forge::items::{
         reference::ItemInput,
         review::{LineComment, NewReview, ReviewVerdict},
@@ -42,7 +43,7 @@ impl Manager {
         review: &mut NewReview,
         repository: RepositoryId,
         caller: &Caller,
-    ) -> Result<permissions::Action> {
+    ) -> Result<Action> {
         let pull = self.context_pull(target, input, Access::Change, Some(caller));
         let (forge, url) = pull.await?;
         let account = self.review_account();
@@ -59,11 +60,7 @@ impl Manager {
             comments: &review.comments,
         };
         let key = PermissionKey::PrReview;
-        Ok(permissions::Action::request(
-            key,
-            &verdict,
-            Some(repository),
-        ))
+        Ok(Action::request(key, &verdict, Some(repository)))
     }
 }
 

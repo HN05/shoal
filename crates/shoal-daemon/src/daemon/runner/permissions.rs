@@ -2,11 +2,12 @@
 
 use anyhow::Result;
 use futures_util::future::BoxFuture;
+use shoal_daemon_base::permitted_actions::Action;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::config::permissions::PermissionKey;
 use shoal_runner::daemon::Permissions;
 
-use crate::daemon::{manager::Manager, permissions::Action, scope::Caller};
+use crate::daemon::{manager::Manager, scope::Caller};
 
 impl Permissions for Manager {
     fn authorize<'a>(

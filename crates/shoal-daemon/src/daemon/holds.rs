@@ -3,6 +3,7 @@
 use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Result, anyhow, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
+use shoal_daemon_base::permitted_actions::Action;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::config::repo::Lifetime;
 
@@ -17,7 +18,6 @@ use crate::{
         approvals::{
             self, ApprovalRequest, HoldSpecification, ReasonRequired, Specification, Target,
         },
-        permissions::Action,
         scope::Caller,
         store,
     },

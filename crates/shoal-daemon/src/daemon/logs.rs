@@ -2,6 +2,7 @@
 //! removed, by its last name or ID until its events expire, within the
 //! caller's scope, and Shoal's own; and how long a removed space's events
 //! stay.
+use shoal_daemon_base::permitted_actions::Action;
 use std::time::Duration;
 
 use anyhow::{Result, ensure};
@@ -17,7 +18,6 @@ use super::{
     events::{retention, shoal_log, space_log},
     log,
     manager::Manager,
-    permissions::Action,
     scope::Caller,
 };
 use crate::config::permissions::PermissionKey;
