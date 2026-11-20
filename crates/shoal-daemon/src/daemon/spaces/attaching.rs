@@ -162,16 +162,13 @@ impl ViewerTerminal {
             tokio::select! {
                 read = self.pty.read(&mut self.screen) => {
                     let step = match read? {
-                        0 => Step::Ended(self.ended().await?),
+                        0 => self.last_step().await?,
                         read => Step::Show(FromSession::Screen(self.screen[..read].to_vec())),
                     };
                     return Ok(Some(step));
                 }
-                line = next_report(&mut self.report), if self.report.is_some() => match line? {
-                    Some(line) => {
-                        let report = serde_json::from_str(&line).context("the attach's report")?;
-                        return Ok(Some(Step::Show(shown_report(report))));
-                    }
+                report = next_report(&mut self.report), if self.report.is_some() => match report? {
+                    Some(report) => return Ok(Some(Step::Show(shown_report(report)))),
                     None => self.report = None,
                 },
                 () = input.gone() => return Ok(None),
@@ -179,10 +176,41 @@ impl ViewerTerminal {
                     self.exited = Some(status?);
                 }
                 () = tokio::time::sleep(LAST_OUTPUT), if self.exited.is_some() => {
-                    return Ok(Some(Step::Ended(self.ended().await?)));
+                    return Ok(Some(self.last_step().await?));
                 }
             }
         }
+    }
+
+    /// The step after the terminal's last output: a report the attach
+    /// wrote before it exited, which the viewer hears before the end, else
+    /// the end.
+    async fn last_step(&mut self) -> Result<Step> {
+        match self.last_report().await? {
+            Some(report) => Ok(Step::Show(shown_report(report))),
+            None => Ok(Step::Ended(self.ended().await?)),
+        }
+    }
+
+    /// The attach's next report, once its terminal shows no more: none
+    /// once it closes its report, or [`LAST_OUTPUT`] after it exited, as
+    /// when a process it started holds the report open.
+    async fn last_report(&mut self) -> Result<Option<AttachReport>> {
+        while self.report.is_some() {
+            tokio::select! {
+                report = next_report(&mut self.report) => match report? {
+                    Some(report) => return Ok(Some(report)),
+                    None => self.report = None,
+                },
+                status = self.attach.wait(), if self.exited.is_none() => {
+                    self.exited = Some(status?);
+                }
+                () = tokio::time::sleep(LAST_OUTPUT), if self.exited.is_some() => {
+                    self.report = None;
+                }
+            }
+        }
+        Ok(None)
     }
 
     /// How the attach exited.
@@ -221,10 +249,17 @@ fn shown_report(report: AttachReport) -> FromSession {
     }
 }
 
-/// The next line the attach reports on `report`; none once it closes.
-async fn next_report(report: &mut Option<Lines<BufReader<UnixStream>>>) -> Result<Option<String>> {
-    match report {
-        Some(report) => Ok(report.next_line().await?),
+/// The next report the attach writes on `report`; none once it closes.
+async fn next_report(
+    report: &mut Option<Lines<BufReader<UnixStream>>>,
+) -> Result<Option<AttachReport>> {
+    let Some(report) = report else {
+        return Ok(None);
+    };
+    match report.next_line().await? {
+        Some(line) => Ok(Some(
+            serde_json::from_str(&line).context("the attach's report")?,
+        )),
         None => Ok(None),
     }
 }
