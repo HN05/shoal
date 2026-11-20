@@ -447,8 +447,9 @@ Each option merges on its own across layers, so a repository can replace
   nonempty context becomes the first forwarded argument. Substitutions happen
   once and user arguments stay literal.
 - `resume_command` restores a stopped agent's session without repeating its
-  first prompt, with the same substitutions; `{prompt}` gives it the
-  continuation prompt. Without one, `resume` restores session `{session}` and
+  first prompt, with the same substitutions; `{prompt}` gives it what the
+  restored agent is told, and an argument that is exactly `{prompt}` is left
+  out when it is told nothing, as an agent stopped between turns is. Without one, `resume` restores session `{session}` and
   `resume_latest` the latest session in the workspace, built in for Claude and
   Codex; a tool with neither a `resume_command` nor these cannot be resumed.
 - `instructions` passes the rendered system text apart from the first message,

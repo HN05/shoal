@@ -620,11 +620,14 @@ an update arrives for it, so that update restores it instead, and its restore
 holds no heavy slot until then. `shoal resume` of an agent whose wrapper
 waits is the user asking for it, so it uses the wrapper's queued restore,
 which then waits only for a heavy slot, rather than refusing the agent as running
-or starting a second beside it. Manual and automatic restores prompt the agent to continue its
-unfinished assignment, naming when and why it stopped, which every stop that
-saves an agent records and a last session keeps, and that its subagents and
-background commands ended; configured restore commands receive that prompt through
-`{prompt}`. Never replay the original task prompt. Keep waiting wrappers tracked; they reattach
+or starting a second beside it. A restore, manual or automatic, of an agent stopped mid-turn, or
+whose turn is unknown, prompts it to continue its unfinished assignment, naming when and why it
+stopped, which every stop that saves an agent records and a last session keeps, and that its
+subagents and background commands ended. One stopped between turns, or that exited on its own,
+is not told to continue: its session opens with only the handoff it needs, or with the wake
+prompt whose hook delivers the updates that wait for it, or with no prompt, and waits.
+Configured restore commands receive the prompt through `{prompt}`, which an argument of
+exactly `{prompt}` leaves out when there is none. Never replay the original task prompt. Keep waiting wrappers tracked; they reattach
 like running commands, so a daemon restart or crash hands the wait to the next
 daemon instead of cancelling the restore. A waiting wrapper's session shows
 the agent asleep under what it last showed, and Enter there starts its queued restore, as the user at

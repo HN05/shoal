@@ -389,10 +389,15 @@ An agent restores through its tool's
 arguments (`resume` and `resume_latest`, built in for Claude and Codex)
 continues the session its
 hooks last reported, otherwise the latest session in the workspace, without a
-session picker, with a prompt to continue its unfinished assignment on manual or
-automatic resume. The prompt of a stopped agent says when and why it stopped and
-that its subagents and background commands ended. Resume commands receive that
-prompt through `{prompt}`;
+session picker. An agent stopped mid-turn, or whose turn is unknown, such as one
+without Shoal's hooks, is prompted to continue its unfinished assignment, told when
+and why it stopped and that its subagents and background commands ended. One
+stopped between turns, such as an asleep agent, or that exited on its own opens
+its session with no prompt and waits; when updates or messages wait for it, a
+built-in resume opens with the prompt that wakes an idle agent, whose hook
+delivers them as its first message. Resume commands receive the prompt through
+`{prompt}`, and an argument that is exactly `{prompt}` is left out when there is
+none;
 other agents need a `resume_command`.
 A failed command lookup warns and
 disables automatic recovery for that launch. Overload alerts include the
@@ -585,8 +590,9 @@ or by an agent that exited on its own, such as one the user quit, picked as
 stopped agents are, or the `--execution` one. A workspace keeps one per agent; the next new agent started
 there or `shoal done` replaces them. Unlike stopped work they use no heavy slot and never delay
 cleanup.
-Stopped commands are included in the continuation prompt, asking the agent to
-rerun the ones still needed: built-in agents receive it as their prompt argument,
+Stopped commands are included in the restored agent's prompt, asking it to
+rerun the ones still needed, on their own for an agent stopped between turns:
+built-in agents receive it as their prompt argument,
 and resume commands through `{prompt}`. Otherwise, and when no agent was
 stopped, restore prints them as `shoal run` commands. Either way they are reported once.
 Several spaces, each with stopped work or a last session, or `--all` for every
