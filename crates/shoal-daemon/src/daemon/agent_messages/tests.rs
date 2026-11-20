@@ -943,3 +943,32 @@ async fn a_repeated_alert_s_longer_titles_count_toward_a_nearly_full_queue() {
     assert!(send(retitled).await.is_err());
     assert_fits_one_delivery(&manager, &workspace).await;
 }
+
+#[tokio::test]
+async fn an_upward_alert_s_longer_titles_count_toward_its_coordinator_s_queue() {
+    let (temp, manager) = manager().await;
+    let parent = workspace(&temp, &manager, "parent").await;
+    let child = manager
+        .create_child(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    // Both run agents, so the child's alerts go to its coordinator.
+    for space in [&parent, &child] {
+        let working = crate::state::AgentState::Working;
+        (manager.set_agent_state(&SpaceSelector::id(&space.id), working, None, None))
+            .await
+            .unwrap();
+    }
+    let as_child = crate::daemon::test_support::caller_in(&SpaceSelector::id(&child.id));
+    let up = |files| manager.send_alert(Some(&as_child), AlertTarget::Up, "logs".into(), files);
+    up(titled_files(&temp, "log")).await.unwrap();
+    let text = |n| format!("{n}{}", "x".repeat(1000));
+    assert!(queue_until_refused(&manager, &parent, text, Vec::new()).await > 0);
+    assert!(up(long_titled_files(&temp)).await.is_err());
+    assert_fits_one_delivery(&manager, &parent).await;
+}

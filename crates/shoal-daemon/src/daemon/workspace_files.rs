@@ -455,7 +455,9 @@ impl Manager {
     }
 
     /// Record the copies `kept` as attached to the workspace or chat
-    /// `space_id` from `source` by `attacher`, and return their records.
+    /// `space_id` from `source` by `attacher`, and return their records,
+    /// unless the titles they take would leave unread alerts that hold them
+    /// more than their agents receive at once.
     async fn record_kept(
         &self,
         space_id: &SpaceId,
@@ -466,7 +468,12 @@ impl Manager {
         let (id, attacher) = (space_id.to_owned(), attacher.clone());
         let copies = kept.copies.clone();
         self.store
-            .write(move |tx| records::record_all(tx, &id, source, &attacher, &copies))
+            .write(move |tx| {
+                let records = records::record_all(tx, &id, source, &attacher, &copies)?;
+                let paths: Vec<_> = copies.iter().map(|copy| copy.path.clone()).collect();
+                crate::daemon::agent_messages::ensure_holders_fit(tx, &paths)?;
+                Ok(records)
+            })
             .await
     }
 

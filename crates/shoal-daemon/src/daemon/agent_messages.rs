@@ -23,7 +23,7 @@ mod settle;
 mod store;
 
 pub(crate) use settle::SettleClock;
-pub(crate) use store::{every_unread, hand_to_user};
+pub(crate) use store::{ensure_holders_fit, every_unread, hand_to_user};
 
 /// Unread alerts one space may hold, and the bytes they may take as its
 /// agent receives them, which leaves room in one response for the item

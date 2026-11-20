@@ -1,6 +1,8 @@
 //! The alerts for a space's agent: queueing one, listing the unread ones as
 //! the agent reads them, marking delivered ones read, and what becomes of
 //! them when their space goes.
+use std::path::PathBuf;
+
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
@@ -87,6 +89,23 @@ pub(super) fn insert(
     let id = alerts::insert(tx, Some(space_id), alert, wakes, for_user)?;
     ensure_fits(tx, space_id)?;
     Ok(Queued { id, new: true })
+}
+
+/// Fail when a space whose unread alerts hold any of the files at `paths`,
+/// as the caller's transaction just recorded them, would take more than its
+/// agent receives at once, as when a new title lengthens a file.
+pub(crate) fn ensure_holders_fit(db: &Connection, paths: &[PathBuf]) -> Result<()> {
+    let holders = db
+        .prepare(
+            "SELECT DISTINCT a.recipient_id FROM alerts a, json_each(a.attachments) j
+                WHERE a.recipient_id IS NOT NULL AND a.read=0
+                    AND j.value IN (SELECT value FROM json_each(?1))",
+        )?
+        .query_map([serde_json::to_string(paths)?], |row| row.get(0))?
+        .collect::<rusqlite::Result<Vec<SpaceId>>>()?;
+    holders
+        .iter()
+        .try_for_each(|space_id| ensure_fits(db, space_id))
 }
 
 /// Fail when the unread alerts of the space `space_id` take more than its
