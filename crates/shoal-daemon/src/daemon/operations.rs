@@ -331,12 +331,13 @@ impl Manager {
             Report::Ended(ended) => {
                 self.keep_preparation_end(&entry.workspace, id, &ended)
                     .await;
+                // Kept first, so what reads the end while it is told finds it.
+                entry.update(|state| state.reported = Some(ended.clone()));
                 match entry.kind {
                     OperationKind::FinishMove => self.tell_finished_move(&ended).await,
                     OperationKind::Move => self.tell_move_after_turn(id, &ended).await,
                     _ => {}
                 }
-                entry.update(|state| state.reported = Some(ended));
             }
         }
         Ok(())

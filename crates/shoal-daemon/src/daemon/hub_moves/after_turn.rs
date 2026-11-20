@@ -106,8 +106,9 @@ impl Manager {
     /// Tell the agent whose move the operation `id` ran, once it `ended`
     /// with its space still here, how it went.
     pub(crate) async fn tell_move_after_turn(&self, id: &str, ended: &Ended) {
+        // Taken in one write, so only one of those who read the end tells.
         let operation = id.to_owned();
-        let space = (self.store).read(move |db| move_of_operation(db, &operation));
+        let space = (self.store).write(move |tx| take_move_of_operation(tx, &operation));
         let space = match space.await {
             Ok(Some(space)) => space,
             Ok(None) => return,
@@ -116,7 +117,6 @@ impl Manager {
                 return;
             }
         };
-        self.forget_move_after_turn(&space).await;
         self.tell_mover(&space, stayed_message(&space, ended)).await;
     }
 
@@ -170,11 +170,12 @@ fn waiting_moves(db: &rusqlite::Transaction<'_>) -> Result<Vec<(SpaceId, MoveOrd
     Ok(moves)
 }
 
-/// The space whose recorded move the operation `id` runs, if one does.
-fn move_of_operation(db: &rusqlite::Transaction<'_>, id: &str) -> Result<Option<SpaceId>> {
-    Ok(db
+/// Forget the recorded move the operation `id` runs, if one does,
+/// returning the space of its agent.
+fn take_move_of_operation(tx: &rusqlite::Transaction<'_>, id: &str) -> Result<Option<SpaceId>> {
+    Ok(tx
         .query_row(
-            "SELECT space_id FROM pending_moves WHERE operation_id=?1",
+            "DELETE FROM pending_moves WHERE operation_id=?1 RETURNING space_id",
             [id],
             |row| row.get(0),
         )
