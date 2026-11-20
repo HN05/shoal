@@ -9,6 +9,7 @@ mod pty;
 
 use std::{
     os::fd::{AsRawFd as _, OwnedFd},
+    path::Path,
     process::{ExitStatus, Stdio},
     sync::Arc,
     time::Duration,
@@ -82,8 +83,6 @@ impl Manager {
     ) -> Result<ViewerTerminal> {
         let space = self.space(selector).await?;
         let machine = self.hub.machine_name(self).await;
-        let (pty, terminal) = pty::open(viewer.size)?;
-        let (report, reported) = std::os::unix::net::UnixStream::pair()?;
         let viewer_json = serde_json::to_string(viewer)?;
         let argv = internal_command(
             &self.paths,
@@ -95,19 +94,7 @@ impl Manager {
                 report: REPORT,
             },
         )?;
-        let mut command = attach_command(&argv, viewer, terminal, reported.as_raw_fd())?;
-        command.current_dir(&self.paths.home);
-        let attach = command.spawn().context("start the attach")?;
-        drop(reported);
-        report.set_nonblocking(true)?;
-        let report = BufReader::new(UnixStream::from_std(report)?).lines();
-        Ok(ViewerTerminal {
-            pty: Arc::new(pty),
-            attach,
-            report: Some(report),
-            exited: None,
-            screen: vec![0; CHUNK],
-        })
+        ViewerTerminal::start(&argv, viewer, &self.paths.home)
     }
 
     /// Answer the request `id`, then carry `terminal`'s output, and the
@@ -149,6 +136,25 @@ impl Manager {
 }
 
 impl ViewerTerminal {
+    /// Run the attach `argv` in `dir` on a terminal made for `viewer`.
+    fn start(argv: &[std::ffi::OsString], viewer: &Viewer, dir: &Path) -> Result<Self> {
+        let (pty, terminal) = pty::open(viewer.size)?;
+        let (report, reported) = std::os::unix::net::UnixStream::pair()?;
+        let mut command = attach_command(argv, viewer, terminal, reported.as_raw_fd())?;
+        command.current_dir(dir);
+        let attach = command.spawn().context("start the attach")?;
+        drop(reported);
+        report.set_nonblocking(true)?;
+        let report = BufReader::new(UnixStream::from_std(report)?).lines();
+        Ok(Self {
+            pty: Arc::new(pty),
+            attach,
+            report: Some(report),
+            exited: None,
+            screen: vec![0; CHUNK],
+        })
+    }
+
     /// What the terminal shows the viewer next; none once the viewer goes,
     /// as `input` tells.
     async fn next(&mut self, input: &mut ViewerInput) -> Result<Option<Step>> {
