@@ -8,7 +8,8 @@
 //!   ([`input_with_default`]) or asked again until a check accepts it
 //!   ([`input_until`]).
 //! - [`picker`]: an fzf picker over `(id, label)` [`Entries`] that returns
-//!   the chosen id ([`pick`]), a typed value ([`pick_choice`]), an issue or
+//!   the chosen id ([`pick`]), also under a header naming what cannot be
+//!   picked ([`pick_with_header`]), a typed value ([`pick_choice`]), an issue or
 //!   PR ([`pick_item`]), or the key that chose it ([`pick_with_keys`]), or
 //!   whose keys act on an entry without leaving it ([`pick_in_place`]);
 //!   [`can_pick`] tells whether one can run, for choices with a usual answer.
@@ -29,6 +30,8 @@
 //!   [`pick_space`]), or several spaces at once ([`select_spaces`]).
 //! - [`elsewhere`]: the other joined machines' spaces those pickers offer
 //!   after this machine's, for a command that acts on them.
+//! - [`machines`]: another joined machine, picked among those online
+//!   ([`pick_machine`]).
 //! - [`rows`]: the aligned labels pickers and lists show ([`workspace_rows`],
 //!   [`aligned`]).
 //!
@@ -42,6 +45,7 @@ mod elsewhere;
 mod fzf;
 mod keys;
 mod linked;
+mod machines;
 mod modes;
 mod picker;
 mod prompt;
@@ -53,6 +57,7 @@ mod workspaces;
 use elsewhere::elsewhere_entries;
 pub use keys::Key;
 pub use linked::pick_linked;
+pub use machines::pick_machine;
 pub use modes::{ModeChoice, ModeFit};
 pub use picker::*;
 pub use prompt::*;

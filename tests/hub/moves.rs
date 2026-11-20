@@ -7,9 +7,14 @@ use serde_json::{Value, json};
 use super::directory::{give_origin, join, listed, machine, workspace};
 use super::support::{
     fixture::{Base, home},
-    git, git_with_identity, printed,
+    git, git_with_identity, install_test_script, printed,
+    prompt::{AnswerOptions, answer},
     wait::wait_for,
 };
+
+/// A picker that records its rows and picks those whose IDs
+/// `SHOAL_TEST_PICK_ID` lists, separated by spaces.
+const PICKER: &str = "#!/bin/sh\ncat > \"$SHOAL_TEST_PICK_INPUT\"\nawk -F '\\t' -v ids=\" $SHOAL_TEST_PICK_ID \" 'index(ids, \" \" $1 \" \") { print }' \"$SHOAL_TEST_PICK_INPUT\"\n";
 
 /// A hub with the joined machines `laptop` and `desk`, whose global config
 /// is `desk_config`, with their IDs at the hub.
@@ -125,4 +130,34 @@ fn a_space_left_behind_keeps_the_moved_space_as_its_parent() {
         let child = listed(&hub, &child, &laptop_id);
         (child["parent"] == work.as_str()).then_some(())
     });
+}
+
+#[test]
+fn a_move_on_a_terminal_offers_a_joined_machine_first_then_picks_it() {
+    let (hub, laptop, _desk, _laptop_id, desk_id) = machines("");
+    give_origin(&laptop);
+    let work = workspace(&laptop, "work");
+    install_test_script(laptop.root.path().join("bin/fzf"), PICKER);
+    let rows = laptop.root.path().join("picker-rows");
+    let mut command = laptop.command();
+    // The kind picker's first row, then the desk among the machines.
+    let picked = format!("0 {desk_id}");
+    command
+        .env("SHOAL_TEST_PICK_INPUT", &rows)
+        .env("SHOAL_TEST_PICK_ID", &picked)
+        .args(["move", &work, "--yes"]);
+    let terminal = AnswerOptions {
+        controlling_terminal: true,
+        kill_on_timeout: true,
+        terminal_stdout: false,
+    };
+
+    let (moved, _) = answer(&mut command, "", terminal);
+
+    assert!(moved.status.success(), "{}", printed(&moved));
+    listed(&hub, &work, &desk_id);
+    // The machine picker offers the other machines, never this one.
+    let machines = fs::read_to_string(&rows).unwrap();
+    assert!(machines.contains("\tdesk"), "{machines}");
+    assert!(!machines.contains("\tlaptop"), "{machines}");
 }

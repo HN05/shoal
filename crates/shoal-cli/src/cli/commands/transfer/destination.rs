@@ -33,6 +33,7 @@ pub(super) struct Chosen {
 /// What the destination picker offers.
 #[derive(Clone, Copy)]
 enum Kind {
+    Machine,
     Ssh,
     File,
 }
@@ -64,9 +65,10 @@ pub(super) async fn choose(ctx: &Context, args: &MoveArgs) -> Result<(Vec<SpaceI
     let several = args.all || spaces.len() > 1;
     let named = match named {
         Some(named) => named,
-        // Only a move over SSH takes them.
-        None if args.no_resume || args.shoal.is_some() => ssh_host(ctx)?,
-        None => pick(ctx, several).await?,
+        // Only a move over SSH takes it.
+        None if args.shoal.is_some() => ssh_host(ctx)?,
+        // A file leaves its agents to the command that opens it.
+        None => pick(ctx, several, !args.no_resume).await?,
     };
     let chosen = match named {
         Named::Ssh(host) => Chosen {
@@ -131,13 +133,29 @@ fn file_destination(path: &Path, several: bool) -> Result<Chosen> {
     })
 }
 
-/// The destination the user picks: its kind, then the host or the path,
-/// a directory for `several` spaces.
-async fn pick(ctx: &Context, several: bool) -> Result<Named> {
-    let kinds = [(Kind::Ssh, "SSH host"), (Kind::File, "File")];
-    match ui::pick_choice(ctx, "Destination> ", &kinds)? {
-        Kind::Ssh => ssh_host(ctx),
-        Kind::File => file(ctx, several).await,
+/// The destination the user picks: its kind, `Joined machine` first on a
+/// machine joined to a hub, and a file only where `files`, then the
+/// machine, the host or the path, a directory for `several` spaces.
+async fn pick(ctx: &Context, several: bool, files: bool) -> Result<Named> {
+    let view = crate::cli::hub_view::view(ctx).await;
+    let mut kinds = Vec::new();
+    if view.is_some() {
+        kinds.push((Kind::Machine, "Joined machine"));
+    }
+    kinds.push((Kind::Ssh, "SSH host"));
+    if files {
+        kinds.push((Kind::File, "File"));
+    }
+    let kind = match kinds.as_slice() {
+        [(only, _)] => *only,
+        _ => ui::pick_choice(ctx, "Destination> ", &kinds)?,
+    };
+    match (kind, view) {
+        (Kind::Machine, Some(view)) => {
+            Ok(Named::Machine(ui::pick_machine(ctx, "Machine> ", &view)?))
+        }
+        (Kind::Ssh | Kind::Machine, _) => ssh_host(ctx),
+        (Kind::File, _) => file(ctx, several).await,
     }
 }
 

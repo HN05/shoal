@@ -4794,10 +4794,13 @@ shoal restore --from moving                    # continue every space written to
 
 `shoal move [space]...` takes one destination: `--ssh <host>`,
 `--machine <machine>` or `-o <file>`. Without one, on a terminal, it picks the spaces when none are
-named, then asks for the destination's kind, `SSH host` or `File`, and for the
-host or path, or only for the host given `--no-resume` or `--shoal`, after
-refusing the spaces, repository or `--checkpoint` it cannot take; without a
-terminal it is refused, naming each flag.
+named, then asks for the destination's kind, `Joined machine` first on a
+machine joined to a hub, `SSH host` or `File`, without `File` given
+`--no-resume`, and picks the machine among the other joined machines online,
+by name, listing the offline ones above them with when the hub last saw them,
+or asks for the host or path; given `--shoal` it asks only for the host. It
+refuses the spaces, repository or `--checkpoint` it cannot take first, and
+without a terminal it is refused, naming each flag.
 
 The daemon runs the move, so it finishes even after the terminal that
 started it closes. It checks the spaces before it ends any, and where that ends spaces

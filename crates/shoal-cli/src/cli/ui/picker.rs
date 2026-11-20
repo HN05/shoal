@@ -61,6 +61,21 @@ pub fn pick(ctx: &Context, prompt: &str, entries: Entries) -> Result<String> {
     Ok(run_picker(ctx, prompt, entries, Vec::new(), false)?.id)
 }
 
+/// [`pick`] under `header`, a line above the entries that names what the
+/// user cannot pick.
+pub fn pick_with_header(
+    ctx: &Context,
+    prompt: &str,
+    entries: Entries,
+    header: Option<&str>,
+) -> Result<String> {
+    let args = match header {
+        Some(header) => vec!["--header".into(), header.into()],
+        None => Vec::new(),
+    };
+    Ok(run_picker(ctx, prompt, entries, args, false)?.id)
+}
+
 pub fn pick_with_keys<T: Clone>(
     ctx: &Context,
     prompt: &str,
