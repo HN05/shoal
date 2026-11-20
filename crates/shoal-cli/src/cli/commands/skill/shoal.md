@@ -568,6 +568,7 @@ and `--draft` also returns the PR to draft.
 ```sh
 shoal send "<text>" [--attach FILE]   # Up: to your coordinator, else the user
 shoal send --space <child> "<text>"   # Down: to the agent of a space below
+shoal send --in-chat [--space S] [--attach FILE]  # Your turn's final message
 shoal alert list [--unread]           # Your space's alerts
 shoal alert withdraw <number>         # Take back one you sent, until it is read
 ```
@@ -582,6 +583,11 @@ deliver them with PR activity; a new one also ends `shoal watch pr` with an
 lists each file attached to it as an `Attached file:` path. `shoal send`
 prints each alert's number, by which its sender withdraws it until it is
 read; `--space` names the space it went to, as for one on another machine.
+`--in-chat` sends your turn's final message as the alert once the turn
+ends, for an agent with Shoal's hooks: it names whom it goes to now, and
+`shoal log` the alert's number once sent. A prompt the user submits during
+the turn drops it, which Shoal tells you, and marks read the alerts your
+chat sent them.
 
 ## Threads
 
@@ -612,6 +618,8 @@ one the other side offered with `--choose`; text is never read as a choice
 number. `--wait` waits without a time limit for the other side's next post
 and prints it. `--in-chat` makes your turn's final message the post, for an
 agent with Shoal's hooks; a prompt the user submits in your chat answers it.
+A turn has one such mark, a post's or an alert's: another `--in-chat`
+replaces it and names the one it replaced.
 
 `--code`, repeatable, points a post at a file, or its lines, in the worktree
 of a space your scope reaches, or of the workspace your chat runs in;

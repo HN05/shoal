@@ -109,10 +109,6 @@ pub struct PostArgs {
     /// Wait for the other side's next post and print it.
     #[arg(long)]
     pub wait: bool,
-    /// Post your turn's final message in the thread instead, which a reply
-    /// in your conversation answers.
-    #[arg(long, conflicts_with_all = ["body_file", "attach", "code", "choices", "recommend", "choose", "wait"])]
-    pub in_chat: bool,
     /// Continue waiting after this post, as the installed release does after
     /// an upgrade restarted the daemon.
     #[arg(long, hide = true, value_name = "POST")]
@@ -127,7 +123,6 @@ impl PostArgs {
             || self.choose.is_some()
             || !self.code.is_empty()
             || self.wait
-            || self.in_chat
             || self.resume.is_some()
     }
 }

@@ -6709,6 +6709,7 @@ shoal send --body-file plan.md --space S      # A file's text as one alert
 shoal send "Crash on launch" --attach shot.png  # Attach files; repeat --attach for more
 shoal send --all "Network is back"            # Every agent your scope reaches
 shoal send "Rebase onto main" --repo [R]      # Every agent of R or the current one
+shoal send --in-chat [--space S] [--attach F]  # The agent's turn's final message, once it ends
 shoal alert list               # Your alerts: a picker on a terminal, else a list
 shoal alert list --unread      # Oldest unread ones first; says how many remain
 shoal alert list --space S     # Those for a space's agent
@@ -6747,6 +6748,22 @@ start there, each with `workspaces` and `chats` with `--json`. The sender may
 withdraw an alert by its number until it is read; `--space` names the space it
 went to, which finds it on the joined machine that has that space, since each
 machine numbers its own alerts.
+
+`--in-chat`, without text or `--body-file`, makes the final message of an
+agent's current turn the alert, so the agent writes it in its conversation,
+where the user reads it as written, and it still reaches its recipients. It
+takes `--space`, `--all`, `--repo` and `--attach` as a plain alert does, and
+the command resolves and checks them at once: it prints whom the alert goes
+to, `user`, `coordinator`, `above` for a coordinator on another joined
+machine, `space`, or `all` with its `repository`. When the turn ends, Shoal
+sends the final message through the same path as `shoal send "<text>"`, as
+one line up or as lines down, each shortened to fit, with copies of the files
+as they are then; the alert gets its number
+then, which the sender's [`shoal log`](#space-log) names. A turn without a
+final message sends that the agent wrote in its chat. A prompt the user
+submits during the turn drops the alert, and the agent's next delivery says
+it was not sent; a prompt in a chat also marks read the user's unread
+alerts that chat sent in-chat, since the user is reading it there.
 
 `--all` sends to every agent the sender's scope reaches, and `--repo` to every
 agent of the repository it names, or without a value the current checkout's
@@ -6995,8 +7012,8 @@ tracks in a workspace or runs as a chat's, post in its conversation, where the
 post reads as the agent wrote it; other agents are refused. It marks the
 agent's current turn, which a daemon restart keeps, and when the turn ends the
 `Stop` hook passes the turn's final message, which becomes the post. A turn
-has one mark: another `--in-chat` in it replaces the earlier one, which the
-command names. A prompt
+has one mark, a post's or an [alert's](#alerts): another `--in-chat` in it
+replaces the earlier one, which the command names. A prompt
 you submit in the agent's chat, rather than one Shoal submits to wake or
 continue it, is your reply to each such post its thread waits on: Shoal
 records it as your post and takes back the post's unread alert, or tells the

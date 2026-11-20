@@ -4,7 +4,8 @@
 //! reaches, running, stopped or queued, or with `--repo` to those of one
 //! repository, the current one without a value. It lists where it went.
 //! Led by a thread's number, it posts in that thread instead (see
-//! [`super::threads`]).
+//! [`super::threads`]). With `--in-chat`, the agent's turn's final message
+//! is the text, sent once the turn ends.
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
@@ -28,43 +29,64 @@ use shoal_protocol::{
 };
 
 /// What `shoal send`'s arguments say: an alert's text, or a post in a
-/// thread.
+/// thread, or either from the agent's chat.
 pub(super) enum Sending {
     Alert(Option<String>),
+    /// The turn's final message as an alert.
+    AlertInChat,
     Post {
         thread: ThreadNumber,
         text: Option<String>,
     },
+    /// The turn's final message as a post in this thread.
+    PostInChat(ThreadNumber),
 }
 
-/// What `args` say, given whether `--body-file` names the text, the
-/// options only posts take and whether an alert's recipients are named: a
-/// thread's number and the text post in that thread, as does a single
-/// argument with `--body-file` or such an option; any other single argument
-/// is an alert's text. A post goes to the thread's other side, so it takes
-/// no recipients.
-pub(super) fn sending(
-    args: Vec<String>,
-    body_file: bool,
-    post: &PostArgs,
-    recipients: bool,
-) -> Result<Sending> {
-    let sending = sending_of(args, body_file, post)?;
-    if recipients && matches!(sending, Sending::Post { .. }) {
+/// Which of `shoal send`'s options other than a post's are given.
+pub(super) struct Given {
+    pub body_file: bool,
+    pub in_chat: bool,
+    pub attached: bool,
+    /// Whether an alert's recipients are named.
+    pub recipients: bool,
+}
+
+/// What `args` say, given the options only posts take and the others
+/// `given`: a thread's number and the text post in that thread, as does a
+/// single argument with `--body-file` or such an option, or with
+/// `--in-chat` the turn's final message; any other single argument is an
+/// alert's text, and `--in-chat` alone makes the final message one. A post
+/// goes to the thread's other side, so it takes no recipients, and one from
+/// the chat carries no files.
+pub(super) fn sending(args: Vec<String>, post: &PostArgs, given: Given) -> Result<Sending> {
+    let sending = sending_of(args, post, &given)?;
+    let posts = matches!(sending, Sending::Post { .. } | Sending::PostInChat(_));
+    if given.recipients && posts {
         bail!("a post goes to its thread's other side; --space, --all and --repo name an alert's");
+    }
+    if given.attached && matches!(sending, Sending::PostInChat(_)) {
+        bail!(
+            "a post from your chat carries no files; post them with shoal send <thread> --attach"
+        );
     }
     Ok(sending)
 }
 
-/// What `args` say, as [`sending`] reads them, whatever recipients are named.
-fn sending_of(args: Vec<String>, body_file: bool, post: &PostArgs) -> Result<Sending> {
+/// What `args` say, as [`sending`] reads them, whatever recipients and
+/// files are given.
+fn sending_of(args: Vec<String>, post: &PostArgs, given: &Given) -> Result<Sending> {
     let mut args = args.into_iter();
     Ok(match (args.next(), args.next()) {
+        (_, Some(_)) if given.in_chat => {
+            bail!("--in-chat takes no text: your turn's final message is the text")
+        }
+        (Some(thread), None) if given.in_chat => Sending::PostInChat(thread.parse()?),
+        (None, None) if given.in_chat => Sending::AlertInChat,
         (Some(thread), Some(text)) => Sending::Post {
             thread: thread.parse()?,
             text: Some(text),
         },
-        (Some(thread), None) if body_file || post.given() => Sending::Post {
+        (Some(thread), None) if given.body_file || post.given() => Sending::Post {
             thread: thread.parse()?,
             text: None,
         },
@@ -98,6 +120,22 @@ pub(super) async fn send(
     let from = super::alerts::sending_space(ctx).await?;
     let sent = alerts::send(&ctx.paths, to, from, message, attachments).await?;
     show_sent(ctx, &sent)
+}
+
+/// Mark the agent's turn as sending its final message to `recipients`
+/// with the files `attach` names, once the turn ends; they are checked
+/// now and copied then.
+pub(super) async fn send_in_chat(
+    ctx: &Context,
+    recipients: Recipients,
+    attach: Vec<String>,
+) -> Result<i32> {
+    super::alerts::refuse_workspace_processes(ctx)?;
+    let attachments = attachments(&attach)?;
+    shoal_protocol::files::check_sent(&attachments)?;
+    let to = target(ctx, recipients).await?;
+    let marked = alerts::send_in_chat(&ctx.paths, to, attachments).await?;
+    in_chat::show(ctx, &marked)
 }
 
 /// Where `recipients` sends: a process in a space of its own sends up

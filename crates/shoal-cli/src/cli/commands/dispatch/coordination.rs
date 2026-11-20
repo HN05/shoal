@@ -17,36 +17,42 @@ pub(in crate::cli::commands) async fn run(
         CoordinationCommand::Send {
             args,
             body_file,
+            in_chat,
             attach,
             space,
             all,
             repository,
             post,
-        } => match send::sending(
-            args,
-            body_file.is_some(),
-            &post,
-            space.is_some() || all || repository.is_some(),
-        )? {
-            send::Sending::Alert(message) => {
-                let recipients = match repository {
-                    Some(repository) => send::Recipients::Repository(repository),
-                    None if all => send::Recipients::All,
-                    None => send::Recipients::Space(space),
-                };
-                send::send(&ctx, recipients, message, body_file, attach).await
+        } => {
+            let given = send::Given {
+                body_file: body_file.is_some(),
+                in_chat,
+                attached: !attach.is_empty(),
+                recipients: space.is_some() || all || repository.is_some(),
+            };
+            let recipients = match repository {
+                Some(repository) => send::Recipients::Repository(repository),
+                None if all => send::Recipients::All,
+                None => send::Recipients::Space(space),
+            };
+            match send::sending(args, &post, given)? {
+                send::Sending::Alert(message) => {
+                    send::send(&ctx, recipients, message, body_file, attach).await
+                }
+                send::Sending::AlertInChat => send::send_in_chat(&ctx, recipients, attach).await,
+                send::Sending::PostInChat(thread) => threads::post_in_chat(&ctx, thread).await,
+                send::Sending::Post { thread, text } => {
+                    let posting = threads::Posting {
+                        thread,
+                        text,
+                        body_file,
+                        attach,
+                        options: post,
+                    };
+                    threads::post(&ctx, posting).await
+                }
             }
-            send::Sending::Post { thread, text } => {
-                let posting = threads::Posting {
-                    thread,
-                    text,
-                    body_file,
-                    attach,
-                    options: post,
-                };
-                threads::post(&ctx, posting).await
-            }
-        },
+        }
         CoordinationCommand::Thread { command } => thread(&ctx, command).await,
         CoordinationCommand::Alert {
             command: AlertCommand::List(args),

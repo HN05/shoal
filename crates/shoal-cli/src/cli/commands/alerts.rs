@@ -154,7 +154,7 @@ pub(super) async fn clear(ctx: &Context) -> Result<i32> {
 /// The daemon takes a scoped process's alerts only as its scope and
 /// `notifications` permission allow; this refuses a descendant that cleared
 /// its scope token, which the daemon would take for the user.
-fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
+pub(super) fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
     ensure!(
         crate::env::is_scoped() || !crate::process::scoped::inherits_scope(&ctx.paths.state),
         "workspace processes read, send and withdraw alerts only with their scope token"

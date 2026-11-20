@@ -24,7 +24,7 @@ mod posting;
 mod render;
 
 pub(super) use listing::{list, view};
-pub(in crate::cli) use posting::{Posting, post};
+pub(in crate::cli) use posting::{Posting, post, post_in_chat};
 pub(in crate::cli) use render::summary;
 
 /// The daemon takes a scoped process's posts as its space's; this refuses

@@ -237,28 +237,34 @@ fn an_earlier_releases_review_watch_hands_over_its_workspace_unchanged() {
 
 #[test]
 fn send_posts_in_a_thread_its_number_leads_and_else_sends_an_alert() {
-    use crate::cli::commands::send::{Sending, sending};
+    use crate::cli::commands::send::{Given, Sending, sending};
     let parse = |arguments: &[&str]| {
         let arguments = ["shoal", "send"].iter().chain(arguments);
         let cli = <Cli as clap::Parser>::try_parse_from(arguments).unwrap();
         let Some(Command::Coordination(CoordinationCommand::Send {
             args,
             body_file,
+            in_chat,
+            attach,
             post,
             space,
             all,
             repository,
-            ..
         })) = cli.command
         else {
             panic!("expected send");
         };
-        let recipients = space.is_some() || all || repository.is_some();
-        sending(args, body_file.is_some(), &post, recipients)
+        let given = Given {
+            body_file: body_file.is_some(),
+            in_chat,
+            attached: !attach.is_empty(),
+            recipients: space.is_some() || all || repository.is_some(),
+        };
+        sending(args, &post, given)
     };
     let post = |sending: Sending| match sending {
         Sending::Post { thread, text } => Some((thread.to_string(), text)),
-        Sending::Alert(_) => None,
+        _ => None,
     };
     let thread =
         |number: &str, text: Option<&str>| Some((number.to_owned(), text.map(str::to_owned)));
@@ -287,16 +293,32 @@ fn send_posts_in_a_thread_its_number_leads_and_else_sends_an_alert() {
         parse(&["Rebase", "--space", "4"]).unwrap(),
         Sending::Alert(_)
     ));
+    // From the chat, the turn's final message is a thread's post or else an
+    // alert, which takes recipients and files.
+    assert!(matches!(
+        parse(&["3.2", "--in-chat"]).unwrap(),
+        Sending::PostInChat(thread) if thread.to_string() == "3.2"
+    ));
+    for alert in [
+        &["--in-chat"][..],
+        &["--in-chat", "--space", "4", "--attach", "a.png"],
+        &["--in-chat", "--repo"],
+    ] {
+        assert!(matches!(parse(alert).unwrap(), Sending::AlertInChat));
+    }
+    assert!(parse(&["3.2", "--in-chat", "--all"]).is_err());
+    assert!(parse(&["3.2", "--in-chat", "--attach", "a.png"]).is_err());
+    assert!(parse(&["Rebase", "--in-chat"]).is_err());
 }
 
 #[test]
-fn a_post_takes_no_alert_recipient() {
+fn send_refuses_options_that_do_not_combine() {
     let parse = |arguments: &[&str]| {
         let arguments = ["shoal", "send"].iter().chain(arguments);
         <Cli as clap::Parser>::try_parse_from(arguments).map(drop)
     };
     assert!(parse(&["3.2", "SQLite", "--space", "4", "--wait"]).is_err());
-    assert!(parse(&["3.2", "--in-chat", "--all"]).is_err());
+    assert!(parse(&["--in-chat", "--body-file", "a.md"]).is_err());
 }
 
 #[test]

@@ -11,7 +11,8 @@ pub enum CoordinationCommand {
     /// Send an alert: up to your coordinator, or else the user; with
     /// --space down to a space's agent, or with --all or --repo to every
     /// agent below. From the user's terminal it picks the space. With a
-    /// thread's number first, post in that thread instead.
+    /// thread's number first, post in that thread instead. With --in-chat,
+    /// your turn's final message is the text.
     Send {
         /// The text, such as "Stop the dev server before running tests",
         /// after a thread's number to post there, such as 3.2 or 2 for one
@@ -22,6 +23,12 @@ pub enum CoordinationCommand {
         /// Read the text from a file, such as multi-line instructions.
         #[arg(long, value_name = "PATH")]
         body_file: Option<PathBuf>,
+        /// Send your turn's final message once the turn ends instead: as a
+        /// post in the thread named first, which a prompt in your
+        /// conversation answers, or else as the alert. A prompt the user
+        /// submits during the turn drops it.
+        #[arg(long, conflicts_with_all = ["body_file", "code", "choices", "recommend", "choose", "wait", "resume"])]
+        in_chat: bool,
         /// Attach a file, such as a screenshot or log, as PATH or
         /// PATH#TITLE, which Shoal copies where the recipient can read it;
         /// repeat for more.

@@ -3080,6 +3080,17 @@ only orders overload stops. A prompt the user submits in the chat becomes
 the user's reply to the post, carrying its text, since the user answered
 there, while one Shoal submits does not.
 
+`send --in-chat` without a thread makes the turn's final message an alert,
+for the same reason, through the path every alert takes. Its recipients and
+files are resolved and checked when the command runs, so a mistake fails at
+once, and the files are copied when the turn ends, as the agent left them.
+A turn has one mark, post or alert, so a second one replaces the first and
+says so rather than sending both. A prompt the user submits during the turn
+drops an alert mark, since the final message then answers the user, and
+tells the agent, which may send it again; a prompt in the chat marks the
+chat's in-chat alerts to the user read, without recording a reply, since
+alerts are one-way.
+
 Threads and approval requests are named `S.N`: the number of the space they
 belong to, then the smallest number no thread or request of that space holds.
 A thread belongs to its opener's space, or to the space the user or Shoal

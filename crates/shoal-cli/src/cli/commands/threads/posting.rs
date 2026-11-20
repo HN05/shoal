@@ -1,7 +1,7 @@
 //! `shoal send <thread>`: post in a thread, optionally offering choices
 //! with a recommendation or picking one the other side offered, wait for
-//! the other side's next post, or post the turn's final message from the
-//! agent's chat instead.
+//! the other side's next post, or mark the agent's turn to post its final
+//! message instead.
 use std::path::PathBuf;
 
 use anyhow::{Context as _, Result};
@@ -35,9 +35,6 @@ pub(in crate::cli) async fn post(ctx: &Context, mut posting: Posting) -> Result<
     let from = super::acting_space(ctx).await?;
     if let Some(after) = posting.options.resume {
         return resume(ctx, posting.thread, after).await;
-    }
-    if posting.options.in_chat {
-        return in_chat(ctx, posting.thread).await;
     }
     let thread = posting.thread;
     let wait = posting.options.wait;
@@ -92,7 +89,8 @@ fn new_post(posting: Posting) -> Result<NewPost> {
 
 /// Mark the agent's turn as posting its final message in the thread
 /// `number`.
-async fn in_chat(ctx: &Context, number: ThreadNumber) -> Result<i32> {
+pub(in crate::cli) async fn post_in_chat(ctx: &Context, number: ThreadNumber) -> Result<i32> {
+    super::refuse_workspace_processes(ctx)?;
     let space = ui::select_space(ctx, None, Fallback::OwnWorkspace).await?;
     let marked = threads::post_in_chat(&ctx.paths, space, number).await?;
     crate::cli::commands::send::in_chat::show(ctx, &marked)
