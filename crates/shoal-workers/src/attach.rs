@@ -1,35 +1,39 @@
 //! `shoal attach`'s steps, which a local attach and the worker the daemon
 //! runs for a user on another machine both take: finding a space's agent
-//! sessions, waking an agent that sleeps or is stopped there, choosing a
-//! session and showing it through the host that keeps it. The caller
-//! passes in what it does its own way through [`Attaching`].
+//! sessions, waking an agent that sleeps or is stopped there, as
+//! [`crate::resume`] resumes one, choosing a session and showing it
+//! through the host that keeps it. The caller passes in what it does its
+//! own way through [`Attaching`].
 mod elsewhere;
 mod restores;
 mod sessions;
 mod target;
 
 use anyhow::Result;
-use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
-use crate::{client::connection::CommandPaths, model::QueueEntry, terminal::Session};
+use crate::{
+    client::connection::CommandPaths,
+    model::QueueEntry,
+    resume::{Resuming, Starter},
+    terminal::Session,
+};
 
 pub use elsewhere::for_viewer;
 pub use restores::entry_session;
 use restores::{POLL, WAIT};
 pub use target::Target;
 
-/// What a caller of attach does its own way: picking a session, resuming a
-/// stopped agent, and telling the user what starts.
-pub trait Attaching: Sync {
+/// What a caller of attach does its own way: picking a session, what a
+/// resume of a stopped agent does its own way and what starts that agent,
+/// and telling the user what starts.
+pub trait Attaching: Resuming {
     /// The one of `sessions`, several an attach that named none offers,
     /// that the user picks.
     fn pick_session<'a>(&self, sessions: &[&'a Session]) -> Result<&'a Session>;
 
-    /// Resume the stopped agent of the space `space` at once, as
-    /// `shoal resume --now` does; whether the resume succeeded, which
-    /// reported why it did not.
-    fn resume_now(&self, space: &SpaceId) -> impl Future<Output = Result<bool>>;
+    /// What starts a stopped agent the attach resumes.
+    fn starter(&self) -> Starter;
 
     /// Tell the user that the queued restore `entry` starts.
     fn resuming(&self, entry: &QueueEntry) -> Result<()>;

@@ -9,16 +9,19 @@ use anyhow::{Result, ensure};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::attaching::Viewer;
 use shoal_workers::attach::{Attaching, Target};
+use shoal_workers::resume::{Resuming, Starter};
 
+use super::resume::reports::Reporting;
+use crate::client::output::batch::Failure;
 use crate::{
     cli::{
-        args::SpaceTargets,
         context::Context,
         recent,
         ui::{self, Fallback, NoCurrentWorkspace},
     },
     client::connection::CommandPaths,
-    model::{Chat, QueueEntry, Spaces},
+    execution::recovery::{SavedCommand, SavedSession},
+    model::{Chat, QueueEntry, Space, Spaces},
     sessions::Origin,
     terminal::Session,
 };
@@ -80,22 +83,28 @@ impl Attaching for Callbacks<'_> {
         ui::pick_choice(self.0, "Attach session> ", &choices)
     }
 
-    async fn resume_now(&self, space: &SpaceId) -> Result<bool> {
-        let targets = SpaceTargets {
-            space: vec![SpaceSelector::id(space)],
-            all: false,
-        };
-        let now = super::resume::Options {
-            execution: None,
-            now: true,
-            focus: false,
-            change: None,
-        };
-        Ok(super::resume::run(self.0, targets, now).await? == 0)
+    fn starter(&self) -> Starter {
+        self.0.starter()
     }
 
     fn resuming(&self, entry: &QueueEntry) -> Result<()> {
         self.0.emit(&format!("Resuming {}", entry.name), entry)
+    }
+}
+
+/// A resume of a stopped agent an attach wakes tells the user what
+/// `shoal resume` would.
+impl Resuming for Callbacks<'_> {
+    fn pick_agent(&self, agents: &[SavedSession], labels: &[String]) -> Result<SavedSession> {
+        Reporting(self.0).pick_agent(agents, labels)
+    }
+
+    fn stopped_commands(&self, space: &Space, commands: &[SavedCommand]) {
+        Reporting(self.0).stopped_commands(space, commands);
+    }
+
+    fn failed(&self, space: &str, error: &anyhow::Error) -> Failure {
+        Reporting(self.0).failed(space, error)
     }
 }
 

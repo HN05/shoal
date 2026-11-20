@@ -20,7 +20,7 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_workers::execution::Restored;
 use shoal_workers::resume::{
-    self, Resumed, Starter, commands,
+    self, Resumed, commands,
     space::{Choice, Restore},
 };
 
@@ -33,13 +33,10 @@ pub(super) async fn now(
     execution: Option<ExecutionId>,
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
-    let starter = match ctx.on_terminal() {
-        true => Starter::Caller(ctx.launcher()),
-        false => Starter::Daemon,
-    };
-    let reporting = Reporting(ctx);
+    let (starter, reporting) = (ctx.starter(), Reporting(ctx));
     let execution = execution.as_ref();
-    match resume::now(&ctx.paths, starter, &space, execution, change, &reporting).await? {
+    let resumed = resume::now(&ctx.paths, starter, &space, execution, change, &reporting);
+    match resumed.await? {
         Resumed::Starts(starts) => sessions::report_starts(ctx, starts).await,
         Resumed::Queued(queued) => reports::queued_code(ctx, &queued),
         Resumed::Commands(report) => {

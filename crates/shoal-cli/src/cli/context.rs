@@ -3,7 +3,7 @@ use std::io::{self, IsTerminal};
 
 use crate::client::output::{self, Output};
 use anyhow::Result;
-use shoal_workers::places::Launcher;
+use shoal_workers::{places::Launcher, resume::Starter};
 
 use crate::{
     cli::{
@@ -104,6 +104,16 @@ impl Context {
         match self.place.is_none() && self.on_terminal() {
             true => Launcher::Terminal,
             false => Launcher::Plain,
+        }
+    }
+
+    /// What starts a stopped agent this command resumes at once: this
+    /// process beside its terminal when a user is on it, otherwise the
+    /// daemon through the queue.
+    pub(in crate::cli) fn starter(&self) -> Starter {
+        match self.on_terminal() {
+            true => Starter::Caller(self.launcher()),
+            false => Starter::Daemon,
         }
     }
 

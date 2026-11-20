@@ -5,7 +5,14 @@ use anyhow::{Context as _, Result, bail, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 
 use super::{Attaching, Target};
-use crate::{client::connection::CommandPaths, sessions::Origin, terminal::Session};
+use crate::{
+    client::connection::CommandPaths,
+    resume::{self, Resumed, sessions::Starts},
+    sessions::Origin,
+    terminal::Session,
+};
+use shoal_ids::space_ids::SpaceNumber;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// An attach's steps for a caller that does its own way what `attaching`
 /// does, calling the daemon at `paths`.
@@ -82,20 +89,19 @@ impl<A: Attaching> Steps<'_, A> {
 
     /// Whether `target` saved stopped work or a last session to restore.
     async fn has_stopped_work(&self, target: &Target) -> Result<bool> {
-        let space = shoal_protocol::space_names::SpaceSelector::id(target.id());
+        let space = SpaceSelector::id(target.id());
         let saved = crate::client::saved::read(self.paths, space).await?;
         Ok(!saved.is_empty())
     }
 
-    /// Resume `target`'s stopped agent as `shoal resume --now` does, and
-    /// wait for the restore it starts through the queue; refused when the
-    /// resume reports that it failed, which it has reported already.
+    /// Resume `target`'s stopped agent at once, as `shoal resume --now`
+    /// does, and wait for the restore it starts through the queue; refused
+    /// when the resume started no agent.
     async fn resume_now(&self, target: &Target) -> Result<()> {
-        ensure!(
-            self.attaching.resume_now(target.id()).await?,
-            "{} did not resume; shoal alert list shows why",
-            target.name()
-        );
+        let space = SpaceSelector::id(target.id());
+        let starter = self.attaching.starter();
+        let resumed = resume::now(self.paths, starter, &space, None, None, self.attaching);
+        ensure_resumed(target.name(), target.number(), resumed.await?)?;
         // A restore whose agent registered already left the queue, which
         // `awaited` finds running.
         self.resume_space(target.id()).await?;
@@ -126,6 +132,28 @@ impl<A: Attaching> Steps<'_, A> {
             tokio::time::sleep(super::POLL).await;
         }
     }
+}
+
+/// Refuse a resume of the agent of the space `name`, numbered `number`,
+/// that `resumed` says started none: one that failed, found only stopped
+/// commands, or left the agent to this terminal, where an attach shows no
+/// session.
+fn ensure_resumed(name: &SpaceName, number: SpaceNumber, resumed: Resumed) -> Result<()> {
+    let failed = match resumed {
+        Resumed::Starts(Starts::Elsewhere(started)) => started.output.failed,
+        Resumed::Queued(queued) => queued.failed,
+        Resumed::Starts(Starts::Here { .. }) => bail!(
+            "no terminal host starts {name}'s agent beside this terminal; shoal resume {number} --focus resumes it here"
+        ),
+        Resumed::Commands(_) => bail!("{name} has no stopped agent to resume"),
+    };
+    let errors: Vec<_> = failed.into_iter().map(|failure| failure.error).collect();
+    ensure!(
+        errors.is_empty(),
+        "{name} did not resume: {}",
+        errors.join("; ")
+    );
+    Ok(())
 }
 
 /// `target`'s session at `place`, as an attach that lost its connection
