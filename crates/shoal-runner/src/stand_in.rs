@@ -486,6 +486,19 @@ impl Records for StandIn {
         Ok(Vec::new())
     }
 
+    /// The stand-in's queue admits no jobs.
+    fn admitted_jobs(
+        &self,
+        _: &Connection,
+    ) -> Result<Vec<(QueueEntryId, RepositoryId, QueuedJob)>> {
+        Ok(Vec::new())
+    }
+
+    /// The stand-in records no executions.
+    fn recorded_executions(&self, _: &Connection) -> Result<crate::daemon::RecordedExecutions> {
+        Ok(Default::default())
+    }
+
     /// Every entry still waits.
     fn delete_waiting_entry(&self, _: &Connection, _: &QueueEntryId) -> Result<bool> {
         Ok(true)

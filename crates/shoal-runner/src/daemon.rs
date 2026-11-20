@@ -211,6 +211,13 @@ impl<T> Daemon for T where
 {
 }
 
+/// The executions the daemon records: their IDs and the spaces they run in.
+#[derive(Debug, Default)]
+pub struct RecordedExecutions {
+    pub ids: HashSet<ExecutionId>,
+    pub spaces: HashSet<SpaceId>,
+}
+
 /// A job waiting in the agent queue for admission.
 pub struct WaitingEntry {
     pub id: QueueEntryId,
@@ -235,6 +242,17 @@ pub trait Records: Send + Sync {
         db: &Connection,
         repository: &RepositoryId,
     ) -> Result<Vec<WaitingEntry>>;
+
+    /// The job entries admission admitted, each with its repository and
+    /// job.
+    fn admitted_jobs(
+        &self,
+        db: &Connection,
+    ) -> Result<Vec<(QueueEntryId, RepositoryId, QueuedJob)>>;
+
+    /// The executions the daemon records, running or awaiting
+    /// reattachment.
+    fn recorded_executions(&self, db: &Connection) -> Result<RecordedExecutions>;
 
     /// Delete the entry `id` if it still waits, returning whether it did.
     fn delete_waiting_entry(&self, db: &Connection, id: &QueueEntryId) -> Result<bool>;

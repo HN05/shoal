@@ -31,27 +31,7 @@ pub struct ClaimedJob {
 impl Runner {
     /// The jobs the runner claimed.
     pub async fn claimed_jobs(&self) -> Result<Vec<ClaimedJob>> {
-        self.store
-            .run(|db| {
-                Ok(db
-                    .prepare(
-                        "SELECT id,repository_id,workspace_id,execution_id,job,launched_at,runner_id
-                         FROM ci_jobs ORDER BY started_at",
-                    )?
-                    .query_map([], |row| {
-                        Ok(ClaimedJob {
-                            id: row.get(0)?,
-                            repository_id: row.get(1)?,
-                            workspace_id: row.get(2)?,
-                            execution_id: row.get(3)?,
-                            launched_at: row.get(5)?,
-                            runner_id: row.get(6)?,
-                            job: queued_job(row, 4)?,
-                        })
-                    })?
-                    .collect::<rusqlite::Result<_>>()?)
-            })
-            .await
+        self.store.run(|db| claims(db)).await
     }
 
     /// Record `execution` as the one running the claimed job `id`'s
@@ -73,6 +53,27 @@ impl Runner {
             })
             .await
     }
+}
+
+/// The jobs the runner claimed, in the order it claimed them.
+pub(super) fn claims(db: &rusqlite::Connection) -> Result<Vec<ClaimedJob>> {
+    Ok(db
+        .prepare(
+            "SELECT id,repository_id,workspace_id,execution_id,job,launched_at,runner_id
+             FROM ci_jobs ORDER BY started_at",
+        )?
+        .query_map([], |row| {
+            Ok(ClaimedJob {
+                id: row.get(0)?,
+                repository_id: row.get(1)?,
+                workspace_id: row.get(2)?,
+                execution_id: row.get(3)?,
+                launched_at: row.get(5)?,
+                runner_id: row.get(6)?,
+                job: queued_job(row, 4)?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 /// The job a row holds as JSON in its column `index`.

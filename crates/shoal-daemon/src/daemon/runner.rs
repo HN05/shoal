@@ -26,7 +26,7 @@ use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::{execution_ids::ExecutionId, queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceName;
 use shoal_runner::{
-    daemon::{Forges, Spaces, WaitingEntry},
+    daemon::{Forges, RecordedExecutions, Spaces, WaitingEntry},
     jobs::INTERVAL,
 };
 use tokio::time::Instant;
@@ -174,6 +174,39 @@ impl shoal_runner::daemon::Records for RunnerRecords {
                 })
             })
             .collect())
+    }
+
+    fn admitted_jobs(
+        &self,
+        db: &Connection,
+    ) -> Result<Vec<(QueueEntryId, RepositoryId, QueuedJob)>> {
+        let rows = db
+            .prepare(
+                "SELECT id,repository_id,job FROM agent_queue
+                 WHERE kind=?1 AND state=?2 AND job IS NOT NULL",
+            )?
+            .query_map(params![QueueKind::Job, QueueState::Starting], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get::<_, String>(2)?))
+            })?
+            .collect::<rusqlite::Result<Vec<(QueueEntryId, RepositoryId, String)>>>()?;
+        let mut jobs = Vec::new();
+        for (id, repository, job) in rows {
+            jobs.push((id, repository, serde_json::from_str(&job)?));
+        }
+        Ok(jobs)
+    }
+
+    fn recorded_executions(&self, db: &Connection) -> Result<RecordedExecutions> {
+        let mut recorded = RecordedExecutions::default();
+        let rows = db
+            .prepare("SELECT id,space_id FROM executions")?
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<rusqlite::Result<Vec<(ExecutionId, SpaceId)>>>()?;
+        for (id, space) in rows {
+            recorded.ids.insert(id);
+            recorded.spaces.insert(space);
+        }
+        Ok(recorded)
     }
 
     fn delete_waiting_entry(&self, db: &Connection, id: &QueueEntryId) -> Result<bool> {

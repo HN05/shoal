@@ -19,6 +19,7 @@ mod costs;
 mod ends;
 mod linked;
 mod listing;
+mod load;
 mod overrun;
 mod queue;
 mod registration;
@@ -29,6 +30,7 @@ mod waiting;
 
 pub use claimed::ClaimedJob;
 pub use costs::JobCost;
+pub use load::JobLoad;
 pub use overrun::GRACE;
 pub use registration::Registration;
 
