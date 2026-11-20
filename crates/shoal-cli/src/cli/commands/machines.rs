@@ -1,7 +1,7 @@
 //! The other joined machines' spaces, which `shoal list`, `inbox` and
 //! `status` show beside this machine's, and the requests for them that the
 //! hub holds while their machine is offline.
-use anyhow::{Result, bail};
+use anyhow::Result;
 use shoal_protocol::{
     hub::{
         directory::{HubView, Listed},
@@ -26,15 +26,11 @@ pub(super) async fn space_elsewhere(
     let Some(view) = hub_view::view(ctx).await else {
         return Ok(None);
     };
-    let mut found = (view.directory.spaces.iter())
-        .filter(|remote| selector.selects(&remote.space.id, remote.space.number));
-    match (found.next().cloned(), found.next()) {
-        (Some(remote), None) => Ok(Some((remote, view))),
-        (Some(_), Some(_)) => bail!(
-            "several other machines have a space {selector}; name it by the ID shoal list --json shows"
-        ),
-        (None, _) => Ok(None),
-    }
+    let selected = view
+        .selected(selector)
+        .map_err(anyhow::Error::msg)?
+        .cloned();
+    Ok(selected.map(|remote| (remote, view)))
 }
 
 /// Report that the hub holds the command's request for the offline machine

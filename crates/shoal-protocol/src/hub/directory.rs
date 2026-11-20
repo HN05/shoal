@@ -15,6 +15,10 @@ use crate::{
     time::UnixTime,
 };
 
+mod selection;
+
+pub use selection::Offered;
+
 /// A space as the machine that owns it reports it to the hub.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpaceSummary {

@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, ensure};
 
 use super::{
-    Cell, Entries, Offered, chat_entries, elsewhere_entries, pick, pick_many, picker_width,
+    Cell, Entries, chat_entries, elsewhere_entries, pick, pick_many, picker_width,
     require_argument, rows_with_status, status_cell,
 };
 use crate::client::output::resume::ResumableSpace;
@@ -24,6 +24,7 @@ use crate::{
     client::connection::CommandPaths,
     model::{Chat, Workspace},
 };
+use shoal_protocol::hub::directory::Offered;
 use shoal_protocol::saved::SavedSummary;
 use shoal_protocol::space_names::SpaceSelector;
 

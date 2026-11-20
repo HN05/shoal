@@ -26,7 +26,7 @@ use crate::{
     terminal::Session,
 };
 use shoal_protocol::{
-    hub::directory::{HubView, Listed},
+    hub::directory::{HubView, Listed, Offered},
     space_names::SpaceSelector,
 };
 
@@ -65,8 +65,7 @@ async fn attach_elsewhere(
     view: &HubView,
     session: Option<String>,
 ) -> Result<i32> {
-    let machine = view.directory.machine(&remote.machine);
-    let machine = machine.map_or(remote.machine.as_str(), |machine| machine.name.as_str());
+    let machine = view.machine_name(remote);
     let code = viewer::attach(ctx, remote.space.id.clone(), machine, session).await?;
     if code == 0 {
         recent::record_attach_elsewhere(ctx, &remote.space.id);
@@ -135,15 +134,6 @@ fn attachable(spaces: Spaces) -> Spaces {
         .collect()
 }
 
-/// The IDs of the other machines' spaces of `view` that `attach -` returns
-/// to, as [`attachable`] chooses this machine's.
-fn attachable_elsewhere(view: &HubView) -> Vec<SpaceId> {
-    (view.directory.spaces.iter())
-        .filter(|listed| listed.space.kind.has_worktree() || listed.space.running.is_some())
-        .map(|listed| listed.space.id.clone())
-        .collect()
-}
-
 /// The space an attach shows, on this machine or another joined one.
 enum Chosen {
     Here(Target),
@@ -174,20 +164,15 @@ async fn resolve(ctx: &Context, name: Option<SpaceSelector>) -> Result<Chosen> {
 async fn previous(ctx: &Context) -> Result<Chosen> {
     let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let view = hub_view::view(ctx).await;
-    let elsewhere = view.as_ref().map(attachable_elsewhere).unwrap_or_default();
+    let elsewhere = view.as_ref().map(HubView::attachable).unwrap_or_default();
     let id = recent::previous_among(ctx, &attachable(spaces.clone()), &elsewhere)?;
-    match view.and_then(|view| listing(view, &id)) {
+    let listed = view.as_ref().and_then(|view| view.listed(&id)).cloned();
+    match listed.zip(view) {
         Some(found) => Ok(Chosen::Elsewhere(Box::new(found))),
         None => Ok(Chosen::Here(
             Target::among(&ctx.paths, spaces.into_chats(), id).await?,
         )),
     }
-}
-
-/// The space `id` that `view` lists, with `view`; none when it lists none.
-fn listing(view: HubView, id: &SpaceId) -> Option<(Listed, HubView)> {
-    let listed = (view.directory.spaces.iter()).find(|listed| &listed.space.id == id)?;
-    Some((listed.clone(), view))
 }
 
 /// [`resolve`] for a space `name` selects on this machine, else the current
@@ -239,7 +224,7 @@ async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Chosen> {
     let workspaces = crate::client::spaces::list(&ctx.paths)
         .await?
         .into_workspaces();
-    let id = ui::pick_space(ctx, workspaces, &chats, ui::Offered::Spaces, "workspace").await?;
+    let id = ui::pick_space(ctx, workspaces, &chats, Offered::Spaces, "workspace").await?;
     match super::machines::space_elsewhere(ctx, &SpaceSelector::id(&id)).await? {
         Some(found) => Ok(Chosen::Elsewhere(Box::new(found))),
         None => Ok(Chosen::Here(Target::among(&ctx.paths, chats, id).await?)),
@@ -281,6 +266,3 @@ pub(in crate::cli::commands) async fn checkout_chat(
         _ => None,
     })
 }
-
-#[cfg(test)]
-mod tests;

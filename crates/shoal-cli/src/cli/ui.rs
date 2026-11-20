@@ -28,7 +28,7 @@
 //!   or picked among running chats as well as a space ([`select_space`],
 //!   [`pick_space`]), or several spaces at once ([`select_spaces`]).
 //! - [`elsewhere`]: the other joined machines' spaces those pickers offer
-//!   after this machine's, for a command that acts on them ([`Offered`]).
+//!   after this machine's, for a command that acts on them.
 //! - [`rows`]: the aligned labels pickers and lists show ([`workspace_rows`],
 //!   [`aligned`]).
 //!
@@ -50,7 +50,6 @@ mod several;
 mod views;
 mod workspaces;
 
-pub use elsewhere::Offered;
 use elsewhere::elsewhere_entries;
 pub use keys::Key;
 pub use linked::pick_linked;
