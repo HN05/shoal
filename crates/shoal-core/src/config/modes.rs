@@ -230,11 +230,12 @@ pub fn get<'a, M>(modes: &'a BTreeMap<String, M>, name: &ModeName) -> Result<&'a
         .with_context(|| format!("no mode {name}; [modes.{name}] in config defines one"))
 }
 
-/// The space each of `modes` starts.
+/// The space each of `modes` starts, with its label.
 pub fn shapes(modes: &BTreeMap<String, Mode>) -> ModeShapes {
     let shape = |mode: &Mode| ModeShape {
         kind: mode.kind,
         repository: mode.repository,
+        label: mode.label.clone(),
     };
     (modes.iter())
         .map(|(name, mode)| (name.clone(), shape(mode)))

@@ -7,7 +7,8 @@ use crate::{
         context::Context,
         output::{Palette, Style},
     },
-    config::modes::{self, ModeName, ModeShape, ModeShapes},
+    config::modes::{self, ModeName, ModeShapes},
+    launches::labels::ModeFit,
     model::SpaceKind,
 };
 
@@ -18,24 +19,6 @@ pub enum ModeChoice {
     Named(ModeName),
     /// A mode picked on the terminal.
     Pick,
-}
-
-/// The spaces a picked mode must start: of `kind`, and in a repository or
-/// not as `repository` says; either when `None`.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct ModeFit {
-    pub kind: Option<SpaceKind>,
-    pub repository: Option<bool>,
-}
-
-impl ModeFit {
-    /// Whether a mode that starts the space `shape` describes fits.
-    pub fn admits(&self, shape: &ModeShape) -> bool {
-        self.kind.is_none_or(|kind| kind == shape.kind)
-            && self
-                .repository
-                .is_none_or(|repository| repository == shape.repository)
-    }
 }
 
 impl ModeChoice {

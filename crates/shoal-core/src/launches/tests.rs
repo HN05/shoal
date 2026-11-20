@@ -264,26 +264,6 @@ fn the_arguments_other_than_the_mode_decide_the_kind_they_fit() {
 }
 
 #[test]
-fn an_items_labels_name_its_mode() {
-    let modes = [("plan", "needs-plan"), ("worker", "planned")];
-    let mode = |labels: &[&str]| {
-        let labels: Vec<String> = labels.iter().map(|label| (*label).into()).collect();
-        labelled_mode(modes, &labels)
-    };
-    assert_eq!(mode(&["type/bug", "planned"]), Ok(Some(ModeName::DEFAULT)));
-    assert_eq!(mode(&["needs-plan"]), Ok(Some(ModeName::PLAN)));
-    assert_eq!(mode(&["type/bug"]), Ok(None));
-    let several = mode(&["needs-plan", "planned"]).unwrap_err();
-    assert_eq!(
-        several.0,
-        [
-            (ModeName::PLAN, "needs-plan".to_owned()),
-            (ModeName::DEFAULT, "planned".to_owned())
-        ]
-    );
-}
-
-#[test]
 fn a_start_names_a_pr_with_pr_or_a_link() {
     let named = |launch: Launch| named_pull(&launch).map(|pull| pull.to_string());
     let url = "https://forge.example/o/r/pulls/8";

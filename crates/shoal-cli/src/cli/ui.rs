@@ -58,7 +58,7 @@ use elsewhere::elsewhere_entries;
 pub use keys::Key;
 pub use linked::pick_linked;
 pub use machines::{can_pick_machine, pick_machine};
-pub use modes::{ModeChoice, ModeFit};
+pub use modes::ModeChoice;
 pub use picker::*;
 pub use prompt::*;
 pub use rows::*;

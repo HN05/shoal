@@ -214,42 +214,6 @@ pub fn ensure_mode_fits(launch: &Launch, mode: &ModeName) -> Result<()> {
     Ok(())
 }
 
-/// The mode the `labels` of an issue or PR call for among `modes`, each
-/// by name with the label it has: the one mode whose label it carries,
-/// none without one, refused where it carries the labels of several.
-pub fn labelled_mode<'a>(
-    modes: impl IntoIterator<Item = (&'a str, &'a str)>,
-    labels: &[String],
-) -> Result<Option<ModeName>, SeveralModes> {
-    let mut called: Vec<_> = (modes.into_iter())
-        .filter(|(_, label)| labels.iter().any(|carried| carried == label))
-        .map(|(mode, label)| (ModeName::from(mode), label.to_owned()))
-        .collect();
-    match called.len() {
-        0 | 1 => Ok(called.pop().map(|(mode, _)| mode)),
-        _ => Err(SeveralModes(called)),
-    }
-}
-
-/// The modes, each with its label, whose labels one issue or PR carries.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SeveralModes(pub Vec<(ModeName, String)>);
-
-impl std::fmt::Display for SeveralModes {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let modes: Vec<_> = (self.0.iter())
-            .map(|(mode, label)| format!("{mode} (label {label})"))
-            .collect();
-        write!(
-            f,
-            "its labels call for modes {}; pass --mode or drop all but one label",
-            modes.join(" and ")
-        )
-    }
-}
-
-impl std::error::Error for SeveralModes {}
-
 /// The issue `--issue` or the positional argument names by number or URL.
 pub fn named_issue(launch: &Launch) -> Result<Option<ItemInput>> {
     Ok(match (&launch.issue, &launch.target) {
@@ -374,6 +338,7 @@ fn positional_target(
     }
 }
 
+pub mod labels;
 mod reads;
 pub mod shape;
 pub mod workspace;

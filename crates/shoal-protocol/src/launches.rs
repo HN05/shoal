@@ -15,8 +15,10 @@ use crate::{
     space_names::{SpaceName, SpaceSelector},
 };
 
+mod labelled;
 mod target;
 
+pub use labelled::{LabelledMode, SeveralModes};
 pub use target::StartTarget;
 
 /// What `shoal start` takes, as the command line gave it: what the agent
