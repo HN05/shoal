@@ -43,10 +43,9 @@ impl Manager {
     ) -> Result<String> {
         ensure!(!order.spaces.is_empty(), "a move takes at least one space");
         for ordered in &order.spaces {
-            self.ensure_movable(&ordered.space, &order.destination)
-                .await?;
+            self.ensure_movable(ordered, &order.destination).await?;
         }
-        let first = order.spaces[0].space.clone();
+        let first = order.spaces[0].clone();
         let spec = OperationSpec::Move {
             order: Box::new(order),
         };
@@ -115,7 +114,7 @@ impl Manager {
             "only the user moves spaces from another machine"
         );
         for ordered in &order.spaces {
-            let selector = SpaceSelector::id(&ordered.space);
+            let selector = SpaceSelector::id(ordered);
             match self.space(&selector).await {
                 Ok(space) => self.ensure_reaches(caller, &space).await?,
                 Err(_) => self.ensure_restorable_by(&selector, caller).await?,

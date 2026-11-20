@@ -110,6 +110,9 @@ shoal_states::open_enum! {
         /// A write or deletion of an app's entry names a revision the entry
         /// is no longer at: another one changed it since its writer read it.
         StaleRevision => "stale_revision",
+        /// An operation needs the caller's consent first, which its failure
+        /// asks for.
+        Unconfirmed => "unconfirmed",
     }
 }
 
@@ -133,6 +136,7 @@ impl ErrorCode {
                 | Self::NotImported
                 | Self::MachineUnreachable
                 | Self::StaleRevision
+                | Self::Unconfirmed
         )
     }
 }

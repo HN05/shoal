@@ -9,7 +9,8 @@ use anyhow::{Context as _, Result, ensure};
 
 use super::{STANDARD_STREAM, targets};
 use crate::cli::{args::transfer::MoveArgs, context::Context, ui};
-use crate::transfer::{MoveDestination, OrderedSpace, SshDestination};
+use crate::transfer::{MoveDestination, SshDestination};
+use shoal_ids::space_ids::SpaceId;
 
 /// Where a move takes spaces, as the user names it.
 enum Named {
@@ -38,7 +39,7 @@ enum Kind {
 /// the destination the user picks on a terminal, once the spaces and
 /// repository it names exist and a checkpoint names one space, after
 /// picking the spaces when it names none.
-pub(super) async fn choose(ctx: &Context, args: &MoveArgs) -> Result<(Vec<OrderedSpace>, Chosen)> {
+pub(super) async fn choose(ctx: &Context, args: &MoveArgs) -> Result<(Vec<SpaceId>, Chosen)> {
     let named = match (&args.ssh, &args.output) {
         (Some(host), _) => Some(Named::Ssh(host.clone())),
         (None, Some(path)) => Some(Named::File(path.clone())),

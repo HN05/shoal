@@ -1,8 +1,8 @@
+use super::super::checks::carried_spaces;
 use super::*;
 use crate::model::{Chat, RefPart, SpaceKind, SpaceRef, Spaces};
-use crate::removal::SpaceRemovalCheck;
-use crate::transfer::Carrying;
-use shoal_workers::moves::checks::carried_spaces;
+use shoal_core::transfer::Carrying;
+use shoal_protocol::removal::SpaceRemovalCheck;
 
 /// A reference to the workspace or chat `id`.
 fn reference(id: &str, kind: SpaceKind) -> SpaceRef {

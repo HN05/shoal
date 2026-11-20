@@ -277,7 +277,9 @@ pub type StoppedExecutions = BTreeMap<SpaceId, BTreeSet<ExecutionId>>;
 /// the spaces below it that go with it, to one destination.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MoveOrder {
-    pub spaces: Vec<OrderedSpace>,
+    /// The spaces it takes by ID: live ones, or for a file removed ones,
+    /// which their removal records move.
+    pub spaces: Vec<SpaceId>,
     pub destination: MoveDestination,
     /// Whether the spaces below each space go with it, rather than staying
     /// here one level up, except those it takes too.
@@ -288,6 +290,22 @@ pub struct MoveOrder {
     /// The earlier checkpoint a copied workspace goes at.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checkpoint: Option<CheckpointNumber>,
+    /// The caller's consent to end what the move would end besides the
+    /// spaces it names, or to release holds; without it such a move ends
+    /// nothing and asks for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consent: Option<Consent>,
+}
+
+/// A caller's consent to what a move ends.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Consent {
+    /// To whatever it ends, as `--yes` gives it.
+    Any,
+    /// To what the question it asked lists, so a move that would end more
+    /// by now asks again.
+    Answered(String),
 }
 
 impl MoveOrder {
@@ -295,24 +313,18 @@ impl MoveOrder {
     pub fn carrying(&self) -> Carrying {
         match self.recursive {
             true => Carrying::Subtree,
-            false => Carrying::Selected(
-                self.spaces
-                    .iter()
-                    .map(|ordered| ordered.space.clone())
-                    .collect(),
-            ),
+            false => Carrying::Selected(self.spaces.clone()),
         }
     }
-}
 
-/// A space a move takes, by its ID: a live one, or for a file a removed
-/// one, which its removal record moves.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OrderedSpace {
-    pub space: SpaceId,
-    /// The unsaved work, and the spaces below it, that the caller saw and
-    /// lets its end here delete.
-    pub unsaved: UnsavedWork,
+    /// Whether the caller consented to what `question` asks.
+    pub fn consents_to(&self, question: &str) -> bool {
+        match &self.consent {
+            Some(Consent::Any) => true,
+            Some(Consent::Answered(answered)) => answered == question,
+            None => false,
+        }
+    }
 }
 
 /// What a move did with each space it took.

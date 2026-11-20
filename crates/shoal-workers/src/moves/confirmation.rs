@@ -1,40 +1,27 @@
-//! What `shoal move` asks before the daemon ends spaces: the spaces that
-//! end with those named and the holds the move releases, and the refusals
-//! of a move to standard output that would end this command first.
-use anyhow::{Result, ensure};
+//! What a move asks its caller before it ends spaces besides those it
+//! names or releases holds: the spaces that end with those named, with
+//! their kind and agent, and the holds it releases.
 use shoal_protocol::model::ByKind;
 
-use crate::{
-    cli::{context::Context, ui},
-    model::{Space, SpaceHold},
-    transfer::{MoveDestination, MoveOrder},
-};
-use shoal_ids::space_ids::SpaceId;
-use shoal_workers::moves::{
+use super::{
     Planned,
     checks::{Checked, Ending},
 };
+use crate::model::{Space, SpaceHold};
+use shoal_core::transfer::{MoveDestination, MoveOrder};
+use shoal_ids::space_ids::SpaceId;
 
-/// Ask, unless `yes` confirms it, before the move `order` that `planned`
-/// describes ends spaces where that ends more than the spaces named or
-/// releases holds.
-pub(super) fn confirm(
-    ctx: &Context,
-    yes: bool,
-    order: &MoveOrder,
-    planned: &[Planned],
-) -> Result<()> {
+/// What the move `order` that `planned` describes asks before it ends
+/// anything; none when it ends only the spaces it names and releases no
+/// holds.
+pub(super) fn question(order: &MoveOrder, planned: &[Planned]) -> Option<String> {
     let checks: Vec<&Checked> = (planned.iter())
         .filter_map(|planned| match planned {
             Planned::Ending { checked, .. } => Some(checked),
             Planned::Copied { .. } | Planned::Removed { .. } => None,
         })
         .collect();
-    let Some(action) = ending_action(heading(order, &checks), &checks).filter(|_| !yes) else {
-        return Ok(());
-    };
-    ensure!(ui::confirm(ctx, &action, "--yes")?, "move canceled");
-    Ok(())
+    ending_action(heading(order, &checks), &checks)
 }
 
 /// What the confirmation of `order`, ending the spaces `checks` describe,
@@ -61,7 +48,7 @@ fn label(check: &Checked) -> String {
     }
 }
 
-/// The question [`confirm`] asks under `heading`; none when ending the
+/// The question [`question`] asks under `heading`; none when ending the
 /// spaces `checks` describe ends only them and releases no holds.
 fn ending_action(heading: String, checks: &[&Checked]) -> Option<String> {
     let mut carried: Vec<&Space> = Vec::new();
@@ -117,34 +104,6 @@ fn described(space: &Space) -> String {
         Some(agent) => format!("{}, {agent}", space.kind()),
         None => space.kind().to_string(),
     }
-}
-
-/// Refuse a move to standard output that ends this command before it
-/// copied the package: one that ends the chat this process runs in, or a
-/// workspace this terminal closes with.
-pub(super) async fn ensure_stream_survives(ctx: &Context, planned: &[Planned]) -> Result<()> {
-    for planned in planned {
-        let Planned::Ending { checked, .. } = planned else {
-            continue;
-        };
-        let spaces = std::iter::once((checked.id(), checked.name().as_str())).chain(
-            checked
-                .carried
-                .iter()
-                .map(|space| (&space.id, space.name.as_str())),
-        );
-        for (id, name) in spaces {
-            ensure!(
-                crate::env::own_space().as_ref() != Some(id),
-                "this process runs in {name}, which the move ends before the package reaches standard output; move it to a file with -o, or from another terminal"
-            );
-            ensure!(
-                !crate::cli::terminal::closes_with(&ctx.paths, id).await?,
-                "this terminal closes when the move ends {name}, ending the stream; move it to a file with -o, or from another terminal"
-            );
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]

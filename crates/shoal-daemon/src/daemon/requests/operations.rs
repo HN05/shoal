@@ -200,7 +200,7 @@ impl Scoped for OperationMethod {
             // Moving spaces is the `admin` permission's.
             OperationMethod::StartMove { order, .. } => {
                 manager.confine_move(caller, order).await?;
-                let first = order.spaces.first().map(|ordered| ordered.space.clone());
+                let first = order.spaces.first().cloned();
                 let repository = match first {
                     Some(first) => manager
                         .space(&SpaceSelector::id(&first))

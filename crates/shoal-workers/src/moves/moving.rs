@@ -49,16 +49,12 @@ pub(super) async fn move_one(
     (checked, file): (Checked, PathBuf),
     steps: &impl Steps,
 ) -> Result<SpaceMoved> {
-    let id = checked.id().clone();
-    let unsaved = (order.spaces.iter())
-        .find(|ordered| ordered.space == id)
-        .map_or_else(|| checked.unsaved(), |ordered| ordered.unsaved.clone());
     let moving = Moving {
-        id,
+        id: checked.id().clone(),
         name: checked.name().clone(),
         destination: &order.destination,
         carrying: order.carrying(),
-        unsaved,
+        unsaved: checked.unsaved(),
         file,
     };
     let lock = MoveLock::take(paths, &moving.id).await?;

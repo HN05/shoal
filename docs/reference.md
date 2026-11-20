@@ -4783,8 +4783,10 @@ refusing the spaces, repository or `--checkpoint` it cannot take; without a
 terminal it is refused, naming both flags.
 
 The daemon runs the move, so it finishes when the terminal that started it
-closes. The command checks the spaces and asks what needs the user, then
-follows the move, printing a line for each space as it goes; with `--json`
+closes. It checks the spaces before it ends any, and where that ends spaces
+besides those named or releases holds, it ends nothing and the command asks,
+then starts the move again for what the user agreed to. The command follows
+the move, printing a line for each space as it goes; with `--json`
 it prints what the move did with each space, `moved` and `failed`. An
 interrupt cancels the move before its next space, and a second one stops
 following, leaving it running. Shoal records each space's move before its

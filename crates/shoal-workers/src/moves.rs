@@ -1,10 +1,11 @@
 //! Moving spaces to another machine or a file, as the daemon's move
-//! operation does: checking every space before any ends, then for each
-//! one packing it, delivering its package and ending it here once its
-//! destination has it, or with `--keep` delivering a copy of it. Only
-//! delivery differs by destination. The command that starts a move runs
-//! the same checks to ask before ending what needs the user.
+//! operation does: checking every space before any ends, and asking the
+//! caller's consent where ending them needs it, then for each one packing
+//! it, delivering its package and ending it here once its destination has
+//! it, or with `--keep` delivering a copy of it. Only delivery differs by
+//! destination.
 pub mod checks;
+mod confirmation;
 mod copying;
 mod finishing;
 mod moving;
@@ -15,7 +16,11 @@ use std::{io::Write as _, path::PathBuf};
 
 use anyhow::{Context as _, Result, ensure};
 
-use crate::{client::connection::CommandPaths, model::Space, protocol::operations::Step};
+use crate::{
+    client::connection::CommandPaths,
+    model::Space,
+    protocol::operations::{Failure, Step},
+};
 use checks::Checked;
 pub use finishing::finish;
 use shoal_core::transfer::{MoveDestination, MoveFailure, MoveOrder, MoveReport, SpaceMoved};
@@ -95,13 +100,13 @@ async fn ordered_spaces(
     tree: &crate::model::Spaces,
 ) -> Result<(Vec<Space>, Vec<RemovedSpace>)> {
     let (mut present, mut removed) = (Vec::new(), Vec::new());
-    for ordered in &order.spaces {
-        match tree.iter().find(|space| space.id == ordered.space) {
+    for id in &order.spaces {
+        match tree.iter().find(|space| space.id == *id) {
             Some(space) => present.push(space.clone()),
             None => {
-                let selector = SpaceSelector::id(&ordered.space);
+                let selector = SpaceSelector::id(id);
                 let record = crate::client::removal::removed_space(paths, selector).await;
-                removed.push(record.with_context(|| format!("no space {}", ordered.space))?);
+                removed.push(record.with_context(|| format!("no space {id}"))?);
             }
         }
     }
@@ -170,6 +175,7 @@ async fn plan_space(
 /// for each.
 pub async fn run(paths: &CommandPaths, order: MoveOrder, steps: &impl Steps) -> Result<MoveReport> {
     let planned = plan(paths, &order).await?;
+    ensure_consent(&order, &planned)?;
     if let MoveDestination::Ssh(destination) = &order.destination {
         ssh::Remote::new(destination).check().await?;
     }
@@ -187,6 +193,18 @@ pub async fn run(paths: &CommandPaths, order: MoveOrder, steps: &impl Steps) -> 
         say(&packages::summary(&order, &report));
     }
     Ok(report)
+}
+
+/// Refuse, before anything ends, a move the caller did not consent to that
+/// ends more than the spaces it names or releases holds, with the question
+/// it asks.
+fn ensure_consent(order: &MoveOrder, planned: &[Planned]) -> Result<()> {
+    match confirmation::question(order, planned) {
+        Some(question) if !order.consents_to(&question) => {
+            Err(crate::operations::Failed(Failure::Unconfirmed { question }).into())
+        }
+        _ => Ok(()),
+    }
 }
 
 /// Move the `planned` space as `order` says, or a copy of it.

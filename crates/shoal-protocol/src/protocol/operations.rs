@@ -616,6 +616,11 @@ pub enum Failure {
     Approval {
         request: Box<ApprovalRequest>,
     },
+    /// The operation ends what the caller has to consent to first, as
+    /// `question` asks; it changed nothing.
+    Unconfirmed {
+        question: String,
+    },
     /// The daemon refused a request of the operation.
     Refused {
         code: ErrorCode,
@@ -636,7 +641,8 @@ impl Failure {
             | Self::HookFailed { message }
             | Self::PushFailed { message }
             | Self::Refused { message, .. }
-            | Self::Failed { message } => Some(message),
+            | Self::Failed { message }
+            | Self::Unconfirmed { question: message } => Some(message),
             Self::SetupUnverified { .. } | Self::Approval { .. } => None,
         }
     }
@@ -654,6 +660,7 @@ impl Failure {
                 ErrorCode::ApprovalDenied
             }
             Self::Refused { code, .. } => code.clone(),
+            Self::Unconfirmed { .. } => ErrorCode::Unconfirmed,
             Self::Approval { .. } | Self::Failed { .. } => ErrorCode::OperationFailed,
         }
     }

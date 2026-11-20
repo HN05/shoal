@@ -4239,8 +4239,9 @@ differs by destination: `-o` writes the package where the daemon writes it,
 `-o -` hands it to the command, and `--ssh` pipes it into
 `ssh -o BatchMode=yes <host> shoal --json restore --from -`, so the other side
 stays a plain command and the key must work without a prompt, as Git's
-fetches need. The command checks the spaces first to ask what needs the user,
-and the worker deletes only the work the user saw.
+fetches need. The worker checks the spaces before any ends,
+and where ending them needs the user it ends nothing and asks, so the command,
+or an app, starts the move again with consent to what the question listed.
 The daemon records each space's move, with its destination and the stopped
 work its spaces saved, before any agent stops, and the package's checkpoints
 and phase once written, and the worker holds a lock on the space while it

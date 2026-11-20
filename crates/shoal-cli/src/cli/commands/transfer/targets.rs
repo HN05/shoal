@@ -3,18 +3,13 @@
 use anyhow::{Context as _, Result, ensure};
 
 use crate::cli::{args::transfer::MoveArgs, context::Context, ui};
-use crate::{model::Space, transfer::OrderedSpace};
+use crate::model::Space;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The spaces `args` selects, by ID, refusing one that selects no space, or
-/// with `files` no live or removed space, before asking for anything else;
-/// the work their end may delete is the user's to confirm.
-pub(super) async fn select(
-    ctx: &Context,
-    args: &MoveArgs,
-    files: bool,
-) -> Result<Vec<OrderedSpace>> {
+/// with `files` no live or removed space, before asking for anything else.
+pub(super) async fn select(ctx: &Context, args: &MoveArgs, files: bool) -> Result<Vec<SpaceId>> {
     let ids = match &args.repository {
         Some(repository) => (repository_spaces(ctx, repository.clone())
             .await?
@@ -24,12 +19,7 @@ pub(super) async fn select(
         None if !args.space.is_empty() => named(ctx, &args.space, files).await?,
         None => picked(ctx).await?,
     };
-    Ok((ids.into_iter())
-        .map(|space| OrderedSpace {
-            space,
-            unsaved: Default::default(),
-        })
-        .collect())
+    Ok(ids)
 }
 
 /// The IDs of the spaces `names` select, or with `files` of the removed

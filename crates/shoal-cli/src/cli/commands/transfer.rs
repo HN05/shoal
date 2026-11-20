@@ -2,28 +2,28 @@
 //! that `shoal restore --from` continues. The daemon runs the move, so it
 //! goes on when this command goes; the command picks what it moves and
 //! where, asks before ending what needs the user, and follows it.
-mod confirmation;
 mod destination;
 mod leaving;
+mod stream;
 mod targets;
 
 use std::io::Write as _;
 
-use anyhow::Result;
+use anyhow::{Result, ensure};
 
 use super::operations::Lines;
-use crate::cli::{args::transfer::MoveArgs, context::Context};
+use crate::cli::{args::transfer::MoveArgs, context::Context, ui};
 use crate::client::operations::Following;
-use crate::protocol::operations::Ended;
-use crate::transfer::{MoveDestination, MoveOrder, MoveReport, OrderedSpace};
+use crate::protocol::operations::{Ended, Failure};
+use crate::transfer::{Consent, MoveDestination, MoveOrder, MoveReport};
 use destination::Chosen;
-use shoal_workers::moves::{self, Planned};
 
 /// The file name that reads or writes the standard streams.
 pub(super) const STANDARD_STREAM: &str = "-";
 
 /// `shoal move`: move the spaces `args` selects to the destination it
-/// names, or to the one the user picks.
+/// names, or to the one the user picks, asking first where the move ends
+/// more than the spaces named or releases holds.
 pub(super) async fn run(ctx: &Context, args: MoveArgs) -> Result<i32> {
     let (spaces, chosen) = destination::choose(ctx, &args).await?;
     let mut order = MoveOrder {
@@ -32,43 +32,35 @@ pub(super) async fn run(ctx: &Context, args: MoveArgs) -> Result<i32> {
         recursive: args.recursive(true),
         keep: args.keep,
         checkpoint: args.checkpoint,
+        consent: args.confirmation.yes.then_some(Consent::Any),
     };
-    let planned = moves::plan(&ctx.paths, &order).await?;
     if let MoveDestination::Client { .. } = order.destination {
-        confirmation::ensure_stream_survives(ctx, &planned).await?;
+        stream::ensure_survives(ctx, &order).await?;
     }
-    confirmation::confirm(ctx, args.confirmation.yes, &order, &planned)?;
-    order.spaces = confirmed(&planned);
-    let leaving = leaving::Leaving::find(ctx, &planned).await?;
-    let report = follow(ctx, order).await?;
-    leaving.navigate(ctx, &report)?;
+    let leaving = leaving::Leaving::find(ctx).await?;
+    let report = loop {
+        match follow(ctx, order.clone()).await? {
+            Moved::Done(report) => break report,
+            Moved::Asks(question) => {
+                ensure!(ui::confirm(ctx, &question, "--yes")?, "move canceled");
+                order.consent = Some(Consent::Answered(question));
+            }
+        }
+    };
+    leaving.navigate(ctx)?;
     finish(ctx, &chosen, report)
 }
 
-/// The spaces of the `planned` move, each with the work the user saw that
-/// ending it here may delete.
-fn confirmed(planned: &[Planned]) -> Vec<OrderedSpace> {
-    (planned.iter())
-        .map(|planned| match planned {
-            Planned::Ending { checked, .. } => OrderedSpace {
-                space: checked.id().clone(),
-                unsaved: checked.unsaved(),
-            },
-            Planned::Copied { space, .. } => OrderedSpace {
-                space: space.id.clone(),
-                unsaved: Default::default(),
-            },
-            Planned::Removed { space, .. } => OrderedSpace {
-                space: space.space_id.clone(),
-                unsaved: Default::default(),
-            },
-        })
-        .collect()
+/// How a move the daemon ran ended: what it did, or the question it asks
+/// before it ends anything.
+enum Moved {
+    Done(MoveReport),
+    Asks(String),
 }
 
 /// Start `order` in the daemon of its spaces' machine and follow it to its
-/// end, showing what it prints, returning what it did.
-async fn follow(ctx: &Context, order: MoveOrder) -> Result<MoveReport> {
+/// end, showing what it prints.
+async fn follow(ctx: &Context, order: MoveOrder) -> Result<Moved> {
     let lines = match order.destination {
         MoveDestination::Client { .. } => Lines::Aside,
         _ => Lines::Command,
@@ -77,7 +69,8 @@ async fn follow(ctx: &Context, order: MoveOrder) -> Result<MoveReport> {
     let (id, mut following) = Following::start_move(&ctx.paths, order, env).await?;
     let ended = super::operations::show(ctx, (&id, lines), async || following.next().await).await?;
     match ended {
-        Ended::Succeeded(outcome) => MoveReport::try_from(*outcome),
+        Ended::Succeeded(outcome) => Ok(Moved::Done(MoveReport::try_from(*outcome)?)),
+        Ended::Failed(Failure::Unconfirmed { question }) => Ok(Moved::Asks(question)),
         Ended::Failed(failure) => Err(crate::operations::error(failure)),
     }
 }
