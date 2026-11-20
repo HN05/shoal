@@ -30,6 +30,15 @@ pub struct Viewer {
     /// connection, without waking or restoring the agent a second time.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub again: Option<Origin>,
+    #[serde(flatten)]
+    pub terminal: Terminal,
+}
+
+/// The terminal on another machine, or on a device, that shows a place of
+/// this one: what Shoal makes the terminal it runs there like, and how the
+/// host's apps there reach it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Terminal {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<TerminalSize>,
     /// The viewer's `TERM`.
@@ -50,7 +59,7 @@ pub struct ViewerApp {
     pub label: String,
 }
 
-impl Viewer {
+impl Terminal {
     /// The label of the viewer's app for `host`, when it has one.
     pub fn app(&self, host: HostName) -> Option<&str> {
         let app = self.apps.iter().find(|app| app.host == host);

@@ -12,7 +12,7 @@ use std::{
 use anyhow::{Context as _, Result, bail};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
-    attaching::{ChosenSession, FromSession, TerminalSize, ToSession, Viewer, ViewerApp},
+    attaching::{ChosenSession, FromSession, Terminal, TerminalSize, ToSession, Viewer, ViewerApp},
     space_names::SpaceSelector,
 };
 use tokio::{
@@ -59,9 +59,11 @@ pub(super) async fn attach(
     let viewer = Viewer {
         session,
         again: None,
-        size: terminal_size(),
-        term: std::env::var("TERM").ok(),
-        apps: viewer_apps().await,
+        terminal: Terminal {
+            size: terminal_size(),
+            term: std::env::var("TERM").ok(),
+            apps: viewer_apps().await,
+        },
     };
     let mut ended = Termination::watch()?;
     let mut raw = RawTerminal::enter()?;

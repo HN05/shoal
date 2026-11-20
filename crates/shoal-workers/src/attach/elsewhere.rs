@@ -49,7 +49,7 @@ pub async fn for_viewer(
     send_report(&mut report, &AttachReport::Chosen(chosen))?;
     let shown = Elsewhere {
         machine: &machine,
-        app: viewer.app(session.place.host),
+        app: viewer.terminal.app(session.place.host),
     };
     let open = terminal::show_elsewhere(&target.number().to_string(), &session, &shown).await?;
     send_report(&mut report, &AttachReport::Left { open })?;

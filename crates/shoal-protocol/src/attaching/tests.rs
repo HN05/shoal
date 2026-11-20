@@ -74,3 +74,29 @@ fn an_attach_reports_the_session_it_chose_and_whether_it_left_it_open() {
     let left = serde_json::to_value(AttachReport::Left { open: false }).unwrap();
     assert_eq!(left, serde_json::json!({"left": {"open": false}}));
 }
+
+#[test]
+fn a_viewer_s_terminal_is_written_beside_its_session() {
+    let viewer = Viewer {
+        session: Some("shoal-7".into()),
+        again: None,
+        terminal: Terminal {
+            size: Some(TerminalSize {
+                rows: 24,
+                columns: 80,
+            }),
+            term: Some("xterm-ghostty".into()),
+            apps: Vec::new(),
+        },
+    };
+    let json = serde_json::to_value(&viewer).unwrap();
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "session": "shoal-7",
+            "size": {"rows": 24, "columns": 80},
+            "term": "xterm-ghostty",
+        })
+    );
+    assert_eq!(serde_json::from_value::<Viewer>(json).unwrap(), viewer);
+}

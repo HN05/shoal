@@ -138,9 +138,10 @@ impl Manager {
 impl ViewerTerminal {
     /// Run the attach `argv` in `dir` on a terminal made for `viewer`.
     fn start(argv: &[std::ffi::OsString], viewer: &Viewer, dir: &Path) -> Result<Self> {
-        let (pty, terminal) = pty::open(viewer.size)?;
+        let (pty, terminal) = pty::open(viewer.terminal.size)?;
         let (report, reported) = std::os::unix::net::UnixStream::pair()?;
-        let mut command = attach_command(argv, viewer, terminal, reported.as_raw_fd())?;
+        let term = viewer.terminal.term.as_deref();
+        let mut command = attach_command(argv, term, terminal, reported.as_raw_fd())?;
         command.current_dir(dir);
         let attach = command.spawn().context("start the attach")?;
         drop(reported);
@@ -265,18 +266,18 @@ async fn next_report(
 }
 
 /// The command that runs `argv`, the attach, as the user on `terminal`,
-/// with `viewer`'s `TERM`, keeping `reported` open as its report
+/// with the viewer's `TERM`, `term`, keeping `reported` open as its report
 /// descriptor.
 fn attach_command(
     argv: &[std::ffi::OsString],
-    viewer: &Viewer,
+    term: Option<&str>,
     terminal: OwnedFd,
     reported: i32,
 ) -> Result<tokio::process::Command> {
     let mut command = tokio::process::Command::new(&argv[0]);
     command
         .args(&argv[1..])
-        .env("TERM", viewer.term.as_deref().unwrap_or("xterm-256color"))
+        .env("TERM", term.unwrap_or("xterm-256color"))
         .env_remove(shoal_protocol::env::SCOPE_TOKEN)
         .stdin(Stdio::from(terminal.try_clone()?))
         .stdout(Stdio::from(terminal.try_clone()?))

@@ -4,7 +4,7 @@ use std::{fs, io::Read as _, os::fd::AsRawFd as _, process::Stdio};
 
 use shoal_client::attaching::attach;
 use shoal_protocol::{
-    attaching::{FromSession, TerminalSize, Viewer},
+    attaching::{FromSession, Terminal, TerminalSize, Viewer},
     space_names::SpaceSelector,
 };
 
@@ -68,10 +68,13 @@ fn laptop_agent(hub: &Base) -> (Base, String, std::process::Child) {
 
 fn viewer() -> Viewer {
     Viewer {
-        size: Some(TerminalSize {
-            rows: 24,
-            columns: 80,
-        }),
+        terminal: Terminal {
+            size: Some(TerminalSize {
+                rows: 24,
+                columns: 80,
+            }),
+            ..Terminal::default()
+        },
         ..Viewer::default()
     }
 }
