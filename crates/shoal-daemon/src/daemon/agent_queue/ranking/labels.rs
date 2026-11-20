@@ -3,9 +3,10 @@
 use anyhow::Result;
 use rusqlite::{Connection, params};
 
-use crate::{daemon::links::pr::watched_prs, forge::items::reference::ItemRef};
+use crate::forge::items::reference::ItemRef;
 use shoal_forge::updates;
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_links::pr::watched_prs;
 
 /// Work of a repository with the labels that rank it.
 pub(super) struct Labelled<Id> {
@@ -16,7 +17,7 @@ pub(super) struct Labelled<Id> {
 
 /// The labels of the issues assigned to the space `id`.
 pub(super) fn of_issues(db: &Connection, id: &SpaceId) -> Result<Vec<String>> {
-    let issues = crate::daemon::links::linked::assigned_issues(db, id)?.into_iter();
+    let issues = shoal_links::linked::assigned_issues(db, id)?.into_iter();
     of_items(db, id, issues.map(|issue| issue.url))
 }
 

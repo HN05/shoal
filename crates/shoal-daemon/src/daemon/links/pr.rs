@@ -3,6 +3,7 @@ use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension};
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::pr::{titles, watched_urls};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::CommitId;
 
@@ -29,8 +30,6 @@ use crate::{
 };
 use shoal_forge::{RepoRequests, account::Account, review::status::StatusRequests};
 pub(crate) use shoal_protocol::links::pr::{Action, Registration, RegistrationKind};
-
-pub(crate) mod titles;
 
 /// How a new PR watch is checked before it is recorded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -522,29 +521,6 @@ impl RegistrationChange {
             titles::record(db, id, url.url(), title)?;
         }
         Ok(())
-    }
-}
-
-/// The PRs the space `id` watches; an unreadable registration watches none.
-pub(crate) fn watched_prs(db: &Connection, id: &SpaceId) -> rusqlite::Result<Vec<ItemRef>> {
-    let record: Option<String> = db
-        .query_row(
-            "SELECT record FROM pr_cleanup WHERE space_id=?1",
-            [id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    let registration = record.and_then(|record| serde_json::from_str(&record).ok());
-    Ok(watched_urls(registration.as_ref()).to_vec())
-}
-
-fn watched_urls(registration: Option<&Registration>) -> &[ItemRef] {
-    match registration {
-        Some(Registration {
-            kind: RegistrationKind::Watch { urls, .. },
-            ..
-        }) => urls,
-        _ => &[],
     }
 }
 

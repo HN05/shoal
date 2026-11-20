@@ -1,6 +1,9 @@
 //! The issues, PRs and CI runs the daemon's spaces link. [`Links`] holds
 //! what links keep in memory and offers their operations.
+pub mod issue;
+pub mod linked;
 mod memories;
+pub mod pr;
 
 use shoal_forge::transport::memory::Memory;
 

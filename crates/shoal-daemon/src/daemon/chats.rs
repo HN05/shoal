@@ -723,7 +723,7 @@ fn recorded(db: &Connection, owner: &Path, root: Option<&SpaceId>) -> Result<Vec
     .into_iter()
     .filter(|chat| (reached.as_ref()).is_none_or(|reached| reached.contains(&chat.id)))
     .map(|mut chat| {
-        chat.links = crate::daemon::links::linked::space_links(db, &chat.id)?;
+        chat.links = shoal_links::linked::space_links(db, &chat.id)?;
         chat.review = crate::daemon::ready_marks::list(db, &chat.id)?;
         chat.holds = crate::daemon::holds::list(db, &chat.id)?;
         chat.parent = super::tree::parent(db, &chat.id)?;

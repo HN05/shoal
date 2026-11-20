@@ -7,7 +7,6 @@ pub(in crate::daemon) mod branches;
 mod checks;
 mod ci;
 pub mod issue;
-pub(crate) mod linked;
 mod listing;
 mod merge_path;
 mod merge_review;
@@ -398,7 +397,7 @@ pub(crate) fn refresh_titles(db: &Connection, id: &SpaceId, url: &str, title: &s
             rusqlite::params![id, url, title],
         )?;
     }
-    pr::titles::refresh(db, id, url, title)
+    shoal_links::pr::titles::refresh(db, id, url, title)
 }
 
 /// Refuse to record another relation of an item the space assigns.

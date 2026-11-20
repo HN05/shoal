@@ -159,7 +159,7 @@ async fn a_done_workspace_folds_into_its_parent_which_takes_its_work_and_records
     assert_eq!(files.len(), 1);
     let id = parent.id.clone();
     let links = (manager.store)
-        .run(move |db| Ok(crate::daemon::links::linked::space_links(db, &id)?))
+        .run(move |db| Ok(shoal_links::linked::space_links(db, &id)?))
         .await
         .unwrap();
     assert_eq!(links.related.len(), 1);

@@ -8,4 +8,10 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+anyhow.workspace = true
+rusqlite = { workspace = true, features = ["bundled"] }
+serde_json.workspace = true
 shoal-forge.workspace = true
+shoal-forge-types = { workspace = true, features = ["rusqlite"] }
+shoal-ids = { workspace = true, features = ["rusqlite"] }
+shoal-protocol = { workspace = true, features = ["rusqlite"] }

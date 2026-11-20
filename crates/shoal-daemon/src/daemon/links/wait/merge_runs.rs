@@ -364,7 +364,7 @@ pub(super) fn follow_merge(
 /// The PR at `url`, when the space `id` watches it or links it as opened.
 fn followed_pr(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<Option<ItemRef>> {
     let watched = linked_items(db, id, Some(ItemKind::Pr))?;
-    let opened = crate::daemon::links::linked::recorded_items(db, id, Relation::Opened)?;
+    let opened = shoal_links::linked::recorded_items(db, id, Relation::Opened)?;
     let opened = opened.into_iter().map(|item| item.url);
     Ok(watched
         .into_iter()

@@ -26,8 +26,9 @@ use crate::{
         },
     },
 };
-pub(crate) use assignees::{AssignerOf, Dropped, of_space as assignees_of};
+pub(crate) use assignees::{AssignerOf, Dropped};
 use shoal_forge::{RepoRequests, items::issue::IssueRequests};
+
 pub(crate) use shoal_protocol::links::issue::Registration;
 
 /// An open issue a new workspace is assigned.
@@ -44,7 +45,7 @@ impl Manager {
         let id = id.to_owned();
         self.store
             .read(move |tx| {
-                let issues = crate::daemon::links::linked::assigned_issues(tx, &id)?.into_iter();
+                let issues = shoal_links::linked::assigned_issues(tx, &id)?.into_iter();
                 Ok(issues
                     .map(|issue| Registration {
                         url: issue.url,
@@ -305,7 +306,7 @@ fn also_assigned(url: &ItemRef, others: &[String]) -> String {
 
 /// The URLs of the space's assigned issues in the order they were assigned.
 pub(crate) fn assigned_urls(db: &Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
-    let issues = crate::daemon::links::linked::assigned_issues(db, id)?.into_iter();
+    let issues = shoal_links::linked::assigned_issues(db, id)?.into_iter();
     Ok(issues.map(|issue| issue.url).collect())
 }
 

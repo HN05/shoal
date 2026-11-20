@@ -238,7 +238,7 @@ fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<
     stack::load(db, workspace)?;
     copies::load(db, workspace)?;
     super::tree::load(db, workspace)?;
-    workspace.links = crate::daemon::links::linked::space_links(db, &workspace.id)?;
+    workspace.links = shoal_links::linked::space_links(db, &workspace.id)?;
     workspace.running = store::exists(
         db,
         "SELECT 1 FROM executions WHERE space_id=?1 AND state=?2",

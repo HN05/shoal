@@ -4,14 +4,11 @@
 //! the repository and stay.
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::linked;
 
 use super::parties::Parties;
 use crate::{
-    daemon::{
-        links::{linked, pr::Action},
-        manager::Manager,
-        scope::Caller,
-    },
+    daemon::{links::pr::Action, manager::Manager, scope::Caller},
     forge::items::link::LinkKind,
     model::{Relation, SpaceLinks},
 };

@@ -52,8 +52,7 @@ impl Manager {
                         }
                     }
                     for relation in [Relation::Opened, Relation::Related] {
-                        for item in crate::daemon::links::linked::recorded_items(db, &id, relation)?
-                        {
+                        for item in shoal_links::linked::recorded_items(db, &id, relation)? {
                             if item.kind() == kind {
                                 links.push((id.clone(), item.url));
                             }

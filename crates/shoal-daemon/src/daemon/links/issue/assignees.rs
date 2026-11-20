@@ -213,30 +213,6 @@ pub(super) fn dropped(db: &Connection, id: &SpaceId, urls: &[ItemRef]) -> Result
     Ok(dropped)
 }
 
-/// The forge assignees the space `id`'s assigned issues stand for, in the
-/// order the issues were assigned: the user's login it stands for, and the
-/// agent account for each issue an agent assigned it.
-pub(crate) fn of_space(db: &Connection, id: &SpaceId) -> rusqlite::Result<Vec<IssueAssignee>> {
-    db.prepare(
-        "SELECT url,?2,EXISTS(SELECT 1 FROM issue_assignments a
-             WHERE a.url=s.url AND a.login=s.assignee), rowid
-         FROM space_issue s WHERE space_id=?1 AND assignee IS NOT NULL
-         UNION ALL SELECT url,linked_by,0,rowid FROM space_issue
-         WHERE space_id=?1 AND linked_by=?3 ORDER BY 4",
-    )?
-    .query_map(
-        rusqlite::params![id, Assigner::User, Assigner::Agent],
-        |row| {
-            Ok(IssueAssignee {
-                url: row.get(0)?,
-                account: row.get(1)?,
-                added: row.get(2)?,
-            })
-        },
-    )?
-    .collect()
-}
-
 /// Record as Shoal's the user's assignees of the space `id` that
 /// `assignees` says Shoal added, as a restored or moved space carries them,
 /// for the issues the space links with an assignee again.

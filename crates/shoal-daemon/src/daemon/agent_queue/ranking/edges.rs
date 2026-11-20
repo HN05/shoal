@@ -124,7 +124,7 @@ fn pr_spaces(db: &Connection, url: &str) -> Result<Vec<SpaceId>> {
         .collect::<rusqlite::Result<_>>()?;
     let mut spaces = Vec::new();
     for id in ids {
-        let links = crate::daemon::links::linked::space_links(db, &id)?;
+        let links = shoal_links::linked::space_links(db, &id)?;
         if (links.prs.iter().chain(&links.opened)).any(|linked| linked.url.url() == url) {
             spaces.push(id);
         }
