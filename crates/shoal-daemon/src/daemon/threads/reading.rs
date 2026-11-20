@@ -40,7 +40,8 @@ fn newest_that_fit(mut threads: Vec<Thread>) -> Result<Listing> {
 impl Manager {
     /// The threads the space `selector` names takes part in, else every
     /// thread, in `state`, only those whose turn is the user's with
-    /// `for_user`, the newest that fit one response.
+    /// `for_user`, the newest that fit one response, with their code
+    /// followed to where it is now.
     pub async fn threads(
         &self,
         selector: Option<&SpaceSelector>,
@@ -56,25 +57,31 @@ impl Manager {
             ThreadState::Resolved => "t.outcome IS NOT NULL",
             ThreadState::All => "1",
         };
-        let threads = self
+        let mut threads = self
             .store
             .run(move |db| records::of_space(db, space.as_ref(), kept))
             .await?;
+        self.follow_code(&mut threads).await;
         let threads = (threads.into_iter())
             .filter(|thread| !for_user || thread.waits_for_user())
             .collect();
         newest_that_fit(threads)
     }
 
-    /// The thread `number` names, for `caller` to read.
+    /// The thread `number` names, for `caller` to read, with its code
+    /// followed to where it is now.
     pub async fn thread(&self, caller: Option<&Caller>, number: ThreadNumber) -> Result<Thread> {
-        self.readable_thread(caller, number).await
+        let mut thread = self.readable_thread(caller, number).await?;
+        self.follow_code(std::slice::from_mut(&mut thread)).await;
+        Ok(thread)
     }
 
-    /// Every open thread with a post, oldest first, which subscription
-    /// snapshots page and the hub lists.
+    /// Every open thread with a post, oldest first, with its code followed
+    /// to where it is now, which subscription snapshots page.
     pub(crate) async fn open_threads(&self) -> Result<Vec<Thread>> {
-        self.store.run(records::open_with_posts).await
+        let mut threads = self.store.run(records::open_with_posts).await?;
+        self.follow_code(&mut threads).await;
+        Ok(threads)
     }
 
     /// Whether a thread the space `id` opened waits for its holder.

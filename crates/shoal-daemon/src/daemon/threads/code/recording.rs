@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    code::{self, CodeAt, Lines, MAX_VERSIONED_LEN, NewCodeRef},
+    code::{self, CodeAt, Lines, NewCodeRef},
     space_names::SpaceName,
 };
 use shoal_refs::CommitId;
@@ -127,7 +127,7 @@ fn relative(root: &Path, path: &Path) -> Result<String> {
 
 /// The version of the file at `path` in the worktree `root`, or `contents`
 /// for it, that a reference to `lines` keeps; none for a directory, a
-/// binary file or one over [`MAX_VERSIONED_LEN`].
+/// binary file or a large one.
 async fn version(
     root: &Path,
     path: &Path,
@@ -150,9 +150,8 @@ async fn version(
     if let Some(lines) = lines {
         ensure_has(path, &bytes, lines)?;
     }
-    let text = match String::from_utf8(bytes) {
-        Ok(text) if text.len() <= MAX_VERSIONED_LEN && !text.contains('\0') => text,
-        _ => return Ok(none),
+    let Some(text) = super::kept_text(bytes) else {
+        return Ok(none);
     };
     let snippet = lines.map(|lines| code::snippet(&text, lines));
     let blob = git::code_versions::write(root, text).await?;

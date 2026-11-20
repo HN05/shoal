@@ -4,12 +4,21 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_protocol::code::MAX_VERSIONED_LEN;
 
+mod following;
 mod recording;
 pub(super) mod records;
 mod versions;
 
 pub(super) use recording::NewCode;
+
+/// `bytes` as text a reference keeps versions of: UTF-8 without NUL, of
+/// at most [`MAX_VERSIONED_LEN`] bytes.
+fn kept_text(bytes: Vec<u8>) -> Option<String> {
+    let text = String::from_utf8(bytes).ok()?;
+    (text.len() <= MAX_VERSIONED_LEN && !text.contains('\0')).then_some(text)
+}
 
 /// The spaces whose versions `code` keeps, by repository.
 pub(super) fn versioned(code: &[NewCode]) -> BTreeMap<RepositoryId, BTreeSet<SpaceId>> {

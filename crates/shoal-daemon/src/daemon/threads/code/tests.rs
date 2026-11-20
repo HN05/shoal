@@ -152,3 +152,61 @@ async fn expiry_lets_go_of_the_versions_of_threads_that_went() {
         .unwrap();
     assert!(kept.is_empty(), "{kept:?}");
 }
+
+/// A thread from the child to its coordinator whose post points at lines
+/// `lines` of `parse.rs` in the child's worktree.
+async fn about_parser(tree: &super::super::tests::Tree, lines: &str) -> ThreadNumber {
+    let (manager, child) = (&tree.manager, caller(&tree.child));
+    let thread = open(manager, Some(&child), None).await;
+    let code = vec![at(parser(&tree.child), lines)];
+    (manager.post_to_thread(Some(&child), full(&thread), post("Here"), Vec::new(), code))
+        .await
+        .unwrap();
+    full(&thread)
+}
+
+/// Where the first reference of the thread `number` is now, and its state.
+async fn followed(tree: &super::super::tests::Tree, number: ThreadNumber) -> (String, CodeState) {
+    let thread = tree.manager.thread(None, number).await.unwrap();
+    let code = &thread.posts[0].code[0];
+    (code.latest.to_string(), code.state)
+}
+
+#[tokio::test]
+async fn a_reference_follows_its_code_through_edits_step_by_step() {
+    let tree = tree().await;
+    let number = about_parser(&tree, "5").await;
+    let file = tree.child.path.join("parse.rs");
+    fs::write(&file, format!("use x;\n\n{PARSER}")).unwrap();
+    let moved = ("parse.rs:7".to_owned(), CodeState::Unchanged);
+    assert_eq!(followed(&tree, number).await, moved);
+
+    fs::write(
+        &file,
+        format!("use x;\n\n{PARSER}").replace("fn tokens() {}", "fn tokens() {\n}"),
+    )
+    .unwrap();
+    let edited = ("parse.rs:7-8".to_owned(), CodeState::Changed);
+    assert_eq!(followed(&tree, number).await, edited);
+
+    fs::write(&file, "use x;\n").unwrap();
+    let (_, state) = followed(&tree, number).await;
+    assert_eq!(state, CodeState::Outdated);
+    let thread = tree.manager.thread(None, number).await.unwrap();
+    assert_eq!(
+        thread.posts[0].code[0].snippet.as_deref(),
+        Some("fn tokens() {}")
+    );
+}
+
+#[tokio::test]
+async fn a_reference_follows_its_file_renamed_whole() {
+    let tree = tree().await;
+    let number = about_parser(&tree, "1-3").await;
+    fs::create_dir(tree.child.path.join("syntax")).unwrap();
+    let moved = format!("// The parser\n{PARSER}");
+    fs::write(tree.child.path.join("syntax/parser.rs"), moved).unwrap();
+    fs::remove_file(tree.child.path.join("parse.rs")).unwrap();
+    let renamed = ("syntax/parser.rs:2-4".to_owned(), CodeState::Unchanged);
+    assert_eq!(followed(&tree, number).await, renamed);
+}

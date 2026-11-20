@@ -98,6 +98,33 @@ pub(in crate::daemon::threads) fn insert(
     Ok(())
 }
 
+/// Move the reference `id` to `latest` in `state`, unless it was followed
+/// from `from` meanwhile; whether it moved.
+pub(super) fn follow(
+    tx: &Transaction<'_>,
+    id: i64,
+    from: &CodeAt,
+    latest: &CodeAt,
+    state: CodeState,
+) -> Result<bool> {
+    let (start, end) = latest.lines.map(|lines| (lines.start, lines.end)).unzip();
+    Ok(tx.execute(
+        "UPDATE thread_code SET latest_path=?4,latest_start=?5,latest_end=?6,latest_blob=?7,
+                state=?8
+            WHERE id=?1 AND latest_path=?2 AND latest_blob IS ?3",
+        params![
+            id,
+            from.path,
+            from.blob,
+            latest.path,
+            start,
+            end,
+            latest.blob,
+            state
+        ],
+    )? > 0)
+}
+
 /// Every file version the references in the worktree of the space `space`
 /// keep.
 pub(super) fn kept(db: &Connection, space: &SpaceId) -> Result<Vec<String>> {
