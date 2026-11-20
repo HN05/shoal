@@ -143,6 +143,24 @@ fn an_outcome_takes_only_its_own_data() {
 }
 
 #[test]
+fn a_thread_s_status_follows_whose_turn_it_is_and_its_outcome() {
+    let empty = thread(Sender::Space, Holder::User, Vec::new());
+    assert_eq!(empty.status(), ThreadStatus::Waiting);
+    let asked = thread(Sender::Space, Holder::User, vec![post(1, Side::Opener)]);
+    assert_eq!(asked.status(), ThreadStatus::Queued);
+    let replied = vec![post(1, Side::Opener), post(2, Side::Holder)];
+    let mut replied = thread(Sender::Space, Holder::User, replied);
+    assert_eq!(replied.status(), ThreadStatus::Waiting);
+    replied.resolution = Some(Resolution {
+        outcome: Outcome::Done,
+        by: Sender::Space,
+        by_space: None,
+        resolved_at: crate::time::UnixTime::from_seconds(3),
+    });
+    assert_eq!(replied.status().to_string(), "done");
+}
+
+#[test]
 fn a_request_is_done_and_a_question_answered() {
     let request = ThreadKind::Request;
     assert_eq!(

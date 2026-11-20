@@ -290,6 +290,29 @@ impl Post {
     }
 }
 
+/// Where a thread stands for editors, which draw it around its code; it
+/// comes from its posts and resolution, not a record of its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThreadStatus {
+    /// Open, and its last post is its opener's: its holder's turn.
+    Queued,
+    /// Open, and its last post is its holder's, or it has none: its
+    /// opener's turn.
+    Waiting,
+    /// Resolved with this outcome.
+    Resolved(OutcomeKind),
+}
+
+impl fmt::Display for ThreadStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Queued => f.write_str("queued"),
+            Self::Waiting => f.write_str("waiting"),
+            Self::Resolved(outcome) => outcome.fmt(f),
+        }
+    }
+}
+
 /// How a thread was settled, by whom and when.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Resolution {
@@ -342,6 +365,15 @@ impl Thread {
             Side::Opener => Side::Holder,
             Side::Holder => Side::Opener,
         })
+    }
+
+    /// Where it stands for editors.
+    pub fn status(&self) -> ThreadStatus {
+        match (&self.resolution, self.awaits()) {
+            (Some(resolution), _) => ThreadStatus::Resolved(resolution.outcome.kind()),
+            (None, Some(Side::Holder)) => ThreadStatus::Queued,
+            (None, Some(Side::Opener) | None) => ThreadStatus::Waiting,
+        }
     }
 
     /// Whether it waits for its holder: open, with a post, the last from
