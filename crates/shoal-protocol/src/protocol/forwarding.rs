@@ -147,7 +147,8 @@ impl Operation {
                     | AgentMethod::RestartAgent { .. }
                     | AgentMethod::CancelRestart { .. }
             ) | Self::Thread(
-                ThreadMethod::ListThreads { .. }
+                ThreadMethod::OpenThread { .. }
+                    | ThreadMethod::ListThreads { .. }
                     | ThreadMethod::ShowThread { .. }
                     | ThreadMethod::ResolveThread { .. }
                     | ThreadMethod::ForwardThread { .. }

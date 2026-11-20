@@ -386,7 +386,7 @@ fn a_coordinator_opens_a_thread_with_its_child_on_another_machine() {
 }
 
 #[test]
-fn a_holder_forwards_a_thread_to_a_space_on_another_machine() {
+fn the_user_opens_and_a_holder_forwards_threads_to_a_space_on_another_machine() {
     let Tree {
         hub,
         laptop,
@@ -395,6 +395,16 @@ fn a_holder_forwards_a_thread_to_a_space_on_another_machine() {
         ..
     } = tree_across_machines();
     working(&laptop, &child);
+    let opened = hub.ok(&["thread", "open", "Which port?", "--space", &child]);
+    assert_eq!(
+        opened["number"],
+        format!("{}.1", listed_number(&hub, &child)),
+        "the user's thread is numbered in the space it is opened with: {opened}"
+    );
+    let number = opened["number"].as_str().unwrap();
+    hub.ok(&["send", number, "8080 or 9090?"]);
+    message_with(&laptop, &child, "8080 or 9090?");
+
     let asked = hub.ok(&["thread", "open", "Which cache?", "--space", &coordinator]);
     let asked = asked["number"].as_str().unwrap();
     hub.ok(&["send", asked, "Redis or memcached?"]);
