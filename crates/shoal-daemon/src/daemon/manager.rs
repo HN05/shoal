@@ -73,7 +73,6 @@ pub struct Manager {
     pub(crate) forge_memories: crate::daemon::links::ForgeMemories,
     /// The local reviews of workspaces.
     pub reviews: Arc<shoal_reviews::Reviews>,
-    pub(crate) runners: crate::daemon::runner::Runners,
     /// The retry each proxied execution's proxy waits to make.
     pub(super) proxy_retries:
         std::sync::Mutex<std::collections::HashMap<ExecutionId, super::proxy_retries::ProxyRetry>>,
@@ -179,7 +178,6 @@ impl Manager {
             seeds: Default::default(),
             forge_memories: Default::default(),
             reviews,
-            runners: Default::default(),
             proxy_retries: Default::default(),
             upstream_limits: Default::default(),
             rejected_configs: Default::default(),

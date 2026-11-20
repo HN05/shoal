@@ -132,7 +132,7 @@ impl Manager {
                 let caller = here.then_some(&entry.id);
                 self.start_launches(starts, caller).await?;
                 if entry.kind == QueueKind::Job {
-                    self.runners.wake();
+                    self.runner.jobs().wake();
                 }
             }
         }

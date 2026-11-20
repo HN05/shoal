@@ -7,6 +7,11 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+# What the daemon's tests of the runner set: the `PATH` its program is found
+# on, and the stops Shoal's log records.
+test-support = []
+
 [dependencies]
 anyhow.workspace = true
 form_urlencoded = "1"

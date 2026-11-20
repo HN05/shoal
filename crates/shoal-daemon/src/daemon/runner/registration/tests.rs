@@ -76,7 +76,7 @@ async fn the_runner_follows_the_setting_and_goes_with_its_repository() {
             &format!("http://{}/team/repo", server.host),
         ],
     );
-    *manager.runners.path.lock().unwrap() = Some(runner_program(root.path()));
+    *manager.runner.jobs().path.lock().unwrap() = Some(runner_program(root.path()));
 
     configure(&manager, &settings(&server.host, true)).await;
     manager.reconcile_runners().await.unwrap();
@@ -134,7 +134,7 @@ async fn registration_fetches_a_token_from_a_command_once() {
             &format!("http://{}/team/repo", server.host),
         ],
     );
-    *manager.runners.path.lock().unwrap() = Some(runner_program(root.path()));
+    *manager.runner.jobs().path.lock().unwrap() = Some(runner_program(root.path()));
     let fetches = root.path().join("fetches");
     let command = format!("echo >> '{}'; echo user", fetches.display());
     configure(
@@ -172,7 +172,7 @@ async fn a_missing_runner_program_registers_nothing_and_tells_the_user_once() {
             &format!("http://{}/team/repo", server.host),
         ],
     );
-    *manager.runners.path.lock().unwrap() = Some(root.path().join("empty").into_os_string());
+    *manager.runner.jobs().path.lock().unwrap() = Some(root.path().join("empty").into_os_string());
     configure(&manager, &settings(&server.host, true)).await;
 
     manager.reconcile_runners().await.unwrap();
@@ -205,7 +205,7 @@ async fn a_github_repository_keeps_no_runner_of_its_own() {
         &root.path().join("actions-runner"),
         "Runner.Listener",
     );
-    *manager.runners.path.lock().unwrap() = Some(bin);
+    *manager.runner.jobs().path.lock().unwrap() = Some(bin);
     let github = |enabled: bool| {
         format!(
             "[machine.forges.\"{}\"]\ntype = \"github\"\nuser_token = \"user\"\n[runner]\nenabled = {enabled}\n",

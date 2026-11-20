@@ -240,7 +240,7 @@ impl Manager {
         published: Option<u64>,
     ) -> Option<Vec<QueueEntryId>> {
         if work.admits(&admitted, |work| matches!(work, Work::Job { .. })) {
-            self.runners.wake();
+            self.runner.jobs().wake();
         }
         let epoch = match work.needs_recovery(&admitted) {
             true => Some(published.and_then(|epoch| self.overload_recovery.consume(epoch))?),
@@ -304,7 +304,7 @@ impl Manager {
                         .as_ref()
                         .context("a job's entry names no repository")?;
                     // A job waits while its repository's permits are all held.
-                    if self.runners.permits_busy(repository) {
+                    if self.runner.jobs().permits_busy(repository) {
                         permits_busy.push(id);
                         continue;
                     }

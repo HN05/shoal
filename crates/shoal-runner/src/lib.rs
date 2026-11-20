@@ -22,6 +22,7 @@ pub struct Runner {
     config: Arc<ConfigState>,
     notifications: Arc<Notifications>,
     triggers: triggers::Triggers,
+    jobs: jobs::Runners,
 }
 
 impl Runner {
@@ -31,6 +32,7 @@ impl Runner {
             config,
             notifications,
             triggers: Default::default(),
+            jobs: Default::default(),
         }
     }
 

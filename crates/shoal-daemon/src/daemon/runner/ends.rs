@@ -91,7 +91,8 @@ impl Manager {
     /// daemon restart. A removal that fails is tried again on the next pass.
     pub(crate) async fn finish_ended_jobs(&self) -> Result<()> {
         let jobs = self.claimed_jobs().await?;
-        self.runners
+        self.runner
+            .jobs()
             .keep_runs(&jobs.iter().map(|job| job.id.clone()).collect());
         for job in jobs {
             let running = match &job.execution_id {
@@ -99,7 +100,7 @@ impl Manager {
                     self.job_execution_runs(&job.workspace_id, execution)
                         .await?
                 }
-                None if self.runners.claiming(&job.id) => true,
+                None if self.runner.jobs().claiming(&job.id) => true,
                 None => self.adopt_job_execution(&job).await?,
             };
             if running && !self.ended_overrun_job(&job).await {
@@ -141,7 +142,7 @@ impl Manager {
             .await;
         // A failed lookup costs only a pass that finds nothing to do.
         if ran_job.unwrap_or(true) {
-            self.runners.wake();
+            self.runner.jobs().wake();
         }
     }
 
@@ -183,8 +184,8 @@ impl Manager {
             let id = QueueEntryId::from(entry.file_name().to_string_lossy().into_owned());
             // Checked for each directory, under the lock a claim writes its
             // files with, so a claim recorded or begun meanwhile keeps them.
-            let _files = self.runners.job_files().await;
-            if self.runners.claiming(&id) || self.job_claimed(&id).await? {
+            let _files = self.runner.jobs().job_files().await;
+            if self.runner.jobs().claiming(&id) || self.job_claimed(&id).await? {
                 continue;
             }
             if let Err(error) = std::fs::remove_dir_all(entry.path()) {
@@ -323,7 +324,8 @@ impl Manager {
             job.job.run.url
         );
         #[cfg(test)]
-        self.runners
+        self.runner
+            .jobs()
             .stops
             .lock()
             .unwrap()
@@ -456,7 +458,7 @@ impl Manager {
             .await?;
         Ok(rows
             .into_iter()
-            .filter(|(job, unlaunched)| !unlaunched || self.runners.claiming(&job.id))
+            .filter(|(job, unlaunched)| !unlaunched || self.runner.jobs().claiming(&job.id))
             .map(|(job, _)| job)
             .collect())
     }

@@ -44,14 +44,14 @@ impl Manager {
             }
             let registered = self.runner_registration(&repository.id).await?;
             let result = match (enabled, registered) {
-                (true, None) if self.runners.due(&repository.id) => {
+                (true, None) if self.runner.jobs().due(&repository.id) => {
                     self.register_runner_unless_removed(&repository).await
                 }
                 (false, Some(registration)) => self.delete_runner(&repository, &registration).await,
                 _ => continue,
             };
             if let Err(error) = result {
-                self.runners.failed(&repository.id);
+                self.runner.jobs().failed(&repository.id);
                 self.notify(
                     None,
                     NotificationKind::RunnerFailed,
@@ -134,7 +134,7 @@ impl Manager {
     /// job's command inherits.
     pub(super) fn runner_program(&self, forge: &ForgeRepo) -> Result<PathBuf> {
         let program = forge.runner_program()?;
-        let path = self.runners.search_path();
+        let path = self.runner.jobs().search_path();
         crate::fsutil::executables::find_executable(program.as_ref(), &path)
             .with_context(|| format!("{program} is not on the daemon's PATH; install it"))
     }

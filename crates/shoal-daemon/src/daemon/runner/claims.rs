@@ -90,7 +90,7 @@ impl Manager {
             }
             Ok(Claim::PermitsBusy) => {
                 if let Ok(repository) = entry.job_repository() {
-                    self.runners.found_permits_busy(repository);
+                    self.runner.jobs().found_permits_busy(repository);
                 }
                 if let Err(error) = self.return_job(&entry.id).await {
                     crate::daemon::log!("runner: {error:#}");
@@ -254,7 +254,7 @@ impl Manager {
         }
         {
             // The sweep of unclaimed directories waits while one is filled.
-            let _files = self.runners.job_files().await;
+            let _files = self.runner.jobs().job_files().await;
             prepare_job_files(claim.workspace, &command).await?;
         }
         let log = self.job_directory(&claim.entry.id).join("job.log");

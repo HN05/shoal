@@ -133,7 +133,8 @@ pub(super) async fn fixture(jobs: Vec<Value>, settings: &str) -> Fixture {
         (200, Vec::new(), body.to_string().into())
     });
     crate::forge::hosts::learn(&server.host, ForgeKind::Forgejo);
-    *manager.runners.path.lock().unwrap() = Some(runner_program(root.path(), "forgejo-runner"));
+    *manager.runner.jobs().path.lock().unwrap() =
+        Some(runner_program(root.path(), "forgejo-runner"));
     let origin = format!("http://{}/team/repo", server.host);
     git(&path, &["remote", "add", "origin", &origin]);
     // The cached remote HEAD names the default branch without a fetch.
@@ -324,7 +325,7 @@ pub(super) async fn github_fixture() -> GitHubFixture {
     let install = root.path().join("actions-runner");
     std::fs::create_dir_all(install.join("bin")).unwrap();
     std::fs::write(install.join("run.sh"), "").unwrap();
-    *manager.runners.path.lock().unwrap() = Some(runner_program(&install, "Runner.Listener"));
+    *manager.runner.jobs().path.lock().unwrap() = Some(runner_program(&install, "Runner.Listener"));
     let origin = format!("http://{}/team/repo", server.host);
     git(&path, &["remote", "add", "origin", &origin]);
     git(&path, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
@@ -470,14 +471,14 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
     manager.finish_ended_jobs().await.unwrap();
     assert!(manager.workspace_by_id(&workspace.id).await.is_ok());
 
-    manager.runners.take_wake();
+    manager.runner.jobs().take_wake();
     manager
         .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(0))
         .await
         .unwrap();
     // Its end wakes the runner, which removes the workspace without waiting
     // for its next poll.
-    assert!(manager.runners.take_wake());
+    assert!(manager.runner.jobs().take_wake());
     manager.finish_ended_jobs().await.unwrap();
     assert!(manager.workspace_by_id(&workspace.id).await.is_err());
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
@@ -509,7 +510,7 @@ async fn the_cargo_presets_jobs_build_incrementally_as_its_seed_did() {
 
 #[tokio::test]
 async fn waiting_jobs_are_read_every_minute_while_none_could_start() {
-    use crate::daemon::runner::INTERVAL;
+    use shoal_runner::jobs::INTERVAL;
     let fixture = fixture(vec![job("h1", 4, 1), job("h2", 5, 1)], "").await;
     let manager = &fixture.manager;
     let reads = || {
@@ -535,10 +536,10 @@ async fn waiting_jobs_are_read_every_minute_while_none_could_start() {
 
     // Half the interval leaves no read due, however slow the runner.
     let read = reads();
-    manager.runners.age_waiting_read(INTERVAL / 2);
+    manager.runner.jobs().age_waiting_read(INTERVAL / 2);
     manager.poll_waiting_jobs().await.unwrap();
     assert_eq!(reads(), read);
-    manager.runners.age_waiting_read(INTERVAL);
+    manager.runner.jobs().age_waiting_read(INTERVAL);
     manager.poll_waiting_jobs().await.unwrap();
     assert_eq!(reads(), read + 1);
 }
@@ -629,7 +630,7 @@ async fn a_job_waits_while_its_permit_pool_is_full() {
     );
 
     // Once the pool has a permit, the job holds it while it runs.
-    manager.runners.forget_permits_busy();
+    manager.runner.jobs().forget_permits_busy();
     manager
         .leases
         .release_resource(
@@ -888,7 +889,7 @@ async fn every_space_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
 
     // Running, it lists there with its workspace, which stays outside the
     // chat's scope.
-    manager.runners.forget_permits_busy();
+    manager.runner.jobs().forget_permits_busy();
     manager
         .leases
         .release_resource(
@@ -1117,7 +1118,7 @@ async fn a_signal_to_a_jobs_wrapper_cancels_its_run_before_the_runner_stops() {
 
 /// What stopped each job whose stop Shoal's log recorded.
 fn logged_stops(manager: &Manager) -> Vec<JobStop> {
-    let stops = manager.runners.stops.lock().unwrap();
+    let stops = manager.runner.jobs().stops.lock().unwrap();
     stops.iter().map(|(_, cause)| *cause).collect()
 }
 
@@ -1310,7 +1311,8 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
     assert!(identity::alive(&left.0).unwrap());
 
     manager
-        .runners
+        .runner
+        .jobs()
         .backdate_finished_runs(super::overrun::GRACE);
     let finishing = tokio::spawn({
         let manager = manager.clone();
@@ -1709,9 +1711,9 @@ async fn a_job_whose_runner_ended_reserves_nothing_while_its_workspace_remains()
         .await
         .unwrap();
     assert_eq!(jobs().await, 0);
-    assert!(manager.runners.begin_claim(&claimed[0].id));
+    assert!(manager.runner.jobs().begin_claim(&claimed[0].id));
     assert_eq!(jobs().await, 1);
-    manager.runners.end_claim(&claimed[0].id);
+    manager.runner.jobs().end_claim(&claimed[0].id);
 }
 
 #[tokio::test]

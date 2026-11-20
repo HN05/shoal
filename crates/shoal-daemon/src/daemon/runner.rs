@@ -25,220 +25,15 @@ mod waiting;
 pub(crate) use registration::Registration;
 pub(crate) use shoal_runner::jobs::JobStop;
 
-use shoal_ids::repository_ids::RepositoryId;
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, Mutex, MutexGuard, PoisonError},
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
-use tokio::{sync::Notify, time::Instant};
+use shoal_runner::jobs::INTERVAL;
+use tokio::time::Instant;
 
 use crate::daemon::{log, manager::Manager};
-use shoal_ids::queue_entry_ids::QueueEntryId;
 
-/// How often the runners are checked against the repositories' settings,
-/// and the forge's waiting jobs read while none could start.
-pub(crate) const INTERVAL: Duration = Duration::from_secs(60);
 /// How often the forge's waiting jobs are read while one could start.
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
-/// How long a repository whose runner could not change waits to try again.
-const RETRY_AFTER: Duration = Duration::from_secs(5 * 60);
-
-/// How long a repository's jobs wait after its permit pool was full.
-const PERMITS_BUSY_FOR: Duration = Duration::from_secs(15);
-
-/// How often the run of a running job is read on its forge.
-const RUN_READ_INTERVAL: Duration = Duration::from_secs(60);
-
-/// What the forge said about the run of a running job.
-#[derive(Default, Clone, Copy)]
-struct RunCheck {
-    /// When it was last read.
-    read: Option<Instant>,
-    /// When it was first found finished.
-    finished: Option<Instant>,
-}
-
-/// What the runner keeps between passes: when each repository's runner last
-/// failed to change or found its permits all held, and the jobs being claimed.
-#[derive(Default)]
-pub(crate) struct Runners {
-    failures: Mutex<HashMap<RepositoryId, Instant>>,
-    permits_busy: Mutex<HashMap<RepositoryId, Instant>>,
-    /// When the forge's waiting jobs were last read.
-    waiting_read: Mutex<Option<Instant>>,
-    /// The queue entries of the jobs whose claim runs.
-    claiming: Mutex<HashSet<QueueEntryId>>,
-    /// The runs of the running jobs, by queue entry.
-    runs: Mutex<HashMap<QueueEntryId, RunCheck>>,
-    /// Admission admitted a job, or one ended.
-    wake: Notify,
-    /// Held while a claim writes a job's files and while the sweep of
-    /// unclaimed directories decides on one.
-    job_files: tokio::sync::Mutex<()>,
-    /// A repository's settings changed since the runners were checked.
-    changed: std::sync::atomic::AtomicBool,
-    /// The `PATH` tests find the runner's program on instead of the process's.
-    #[cfg(test)]
-    pub(crate) path: Mutex<Option<std::ffi::OsString>>,
-    /// The workspace of each job whose stop Shoal's log recorded, with what
-    /// stopped it, for tests, which do not read the log.
-    #[cfg(test)]
-    pub(crate) stops: Mutex<Vec<(shoal_ids::space_ids::SpaceId, JobStop)>>,
-}
-
-impl Runners {
-    /// The `PATH` the runner's program is found on: the daemon's, which
-    /// each job's command inherits.
-    pub(crate) fn search_path(&self) -> std::ffi::OsString {
-        #[cfg(test)]
-        if let Some(path) = self.path.lock().unwrap().clone() {
-            return path;
-        }
-        std::env::var_os("PATH").unwrap_or_default()
-    }
-
-    /// Whether `repository_id`'s runner may be tried again.
-    pub(crate) fn due(&self, repository_id: &RepositoryId) -> bool {
-        lock(&self.failures)
-            .get(repository_id)
-            .is_none_or(|failed| failed.elapsed() >= RETRY_AFTER)
-    }
-
-    pub(crate) fn failed(&self, repository_id: &RepositoryId) {
-        lock(&self.failures).insert(repository_id.to_owned(), Instant::now());
-    }
-
-    /// Whether `repository_id`'s permit pool was full a moment ago.
-    pub(crate) fn permits_busy(&self, repository_id: &RepositoryId) -> bool {
-        lock(&self.permits_busy)
-            .get(repository_id)
-            .is_some_and(|busy| busy.elapsed() < PERMITS_BUSY_FOR)
-    }
-
-    pub(crate) fn found_permits_busy(&self, repository_id: &RepositoryId) {
-        lock(&self.permits_busy).insert(repository_id.to_owned(), Instant::now());
-    }
-
-    #[cfg(test)]
-    pub(crate) fn forget_permits_busy(&self) {
-        lock(&self.permits_busy).clear();
-    }
-
-    /// Whether the forge's waiting jobs are due for a read whether or not
-    /// one could start.
-    pub(crate) fn waiting_jobs_due(&self) -> bool {
-        lock(&self.waiting_read).is_none_or(|read| read.elapsed() >= INTERVAL)
-    }
-
-    pub(crate) fn read_waiting_jobs(&self) {
-        *lock(&self.waiting_read) = Some(Instant::now());
-    }
-
-    /// Make the last read of the forge's waiting jobs `age` old.
-    #[cfg(test)]
-    pub(crate) fn age_waiting_read(&self, age: Duration) {
-        *lock(&self.waiting_read) = Instant::now().checked_sub(age);
-    }
-
-    /// Take the claim of the job `entry`, unless one runs.
-    pub(crate) fn begin_claim(&self, entry: &QueueEntryId) -> bool {
-        lock(&self.claiming).insert(entry.clone())
-    }
-
-    pub(crate) fn end_claim(&self, entry: &QueueEntryId) {
-        lock(&self.claiming).remove(entry);
-    }
-
-    pub(crate) fn claiming(&self, entry: &QueueEntryId) -> bool {
-        lock(&self.claiming).contains(entry)
-    }
-
-    /// Whether the run of the running job `entry` is to be read, which
-    /// marks it read: one found finished stays so, and one read a moment
-    /// ago waits.
-    pub(crate) fn take_run_read(&self, entry: &QueueEntryId) -> bool {
-        let mut runs = lock(&self.runs);
-        let check = runs.entry(entry.clone()).or_default();
-        let due = check.finished.is_none()
-            && check
-                .read
-                .is_none_or(|read| read.elapsed() >= RUN_READ_INTERVAL);
-        if due {
-            check.read = Some(Instant::now());
-        }
-        due
-    }
-
-    /// The forge reported the run of the running job `entry` finished.
-    pub(crate) fn run_finished(&self, entry: &QueueEntryId) {
-        let mut runs = lock(&self.runs);
-        let check = runs.entry(entry.clone()).or_default();
-        check.finished.get_or_insert_with(Instant::now);
-    }
-
-    /// How long ago the forge reported the run of the running job `entry`
-    /// finished, if it did.
-    pub(crate) fn finished_for(&self, entry: &QueueEntryId) -> Option<Duration> {
-        lock(&self.runs)
-            .get(entry)
-            .and_then(|check| check.finished)
-            .map(|finished| finished.elapsed())
-    }
-
-    /// Forget the runs of the jobs other than `running`.
-    pub(crate) fn keep_runs(&self, running: &HashSet<QueueEntryId>) {
-        lock(&self.runs).retain(|entry, _| running.contains(entry));
-    }
-
-    /// Take each run found finished to have finished `by` earlier.
-    #[cfg(test)]
-    pub(crate) fn backdate_finished_runs(&self, by: Duration) {
-        for check in lock(&self.runs).values_mut() {
-            check.finished = check.finished.and_then(|finished| finished.checked_sub(by));
-        }
-    }
-
-    /// The lock over the runner's job directories.
-    pub(crate) async fn job_files(&self) -> tokio::sync::MutexGuard<'_, ()> {
-        self.job_files.lock().await
-    }
-
-    /// Run the runner's pass now.
-    pub(crate) fn wake(&self) {
-        self.wake.notify_one();
-    }
-
-    /// Check the runners against the repositories' settings now, as after
-    /// an edit of a repository's local config.
-    pub(crate) fn settings_changed(&self) {
-        self.changed
-            .store(true, std::sync::atomic::Ordering::Relaxed);
-        self.wake();
-    }
-
-    /// Whether a pass was asked for since the last call.
-    #[cfg(test)]
-    pub(crate) fn take_wake(&self) -> bool {
-        use futures_util::FutureExt;
-        self.wake.notified().now_or_never().is_some()
-    }
-
-    fn take_changed(&self) -> bool {
-        self.changed
-            .swap(false, std::sync::atomic::Ordering::Relaxed)
-    }
-
-    /// Try every repository again, as after the user changed the config.
-    fn forget_failures(&self) {
-        lock(&self.failures).clear();
-    }
-}
-
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(PoisonError::into_inner)
-}
 
 pub(super) async fn run(manager: Arc<Manager>) {
     let mut config = manager.config_state.watch();
@@ -248,10 +43,10 @@ pub(super) async fn run(manager: Arc<Manager>) {
             // A daemon update waits for the pass, as for any background
             // operation, and an exit that waits holds it back.
             let _operation = manager.gates.background_pass().await;
-            let changed = manager.runners.take_changed();
+            let changed = manager.runner.jobs().take_changed();
             if changed {
                 // A changed setting deserves a try at once.
-                manager.runners.forget_failures();
+                manager.runner.jobs().forget_failures();
             }
             if changed || reconciled.is_none_or(|at| at.elapsed() >= INTERVAL) {
                 if let Err(error) = manager.reconcile_runners().await {
@@ -265,10 +60,10 @@ pub(super) async fn run(manager: Arc<Manager>) {
         }
         tokio::select! {
             _ = config.changed() => {
-                manager.runners.forget_failures();
+                manager.runner.jobs().forget_failures();
                 reconciled = None;
             }
-            _ = manager.runners.wake.notified() => {}
+            () = manager.runner.jobs().woken() => {}
             _ = tokio::time::sleep(POLL_INTERVAL) => {}
         }
     }
@@ -291,7 +86,7 @@ async fn pass(manager: &Arc<Manager>) -> anyhow::Result<()> {
 /// that a daemon update waits for, and wake admission once it ends.
 async fn claim_admitted_jobs(manager: &Arc<Manager>) -> anyhow::Result<()> {
     for entry in manager.admitted_jobs().await? {
-        if !manager.runners.begin_claim(&entry.id) {
+        if !manager.runner.jobs().begin_claim(&entry.id) {
             continue;
         }
         let manager = manager.clone();
@@ -299,7 +94,7 @@ async fn claim_admitted_jobs(manager: &Arc<Manager>) -> anyhow::Result<()> {
         tokio::spawn(async move {
             let _operation = operation;
             manager.claim_job(&entry).await;
-            manager.runners.end_claim(&entry.id);
+            manager.runner.jobs().end_claim(&entry.id);
             manager.agent_queue.wake();
         });
     }
