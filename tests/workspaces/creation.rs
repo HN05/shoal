@@ -2554,20 +2554,17 @@ fn branch_only_commands_refuse_a_workspace_at_a_commit() {
         assert!(stderr.contains("is at a commit"), "{args:?}: {stderr}");
     }
     // What needs no branch works there, its agent's ready mark and
-    // completion included; a diff before completion starts its cleanup.
+    // completion included. Completion's cleanup may remove the workspace at
+    // once, so what reads it runs before, and completion shows its own head.
     let head = git(&path, &["rev-parse", "HEAD"]).trim().to_owned();
     let diffed = fixture.run(&["diff", &fixture.id(&name)]);
     assert!(diffed.status.success(), "{}", printed(&diffed));
-    for args in [
-        &["run", "--", "git", "rev-parse", "HEAD"][..],
-        &["ready"],
-        &["done"],
-    ] {
+    for args in [&["run", "--", "git", "rev-parse", "HEAD"][..], &["ready"]] {
         let output = run(args);
         assert!(output.status.success(), "{args:?}: {}", printed(&output));
     }
-    let status = fixture.ok(&["status", &fixture.id(&name)]);
-    assert_eq!(status["completion"]["head"], head, "{status}");
+    let completion = fixture.ok_from(fixture.command().current_dir(&path), &["done"]);
+    assert_eq!(completion["head"], head, "{completion}");
 }
 
 #[test]
