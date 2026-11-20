@@ -1,8 +1,10 @@
 //! Posting in a thread: the post's checks, the choice it picks, and
 //! recording and delivering it from the poster's side.
+use std::collections::{BTreeMap, BTreeSet};
+
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::Transaction;
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     code::NewCodeRef,
     space_names::{SpaceName, SpaceSelector},
@@ -100,6 +102,36 @@ pub(super) struct Attached<'a> {
     pub(super) code: &'a [NewCode],
 }
 
+/// The opening post of a thread about code: who posts it, and the places
+/// in code it carries.
+pub(super) struct Opening {
+    pub(super) poster: Poster,
+    pub(super) code: Vec<NewCode>,
+}
+
+impl Opening {
+    /// Record the post in the thread `id` named `name`, in the transaction
+    /// that records the thread, its text the thread's name, and deliver
+    /// it; the thread as it is now.
+    pub(super) fn record(
+        &self,
+        tx: &Transaction<'_>,
+        id: i64,
+        name: &str,
+        removing: &Removing,
+    ) -> Result<(Thread, Delivered)> {
+        let post = NewPost {
+            text: name.to_owned(),
+            ..NewPost::default()
+        };
+        let attached = Attached {
+            files: &[],
+            code: &self.code,
+        };
+        record_post(tx, id, &self.poster, &post, attached, false, removing)
+    }
+}
+
 /// Record `post` with what it has `attached` from `poster` in the thread
 /// `id`, which must still be open, and deliver it; the thread as it is
 /// now. A post from the side of a space that opened the thread makes the
@@ -183,11 +215,22 @@ impl Manager {
                 },
             )
             .await?;
+        self.announce_post(delivered, versioned).await;
+        Ok(thread)
+    }
+
+    /// Announce what a post `delivered` once it committed, and keep the
+    /// versions of the code it points at, those of the spaces `versioned`
+    /// names by repository.
+    pub(super) async fn announce_post(
+        &self,
+        delivered: Delivered,
+        versioned: BTreeMap<RepositoryId, BTreeSet<SpaceId>>,
+    ) {
         self.announce_threads(delivered).await;
         for (repository, spaces) in versioned {
             self.keep_code_versions(&repository, spaces).await;
         }
-        Ok(thread)
     }
 
     /// The space whose attached files keep the files `poster` sends in

@@ -12,12 +12,11 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     code::NewCodeRef,
     space_names::SpaceSelector,
-    threads::{Holder, NewPost, Sender, Side, Thread, ThreadKind},
+    threads::{Holder, Sender, Side, Thread, ThreadKind},
 };
 
 use crate::daemon::{alerts::Recipients, manager::Manager, notifications::Source, scope::Caller};
-use code::NewCode;
-use posting::{Attached, Poster, record_post};
+use posting::Opening;
 use records::NewThread;
 
 mod chat;
@@ -72,7 +71,9 @@ impl Manager {
         };
         let removing = self.space_removals.clone();
         let opening = self.opening_post(caller, code).await?;
-        let versioned = opening.as_ref().map(|(_, code)| code::versioned(code));
+        let versioned = opening
+            .as_ref()
+            .map(|opening| code::versioned(&opening.code));
         let (thread, delivered) = self
             .store
             .write(move |tx| {
@@ -87,30 +88,18 @@ impl Manager {
                     holder: holder.as_ref(),
                 };
                 let id = records::insert_thread(tx, &new)?;
-                match opening {
-                    Some((poster, code)) => {
-                        let post = NewPost {
-                            text: name.clone(),
-                            ..NewPost::default()
-                        };
-                        let attached = Attached {
-                            files: &[],
-                            code: &code,
-                        };
-                        let posted =
-                            record_post(tx, id, &poster, &post, attached, false, &removing)?;
-                        Ok((posted.0, Some(posted.1)))
+                match &opening {
+                    Some(opening) => {
+                        let (thread, delivered) = opening.record(tx, id, &name, &removing)?;
+                        Ok((thread, Some(delivered)))
                     }
                     None => Ok((records::reread(tx, id)?, None)),
                 }
             })
             .await?;
         self.signals.thread_changed();
-        if let Some(delivered) = delivered {
-            self.announce_threads(delivered).await;
-        }
-        for (repository, spaces) in versioned.into_iter().flatten() {
-            self.keep_code_versions(&repository, spaces).await;
+        if let (Some(delivered), Some(versioned)) = (delivered, versioned) {
+            self.announce_post(delivered, versioned).await;
         }
         Ok(thread)
     }
@@ -123,14 +112,14 @@ impl Manager {
         &self,
         caller: Option<&Caller>,
         code: Vec<NewCodeRef>,
-    ) -> Result<Option<(Poster, Vec<NewCode>)>> {
+    ) -> Result<Option<Opening>> {
         if code.is_empty() {
             return Ok(None);
         }
         let code = self.new_code(caller, code).await?;
         // The opener's side is checked against no holder.
         let poster = self.poster(caller, Side::Opener, &Holder::User).await?;
-        Ok(Some((poster, code)))
+        Ok(Some(Opening { poster, code }))
     }
 
     /// The space whose agent coordinates the space `id`, here or on another
