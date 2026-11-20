@@ -1,6 +1,7 @@
 //! Importing a package `shoal move` wrote, which the daemon reads itself:
-//! its manifest first, then, once it knows the repositories its spaces go
-//! to, its parts into the directory of the repository it goes to. Only once the whole package
+//! its manifest first, then, once the repositories its spaces go to are
+//! here, cloning those it lacks from their origins, its parts into the
+//! directory of the repository it goes to. Only once the whole package
 //! checks out does it record its spaces, opening its own again as
 //! [`Manager::import_space`] does and leaving those it carries recorded for
 //! the caller to open after it, parents first.
@@ -44,8 +45,8 @@ struct Package {
 impl Manager {
     /// Import the package `input` holds as `import` says: read it whole and
     /// check it, then record its spaces as removed here and open its own
-    /// again. `caller`, when scoped, imports only into its own repository.
-    /// An error before anything is recorded says so.
+    /// again. `caller`, when scoped, imports only into its own repository
+    /// and clones none. An error before anything is recorded says so.
     pub(crate) async fn import_package(
         &self,
         import: &PackageImport,

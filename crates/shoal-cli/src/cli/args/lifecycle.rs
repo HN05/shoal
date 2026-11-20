@@ -58,8 +58,8 @@ pub enum LifecycleCommand {
     /// carried with it. --no-recursive leaves the spaces below here instead, moved up one level;
     /// --keep leaves the spaces running and moves copies of them instead.
     ///
-    /// --ssh moves each space once ssh reaches Shoal there, which needs a repository with the
-    /// same origin, and resumes its agents there unless --no-resume; nothing ends when it does not reach
+    /// --ssh moves each space once ssh reaches Shoal there, which clones the repository from its
+    /// origin when it has none, and resumes its agents there unless --no-resume; nothing ends when it does not reach
     /// Shoal. A workspace whose import fails stays removed here, and shoal restore opens it
     /// again.
     ///

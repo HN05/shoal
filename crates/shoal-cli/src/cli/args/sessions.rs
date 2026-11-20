@@ -74,7 +74,7 @@ pub enum SessionsCommand {
     /// lists them without a terminal.
     ///
     /// `--from` continues the workspaces and chats shoal move wrote to a file, in the repository
-    /// with the same origin: each space is recorded as removed and opens again under its ID, a
+    /// with the same origin, cloned from it when none is registered: each space is recorded as removed and opens again under its ID, a
     /// workspace fetching the default branch when the file builds on commits the repository
     /// lacks, a chat in the worktree it ran in when that workspace is here, else in the
     /// repository's checkout, or in root_dir without a repository, and their agents resume. The

@@ -1,12 +1,12 @@
 //! The repositories a package's spaces go to: the registered one the import
-//! names for its own space, else the registered one with each space's
-//! origin.
+//! names for its own space, else the one with each space's origin, which
+//! the import registers as a clone of that origin when none here has it.
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};
 
 use crate::daemon::{manager::Manager, scope::Caller};
-use crate::{model::RemovedSpace, transfer::Manifest};
+use crate::{model::RemovedSpace, repository::NotRegistered, transfer::Manifest};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::repository::Selector;
 
@@ -38,7 +38,7 @@ impl Manager {
     /// one `repository` names for its own space and every space of the
     /// same repository, else the one with the origin each space records.
     /// `caller`, when scoped, imports its own space only into its own
-    /// repository.
+    /// repository and clones none.
     pub(super) async fn destinations(
         &self,
         manifest: &Manifest,
@@ -65,7 +65,7 @@ impl Manager {
             let here = async {
                 let origin =
                     (carried.remote_url.clone()).context("its repository has no origin")?;
-                self.with_origin(origin).await
+                self.with_origin(origin, caller).await
             };
             let here = (here.await).with_context(|| format!("{name} goes with it, but"))?;
             destinations.here.insert(there.clone(), here);
@@ -84,7 +84,7 @@ impl Manager {
             "the exported repository has no origin; select the repository to import into with --repo",
         )?;
         let Some(caller) = caller else {
-            return self.with_origin(origin).await;
+            return self.with_origin(origin, None).await;
         };
         const REFUSAL: &str = "scoped processes import only into their own repository";
         let selector = crate::repository::named(origin)?;
@@ -92,9 +92,18 @@ impl Manager {
         Ok(self.repository(&own).await?.id)
     }
 
-    /// The registered repository with `origin`.
-    async fn with_origin(&self, origin: String) -> Result<RepositoryId> {
-        let selector = crate::repository::named(origin)?;
-        Ok(self.repository(selector).await?.id)
+    /// The registered repository with `origin`, which the user's import
+    /// registers as a clone of it when none here has it; a scoped `caller`
+    /// clones none.
+    async fn with_origin(&self, origin: String, caller: Option<&Caller>) -> Result<RepositoryId> {
+        let selector = crate::repository::named(origin.clone())?;
+        match self.repository(selector).await {
+            Ok(repository) => Ok(repository.id),
+            Err(error) if caller.is_none() && NotRegistered::refused(&error) => {
+                let cloned = self.register_repository(origin.into(), None, None).await?;
+                Ok(cloned.id)
+            }
+            Err(error) => Err(error),
+        }
     }
 }

@@ -451,8 +451,11 @@ fn a_failed_move_leaves_the_workspace_here_and_restarts_its_agent() {
 #[test]
 fn a_failed_move_leaves_the_chat_here_and_restores_its_agent() {
     let here = super::restarts::parent_fixture();
-    // The other machine has not registered the chat's repository.
-    add_origin(&here);
+    // The other machine has not registered the chat's repository and cannot
+    // clone it from its origin.
+    let origin = here.root.path().join("gone.git");
+    let origin = format!("file://{}", origin.display());
+    git(&here.repo, &["remote", "add", "origin", &origin]);
     let there = Fixture::new();
     install_ssh_to(&here, &there);
     let home = here.root.path().to_owned();

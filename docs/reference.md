@@ -4796,7 +4796,9 @@ another Shoal version wrote, and continues it in the registered repository with 
 exported repository's origin, or the one `--repo` names, or a chat without a
 repository in `root_dir`. A space the file carries goes to the repository
 with its own origin, or where the file goes when it is of the file's
-repository. Given `--from` several times, or a
+repository. Where no registered repository has an origin the import needs,
+it registers that origin as a clone, as `shoal start <url>` does; a
+workspace process's import clones none. Given `--from` several times, or a
 directory, whose `.shoal` files it reads in name order, it imports each one, going
 on after a failure, lists every space it continued and exits 1 naming each file it
 could not import or whose `hooks.post_setup` failed. The export carries the files of each
@@ -4833,11 +4835,11 @@ rest and names each failure, so `shoal move --ssh` keeps the spaces here, and it
 record, where the import made one, stays for `shoal restore <id>`. With `--no-resume`, the agents of every imported space
 stay stopped and the report names the `shoal resume` that resumes them.
 An import is refused, before it records anything, when a space with the ID of
-the package's space, or of a space it carries, is already here, or a carried
-space's repository is not registered: `shoal rm` removes that space here, or
-`shoal move --keep` where the package was written writes a copy, which
-opens under an ID of its own. An import that fails before it records
-anything of the space reports the error code `not_imported`. Workspace
+the package's space, or of a space it carries, is already here: `shoal rm`
+removes that space here, or `shoal move --keep` where the package was written
+writes a copy, which opens under an ID of its own. An import that fails before
+it records anything of the space, such as one whose clone fails or whose
+package ends early, reports the error code `not_imported`. Workspace
 processes can neither export nor import.
 
 `shoal move [space]... --ssh <host>`, or `--repo <repository> --all`, moves each

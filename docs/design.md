@@ -4183,7 +4183,9 @@ original conversation never changes, even on the same machine. A copy of an
 earlier checkpoint carries sessions newer than its files, which export, import
 and the forked agents are told. The bundle leaves out the default
 remote's default branch, which the importer fetches when it lacks the commit the
-bundle builds on, since that branch only advances. Repositories match by origin.
+bundle builds on, since that branch only advances. Repositories match by origin,
+and an import registers an origin no registered repository has as a clone, as
+`start --machine` does, so a package needs nothing set up before it arrives.
 The daemon reads a package itself, from a file or from the bytes a client
 streams on its connection, and checks it whole before it records anything, so
 every import takes one path whether a terminal, another daemon or the hub
