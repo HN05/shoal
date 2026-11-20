@@ -4782,22 +4782,32 @@ host or path, or only for the host given `--no-resume` or `--shoal`, after
 refusing the spaces, repository or `--checkpoint` it cannot take; without a
 terminal it is refused, naming both flags.
 
-`shoal move [space] -o <file>` ends a workspace or chat here and writes
-it to a new file, or to standard output for `-`, refusing a
-terminal. Its argument names a workspace or chat, else the current workspace,
-else a picker offers both. The daemon writes the file, so
-it is complete even when the terminal closes with the space. It refuses before
-ending anything when the file exists, when the daemon cannot create a file in its
-directory within 30 seconds, or when `-` would stream from a place that closes
-with the space. A workspace is removed as `shoal rm` removes it, and its file
-holds its removal record and checkpoint; a chat's file holds its removal record
-with its agent's session. Every space below it, workspaces and chats alike, and
+The daemon runs the move, so it finishes when the terminal that started it
+closes. The command checks the spaces and asks what needs the user, then
+follows the move, printing a line for each space as it goes; with `--json`
+it prints what the move did with each space, `moved` and `failed`. An
+interrupt cancels the move before its next space, and a second one stops
+following, leaving it running.
+
+`shoal move [space] -o <file>` writes a workspace or chat to a new file, or
+to standard output for `-`, refusing a terminal, and ends it here once the file
+holds it. Its argument names a workspace or chat, else the current workspace,
+else a picker offers both. The daemon stops the space's agents, saving their
+sessions, writes the file and ends the space, so only `-o -` needs the
+command, which copies the file to standard output once the move ends. It
+refuses before ending anything when the file exists, when the daemon cannot
+create a file in its directory within 30 seconds, or when `-` would stream from
+a place that closes with the space. A workspace is removed as `shoal rm`
+removes it, and its file holds its removal record and checkpoint; a chat's
+file holds its removal record with its agent's session. A workspace whose HEAD
+or unsaved files changed after its file was written stays here too, and the
+report says so and names the `shoal rm` that removes it here. Every space below it, workspaces and chats alike, and
 the chats in the worktree of each workspace among them, go with it in its file,
 parents first, ended by the same removal, each workspace with a checkpoint of
 its own. Before ending anything, the export refuses, listing each space that
 fails, when one of them is a workspace whose uncommitted files a checkpoint
-cannot keep, that another lifecycle operation holds, that holds the file or
-that the terminal closes with, or is the chat the export runs in. It asks,
+cannot keep, that another lifecycle operation holds or that holds the file, or
+for `-o -` one the terminal closes with or the chat the command runs in. It asks,
 unless given `--yes`, when it ends spaces besides the one named, listing each
 with its kind and agent, or releases holds. Each checkpoint
 travels as a Git bundle without the commits of the default remote's default
@@ -4828,9 +4838,9 @@ picker selects when `-o` names an existing directory, and `shoal move
 of the repository, export each to `<id>.shoal` in the directory, named after
 the space's ID since names repeat, creating it when missing. A space below
 another of them goes in that space's file, so the directory gets a file for
-each space no other selected space carries. It checks every space as a single export does, that no workspace
-is in the middle of another lifecycle operation, and that the terminal does not
-close with one of them, before ending any: when one cannot be exported, it lists
+each space no other selected space carries. It checks every space as a single export does, and
+that no workspace is in the middle of another lifecycle operation, before
+ending any: when one cannot be exported, it lists
 each refusal and ends nothing. It asks once, as a single export does, before
 ending them, then exports each space and lists the files it wrote; a
 failure there leaves the remaining ones to export, and the command exits 1
@@ -4912,9 +4922,11 @@ package ends early, reports the error code `not_imported`. Workspace
 processes can neither export nor import.
 
 `shoal move [space]... --ssh <host>`, or `--repo <repository> --all`, moves each
-space with `ssh <host> shoal --json restore --from -`, after
+space with `ssh -o BatchMode=yes <host> shoal --json restore --from -`, after
 `ssh <host> shoal repo ls` shows Shoal answers there; when it does not, nothing
-ends. `--shoal <path>` names the program there when the remote shell's `PATH`
+ends. The daemon runs `ssh`, which never prompts there: the host must take a
+key that works without a prompt, as Git's fetches need, and a host alias is
+read from the SSH config of the machine that runs the move. `--shoal <path>` names the program there when the remote shell's `PATH`
 lacks it, and `--no-resume` leaves the agents stopped there, a chat's as a
 workspace's. It checks the spaces as a batch export does and
 asks once before ending them. Each space then moves on its own, after the

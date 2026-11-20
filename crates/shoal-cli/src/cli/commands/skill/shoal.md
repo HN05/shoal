@@ -712,7 +712,8 @@ space automatic cleanup would remove without waiting for its idle delay;
 `--dry-run` lists those, kept branches and shared caches, and why each other
 space stays. `move --ssh` moves a space, with the spaces below it, to another machine and
 resumes its agents there unless `--no-resume`; with `--keep`, it copies them there as new
-ones and leaves them running here.
+ones and leaves them running here. The daemon runs a move, so it finishes when the
+command that started it goes.
 
 ## Branches
 

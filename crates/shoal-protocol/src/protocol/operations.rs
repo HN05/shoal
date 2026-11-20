@@ -142,12 +142,22 @@ pub enum OperationMethod {
     },
     /// The worker's report of a step of operation `id`, or of its end.
     ReportProgress { id: String, report: Report },
+    /// Long-lived: start `order`, a move, under the caller's scope on the
+    /// machine of its spaces, answering with
+    /// [`super::Body::OperationStarted`], then follow it from its first
+    /// event as [`Self::FollowOperation`] does. The worker runs with `env`
+    /// as [`Self::StartOperation`] takes it.
+    StartMove {
+        order: Box<crate::transfer::MoveOrder>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        env: Option<BTreeMap<String, String>>,
+    },
 }
 
 impl OperationMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
-            Self::FollowOperation { .. } => Lifetime::Open,
+            Self::FollowOperation { .. } | Self::StartMove { .. } => Lifetime::Open,
             _ => Lifetime::Reply,
         }
     }
@@ -247,6 +257,11 @@ pub enum OperationSpec {
         workspace: SpaceSelector,
         approval: String,
         push: crate::approvals::PushSpecification,
+    },
+    /// Move spaces to another machine or a file, as
+    /// [`OperationMethod::StartMove`] starts it.
+    Move {
+        order: Box<crate::transfer::MoveOrder>,
     },
 }
 
@@ -414,14 +429,16 @@ pub struct LaunchIssue {
 }
 
 impl OperationSpec {
-    /// The workspace the operation works in.
-    pub fn workspace_mut(&mut self) -> &mut SpaceSelector {
+    /// The workspace the operation works in; none for a move, which works
+    /// in its spaces.
+    pub fn workspace_mut(&mut self) -> Option<&mut SpaceSelector> {
         match self {
             Self::Prepare { workspace, .. }
             | Self::OpenPull { workspace, .. }
             | Self::Merge { workspace, .. }
             | Self::Unmerge { workspace }
-            | Self::Push { workspace, .. } => workspace,
+            | Self::Push { workspace, .. } => Some(workspace),
+            Self::Move { .. } => None,
         }
     }
 
@@ -432,6 +449,7 @@ impl OperationSpec {
             Self::Merge { .. } => OperationKind::Merge,
             Self::Unmerge { .. } => OperationKind::Unmerge,
             Self::Push { .. } => OperationKind::Push,
+            Self::Move { .. } => OperationKind::Move,
         }
     }
 }
@@ -444,6 +462,7 @@ shoal_states::states!(
         Merge => "merge",
         Unmerge => "unmerge",
         Push => "push",
+        Move => "move",
     }
 );
 
@@ -460,6 +479,12 @@ shoal_states::states!(Step {
     Pushed => "pushed",
     MergeStarted => "merge_started",
     UnmergeStarted => "unmerge_started",
+    /// A move stops a space's agents and writes its package.
+    MovePacking => "move_packing",
+    /// A move hands a package to another machine.
+    MoveDelivering => "move_delivering",
+    /// A move ends a delivered space here.
+    MoveEnding => "move_ending",
 });
 
 shoal_states::states!(Stream {
@@ -514,6 +539,7 @@ pub enum Outcome {
     Merged(MergedBranch),
     Unmerged(Unmerged),
     Decided(Box<crate::approvals::ApprovalRequest>),
+    Moved(crate::transfer::MoveReport),
 }
 
 /// A prepared workspace, ready, and the agent queued in it.
@@ -544,7 +570,8 @@ outcomes!(
     Opened(OpenOutcome),
     Merged(MergedBranch),
     Unmerged(Unmerged),
-    Decided(Box<crate::approvals::ApprovalRequest>)
+    Decided(Box<crate::approvals::ApprovalRequest>),
+    Moved(crate::transfer::MoveReport)
 );
 
 /// Why an operation failed, as typed as its caller acts on it.

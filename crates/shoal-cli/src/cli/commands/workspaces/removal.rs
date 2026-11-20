@@ -8,7 +8,6 @@ use crate::{
     cli::{context::Context, shell, ui},
     model::Space,
     removal::SpaceRemovalCheck,
-    state::WorkspaceState,
 };
 
 /// Refuse a space that a batch, named by its `(noun, verb)`, could not
@@ -22,17 +21,7 @@ pub(in crate::cli::commands) async fn ensure_batch_removable(
     check: &SpaceRemovalCheck,
     (noun, verb): (&str, &str),
 ) -> Result<()> {
-    if let Some(worktree) = &check.worktree {
-        let state = worktree.workspace.state;
-        ensure!(
-            match state {
-                WorkspaceState::Ready | WorkspaceState::Failed => true,
-                WorkspaceState::Preparing => worktree.running_commands == 0,
-                _ => false,
-            },
-            "workspace is {state}; wait for that operation to finish"
-        );
-    }
+    shoal_workers::moves::checks::ensure_settled(check)?;
     let space = &check.space;
     ensure!(
         !crate::cli::terminal::closes_with(&ctx.paths, &space.id).await?,
@@ -63,7 +52,10 @@ pub(in crate::cli::commands) async fn leaving<T>(
 /// Where the shell should go if the current directory is inside the
 /// worktree of `space`: its repository's Shoal directory, or home when that
 /// is unavailable.
-async fn escape_destination(ctx: &Context, space: &Space) -> Result<Option<PathBuf>> {
+pub(in crate::cli::commands) async fn escape_destination(
+    ctx: &Context,
+    space: &Space,
+) -> Result<Option<PathBuf>> {
     let Some(workspace) = space.to_workspace() else {
         return Ok(None);
     };

@@ -21,9 +21,10 @@ use anyhow::{Context, Result, ensure};
 
 pub use carried::{CarriedSpaceExt, Placed, carried_spaces};
 pub use shoal_protocol::transfer::{
-    CarriedRecord, CarriedSpace, Carrying, ExportedSpace, ImportedPackage, Manifest,
-    MoveDestination, MovePhase, MoveRecord, PackageImport, PackageSource, PackagedSpace, Sessions,
-    SshDestination, StoppedExecutions, package_name,
+    Arrived, CarriedRecord, CarriedSpace, Carrying, ExportedSpace, ImportedPackage, Manifest,
+    MoveDestination, MoveFailure, MoveOrder, MovePhase, MoveRecord, MoveReport, OrderedSpace,
+    PackageImport, PackageSource, PackagedSpace, Sessions, SpaceMoved, SshDestination,
+    StoppedExecutions, package_name,
 };
 
 mod carried;

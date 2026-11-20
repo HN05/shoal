@@ -213,21 +213,37 @@ impl Entry {
 impl Manager {
     /// Start `spec` in a worker that acts with `caller`'s scope, in `env`
     /// when given, returning the operation's ID. The scope check already
-    /// narrowed a scoped caller's workspace to an ID.
+    /// narrowed a scoped caller's workspace to an ID. A move starts with its
+    /// own request.
     pub(crate) async fn start_operation(
         &self,
         mut spec: OperationSpec,
         env: Option<BTreeMap<String, String>>,
         caller: Option<&Caller>,
     ) -> Result<String> {
-        let workspace = match spec {
-            OperationSpec::Unmerge { .. } => self.unmerge_workspace(spec.workspace_mut()).await?,
-            _ => self.workspace(spec.workspace_mut()).await?,
+        let unmerge = matches!(spec, OperationSpec::Unmerge { .. });
+        let selector = (spec.workspace_mut())
+            .ok_or_else(|| anyhow::anyhow!("a move starts with its own request"))?;
+        let workspace = match unmerge {
+            true => self.unmerge_workspace(selector).await?,
+            false => self.workspace(selector).await?,
         }
         .id;
-        *spec.workspace_mut() = SpaceSelector::id(&workspace);
+        *selector = SpaceSelector::id(&workspace);
+        self.spawn_operation(workspace, spec, env, caller).await
+    }
+
+    /// Start `spec`, which works in the space `workspace`, in a worker as
+    /// [`Self::start_operation`] does, returning the operation's ID.
+    pub(crate) async fn spawn_operation(
+        &self,
+        workspace: SpaceId,
+        spec: OperationSpec,
+        env: Option<BTreeMap<String, String>>,
+        caller: Option<&Caller>,
+    ) -> Result<String> {
         let token = caller.map(|caller| self.operations.issue(caller));
-        let (id, entry) = self.operations.register(workspace.clone(), spec.kind());
+        let (id, entry) = self.operations.register(workspace, spec.kind());
         let order = Order {
             id: id.clone(),
             spec,

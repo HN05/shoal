@@ -25,6 +25,7 @@ use shoal_protocol::space_names::SpaceSelector;
 fn starts_work(method: &OperationMethod) -> bool {
     match method {
         OperationMethod::StartOperation { .. }
+        | OperationMethod::StartMove { .. }
         | OperationMethod::StartWorkspace { .. }
         | OperationMethod::StartCreation { .. }
         | OperationMethod::StartChild { .. }
@@ -58,7 +59,19 @@ pub(super) async fn handle(
                 scope: scope.cloned(),
             };
             return Ok(Answer::connection(move |stream, request_id, guard| {
-                follower.follow(stream, request_id, entry, after, guard)
+                follower.follow(stream, request_id, (entry, Body::Ok), after, guard)
+            }));
+        }
+        OperationMethod::StartMove { order, env } => {
+            let id = manager.start_move(*order, env, caller).await?;
+            let entry = manager.operation(&id, caller).await?;
+            let follower = Follower {
+                manager: manager.clone(),
+                scope: scope.cloned(),
+            };
+            let started = Body::OperationStarted(Started { id });
+            return Ok(Answer::connection(move |stream, request_id, guard| {
+                follower.follow(stream, request_id, (entry, started), 0, guard)
             }));
         }
         OperationMethod::StartWorkspace {
@@ -183,7 +196,22 @@ impl Scoped for OperationMethod {
         caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
-            OperationMethod::StartOperation { spec, .. } => Some(spec.workspace_mut()),
+            OperationMethod::StartOperation { spec, .. } => spec.workspace_mut(),
+            // Moving spaces is the `admin` permission's.
+            OperationMethod::StartMove { order, .. } => {
+                manager.confine_move(caller, order).await?;
+                let first = order.spaces.first().map(|ordered| ordered.space.clone());
+                let repository = match first {
+                    Some(first) => manager
+                        .space(&SpaceSelector::id(&first))
+                        .await
+                        .ok()
+                        .and_then(|space| space.repository_id),
+                    None => None,
+                };
+                manager.administer(caller, &**order, repository).await?;
+                None
+            }
             OperationMethod::StartChild { parent, copy, .. } => {
                 if let Some(copy) = copy {
                     manager.copy_within(caller, copy).await?;
@@ -229,21 +257,21 @@ struct Follower {
 }
 
 impl Follower {
-    /// Send the operation's events from the `after`th on as they come, then
-    /// its end, unless the client hangs up first or its scope token is
-    /// revoked. It writes only under an operation guard, so an update closes
-    /// it between writes.
+    /// Answer with `first`, then send the operation's events from the
+    /// `after`th on as they come, then its end, unless the client hangs up
+    /// first or its scope token is revoked. It writes only under an
+    /// operation guard, so an update closes it between writes.
     async fn follow(
         self,
         mut stream: UnixStream,
         request_id: u64,
-        entry: Arc<Entry>,
+        (entry, first): (Arc<Entry>, Body),
         after: u64,
         startup: OperationGuard,
     ) -> Result<()> {
         let manager = &self.manager;
         let mut changed = entry.watch();
-        crate::protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
+        crate::protocol::write(&mut stream, &Response::new(request_id, first)).await?;
         drop(startup);
         let (mut reader, mut writer) = stream.split();
         let mut next = after;

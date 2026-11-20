@@ -17,7 +17,7 @@ pub(super) use cd::cd;
 pub(super) use changes::{conflicts, diff};
 pub(in crate::cli) use environment::agent_environment;
 pub(super) use refresh::refresh;
-pub(super) use removal::{ensure_batch_removable, leaving};
+pub(super) use removal::{ensure_batch_removable, escape_destination, leaving};
 pub(super) use run::{edit, exec};
 pub(super) use setup::{
     SetUp, follow_setup, run_post_setup, settle_setup, setup, setup_workspace, skip_setup,

@@ -1,15 +1,18 @@
 //! Where `shoal move` takes spaces: the destination its flags name, or one
-//! the user picks on a terminal.
-use std::path::PathBuf;
+//! the user picks on a terminal, as the daemon that runs the move reads it.
+use std::{
+    io::IsTerminal,
+    path::{Path, PathBuf},
+};
 
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 
-use super::{STANDARD_STREAM, export};
+use super::{STANDARD_STREAM, targets};
 use crate::cli::{args::transfer::MoveArgs, context::Context, ui};
-use shoal_protocol::space_names::SpaceSelector;
+use crate::transfer::{MoveDestination, OrderedSpace, SshDestination};
 
-/// Where a move takes spaces.
-pub(super) enum Destination {
+/// Where a move takes spaces, as the user names it.
+enum Named {
     /// Another machine's Shoal, through this SSH destination.
     Ssh(String),
     /// A file, a directory of them or standard output, which
@@ -17,23 +20,11 @@ pub(super) enum Destination {
     File(PathBuf),
 }
 
-impl Destination {
-    /// The destination the flags of `args` name.
-    fn named(args: &MoveArgs) -> Option<Self> {
-        match (&args.ssh, &args.output) {
-            (Some(host), _) => Some(Self::Ssh(host.clone())),
-            (None, Some(path)) => Some(Self::File(path.clone())),
-            (None, None) => None,
-        }
-    }
-
-    /// Whether the spaces below a moved space go with it unless the move
-    /// says otherwise.
-    pub(super) fn recursive(&self) -> bool {
-        match self {
-            Self::Ssh(_) | Self::File(_) => true,
-        }
-    }
+/// The destination a move goes to, with the temporary directory the
+/// package that goes to standard output waits in.
+pub(super) struct Chosen {
+    pub(super) destination: MoveDestination,
+    _stream: Option<tempfile::TempDir>,
 }
 
 /// What the destination picker offers.
@@ -47,34 +38,90 @@ enum Kind {
 /// the destination the user picks on a terminal, once the spaces and
 /// repository it names exist and a checkpoint names one space, after
 /// picking the spaces when it names none.
-pub(super) async fn choose(
-    ctx: &Context,
-    args: &MoveArgs,
-) -> Result<(Vec<SpaceSelector>, Destination)> {
-    let names = args.space.clone();
-    if let Some(destination) = Destination::named(args) {
-        return Ok((names, destination));
+pub(super) async fn choose(ctx: &Context, args: &MoveArgs) -> Result<(Vec<OrderedSpace>, Chosen)> {
+    let named = match (&args.ssh, &args.output) {
+        (Some(host), _) => Some(Named::Ssh(host.clone())),
+        (None, Some(path)) => Some(Named::File(path.clone())),
+        (None, None) => None,
+    };
+    if named.is_none() {
+        ui::require_one_of(ctx, "destination", &["ssh", "output"])?;
     }
-    ui::require_one_of(ctx, "destination", &["ssh", "output"])?;
-    export::ensure_targets(ctx, &names, args.repository.as_deref()).await?;
-    let all = args.all;
-    let names = match all || !names.is_empty() {
-        true => names,
-        false => ui::select_spaces(ctx, names, true).await?,
-    };
-    export::copy::ensure_one_at_checkpoint(names.len(), args.checkpoint)?;
-    let several = all || names.len() > 1;
-    let destination = match args.no_resume || args.shoal.is_some() {
+    if let Some(Named::File(path)) = &named {
+        ensure_new_file(path)?;
+    }
+    let files = !matches!(named, Some(Named::Ssh(_)));
+    let spaces = targets::select(ctx, args, files).await?;
+    ensure!(
+        args.checkpoint.is_none() || spaces.len() == 1,
+        "--checkpoint copies one workspace, whose checkpoints it numbers; name one"
+    );
+    let several = args.all || spaces.len() > 1;
+    let named = match named {
+        Some(named) => named,
         // Only a move over SSH takes them.
-        true => ssh_host(ctx)?,
-        false => pick(ctx, several).await?,
+        None if args.no_resume || args.shoal.is_some() => ssh_host(ctx)?,
+        None => pick(ctx, several).await?,
     };
-    Ok((names, destination))
+    let chosen = match named {
+        Named::Ssh(host) => Chosen {
+            destination: MoveDestination::Ssh(SshDestination {
+                host,
+                shoal: args.shoal.clone(),
+                resume: !args.no_resume,
+            }),
+            _stream: None,
+        },
+        Named::File(path) => file_destination(&path, several)?,
+    };
+    Ok((spaces, chosen))
+}
+
+/// Refuse a file `-o path` names that exists, before any picker opens; a
+/// directory takes a file per space.
+fn ensure_new_file(path: &Path) -> Result<()> {
+    ensure!(
+        path.as_os_str() == STANDARD_STREAM || path.is_dir() || !path.exists(),
+        "{} exists; choose another file",
+        path.display()
+    );
+    Ok(())
+}
+
+/// The destination `-o path` names for `several` spaces or one: standard
+/// output for `-`, a directory that takes a file per space, or a file.
+fn file_destination(path: &Path, several: bool) -> Result<Chosen> {
+    if path.as_os_str() == STANDARD_STREAM {
+        ensure!(
+            !several,
+            "several spaces go to a file each; name a directory with -o"
+        );
+        ensure!(
+            !std::io::stdout().is_terminal(),
+            "the move writes an archive, not text; name a file with -o, or pipe it, as in shoal move 7 -o - | ssh host shoal restore --from -"
+        );
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("workspace.shoal");
+        return Ok(Chosen {
+            destination: MoveDestination::Client { path },
+            _stream: Some(directory),
+        });
+    }
+    // The daemon's worker runs elsewhere, so it takes an absolute path.
+    let path = std::path::absolute(path).with_context(|| format!("find {}", path.display()))?;
+    let destination = match several || path.is_dir() {
+        true => MoveDestination::Directory { path },
+        false => MoveDestination::File { path },
+    };
+    Ok(Chosen {
+        destination,
+        _stream: None,
+    })
 }
 
 /// The destination the user picks: its kind, then the host or the path,
 /// a directory for `several` spaces.
-async fn pick(ctx: &Context, several: bool) -> Result<Destination> {
+async fn pick(ctx: &Context, several: bool) -> Result<Named> {
     let kinds = [(Kind::Ssh, "SSH host"), (Kind::File, "File")];
     match ui::pick_choice(ctx, "Destination> ", &kinds)? {
         Kind::Ssh => ssh_host(ctx),
@@ -83,13 +130,13 @@ async fn pick(ctx: &Context, several: bool) -> Result<Destination> {
 }
 
 /// The SSH host the user types.
-fn ssh_host(ctx: &Context) -> Result<Destination> {
-    Ok(Destination::Ssh(ui::input(ctx, "SSH host")?))
+fn ssh_host(ctx: &Context) -> Result<Named> {
+    Ok(Named::Ssh(ui::input(ctx, "SSH host")?))
 }
 
 /// The file the user types, a directory for `several` spaces, never
 /// standard output, which only `-o -` writes.
-async fn file(ctx: &Context, several: bool) -> Result<Destination> {
+async fn file(ctx: &Context, several: bool) -> Result<Named> {
     let prompt = match several {
         true => "Directory",
         false => "File",
@@ -99,7 +146,7 @@ async fn file(ctx: &Context, several: bool) -> Result<Destination> {
             path != STANDARD_STREAM,
             "name a file; only -o - writes to standard output"
         );
-        Ok(Destination::File(PathBuf::from(path)))
+        Ok(Named::File(PathBuf::from(path)))
     })
     .await
 }

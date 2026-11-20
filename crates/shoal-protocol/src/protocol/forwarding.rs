@@ -9,8 +9,8 @@ use crate::{approvals::ApprovalRequest, item_numbers::ItemNumber};
 
 use super::{
     AgentMethod, AlertMethod, AlertTarget, ApprovalMethod, AssignmentMethod, BranchMethod,
-    CiMethod, DemoMethod, HoldMethod, ItemMethod, LaunchMethod, Operation, QueueMethod,
-    RemovalMethod, RepositoryMethod, ThreadMethod, WorkspaceMethod,
+    CiMethod, DemoMethod, HoldMethod, ItemMethod, LaunchMethod, Operation, OperationMethod,
+    QueueMethod, RemovalMethod, RepositoryMethod, ThreadMethod, WorkspaceMethod,
 };
 
 /// What a daemon does with a request for another machine's space.
@@ -57,6 +57,8 @@ impl Operation {
                 launch.directory = None;
                 launch.forwarded.get_or_insert_default();
             }
+            // Its worker runs in that machine's daemon's environment.
+            Self::Operations(OperationMethod::StartMove { env, .. }) => *env = None,
             _ => {}
         }
     }
@@ -97,6 +99,7 @@ impl Operation {
         } else if matches!(
             self,
             Self::Workspace(WorkspaceMethod::FollowSession { .. } | WorkspaceMethod::Diff { .. })
+                | Self::Operations(OperationMethod::StartMove { .. })
         ) {
             Forwarding::Streamed
         } else if matches!(

@@ -32,5 +32,6 @@ fn doing(kind: OperationKind) -> &'static str {
         OperationKind::Merge => "merging",
         OperationKind::Unmerge => "undoing a merge",
         OperationKind::Push => "pushing",
+        OperationKind::Move => "moving it",
     }
 }

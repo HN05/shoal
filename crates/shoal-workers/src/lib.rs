@@ -7,6 +7,7 @@ pub mod attach;
 pub mod execution;
 pub mod git_credential;
 pub mod homes;
+pub mod moves;
 pub mod opened_pull;
 pub mod operations;
 pub mod places;

@@ -143,11 +143,6 @@ impl<T> Report<T> {
         self.failed.push(failure_value(workspace, error));
     }
 
-    /// How many items the command acted on, and how many it failed on.
-    pub fn counts(&self) -> (usize, usize) {
-        (self.done.len(), self.failed.len())
-    }
-
     /// The items acted on and the failures, for a command that reports
     /// them with others.
     pub fn into_parts(self) -> (Vec<T>, Vec<Failure>) {

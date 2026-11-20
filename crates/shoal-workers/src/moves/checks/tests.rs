@@ -40,31 +40,6 @@ fn workspace(id: &str, parent: Option<&str>) -> Space {
     workspace.into()
 }
 
-/// A hold named `name`.
-fn hold(name: &str) -> SpaceHold {
-    serde_json::from_value(serde_json::json!({
-        "space_id": "held", "name": name, "reason": null, "created_at": 0,
-    }))
-    .unwrap()
-}
-
-/// The export check of the workspace `space`, which carries `carried`.
-fn checked(space: Space, carried: Vec<Space>) -> Checked {
-    let workspace = space.to_workspace().unwrap();
-    let worktree = serde_json::json!({
-        "workspace": workspace, "running_commands": 0, "processes": [], "dirty": false,
-        "unpushed_commits": 0, "branch": "worker", "matches_default_branch": true,
-    });
-    let check: SpaceRemovalCheck = serde_json::from_value(serde_json::json!({
-        "space": workspace, "worktree": worktree, "children": [],
-    }))
-    .unwrap();
-    Checked {
-        space: Ending::Workspace(check),
-        carried,
-    }
-}
-
 fn ids(spaces: &[Space]) -> Vec<&str> {
     spaces.iter().map(|space| space.id.as_str()).collect()
 }
@@ -101,33 +76,4 @@ fn a_batch_writes_a_file_for_each_space_no_other_selected_space_carries() {
         ids(&exported_alone(&batch, &tree, &selected)),
         ["worker", "nested"]
     );
-}
-
-#[test]
-fn the_confirmation_lists_every_space_that_ends_with_the_named_one() {
-    let tree = tree();
-    let carried = carried_spaces(&tree, &"worker".into(), &Carrying::Subtree);
-    let check = checked(workspace("worker", None), carried);
-
-    let action = ending_action("Export worker".into(), &[&check]).unwrap();
-
-    let listed: Vec<&str> = action.lines().skip(2).collect();
-    assert_eq!(
-        listed,
-        [
-            "  split (workspace)",
-            "  nested (workspace)",
-            "  talk (chat, claude)"
-        ]
-    );
-}
-
-#[test]
-fn a_lone_space_asks_only_for_its_holds() {
-    assert!(ending_action("Export".into(), &[&checked(workspace("w", None), vec![])]).is_none());
-
-    let mut held = workspace("held", None);
-    held.holds = vec![hold("review")];
-    let action = ending_action("Export".into(), &[&checked(held, vec![])]).unwrap();
-    assert!(action.ends_with("\n  review"), "{action}");
 }

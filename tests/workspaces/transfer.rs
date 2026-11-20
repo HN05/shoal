@@ -53,9 +53,15 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     let file = file.to_str().unwrap();
     let exported = fixture.ok(&["move", &fixture.id("moving"), "-o", file]);
     assert!(agent.wait_with_output().unwrap().status.success());
-    assert_eq!(exported["manifest"]["record"]["name"], "moving");
-    assert!(exported["manifest"]["bundle"].as_u64().is_some());
-    let agents = exported["manifest"]["record"]["agents"].as_array().unwrap();
+    assert_eq!(exported["moved"][0]["manifest"]["record"]["name"], "moving");
+    assert!(
+        exported["moved"][0]["manifest"]["bundle"]
+            .as_u64()
+            .is_some()
+    );
+    let agents = exported["moved"][0]["manifest"]["record"]["agents"]
+        .as_array()
+        .unwrap();
     assert_eq!(agents.len(), 1, "{exported}");
     assert_eq!(agents[0]["record"]["moved"], true);
     assert!(!path.exists());
@@ -236,6 +242,7 @@ fn install_ssh_to(fixture: &Fixture, other: &Fixture) {
         fixture.root.path().join("bin/ssh"),
         format!(
             "#!/bin/sh\n\
+             while [ \"$1\" = -o ]; do shift 2; done\n\
              [ \"$1\" = -- ] && shift\n\
              if [ \"$1\" = down ]; then echo 'ssh: connect to host down: refused' >&2; exit 255; fi\n\
              shift\n\
@@ -360,11 +367,11 @@ fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
     ]);
     assert!(agent.wait_with_output().unwrap().status.success());
     assert_eq!(moved["failed"], serde_json::json!([]), "{moved}");
-    let imported = &moved["moved"][0];
-    assert_eq!(imported["space"]["name"], "handed", "{moved}");
-    assert_eq!(imported["queued"]["queued"].as_array().unwrap().len(), 1);
+    let arrived = &moved["moved"][0]["arrived"];
+    assert_eq!(arrived["space"]["name"], "handed", "{moved}");
+    assert_eq!(arrived["queued"].as_array().unwrap().len(), 1);
     assert!(!path.exists());
-    let moved_path = Path::new(imported["space"]["path"].as_str().unwrap()).to_owned();
+    let moved_path = Path::new(arrived["space"]["path"].as_str().unwrap()).to_owned();
     assert!(moved_path.starts_with(fs::canonicalize(there.root.path()).unwrap()));
     wait_until("agent restarted there", || {
         moved_path.join("agent-restarted").exists()
@@ -586,7 +593,7 @@ fn move_ssh_keep_copies_workspaces_there_and_leaves_them_here() {
 
     let copied = here.ok(&ssh(&[]));
     assert_eq!(copied["failed"], serde_json::json!([]), "{copied}");
-    let copies = copied["copied"].as_array().unwrap();
+    let copies = copied["moved"].as_array().unwrap();
     assert_eq!(copies.len(), 2, "{copied}");
     let there_root = fs::canonicalize(there.root.path()).unwrap();
     for ((copy, path), name) in copies.iter().zip(&paths).zip(["first", "second"]) {
@@ -594,7 +601,7 @@ fn move_ssh_keep_copies_workspaces_there_and_leaves_them_here() {
             fs::read_to_string(path.join("notes")).unwrap(),
             format!("{name}\n")
         );
-        let copy_path = Path::new(copy["space"]["path"].as_str().unwrap());
+        let copy_path = Path::new(copy["arrived"]["space"]["path"].as_str().unwrap());
         assert!(copy_path.starts_with(&there_root), "{copied}");
         assert_eq!(
             fs::read_to_string(copy_path.join("notes")).unwrap(),
@@ -674,7 +681,7 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
     let exported = export(&["--yes", "--json"]);
     assert!(exported.status.success(), "{}", printed(&exported));
     let exported: Value = serde_json::from_slice(&exported.stdout).unwrap();
-    let names: Vec<_> = exported["exported"]
+    let names: Vec<_> = exported["moved"]
         .as_array()
         .unwrap()
         .iter()
@@ -758,14 +765,14 @@ fn export_all_keep_copies_every_space_past_one_that_cannot_be_copied() {
         .unwrap();
     assert_eq!(copied.status.code(), Some(1), "{}", printed(&copied));
     let copied: Value = serde_json::from_slice(&copied.stdout).unwrap();
-    let names: Vec<_> = copied["exported"]
+    let names: Vec<_> = copied["moved"]
         .as_array()
         .unwrap()
         .iter()
         .map(|export| export["manifest"]["record"]["name"].clone())
         .collect();
     assert_eq!(names, ["second"], "{copied}");
-    assert_eq!(copied["failed"][0]["workspace"], "first", "{copied}");
+    assert_eq!(copied["failed"][0]["name"], "first", "{copied}");
     assert!(paths.iter().all(|path| path.exists()));
     assert!(fs::metadata(directory.join(&files[1])).unwrap().len() > 0);
 }
@@ -797,11 +804,7 @@ fn export_of_several_workspaces_writes_a_file_each_to_the_directory() {
         output,
         "--yes",
     ]);
-    assert_eq!(
-        exported["exported"].as_array().unwrap().len(),
-        2,
-        "{exported}"
-    );
+    assert_eq!(exported["moved"].as_array().unwrap().len(), 2, "{exported}");
     assert_eq!(exported["failed"], serde_json::json!([]));
     for id in &ids[..2] {
         assert!(directory.join(format!("{id}.shoal")).exists());
@@ -1024,7 +1027,7 @@ fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
     let imported = fixture.ok(&["restore", "--from", file, "--repo", repo, "--no-resume"]);
     assert_eq!(imported["warnings"], serde_json::json!([]));
     // A machine without an ID cannot tell it exported the workspace.
-    if exported["manifest"]["sessions"]["machine"].is_null() {
+    if exported["moved"][0]["manifest"]["sessions"]["machine"].is_null() {
         resume();
         assert!(!path.join("resumed").exists());
         return;
@@ -1046,7 +1049,8 @@ fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
     fs::remove_file(file).unwrap();
     let exported = fixture.ok(&["move", &fixture.id("carried"), "-o", file]);
     assert_eq!(
-        exported["manifest"]["sessions"]["last_sessions"][0]["session"], "carried-session",
+        exported["moved"][0]["manifest"]["sessions"]["last_sessions"][0]["session"],
+        "carried-session",
         "{exported}"
     );
     fixture.ok(&[
@@ -1103,7 +1107,7 @@ fn export_carries_session_files_that_import_puts_back() {
     let file = fixture.root.path().join("transcript.shoal");
     let file = file.to_str().unwrap();
     let exported = fixture.ok(&["move", &fixture.id("transcript"), "-o", file]);
-    let carried: Vec<_> = exported["manifest"]["session_files"]
+    let carried: Vec<_> = exported["moved"][0]["manifest"]["session_files"]
         .as_array()
         .unwrap()
         .iter()
@@ -1326,7 +1330,7 @@ fn a_chat_moves_with_its_session_and_continues_it() {
 
         // A chat that ends alone, without holds, needs no confirmation.
         let exported = fixture.ok(&["move", &fixture.id("talk"), "-o", file]);
-        let manifest = &exported["manifest"];
+        let manifest = &exported["moved"][0]["manifest"];
         assert!(manifest["record"]["chat"].is_object(), "{exported}");
         assert_eq!(manifest["record"]["name"], "talk", "{exported}");
         assert_eq!(
@@ -1350,10 +1354,13 @@ fn a_removed_chat_moves_from_its_removal_record() {
 
     let exported = fixture.ok(&["move", &id, "-o", file]);
     assert!(
-        exported["manifest"]["record"]["chat"].is_object(),
+        exported["moved"][0]["manifest"]["record"]["chat"].is_object(),
         "{exported}"
     );
-    assert_eq!(exported["manifest"]["record"]["name"], "talk", "{exported}");
+    assert_eq!(
+        exported["moved"][0]["manifest"]["record"]["name"], "talk",
+        "{exported}"
+    );
     let removed = fixture.ok(&["restore"])["removed"].clone();
     assert_eq!(removed[0]["workspace_id"], id.as_str(), "{removed}");
     // The record stays here, so the import elsewhere opens the chat again.
@@ -1377,7 +1384,7 @@ fn a_workspace_moves_with_the_chat_in_its_worktree() {
 
     let exported = fixture.ok(&["move", &worker, "-o", file, "--yes"]);
     assert_eq!(
-        exported["manifest"]["carried"][0]["record"]["name"], "reading",
+        exported["moved"][0]["manifest"]["carried"][0]["record"]["name"], "reading",
         "{exported}"
     );
     assert_eq!(fixture.ok(&["list", "--chats"]), serde_json::json!([]));
@@ -1410,7 +1417,7 @@ fn a_chat_from_a_worktree_moves_back_into_it() {
     let workspace = chat_in_worktree(&fixture, &marked, || {
         id = fixture.id("reading");
         let exported = fixture.ok(&["move", &id, "-o", file, "--yes"]);
-        let ran_in = &exported["manifest"]["record"]["chat"]["workspace"]["id"];
+        let ran_in = &exported["moved"][0]["manifest"]["record"]["chat"]["workspace"]["id"];
         assert_eq!(ran_in, &fixture.ok(&["list"])[0]["id"], "{exported}");
     });
     assert_eq!(fixture.ok(&["list"])[0]["id"], workspace["id"]);
@@ -1467,7 +1474,8 @@ fn the_sessions_of_a_profile_only_the_workspace_defines_move_with_it() {
     let file = file.to_str().unwrap();
     let exported = fixture.ok(&["move", &fixture.id("profiled"), "-o", file]);
     assert_eq!(
-        exported["manifest"]["session_files"][0]["path"], "-elsewhere/profiled-session.jsonl",
+        exported["moved"][0]["manifest"]["session_files"][0]["path"],
+        "-elsewhere/profiled-session.jsonl",
         "{exported}"
     );
 
@@ -1533,7 +1541,8 @@ fn a_carried_space_finds_its_sessions_with_a_profile_only_its_config_defines() {
     let exported = fixture.ok(&["move", &fixture.id("lead"), "-o", file, "--yes"]);
 
     assert_eq!(
-        exported["manifest"]["session_files"][0]["path"], "-elsewhere/profiled-session.jsonl",
+        exported["moved"][0]["manifest"]["session_files"][0]["path"],
+        "-elsewhere/profiled-session.jsonl",
         "{exported}"
     );
 }
@@ -1683,7 +1692,7 @@ fn exporting_a_parent_takes_its_children_which_import_opens_below_it() {
     let exported = export(&["--yes", "--json"]);
     assert!(exported.status.success(), "{}", printed(&exported));
     let exported: Value = serde_json::from_slice(&exported.stdout).unwrap();
-    let carried = &exported["manifest"]["carried"];
+    let carried = &exported["moved"][0]["manifest"]["carried"];
     assert_eq!(carried[0]["record"]["workspace_id"], ids[1], "{exported}");
     assert!(!parent.exists() && !child.exists());
 

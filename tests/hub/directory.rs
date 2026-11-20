@@ -108,6 +108,7 @@ pub(super) fn reach(machine: &Base, other: &Base) {
         root.join("bin/ssh"),
         format!(
             "#!/bin/sh\n\
+             while [ \"$1\" = -o ]; do shift 2; done\n\
              [ \"$1\" = -- ] && shift\n\
              shift\n\
              cd '{there}' || exit 255\n\

@@ -4229,10 +4229,21 @@ Each package uses the lowest format version that reads it, so an older importer
 refuses as newer what it would misread; a chat package from before chats moved
 as their removal records, and a workspace package from before the record held
 the workspace's branch or starting commit, are refused.
+A move runs in the daemon as an operation the command follows, as creation,
+`pr open` and merge do: its worker checks the spaces as a batch does, and for
+each one has the daemon stop the agents, saving their sessions, and write the
+package, delivers it, and has the daemon end the spaces here once their
+destination has it, so a move finishes when the terminal that started it
+closes and is the one move path every destination takes. Only delivery
+differs by destination: `-o` writes the package where the daemon writes it,
+`-o -` hands it to the command, and `--ssh` pipes it into
+`ssh -o BatchMode=yes <host> shoal --json restore --from -`, so the other side
+stays a plain command and the key must work without a prompt, as Git's
+fetches need. The command checks the spaces first to ask what needs the user,
+and the worker deletes only the work the user saw.
 Moving a workspace is a removal there and a restore here:
 export writes the removal record and a Git bundle of its checkpoint from the
-daemon, which outlives a terminal closing with the workspace and checks the
-destination before removing anything. Import records both as a removal of this
+daemon, and the destination is checked before anything ends. Import records both as a removal of this
 repository, the ref before the records, then runs the normal restore. Moving rather than copying keeps one workspace per
 branch, so two agents never push it or watch its PRs, and the source's removal
 stays restorable when the transfer fails. A space already removed, a

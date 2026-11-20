@@ -41,7 +41,7 @@ where
 /// did.
 async fn follow(ctx: &Context, id: String) -> Result<Outcome> {
     let mut following = Following::open(&ctx.paths, id.clone(), 0).await?;
-    match show(ctx, &id, async || following.next().await).await? {
+    match show(ctx, (&id, Lines::Command), async || following.next().await).await? {
         Ended::Succeeded(outcome) => Ok(*outcome),
         Ended::Failed(failure) => Err(crate::operations::error(failure)),
     }
@@ -56,18 +56,30 @@ pub(super) async fn follow_preparation(
 ) -> Result<Result<Prepared, Unprepared>> {
     super::links::print_warnings(preparing.warnings());
     let id = preparing.operation().to_owned();
-    show(ctx, &id, async || preparing.next().await).await
+    show(ctx, (&id, Lines::Command), async || preparing.next().await).await
 }
 
-/// Show the output of operation `id` that `next` reports, below a spinner
-/// naming its step, until it ends, returning how it did. Each report runs
+/// Where an operation's output lines go.
+#[derive(Clone, Copy)]
+pub(super) enum Lines {
+    /// Where the command showed them, keeping stdout for the result with
+    /// `--json`.
+    Command,
+    /// To standard error, since standard output carries what the command
+    /// writes there.
+    Aside,
+}
+
+/// Show the output of operation `id` that `next` reports, its lines where
+/// `lines` says, below a spinner naming its step, until it ends, returning
+/// how it did. Each report runs
 /// to its end while the spinner ticks, so a slow one is never restarted. An
 /// interrupt or termination cancels the operation, as it stopped the work
 /// when the command ran it; a second one stops following and leaves it
 /// running.
-async fn show<E>(
+pub(super) async fn show<E>(
     ctx: &Context,
-    id: &str,
+    (id, lines): (&str, Lines),
     mut next: impl AsyncFnMut() -> Result<Followed<E>>,
 ) -> Result<E> {
     let mut interrupt = signal(SignalKind::interrupt())?;
@@ -91,7 +103,7 @@ async fn show<E>(
             }
         };
         match followed {
-            Followed::Event(event) => show_progress(ctx, &mut spinner, event.progress),
+            Followed::Event(event) => show_progress(ctx, &mut spinner, (event.progress, lines)),
             Followed::Ended(ended) => return Ok(ended),
         }
     }
@@ -109,16 +121,20 @@ async fn cancel(ctx: &Context, id: &str, cancelled: bool) -> Result<bool> {
     Ok(true)
 }
 
-/// Show an output line where the command showed it, keeping stdout for
-/// the result with `--json`, and a step as the spinner's message.
-fn show_progress(ctx: &Context, spinner: &mut Spinner<impl Write>, progress: Progress) {
+/// Show an output line where `lines` says, and a step as the spinner's
+/// message.
+fn show_progress(
+    ctx: &Context,
+    spinner: &mut Spinner<impl Write>,
+    (progress, lines): (Progress, Lines),
+) {
     let (stream, line) = match progress {
         Progress::Step { step } => return spinner.set_message(doing(Some(step))),
         Progress::Output { stream, line } => (stream, line),
     };
     spinner.clear();
-    match stream {
-        Stream::Stdout if !ctx.json => outln!("{line}"),
+    match (stream, lines) {
+        (Stream::Stdout, Lines::Command) if !ctx.json => outln!("{line}"),
         _ => eprintln!("{line}"),
     }
 }
@@ -135,5 +151,8 @@ fn doing(step: Option<Step>) -> &'static str {
         Some(Step::MergeStarted) => "Merging",
         Some(Step::UnmergeStarted) => "Undoing merge",
         Some(Step::AgentQueued | Step::Pushed) => "Finishing",
+        Some(Step::MovePacking) => "Stopping agents and packing",
+        Some(Step::MoveDelivering) => "Delivering",
+        Some(Step::MoveEnding) => "Ending the moved spaces here",
     }
 }

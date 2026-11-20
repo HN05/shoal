@@ -46,12 +46,12 @@ fn every_agent_takes_a_place_among_all_the_command_selected() {
     };
     progress.ended(&elsewhere("web", "desk"), Ok(waits));
     assert_eq!(progress.next(), "(4/4)");
-    // A restart the daemon took for later is no failure.
-    assert_eq!(progress.report.counts().1, 1);
     let [pending] = progress.pending.as_slice() else {
         panic!("expected one pending restart");
     };
     assert_eq!(pending.machine.as_deref(), Some("desk"));
+    // A restart the daemon took for later is no failure.
+    assert_eq!(progress.report.into_parts().1.len(), 1);
 }
 
 #[test]

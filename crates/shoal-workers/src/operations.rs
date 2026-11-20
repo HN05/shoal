@@ -130,5 +130,20 @@ async fn work(
         } => push::push_approved(paths, workspace, approval, push, reporter)
             .await
             .map(Outcome::Decided),
+        OperationSpec::Move { order } => crate::moves::run(paths, *order, reporter)
+            .await
+            .map(Outcome::Moved),
+    }
+}
+
+/// A move reports its steps for followers only, so a daemon that restarted
+/// and lost the operation, whose worker goes on with the move, stops none.
+impl crate::moves::Steps for Reporter<'_> {
+    async fn reached(&self, step: Step) {
+        let _ = self.reached(step).await;
+    }
+
+    fn ensure_running(&self) -> Result<()> {
+        Reporter::ensure_running(self)
     }
 }

@@ -59,6 +59,7 @@ pub mod links;
 mod logs;
 pub(crate) mod lost_reports;
 pub mod manager;
+mod moves;
 #[cfg(target_os = "linux")]
 mod oom_scores;
 pub(crate) mod operations;

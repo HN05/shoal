@@ -272,3 +272,90 @@ pub struct MoveRecord {
 
 /// Executions by the space whose stopped work saves them.
 pub type StoppedExecutions = BTreeMap<SpaceId, BTreeSet<ExecutionId>>;
+
+/// A move the daemon runs as an operation: the spaces it takes, each with
+/// the spaces below it that go with it, to one destination.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MoveOrder {
+    pub spaces: Vec<OrderedSpace>,
+    pub destination: MoveDestination,
+    /// Whether the spaces below each space go with it, rather than staying
+    /// here one level up, except those it takes too.
+    pub recursive: bool,
+    /// Whether copies of the spaces move, leaving them running here.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub keep: bool,
+    /// The earlier checkpoint a copied workspace goes at.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkpoint: Option<CheckpointNumber>,
+}
+
+impl MoveOrder {
+    /// Which spaces below each of its spaces go with it.
+    pub fn carrying(&self) -> Carrying {
+        match self.recursive {
+            true => Carrying::Subtree,
+            false => Carrying::Selected(
+                self.spaces
+                    .iter()
+                    .map(|ordered| ordered.space.clone())
+                    .collect(),
+            ),
+        }
+    }
+}
+
+/// A space a move takes, by its ID: a live one, or for a file a removed
+/// one, which its removal record moves.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrderedSpace {
+    pub space: SpaceId,
+    /// The unsaved work, and the spaces below it, that the caller saw and
+    /// lets its end here delete.
+    pub unsaved: UnsavedWork,
+}
+
+/// What a move did with each space it took.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MoveReport {
+    pub moved: Vec<SpaceMoved>,
+    pub failed: Vec<MoveFailure>,
+}
+
+/// A space a move delivered, or a copy of it with `--keep`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpaceMoved {
+    pub id: SpaceId,
+    pub name: SpaceName,
+    pub manifest: Manifest,
+    /// The file it went to; none for another machine.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<PathBuf>,
+    /// Its end here, which a copy and a removed space lack.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub removal: Option<RemovalResult>,
+    /// Where it opened on another machine.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arrived: Option<Arrived>,
+    /// What its package left out.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+}
+
+/// A space as another machine's import opened it, with the restores of
+/// its agents queued there.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Arrived {
+    pub space: crate::model::Space,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub queued: Vec<crate::model::QueueEntry>,
+}
+
+/// A space a move failed to take, which stayed here unless its error says
+/// otherwise.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MoveFailure {
+    pub id: SpaceId,
+    pub name: SpaceName,
+    pub error: String,
+}

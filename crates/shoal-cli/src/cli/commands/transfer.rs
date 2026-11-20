@@ -1,96 +1,108 @@
 //! `shoal move`: moving spaces to another Shoal, over SSH or through a file
-//! that `shoal restore --from` continues.
+//! that `shoal restore --from` continues. The daemon runs the move, so it
+//! goes on when this command goes; the command picks what it moves and
+//! where, asks before ending what needs the user, and follows it.
+mod confirmation;
 mod destination;
-mod export;
-mod ssh;
+mod leaving;
+mod targets;
 
-use std::{io::IsTerminal, path::PathBuf};
+use std::io::Write as _;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
+use super::operations::Lines;
 use crate::cli::{args::transfer::MoveArgs, context::Context};
-use destination::Destination;
-use shoal_ids::checkpoint_numbers::CheckpointNumber;
-use shoal_protocol::space_names::SpaceSelector;
+use crate::client::operations::Following;
+use crate::protocol::operations::Ended;
+use crate::transfer::{MoveDestination, MoveOrder, MoveReport, OrderedSpace};
+use destination::Chosen;
+use shoal_workers::moves::{self, Planned};
 
 /// The file name that reads or writes the standard streams.
 pub(super) const STANDARD_STREAM: &str = "-";
 
-/// What a move takes, whatever its destination.
-struct Moving {
-    /// The spaces named or picked; none with `repository`.
-    names: Vec<SpaceSelector>,
-    /// The repository whose every space moves.
-    repository: Option<String>,
-    /// Whether copies move, leaving the spaces here.
-    keep: bool,
-    /// The earlier checkpoint a copied workspace goes at.
-    checkpoint: Option<CheckpointNumber>,
-    /// Whether the spaces below each space go with it.
-    recursive: bool,
-    /// Whether ending the spaces needs no confirmation.
-    yes: bool,
-}
-
-impl Moving {
-    /// What `args` moves, the spaces `names` select, to `destination`.
-    fn new(args: &MoveArgs, names: Vec<SpaceSelector>, destination: &Destination) -> Self {
-        Self {
-            names,
-            repository: args.repository.clone(),
-            keep: args.keep,
-            checkpoint: args.checkpoint,
-            recursive: args.recursive(destination.recursive()),
-            yes: args.confirmation.yes,
-        }
-    }
-}
-
 /// `shoal move`: move the spaces `args` selects to the destination it
 /// names, or to the one the user picks.
 pub(super) async fn run(ctx: &Context, args: MoveArgs) -> Result<i32> {
-    let (names, destination) = destination::choose(ctx, &args).await?;
-    let moving = Moving::new(&args, names, &destination);
-    match destination {
-        Destination::Ssh(host) => {
-            let remote = ssh::Remote::new(host, args.shoal, !args.no_resume);
-            ssh::run(ctx, remote, moving).await
-        }
-        Destination::File(path) => to_file(ctx, path, moving).await,
+    let (spaces, chosen) = destination::choose(ctx, &args).await?;
+    let mut order = MoveOrder {
+        spaces,
+        destination: chosen.destination.clone(),
+        recursive: args.recursive(true),
+        keep: args.keep,
+        checkpoint: args.checkpoint,
+    };
+    let planned = moves::plan(&ctx.paths, &order).await?;
+    if let MoveDestination::Client { .. } = order.destination {
+        confirmation::ensure_stream_survives(ctx, &planned).await?;
+    }
+    confirmation::confirm(ctx, args.confirmation.yes, &order, &planned)?;
+    order.spaces = confirmed(&planned);
+    let leaving = leaving::Leaving::find(ctx, &planned).await?;
+    let report = follow(ctx, order).await?;
+    leaving.navigate(ctx, &report)?;
+    finish(ctx, &chosen, report)
+}
+
+/// The spaces of the `planned` move, each with the work the user saw that
+/// ending it here may delete.
+fn confirmed(planned: &[Planned]) -> Vec<OrderedSpace> {
+    (planned.iter())
+        .map(|planned| match planned {
+            Planned::Ending { checked, .. } => OrderedSpace {
+                space: checked.id().clone(),
+                unsaved: checked.unsaved(),
+            },
+            Planned::Copied { space, .. } => OrderedSpace {
+                space: space.id.clone(),
+                unsaved: Default::default(),
+            },
+            Planned::Removed { space, .. } => OrderedSpace {
+                space: space.space_id.clone(),
+                unsaved: Default::default(),
+            },
+        })
+        .collect()
+}
+
+/// Start `order` in the daemon of its spaces' machine and follow it to its
+/// end, showing what it prints, returning what it did.
+async fn follow(ctx: &Context, order: MoveOrder) -> Result<MoveReport> {
+    let lines = match order.destination {
+        MoveDestination::Client { .. } => Lines::Aside,
+        _ => Lines::Command,
+    };
+    let env = crate::env::without_secrets();
+    let (id, mut following) = Following::start_move(&ctx.paths, order, env).await?;
+    let ended = super::operations::show(ctx, (&id, lines), async || following.next().await).await?;
+    match ended {
+        Ended::Succeeded(outcome) => MoveReport::try_from(*outcome),
+        Ended::Failed(failure) => Err(crate::operations::error(failure)),
     }
 }
 
-/// Write the spaces `moving` takes to `path`: a file, a directory of a
-/// file per space, or standard output.
-async fn to_file(ctx: &Context, path: PathBuf, moving: Moving) -> Result<i32> {
-    if let Some(repository) = moving.repository {
-        ensure!(
-            path.as_os_str() != STANDARD_STREAM,
-            "--all writes a file each; name a directory with -o"
-        );
-        let spaces = export::repository_spaces(ctx, repository).await?;
-        let carrying = export::carrying(moving.recursive, &spaces);
-        return match moving.keep {
-            true => export::copy::copy_into(ctx, &spaces, path, None, &carrying).await,
-            false => export::export_into(ctx, &spaces, path, moving.yes, &carrying).await,
+/// Report the move that `report` describes, copying a package that goes to
+/// standard output there, exiting 1 when any space failed to move.
+fn finish(ctx: &Context, chosen: &Chosen, report: MoveReport) -> Result<i32> {
+    if let MoveDestination::Client { path } = &chosen.destination {
+        let [moved] = report.moved.as_slice() else {
+            anyhow::bail!("the move wrote no package");
         };
-    }
-    ensure_stream_piped(&path)?;
-    match moving.keep {
-        true => {
-            let (names, checkpoint) = (moving.names, moving.checkpoint);
-            export::copy::export_copy(ctx, names, path, checkpoint, moving.recursive).await
+        let mut file = std::fs::File::open(path)?;
+        crate::stdout::write(|stdout| {
+            std::io::copy(&mut file, stdout)?;
+            stdout.flush()
+        })?;
+        match moved.manifest.copy {
+            Some(_) => eprintln!("Exported a copy of {}", moved.name),
+            None => eprintln!("Exported {}", moved.name),
         }
-        false => export::export(ctx, moving.names, path, moving.yes, moving.recursive).await,
+        return Ok(0);
     }
-}
-
-/// Refuse to write standard output for `-` when it is a terminal, which
-/// cannot show the archive.
-fn ensure_stream_piped(path: &std::path::Path) -> Result<()> {
-    ensure!(
-        path.as_os_str() != STANDARD_STREAM || !std::io::stdout().is_terminal(),
-        "the move writes an archive, not text; name a file with -o, or pipe it, as in shoal move 7 -o - | ssh host shoal restore --from -"
-    );
-    Ok(())
+    let failed = !report.failed.is_empty();
+    if ctx.json {
+        outln!("{}", crate::client::output::json(&report)?);
+    }
+    Ok(if failed { 1 } else { 0 })
 }

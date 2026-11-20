@@ -11,6 +11,7 @@ use shoal_protocol::protocol::{
     Body, OperationMethod, Responses,
     operations::{Ended, OperationEvent, OperationSpec, Report, Started},
 };
+use shoal_protocol::transfer::MoveOrder;
 
 /// What following an operation reports, ending in `E`, how it ended.
 #[derive(Debug, Clone)]
@@ -53,6 +54,25 @@ impl Following {
             Body::OperationEnded(ended) => Ok(Followed::Ended(ended)),
             body => Err(body.unexpected("OperationEvent")),
         }
+    }
+}
+
+impl Following {
+    /// Start the move `order` with `env` on the machine of its spaces and
+    /// follow it from its start, returning its ID with it.
+    pub async fn start_move(
+        daemon: &impl Daemon,
+        order: MoveOrder,
+        env: BTreeMap<String, String>,
+    ) -> Result<(String, Self)> {
+        let method = OperationMethod::StartMove {
+            order: Box::new(order),
+            env: Some(env),
+        };
+        let (stream, body) = connection::open_buffered(daemon, method).await?;
+        let Started { id } = Started::try_from(body)?;
+        let stream = Responses::new(stream);
+        Ok((id, Self { stream }))
     }
 }
 
