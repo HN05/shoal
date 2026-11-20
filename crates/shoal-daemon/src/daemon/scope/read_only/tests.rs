@@ -38,6 +38,14 @@ async fn read_only_scope_reads_without_changing() {
             Operation::Workspace(WorkspaceMethod::SpaceStatus {
                 space: space.clone(),
             }),
+            // Listing a space's alerts leaves them unread.
+            Operation::Alert(crate::protocol::AlertMethod::ListAlerts {
+                to: crate::protocol::AlertsFor::Space {
+                    space: space.clone(),
+                },
+                unread_only: true,
+                limit: 50,
+            }),
             Operation::Agent(AgentMethod::AgentUpdates {
                 space: space.clone(),
             }),
@@ -59,8 +67,8 @@ async fn read_only_scope_reads_without_changing() {
             allowed.push(authorized.is_ok());
         }
         let expected = match read_only {
-            false => [true, true, true, true],
-            true => [true, false, false, false],
+            false => [true, true, true, true, true],
+            true => [true, true, false, false, false],
         };
         assert_eq!(allowed, expected, "read_only: {read_only}");
     }
