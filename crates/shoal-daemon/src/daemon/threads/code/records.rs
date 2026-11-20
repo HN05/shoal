@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use rusqlite::{Connection, Transaction, params};
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     code::{CodeAt, CodeRef, CodeState, Lines},
     threads::ThreadSpace,
@@ -108,5 +108,14 @@ pub(super) fn kept(db: &Connection, space: &SpaceId) -> Result<Vec<String>> {
             ORDER BY 1",
         )?
         .query_map([space], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// The spaces whose references keep file versions in the repository
+/// `repository`.
+pub(super) fn spaces_in(db: &Connection, repository: &RepositoryId) -> Result<Vec<SpaceId>> {
+    Ok(db
+        .prepare("SELECT DISTINCT space_id FROM thread_code WHERE repository_id=?1")?
+        .query_map([repository], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }

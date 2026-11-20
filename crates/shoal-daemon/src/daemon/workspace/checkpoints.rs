@@ -431,7 +431,8 @@ impl Manager {
 
     /// Delete expired checkpoints and removal records, checkpoints and
     /// imported session files no workspace or removal record owns, and refs
-    /// without a checkpoint, then prune the repository's unreachable loose
+    /// without a checkpoint, keep only the file versions code references
+    /// still point at, then prune the repository's unreachable loose
     /// objects as its gc would. A failure keeps what it concerns for the
     /// next pass and does not skip the rest.
     pub async fn expire_checkpoints(&self) -> Result<()> {
@@ -481,7 +482,8 @@ impl Manager {
         // An unreadable session file keeps no ref.
         let sessions = (self.expire_imported_sessions(&HomeKey::Repository(repo.clone()))).await;
         // A failure leaves the objects to the next pass that deletes a ref.
-        if self.delete_unowned_refs(repo, &kept).await? {
+        let deleted = self.delete_unowned_refs(repo, &kept).await?;
+        if self.expire_code_versions(repo).await? || deleted {
             git::checkpoint::prune_unreachable(&repo.path).await?;
         }
         sessions

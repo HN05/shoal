@@ -1,6 +1,8 @@
 //! Keeping the file versions code references point at: each space's ref
 //! in its repository holds exactly the versions its references keep, and
 //! goes with the last of them.
+use std::collections::BTreeSet;
+
 use anyhow::Result;
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 
@@ -42,5 +44,22 @@ impl Manager {
         }
         git::code_versions::keep(&repo.path, &reference, &blobs).await?;
         Ok(true)
+    }
+
+    /// Write the ref of every space with versions in `repo` again, after
+    /// expiry deleted the threads of some, under the checkpoints gate the
+    /// caller holds; whether one changed, which leaves versions to prune.
+    pub(crate) async fn expire_code_versions(&self, repo: &Repository) -> Result<bool> {
+        let repository = repo.id.clone();
+        let recorded = (self.store)
+            .read(move |db| records::spaces_in(db, &repository))
+            .await?;
+        let mut spaces: BTreeSet<String> = recorded.iter().map(|space| space.to_string()).collect();
+        spaces.extend(git::code_versions::spaces(&repo.path).await?);
+        let mut changed = false;
+        for space in spaces {
+            changed |= self.keep_versions_of(repo, &space.into()).await?;
+        }
+        Ok(changed)
     }
 }

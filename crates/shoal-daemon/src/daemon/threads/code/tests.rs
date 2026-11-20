@@ -127,3 +127,28 @@ async fn a_thread_opened_about_code_posts_it_at_once_from_a_buffer() {
     let shown = manager.thread(None, ThreadNumber::Full(opened.number));
     assert_eq!(shown.await.unwrap().posts[0].code.len(), 1);
 }
+
+#[tokio::test]
+async fn expiry_lets_go_of_the_versions_of_threads_that_went() {
+    let tree = tree().await;
+    let (manager, child) = (&tree.manager, caller(&tree.child));
+    let thread = open(manager, Some(&child), None).await;
+    let code = vec![at(parser(&tree.child), "1-3")];
+    (manager.post_to_thread(Some(&child), full(&thread), post("Here"), Vec::new(), code))
+        .await
+        .unwrap();
+    let repository = tree.child.repository_id.clone().unwrap();
+    let repo = manager.repository(&repository).await.unwrap();
+    let reference = git::code_versions::reference(tree.child.id.as_str());
+
+    let id = thread.id;
+    (manager.store)
+        .write(move |tx| Ok(tx.execute("DELETE FROM threads WHERE id=?1", [id])?))
+        .await
+        .unwrap();
+    manager.expire_checkpoints().await.unwrap();
+    let kept = git::code_versions::kept(&repo.path, &reference)
+        .await
+        .unwrap();
+    assert!(kept.is_empty(), "{kept:?}");
+}
