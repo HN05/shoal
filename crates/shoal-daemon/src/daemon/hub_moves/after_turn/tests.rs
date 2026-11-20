@@ -107,3 +107,28 @@ fn a_carried_space_hears_the_failure_of_the_space_that_carried_it() {
     let told = stayed_message(&chat, &ended);
     assert!(told.contains("it changed since"), "{told}");
 }
+
+#[tokio::test]
+async fn a_move_whose_operation_a_restart_cut_off_is_forgotten_and_told() {
+    let (_root, manager) = manager().await;
+    let chat = test_support::chat(&manager, "planner", "chat", None, None).await;
+    let caller = Caller::of_space(chat.id.clone());
+    manager
+        .move_after_turn(&caller, order(&[&chat.id], false))
+        .await
+        .unwrap();
+    let space = chat.id.clone();
+    // As an operation of the daemon before a restart.
+    (manager.store)
+        .write(move |tx| started(tx, &space, "before-restart"))
+        .await
+        .unwrap();
+
+    manager.finish_interrupted_moves().await.unwrap();
+
+    assert!(manager.store.read(started_moves).await.unwrap().is_empty());
+    let told = (manager.agent_messages(&SpaceSelector::id(&chat.id)))
+        .await
+        .unwrap();
+    assert_eq!(told.len(), 1);
+}

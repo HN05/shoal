@@ -91,15 +91,7 @@ impl Manager {
     /// with its space still here, how it went.
     pub(crate) async fn tell_move_after_turn(&self, id: &str, ended: &Ended) {
         let operation = id.to_owned();
-        let space = (self.store).read(move |db| {
-            Ok(db
-                .query_row(
-                    "SELECT space_id FROM pending_moves WHERE operation_id=?1",
-                    [&operation],
-                    |row| row.get::<_, SpaceId>(0),
-                )
-                .optional()?)
-        });
+        let space = (self.store).read(move |db| move_of_operation(db, &operation));
         let space = match space.await {
             Ok(Some(space)) => space,
             Ok(None) => return,
@@ -110,6 +102,21 @@ impl Manager {
         };
         self.forget_move_after_turn(&space).await;
         self.tell_mover(&space, stayed_message(&space, ended)).await;
+    }
+
+    /// Forget each recorded move whose operation this daemon does not run,
+    /// as one a restart cut off, which Shoal finishes as it finishes any
+    /// interrupted move, telling its agent so.
+    pub(crate) async fn forget_moves_cut_off(&self) -> Result<()> {
+        for (space, operation) in self.store.read(started_moves).await? {
+            if self.operation(&operation, None).await.is_ok() {
+                continue;
+            }
+            self.forget_move_after_turn(&space).await;
+            let text = "Shoal restarted during the move of your space, which it finishes on its own; shoal status shows where your space is now";
+            self.tell_mover(&space, text.to_owned()).await;
+        }
+        Ok(())
     }
 
     /// Forget the move recorded for the turn of the agent of `space`.
@@ -145,6 +152,27 @@ fn waiting_moves(db: &rusqlite::Transaction<'_>) -> Result<Vec<(SpaceId, MoveOrd
         moves.push((space, serde_json::from_str(&order)?));
     }
     Ok(moves)
+}
+
+/// The space whose recorded move the operation `id` runs, if one does.
+fn move_of_operation(db: &rusqlite::Transaction<'_>, id: &str) -> Result<Option<SpaceId>> {
+    Ok(db
+        .query_row(
+            "SELECT space_id FROM pending_moves WHERE operation_id=?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
+/// The recorded moves that started, by the space of each agent, with the
+/// operation that runs each.
+fn started_moves(db: &rusqlite::Transaction<'_>) -> Result<Vec<(SpaceId, String)>> {
+    let mut statement = db.prepare(
+        "SELECT space_id,operation_id FROM pending_moves WHERE operation_id IS NOT NULL",
+    )?;
+    let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
 /// Record that the operation `id` runs the move recorded for `space`.
