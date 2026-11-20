@@ -4782,8 +4782,8 @@ host or path, or only for the host given `--no-resume` or `--shoal`, after
 refusing the spaces, repository or `--checkpoint` it cannot take; without a
 terminal it is refused, naming both flags.
 
-The daemon runs the move, so it finishes when the terminal that started it
-closes. It checks the spaces before it ends any, and where that ends spaces
+The daemon runs the move, so it finishes even after the terminal that
+started it closes. It checks the spaces before it ends any, and where that ends spaces
 besides those named or releases holds, it ends nothing and the command asks,
 then starts the move again for what the user agreed to. The command follows
 the move, printing a line for each space as it goes; with `--json`

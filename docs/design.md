@@ -4233,8 +4233,8 @@ A move runs in the daemon as an operation the command follows, as creation,
 `pr open` and merge do: its worker checks the spaces as a batch does, and for
 each one has the daemon stop the agents, saving their sessions, and write the
 package, delivers it, and has the daemon end the spaces here once their
-destination has it, so a move finishes when the terminal that started it
-closes and is the one move path every destination takes. Only delivery
+destination has it, so a move finishes even after the terminal that started
+it closes and is the one move path every destination takes. Only delivery
 differs by destination: `-o` writes the package where the daemon writes it,
 `-o -` hands it to the command, which holds the move's lock and ends the
 spaces once it copied the package, and `--ssh` pipes it into
