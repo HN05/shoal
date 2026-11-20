@@ -117,8 +117,9 @@ fn terminal() -> (File, File) {
             &mut controller,
             &mut device,
             std::ptr::null_mut(),
-            std::ptr::null(),
-            std::ptr::null(),
+            // macOS takes these as mutable, Linux as constant.
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
         )
     };
     assert_eq!(opened, 0, "{}", std::io::Error::last_os_error());
