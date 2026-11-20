@@ -8,7 +8,7 @@ use rusqlite::{Connection, OptionalExtension as _, Transaction, params};
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use shoal_protocol::{
     space_names::SpaceSelector,
-    threads::{NewPost, Post, Sender, Side, Thread, ThreadNumber},
+    threads::{Holder, NewPost, Post, Sender, Side, Thread, ThreadNumber},
 };
 
 use super::{
@@ -69,6 +69,16 @@ fn chat_text(message: Option<&str>, fallback: &str) -> String {
     match text.trim() {
         "" => fallback.to_owned(),
         text => crate::validate::shorten(text.to_owned(), shoal_protocol::threads::MAX_POST_LEN),
+    }
+}
+
+/// The side of `thread` the space `id` posts from: the opener's when it
+/// opened the thread, the holder's while it holds it, else none.
+fn side_of(thread: &Thread, id: &SpaceId) -> Option<Side> {
+    match (thread.opener, &thread.holder) {
+        (Sender::Space, _) if &thread.space_id == id => Some(Side::Opener),
+        (_, Holder::Space(holder)) if &holder.id == id => Some(Side::Holder),
+        _ => None,
     }
 }
 
@@ -232,9 +242,15 @@ impl Manager {
                     return Ok(Delivered::default());
                 };
                 let thread = records::reread(tx, id)?;
-                let side = match thread.opener {
-                    Sender::Space if thread.space_id == space.id => Side::Opener,
-                    _ => Side::Holder,
+                // The thread may have gone to another holder since the turn
+                // was marked, which leaves the space no side to post from.
+                let Some(side) = side_of(&thread, &space.id) else {
+                    crate::daemon::log!(
+                        "post of {} in its chat dropped: it no longer takes part in thread {}",
+                        space.name,
+                        thread.number
+                    );
+                    return Ok(Delivered::default());
                 };
                 let poster = Poster {
                     side,

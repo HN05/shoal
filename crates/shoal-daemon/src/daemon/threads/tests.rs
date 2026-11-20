@@ -374,6 +374,43 @@ async fn a_space_being_removed_starts_no_wait() {
 }
 
 #[tokio::test]
+async fn a_marked_turn_posts_nothing_in_a_thread_that_went_elsewhere() {
+    let tree = tree().await;
+    let manager = &tree.manager;
+    let thread = open(manager, None, Some(&tree.parent)).await;
+    send(manager, None, &thread, "Which database?").await;
+    let selector = SpaceSelector::id(&tree.parent.id);
+    let agent = Caller {
+        execution: Some(ScopedExecution {
+            id: tree.agent.clone(),
+            kind: ExecutionKind::Command,
+            agent_execution: None,
+        }),
+        ..caller(&tree.parent)
+    };
+    (manager.mark_chat_post(Some(&agent), &selector, full(&thread)))
+        .await
+        .unwrap();
+    let child = SpaceSelector::id(&tree.child.id);
+    (manager.forward_thread(Some(&agent), full(&thread), Some(&child), None))
+        .await
+        .unwrap();
+    let ending = TurnEnd {
+        final_message: Some("SQLite".into()),
+        ..TurnEnd::default()
+    };
+    (manager.end_agent_turn(&selector, Some(tree.agent.clone()), None, ending))
+        .await
+        .unwrap();
+    let kept = manager.thread(None, full(&thread)).await.unwrap();
+    assert!(
+        !kept.posts.iter().any(|post| post.in_chat),
+        "{:?}",
+        kept.posts
+    );
+}
+
+#[tokio::test]
 async fn the_opener_resolves_its_thread_and_takes_back_an_unread_notice() {
     let tree = tree().await;
     let manager = &tree.manager;
