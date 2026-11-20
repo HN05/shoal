@@ -229,6 +229,7 @@ const REQUESTS: &[&str] = &[
     r#"{"git_credential":{"host":"git.example.com"}}"#,
     r#"{"agent_updates":{"space":"fix"}}"#,
     r#"{"wait_agent_updates":{"space":"app-chat"}}"#,
+    r#"{"updates_waiting":{"space":"fix"}}"#,
     r#"{"agent_session":{"space":"app-chat"}}"#,
     // Threads.
     r#"{"open_thread":{"name":"Which database?","kind":"question","to":"part","from":"planning"}}"#,
