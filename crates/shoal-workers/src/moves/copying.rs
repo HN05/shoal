@@ -1,10 +1,12 @@
 //! Copying one space, with copies of the spaces below it, which its
 //! destination opens as new spaces, leaving it running here.
-use anyhow::Result;
+use anyhow::{Result, bail};
 
 use super::{Steps, ssh::Remote};
 use crate::{client::connection::CommandPaths, model::Space, protocol::operations::Step};
-use shoal_core::transfer::{MoveDestination, MoveOrder, SpaceMoved};
+use shoal_core::transfer::{
+    Arrived, ImportedMove, MachineDestination, MoveDestination, MoveOrder, SpaceMoved,
+};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Write a copy of `space` as `order` says to its new package file, at the
@@ -37,23 +39,44 @@ pub(super) async fn copy_one(
         arrived: None,
         warnings: exported.warnings,
     };
-    let destination = match &order.destination {
-        MoveDestination::Ssh(destination) => destination,
+    let imported = match &order.destination {
+        MoveDestination::Ssh(destination) => {
+            steps.reached(Step::MoveDelivering).await;
+            Remote::new(destination)
+                .import(&file)
+                .await
+                .map_err(Into::into)
+        }
         MoveDestination::Machine(destination) => {
-            anyhow::bail!(
-                "Shoal delivers no copy to machine {} yet",
-                destination.machine
-            )
+            steps.reached(Step::MoveDelivering).await;
+            deliver_copy(paths, space, destination).await
         }
         MoveDestination::File { .. }
         | MoveDestination::Directory { .. }
         | MoveDestination::Client { .. } => return Ok(moved),
     };
-    steps.reached(Step::MoveDelivering).await;
-    let imported = Remote::new(destination).import(&file).await;
     // The copy's package, delivered or not, is of no further use here.
     let _ = std::fs::remove_file(&file);
     moved.arrived = Some(imported?);
     moved.file = None;
     Ok(moved)
+}
+
+/// Deliver the package of the copy of `space` to the joined machine
+/// `destination` names, which reports where it arrived.
+async fn deliver_copy(
+    paths: &CommandPaths,
+    space: &Space,
+    destination: &MachineDestination,
+) -> Result<Arrived> {
+    let machine = &destination.machine;
+    let selector = SpaceSelector::id(&space.id);
+    let delivering = crate::client::transfer::deliver_copy(paths, selector, destination.clone());
+    match delivering.await? {
+        ImportedMove::Arrived(arrived) => Ok(*arrived),
+        ImportedMove::Refused { error } => bail!("machine {machine} took none of it: {error}"),
+        ImportedMove::Failed { error } => {
+            bail!("the copy is on machine {machine}, but opening it there failed: {error}")
+        }
+    }
 }

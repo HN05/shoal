@@ -23,7 +23,7 @@ use crate::{
 use shoal_core::execution::recovery::{SavedCommand, SavedSession};
 use shoal_core::transfer::{
     Arrived, Carrying, ExportedSpace, Manifest, MoveDestination, MoveLock, MoveOrder, SpaceMoved,
-    StoppedExecutions,
+    SshDestination, StoppedExecutions,
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::removal::{RemovalResult, UnsavedWork};
@@ -171,30 +171,41 @@ pub(super) async fn end(
 }
 
 /// Hand the package of the space `id` in `file` to `destination`: import
-/// it on another machine, which reports where it arrived; a file already
-/// holds it.
+/// it on another machine, which reports where it arrived where it can; a
+/// file already holds it.
 async fn deliver(
     paths: &CommandPaths,
     destination: &MoveDestination,
     (id, file): (&SpaceId, &PathBuf),
     steps: &impl Steps,
 ) -> Result<Option<Arrived>> {
-    let destination = match destination {
-        MoveDestination::Ssh(destination) => destination,
+    match destination {
+        MoveDestination::Ssh(destination) => {
+            steps.reached(Step::MoveDelivering).await;
+            import_over_ssh(paths, destination, (id, file))
+                .await
+                .map(Some)
+        }
         MoveDestination::Machine(destination) => {
-            anyhow::bail!(
-                "Shoal delivers no move to machine {} yet",
-                destination.machine
-            )
+            steps.reached(Step::MoveDelivering).await;
+            super::joined::deliver(paths, id, destination, steps).await
         }
         MoveDestination::File { .. }
         | MoveDestination::Directory { .. }
-        | MoveDestination::Client { .. } => return Ok(None),
-    };
-    steps.reached(Step::MoveDelivering).await;
+        | MoveDestination::Client { .. } => Ok(None),
+    }
+}
+
+/// Import the package of the space `id` in `file` on the machine `ssh`
+/// reaches at `destination`, which reports where it arrived.
+async fn import_over_ssh(
+    paths: &CommandPaths,
+    destination: &SshDestination,
+    (id, file): (&SpaceId, &PathBuf),
+) -> Result<Arrived> {
     let remote = Remote::new(destination);
     match remote.import(file).await {
-        Ok(arrived) => Ok(Some(arrived)),
+        Ok(arrived) => Ok(arrived),
         Err(ImportFailure::Refused(error)) => Err(stays_here(paths, id, error).await),
         Err(ImportFailure::Unknown(error)) => {
             Err(maybe_there(paths, id, remote.host(), error).await)

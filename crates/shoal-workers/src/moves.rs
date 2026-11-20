@@ -10,6 +10,7 @@ mod copying;
 mod finishing;
 #[cfg(test)]
 mod fixtures;
+mod joined;
 mod moving;
 mod packages;
 mod ssh;

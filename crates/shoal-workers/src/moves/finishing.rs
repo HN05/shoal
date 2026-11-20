@@ -64,9 +64,11 @@ async fn finish_locked(
             Err(moving::maybe_there(paths, &moving.id, &destination.host, error).await)
         }
         (MovePhase::Delivering, MoveDestination::Machine(destination)) => {
-            let error = anyhow!("the move stopped while it delivered it");
-            let holder = format!("machine {}", destination.machine);
-            Err(moving::maybe_there(paths, &moving.id, &holder, error).await)
+            let machine = format!("machine {}", destination.machine);
+            let error = anyhow!("the move stopped while {machine} imported it");
+            super::joined::settle(paths, &moving.id, &machine, error, steps).await?;
+            let removal = moving::end(paths, moving, steps).await?;
+            Ok(moving.moved(packed, removal, None))
         }
         (MovePhase::Delivering, MoveDestination::Client { .. }) => {
             let error = anyhow!("the command that took its package went before it ended it");
