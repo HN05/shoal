@@ -289,6 +289,24 @@ async fn a_holder_forwards_its_thread_up_and_down() {
 }
 
 #[tokio::test]
+async fn a_thread_the_user_opened_never_goes_back_to_the_user() {
+    let tree = tree().await;
+    let manager = &tree.manager;
+    let thread = open(manager, None, Some(&tree.beside)).await;
+    send(manager, None, &thread, "Which port?").await;
+    // The space has no coordinator, so passing the thread up would hand it
+    // to the user who asked.
+    let beside = caller(&tree.beside);
+    let up = manager.forward_thread(Some(&beside), full(&thread), None, None);
+    assert!(up.await.is_err());
+    let kept = manager.thread(None, full(&thread)).await.unwrap();
+    assert_eq!(
+        kept.holder.space().map(|holder| &holder.id),
+        Some(&tree.beside.id)
+    );
+}
+
+#[tokio::test]
 async fn the_opener_resolves_its_thread_and_takes_back_an_unread_notice() {
     let tree = tree().await;
     let manager = &tree.manager;

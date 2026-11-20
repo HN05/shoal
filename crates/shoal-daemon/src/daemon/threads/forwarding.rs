@@ -97,10 +97,15 @@ impl Manager {
             thread.holder.label(),
             thread.number
         );
+        let opener = match thread.opener {
+            Sender::Space => holder.as_ref() == Some(&thread.space_id),
+            Sender::User => holder.is_none(),
+            Sender::Shoal => false,
+        };
         ensure!(
-            !(thread.opener == Sender::Space && holder.as_ref() == Some(&thread.space_id)),
+            !opener,
             "{} opened thread {}; it cannot hold it too",
-            thread.space,
+            thread.party(Side::Opener),
             thread.number
         );
         Ok(holder)
