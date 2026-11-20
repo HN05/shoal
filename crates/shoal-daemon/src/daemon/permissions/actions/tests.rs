@@ -317,24 +317,6 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
     assert!(!manager.decides_as_user(&mastering, &own).await.unwrap());
 }
 
-#[test]
-fn a_long_request_names_its_start_and_a_digest_of_all_of_it() {
-    use crate::forge::raw::{HttpMethod, RawRequest};
-
-    let write = |body: &str| RawRequest {
-        method: HttpMethod::Patch,
-        path: "repos/{owner}/{repo}/issues/3".into(),
-        body: Some(serde_json::json!({ "body": body.repeat(100) })),
-    };
-    let named = |body| Action::request(PermissionKey::ApiWrites, &write(body), None).action;
-    let (first, other) = (named("a"), named("b"));
-    assert!(
-        first.starts_with(r#"{"method":"PATCH","path":"repos/{owner}/{repo}/issues/3""#),
-        "{first}"
-    );
-    assert_ne!(first, other);
-}
-
 #[tokio::test]
 async fn a_chat_without_a_repository_takes_an_action_as_its_repository_allows() {
     let (temp, manager) = manager().await;

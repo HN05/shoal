@@ -72,3 +72,6 @@ fn request_text(request: &impl serde::Serialize) -> String {
         .collect();
     format!("{shown}… (sha256 {digest})")
 }
+
+#[cfg(test)]
+mod tests;
