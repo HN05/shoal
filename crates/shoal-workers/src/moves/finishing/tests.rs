@@ -1,72 +1,11 @@
 use super::*;
-use crate::protocol::operations::Step;
-use shoal_core::transfer::{Carrying, SshDestination};
+use crate::moves::fixtures::{Unfollowed, helper, left_move};
+use shoal_core::transfer::SshDestination;
 use shoal_daemon::test_daemon::TestDaemon;
-use shoal_protocol::removal::UnsavedWork;
 
-/// Run this module's helper `name` in a process of its own, without the
-/// runner's Shoal variables, which would reach the daemon in its scope.
+/// Run this module's helper `name` in a process of its own.
 async fn isolated(name: &str) {
-    let root = tempfile::tempdir().unwrap();
-    let name = format!("moves::finishing::tests::{name}");
-    let output = (crate::test_support::isolated_test(root.path(), &name).output())
-        .await
-        .unwrap();
-    let printed = crate::test_support::printed(&output);
-    assert!(output.status.success(), "{printed}");
-}
-
-/// Whether this process is a helper [`isolated`] runs.
-fn helper() -> bool {
-    std::env::var_os("SHOAL_TEST_HELPER").is_some()
-}
-
-/// Steps no one follows.
-struct Unfollowed;
-
-impl Steps for Unfollowed {
-    async fn reached(&self, _step: Step) {}
-
-    fn ensure_running(&self) -> Result<()> {
-        Ok(())
-    }
-}
-
-/// A daemon with a workspace whose move to `destination` wrote its package
-/// and was recorded in `phase`, as its worker left it, with the paths that
-/// reach the daemon.
-async fn left_move(
-    daemon: &TestDaemon,
-    destination: impl FnOnce(&std::path::Path) -> MoveDestination,
-) -> (CommandPaths, MoveRecord, std::path::PathBuf) {
-    let workspace = daemon.workspace("moving").await;
-    let paths = CommandPaths::from(daemon.manager.paths.clone());
-    let destination = destination(&daemon.manager.paths.home);
-    let space = SpaceSelector::id(&workspace.id);
-    let (unsaved, carrying) = (UnsavedWork::default(), Carrying::Subtree);
-    let packing = crate::client::transfer::export_moving(
-        &paths,
-        space,
-        unsaved.clone(),
-        destination.clone(),
-        carrying.clone(),
-        false,
-    );
-    packing.await.unwrap();
-    let phase = match destination {
-        MoveDestination::Ssh(_) | MoveDestination::Client { .. } => MovePhase::Delivering,
-        _ => MovePhase::Delivered,
-    };
-    let record = MoveRecord {
-        space: workspace.id.clone(),
-        destination,
-        carrying,
-        unsaved,
-        phase,
-        checkpoints: Default::default(),
-        saved_before: Default::default(),
-    };
-    (paths, record, workspace.path.clone())
+    crate::moves::fixtures::isolated(&format!("moves::finishing::tests::{name}")).await;
 }
 
 #[tokio::test]

@@ -8,6 +8,8 @@ pub mod checks;
 mod confirmation;
 mod copying;
 mod finishing;
+#[cfg(test)]
+mod fixtures;
 mod moving;
 mod packages;
 mod ssh;

@@ -296,3 +296,6 @@ impl Resuming for RestoringHere {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
