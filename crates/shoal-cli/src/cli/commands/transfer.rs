@@ -49,9 +49,7 @@ impl Moving {
 /// `shoal move`: move the spaces `args` selects to the destination it
 /// names, or to the one the user picks.
 pub(super) async fn run(ctx: &Context, args: MoveArgs) -> Result<i32> {
-    let named = Destination::named(&args);
-    let (names, destination) =
-        destination::choose(ctx, named, args.space.clone(), args.all).await?;
+    let (names, destination) = destination::choose(ctx, &args).await?;
     let moving = Moving::new(&args, names, &destination);
     match destination {
         Destination::Ssh(host) => {

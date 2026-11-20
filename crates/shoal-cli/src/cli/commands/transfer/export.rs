@@ -307,6 +307,28 @@ pub(super) fn warn(exported: &ExportedSpace) {
     }
 }
 
+/// Refuse a space among `names` that selects no live or removed space, or
+/// a `repository` without spaces to move, so a move refuses what it was
+/// given before it asks for what it was not.
+pub(super) async fn ensure_targets(
+    ctx: &Context,
+    names: &[SpaceSelector],
+    repository: Option<&str>,
+) -> Result<()> {
+    if let Some(repository) = repository {
+        repository_spaces(ctx, repository.to_owned()).await?;
+    }
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
+    for selector in names {
+        if spaces.find(selector).is_none() {
+            crate::client::removal::removed_space(&ctx.paths, selector.clone())
+                .await
+                .with_context(|| format!("no space {selector}"))?;
+        }
+    }
+    Ok(())
+}
+
 /// The spaces of `repository`: its workspaces and running chats.
 pub(super) async fn repository_spaces(ctx: &Context, repository: String) -> Result<Vec<Space>> {
     let repositories = crate::client::repositories::list(&ctx.paths).await?;

@@ -840,6 +840,15 @@ fn a_move_without_a_destination_asks_for_one_on_a_terminal() {
         printed(&refused)
     );
     assert!(path.exists());
+    // A space or repository that does not exist is refused before the picker.
+    for missing in [
+        &["move", "999"][..],
+        &["move", "--repo", "missing", "--all"],
+    ] {
+        let (refused, rows) = fixture.pick(missing, "1", "unused\n");
+        assert!(!refused.status.success(), "{}", printed(&refused));
+        assert!(rows.is_empty(), "{rows}");
+    }
 
     // The kind picker lists SSH first, so its row 1 is a file.
     let file = fixture.root.path().join("asked.shoal");

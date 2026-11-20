@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::{Result, ensure};
 
-use super::STANDARD_STREAM;
+use super::{STANDARD_STREAM, export};
 use crate::cli::{args::transfer::MoveArgs, context::Context, ui};
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -19,7 +19,7 @@ pub(super) enum Destination {
 
 impl Destination {
     /// The destination the flags of `args` name.
-    pub(super) fn named(args: &MoveArgs) -> Option<Self> {
+    fn named(args: &MoveArgs) -> Option<Self> {
         match (&args.ssh, &args.output) {
             (Some(host), _) => Some(Self::Ssh(host.clone())),
             (None, Some(path)) => Some(Self::File(path.clone())),
@@ -43,19 +43,20 @@ enum Kind {
     File,
 }
 
-/// The spaces `names` select with the destination `named`, or without one
-/// the destination the user picks on a terminal, after picking the spaces
-/// when `names` names none and `all` takes none.
+/// The spaces `args` names with the destination it names, or without one
+/// the destination the user picks on a terminal, once the spaces and
+/// repository it names exist, after picking the spaces when it names none.
 pub(super) async fn choose(
     ctx: &Context,
-    named: Option<Destination>,
-    names: Vec<SpaceSelector>,
-    all: bool,
+    args: &MoveArgs,
 ) -> Result<(Vec<SpaceSelector>, Destination)> {
-    if let Some(destination) = named {
+    let names = args.space.clone();
+    if let Some(destination) = Destination::named(args) {
         return Ok((names, destination));
     }
     ui::require_one_of(ctx, "destination", &["ssh", "output"])?;
+    export::ensure_targets(ctx, &names, args.repository.as_deref()).await?;
+    let all = args.all;
     let names = match all || !names.is_empty() {
         true => names,
         false => ui::select_spaces(ctx, names, true).await?,
