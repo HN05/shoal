@@ -1000,6 +1000,75 @@ CREATE TABLE shared_files (
     revision INTEGER NOT NULL
 );
 
+CREATE TABLE space_changes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    space_id TEXT NOT NULL,
+    space_name TEXT NOT NULL,
+    number INTEGER NOT NULL,
+    repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    author TEXT NOT NULL CHECK(author IN ('agent','mixed','others')),
+    kind TEXT NOT NULL CHECK(kind IN ('text','generated','binary','large')),
+    made_at INTEGER NOT NULL,
+    turn INTEGER,
+    execution_id TEXT,
+    thread_id INTEGER REFERENCES threads(id) ON DELETE CASCADE,
+    commit_id TEXT,
+    path TEXT NOT NULL,
+    start INTEGER,
+    end INTEGER,
+    blob TEXT,
+    size INTEGER,
+    before_start INTEGER NOT NULL DEFAULT 0,
+    removed TEXT NOT NULL DEFAULT '[]',
+    added TEXT NOT NULL DEFAULT '[]',
+    removed_count INTEGER NOT NULL DEFAULT 0,
+    added_count INTEGER NOT NULL DEFAULT 0,
+    latest_path TEXT NOT NULL,
+    latest_start INTEGER,
+    latest_end INTEGER,
+    latest_blob TEXT,
+    state TEXT NOT NULL CHECK(state IN ('unchanged','changed','outdated')),
+    UNIQUE(space_id, number),
+    CHECK((start IS NULL) = (end IS NULL)
+        AND (latest_start IS NULL) = (latest_end IS NULL)
+        AND (start IS NULL) = (latest_start IS NULL))
+);
+
+CREATE TABLE space_change_numbers (
+    space_id TEXT PRIMARY KEY,
+    last INTEGER NOT NULL
+);
+
+CREATE TABLE space_change_bases (
+    space_id TEXT PRIMARY KEY REFERENCES spaces(id) ON DELETE CASCADE,
+    tree TEXT NOT NULL
+);
+
+CREATE TABLE space_change_commands (
+    space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+    call TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    PRIMARY KEY(space_id, call)
+);
+
+CREATE TABLE space_edit_reports (
+    space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    PRIMARY KEY(space_id, path)
+);
+
+CREATE TABLE space_current_thread (
+    space_id TEXT PRIMARY KEY REFERENCES spaces(id) ON DELETE CASCADE,
+    thread_id INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE
+);
+
+CREATE TABLE thread_post_changes (
+    post_id INTEGER NOT NULL REFERENCES thread_posts(id) ON DELETE CASCADE,
+    change_id INTEGER NOT NULL REFERENCES space_changes(id) ON DELETE CASCADE,
+    PRIMARY KEY(post_id, change_id)
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -1098,6 +1167,14 @@ CREATE INDEX thread_code_repository ON thread_code(repository_id);
 CREATE INDEX hub_packages_member ON hub_packages(member_id);
 
 CREATE INDEX hub_takeovers_member ON hub_takeovers(member_id);
+
+CREATE INDEX space_changes_thread ON space_changes(thread_id);
+
+CREATE INDEX space_changes_repository ON space_changes(repository_id);
+
+CREATE INDEX space_current_thread_thread ON space_current_thread(thread_id);
+
+CREATE INDEX thread_post_changes_change ON thread_post_changes(change_id);
 
 CREATE VIEW space_refs AS
     SELECT spaces.id, CASE spaces.kind
@@ -1569,4 +1646,33 @@ END;
 
 CREATE TRIGGER hub_package_states_removed AFTER DELETE ON spaces BEGIN
     DELETE FROM hub_package_states WHERE space_id=OLD.id;
+END;
+
+CREATE TRIGGER space_changes_resolved AFTER UPDATE OF outcome ON threads
+WHEN NEW.outcome IS NOT NULL BEGIN
+    DELETE FROM space_current_thread WHERE thread_id=NEW.id;
+END;
+
+CREATE TRIGGER space_changes_parties_changed AFTER UPDATE OF holder_id,space_id ON threads
+BEGIN
+    DELETE FROM space_current_thread WHERE thread_id=NEW.id
+        AND space_id IS NOT NEW.holder_id AND space_id IS NOT NEW.space_id;
+END;
+
+CREATE TRIGGER space_changes_space_removed AFTER DELETE ON spaces BEGIN
+    DELETE FROM space_changes WHERE space_id=OLD.id AND thread_id IS NULL
+        AND id NOT IN (SELECT change_id FROM thread_post_changes)
+        AND NOT EXISTS (SELECT 1 FROM removed_spaces WHERE space_id=OLD.id);
+    DELETE FROM space_change_numbers WHERE space_id=OLD.id
+        AND NOT EXISTS (SELECT 1 FROM removed_spaces WHERE space_id=OLD.id)
+        AND NOT EXISTS (SELECT 1 FROM space_changes WHERE space_id=OLD.id);
+END;
+
+CREATE TRIGGER space_changes_removal_forgotten AFTER DELETE ON removed_spaces BEGIN
+    DELETE FROM space_changes WHERE space_id=OLD.space_id AND thread_id IS NULL
+        AND id NOT IN (SELECT change_id FROM thread_post_changes)
+        AND NOT EXISTS (SELECT 1 FROM spaces WHERE id=OLD.space_id);
+    DELETE FROM space_change_numbers WHERE space_id=OLD.space_id
+        AND NOT EXISTS (SELECT 1 FROM spaces WHERE id=OLD.space_id)
+        AND NOT EXISTS (SELECT 1 FROM space_changes WHERE space_id=OLD.space_id);
 END;
