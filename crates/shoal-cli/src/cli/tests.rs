@@ -173,6 +173,7 @@ fn the_daemon_permission_governs_the_service_commands() {
         vec!["shoal", "daemon", "stop"],
         vec!["shoal", "daemon", "install"],
         vec!["shoal", "update"],
+        vec!["shoal", "hub", "update"],
     ] {
         let command = Cli::try_parse_from(&args).unwrap().command.unwrap();
         assert_eq!(

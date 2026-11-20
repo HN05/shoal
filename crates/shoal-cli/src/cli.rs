@@ -325,9 +325,13 @@ impl Command {
     /// as its space's permission for it allows.
     pub fn permission(&self) -> Option<PermissionKey> {
         match self {
-            Command::Service(ServiceCommand::Update { .. } | ServiceCommand::Daemon { .. }) => {
-                Some(PermissionKey::Daemon)
-            }
+            Command::Service(
+                ServiceCommand::Update { .. }
+                | ServiceCommand::Daemon { .. }
+                | ServiceCommand::Hub {
+                    command: HubCommand::Update,
+                },
+            ) => Some(PermissionKey::Daemon),
             Command::Create(CreateCommand::Contribute(_))
             | Command::Repository(RepositoryCommand::Repo {
                 command:

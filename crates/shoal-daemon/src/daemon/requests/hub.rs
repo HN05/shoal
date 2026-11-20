@@ -1,7 +1,8 @@
 //! The daemon's answers to [`HubMethod`] requests, and who may send them:
 //! anyone lists the hub's members and the spaces of its machines, as far as
-//! their scope reaches them, and only the user changes the members, joins,
-//! leaves or updates the hub.
+//! their scope reaches them, a space updates the hub as its `daemon`
+//! permission allows, and only the user changes the members, joins or
+//! leaves.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -10,9 +11,11 @@ use shoal_protocol::{hub::directory::HubView, space_names::SpaceSelector};
 use super::super::{
     answer::Answer,
     manager::Manager,
+    permissions::Action,
     scope::{Caller, Scoped},
 };
 use crate::{
+    config::permissions::PermissionKey,
     protocol::{Body, HubMethod},
     refusal::{Reason, Refusal},
 };
@@ -22,13 +25,7 @@ pub(super) async fn handle(
     method: HubMethod,
     caller: Option<&Caller>,
 ) -> Result<Answer> {
-    if caller.is_some() && !matches!(method, HubMethod::HubMembers | HubMethod::HubDirectory) {
-        return Err(Refusal::new(
-            Reason::NotReady,
-            "only the user's own terminal pairs, joins, leaves, updates and revokes the hub's machines",
-        )
-        .into());
-    }
+    authorize(manager, &method, caller).await?;
     Ok(Answer::Body(match method {
         HubMethod::PairHub => Body::Pairing(manager.hub.hub_pairing(&**manager).await?),
         HubMethod::JoinHub { via, name } => {
@@ -48,6 +45,25 @@ pub(super) async fn handle(
     }))
 }
 
+/// Refuse `caller` what `method` does that its space may not.
+async fn authorize(manager: &Manager, method: &HubMethod, caller: Option<&Caller>) -> Result<()> {
+    let Some(caller) = caller else {
+        return Ok(());
+    };
+    match method {
+        HubMethod::HubMembers | HubMethod::HubDirectory => Ok(()),
+        HubMethod::UpdateHub => {
+            let action = Action::new(PermissionKey::Daemon, "shoal hub update");
+            manager.authorize_action(Some(caller), action).await
+        }
+        _ => Err(Refusal::new(
+            Reason::NotReady,
+            "only the user's own terminal pairs, joins, leaves and revokes the hub's machines",
+        )
+        .into()),
+    }
+}
+
 impl Scoped for HubMethod {
     async fn scope(
         &mut self,
@@ -58,3 +74,6 @@ impl Scoped for HubMethod {
         Ok(None)
     }
 }
+
+#[cfg(test)]
+mod tests;

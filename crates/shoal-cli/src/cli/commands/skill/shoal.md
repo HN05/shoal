@@ -428,8 +428,8 @@ for approval, `pr_review` approving and requesting changes on PRs, bound to
 the PR's head and the review's text, `triggers` pausing, resuming and running
 [triggers](#triggers), `user_holds` releasing the user's holds
 and removing what the user holds, and `daemon` the daemon's service
-commands and `shoal update` while a daemon of this Shoal answers to decide
-it. `notifications`, `deny` or `direct`, lets a
+commands, `shoal update` and `shoal hub update` while a daemon of this
+Shoal answers to decide it. `notifications`, `deny` or `direct`, lets a
 space read the user's notifications, Shoal's own log and the inbox's
 daemon-wide problems, and `decide`, `deny` or `direct`, decide the requests
 of the spaces below as the user does.
@@ -894,8 +894,9 @@ process of the workspace Shoal does not track, never the agent or its shells.
 
 ## Daemon
 
-Installing, starting, stopping and restarting the daemon and `shoal update`
-follow the space's `daemon` [permission](#permitted-actions).
+Installing, starting, stopping and restarting the daemon, `shoal update` and
+`shoal hub update`, which installs the latest release on the hub, follow the
+space's `daemon` [permission](#permitted-actions).
 Stopping the daemon stops every agent. While a stop or restart waits for the
 work the daemon runs itself, commands that would start more, such as `shoal rm`,
 wait and run on the next daemon, or fail for a stop; while it restarts, every agent's other `shoal`

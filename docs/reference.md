@@ -904,7 +904,7 @@ update to run. A refused machine keeps working on its own.
 
 The hub updates as it was installed: with `brew upgrade hn05/tap/shoal`
 there, or for a downloaded binary with `shoal update` there or `shoal hub
-update` on any of its machines, which only your own terminal runs. A managed
+update` on any of its machines, which the `daemon` permission governs. A managed
 daemon restarts on the new release once idle; `shoal hub update` says when a
 foreground one needs a restart.
 
@@ -3114,7 +3114,8 @@ notifications, Shoal's own log, and the untracked worktrees, cleanup errors
 and failing syncs the inbox lists; `user_holds` governs
 releasing the user's holds and removing a space the user holds, or holds
 one below; `daemon` governs installing,
-starting, stopping and restarting the daemon, and `shoal update`, which a
+starting, stopping and restarting the daemon, `shoal update` and `shoal hub
+update`, which a
 scoped process takes only while a daemon of the same Shoal answers to decide
 it; `limits`
 starting agents regardless of `max_heavy_agents` and memory, with `--now`,
