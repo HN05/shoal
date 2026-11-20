@@ -55,18 +55,18 @@ fn offline_header(offline: &[&Member], now: UnixTime) -> Option<String> {
     Some(format!("Offline: {}", listed.join(", ")))
 }
 
-/// How `--machine` names the machine `id` of `view`: by its name, unless
-/// another machine has that name too.
+/// How `--machine` names the machine `id` of `view`: by its name where
+/// that names it back, else by its ID.
 fn named(view: &HubView, id: &str) -> String {
-    let machines = &view.directory.machines;
-    let Some(machine) = machines.iter().find(|machine| machine.id.as_str() == id) else {
-        return id.to_owned();
-    };
-    let shared = (machines.iter())
-        .filter(|other| other.name == machine.name)
-        .count();
-    match shared {
-        1 => machine.name.clone(),
+    let directory = &view.directory;
+    let machine = (directory.machines.iter()).find(|machine| machine.id.as_str() == id);
+    match machine {
+        Some(machine)
+            if (directory.named_machine(&machine.name))
+                .is_ok_and(|named| named.id == machine.id) =>
+        {
+            machine.name.clone()
+        }
         _ => id.to_owned(),
     }
 }

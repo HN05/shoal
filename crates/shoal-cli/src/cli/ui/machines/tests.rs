@@ -40,14 +40,19 @@ fn the_other_machines_online_are_picked_by_name_and_the_offline_ones_listed() {
 }
 
 #[test]
-fn a_machine_whose_name_another_shares_is_named_by_its_id() {
+fn a_machine_whose_name_names_another_is_named_by_its_id() {
     let view = view(vec![
         member("1", "desk", "machine", None),
         member("2", "desk", "machine", None),
         member("3", "server", "machine", None),
+        member("4", "1", "machine", None),
+        member("5", "server", "device", None),
     ]);
     assert_eq!(named(&view, "2"), "2");
+    // A device of the same name leaves the machine's name its own.
     assert_eq!(named(&view, "3"), "server");
+    // A name that is another machine's ID names that machine.
+    assert_eq!(named(&view, "4"), "4");
 }
 
 #[test]

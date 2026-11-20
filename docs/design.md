@@ -4302,8 +4302,9 @@ default, below the moved space, which keeps its ID on the other machine, so the
 hub routes their events there and they need no new parent; they are detached
 while its removal here runs, which would take them along, and recorded with
 it until they are linked again, which a restart during the removal finishes.
-Without a destination a terminal asks for one, a joined machine first where
-there is a hub, since the hub needs nothing set up between the machines, and
+Without a destination a terminal asks for one, a joined machine first while
+another one is online, since the hub needs nothing set up between the
+machines, and
 anything else is refused, so an archive reaches standard output only through
 `-o -`. A move always names its machine: a placement policy, which chooses
 where a new space starts, chooses no move's destination.
