@@ -245,12 +245,16 @@ fn send_posts_in_a_thread_its_number_leads_and_else_sends_an_alert() {
             args,
             body_file,
             post,
+            space,
+            all,
+            repository,
             ..
         })) = cli.command
         else {
             panic!("expected send");
         };
-        sending(args, body_file.is_some(), &post)
+        let recipients = space.is_some() || all || repository.is_some();
+        sending(args, body_file.is_some(), &post, recipients)
     };
     let post = |sending: Sending| match sending {
         Sending::Post { thread, text } => Some((thread.to_string(), text)),
@@ -276,8 +280,13 @@ fn send_posts_in_a_thread_its_number_leads_and_else_sends_an_alert() {
         parse(&["--body-file", "a.md"]).unwrap(),
         Sending::Alert(None)
     ));
-    // A post's options need a thread.
+    // A post's options need a thread, and a post takes no recipients.
     assert!(parse(&["--wait"]).is_err());
+    assert!(parse(&["3.2", "SQLite", "--space", "4"]).is_err());
+    assert!(matches!(
+        parse(&["Rebase", "--space", "4"]).unwrap(),
+        Sending::Alert(_)
+    ));
 }
 
 #[test]
@@ -286,7 +295,6 @@ fn a_post_takes_no_alert_recipient() {
         let arguments = ["shoal", "send"].iter().chain(arguments);
         <Cli as clap::Parser>::try_parse_from(arguments).map(drop)
     };
-    assert!(parse(&["3.2", "SQLite", "--space", "4"]).is_ok());
     assert!(parse(&["3.2", "SQLite", "--space", "4", "--wait"]).is_err());
     assert!(parse(&["3.2", "--in-chat", "--all"]).is_err());
 }

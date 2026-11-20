@@ -37,11 +37,27 @@ pub(super) enum Sending {
     },
 }
 
-/// What `args` say, given whether `--body-file` names the text and the
-/// options only posts take: a thread's number and the text post in that
-/// thread, as does a single argument with `--body-file` or such an
-/// option; any other single argument is an alert's text.
-pub(super) fn sending(args: Vec<String>, body_file: bool, post: &PostArgs) -> Result<Sending> {
+/// What `args` say, given whether `--body-file` names the text, the
+/// options only posts take and whether an alert's recipients are named: a
+/// thread's number and the text post in that thread, as does a single
+/// argument with `--body-file` or such an option; any other single argument
+/// is an alert's text. A post goes to the thread's other side, so it takes
+/// no recipients.
+pub(super) fn sending(
+    args: Vec<String>,
+    body_file: bool,
+    post: &PostArgs,
+    recipients: bool,
+) -> Result<Sending> {
+    let sending = sending_of(args, body_file, post)?;
+    if recipients && matches!(sending, Sending::Post { .. }) {
+        bail!("a post goes to its thread's other side; --space, --all and --repo name an alert's");
+    }
+    Ok(sending)
+}
+
+/// What `args` say, as [`sending`] reads them, whatever recipients are named.
+fn sending_of(args: Vec<String>, body_file: bool, post: &PostArgs) -> Result<Sending> {
     let mut args = args.into_iter();
     Ok(match (args.next(), args.next()) {
         (Some(thread), Some(text)) => Sending::Post {

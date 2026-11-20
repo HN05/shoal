@@ -22,7 +22,12 @@ pub(in crate::cli::commands) async fn run(
             all,
             repository,
             post,
-        } => match send::sending(args, body_file.is_some(), &post)? {
+        } => match send::sending(
+            args,
+            body_file.is_some(),
+            &post,
+            space.is_some() || all || repository.is_some(),
+        )? {
             send::Sending::Alert(message) => {
                 let recipients = match repository {
                     Some(repository) => send::Recipients::Repository(repository),
