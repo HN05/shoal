@@ -521,3 +521,16 @@ fn a_stop_takes_spaces_here_and_on_another_machine_together() {
     // One report for the space here, one for the laptop's.
     assert_eq!(reports.matches("\"stopped\":true").count(), 2, "{reports}");
 }
+
+#[test]
+fn a_removal_in_a_terminal_session_takes_spaces_here_and_on_another_machine_together() {
+    let (hub, laptop, there) = laptop_space();
+    let here = workspace(&hub, "here");
+    // A zmx session's place, which a space of this machine may own.
+    let mut command = hub.command();
+    command.env("ZMX_SESSION", "terminal");
+    let removed = hub.output(command.args(["rm", &here, &there, "--wait", "--yes", "--json"]));
+    assert!(removed.status.success(), "{}", printed(&removed));
+    let gone = laptop.run(&["status", &there, "--json"]);
+    assert!(!gone.status.success(), "{}", printed(&gone));
+}

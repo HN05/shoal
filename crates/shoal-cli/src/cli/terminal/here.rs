@@ -2,6 +2,7 @@
 //! closing it with the workspace.
 use anyhow::{Context as _, Result};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 
 use super::closing;
 use crate::{
@@ -13,7 +14,8 @@ use crate::{
 /// Whether the place this process runs in closes once the space `space` is
 /// removed, ending anything it streams: a watcher closes it then, or the
 /// daemon does, which records it as a place Shoal created for the space or
-/// whose host labels it as the space's session.
+/// whose host labels it as the space's session. A space of another joined
+/// machine owns no place of this one.
 pub(in crate::cli) async fn closes_with(
     paths: &crate::client::connection::CommandPaths,
     space: &SpaceId,
@@ -21,13 +23,20 @@ pub(in crate::cli) async fn closes_with(
     if closing::closes_with(paths, space).await {
         return Ok(true);
     }
-    match current_place().await {
-        Some(place) => Ok(
-            crate::client::workspaces::place_ownership(paths, space, &place).await?
-                == crate::sessions::PlaceOwnership::Space,
-        ),
-        None => Ok(false),
+    let Some(place) = current_place().await else {
+        return Ok(false);
+    };
+    let selector = SpaceSelector::id(space);
+    if crate::client::workspaces::present_space(paths, &selector)
+        .await?
+        .is_none()
+    {
+        return Ok(false);
     }
+    Ok(
+        crate::client::workspaces::place_ownership(paths, space, &place).await?
+            == crate::sessions::PlaceOwnership::Space,
+    )
 }
 
 /// Record `place`, one Shoal created for `space`, a workspace or a chat,
