@@ -468,7 +468,7 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
     assert!(job_variable(&command, "CARGO_INCREMENTAL").is_none());
 
     // A running job keeps its workspace.
-    manager.finish_ended_jobs().await.unwrap();
+    finish_ended_jobs(manager).await;
     assert!(manager.workspace_by_id(&workspace.id).await.is_ok());
 
     manager.runner.jobs().take_wake();
@@ -479,7 +479,7 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
     // Its end wakes the runner, which removes the workspace without waiting
     // for its next poll.
     assert!(manager.runner.jobs().take_wake());
-    manager.finish_ended_jobs().await.unwrap();
+    finish_ended_jobs(manager).await;
     assert!(manager.workspace_by_id(&workspace.id).await.is_err());
     assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     assert!(!directory.exists());
@@ -677,7 +677,7 @@ async fn a_restart_during_a_claim_keeps_a_started_command_and_removes_the_rest()
     // As if the daemon stopped after the command started but before its
     // execution was recorded: the running command is kept.
     forget_execution().await.unwrap();
-    manager.finish_ended_jobs().await.unwrap();
+    finish_ended_jobs(manager).await;
     let kept = manager.runner.claimed_jobs().await.unwrap();
     assert_eq!(
         kept[0].execution_id.as_ref().map(ExecutionId::as_str),
@@ -690,7 +690,7 @@ async fn a_restart_during_a_claim_keeps_a_started_command_and_removes_the_rest()
         .await
         .unwrap();
     forget_execution().await.unwrap();
-    manager.finish_ended_jobs().await.unwrap();
+    finish_ended_jobs(manager).await;
     assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     assert!(
         manager
@@ -713,7 +713,7 @@ async fn a_jobs_directory_goes_however_its_workspace_went() {
         .remove_job_workspace(&claimed[0].workspace_id)
         .await
         .unwrap();
-    manager.finish_ended_jobs().await.unwrap();
+    finish_ended_jobs(manager).await;
     assert!(!directory.exists());
 }
 
@@ -986,13 +986,13 @@ async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_for
     );
     assert_eq!(logged_stops(manager), [JobStop::Stop]);
     // The job runs until the forge's runner stops it.
-    manager.finish_ended_jobs().await.unwrap();
+    finish_ended_jobs(manager).await;
     assert_eq!(manager.runner.claimed_jobs().await.unwrap().len(), 1);
     manager
         .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(1))
         .await
         .unwrap();
-    manager.finish_ended_jobs().await.unwrap();
+    finish_ended_jobs(manager).await;
     assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
 }
 
@@ -1319,7 +1319,7 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
     let left = Leftover(identity::capture(pid).unwrap().unwrap());
 
     // The forge cancelled run 6, but the runner gets its grace period.
-    manager.finish_ended_jobs().await.unwrap();
+    finish_ended_jobs(manager).await;
     assert_eq!(manager.runner.claimed_jobs().await.unwrap().len(), 1);
     assert!(identity::alive(&left.0).unwrap());
 
@@ -1329,7 +1329,7 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
         .backdate_finished_runs(shoal_runner::jobs::GRACE);
     let finishing = tokio::spawn({
         let manager = manager.clone();
-        async move { manager.finish_ended_jobs().await }
+        async move { manager.runner.finish_ended_jobs(&*manager).await }
     });
     let control: Control = read(&mut connection).await;
     assert!(matches!(&control, Control::Stop { .. }), "{control:?}");
@@ -1430,7 +1430,7 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
 
     // The cut-short claim's workspace goes with its permit, and the job,
     // still admitted, is claimed again.
-    manager.finish_ended_jobs().await.unwrap();
+    finish_ended_jobs(manager).await;
     assert!(manager.workspace_by_id(&workspace.id).await.is_err());
     manager.claim_job(entry).await;
     let claimed = manager.runner.claimed_jobs().await.unwrap();
@@ -1476,7 +1476,7 @@ async fn workspace_a_restart_caught_preparing(fixture: &Fixture) -> Workspace {
 
 /// Whether the cut-short claim of `workspace` went with it.
 async fn removed_with_its_claim(manager: &Manager, workspace: &Workspace) -> bool {
-    manager.finish_ended_jobs().await.unwrap();
+    finish_ended_jobs(manager).await;
     manager.workspace_by_id(&workspace.id).await.is_err()
         && manager.runner.claimed_jobs().await.unwrap().is_empty()
 }
@@ -1738,7 +1738,7 @@ async fn the_sweep_keeps_the_directory_of_a_recorded_claim() {
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
     let stray = manager.runner.job_directory(&"stray".into());
     std::fs::create_dir_all(&stray).unwrap();
-    manager.finish_ended_jobs().await.unwrap();
+    finish_ended_jobs(manager).await;
     assert!(
         manager
             .runner
@@ -1786,7 +1786,7 @@ async fn a_runner_gone_while_the_daemon_was_away_gives_its_job_up_once_nothing_o
     // A wrapper still alive may reattach, so the job keeps running.
     let alive = capture(std::process::id()).unwrap().unwrap();
     mark(&alive, &gone).await.unwrap();
-    manager.finish_ended_jobs().await.unwrap();
+    finish_ended_jobs(manager).await;
     assert_eq!(manager.runner.claimed_jobs().await.unwrap().len(), 1);
 
     // A descendant carrying the execution's marker keeps it too, and is
@@ -1802,12 +1802,12 @@ async fn a_runner_gone_while_the_daemon_was_away_gives_its_job_up_once_nothing_o
         .kill_on_drop(true);
     let mut survivor = crate::daemon::test_support::spawn_marked_child(&mut marked);
     mark(&gone, &gone).await.unwrap();
-    manager.finish_ended_jobs().await.unwrap();
+    finish_ended_jobs(manager).await;
     assert_eq!(manager.runner.claimed_jobs().await.unwrap().len(), 1);
     survivor.wait().await.unwrap();
 
     // Once nothing of it runs, the job ends here.
-    manager.finish_ended_jobs().await.unwrap();
+    finish_ended_jobs(manager).await;
     assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     assert!(
         manager
@@ -1866,6 +1866,11 @@ async fn removing_a_repository_deletes_its_runner_on_the_forge() {
 /// Bring the job entries in line with the jobs the forge lists as waiting.
 pub(super) async fn refresh_waiting_jobs(manager: &Manager) {
     manager.runner.refresh_waiting_jobs(manager).await.unwrap();
+}
+
+/// End the claimed jobs whose runner ended.
+pub(super) async fn finish_ended_jobs(manager: &Manager) {
+    manager.runner.finish_ended_jobs(manager).await.unwrap();
 }
 
 /// Read the forge's waiting jobs when due.

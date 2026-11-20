@@ -150,6 +150,20 @@ pub trait Executions: Send + Sync {
         id: &'a SpaceId,
     ) -> BoxFuture<'a, Result<Vec<StoppedProcess>>>;
 
+    /// Whether the execution `id` of a job in the workspace `workspace` may
+    /// still run, which the daemon proves from its processes.
+    fn job_execution_runs<'a>(
+        &'a self,
+        workspace: &'a SpaceId,
+        id: &'a ExecutionId,
+    ) -> BoxFuture<'a, Result<bool>>;
+
+    /// An execution recorded in the workspace `id`, if any.
+    fn workspace_execution<'a>(
+        &'a self,
+        id: &'a SpaceId,
+    ) -> BoxFuture<'a, Result<Option<ExecutionId>>>;
+
     /// Whether the daemon still records the execution `id`, running or
     /// awaiting reattachment.
     fn execution_recorded<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, Result<bool>>;
@@ -172,6 +186,10 @@ pub trait Workspaces: Send + Sync {
         commit: &'a CommitId,
         reference: Option<&'a str>,
     ) -> BoxFuture<'a, Result<()>>;
+
+    /// Remove the job workspace `id` whatever it holds; its claim goes with
+    /// it.
+    fn remove_job_workspace<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>>;
 }
 
 /// Everything the triggers and the runner need of the daemon, which each of

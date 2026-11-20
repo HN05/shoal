@@ -89,7 +89,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
 /// admission admitted, and read the forge's waiting jobs when due.
 async fn pass(manager: &Arc<Manager>) -> anyhow::Result<()> {
     manager.runner.sample_job_usage(&**manager).await?;
-    manager.finish_ended_jobs().await?;
+    manager.runner.finish_ended_jobs(&**manager).await?;
     manager.runner.follow_taken_jobs(&**manager).await?;
     manager.runner.release_idle_runners(&**manager).await?;
     claim_admitted_jobs(manager).await?;
@@ -268,6 +268,24 @@ impl shoal_runner::daemon::Executions for Manager {
         Box::pin(Manager::workspace_has_executions(self, id))
     }
 
+    fn job_execution_runs<'a>(
+        &'a self,
+        workspace: &'a SpaceId,
+        id: &'a ExecutionId,
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(Manager::job_execution_runs(self, workspace, id))
+    }
+
+    fn workspace_execution<'a>(
+        &'a self,
+        id: &'a SpaceId,
+    ) -> BoxFuture<'a, Result<Option<ExecutionId>>> {
+        Box::pin(async move {
+            let executions = self.workspace_executions(id).await?;
+            Ok(executions.into_iter().next().map(|execution| execution.id))
+        })
+    }
+
     fn stop_job_runner<'a>(&'a self, id: &'a SpaceId, reason: String) -> BoxFuture<'a, Result<()>> {
         let request = StopRequest {
             reason,
@@ -285,6 +303,10 @@ impl shoal_runner::daemon::Workspaces for Manager {
         reference: Option<&'a str>,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(Manager::move_job_workspace(self, id, commit, reference))
+    }
+
+    fn remove_job_workspace<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
+        Box::pin(Manager::remove_job_workspace(self, id))
     }
 }
 

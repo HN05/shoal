@@ -263,7 +263,8 @@ impl Manager {
         let execution = self
             .launch_job_command(claim.workspace, log, at_low_priority(command))
             .await?;
-        self.record_job_execution(claim.entry.id.as_str(), execution)
+        self.runner
+            .record_job_execution(&claim.entry.id, execution)
             .await
     }
 
@@ -336,24 +337,6 @@ impl Manager {
         self.store
             .run(move |db| {
                 db.execute("DELETE FROM agent_queue WHERE id=?1", [id])?;
-                Ok(())
-            })
-            .await
-    }
-
-    pub(super) async fn record_job_execution(
-        &self,
-        id: &str,
-        execution: ExecutionId,
-    ) -> Result<()> {
-        let id = id.to_owned();
-        self.store
-            .run(move |db| {
-                db.execute(
-                    "UPDATE ci_jobs SET execution_id=?2,launched_at=coalesce(launched_at,?3)
-                     WHERE id=?1",
-                    params![id, execution, crate::time::UnixTime::now()],
-                )?;
                 Ok(())
             })
             .await

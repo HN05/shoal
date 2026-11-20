@@ -1,13 +1,5 @@
-//! The end of a claimed job: once the execution running the forge's runner
-//! ends, however it ended, the runner registered for the job alone is
-//! deleted and the job's workspace is removed whatever it holds,
-//! with its permit, and the runner's directory of a job no longer claimed,
-//! however its workspace went, is deleted. A job ends only on the forge's
-//! word: stopping it, removing its workspace while it runs, or a signal
-//! ending its wrapper's session cancels its run there, and the forge's
-//! runner then stops it, or Shoal or the wrapper does once the runner
-//! outlives the run or the signal. Shoal's log names what stopped each
-//! runner.
+//! The load of the runner's jobs as admission counts it, and the process
+//! proof of whether a job's execution still runs.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
@@ -17,12 +9,11 @@ use anyhow::Result;
 use rusqlite::params;
 
 use crate::{
-    daemon::{capacity::Activity, manager::Manager, notifications::AlertKind},
+    daemon::{capacity::Activity, manager::Manager},
     model::QueuedJob,
     process::{execution::Processes, identity},
     state::{ExecutionState, QueueKind, QueueState},
 };
-use shoal_runner::jobs::ClaimedJob;
 
 /// A job starting or running, as admission counts it.
 struct ActiveJob {
@@ -37,128 +28,6 @@ struct ActiveJob {
 }
 
 impl Manager {
-    /// Remove the workspace of each claimed job whose execution ended, or
-    /// that never started one and whose claim no longer runs, as after a
-    /// daemon restart. A removal that fails is tried again on the next pass.
-    pub(crate) async fn finish_ended_jobs(&self) -> Result<()> {
-        let jobs = self.runner.claimed_jobs().await?;
-        self.runner
-            .jobs()
-            .keep_runs(&jobs.iter().map(|job| job.id.clone()).collect());
-        for job in jobs {
-            let running = match &job.execution_id {
-                Some(execution) => {
-                    self.job_execution_runs(&job.workspace_id, execution)
-                        .await?
-                }
-                None if self.runner.jobs().claiming(&job.id) => true,
-                None => self.adopt_job_execution(&job).await?,
-            };
-            if running && !self.ended_overrun_job(&job).await {
-                continue;
-            }
-            self.runner.record_job_usage(&job).await?;
-            if let Err(error) = self.runner.delete_job_runner(self, &job).await {
-                crate::daemon::log!("runner: {error:#}");
-            }
-            if let Err(error) = self.remove_job_workspace(&job.workspace_id).await {
-                self.notify(
-                    None,
-                    AlertKind::RunnerFailed,
-                    format!(
-                        "The workspace of the ended CI job {} could not be removed: {error:#}",
-                        job.job.job.name
-                    ),
-                )
-                .await;
-                continue;
-            }
-        }
-        self.remove_unclaimed_job_directories().await
-    }
-
-    /// Have the runner end the job the ended execution `id` ran now, instead
-    /// of on its next poll, so its workspace goes as soon as it can.
-    pub(crate) async fn wake_runner_for_ended_job(&self, id: &ExecutionId) {
-        let id = id.to_owned();
-        let ran_job = self
-            .store
-            .run(move |db| {
-                crate::daemon::store::exists(
-                    db,
-                    "SELECT 1 FROM ci_jobs WHERE execution_id=?1",
-                    [id],
-                )
-            })
-            .await;
-        // A failed lookup costs only a pass that finds nothing to do.
-        if ran_job.unwrap_or(true) {
-            self.runner.jobs().wake();
-        }
-    }
-
-    /// Whether Shoal ended `job`, whose runner outlived its run; a job it
-    /// could not end, or whose run could not be read, is tried again on a
-    /// later pass.
-    async fn ended_overrun_job(&self, job: &ClaimedJob) -> bool {
-        self.runner
-            .end_overrun_job(self, job)
-            .await
-            .unwrap_or_else(|error| {
-                crate::daemon::log!("runner: {}: {error:#}", job.job.job.name);
-                false
-            })
-    }
-
-    /// Record the execution running in the workspace of `job`, whose claim
-    /// a restart cut short after its command started but before its
-    /// execution was recorded, returning whether there is one.
-    async fn adopt_job_execution(&self, job: &ClaimedJob) -> Result<bool> {
-        let executions = self.workspace_executions(&job.workspace_id).await?;
-        let Some(execution) = executions.into_iter().next() else {
-            return Ok(false);
-        };
-        self.record_job_execution(job.id.as_str(), execution.id)
-            .await?;
-        Ok(true)
-    }
-
-    /// Delete the runner's directory of each job no longer claimed, however
-    /// its workspace went; one that cannot be deleted is tried again on the
-    /// next pass.
-    async fn remove_unclaimed_job_directories(&self) -> Result<()> {
-        let parent = self.paths.state.join("runner");
-        let entries = match std::fs::read_dir(&parent) {
-            Ok(entries) => entries,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-            Err(error) => return Err(error.into()),
-        };
-        for entry in entries {
-            let entry = entry?;
-            let id = QueueEntryId::from(entry.file_name().to_string_lossy().into_owned());
-            // Checked for each directory, under the lock a claim writes its
-            // files with, so a claim recorded or begun meanwhile keeps them.
-            let _files = self.runner.jobs().job_files().await;
-            if self.runner.jobs().claiming(&id) || self.job_claimed(&id).await? {
-                continue;
-            }
-            if let Err(error) = std::fs::remove_dir_all(entry.path()) {
-                crate::daemon::log!("runner: {}: {error:#}", entry.path().display());
-            }
-        }
-        Ok(())
-    }
-
-    /// Whether the runner records a claim of the job `id`.
-    async fn job_claimed(&self, id: &QueueEntryId) -> Result<bool> {
-        let id = id.to_owned();
-        self.store
-            .run(move |db| {
-                crate::daemon::store::exists(db, "SELECT 1 FROM ci_jobs WHERE id=?1", [id])
-            })
-            .await
-    }
-
     /// Whether the execution `id` of a job in `workspace_id` may still run.
     /// One whose wrapper has not reattached since a daemon restart, which
     /// restart recovery leaves to its owner since a job's runner has no agent
@@ -167,7 +36,11 @@ impl Manager {
     /// marker or in its process group. Verified survivors are stopped and
     /// checked again on the next pass; a launch whose identity was never
     /// recorded proves nothing and keeps the job.
-    async fn job_execution_runs(&self, workspace_id: &SpaceId, id: &ExecutionId) -> Result<bool> {
+    pub(super) async fn job_execution_runs(
+        &self,
+        workspace_id: &SpaceId,
+        id: &ExecutionId,
+    ) -> Result<bool> {
         let workspace = self.workspace_by_id(workspace_id).await?;
         let execution = self
             .workspace_executions(workspace_id)

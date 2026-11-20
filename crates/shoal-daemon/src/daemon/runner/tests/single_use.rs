@@ -2,7 +2,9 @@
 //! them.
 use rusqlite::params;
 
-use super::{GitHubState, admit_and_claim, github_fixture, github_job, launched};
+use super::{
+    GitHubState, admit_and_claim, finish_ended_jobs, github_fixture, github_job, launched,
+};
 use crate::{
     daemon::{executions::ExecutionKind, manager::Manager},
     forge::numbers::RunnerId,
@@ -93,7 +95,7 @@ async fn a_jobs_runner_runs_from_its_copy_and_goes_once_no_job_is_left_for_it() 
         .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(0))
         .await
         .unwrap();
-    manager.finish_ended_jobs().await.unwrap();
+    finish_ended_jobs(manager).await;
     assert!(manager.workspace_by_id(&workspace.id).await.is_err());
     // Its end deletes the runner too, which counts as done once it is gone.
     assert_eq!(deleted(&fixture.state), ["77", "77"]);
@@ -123,6 +125,6 @@ async fn a_runner_that_took_a_job_stays_until_the_job_ends() {
         .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(0))
         .await
         .unwrap();
-    manager.finish_ended_jobs().await.unwrap();
+    finish_ended_jobs(manager).await;
     assert_eq!(deleted(&fixture.state), ["77"]);
 }

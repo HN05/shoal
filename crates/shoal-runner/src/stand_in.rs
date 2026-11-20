@@ -433,6 +433,21 @@ impl crate::daemon::Executions for StandIn {
     fn workspace_has_executions<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async { Ok(false) })
     }
+
+    fn job_execution_runs<'a>(
+        &'a self,
+        _: &'a SpaceId,
+        _: &'a shoal_ids::execution_ids::ExecutionId,
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(false) })
+    }
+
+    fn workspace_execution<'a>(
+        &'a self,
+        _: &'a SpaceId,
+    ) -> BoxFuture<'a, Result<Option<shoal_ids::execution_ids::ExecutionId>>> {
+        Box::pin(async { Ok(None) })
+    }
 }
 
 /// The stand-in's job workspaces never move.
@@ -444,6 +459,10 @@ impl crate::daemon::Workspaces for StandIn {
         _: Option<&'a str>,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move { anyhow::bail!("job workspace {id} cannot move") })
+    }
+
+    fn remove_job_workspace<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
     }
 }
 

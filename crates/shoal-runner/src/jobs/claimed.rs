@@ -2,6 +2,7 @@
 //! workspace it runs in, the execution running the forge's runner once it
 //! started, and the runner the forge registered for it alone.
 use anyhow::Result;
+use rusqlite::params;
 use shoal_forge_types::numbers::RunnerId;
 use shoal_ids::{
     execution_ids::ExecutionId, queue_entry_ids::QueueEntryId, repository_ids::RepositoryId,
@@ -49,6 +50,26 @@ impl Runner {
                         })
                     })?
                     .collect::<rusqlite::Result<_>>()?)
+            })
+            .await
+    }
+
+    /// Record `execution` as the one running the claimed job `id`'s
+    /// runner, and when it launched.
+    pub async fn record_job_execution(
+        &self,
+        id: &QueueEntryId,
+        execution: ExecutionId,
+    ) -> Result<()> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE ci_jobs SET execution_id=?2,launched_at=coalesce(launched_at,?3)
+                     WHERE id=?1",
+                    params![id, execution, UnixTime::now()],
+                )?;
+                Ok(())
             })
             .await
     }
