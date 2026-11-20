@@ -14,9 +14,11 @@ use crate::{
     cli::context::Context,
     protocol::{ErrorCode, RemoteError},
     refusal::Reason,
-    transfer::{Arrived, ImportedMove, ImportedPackage, PackageImport, PackageSource},
+    transfer::{
+        Arrived, CarriedRecord, ImportedMove, ImportedPackage, PackageImport, PackageSource,
+    },
 };
-use shoal_ids::move_tickets::MoveTicket;
+use shoal_ids::{move_tickets::MoveTicket, space_ids::SpaceId};
 
 /// Continue the package on standard input, claiming its spaces with
 /// `ticket`, which a copy lacks, queueing their agents' restores when
@@ -28,7 +30,10 @@ pub(in crate::cli::commands) async fn import_moved(
 ) -> Result<i32> {
     let imported = match receive(ctx, ticket).await {
         Ok(imported) => match open(ctx, imported, restore).await {
-            Ok(arrived) => ImportedMove::Arrived(Box::new(arrived)),
+            Ok((arrived, carried)) => ImportedMove::Arrived {
+                arrived: Box::new(arrived),
+                carried,
+            },
             Err(error) => failed(&error),
         },
         Err(error) if nothing_imported(&error) => ImportedMove::Refused {
@@ -56,8 +61,18 @@ async fn receive(ctx: &Context, ticket: Option<MoveTicket>) -> Result<ImportedPa
 /// Open the spaces `imported` recorded here, as `shoal restore --from`
 /// does: its own space set up, with its post-setup hook run and, once that
 /// succeeded, its agents' restores queued when `restore`, then the spaces
-/// it carries.
-async fn open(ctx: &Context, imported: ImportedPackage, restore: bool) -> Result<Arrived> {
+/// it carries, whose IDs it returns with where its own arrived.
+async fn open(
+    ctx: &Context,
+    imported: ImportedPackage,
+    restore: bool,
+) -> Result<(Arrived, Vec<SpaceId>)> {
+    let carried = (imported.carried.iter())
+        .filter_map(|record| match record {
+            CarriedRecord::Recorded { space, .. } => Some(space.clone()),
+            CarriedRecord::Failed { .. } => None,
+        })
+        .collect();
     let mut reopened = reopen::prepare_set_up(ctx, imported.restored).await?;
     let post_setup = reopen::run_post_setup(ctx, &reopened).await;
     if post_setup.is_ok() && restore {
@@ -66,10 +81,11 @@ async fn open(ctx: &Context, imported: ImportedPackage, restore: bool) -> Result
     let failed = carried::open(ctx, imported.carried, restore).await;
     post_setup?;
     carried::ensure_opened(failed)?;
-    Ok(Arrived {
+    let arrived = Arrived {
         space: reopened.space,
         queued: (reopened.queued).map_or_else(Vec::new, |queued| queued.queued),
-    })
+    };
+    Ok((arrived, carried))
 }
 
 /// That the import failed with `error` once the hub took its claim.

@@ -5,7 +5,7 @@ use std::fs;
 use serde_json::{Value, json};
 
 use super::directory::{give_origin, join, listed, machine, workspace};
-use super::routing::scope_of;
+use super::routing::{message_with, scope_of};
 use super::support::{
     fixture::{Base, home},
     git, git_with_identity, install_test_script, printed,
@@ -62,6 +62,9 @@ fn a_move_from_a_third_machine_takes_a_workspace_to_a_joined_one_with_its_id_and
         fs::read_to_string(format!("{there}/notes")).is_ok_and(|notes| notes.contains("laptop"))
     );
     assert!(own_spaces(&laptop).iter().all(|space| space["id"] != work));
+    // Its agent hears where it is now.
+    let told = message_with(&desk, &work, "moved here from machine laptop");
+    assert_eq!(told["kind"], "space_moved", "{told}");
 }
 
 #[test]

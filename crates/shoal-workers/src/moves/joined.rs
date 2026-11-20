@@ -29,7 +29,7 @@ pub(super) async fn deliver(
 ) -> Result<Option<Arrived>> {
     let machine = format!("machine {}", destination.machine);
     let error = match crate::client::transfer::deliver_move(paths, SpaceSelector::id(id)).await {
-        Ok(ImportedMove::Arrived(arrived)) => return Ok(Some(*arrived)),
+        Ok(ImportedMove::Arrived { arrived, .. }) => return Ok(Some(*arrived)),
         Ok(ImportedMove::Refused { error }) => {
             let refused = anyhow!("{machine} took none of it: {error}");
             return Err(moving::stays_here(paths, id, refused).await);

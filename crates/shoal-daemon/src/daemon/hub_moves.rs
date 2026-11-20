@@ -7,3 +7,5 @@
 mod authorization;
 mod delivering;
 mod receiving;
+
+pub(crate) use receiving::Receiving;

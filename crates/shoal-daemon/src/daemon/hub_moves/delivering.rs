@@ -92,6 +92,7 @@ impl Manager {
         let receive = RemovalMethod::ReceiveMove {
             ticket: ticket.cloned(),
             resume: destination.resume,
+            from: self.hub.machine_name(self).await,
         };
         let operation = Operation::Removal(receive);
         let (incoming, outgoing) = self

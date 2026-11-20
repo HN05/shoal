@@ -167,10 +167,13 @@ pub enum RemovalMethod {
     /// request's connection once the first reply asks for it, and continue
     /// its spaces here as `shoal restore --from -` does, their claims at
     /// the hub carrying `ticket`, which a copy lacks, with their agents'
-    /// restores queued when `resume`; answered with how the import went.
+    /// restores queued when `resume`, and tell their agents that the spaces
+    /// moved here from the machine named `from`; answered with how the
+    /// import went.
     ReceiveMove {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ticket: Option<shoal_ids::move_tickets::MoveTicket>,
         resume: bool,
+        from: String,
     },
 }

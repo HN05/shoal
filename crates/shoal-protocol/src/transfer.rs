@@ -398,8 +398,13 @@ pub struct Arrived {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum ImportedMove {
-    /// Its spaces opened here, its own as this says.
-    Arrived(Box<Arrived>),
+    /// Its spaces opened here, its own as `arrived` says, with the IDs of
+    /// those it carries.
+    Arrived {
+        arrived: Box<Arrived>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        carried: Vec<SpaceId>,
+    },
     /// Nothing was recorded, for `error`, so the spaces stay where they
     /// were.
     Refused { error: String },

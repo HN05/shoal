@@ -11,31 +11,53 @@ use tokio::net::UnixStream;
 
 use crate::{
     daemon::{
+        alerts::AlertKind,
         answer::{self, OperationGuard},
+        log,
         manager::Manager,
     },
+    model::Space,
     transfer::ImportedMove,
     workers::{Worker, detached_command, internal_command},
 };
+use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
+
+/// A move another joined machine delivers here.
+pub(crate) struct Receiving {
+    /// The ticket its claims carry, which a copy lacks.
+    pub(crate) ticket: Option<MoveTicket>,
+    /// Whether its agents' restores are queued here.
+    pub(crate) resume: bool,
+    /// The name of the machine it moves from.
+    pub(crate) from: String,
+}
 
 impl Manager {
-    /// Continue the package of a move that another joined machine writes on
-    /// `stream` once this daemon answered `request_id`, its spaces' claims
-    /// carrying `ticket` and their agents restored when `resume`, then
-    /// answer again with how that went, holding `guard` until then.
+    /// Continue the package of the move `receiving` that another joined
+    /// machine writes on `stream` once this daemon answered `request_id`,
+    /// telling the agents of the spaces that arrived where they are now,
+    /// then answer again with how that went, holding `guard` until then.
     pub(crate) async fn receive_move(
         self: Arc<Self>,
         mut stream: UnixStream,
         request_id: u64,
-        (ticket, resume): (Option<MoveTicket>, bool),
+        receiving: Receiving,
         guard: OperationGuard,
     ) -> Result<()> {
         protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
+        let ticket = receiving.ticket.as_ref();
         let body = match self
-            .import_moved(&mut stream, ticket.as_ref(), resume)
+            .import_moved(&mut stream, ticket, receiving.resume)
             .await
         {
-            Ok(imported) => Body::ImportedMove(imported),
+            Ok(imported) => {
+                if let ImportedMove::Arrived { arrived, carried } = &imported {
+                    let arrived = std::iter::once(&arrived.space.id).chain(carried);
+                    self.tell_arrived(arrived, &receiving.from).await;
+                }
+                Body::ImportedMove(imported)
+            }
             Err(error) => answer::failure(&error),
         };
         protocol::write(&mut stream, &Response::new(request_id, body)).await?;
@@ -70,6 +92,36 @@ impl Manager {
         let (_, output) = tokio::join!(feeding, child.wait_with_output());
         reported(&output.context("run the import")?)
     }
+}
+
+impl Manager {
+    /// Tell the agents of the `arrived` spaces, which moved here from the
+    /// machine named `from`, where they are now.
+    async fn tell_arrived(&self, arrived: impl Iterator<Item = &SpaceId>, from: &str) {
+        for id in arrived {
+            let told = async {
+                let space = self.space(&SpaceSelector::id(id)).await?;
+                let text = arrived_message(&space, from);
+                self.queue_agent_message(id, AlertKind::SpaceMoved, text)
+                    .await
+            };
+            if let Err(error) = told.await {
+                log!("space {id}, which moved here from {from}, is untold: {error:#}");
+            }
+        }
+    }
+}
+
+/// What the agent of `space`, which moved here from the machine named
+/// `from`, hears as it continues here.
+fn arrived_message(space: &Space, from: &str) -> String {
+    let place = match space.worktree() {
+        Some(workspace) => format!(", and its worktree is {}", workspace.path.display()),
+        None => String::new(),
+    };
+    format!(
+        "Your space moved here from machine {from}{place}; your session continues on this machine, so go on with your work here."
+    )
 }
 
 /// What the import that wrote `output` reported: its last line of

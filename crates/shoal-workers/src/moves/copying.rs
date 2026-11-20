@@ -73,7 +73,7 @@ async fn deliver_copy(
     let selector = SpaceSelector::id(&space.id);
     let delivering = crate::client::transfer::deliver_copy(paths, selector, destination.clone());
     match delivering.await? {
-        ImportedMove::Arrived(arrived) => Ok(*arrived),
+        ImportedMove::Arrived { arrived, .. } => Ok(*arrived),
         ImportedMove::Refused { error } => bail!("machine {machine} took none of it: {error}"),
         ImportedMove::Failed { error } => {
             bail!("the copy is on machine {machine}, but opening it there failed: {error}")

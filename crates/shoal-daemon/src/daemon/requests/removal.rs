@@ -9,6 +9,7 @@ use tokio::net::UnixStream;
 use super::super::{
     answer::{self, Answer},
     cleanup,
+    hub_moves::Receiving,
     manager::Manager,
     restore::PackageInput,
     scope::{Caller, Scoped},
@@ -189,10 +190,19 @@ pub(super) async fn handle(
         RemovalMethod::ImportPackage(import) => {
             return import_package(manager, *import, caller).await;
         }
-        RemovalMethod::ReceiveMove { ticket, resume } => {
+        RemovalMethod::ReceiveMove {
+            ticket,
+            resume,
+            from,
+        } => {
             let manager = manager.clone();
+            let receiving = Receiving {
+                ticket,
+                resume,
+                from,
+            };
             return Ok(Answer::connection(move |stream, request_id, guard| {
-                manager.receive_move(stream, request_id, (ticket, resume), guard)
+                manager.receive_move(stream, request_id, receiving, guard)
             }));
         }
     }))

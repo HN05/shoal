@@ -4913,7 +4913,7 @@ takes the spaces below too, and the spaces that stay keep running below the
 moved space, which keeps its ID and number there. The package goes over the
 hub's links to that machine's daemon, which continues it as `shoal restore
 --from -` does, cloning a repository it lacks, and resumes its agents unless
-`--no-resume`. Its claim of the space at the hub commits the move: a machine
+`--no-resume`, telling each where its space is now. Its claim of the space at the hub commits the move: a machine
 that took none of the package leaves the spaces here, with their agents'
 restores queued, and once its claim stands the spaces are its own and end
 here, also when setting them up there fails, which the move reports and

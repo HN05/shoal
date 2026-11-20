@@ -122,7 +122,7 @@ pub(super) fn scope_of(machine: &Base, id: &str) -> String {
 
 /// The messages waiting for the agent of `machine`'s space `id`, once one
 /// holds `text`.
-fn message_with(machine: &Base, id: &str, text: &str) -> Value {
+pub(super) fn message_with(machine: &Base, id: &str, text: &str) -> Value {
     wait_for("the agent's message", || {
         let to = json!({"space": {"space": id}});
         let messages = request(

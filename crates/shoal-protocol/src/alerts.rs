@@ -36,6 +36,9 @@ states!(AlertKind {
     /// Shoal finished a move whose worker went before it ended, as when the
     /// machine restarted during it.
     MoveFinished => "move_finished",
+    /// A space moved here from another joined machine, which its agent
+    /// hears as it continues here.
+    SpaceMoved => "space_moved",
     /// The daemon removed or forgot a space on its own.
     SpaceRemoved => "workspace_removed",
     /// An agent explicitly marked its space's work finished.
