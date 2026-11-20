@@ -473,3 +473,19 @@ async fn work_outside_the_slice_is_told_apart_from_work_in_it() {
     );
     assert_eq!(usages.memory(start + STALE + SAMPLE_INTERVAL), None);
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_sample_missing_containers_gives_no_work_memory() {
+    let start = Instant::now();
+    let readings = |containers: ContainerReadings| {
+        let mut usages = WorkspaceUsages::default();
+        usages.record(Ok(sample(start, [process(10, 1, "a", 0)])), containers);
+        usages.memory(start)
+    };
+    assert!(readings(Ok(Vec::new())).is_some());
+    // The runtime could not be read at all.
+    assert_eq!(readings(Err(anyhow::anyhow!("timed out"))), None);
+    // One project's reading failed.
+    let failed = vec![("a".into(), Err(anyhow::anyhow!("no such project")))];
+    assert_eq!(readings(Ok(failed)), None);
+}

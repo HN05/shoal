@@ -74,6 +74,9 @@ pub(crate) struct WorkspaceUsages {
     unread_containers: HashSet<SpaceId>,
     /// No container could be read last time, which is logged once too.
     containers_unreadable: bool,
+    /// The latest sample read every project's containers it tried, so its
+    /// memory holds all of theirs.
+    containers_complete: bool,
 }
 
 impl WorkspaceUsages {
@@ -106,6 +109,7 @@ impl WorkspaceUsages {
     /// once: a runtime that cannot be read leaves its workspaces' usage as
     /// their processes'.
     fn read_containers(&mut self, readings: ContainerReadings) -> Vec<(SpaceId, ContainerUsage)> {
+        self.containers_complete = false;
         let readings = match readings {
             Ok(readings) => readings,
             Err(error) => {
@@ -116,6 +120,7 @@ impl WorkspaceUsages {
             }
         };
         self.containers_unreadable = false;
+        self.containers_complete = readings.iter().all(|(_, reading)| reading.is_ok());
         let mut read = Vec::new();
         for (workspace, reading) in readings {
             match reading {
@@ -147,10 +152,11 @@ impl WorkspaceUsages {
 
     /// The memory every space's processes and containers held at the latest
     /// sample, and what of it ran outside the work slice, while sampling has
-    /// not stalled.
+    /// not stalled; none when a container's reading failed, since the
+    /// sample then misses what those containers hold.
     pub(crate) fn memory(&self, now: Instant) -> Option<SampledWork> {
         let latest = self.latest.as_ref()?;
-        if now.duration_since(latest.time) > STALE {
+        if now.duration_since(latest.time) > STALE || !self.containers_complete {
             return None;
         }
         let all = (self.usage.values()).fold(0u64, |total, usage| {

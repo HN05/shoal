@@ -321,7 +321,8 @@ sample counts for work running outside it, as a command whose scope could
 not start; before the slice exists, and on
 macOS, where the kernel does not enforce the limit, it is the memory the
 latest usage sample counts for every space's processes and containers.
-Without a current sample there is no reading of the work, and nothing starts.
+Without a current sample, or with one that could not read every workspace's
+containers, there is no reading of the work, and nothing starts.
 
 The wrapper reads its command's scope every second while it runs and once as
 it ends: how many processes the kernel's OOM killer killed there, and the
