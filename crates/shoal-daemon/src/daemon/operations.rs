@@ -314,28 +314,41 @@ impl Manager {
     }
 
     /// The operation `named` names, refusing a scoped caller one outside
-    /// its tree, and one that works in another space than the one it names,
-    /// which a space this machine has none of refuses for its own machine
-    /// to answer.
+    /// its tree, and one that works in another space than the one it
+    /// names. One this machine does not run, named with a space it has none
+    /// of, is refused for that space's machine to answer; one it runs is
+    /// its own whatever became of its space, as a move's once the space
+    /// left.
     pub(crate) async fn named_operation(
         &self,
         named: &OperationRef,
         caller: Option<&Caller>,
     ) -> Result<Arc<Entry>> {
-        let entry = self.operation(&named.id, caller).await;
         let Some(space) = &named.space else {
-            return entry;
+            return self.operation(&named.id, caller).await;
         };
-        let space = self.space(space).await?;
-        let entry = entry?;
+        if !self.has_operation(&named.id) {
+            self.space(space).await?;
+        }
+        let entry = self.operation(&named.id, caller).await?;
+        let works_in = match space.given_id() {
+            Some(id) => *id == entry.workspace,
+            None => self.space(space).await?.id == entry.workspace,
+        };
         ensure!(
-            entry.workspace == space.id,
+            works_in,
             Refusal::new(
                 Reason::NotFound,
-                format!("operation {} does not work in {}", named.id, space.name)
+                format!("operation {} does not work in space {space}", named.id)
             )
         );
         Ok(entry)
+    }
+
+    /// Whether this machine runs operation `id`, or ran it recently enough
+    /// to be followed.
+    pub(crate) fn has_operation(&self, id: &str) -> bool {
+        self.operations.get(id).is_some()
     }
 
     /// Record the worker's `report` of operation `id`.

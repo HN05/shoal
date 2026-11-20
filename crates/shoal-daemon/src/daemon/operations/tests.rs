@@ -1,4 +1,5 @@
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::time::Duration;
 
 use super::{Entry, RETAIN, fake};
@@ -9,9 +10,10 @@ use crate::{
     },
     model::{Repository, Workspace},
     protocol::operations::{
-        Ended, Failure, OperationSpec, Outcome, Preparation, Prepared, Progress, Report, Step,
-        Stream,
+        Ended, Failure, OperationKind, OperationRef, OperationSpec, Outcome, Preparation, Prepared,
+        Progress, Report, Step, Stream,
     },
+    refusal::{Reason, Refusal},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -274,4 +276,33 @@ async fn a_long_line_arrives_in_parts_of_bounded_size() {
         })
         .collect();
     assert_eq!(lengths, [8 * 1024, 8 * 1024, 10]);
+}
+
+#[tokio::test]
+async fn an_operation_named_with_its_space_is_found_here_after_its_space_left() {
+    let (root, manager) = manager().await;
+    let repository = registered(root.path(), &manager).await;
+    let other = workspace(&manager, &repository, "api").await;
+    // A move's operation outlives the space it moved away.
+    let gone = SpaceId::generate();
+    let (id, _) = manager
+        .operations
+        .register(gone.clone(), OperationKind::Move);
+    let named = OperationRef::in_space(id.clone(), SpaceSelector::id(&gone));
+    let entry = manager.named_operation(&named, None).await.unwrap();
+    assert_eq!(entry.workspace, gone);
+    // Named with another space, it is not that space's.
+    let elsewhere = OperationRef::in_space(id, SpaceSelector::id(&other.id));
+    let Err(refused) = manager.named_operation(&elsewhere, None).await else {
+        panic!("another space's operation was found");
+    };
+    assert_eq!(Reason::of(&refused), Some(Reason::NotFound), "{refused:#}");
+    // One this machine does not run is refused as the absent space's, which
+    // that space's machine answers instead.
+    let there = OperationRef::in_space("unknown".into(), SpaceSelector::id(&gone));
+    let Err(refused) = manager.named_operation(&there, None).await else {
+        panic!("an unknown operation was found");
+    };
+    let absent = Refusal::absent_space(&refused);
+    assert_eq!(absent, Some(&SpaceSelector::id(&gone)), "{refused:#}");
 }

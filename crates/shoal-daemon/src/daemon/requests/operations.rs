@@ -240,11 +240,12 @@ impl Scoped for OperationMethod {
                 None
             }
             OperationMethod::ConvertToWorkspace { chat, .. } => Some(chat),
-            // One named with its space is that space's, wherever it runs.
+            // One this machine runs is checked here; one named with a space
+            // is that space's, wherever it runs.
             OperationMethod::FollowOperation { operation, .. }
             | OperationMethod::CancelOperation { operation } => match &mut operation.space {
-                Some(space) => Some(space),
-                None => {
+                Some(space) if !manager.has_operation(&operation.id) => Some(space),
+                _ => {
                     manager.operation(&operation.id, Some(caller)).await?;
                     None
                 }
