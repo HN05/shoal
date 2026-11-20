@@ -595,6 +595,39 @@ async fn an_earlier_viewer_whose_group_cannot_be_proven_stopped_keeps_its_record
 }
 
 #[tokio::test]
+async fn a_demo_whose_viewer_cannot_be_proven_stopped_keeps_its_records() {
+    let (temp, manager) = manager().await;
+    let (workspace, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
+    let port = manager.reserve_viewer_port(&demo, None).await.unwrap();
+    let (pid_file, gate) = (temp.path().join("helper.pid"), temp.path().join("exit"));
+    let unmarked = format!("env -u {} {}", env::EXECUTION_ID, helper(&pid_file));
+    let script = format!("{unmarked}; {}; exit 0", await_file(&gate));
+    let mut earlier = ProcessGroup::spawn(
+        std::process::Command::new("sh")
+            .args(["-c", &script])
+            .env(env::EXECUTION_ID, &demo.execution_id),
+    );
+    let process = crate::process::identity::capture(earlier.id())
+        .unwrap()
+        .unwrap();
+    let _helper = Helper::read(&pid_file).await;
+    let serving = Viewer {
+        port,
+        process,
+        serving: true,
+    };
+    (manager.record_viewer(&demo.execution_id, &serving))
+        .await
+        .unwrap();
+    std::fs::write(&gate, "").unwrap();
+    let _ = earlier.wait();
+    // As a stop of a demo whose wrapper is away ends it.
+    assert!(manager.forget_execution(&demo.execution_id).await.is_err());
+    let still = listed(&manager, &workspace).await;
+    assert_eq!(still.execution_id, demo.execution_id);
+}
+
+#[tokio::test]
 async fn a_viewer_port_another_process_listens_on_starts_no_viewer() {
     let (temp, manager) = manager().await;
     let (_, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;

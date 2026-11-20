@@ -79,16 +79,13 @@ impl Manager {
     pub(super) async fn delete_execution_record(&self, id: &ExecutionId) -> Result<Option<String>> {
         let ended = id.to_owned();
         let hosts: Vec<_> = self.session_hosts.iter().map(|host| host.name()).collect();
-        let (demo, agent_space, viewer) = self
+        let (demo, agent_space) = self
             .store
             .write(move |tx| {
                 let demo = super::super::sessions::pending::record_demo(tx, &ended, &hosts)?;
                 let agent_space = record_agent_end(tx, &ended)?;
-                // Read where its record goes, so a viewer recorded before
-                // is stopped here and one recorded later cannot be.
-                let viewer = crate::daemon::demos::viewers::recorded(tx, &ended)?;
                 record_execution_end(tx, &ended, true)?;
-                Ok((demo, agent_space, viewer))
+                Ok((demo, agent_space))
             })
             .await?;
         if let Some(space) = &agent_space {
@@ -96,14 +93,6 @@ impl Manager {
         }
         // A demo's viewer goes with it.
         self.viewers.end(id);
-        // The record goes with the execution's, so a viewer that cannot be
-        // proven stopped is only logged.
-        if let Some(viewer) = viewer
-            && let Err(error) =
-                crate::daemon::demos::viewers::stop_recorded(id, &viewer.process).await
-        {
-            crate::daemon::log!("viewer of execution {id} not stopped: {error:#}");
-        }
         Ok(demo)
     }
 }

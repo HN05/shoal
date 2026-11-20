@@ -209,6 +209,16 @@ impl Manager {
         Ok(Some(port))
     }
 
+    /// Stop the viewer recorded for the demo `execution` runs, before the
+    /// execution's records go; fails, so they stay, while its process group
+    /// is not proven stopped.
+    pub(crate) async fn retire_execution_viewer(&self, execution: &ExecutionId) -> Result<()> {
+        let Some(viewer) = self.recorded_viewer(execution).await? else {
+            return Ok(());
+        };
+        (stop_recorded(execution, &viewer.process).await).context("its demo's viewer")
+    }
+
     /// Stop `demo`'s recorded `viewer` and forget it once nothing of its
     /// process group runs; while something does, the record stays, so the
     /// next open tries again.
@@ -305,7 +315,7 @@ impl Manager {
 }
 
 /// The viewer recorded for the demo `execution` runs.
-pub(crate) fn recorded(db: &Connection, execution: &ExecutionId) -> Result<Option<Viewer>> {
+fn recorded(db: &Connection, execution: &ExecutionId) -> Result<Option<Viewer>> {
     let row: Option<(u16, String, bool)> = db
         .query_row(
             "SELECT port,process,serving FROM demo_viewers WHERE execution_id=?1",
@@ -344,7 +354,7 @@ fn scope_token(db: &Connection, execution: &ExecutionId) -> Result<ScopeToken> {
 /// viewer serves only its demo, so nothing in its group has work to save.
 /// Fails while a live process remains in the group, such as one whose
 /// environment cannot be read, which unknown ownership leaves running.
-pub(crate) async fn stop_recorded(execution: &ExecutionId, process: &Identity) -> Result<()> {
+async fn stop_recorded(execution: &ExecutionId, process: &Identity) -> Result<()> {
     if runs(process) {
         // SAFETY: the group the live, verified viewer leads.
         unsafe {

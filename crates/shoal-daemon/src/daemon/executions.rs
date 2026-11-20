@@ -1027,6 +1027,11 @@ impl Manager {
 
     /// Delete an execution record whose processes the caller proved stopped.
     pub(crate) async fn forget_execution(&self, id: &ExecutionId) -> Result<()> {
+        // A demo's viewer spawning meanwhile waits, then finds no record to
+        // join and stops itself.
+        let spawning = self.viewers.spawn_lock(id);
+        let _spawning = spawning.lock().await;
+        self.retire_execution_viewer(id).await?;
         self.keep_stopped_turn(id, None).await;
         self.leases.release_execution_leases(self, id).await;
         let demo = self.delete_execution_record(id).await?;
