@@ -35,7 +35,7 @@ pub async fn start_entry(
         .iter()
         .any(|queued| queued.id == entry && queued.state == QueueState::Starting);
     ensure!(admitted, "the queued restore was cancelled");
-    let restored = super::space::run(ctx, space.clone(), Some(execution), true, None).await;
+    let restored = super::space::here(ctx, space.clone(), Some(execution), None).await;
     if let Err(error) = &restored {
         crate::queued_starts::fail(&ctx.paths, &entry, error).await;
     }

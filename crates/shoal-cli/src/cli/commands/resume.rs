@@ -16,7 +16,7 @@ use crate::{
     execution::recovery::Saved,
     model::Space,
 };
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::saved::Queuing;
 use shoal_protocol::space_names::SpaceSelector;
@@ -187,12 +187,10 @@ async fn resume_selected(
     match selected.spaces.as_deref() {
         Some([space]) if focus => {
             let first = reports::first(ctx, alongside.continue_turns(ctx).await)?;
-            let code = space::run(ctx, space.clone(), execution, true, change).await?;
+            let code = space::here(ctx, space.clone(), execution, change).await?;
             Ok(first.max(code))
         }
-        Some([space]) if alone && queuing == Queuing::Here { now: true } => {
-            space::run(ctx, space.clone(), execution, false, change).await
-        }
+        Some([space]) if alone && now => space::now(ctx, space.clone(), execution, change).await,
         Some([space]) if alone => {
             queue::queue_space(ctx, space.clone(), execution, queuing, change).await
         }
@@ -368,14 +366,12 @@ async fn retry_failed_starts(ctx: &Context, selected: &Selected, resumed: &mut Q
 
 /// The space `selector` names, a workspace or a chat.
 async fn present_space(ctx: &Context, selector: &SpaceSelector) -> Result<Space> {
-    let space = crate::client::workspaces::present_space(&ctx.paths, selector).await?;
-    space.with_context(|| format!("no space {selector}"))
+    resume::space::present_space(&ctx.paths, selector).await
 }
 
 pub(in crate::cli::commands) mod changed;
 pub(in crate::cli::commands) mod failed_starts;
 pub(in crate::cli::commands) mod permission_change;
-mod picker;
 pub(in crate::cli::commands) mod queue;
 pub(in crate::cli::commands) mod queued;
 pub(in crate::cli::commands) mod reports;

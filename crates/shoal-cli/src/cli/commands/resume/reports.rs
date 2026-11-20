@@ -1,7 +1,7 @@
 //! What `shoal resume` tells the user: the report of each outcome, and the
 //! notices a resume in this terminal prints before its agent starts.
 use crate::execution::recovery::changes::Change;
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use std::fmt::Display;
 
 use crate::cli::commands::restore::reopen::ReopenedExt;
@@ -12,7 +12,7 @@ use crate::client::output::{
 };
 use crate::{
     cli::{context::Context, ui},
-    execution::recovery::SavedCommand,
+    execution::recovery::{SavedCommand, SavedSession},
     model::Space,
     state::QueueState,
 };
@@ -22,6 +22,17 @@ use shoal_workers::resume::{Resuming, sessions::Started};
 pub(in crate::cli::commands) struct Reporting<'a>(pub &'a Context);
 
 impl Resuming for Reporting<'_> {
+    fn pick_agent(&self, agents: &[SavedSession], labels: &[String]) -> Result<SavedSession> {
+        ensure!(
+            self.0.interactive(),
+            "multiple stopped agents; select one with --execution <id>"
+        );
+        let choices: Vec<_> = (agents.iter().cloned())
+            .zip(labels.iter().map(String::as_str))
+            .collect();
+        ui::pick_choice(self.0, "Resume agent> ", &choices)
+    }
+
     fn stopped_commands(&self, space: &Space, commands: &[SavedCommand]) {
         stopped_commands(self.0, space, commands);
     }
@@ -66,6 +77,13 @@ pub(in crate::cli::commands) fn queued(ctx: &Context, queued: &Queued) -> Result
             outln!("{summary}");
         }
     })
+}
+
+/// Report the `queued` restores, returning the exit code: 1 when any
+/// failed.
+pub(super) fn queued_code(ctx: &Context, queued: &Queued) -> Result<i32> {
+    self::queued(ctx, queued)?;
+    Ok(if queued.failed.is_empty() { 0 } else { 1 })
 }
 
 /// Tell what each of the `reopened` workspaces restored.

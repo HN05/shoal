@@ -1,18 +1,17 @@
 //! Resuming one space's stopped agent or last session, a workspace's or a
-//! chat's, in this terminal or where it stopped or in the background.
+//! chat's, in this terminal, or at once where it stopped or in the
+//! background, as `shoal_workers::resume` does.
 use anyhow::{Result, ensure};
 use std::path::PathBuf;
 
 use super::reports::{self, Reporting};
-use super::{changed, picker, queue, sessions};
-use crate::client::output::resume::StartedRestores;
+use super::{changed, sessions};
 use crate::execution::recovery::RecordExt;
 use crate::{
     cli::{context::Context, terminal},
     config::permissions::PermissionChange,
     execution::recovery::{
-        LastSession, Recovery, Saved, SavedCommand, changes::Change, claim_last_session,
-        claim_record,
+        LastSession, Recovery, SavedCommand, changes::Change, claim_last_session, claim_record,
     },
     model::Space,
     protocol::ConfigTarget,
@@ -20,112 +19,94 @@ use crate::{
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_workers::execution::Restored;
-use shoal_workers::resume::{commands, permissions, stale};
+use shoal_workers::resume::{
+    self, Resumed, Starter, commands,
+    space::{Choice, Restore},
+};
 
-/// Resume the stopped agent of the space `space` names, the `execution` one
-/// when given. The agent restores in this terminal when `here`, otherwise
-/// where it stopped or in the background, making `change` when given; one
-/// whose wrapper waits to restore it starts there at once.
-pub(super) async fn run(
+/// Resume the stopped agent of the space `space` names at once, the
+/// `execution` one when given, from beside this terminal when it has one,
+/// otherwise through the queue, making `change` when given, and report it.
+pub(super) async fn now(
     ctx: &Context,
     space: SpaceSelector,
     execution: Option<ExecutionId>,
-    here: bool,
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
-    let space = super::present_space(ctx, &space).await?;
-    let mut saved = crate::client::saved::read(&ctx.paths, SpaceSelector::id(&space.id)).await?;
-    if let Some(execution) = &execution {
-        saved.retain_execution(execution, true);
+    let starter = match ctx.on_terminal() {
+        true => Starter::Caller(ctx.launcher()),
+        false => Starter::Daemon,
+    };
+    let reporting = Reporting(ctx);
+    let execution = execution.as_ref();
+    match resume::now(&ctx.paths, starter, &space, execution, change, &reporting).await? {
+        Resumed::Starts(starts) => sessions::report_starts(ctx, starts).await,
+        Resumed::Queued(queued) => reports::queued_code(ctx, &queued),
+        Resumed::Commands(report) => {
+            reports::commands_only(ctx, &report)?;
+            Ok(0)
+        }
     }
-    ensure!(
-        !saved.is_empty(),
-        "no stopped agents or commands for this {}",
-        space.kind()
-    );
-    if saved.agents.is_empty() && !saved.sessions.is_empty() {
-        return continue_last_session(ctx, &space, saved, here, change).await;
+}
+
+/// Resume the stopped agent of the space `space` names in this terminal,
+/// the `execution` one when given, making `change` when given; one whose
+/// wrapper waits to restore it starts there at once.
+pub(super) async fn here(
+    ctx: &Context,
+    space: SpaceSelector,
+    execution: Option<ExecutionId>,
+    change: Option<&PermissionChange>,
+) -> Result<i32> {
+    let reporting = Reporting(ctx);
+    let execution = execution.as_ref();
+    let choice = resume::space::choose(&ctx.paths, &space, execution, change, &reporting);
+    match choice.await? {
+        Choice::Commands(report) => {
+            reports::commands_only(ctx, &report)?;
+            Ok(0)
+        }
+        Choice::Queued(queued) => reports::queued_code(ctx, &queued),
+        Choice::Restore(chosen) if chosen.last_session => continue_last_session(ctx, *chosen).await,
+        Choice::Restore(chosen) => restore_agent(ctx, *chosen).await,
     }
-    let recovery_id = execution
-        .as_ref()
-        .or_else(|| (saved.agents.len() == 1).then(|| &saved.agents[0].id));
-    let active = active_executions(ctx, &space, recovery_id).await?;
-    if saved.agents.is_empty() {
-        let report = commands::report_claimed(&Reporting(ctx), &space, &mut saved.commands)?;
-        reports::commands_only(ctx, &report)?;
-        return Ok(0);
-    }
-    let picked = picker::select_agent(ctx, &saved.agents, picker::agent_label)?;
-    let (selected_id, selected) = (picked.id.clone(), picked.path.clone());
-    if picked.waits_in_wrapper {
-        saved.retain_execution(&selected_id, true);
-        let stopped = vec![(space, saved)];
-        return queue::queue_all(ctx, stopped, Default::default(), true).await;
-    }
-    ensure!(
-        !active.contains(&selected_id),
-        "selected execution is active or unknown; stop or reconcile it first"
-    );
-    permissions::apply_one(&ctx.paths, &space, &selected_id, change).await?;
-    if !here {
-        let session = (space, picked);
-        return sessions::start_sessions(ctx, vec![session], true, StartedRestores::default())
-            .await;
-    }
+}
+
+/// Restore the stopped agent `chosen` picked in this terminal, telling it
+/// about its stop and the stopped commands.
+async fn restore_agent(ctx: &Context, chosen: Restore) -> Result<i32> {
+    let Restore {
+        space,
+        picked,
+        mut commands,
+        ..
+    } = chosen;
     // The restore claims the commands it reports, which a restore started
     // elsewhere claims for itself.
-    let _commands = commands::claim(&mut saved.commands);
-    let (_claim, recorded) = claim_record(&selected)?;
+    let _commands = commands::claim(&mut commands);
+    let (_claim, recorded) = claim_record(&picked.path)?;
     if let Some(reason) = &recorded.stop_reason {
         reports::restoring(&recorded.agent, reason);
     }
-    let session = recorded.into_last_session(selected_id, &selected);
-    restore(ctx, &space, session, selected, saved.commands).await
+    let session = recorded.into_last_session(picked.id, &picked.path);
+    restore(ctx, &space, session, picked.path, commands).await
 }
 
-/// The executions of `space` recorded once a daemon restart's unknown
-/// `selected` one, when any, is proven ended, as a workspace's repair
-/// proves it; a chat's agent registers only while none of it runs.
-async fn active_executions(
-    ctx: &Context,
-    space: &Space,
-    selected: Option<&ExecutionId>,
-) -> Result<Vec<ExecutionId>> {
-    if space.worktree().is_none() {
-        return Ok(Vec::new());
-    }
-    let selector = SpaceSelector::id(&space.id);
-    let inspection = crate::client::workspaces::inspect(&ctx.paths, selector.clone()).await?;
-    stale::reconcile(&ctx.paths, &inspection, selected).await?;
-    let inspection = crate::client::workspaces::inspect(&ctx.paths, selector).await?;
-    Ok(inspection.executions.into_iter().map(|e| e.id).collect())
-}
-
-/// Continue one of the last sessions that `saved` keeps of `space`, the
-/// only one or one picked on a terminal, telling it about the stopped
-/// commands: in this terminal when `here`, otherwise where it stopped or in
-/// the background, making `change` when given.
-pub(super) async fn continue_last_session(
-    ctx: &Context,
-    space: &Space,
-    saved: Saved,
-    here: bool,
-    change: Option<&PermissionChange>,
-) -> Result<i32> {
-    let picked = picker::select_agent(ctx, &saved.sessions, picker::session_label)?;
-    permissions::apply_one(&ctx.paths, space, &picked.id, change).await?;
-    if !here {
-        let session = (space.clone(), picked);
-        return sessions::start_sessions(ctx, vec![session], true, StartedRestores::default())
-            .await;
-    }
+/// Continue the last session `chosen` picked in this terminal, telling it
+/// about the stopped commands.
+async fn continue_last_session(ctx: &Context, chosen: Restore) -> Result<i32> {
+    let Restore {
+        space,
+        picked,
+        mut commands,
+        ..
+    } = chosen;
     let (_claim, last) = claim_last_session(&picked.path)?;
-    let mut commands = saved.commands;
     let _commands = commands::claim(&mut commands);
     if !last.moved {
         reports::continuing(&last.agent);
     }
-    restore(ctx, space, last, picked.path, commands).await
+    restore(ctx, &space, last, picked.path, commands).await
 }
 
 /// Restore the agent of `session` in `space`, saved at `path`, telling it

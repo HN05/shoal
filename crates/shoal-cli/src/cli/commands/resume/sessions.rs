@@ -67,12 +67,16 @@ pub(super) async fn start_sessions(
     let reporting = Reporting(ctx);
     let launcher = ctx.launcher();
     let starts = sessions::start(&ctx.paths, launcher, sessions, single, output, &reporting);
-    match starts.await? {
+    report_starts(ctx, starts.await?).await
+}
+
+/// Report the agents `starts` started, or restore the one it leaves to this
+/// terminal here.
+pub(super) async fn report_starts(ctx: &Context, starts: Starts) -> Result<i32> {
+    match starts {
         Starts::Here { space, execution } => {
             let selector = SpaceSelector::id(&space);
-            // Boxed, since `run` calls back into this function.
-            let resume = super::space::run(ctx, selector, Some(execution), true, None);
-            Box::pin(resume).await
+            super::space::here(ctx, selector, Some(execution), None).await
         }
         Starts::Elsewhere(started) => {
             reports::started(ctx, &started)?;

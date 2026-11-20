@@ -1,31 +1,23 @@
-//! Picking the one stopped agent or last session of a workspace to restore,
+//! Picking the one stopped agent or last session of a space to restore,
 //! and how the picker names each.
 use anyhow::Result;
+use shoal_core::execution::recovery::SavedSession;
 
-use crate::{
-    cli::{context::Context, ui},
-    execution::recovery::SavedSession,
-};
+use super::Resuming;
 
-/// The agent to restore of `agents`: the only one, or one picked on a
-/// terminal by its `label`.
+/// The agent to restore of `agents`: the only one, or one `resuming` picks
+/// among several by its `label`.
 pub(super) fn select_agent(
-    ctx: &Context,
+    resuming: &impl Resuming,
     agents: &[SavedSession],
     label: fn(&SavedSession) -> String,
 ) -> Result<SavedSession> {
     match agents {
         [agent] => Ok(agent.clone()),
-        agents if ctx.interactive() => {
-            let labels = agents.iter().map(label).collect::<Vec<_>>();
-            let choices = agents
-                .iter()
-                .cloned()
-                .zip(labels.iter().map(String::as_str))
-                .collect::<Vec<_>>();
-            ui::pick_choice(ctx, "Resume agent> ", &choices)
+        agents => {
+            let labels: Vec<_> = agents.iter().map(label).collect();
+            resuming.pick_agent(agents, &labels)
         }
-        _ => anyhow::bail!("multiple stopped agents; select one with --execution <id>"),
     }
 }
 

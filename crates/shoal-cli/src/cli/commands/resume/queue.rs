@@ -148,29 +148,20 @@ fn keep_unattended(saved: &mut Saved) {
     saved.commands.clear();
 }
 
-/// Restore `workspace`'s stopped agents, only `execution`'s when given, as
-/// [`Saved::restore`] decides for `queuing`, making `change` when given.
+/// Restore the stopped agents of the space `selector` names, only
+/// `execution`'s when given, as [`Saved::restore`] decides for `queuing`,
+/// making `change` when given.
 pub(super) async fn queue_space(
     ctx: &Context,
-    space: SpaceSelector,
+    selector: SpaceSelector,
     execution: Option<ExecutionId>,
     queuing: Queuing,
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
-    let space = super::present_space(ctx, &space).await?;
-    let mut saved = saved(ctx, &space).await?;
-    if let Some(execution) = &execution {
-        saved.retain_execution(execution, true);
-    }
-    ensure!(
-        !saved.is_empty(),
-        "no stopped agents or commands for this {}",
-        space.kind()
-    );
+    let space = super::present_space(ctx, &selector).await?;
+    let saved = shoal_workers::resume::space::saved(&ctx.paths, &space, execution.as_ref()).await?;
     let now = match saved.restore(queuing) {
-        Restore::Continue => {
-            return super::space::continue_last_session(ctx, &space, saved, false, change).await;
-        }
+        Restore::Continue => return super::space::now(ctx, selector, execution, change).await,
         Restore::Queue { now } => now,
     };
     let stopped = vec![(space, saved)];
