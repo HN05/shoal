@@ -64,7 +64,13 @@ async fn an_agent_waiting_for_its_restore_refuses_another_worker() {
             .await
     );
     manager.queue_agent_restore(&execution).await.unwrap();
-    refusal(queue_worker(&manager, &workspace).await);
+    let refused = queue_worker(&manager, &workspace).await;
+    assert!(
+        refused
+            .as_ref()
+            .is_err_and(|error| error.is::<StoppedAgent>()),
+        "{refused:?}"
+    );
 
     // Its wrapper is gone, and the daemon takes over its restore.
     (manager.store)
@@ -90,6 +96,59 @@ async fn an_agent_waiting_for_its_restore_refuses_another_worker() {
     manager.replace_stopped_worker(&space).await.unwrap();
     assert!(manager.queue_entries().await.unwrap().is_empty());
     queue_worker(&manager, &workspace).await.unwrap();
+}
+
+/// An asleep agent whose wrapper waits to restore it runs no turn, so a
+/// launch that replaces it stops that wrapper, takes its restore out of
+/// the queue and discards it.
+#[tokio::test]
+async fn replacing_an_asleep_agent_stops_the_wrapper_waiting_for_it() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let workspace = create(&manager, &repo, "asleep").await;
+    let (execution, stop) = connected_agent(&manager, &workspace).await;
+    assert!(
+        manager
+            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
+            .await
+    );
+    manager.queue_agent_restore(&execution).await.unwrap();
+    let wrapper = wrapper_ending_when_stopped(&manager, &execution, stop);
+
+    let admission = manager
+        .queue_add(QueueRequest {
+            replace: true,
+            ..launch_in(&workspace, false)
+        })
+        .await
+        .unwrap();
+
+    wrapper.await.unwrap();
+    let entries = manager.queue_entries().await.unwrap();
+    assert_eq!(entries.len(), 1, "{entries:?}");
+    assert_eq!(entries[0].id, admission.entry.unwrap().id);
+    let records = crate::execution::recovery::agent_records(&manager.paths, &workspace.id);
+    assert!(records.unwrap().is_empty());
+}
+
+/// The wrapper of `execution`, which waits to restore its agent after the
+/// stop `stop` has seen, ending it once the next stop asks it to, as a real
+/// wrapper does.
+fn wrapper_ending_when_stopped(
+    manager: &std::sync::Arc<Manager>,
+    execution: &ExecutionId,
+    mut stop: tokio::sync::watch::Receiver<bool>,
+) -> tokio::task::JoinHandle<()> {
+    let (manager, execution) = (manager.clone(), execution.clone());
+    stop.borrow_and_update();
+    tokio::spawn(async move {
+        stop.changed().await.unwrap();
+        let kind = crate::daemon::executions::ExecutionKind::Command;
+        manager
+            .finish_execution(execution, kind, Some(0))
+            .await
+            .unwrap();
+    })
 }
 
 /// Record a stopped agent of `workspace` awaiting `shoal resume`,

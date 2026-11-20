@@ -737,6 +737,32 @@ impl Manager {
         }
     }
 
+    /// Wait until the execution `id` of the space `space`, whose wrapper
+    /// was asked to stop, ends, as a space's stop waits for its executions.
+    pub(in crate::daemon) async fn await_execution_end(
+        &self,
+        space: &SpaceId,
+        id: &ExecutionId,
+    ) -> Result<()> {
+        let deadline = Instant::now() + timing::WORKSPACE_STOP_TIMEOUT;
+        loop {
+            let query_id = space.to_owned();
+            let executions = self
+                .store
+                .run(move |db| store::executions(db, &query_id))
+                .await?;
+            let Some(execution) = executions.iter().find(|execution| execution.id == *id) else {
+                return Ok(());
+            };
+            ensure!(
+                Instant::now() < deadline,
+                "timed out waiting for the agent's wrapper to stop: {}",
+                self.stop_progress(execution)
+            );
+            sleep(timing::WORKSPACE_STOP_POLL_INTERVAL).await;
+        }
+    }
+
     /// Ask the connected wrapper of `id` to stop for `request`, cancelling
     /// its agent's automatic restore, unless `protected` keeps an agent that
     /// protection stopped waiting for its restore. Returns whether the

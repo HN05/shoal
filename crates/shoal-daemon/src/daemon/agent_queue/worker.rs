@@ -9,6 +9,7 @@ use crate::{
     execution::recovery,
     model::Space,
 };
+use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
@@ -20,8 +21,13 @@ impl Manager {
     /// failed, whose place the agent left waiting takes. Requires the queue
     /// gate, which keeps another launch out until this one is recorded.
     pub(in crate::daemon) async fn ensure_takes_worker(&self, space: &Space) -> Result<()> {
-        self.ensure_no_live_worker(space).await?;
-        if self.has_stopped_worker(space).await? {
+        let asleep = !self.asleep_restores(space).await?.is_empty();
+        // An asleep agent's wrapper may still wait to restore it, which runs
+        // no turn.
+        if !asleep {
+            self.ensure_no_live_worker(space).await?;
+        }
+        if asleep || !recovery::agent_records(&self.paths, &space.id)?.is_empty() {
             bail!(StoppedAgent::of(space));
         }
         Ok(())
@@ -31,8 +37,11 @@ impl Manager {
     /// sessions and stopped commands, as `shoal restore --discard-agent`
     /// does, so that a new agent can take its place; a running agent, or
     /// one in the agent queue, is refused, so a start never cuts off a live
-    /// turn.
+    /// turn, and so is an asleep agent whose wrapper still waits to restore
+    /// it, which [`Self::stop_asleep_wrappers`] stops first. Requires the
+    /// queue gate.
     pub(in crate::daemon) async fn replace_stopped_worker(&self, space: &Space) -> Result<()> {
+        self.retire_asleep_restores(space).await?;
         self.ensure_no_live_worker(space).await?;
         let selector = SpaceSelector::id(&space.id);
         if !self.saved_work(&selector).await?.is_empty() {
@@ -61,7 +70,7 @@ impl Manager {
 
     /// Refuse a launch in `space` while an agent of its own runs there or
     /// waits in the agent queue, which a replacing launch refuses too.
-    pub(in crate::daemon) async fn ensure_no_live_worker(&self, space: &Space) -> Result<()> {
+    async fn ensure_no_live_worker(&self, space: &Space) -> Result<()> {
         let (number, kind) = (space.number, space.kind());
         if self.running_agent_workspaces().await.contains(&space.id)
             || self.recorded_agent_spaces().await?.contains(&space.id)
@@ -83,16 +92,49 @@ impl Manager {
         Ok(())
     }
 
-    /// Whether `space` has a stopped agent awaiting `shoal resume`, or an
-    /// asleep one whose restore waits in the queue.
-    async fn has_stopped_worker(&self, space: &Space) -> Result<bool> {
-        if !recovery::agent_records(&self.paths, &space.id)?.is_empty() {
-            return Ok(true);
-        }
+    /// The restores of the asleep agent of `space` that wait in the queue.
+    async fn asleep_restores(&self, space: &Space) -> Result<Vec<QueueEntryId>> {
         let id = space.id.clone();
         (self.store)
-            .read(move |tx| super::store::sleeps_agent_in(tx, &id))
+            .read(move |tx| super::store::asleep_restores(tx, &id))
             .await
+    }
+
+    /// Refuse a launch in `space` that replaces its stopped agent while an
+    /// agent of its own runs there or waits in the agent queue, as
+    /// replacing it would; an asleep agent's waiting wrapper runs no turn.
+    pub(in crate::daemon) async fn ensure_replaceable(&self, space: &Space) -> Result<()> {
+        match self.asleep_restores(space).await?.is_empty() {
+            true => self.ensure_no_live_worker(space).await,
+            false => Ok(()),
+        }
+    }
+
+    /// Stop the wrappers that wait to restore the asleep agent of `space`,
+    /// as removing their restores from the queue does, and wait until they
+    /// end, so the agent stays stopped for its replacement to discard. A
+    /// wrapper's end takes its restore out of the queue, so this runs
+    /// without the queue gate.
+    pub(in crate::daemon) async fn stop_asleep_wrappers(&self, space: &Space) -> Result<()> {
+        let restores = self.asleep_restores(space).await?;
+        let entries = self.queue_entries().await?.into_iter();
+        for entry in entries.filter(|entry| restores.contains(&entry.id)) {
+            if let Some(execution) = self.waiting_wrapper(&entry).await? {
+                self.stop_waiting_wrapper(&entry, &execution).await?;
+                self.await_execution_end(&space.id, &execution).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Take the restores of the asleep agent of `space` out of the queue,
+    /// which no wrapper waits for once [`Self::stop_asleep_wrappers`]
+    /// stopped them. Requires the queue gate.
+    async fn retire_asleep_restores(&self, space: &Space) -> Result<()> {
+        for restore in self.asleep_restores(space).await? {
+            self.delete_waiting_entry(restore).await?;
+        }
+        Ok(())
     }
 
     /// Take the queue gate for an agent that registers in `space` without a

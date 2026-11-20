@@ -86,6 +86,9 @@ impl Manager {
         };
         let now = launch.request.now;
         let launch = std::sync::Arc::new(launch);
+        if replace {
+            self.prepare_replacement(&space, &launch).await?;
+        }
         let _gate = self.agent_queue.lock_admission().await;
         if replace {
             self.replace_for(&space, &launch).await?;
@@ -111,16 +114,34 @@ impl Manager {
         Ok(admission)
     }
 
+    /// Stop the wrappers that wait to restore the asleep agent of `space`
+    /// that `launch` replaces, once nothing but that agent would refuse to
+    /// record the launch, before the queue gate is taken.
+    async fn prepare_replacement(
+        &self,
+        space: &crate::model::Space,
+        launch: &Arc<Launch>,
+    ) -> Result<()> {
+        self.ensure_launch_recordable(launch).await?;
+        self.stop_asleep_wrappers(space).await
+    }
+
     /// Discard the stopped or asleep agent of `space` that `launch`
     /// replaces, once nothing but that agent would refuse to record the
     /// launch, so a refused launch keeps it. Requires the queue gate, which
     /// keeps another launch out until this one is recorded.
     async fn replace_for(&self, space: &crate::model::Space, launch: &Arc<Launch>) -> Result<()> {
+        self.ensure_launch_recordable(launch).await?;
+        self.replace_stopped_worker(space).await
+    }
+
+    /// Refuse `launch` where recording it would refuse it.
+    async fn ensure_launch_recordable(&self, launch: &Arc<Launch>) -> Result<()> {
         let (launch, removing) = (launch.clone(), self.space_removals.clone());
         (self.store)
             .read(move |tx| ensure_recordable(tx, &launch, &removing))
-            .await?;
-        self.replace_stopped_worker(space).await
+            .await
+            .map(drop)
     }
 
     /// The answer to the launch `id`, which the caller starts when `start`:

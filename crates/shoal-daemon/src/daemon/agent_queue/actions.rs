@@ -65,7 +65,7 @@ impl Manager {
 
     /// The execution of the stopped agent whose wrapper waits for `entry`,
     /// a restore the daemon does not start itself.
-    async fn waiting_wrapper(&self, entry: &QueueEntry) -> Result<Option<ExecutionId>> {
+    pub(super) async fn waiting_wrapper(&self, entry: &QueueEntry) -> Result<Option<ExecutionId>> {
         if entry.kind != QueueKind::Restore || self.restores_stopped_agent(&entry.id).await? {
             return Ok(None);
         }
@@ -279,7 +279,7 @@ impl Manager {
     /// `shoal stop` stops it, leaving its recovery record. A disconnected
     /// wrapper would queue the restore again once it reattaches, so it is
     /// refused.
-    async fn stop_waiting_wrapper(
+    pub(super) async fn stop_waiting_wrapper(
         &self,
         entry: &QueueEntry,
         execution: &ExecutionId,
@@ -304,7 +304,7 @@ impl Manager {
     }
 
     /// Delete the entry `id` if it still waits, returning whether it did.
-    async fn delete_waiting_entry(&self, id: QueueEntryId) -> Result<bool> {
+    pub(super) async fn delete_waiting_entry(&self, id: QueueEntryId) -> Result<bool> {
         self.store.write(move |tx| delete_waiting(tx, &id)).await
     }
 }

@@ -163,14 +163,21 @@ pub(super) fn queues_agent_in(tx: &rusqlite::Transaction<'_>, workspace: &SpaceI
     )
 }
 
-/// Whether the restore of an asleep agent of `workspace`, which Shoal
-/// queued on its own, waits in the queue.
-pub(super) fn sleeps_agent_in(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<bool> {
-    crate::daemon::store::exists(
-        tx,
-        "SELECT 1 FROM agent_queue WHERE space_id=?1 AND kind=?2 AND automatic AND state=?3",
-        params![workspace, QueueKind::Restore, QueueState::Queued],
-    )
+/// The restores of an asleep agent of `workspace`, which Shoal queued on
+/// its own, that wait in the queue.
+pub(super) fn asleep_restores(
+    tx: &rusqlite::Transaction<'_>,
+    workspace: &SpaceId,
+) -> Result<Vec<QueueEntryId>> {
+    Ok(tx
+        .prepare(
+            "SELECT id FROM agent_queue WHERE space_id=?1 AND kind=?2 AND automatic AND state=?3",
+        )?
+        .query_map(
+            params![workspace, QueueKind::Restore, QueueState::Queued],
+            |row| row.get(0),
+        )?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 /// Whether a launch waits in the queue or starts in `workspace`, holding

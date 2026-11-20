@@ -89,7 +89,7 @@ impl Manager {
     ) -> Result<()> {
         let space = self.space(&SpaceSelector::id(&workspace.id)).await?;
         match launch.replace {
-            true => self.ensure_no_live_worker(&space).await,
+            true => self.ensure_replaceable(&space).await,
             false => self.ensure_takes_worker(&space).await,
         }
     }

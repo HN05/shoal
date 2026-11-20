@@ -2723,8 +2723,9 @@ in the queue, including while a blocker holds it back, naming `shoal attach`,
 `shoal restart`, `shoal stop` or `shoal queue` as fits. A stopped agent awaiting
 `shoal resume`, or an asleep one whose restore Shoal queued on its own, refuses
 it too, naming `shoal resume` and `--replace`, unless the start passes
-`--replace`: the launch then discards that agent, with its last sessions and
-stopped commands, as `shoal restore --discard-agent` does, and queues its own.
+`--replace`: the launch then stops the wrapper that waits to restore an asleep
+agent, discards the agent, with its last sessions and stopped commands, as
+`shoal restore --discard-agent` does, and queues its own.
 Without `--replace`, a start on a terminal asks whether to resume the stopped
 agent, replace it or cancel. `--replace` applies only to a start of a
 workspace's own agent, with `--in` or on a branch or issue the workspace has,
