@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use shoal_protocol::{
-    alerts::Alert,
+    alerts::{Alert, AlertKind},
     chat_marks::{ChatMark, ChatMarked, MarkedRecipients},
     files::NewFile,
     protocol::AlertTarget,
@@ -292,4 +292,58 @@ async fn only_the_agent_of_a_space_marks_its_turn() {
     let command = caller_in(&SpaceSelector::id(&tree.parent.space));
     let marked = (tree.manager).mark_chat_alert(Some(&command), AlertTarget::Up, Vec::new());
     assert!(marked.await.is_err());
+}
+
+impl Agent {
+    /// The user submits `prompt` in the agent's chat.
+    async fn prompted(&self, manager: &Manager, prompt: &str) {
+        let selector = SpaceSelector::id(&self.space);
+        (manager.reply_in_chat(&selector, Some(&self.execution), Some(prompt.into())))
+            .await
+            .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn a_prompt_during_a_marked_turn_drops_its_alert_and_tells_the_agent() {
+    let tree = tree().await;
+    (tree.parent)
+        .mark_alert(&tree.manager, AlertTarget::Up, Vec::new())
+        .await;
+    tree.parent
+        .prompted(&tree.manager, "Wait, one more thing")
+        .await;
+    tree.parent.end_turn(&tree.manager, "Sure").await;
+    assert!(tree.users().await.is_empty());
+    let kinds: Vec<AlertKind> = (tree.unread(&tree.parent).await.into_iter())
+        .map(|alert| alert.kind)
+        .collect();
+    assert_eq!(kinds, [AlertKind::ChatAlertDropped]);
+}
+
+#[tokio::test]
+async fn a_prompt_marks_read_the_alerts_its_chat_sent_the_user() {
+    let tree = tree().await;
+    let parent = tree.parent.caller();
+    let plain = tree
+        .manager
+        .send_alert(Some(&parent), AlertTarget::Up, "Plain".into(), Vec::new());
+    plain.await.unwrap();
+    for to in [
+        AlertTarget::Up,
+        AlertTarget::Space {
+            space: SpaceSelector::id(&tree.child.space),
+        },
+    ] {
+        tree.parent.mark_alert(&tree.manager, to, Vec::new()).await;
+        tree.parent.end_turn(&tree.manager, "From the chat").await;
+    }
+    assert_eq!(tree.users().await.len(), 2);
+    tree.parent.prompted(&tree.manager, "Thanks").await;
+    // The alert sent with `send` and the child's stay unread.
+    let users: Vec<String> = (tree.users().await.into_iter())
+        .map(|alert| alert.message)
+        .collect();
+    assert_eq!(users, ["Plain"]);
+    assert_eq!(tree.unread(&tree.child).await.len(), 1);
 }

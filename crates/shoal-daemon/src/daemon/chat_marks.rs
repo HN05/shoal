@@ -164,8 +164,10 @@ impl Manager {
 
     /// The user replied `prompt` in the conversation of the agent
     /// `execution` runs in the space `selector` names: record their
-    /// interaction with it, drop the mark of a turn underway, and record
-    /// their reply to the posts its agents made there.
+    /// interaction with it, drop the mark of a turn underway, telling the
+    /// agent of an alert it leaves unsent, record their reply to the posts
+    /// its agents made there, and mark the alerts they sent the user from
+    /// there read.
     pub(crate) async fn reply_in_chat(
         &self,
         selector: &SpaceSelector,
@@ -174,17 +176,24 @@ impl Manager {
     ) -> Result<()> {
         self.note_interaction(selector).await;
         let space = self.space(selector).await?;
-        let turn = execution.cloned();
-        let delivered = self
+        let (turn, id) = (execution.cloned(), space.id.clone());
+        let (dropped, delivered) = self
             .store
             .write(move |tx| {
-                if let Some(turn) = &turn {
-                    take(tx, turn)?;
-                }
-                crate::daemon::threads::record_chat_replies(tx, &space.id, prompt.as_deref())
+                let dropped = match &turn {
+                    Some(turn) => take(tx, turn)?,
+                    None => None,
+                };
+                alerts::read_in_chat(tx, &id)?;
+                let delivered =
+                    crate::daemon::threads::record_chat_replies(tx, &id, prompt.as_deref())?;
+                Ok((dropped, delivered))
             })
             .await?;
         self.announce_threads(delivered).await;
+        if let Some(Mark::Alert(alert)) = dropped {
+            self.tell_alert_dropped(&space, alert).await?;
+        }
         Ok(())
     }
 }

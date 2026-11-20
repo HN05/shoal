@@ -76,6 +76,9 @@ states!(AlertKind {
     WakeTimer => "wake_timer",
     /// Shoal retries a turn an API failure ended.
     TurnRetried => "turn_retried",
+    /// A prompt the user submitted answered a turn the agent marked to
+    /// send its final message as an alert, which therefore went unsent.
+    ChatAlertDropped => "chat_alert_dropped",
     /// The machine's memory, CPU or disk space runs short.
     LoadWarning => "load_warning",
     /// What blocks the space's work changed.

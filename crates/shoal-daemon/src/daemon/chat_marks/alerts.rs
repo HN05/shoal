@@ -16,7 +16,8 @@ use shoal_protocol::{
 use super::Mark;
 use crate::{
     daemon::{
-        alerts::{Recipients, recipient},
+        agent_messages::Delivery,
+        alerts::{AlertKind, Recipients, recipient},
         executions::ExecutionKind,
         manager::Manager,
         notifications::Source,
@@ -66,6 +67,18 @@ fn alert_text(to: &AlertTarget, message: Option<&str>) -> String {
         "" => super::WROTE_IN_CHAT.to_owned(),
         _ => crate::validate::shorten(text, max),
     }
+}
+
+/// Mark read the user's unread alerts that the space `id` sent from its
+/// chat, which a prompt the user submits there answers. Alerts are
+/// one-way, so the prompt is no reply to them.
+pub(super) fn read_in_chat(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
+    tx.execute(
+        "UPDATE alerts SET read=1 WHERE recipient_id IS NULL AND read=0 AND in_chat
+            AND sender='space' AND space_id=?1",
+        [id],
+    )?;
+    Ok(())
 }
 
 /// Record that the alerts `ids` carry a turn's final message.
@@ -142,6 +155,25 @@ impl Manager {
     async fn repository_name(&self, selector: &Selector) -> Result<String> {
         let repository = self.repository(selector.clone()).await?;
         Ok(repository.display_name().to_owned())
+    }
+
+    /// Tell the agent of `space` that a prompt the user submitted answered
+    /// its turn, leaving the alert it marked the turn to send, to whom
+    /// `alert` names, unsent; its next delivery shows the agent.
+    pub(super) async fn tell_alert_dropped(&self, space: &Space, alert: MarkedAlert) -> Result<()> {
+        let to = match alert.recipients {
+            MarkedRecipients::User => "the user".to_owned(),
+            MarkedRecipients::Coordinator { space } | MarkedRecipients::Space { space } => {
+                format!("the agent of {}", space.label())
+            }
+            MarkedRecipients::Above => "your coordinator".to_owned(),
+            MarkedRecipients::All { .. } => "the agents below".to_owned(),
+        };
+        let message = format!(
+            "The user's prompt answered your turn, so the alert to {to} that `shoal send --in-chat` marked it to send was not sent. Send it again if it still applies."
+        );
+        let kind = AlertKind::ChatAlertDropped;
+        (self.queue_agent_message_delivered(&space.id, kind, message, Delivery::NextTurn)).await
     }
 
     /// Send `message`, the final message of the turn `turn` of the agent
