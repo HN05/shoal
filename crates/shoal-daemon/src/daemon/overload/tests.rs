@@ -270,31 +270,43 @@ fn warnings_follow_enabled_protections_and_sustained_cpu() {
             .collect::<Vec<_>>()
     };
     assert_eq!(
-        signals(monitor.warnings(start, &settings, Some(WARNING))),
+        signals(monitor.warnings(start, &settings, Some(WARNING), false)),
         [Signal::Memory]
     );
-    assert!(monitor.warnings(start, &settings, None).is_empty());
+    assert!(monitor.warnings(start, &settings, None, false).is_empty());
     settings.memory.enabled = false;
-    assert!(monitor.warnings(start, &settings, Some(WARNING)).is_empty());
+    assert!(
+        monitor
+            .warnings(start, &settings, Some(WARNING), false)
+            .is_empty()
+    );
     settings.memory.enabled = true;
     settings.warning.enabled = false;
-    assert!(monitor.warnings(start, &settings, Some(WARNING)).is_empty());
+    assert!(
+        monitor
+            .warnings(start, &settings, Some(WARNING), false)
+            .is_empty()
+    );
     settings.warning.enabled = true;
 
     // CPU warns only while its protection is enabled, after the warning
     // threshold has held for its sustained time.
     settings.cpu.enabled = true;
     monitor.cpu_used = Some(85.0);
-    assert!(monitor.warnings(start, &settings, Some(CALM)).is_empty());
+    assert!(
+        monitor
+            .warnings(start, &settings, Some(CALM), false)
+            .is_empty()
+    );
     let sustained = Duration::from_secs(settings.warning.cpu_sustained_seconds);
     assert_eq!(
-        signals(monitor.warnings(start + sustained, &settings, Some(CALM))),
+        signals(monitor.warnings(start + sustained, &settings, Some(CALM), false)),
         [Signal::Cpu]
     );
     monitor.cpu_used = Some(79.0);
     assert!(
         monitor
-            .warnings(start + sustained * 2, &settings, Some(CALM))
+            .warnings(start + sustained * 2, &settings, Some(CALM), false)
             .is_empty()
     );
 }

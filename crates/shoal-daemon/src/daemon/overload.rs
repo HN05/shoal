@@ -50,6 +50,8 @@ impl Sustained {
 struct Readings {
     /// `None` with memory protection off or a failed reading.
     memory: Option<MemoryPressure>,
+    /// `memory` counts Shoal's work against its memory limit.
+    limited: bool,
     cpu: anyhow::Result<load::CpuTicks>,
     disk_safe: bool,
 }
@@ -58,8 +60,10 @@ impl Readings {
     /// Take one sample, reading CPU ticks when `cpu`: for CPU protection or
     /// dynamic job admission.
     fn take(settings: &crate::config::overload::Overload, cpu: bool, manager: &Manager) -> Self {
+        let work = manager.work_limit();
         Self {
-            memory: memory_pressure(settings, manager.work_limit()),
+            memory: memory_pressure(settings, work),
+            limited: work.is_some(),
             cpu: if cpu {
                 load::cpu_ticks()
             } else {
@@ -166,12 +170,14 @@ impl Monitor {
 
     /// Signals past their warning thresholds, after [`Self::reason`] has
     /// taken this sample's CPU reading. Each warns only while its protection is
-    /// enabled; a failed reading warns about nothing.
+    /// enabled; a failed reading warns about nothing. `limited` says that
+    /// `memory` counts Shoal's work against its memory limit.
     fn warnings(
         &mut self,
         now: Instant,
         settings: &crate::config::overload::Overload,
         memory: Option<MemoryPressure>,
+        limited: bool,
     ) -> Vec<(Signal, String)> {
         let warning = &settings.warning;
         let enabled = |protection| warning.enabled && protection;
@@ -187,7 +193,7 @@ impl Monitor {
             enabled(settings.memory.enabled) && memory.is_some_and(|memory| memory.warning);
         let mut signals = Vec::new();
         if memory {
-            signals.push((Signal::Memory, warnings::memory(settings)));
+            signals.push((Signal::Memory, warnings::memory(settings, limited)));
         }
         if cpu {
             signals.push((Signal::Cpu, warnings::cpu(settings)));
@@ -261,7 +267,8 @@ pub(super) async fn run(manager: Arc<Manager>) {
             Recovery::Revoke => manager.overload_recovery.reset(),
             Recovery::Publish(ready) => manager.overload_recovery.publish(ready),
         }
-        for (signal, message) in monitor.warnings(now, settings, readings.memory) {
+        for (signal, message) in monitor.warnings(now, settings, readings.memory, readings.limited)
+        {
             warned.warn(&manager, now, signal, &message).await;
         }
         if let Some(pressure) = pressure

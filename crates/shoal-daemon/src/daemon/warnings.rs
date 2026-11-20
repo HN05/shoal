@@ -73,12 +73,23 @@ impl Warnings {
 /// agent to change its work.
 const HEADS_UP: &str = "This is information only; it needs no action from you.";
 
-pub(super) fn memory(settings: &Overload) -> String {
-    let level = if cfg!(target_os = "macos") {
+/// The warning of memory pressure, the machine's or, where `limited`,
+/// that of Shoal's work against its memory limit.
+pub(super) fn memory(settings: &Overload, limited: bool) -> String {
+    let used = match limited {
+        true => "RAM and swap, or Shoal's work against its memory limit,",
+        false => "RAM and swap",
+    };
+    let level = if cfg!(target_os = "macos") && !limited {
         "Memory pressure is high: macOS reports warning pressure, and Shoal stops an agent at critical pressure.".to_owned()
+    } else if cfg!(target_os = "macos") {
+        format!(
+            "Memory pressure is high: macOS reports warning pressure or Shoal's work passed {}% of its memory limit, and Shoal stops an agent at critical pressure or {}% of the limit.",
+            settings.warning.memory_used_percent, settings.memory.used_percent,
+        )
     } else {
         format!(
-            "Memory pressure is high: RAM and swap in use passed {}% or memory stall {}%, and Shoal stops an agent at {}% in use or at {}% stall of every task.",
+            "Memory pressure is high: {used} in use passed {}% or memory stall {}%, and Shoal stops an agent at {}% in use or at {}% stall of every task.",
             settings.warning.memory_used_percent,
             settings.warning.memory_stall_percent,
             settings.memory.used_percent,

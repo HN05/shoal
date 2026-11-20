@@ -56,7 +56,7 @@ async fn running_agents_are_warned_once_per_signal_until_the_repeat_interval() {
     let later = start + Duration::from_secs(60);
     track(0).await;
     warnings
-        .warn(&manager, start, Signal::Memory, &memory(&settings))
+        .warn(&manager, start, Signal::Memory, &memory(&settings, false))
         .await;
     let delivered = manager
         .agent_messages(&manager.named("first").await)
@@ -70,7 +70,7 @@ async fn running_agents_are_warned_once_per_signal_until_the_repeat_interval() {
     // and each signal has its own interval.
     track(1).await;
     warnings
-        .warn(&manager, later, Signal::Memory, &memory(&settings))
+        .warn(&manager, later, Signal::Memory, &memory(&settings, false))
         .await;
     warnings
         .warn(
@@ -86,7 +86,12 @@ async fn running_agents_are_warned_once_per_signal_until_the_repeat_interval() {
     // After the interval, a persisting condition warns again.
     let repeat = Duration::from_secs(settings.warning.repeat_minutes * 60);
     warnings
-        .warn(&manager, start + repeat, Signal::Memory, &memory(&settings))
+        .warn(
+            &manager,
+            start + repeat,
+            Signal::Memory,
+            &memory(&settings, false),
+        )
         .await;
     assert_eq!(count("first").await, 2);
 }
@@ -128,7 +133,7 @@ async fn only_disk_warnings_wake_an_idle_agent() {
     let mut warnings = Warnings::default();
     let now = Instant::now();
     warnings
-        .warn(&manager, now, Signal::Memory, &memory(&settings))
+        .warn(&manager, now, Signal::Memory, &memory(&settings, false))
         .await;
     warnings
         .warn(&manager, now, Signal::Cpu, &cpu(&settings))
@@ -152,7 +157,8 @@ fn warnings_are_single_lines_within_the_message_limit() {
     let settings = Overload::default();
     let path = format!("/{}", "x".repeat(200));
     for message in [
-        memory(&settings),
+        memory(&settings, false),
+        memory(&settings, true),
         cpu(&settings),
         disk(&settings, &format!("3.2 GiB available at {path}")),
     ] {
