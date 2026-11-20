@@ -91,7 +91,7 @@ fn way(auto_update: bool, development: bool, installed: Installed) -> Way {
 /// Whether a release whose newest state schema is `schema` reads the state
 /// this machine's daemon keeps: an older one cannot start on state a newer
 /// release migrated past it.
-fn reads_state(schema: i64) -> bool {
+pub(super) fn reads_state(schema: i64) -> bool {
     schema >= shoal_store::SCHEMA_VERSION
 }
 

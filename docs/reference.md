@@ -915,7 +915,8 @@ signed which one it is; a managed daemon restarts on it once idle, with its
 agents running through the restart, and connects again, while a foreground one
 tells you to restart it. It never installs a release too old to read the state
 its newer one migrated, and tells you to update the hub instead, there or with
-`shoal hub update` from a machine connected to it.
+`shoal hub update` from a machine connected to it; nor does `shoal hub join`
+suggest one.
 [`[machine.hub] auto_update = false`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
 turns that off. A Homebrew installation never updates on its own: its machine
 tells you to run `brew upgrade hn05/tap/shoal` there. A machine that does not

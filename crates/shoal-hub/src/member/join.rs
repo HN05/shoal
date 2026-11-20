@@ -65,6 +65,16 @@ impl Hub {
         let welcomed = match refused {
             Ok(welcomed) => welcomed,
             Err(LinkRefused {
+                hub_version:
+                    Some(HubVersion {
+                        version, schema, ..
+                    }),
+                ..
+            }) if !follow::reads_state(schema) => bail!(
+                "the hub runs Shoal {version}, older than this machine's {}, which cannot read the state this machine keeps; update the hub, then join again",
+                env!("CARGO_PKG_VERSION")
+            ),
+            Err(LinkRefused {
                 hub_version: Some(HubVersion { version, .. }),
                 ..
             }) => bail!(
