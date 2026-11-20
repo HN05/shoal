@@ -12,6 +12,7 @@ pub mod assignments;
 pub mod attaching;
 pub mod branches;
 pub mod cleanup;
+pub mod code;
 pub mod config;
 pub mod connection;
 pub mod containers;
