@@ -3538,18 +3538,19 @@ implements without asking. The label lives on the mode, so any mode, built in
 or the user's, joins the flow the same way; labels are configuration, so Shoal
 assumes no label scheme, ships none, and refuses two modes with the same
 label, and issues with no mode's label stay outside the flow.
-The labels decide the mode of a `shoal start` on an issue or PR that omits
-`--mode`, with or without a terminal, since the label already says which work comes next and an
+The labels decide the mode of every launch on an issue or PR that names
+none, a `shoal start` without `--mode`, with or without a terminal, a
+trigger's or an app's, since the label already says which work comes next and an
 agent starting work on an issue means the same as the user; a script that
-wants a fixed mode passes `--mode`. An item with no mode's label gets the
+wants a fixed mode names it. An item with no mode's label gets the
 picker on a terminal and the default mode without one; one with the labels of
 several gets the picker on a terminal and is refused without one, naming them,
 since no default is right. A bare `--issue` or `--pr` picks the item first,
 among those carrying the label of the mode `--mode` names where it has one,
 so its labels can decide the mode when none is named; a named mode alone
-never opens that picker. The CLI reads the labels, so a launch the daemon
-receives without a mode, such as a trigger's, takes the default mode; the
-proposal in #3299 moves the lookup to the daemon.
+never opens that picker. The daemon reads the labels, so every caller gets
+the same mode, and `shoal start` asks it for that mode before it offers its
+picker.
 The plan mode settles a plan in a chat, not a workspace: planning changes no
 code, needs the user's attention and their authority to rewrite the issue, and
 the chat coordinates the implementing workspace when the user has it start

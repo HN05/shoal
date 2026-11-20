@@ -158,7 +158,6 @@ pub(in crate::cli) struct Issue {
     pub(in crate::cli) title: String,
     pub(super) url: ItemRef,
     pub(super) details: String,
-    pub(in crate::cli) labels: Vec<String>,
     /// How many comments it has, where the forge says.
     pub(super) comments: Option<u64>,
 }
@@ -238,7 +237,6 @@ impl From<crate::forge::items::issue::IssueDetails> for Issue {
             title: issue.title,
             url: issue.url,
             details: issue.details,
-            labels: issue.labels,
             comments: issue.comments,
         }
     }

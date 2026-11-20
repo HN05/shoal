@@ -116,7 +116,6 @@ fn an_issues_subject_names_it_by_number_title_and_url() {
         title: "日本語 to the".into(),
         url: "https://forge.example/team/repo/issues/34".parse().unwrap(),
         details: "body".into(),
-        labels: Vec::new(),
         comments: Some(2),
     };
     let subject = issue.subject();

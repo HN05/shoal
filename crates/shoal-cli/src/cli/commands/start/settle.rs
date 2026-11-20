@@ -60,7 +60,7 @@ pub(in crate::cli::commands) async fn settle(
     let settings = launch_settings(ctx, &launch).await?;
     let (found, settings) = picked_items(ctx, &mut launch, (found, settings)).await?;
     let modes = start_modes(ctx, &launch, &settings).await?;
-    let choice = mode::decided(ctx, &launch, found.as_ref(), &modes).await?;
+    let choice = mode::decided(ctx, &launch).await?;
     let (mut found, mut settings) = match choice.clone().named() {
         Some(mode) => {
             mode::ensure_fits(&launch, &mode, &modes)?;

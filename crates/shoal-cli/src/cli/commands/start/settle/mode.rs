@@ -1,45 +1,37 @@
-//! The mode a start's agent starts in: named, else the one its PR's or
-//! issue's labels call for, else on a terminal a picked one, else the default mode.
+//! The mode a start's agent starts in: named, else the one the daemon finds
+//! its PR's or issue's labels call for, else on a terminal a picked one,
+//! else the default mode.
 use anyhow::Result;
 use shoal_protocol::launches::{LabelledMode, Launch};
 
 use crate::{
     cli::{
         args::create::StartArgs,
-        client,
-        commands::{
-            issues,
-            start::{launch_settings, start_modes},
-        },
+        commands::start::{launch_settings, start_modes},
         context::Context,
         ui::{self, ModeChoice},
     },
     config::modes::{self, ModeShapes},
     launches::{self, labels},
-    model::{Repository, SpaceKind},
+    model::SpaceKind,
 };
 
 /// The mode of `launch` as far as nothing needs asking: the one it names,
-/// else the [`item_mode`] of the PR or issue it names in the `found`
-/// repository; otherwise one a terminal picks once the daemon has checked
-/// the rest, and off one the [`launches::default_mode`].
-pub(super) async fn decided(
-    ctx: &Context,
-    launch: &Launch,
-    found: Option<&Repository>,
-    modes: &ModeShapes,
-) -> Result<ModeChoice> {
+/// else the one the daemon finds its PR's or issue's labels call for;
+/// otherwise one a terminal picks once the daemon has checked the rest,
+/// and off one the [`launches::default_mode`], or the refusal of labels
+/// that call for several.
+pub(super) async fn decided(ctx: &Context, launch: &Launch) -> Result<ModeChoice> {
     if let Some(mode) = &launch.mode {
         return Ok(ModeChoice::Named(mode.clone()));
     }
-    let labelled = match found {
-        Some(repo) => item_mode(ctx, launch, repo, modes).await?,
-        None => None,
-    };
-    Ok(labelled.unwrap_or_else(|| match ui::can_pick(ctx) {
-        true => ModeChoice::Pick,
-        false => ModeChoice::Named(launches::default_mode(launch)),
-    }))
+    let labelled = crate::client::launches::labelled_mode(&ctx.paths, launch.clone()).await?;
+    Ok(match (labelled, ui::can_pick(ctx)) {
+        (LabelledMode::Called(mode), _) => ModeChoice::Named(mode),
+        (_, true) => ModeChoice::Pick,
+        (LabelledMode::Several(several), false) => return Err(several.into()),
+        (LabelledMode::Unlabelled, false) => ModeChoice::Named(launches::default_mode(launch)),
+    })
 }
 
 /// Refuse the copy and fork pickers that making the launch of `args`
@@ -117,52 +109,6 @@ pub(super) fn starts_workspace(
 ) -> Result<bool> {
     let configured = configured(launch, mode, modes)?;
     Ok(configured.is_some_and(|mode| mode.kind == SpaceKind::Workspace))
-}
-
-/// The mode the labels of the PR `launch` names in `repo`, else of the
-/// issue it names, call for, by [`labels::labelled_mode`] among the
-/// [`labels::labelled`] `modes`; a pick on a terminal where they call for
-/// several, and refused off one; none without such an item or a mode with
-/// a label it carries.
-async fn item_mode(
-    ctx: &Context,
-    launch: &Launch,
-    repo: &Repository,
-    modes: &ModeShapes,
-) -> Result<Option<ModeChoice>> {
-    let labelled = labels::labelled(launch, modes)?;
-    if labelled.is_empty() {
-        return Ok(None);
-    }
-    let Some((item, labels)) = item_labels(ctx, launch, repo).await? else {
-        return Ok(None);
-    };
-    match labels::labelled_mode(item, labelled, &labels) {
-        LabelledMode::Called(mode) => Ok(Some(ModeChoice::Named(mode))),
-        LabelledMode::Unlabelled => Ok(None),
-        LabelledMode::Several(_) if ui::can_pick(ctx) => Ok(Some(ModeChoice::Pick)),
-        LabelledMode::Several(several) => Err(several.into()),
-    }
-}
-
-/// What `launch` starts on in `repo`, the PR it names, else the issue, as
-/// refusals name it, with its labels; none where it names neither.
-async fn item_labels(
-    ctx: &Context,
-    launch: &Launch,
-    repo: &Repository,
-) -> Result<Option<(String, Vec<String>)>> {
-    if let Some(pull) = launches::named_pull(launch) {
-        let context = issues::read_context(ctx, repo).await?;
-        let pull = client::pull_request(&ctx.paths, context, pull).await?;
-        return Ok(Some((format!("PR {}", pull.url), pull.labels)));
-    }
-    let Some(input) = launches::named_issue(launch)? else {
-        return Ok(None);
-    };
-    let context = issues::read_context(ctx, repo).await?;
-    let issue = issues::load(ctx, context, input.clone()).await?;
-    Ok(Some((format!("issue {input}"), issue.labels)))
 }
 
 #[cfg(test)]
