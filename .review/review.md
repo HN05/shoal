@@ -56,7 +56,9 @@ instead of the PR delivery guidance below.
   crate but `shoal-core`, `shoal-daemon-base`, `shoal-ids`, `shoal-protocol`,
   `shoal-store` and `shoal-subprocess`, and `shoal-reviews` on none but
   `shoal-core`, `shoal-daemon-base`, `shoal-forge`, `shoal-forge-types`,
-  `shoal-ids`, `shoal-protocol`, `shoal-refs` and `shoal-store`. Flag a `Manager` method that does a
+  `shoal-ids`, `shoal-protocol`, `shoal-refs` and `shoal-store`, and
+  `shoal-hub` on none but `shoal-core`, `shoal-daemon-base`, `shoal-ids`,
+  `shoal-protocol`, `shoal-schedule` and `shoal-store`. Flag a `Manager` method that does a
   subsystem's work, a subsystem crate that reads another's tables or calls it
   other than through such an interface, and a test of one subsystem that
   builds a `Manager` instead of the service over stand-ins.

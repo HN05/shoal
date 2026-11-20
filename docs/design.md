@@ -110,7 +110,11 @@ crate declares, which the daemon implements and passes each operation.
 decide in one-shot agent runs: its `Reviews` service owns the running
 reviews and their checkouts and the gate's sessions, and the agent queue
 admits a run through the same kind of interface, as a handle the run holds
-until it ends.
+until it ends. `shoal-hub` holds the hub role and membership of a hub: its
+`Hub` service owns the links, pairing codes, vouches and outbox, and reads
+the spaces, permissions, messages and approvals it routes across machines
+through the interface; request dispatch, which answers what the hub
+forwards here, stays in the daemon.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
 the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
 `shoal-workers` neither the daemon nor its tests: the daemon depends on no
