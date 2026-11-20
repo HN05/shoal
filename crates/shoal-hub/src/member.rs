@@ -102,6 +102,11 @@ impl Link {
         (self.restarts_on_update).store(restarts, std::sync::atomic::Ordering::Relaxed);
     }
 
+    /// Whether the daemon restarts on a replaced binary.
+    pub(super) fn restarts(&self) -> bool {
+        (self.restarts_on_update).load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     pub(super) fn calls(&self) -> Option<Arc<Calls>> {
         self.state.lock().unwrap().calls.clone()
     }

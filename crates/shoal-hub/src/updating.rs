@@ -1,7 +1,7 @@
 //! `shoal hub update`: the hub installs the latest release where it was
-//! downloaded, from any of its machines; its daemon then restarts on it
-//! once idle, and the machines that follow its version install it as the
-//! hub refuses theirs. Homebrew updates its own installations.
+//! downloaded, from any of its machines; a managed daemon then restarts on
+//! it once idle, a foreground one once the user restarts it, and the
+//! machines that follow its version install it as the hub refuses theirs. Homebrew updates its own installations.
 use std::time::Duration;
 
 use anyhow::Result;
@@ -56,11 +56,12 @@ impl Hub {
         };
         let installed = update::update(RELEASES, &installation, &Target::Latest).await?;
         if let Some(version) = &installed {
-            log!("hub: installed Shoal {version}; the daemon restarts on it once idle");
+            log!("hub: installed Shoal {version}");
         }
         Ok(HubUpdate {
             previous: env!("CARGO_PKG_VERSION").to_owned(),
             installed,
+            restarts: self.member.restarts(),
         })
     }
 }

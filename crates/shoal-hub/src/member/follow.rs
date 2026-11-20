@@ -2,13 +2,11 @@
 //! running another version, with its own signed, a Shoal installed from a
 //! release download with `[machine.hub] auto_update` on installs exactly
 //! the hub's release, as `shoal update --version` does, a downgrade
-//! included; the daemon then restarts on it once idle, keeping its agents
-//! running, and connects again. Otherwise the user hears what to run, and
+//! included; a managed daemon then restarts on it once idle, keeping its
+//! agents running, and connects again, while a foreground one tells the user
+//! to restart it. Otherwise the user hears what to run, and
 //! the machine works on its own until its version matches.
-use std::{
-    sync::{Mutex, atomic::Ordering},
-    time::Duration,
-};
+use std::{sync::Mutex, time::Duration};
 
 use anyhow::Result;
 use shoal_core::update::{self, HOMEBREW_UPGRADE, Installation, Installed, RELEASES, Target};
@@ -145,7 +143,7 @@ impl Hub {
             ),
             Ok(Way::Install(installation)) => {
                 match self.install_hub_version(&installation, version).await {
-                    Ok(()) if self.member.restarts_on_update.load(Ordering::Relaxed) => return,
+                    Ok(()) if self.member.restarts() => return,
                     Ok(()) => format!(
                         "Shoal installed {version}, the hub's version, but this daemon runs in the foreground, {stays}: restart it"
                     ),
@@ -180,7 +178,7 @@ impl Hub {
         let target = Target::Exact(version.to_owned());
         update::update(RELEASES, installation, &target).await?;
         self.member.followed.installed(version);
-        log!("hub: installed Shoal {version}; the daemon restarts on it once idle");
+        log!("hub: installed Shoal {version}, the hub's version");
         Ok(())
     }
 }

@@ -342,10 +342,13 @@ pub struct Left {
 pub struct HubUpdate {
     /// The version the hub ran.
     pub previous: String,
-    /// The release it installed, none when it ran the latest; its daemon
-    /// restarts on it once idle, and its machines follow it.
+    /// The release it installed, none when it ran the latest; its machines
+    /// follow it once its daemon runs it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub installed: Option<String>,
+    /// Whether its daemon restarts on the release once idle, as a managed
+    /// one does; a foreground one needs a restart.
+    pub restarts: bool,
 }
 
 #[cfg(test)]

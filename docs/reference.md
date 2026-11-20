@@ -904,15 +904,18 @@ update to run. A refused machine keeps working on its own.
 
 The hub updates as it was installed: with `brew upgrade hn05/tap/shoal`
 there, or for a downloaded binary with `shoal update` there or `shoal hub
-update` on any of its machines, which only your own terminal runs.
+update` on any of its machines, which only your own terminal runs. A managed
+daemon restarts on the new release once idle; `shoal hub update` says when a
+foreground one needs a restart.
 
 A machine follows the hub's version. Once the hub refuses it for running
 another one, a Shoal downloaded from a release installs exactly the hub's
 release, as `shoal update --version` does, older or newer, after the hub's key
-signed which one it is; its daemon restarts on it once idle, with its agents
-running through the restart, and connects again. It never installs a release
-too old to read the state its newer one migrated, and tells you to update the
-hub instead, there or with `shoal hub update` from a machine connected to it.
+signed which one it is; a managed daemon restarts on it once idle, with its
+agents running through the restart, and connects again, while a foreground one
+tells you to restart it. It never installs a release too old to read the state
+its newer one migrated, and tells you to update the hub instead, there or with
+`shoal hub update` from a machine connected to it.
 [`[machine.hub] auto_update = false`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
 turns that off. A Homebrew installation never updates on its own: its machine
 tells you to run `brew upgrade hn05/tap/shoal` there. A machine that does not

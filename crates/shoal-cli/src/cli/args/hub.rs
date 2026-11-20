@@ -22,7 +22,7 @@ pub enum HubCommand {
     Ls,
     /// Install the latest release on the hub, from any machine that joined it.
     ///
-    /// The hub's daemon restarts on it once idle, and the machines that follow its version
+    /// A managed hub daemon restarts on it once idle, and the machines that follow its version
     /// install it too. A hub that Homebrew installed is refused: run brew upgrade hn05/tap/shoal
     /// there.
     Update,
