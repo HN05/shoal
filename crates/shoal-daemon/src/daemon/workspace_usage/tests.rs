@@ -462,7 +462,7 @@ async fn work_outside_the_slice_is_told_apart_from_work_in_it() {
     let start = Instant::now();
     let in_slice = process(10, 1, "a", 0);
     let mut sampled = sample(start, [in_slice.clone(), process(20, 1, "b", 0)]);
-    sampled.in_work_slice.insert(in_slice.0);
+    sampled.mark_work_slice(|pid| pid == in_slice.0.pid);
     let mut usages = WorkspaceUsages::default();
     usages.record(Ok(sampled), Ok(Vec::new()));
     assert_eq!(

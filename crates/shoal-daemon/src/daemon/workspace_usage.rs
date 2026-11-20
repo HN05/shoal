@@ -82,6 +82,14 @@ impl Oneshots {
 }
 
 impl Sample {
+    /// Mark the processes in the work slice, which `holds` tells by PID.
+    fn mark_work_slice(&mut self, holds: impl Fn(u32) -> bool) {
+        self.in_work_slice = (self.processes.keys())
+            .filter(|identity| holds(identity.pid))
+            .cloned()
+            .collect();
+    }
+
     /// The memory of its processes in the work slice.
     fn in_work_slice_memory(&self) -> u64 {
         (self.in_work_slice.iter())
@@ -433,10 +441,7 @@ async fn sample(manager: &Manager, tracked: Vec<(SpaceId, Identity)>) -> Result<
     let reading = move || {
         let mut sample = read(running, missed, usage::read, state)?;
         let holds = crate::service::work::holds;
-        sample.in_work_slice = (sample.processes.keys())
-            .filter(|identity| holds(identity.pid))
-            .cloned()
-            .collect();
+        sample.mark_work_slice(holds);
         sample.oneshots = Oneshots::read(&oneshots, usage::read, holds)?;
         Ok(sample)
     };
