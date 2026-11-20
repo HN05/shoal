@@ -16,8 +16,8 @@ use shoal_protocol::{
 
 use super::Target;
 use crate::{
-    cli::{context::Context, terminal},
-    terminal::Elsewhere,
+    cli::context::Context,
+    terminal::{self, Elsewhere},
 };
 
 /// Attach this terminal, which `viewer` views from another machine, to a

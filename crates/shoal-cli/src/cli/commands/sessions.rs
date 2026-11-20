@@ -18,7 +18,6 @@ use crate::{
         args::SpaceTargets,
         context::Context,
         recent,
-        terminal::{self, Recorded},
         ui::{self, Fallback, NoCurrentWorkspace},
     },
     client::connection::CommandPaths,
@@ -50,7 +49,7 @@ pub(super) async fn attach(
     // Attaching is the user's interaction with the space's agent.
     crate::client::agents::report_attach(&ctx.paths, SpaceSelector::id(target.id())).await?;
     let (target, session) = target.awake_session(ctx, session, None).await?;
-    if terminal::attach(&target.number().to_string(), &session).await? {
+    if crate::terminal::attach(&target.number().to_string(), &session).await? {
         target.record_detach(ctx).await;
     }
     Ok(0)
@@ -193,7 +192,7 @@ impl Target {
     async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Self> {
         let places = chat_places(&ctx.paths, &chats).await;
         let places: Vec<_> = places.iter().map(|(id, place)| (id, place)).collect();
-        let attachable = terminal::session_owners(&places);
+        let attachable = crate::terminal::session_owners(&places);
         let chats: Vec<_> = chats
             .into_iter()
             .filter(|chat| attachable.contains(&chat.id) || !chat.running || chat.asleep.is_some())
@@ -239,8 +238,8 @@ impl Target {
         let settings = shoal_workers::settings::of(&ctx.paths, self.config()).await?;
         let space = SpaceSelector::id(self.id());
         let places = crate::client::workspaces::places(&ctx.paths, space).await?;
-        let recorded = Recorded::space(&places.executions, &places.places);
-        terminal::sessions(&settings, &recorded).await
+        let recorded = crate::terminal::Recorded::space(&places.executions, &places.places);
+        crate::terminal::sessions(&settings, &recorded).await
     }
 
     /// The session `named` names, the target's only one or one picked,

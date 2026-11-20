@@ -12,7 +12,6 @@ use crate::{
     cli::{
         commands::{machines, service},
         context::Context,
-        terminal::{self, Recorded},
         ui,
     },
     forge::IssueInput,
@@ -120,9 +119,9 @@ async fn sessions(ctx: &Context, space: &SpaceDetail) -> Result<Vec<crate::termi
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     let places = crate::client::workspaces::places(&ctx.paths, SpaceSelector::id(space.id()));
     let places = places.await?;
-    terminal::sessions(
+    crate::terminal::sessions(
         &settings,
-        &Recorded::space(&places.executions, &places.places),
+        &crate::terminal::Recorded::space(&places.executions, &places.places),
     )
     .await
 }

@@ -10,7 +10,6 @@ use std::{
 
 use anyhow::{Result, ensure};
 
-use super::sessions::{left_open, report_detach};
 use crate::{
     cli::{context::Context, recent},
     config::{Effective, modes::ModeName},
@@ -19,8 +18,8 @@ use crate::{
     sessions::Origin,
     start_plan::{PlacePlan, open_place},
     terminal::{
-        Attaches, Configured, Owner, Places, Start, chat_session_name, current, place_env,
-        rerun_in_host,
+        Attaches, Configured, Owner, Places, Start, chat_session_name, current, left_open,
+        place_env, report_detach, rerun_in_host,
     },
 };
 use shoal_workers::places::{groups, naming::name_plan, queued::start_in_background};

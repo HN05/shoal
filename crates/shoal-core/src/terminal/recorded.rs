@@ -15,11 +15,11 @@ use crate::{
 
 /// A place the daemon recorded, with the agent it recorded running there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(in crate::cli) struct Recorded<'a> {
-    pub place: &'a Origin,
-    pub agent: Option<&'a crate::agent::Agent>,
+pub struct Recorded<'a> {
+    place: &'a Origin,
+    agent: Option<&'a crate::agent::Agent>,
     /// The execution recorded there.
-    pub execution: Option<&'a ExecutionId>,
+    execution: Option<&'a ExecutionId>,
     /// Why Shoal stopped that agent, while its wrapper waits to restore it.
     pub stopped: Option<&'a Protection>,
 }
@@ -51,10 +51,7 @@ impl<'a> Recorded<'a> {
 /// enable, where the daemon recorded a space's executions running, or the
 /// places Shoal created for it. A session where a stopped agent waits to be
 /// restored says so, whichever place found it.
-pub(in crate::cli) async fn sessions(
-    settings: &Effective,
-    places: &[Recorded<'_>],
-) -> Result<Vec<Session>> {
+pub async fn sessions(settings: &Effective, places: &[Recorded<'_>]) -> Result<Vec<Session>> {
     let places = distinct_places(places);
     let origins: Vec<_> = places.iter().map(|recorded| recorded.place).collect();
     let (found, failure) = open_at(&origins, |host| {
@@ -184,7 +181,7 @@ fn distinct_places<'a>(places: &[Recorded<'a>]) -> Vec<Recorded<'a>> {
 
 /// The IDs of the owners with an agent session: those of `places`, recorded
 /// for owners by ID, whose hosts keep sessions.
-pub(in crate::cli) fn session_owners(places: &[(&SpaceId, &Origin)]) -> HashSet<SpaceId> {
+pub fn session_owners(places: &[(&SpaceId, &Origin)]) -> HashSet<SpaceId> {
     places
         .iter()
         .filter(|(_, place)| named(place.host).sessions().is_some())
@@ -196,7 +193,7 @@ pub(in crate::cli) fn session_owners(places: &[(&SpaceId, &Origin)]) -> HashSet<
 /// session still open there, asking only hosts the owner's `settings`
 /// enable. A place whose owner has no settings, or whose host cannot say,
 /// counts as closed.
-pub(in crate::cli) async fn open_session_owners(
+pub async fn open_session_owners(
     places: &[(&SpaceId, &Origin)],
     settings: &HashMap<SpaceId, Effective>,
 ) -> HashSet<SpaceId> {
@@ -231,7 +228,7 @@ fn enabled_places<'a>(
 /// Show `session` in this terminal through the host that keeps it, then
 /// say how to return to it with `shoal attach <space>` when it outlives the
 /// attach. Returns whether its place still has a session once shown.
-pub(in crate::cli) async fn attach(space: &str, session: &Session) -> Result<bool> {
+pub async fn attach(space: &str, session: &Session) -> Result<bool> {
     let (places, sessions) = keeping(session)?;
     places.show(&session.place, &session.name).await?;
     report_detach(sessions, space, &session.name).await?;
@@ -240,11 +237,7 @@ pub(in crate::cli) async fn attach(space: &str, session: &Session) -> Result<boo
 
 /// Show `session` to `viewer`, a user on another machine, through the host
 /// that keeps it, then say how to return to it as [`attach`] does.
-pub(in crate::cli) async fn show_elsewhere(
-    space: &str,
-    session: &Session,
-    viewer: &Elsewhere<'_>,
-) -> Result<()> {
+pub async fn show_elsewhere(space: &str, session: &Session, viewer: &Elsewhere<'_>) -> Result<()> {
     let (places, sessions) = keeping(session)?;
     places
         .show_elsewhere(&session.place, &session.name, viewer)
@@ -265,7 +258,7 @@ fn keeping(session: &Session) -> Result<(&'static dyn Places, &'static dyn Sessi
 /// Say how to return to `session`, one `host` attached this terminal to,
 /// with `shoal attach <space>` when it still runs after this terminal left
 /// it, and whether it does.
-pub(super) async fn report_detach(host: &dyn Sessions, space: &str, session: &str) -> Result<bool> {
+pub async fn report_detach(host: &dyn Sessions, space: &str, session: &str) -> Result<bool> {
     let running = host.left_running(session).await?;
     if running {
         eprintln!("shoal: detached; run `shoal attach {space}` to return");
@@ -275,7 +268,7 @@ pub(super) async fn report_detach(host: &dyn Sessions, space: &str, session: &st
 
 /// Whether `place`, which its host showed here, still has a session there.
 /// A host that keeps no sessions has none.
-pub(super) async fn left_open(place: &Origin) -> bool {
+pub async fn left_open(place: &Origin) -> bool {
     match named(place.host).sessions() {
         Some(sessions) => still_open(sessions, place).await,
         None => false,

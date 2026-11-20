@@ -19,7 +19,7 @@ use crate::{
         agents,
         availability::{self, Fit, Need},
         scoping::Scoping,
-        terminal, ui,
+        ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     client::connection::CommandPaths,
@@ -647,7 +647,7 @@ async fn session_chat_candidates(paths: &CommandPaths) -> Result<Vec<CompletionC
         .into_running_chats();
     let places = super::commands::sessions::chat_places(paths, &chats).await;
     let places: Vec<_> = places.iter().map(|(id, place)| (id, place)).collect();
-    let attachable = terminal::session_owners(&places);
+    let attachable = crate::terminal::session_owners(&places);
     Ok(chats
         .iter()
         .filter(|chat| attachable.contains(&chat.id))

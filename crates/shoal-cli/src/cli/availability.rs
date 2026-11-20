@@ -4,7 +4,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    cli::{list_status::ListStatus, terminal},
+    cli::list_status::ListStatus,
     client::connection::CommandPaths,
     client::connection::Daemon,
     model::{Chat, RunningAgent, Workspace},
@@ -300,7 +300,7 @@ async fn session_workspaces(paths: &CommandPaths) -> HashSet<SpaceId> {
         .await
         .unwrap_or_default();
     let places = agent_places(&agents);
-    let mut owners = terminal::session_owners(&places.connected);
+    let mut owners = crate::terminal::session_owners(&places.connected);
     // Each host lists its sessions once for the owners still in question.
     let recorded: Vec<_> = places
         .unknown
@@ -309,7 +309,7 @@ async fn session_workspaces(paths: &CommandPaths) -> HashSet<SpaceId> {
         .filter(|(owner, _)| !owners.contains(*owner))
         .collect();
     let settings = workspace_settings(paths, recorded.iter().map(|(owner, _)| *owner)).await;
-    owners.extend(terminal::open_session_owners(&recorded, &settings).await);
+    owners.extend(crate::terminal::open_session_owners(&recorded, &settings).await);
     owners
 }
 
