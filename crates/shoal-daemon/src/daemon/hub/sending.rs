@@ -1,15 +1,12 @@
 //! Sending a file to another joined machine's daemon over a duplex stream
 //! of the hub's links, once the request that daemon answers asks for it,
 //! and reading its answer to the file from the same stream.
-use std::{io::Read as _, path::Path};
+use std::path::Path;
 
 use anyhow::{Result, bail};
 use shoal_protocol::protocol::{Body, Response};
 
 use super::{Incoming, Outgoing};
-
-/// The most bytes of a file read or written at once.
-const CHUNK: usize = 64 << 10;
 
 /// Send the file `file` on `outgoing` once the other machine's daemon,
 /// which writes its answers on `incoming`, asked for it, and return its
@@ -24,7 +21,7 @@ pub(crate) async fn deliver_file(
     answers.next().await?;
     let sending = async move {
         let mut outgoing = outgoing;
-        if send_file(file, &mut outgoing).await.is_ok() {
+        if outgoing.write_file(file).await.is_ok() {
             outgoing.end(None).await;
         }
     };
@@ -35,26 +32,6 @@ pub(crate) async fn deliver_file(
         () = sending => {}
     }
     answer.await
-}
-
-/// Write the file `file` on `outgoing`, a chunk at a time.
-async fn send_file(file: &Path, outgoing: &mut Outgoing) -> Result<()> {
-    let path = file.to_owned();
-    let mut input = blocking(move || std::fs::File::open(path)).await?;
-    loop {
-        let (file, chunk) = blocking(move || {
-            let mut chunk = vec![0; CHUNK];
-            let read = input.read(&mut chunk)?;
-            chunk.truncate(read);
-            Ok((input, chunk))
-        })
-        .await?;
-        if chunk.is_empty() {
-            return Ok(());
-        }
-        input = file;
-        outgoing.write(&chunk).await?;
-    }
 }
 
 /// What `work`, which blocks on the file system, returns, run on the

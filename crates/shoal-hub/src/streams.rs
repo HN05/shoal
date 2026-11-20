@@ -7,18 +7,21 @@
 //! carries the opener's bytes the other way, under credit of their own.
 use std::{
     collections::HashMap,
+    io::Read as _,
+    path::Path,
     sync::{
         Arc, Mutex, PoisonError,
         atomic::{AtomicU64, Ordering},
     },
 };
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context as _, Result, anyhow, bail};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use shoal_protocol::hub::link::{Frame, STREAM_WINDOW};
 use tokio::sync::{Semaphore, mpsc};
 
 use crate::transport::Sender;
+use shoal_core::fsutil::off_runtime;
 
 /// The most bytes one [`Frame::Data`] carries.
 const CHUNK: usize = 64 << 10;
@@ -400,6 +403,29 @@ impl Outgoing {
     /// once the reader stopped reading or the link closed.
     pub async fn write(&mut self, bytes: &[u8]) -> Result<()> {
         self.send_data(bytes, false).await
+    }
+
+    /// Send the contents of the file `path`, a chunk at a time.
+    pub async fn write_file(&mut self, path: &Path) -> Result<()> {
+        let path = path.to_owned();
+        let mut input = off_runtime::run(move || {
+            (std::fs::File::open(&path)).with_context(|| format!("open {}", path.display()))
+        })
+        .await?;
+        loop {
+            let (file, chunk) = off_runtime::run(move || {
+                let mut chunk = vec![0; CHUNK];
+                let read = input.read(&mut chunk)?;
+                chunk.truncate(read);
+                Ok((input, chunk))
+            })
+            .await?;
+            if chunk.is_empty() {
+                return Ok(());
+            }
+            input = file;
+            self.write(&chunk).await?;
+        }
     }
 
     /// [`Self::write`], returning once the bytes are written to the
