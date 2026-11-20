@@ -9,7 +9,6 @@ mod ci;
 pub mod issue;
 pub(crate) mod linked;
 mod listing;
-mod memories;
 mod merge_path;
 mod merge_review;
 mod merge_warning;
@@ -29,8 +28,6 @@ pub(in crate::daemon) mod target;
 mod verdict;
 mod view;
 pub mod wait;
-
-pub(crate) use memories::ForgeMemories;
 
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};

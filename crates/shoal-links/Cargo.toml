@@ -1,0 +1,11 @@
+[package]
+name = "shoal-links"
+version.workspace = true
+description = "The issues, PRs and CI runs a Shoal daemon's spaces link"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+shoal-forge.workspace = true

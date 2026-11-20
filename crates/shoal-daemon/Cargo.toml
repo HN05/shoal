@@ -39,6 +39,7 @@ shoal-forge-types = { workspace = true, features = ["rusqlite"] }
 shoal-hub.workspace = true
 shoal-ids = { workspace = true, features = ["rusqlite"] }
 shoal-leases.workspace = true
+shoal-links.workspace = true
 shoal-protocol = { workspace = true, features = ["rusqlite"] }
 shoal-refs = { workspace = true, features = ["rusqlite"] }
 shoal-reviews.workspace = true

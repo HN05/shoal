@@ -27,7 +27,7 @@ impl Manager {
     pub(crate) fn user_account(&self) -> Account {
         let forges = &self.config().machine.forges;
         Account::user(forges.logins(Whose::User))
-            .remembering(self.forge_memories.of(&user_identity(forges)))
+            .remembering(self.links.forge_memory(&user_identity(forges)))
             .naming_missing(Whose::User.missing())
     }
 
@@ -49,7 +49,7 @@ impl Manager {
             format!("agent {tokens} {user}")
         };
         Account::agent(forges.logins(Whose::Agent), forges.logins(Whose::User))
-            .remembering(self.forge_memories.of(&identity))
+            .remembering(self.links.forge_memory(&identity))
             .naming_missing(Whose::Agent.missing())
     }
 
@@ -59,7 +59,7 @@ impl Manager {
         let forges = &self.config().machine.forges;
         let identity = format!("review {}", forges.identity(Whose::Review));
         Account::user(forges.logins(Whose::Review))
-            .remembering(self.forge_memories.of(&identity))
+            .remembering(self.links.forge_memory(&identity))
             .naming_missing(Whose::Review.missing())
     }
 

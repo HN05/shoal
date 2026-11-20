@@ -70,7 +70,8 @@ pub struct Manager {
     /// them goes by, which keep the workspaces below them meanwhile.
     pub(crate) completed_owners: crate::daemon::spaces::Removing,
     pub(crate) seeds: super::seed::Seeds,
-    pub(crate) forge_memories: crate::daemon::links::ForgeMemories,
+    /// The issues, PRs and CI runs the spaces link.
+    pub links: Arc<shoal_links::Links>,
     /// The local reviews of workspaces.
     pub reviews: Arc<shoal_reviews::Reviews>,
     /// The retry each proxied execution's proxy waits to make.
@@ -179,7 +180,7 @@ impl Manager {
             space_removals: Default::default(),
             completed_owners: Default::default(),
             seeds: Default::default(),
-            forge_memories: Default::default(),
+            links: Default::default(),
             reviews,
             proxy_retries: Default::default(),
             upstream_limits: Default::default(),

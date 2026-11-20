@@ -2530,6 +2530,7 @@ dependencies = [
  "shoal-hub",
  "shoal-ids",
  "shoal-leases",
+ "shoal-links",
  "shoal-protocol",
  "shoal-refs",
  "shoal-reviews",
@@ -2667,6 +2668,13 @@ dependencies = [
  "tokio",
  "toml",
  "uuid",
+]
+
+[[package]]
+name = "shoal-links"
+version = "0.19.0"
+dependencies = [
+ "shoal-forge",
 ]
 
 [[package]]
