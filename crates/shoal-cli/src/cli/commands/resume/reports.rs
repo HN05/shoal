@@ -16,8 +16,7 @@ use crate::{
     model::Space,
     state::QueueState,
 };
-use shoal_ids::execution_ids::ExecutionId;
-use shoal_workers::resume::Resuming;
+use shoal_workers::resume::{Resuming, sessions::Started};
 
 /// What `shoal resume` tells the user as a resume goes.
 pub(in crate::cli::commands) struct Reporting<'a>(pub &'a Context);
@@ -114,16 +113,17 @@ fn summary(count: usize, starting: bool) -> String {
     format!("{done} {count} {agents}; shoal queue shows them")
 }
 
-/// Report the agents a restore started at once, as `output` lists them:
-/// `in_wrappers` of them where they wait to restore, those it started in
-/// `place`, and the `listed` ones the user starts in terminals of their own.
-pub(super) fn started(
-    ctx: &Context,
-    output: &StartedRestores,
-    in_wrappers: usize,
-    place: Option<&str>,
-    listed: &[(&Space, &ExecutionId)],
-) -> Result<()> {
+/// Report the agents a restore `started` at once, as its output lists them:
+/// those where they wait to restore, those it started in a place, and the
+/// ones the user starts in terminals of their own.
+pub(super) fn started(ctx: &Context, started: &Started) -> Result<()> {
+    let Started {
+        output,
+        in_wrappers,
+        place,
+        listed,
+    } = started;
+    let in_wrappers = *in_wrappers;
     ctx.show(output, |output| {
         reopened_lines(ctx, &output.reopened);
         if !output.queued.is_empty() {

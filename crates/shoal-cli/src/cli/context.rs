@@ -3,6 +3,7 @@ use std::io::{self, IsTerminal};
 
 use crate::client::output::{self, Output};
 use anyhow::Result;
+use shoal_workers::places::Launcher;
 
 use crate::{
     cli::{
@@ -93,6 +94,17 @@ impl Context {
     /// in it.
     pub fn on_terminal(&self) -> bool {
         Self::is_interactive(false)
+    }
+
+    /// What starts the work this command opens places for beside this
+    /// terminal. A place a host opened for this process, or a terminal
+    /// without a user, keeps work in place; a call that asked for JSON
+    /// keeps its terminal's host.
+    pub(in crate::cli) fn launcher(&self) -> Launcher {
+        match self.place.is_none() && self.on_terminal() {
+            true => Launcher::Terminal,
+            false => Launcher::Plain,
+        }
     }
 
     pub fn is_interactive(json: bool) -> bool {

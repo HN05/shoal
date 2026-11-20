@@ -376,7 +376,6 @@ pub(in crate::cli::commands) mod changed;
 pub(in crate::cli::commands) mod failed_starts;
 pub(in crate::cli::commands) mod permission_change;
 mod picker;
-mod places;
 pub(in crate::cli::commands) mod queue;
 pub(in crate::cli::commands) mod queued;
 pub(in crate::cli::commands) mod reports;

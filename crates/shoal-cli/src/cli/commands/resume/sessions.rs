@@ -2,18 +2,19 @@
 //! wrapper that waits for it, in the background, or in this terminal, and
 //! listing those the user starts in terminals of their own.
 use anyhow::Result;
-use std::ffi::OsString;
 
 use super::reports::{self, Reporting};
-use crate::client::output::resume::{RestoredAgent, StartedRestores};
+use crate::client::output::resume::StartedRestores;
 use crate::{
-    cli::{context::Context, terminal, ui},
+    cli::{context::Context, ui},
     execution::recovery::{Saved, SavedSession},
     model::Space,
-    protocol::ConfigTarget,
 };
 use shoal_protocol::space_names::SpaceSelector;
-use shoal_workers::resume::{commands, queue};
+use shoal_workers::resume::{
+    commands,
+    sessions::{self, Starts},
+};
 
 /// Resume each space's stopped work, reporting it with what `resumed` holds
 /// already. Commands without an agent to receive them, as none restoring
@@ -61,105 +62,22 @@ pub(super) async fn start_sessions(
     ctx: &Context,
     sessions: Vec<(Space, SavedSession)>,
     single: bool,
-    mut output: StartedRestores,
+    output: StartedRestores,
 ) -> Result<i32> {
-    let mut listed = Vec::new();
-    let mut in_wrappers = 0;
-    let mut place = None;
-    for (space, session) in &sessions {
-        let id = &session.id;
-        let (reused, started) = match start_session(ctx, space, session, single).await {
-            Ok(Started::Here) => {
-                // Boxed, since `run` calls back into this function.
-                let id = Some(id.clone());
-                let selector = SpaceSelector::id(&space.id);
-                return Box::pin(super::space::run(ctx, selector, id, true, None)).await;
-            }
-            Ok(Started::Elsewhere { reused, place }) => (reused, place),
-            Ok(Started::InWrapper) => {
-                in_wrappers += 1;
-                output.agents.push(RestoredAgent {
-                    workspace: space.name.clone(),
-                    execution: id.clone(),
-                    background: false,
-                    reused: true,
-                });
-                continue;
-            }
-            Err(error) => {
-                let failure = ui::failure(ctx, "resume", &space.name, &error);
-                output.failed.push(failure);
-                continue;
-            }
-        };
-        place = started.or(place);
-        if started.is_none() {
-            listed.push((space, id));
+    let reporting = Reporting(ctx);
+    let launcher = ctx.launcher();
+    let starts = sessions::start(&ctx.paths, launcher, sessions, single, output, &reporting);
+    match starts.await? {
+        Starts::Here { space, execution } => {
+            let selector = SpaceSelector::id(&space);
+            // Boxed, since `run` calls back into this function.
+            let resume = super::space::run(ctx, selector, Some(execution), true, None);
+            Box::pin(resume).await
         }
-        output.agents.push(RestoredAgent {
-            workspace: space.name.clone(),
-            execution: id.clone(),
-            background: started.is_some(),
-            reused,
-        });
+        Starts::Elsewhere(started) => {
+            reports::started(ctx, &started)?;
+            let failed = &started.output.failed;
+            Ok(if failed.is_empty() { 0 } else { 1 })
+        }
     }
-    reports::started(ctx, &output, in_wrappers, place, &listed)?;
-    Ok(if output.failed.is_empty() { 0 } else { 1 })
-}
-
-/// Where a stopped agent resumes.
-enum Started {
-    /// Through the wrapper that waits to restore it, which its queued
-    /// restore lets go.
-    InWrapper,
-    /// In this terminal, as the only agent to resume where the backend can
-    /// start nothing elsewhere.
-    Here,
-    /// Where it stopped when `reused`, in the backend's background, or, when
-    /// `place` is `None`, in a terminal of the user's own.
-    Elsewhere {
-        reused: bool,
-        place: Option<&'static str>,
-    },
-}
-
-/// Start the stopped agent `session` of `space` through the wrapper that
-/// waits for it, where it stopped or in the background; when none is
-/// possible, `single` resumes the only one in this terminal.
-async fn start_session(
-    ctx: &Context,
-    space: &Space,
-    session: &SavedSession,
-    single: bool,
-) -> Result<Started> {
-    if session.waits_in_wrapper {
-        queue::queue(&ctx.paths, space, &session.id, true).await?;
-        return Ok(Started::InWrapper);
-    }
-    let target = ConfigTarget::Space(SpaceSelector::id(&space.id));
-    let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
-    let args = [
-        "resume",
-        space.id.as_str(),
-        "--execution",
-        session.id.as_str(),
-        "--focus",
-    ]
-    .map(OsString::from);
-    if let Some(places) =
-        terminal::rerun_where_stopped(ctx, &settings, session.origin.as_ref(), &args).await?
-    {
-        return Ok(Started::Elsewhere {
-            reused: true,
-            place: Some(places),
-        });
-    }
-    let place = super::places::run_in_background(ctx, &settings, space, &args).await?;
-    if single && place.is_none() {
-        return Ok(Started::Here);
-    }
-    Ok(Started::Elsewhere {
-        reused: false,
-        place,
-    })
 }

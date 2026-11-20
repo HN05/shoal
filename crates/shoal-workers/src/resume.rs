@@ -1,12 +1,15 @@
 //! Resuming the stopped agents of spaces, workspaces' and chats' alike, for
 //! `shoal resume` and the other commands that bring agents back: queuing
 //! their restores, which the daemon starts, once an execution a daemon
-//! restart left unknown is proven ended, and handing the commands stopped
-//! with them to the restored agent or the user. The caller passes in what
-//! it does its own way through [`Resuming`].
+//! restart left unknown is proven ended, or starting them at once beside
+//! the caller's terminal, and handing the commands stopped with them to the
+//! restored agent or the user. The caller passes in what it does its own
+//! way through [`Resuming`].
 pub mod commands;
 pub mod permissions;
+mod places;
 pub mod queue;
+pub mod sessions;
 pub mod stale;
 
 use shoal_core::execution::recovery::SavedCommand;

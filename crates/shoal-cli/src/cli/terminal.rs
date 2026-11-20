@@ -17,9 +17,6 @@ pub(in crate::cli) use here::{
     close_background_place_when_done, close_here_when_done, closes_with, label_current,
     record_owned_here,
 };
-pub(in crate::cli) use launch::{
-    AgentSpace, Placement, opens_beside, rerun_where_stopped, run_agent, run_in_background,
-    start_place,
-};
+pub(in crate::cli) use launch::{AgentSpace, Placement, opens_beside, run_agent, start_place};
 pub(in crate::cli) use naming::{Renamed, relabel_space};
 pub(in crate::cli) use prompts::{CONTINUE_PROMPT, submitted_by_shoal};

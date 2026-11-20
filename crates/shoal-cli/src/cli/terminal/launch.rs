@@ -1,5 +1,5 @@
-//! Starting Shoal work beside this terminal: additions, restores, tracked
-//! agents and chats, focused or in the background.
+//! Starting Shoal work beside this terminal: additions, tracked agents and
+//! chats, focused or in the background.
 use shoal_ids::space_ids::SpaceNumber;
 use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::space_names::SpaceSelector;
@@ -14,15 +14,14 @@ use crate::{
     cli::{context::Context, recent},
     config::{Effective, modes::ModeName},
     env,
-    model::{Part, Space, Workspace},
-    sessions::Origin,
+    model::{Part, Space},
     start_plan::{PlacePlan, open_place},
     terminal::{
         Attaches, Configured, Owner, Places, Start, chat_session_name, current, left_open,
-        place_env, report_detach, rerun_in_host,
+        place_env, report_detach,
     },
 };
-use shoal_workers::places::{groups, naming::name_plan, queued::start_in_background};
+use shoal_workers::places::{groups, naming::name_plan};
 
 /// Start `plan` in `space` beside this terminal as its start placed it,
 /// focused or in the background. Returns whether it left this process; a
@@ -39,7 +38,7 @@ pub(in crate::cli) async fn start_place(
         !crate::process::scoped::inherits_scope(&ctx.paths.state),
         "workspace processes open no place beside a terminal"
     );
-    let host = beside(ctx, settings);
+    let host = ctx.launcher().host(settings);
     name_plan(&ctx.paths, host.options.name_template.clone(), plan, space).await?;
     let Some(places) = host.places() else {
         return Ok(false);
@@ -60,42 +59,6 @@ pub(in crate::cli) async fn start_place(
         outln!("Started {name} {}", places.background_place(name));
     }
     Ok(true)
-}
-
-/// Run Shoal with `args` where an agent stopped, in `stopped`, when that
-/// place is another one still open and idle. Returns what such restarts run
-/// in, or `None` when it did not run.
-pub(in crate::cli) async fn rerun_where_stopped(
-    ctx: &Context,
-    settings: &Effective,
-    stopped: Option<&Origin>,
-    args: &[OsString],
-) -> Result<Option<&'static str>> {
-    let host = beside(ctx, settings).host;
-    let reused = rerun_in_host(&ctx.paths, host, stopped, args).await?;
-    Ok(host
-        .places()
-        .filter(|_| reused)
-        .map(Places::background_places))
-}
-
-/// Run Shoal with `args` for `workspace` in the background, returning what
-/// such starts run in, or `None` when this terminal cannot start them.
-pub(in crate::cli) async fn run_in_background(
-    ctx: &Context,
-    settings: &Effective,
-    workspace: &Workspace,
-    args: &[OsString],
-) -> Result<Option<&'static str>> {
-    let host = beside(ctx, settings);
-    let Some(places) = host.places() else {
-        return Ok(None);
-    };
-    let repo = groups::Repo::Id(workspace.repository().as_str());
-    let origin = groups::beside(&ctx.paths, &host, &repo, &workspace.path).await?;
-    let beside = host.beside(origin.as_ref());
-    start_in_background(&ctx.paths, &host, places, beside, workspace, args).await?;
-    Ok(Some(places.background_places()))
 }
 
 /// Where a tracked agent launched from this terminal runs apart from this
@@ -269,18 +232,7 @@ fn agent_worker(
 /// Whether the host under `settings` opens places beside this terminal for
 /// the starts made from it.
 pub(in crate::cli) fn opens_beside(ctx: &Context, settings: &Effective) -> bool {
-    beside(ctx, settings).places().is_some()
-}
-
-/// The host that starts work beside this terminal. A place a host opened for
-/// this process, or a terminal without a user, keeps work in place; a call
-/// that asked for JSON keeps its terminal's host.
-fn beside(ctx: &Context, settings: &Effective) -> Configured {
-    if ctx.place.is_none() && ctx.on_terminal() {
-        current(settings)
-    } else {
-        Configured::plain(settings)
-    }
+    ctx.launcher().host(settings).places().is_some()
 }
 
 /// Whether a launch takes the caller's terminal or runs in the background.
