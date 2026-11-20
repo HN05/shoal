@@ -210,3 +210,37 @@ async fn a_reference_follows_its_file_renamed_whole() {
     let renamed = ("syntax/parser.rs:2-4".to_owned(), CodeState::Unchanged);
     assert_eq!(followed(&tree, number).await, renamed);
 }
+
+#[tokio::test]
+async fn a_reference_that_cannot_be_followed_leaves_the_others_to_follow() {
+    let tree = tree().await;
+    let (manager, child) = (&tree.manager, caller(&tree.child));
+    let thread = open(manager, Some(&child), None).await;
+    let lexer = tree.child.path.join("lexer.rs");
+    fs::write(&lexer, "fn lex() {}\n").unwrap();
+    let code = vec![at(lexer.clone(), "1"), at(parser(&tree.child), "5")];
+    let posted = manager
+        .post_to_thread(Some(&child), full(&thread), post("Here"), Vec::new(), code)
+        .await
+        .unwrap();
+    // The version the first was last followed to is gone from Git.
+    let broken = posted.posts[0].code[0].id;
+    (manager.store)
+        .write(move |tx| {
+            let missing = "0123456789abcdef0123456789abcdef01234567";
+            let sql = "UPDATE thread_code SET latest_blob=?2 WHERE id=?1";
+            Ok(tx.execute(sql, rusqlite::params![broken, missing])?)
+        })
+        .await
+        .unwrap();
+    fs::write(&lexer, "// Lexing\nfn lex() {}\n").unwrap();
+    let file = tree.child.path.join("parse.rs");
+    fs::write(&file, format!("use x;\n{PARSER}")).unwrap();
+
+    let thread = manager.thread(None, full(&thread)).await.unwrap();
+    let [lexed, parsed] = &thread.posts[0].code[..] else {
+        panic!("{:?}", thread.posts[0].code)
+    };
+    assert_eq!(lexed.latest.to_string(), "lexer.rs:1");
+    assert_eq!(parsed.latest.to_string(), "parse.rs:6");
+}

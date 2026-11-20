@@ -27,7 +27,8 @@ struct Step {
 
 impl Manager {
     /// `threads` with the references in each ready worktree followed to
-    /// its code now; one that cannot be followed stays where it was.
+    /// its code now; one that cannot be followed stays where it was, and
+    /// the others go on.
     pub(in crate::daemon::threads) async fn follow_code(&self, threads: &mut [Thread]) {
         let mut by_space: BTreeMap<SpaceId, Vec<&mut CodeRef>> = BTreeMap::new();
         let references = (threads.iter_mut())
@@ -59,14 +60,26 @@ impl Manager {
         let mut moved = false;
         for code in &mut references {
             let now = current.get(&code.latest.path).map(String::as_str);
-            if let Some(step) = step(&workspace.path, code, now).await? {
-                moved |= self.record_step(code, step).await?;
+            match self.follow_one(&workspace.path, code, now).await {
+                Ok(followed) => moved |= followed,
+                Err(error) => {
+                    crate::daemon::log!("code reference {} not followed: {error:#}", code.id)
+                }
             }
         }
         if moved {
             self.keep_versions_of_workspace(&workspace).await;
         }
         Ok(())
+    }
+
+    /// Follow `code` into the worktree `root`, whose file at its path is
+    /// version `now` while it is there; whether it moved.
+    async fn follow_one(&self, root: &Path, code: &mut CodeRef, now: Option<&str>) -> Result<bool> {
+        match step(root, code, now).await? {
+            Some(step) => self.record_step(code, step).await,
+            None => Ok(false),
+        }
     }
 
     /// Move `code` to where `step` took it, unless another read moved it
@@ -115,6 +128,11 @@ async fn step(root: &Path, code: &CodeRef, now: Option<&str>) -> Result<Option<S
         return Ok(gone.then(|| outdated(code)).flatten());
     };
     if now == Some(blob.as_str()) {
+        return Ok(None);
+    }
+    // Code once gone stays outdated until its file is back at its path, so
+    // no read searches for a rename again.
+    if now.is_none() && code.state == CodeState::Outdated {
         return Ok(None);
     }
     let path = match now {
