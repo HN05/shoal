@@ -8,13 +8,14 @@
 //! that a push moved after the checks.
 use anyhow::{Context, Result, bail};
 use shoal_daemon_base::permitted_actions::Action;
+use shoal_links::place::Access;
 use shoal_refs::BranchName;
 
 use super::ReadBranches;
 use crate::{
     branches::{DeletedBranch, ListedBranch, SpaceWork},
     config::permissions::PermissionKey,
-    daemon::{links::place::Access, manager::Manager, scope::Caller},
+    daemon::{manager::Manager, scope::Caller},
     git,
     protocol::RepoTarget,
 };

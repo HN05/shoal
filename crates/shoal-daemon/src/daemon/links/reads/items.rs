@@ -2,19 +2,13 @@
 //! kind a bare number is, an issue's details and blockers, and a PR's head,
 //! reviewers and review threads.
 use anyhow::{Context, Result};
+use shoal_links::place::{Access, Place};
 use shoal_links::space::LinkSpace;
+use shoal_links::target::{ForgeTarget, NOTHING_LINKED};
 use shoal_protocol::progress::Blocker;
 
 use crate::{
-    daemon::{
-        links::{
-            actions::NOTHING_LINKED,
-            place::{Access, Place},
-            target::ForgeTarget,
-        },
-        manager::Manager,
-        scope::Caller,
-    },
+    daemon::{manager::Manager, scope::Caller},
     forge::{
         ForgeRepo, PullRequest,
         capability::Capability,
@@ -50,7 +44,7 @@ impl Manager {
         elsewhere: bool,
         caller: Option<&Caller>,
     ) -> Result<Selected> {
-        let account = self.read_account(caller);
+        let account = self.links.read_account(caller);
         let target = (self.selection_target(target, selection, elsewhere, caller)).await?;
         let items = (self.target_selection(&target, selection, elsewhere, &account)).await?;
         let path = (target.origin.as_ref()).map(|place| place.origin_path().to_owned());
@@ -70,7 +64,10 @@ impl Manager {
             (Some(input), true) => shoal_links::forges::of_input(self, input).await?,
             _ => None,
         };
-        (self.forge_target(target, named, Access::Read, caller)).await
+        (self
+            .links
+            .forge_target(self, target, named, Access::Read, caller))
+        .await
     }
 
     /// The items `selection` names in `target`: in a space's own
@@ -122,8 +119,11 @@ impl Manager {
         number: u64,
         caller: Option<&Caller>,
     ) -> Result<LinkKind> {
-        let account = self.read_account(caller);
-        let target = (self.forge_target(target, None, Access::Read, caller)).await?;
+        let account = self.links.read_account(caller);
+        let target = (self
+            .links
+            .forge_target(self, target, None, Access::Read, caller))
+        .await?;
         match target.own_place().and_then(Place::space) {
             Some(space) => self.space_number_kind(space, number, &account).await,
             None => Ok(target.forge()?.item_kind(&account, number).await?.into()),
@@ -159,7 +159,7 @@ impl Manager {
         let forge = self.context_forge(context).await?;
         let issue = ItemRef::in_repository(&forge, LinkKind::Issue, item)?;
         forge
-            .read_issue(&self.read_account(caller), &issue, closed)
+            .read_issue(&self.links.read_account(caller), &issue, closed)
             .await
     }
 
@@ -173,7 +173,7 @@ impl Manager {
     ) -> Result<Vec<Blocker>> {
         let forge = self.context_forge(context).await?;
         let issue = ItemRef::in_repository(&forge, LinkKind::Issue, item)?;
-        let account = self.read_account(caller);
+        let account = self.links.read_account(caller);
         let blockers = forge.open_issue_blockers(&account, issue.issue()?).await?;
         Ok((blockers.into_iter())
             .map(|issue| Blocker::Issue(issue.into()))
@@ -190,7 +190,9 @@ impl Manager {
     ) -> Result<PullRequest> {
         let forge = self.context_forge(context).await?;
         let pull = ItemRef::in_repository(&forge, LinkKind::Pr, item)?;
-        forge.pull_request(&self.read_account(caller), &pull).await
+        forge
+            .pull_request(&self.links.read_account(caller), &pull)
+            .await
     }
 
     /// Who the PR `item` names in the `target` repository, or the space's
@@ -201,11 +203,13 @@ impl Manager {
         item: Option<ItemInput>,
         caller: Option<&Caller>,
     ) -> Result<Vec<Reviewer>> {
-        let read = self.target_item(target, item, ItemKind::Pr, Access::Read, caller);
+        let read = self
+            .links
+            .target_item(self, target, item, ItemKind::Pr, Access::Read, caller);
         let (target, pull) = read.await?;
         let forge = target.forge()?;
         forge
-            .reviewers(&self.read_account(caller), pull.pull()?)
+            .reviewers(&self.links.read_account(caller), pull.pull()?)
             .await
     }
 
@@ -219,12 +223,14 @@ impl Manager {
         comment: CommentId,
         caller: Option<&Caller>,
     ) -> Result<Thread> {
-        let read = self.target_item(target, item, ItemKind::Pr, Access::Read, caller);
+        let read = self
+            .links
+            .target_item(self, target, item, ItemKind::Pr, Access::Read, caller);
         let (target, pull) = read.await?;
         let forge = target.forge()?;
         forge.require(Capability::ResolveThreads)?;
         forge
-            .thread(&self.read_account(caller), pull.pull()?, comment)
+            .thread(&self.links.read_account(caller), pull.pull()?, comment)
             .await
     }
 }

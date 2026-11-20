@@ -12,7 +12,6 @@ mod listing;
 mod merge_path;
 mod merge_review;
 mod merge_warning;
-pub(in crate::daemon) mod place;
 pub mod pr;
 pub mod proposals;
 mod pushes;
@@ -23,8 +22,8 @@ mod revert;
 mod run_approval;
 mod runs;
 pub(crate) mod space;
+mod spaces;
 pub(in crate::daemon) mod stack;
-pub(in crate::daemon) mod target;
 mod verdict;
 mod view;
 pub mod wait;
@@ -33,6 +32,7 @@ use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::place::Access;
 use shoal_links::space::LinkSpace;
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -126,7 +126,7 @@ impl Manager {
             let context = self.link_space(selector).await?.item_context();
             let forge = self.context_forge(&context).await?;
             let item = ItemRef::in_repository(&forge, kind.into(), input)?;
-            let account = self.read_account(caller);
+            let account = self.links.read_account(caller);
             let current = forge.read(&account, kind, item.number().get()).await?;
             anyhow::Ok(current.item.title)
         };
@@ -176,7 +176,7 @@ impl Manager {
         // A watch reads the run as the user where it is not the space's own,
         // so linking it is a change there.
         let target = space.item_context().into();
-        let linked = self.named_run(&target, input, place::Access::Change, caller);
+        let linked = self.named_run(&target, input, Access::Change, caller);
         let (place, url) = linked.await?;
         let run = (place.forge().view_run(&place.account, &url).await)
             .with_context(|| format!("could not read CI run {url}"))?;

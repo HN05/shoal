@@ -4,11 +4,9 @@
 //! `ci_approve` permission allows, as the agent account.
 use anyhow::{Context, Result};
 use shoal_daemon_base::permitted_actions::Action;
+use shoal_links::place::{Access, Place};
+use shoal_links::target::ForgeTarget;
 
-use super::{
-    place::{Access, Place},
-    target::ForgeTarget,
-};
 use crate::{
     config::permissions::PermissionKey,
     daemon::{events, manager::Manager, scope::Caller},
@@ -40,7 +38,10 @@ impl Manager {
             Some(input) => shoal_links::forges::of_input(self, input).await?,
             None => None,
         };
-        let target = (self.forge_target(target, named, Access::Change, caller)).await?;
+        let target = (self
+            .links
+            .forge_target(self, target, named, Access::Change, caller))
+        .await?;
         let workspace = target.own_place().and_then(Place::workspace);
         let workspace = workspace.as_ref();
         let forge = target.forge()?;
@@ -97,7 +98,8 @@ impl Manager {
     ) -> Result<Vec<String>> {
         let (forge, place) = (target.forge()?, target.own_place());
         let space = place.and_then(Place::space_id);
-        let pull = (self.named_or_linked(pr, space, forge, ItemKind::Pr)).await?;
+        let pull =
+            (shoal_links::target::named_or_linked(self, pr, space, forge, ItemKind::Pr)).await?;
         let (number, url) = (pull.pull()?, pull.to_string());
         let waiting = forge
             .pr_waiting_runs(account, number)

@@ -2,14 +2,10 @@
 //! as the agent account of the workspace or registered checkout.
 use anyhow::{Context, Result};
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::place::{Access, Place};
 
 use crate::{
-    daemon::{
-        events,
-        links::place::{Access, Place},
-        manager::Manager,
-        scope::Caller,
-    },
+    daemon::{events, manager::Manager, scope::Caller},
     forge::{
         ci::{CiActed, CiAction},
         items::{link::ItemKind, reference::ItemInput},
@@ -32,9 +28,11 @@ impl Manager {
         for check in &checks {
             validate_check_name(check)?;
         }
-        let acted = self.target_item(target, item, ItemKind::Pr, Access::Change, caller);
+        let acted =
+            self.links
+                .target_item(self, target, item, ItemKind::Pr, Access::Change, caller);
         let (target, pull) = acted.await?;
-        let account = self.target_account(&target, Access::Change, caller);
+        let account = self.links.target_account(&target, Access::Change, caller);
         let (forge, number, url) = (target.forge()?, pull.pull()?, pull.to_string());
         let plan = forge
             .plan_ci(&account, number, action, &checks)

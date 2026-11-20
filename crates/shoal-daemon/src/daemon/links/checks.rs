@@ -1,14 +1,12 @@
 //! Failed Actions logs resolved from a PR's current check, using the agent
 //! account of the workspace or registered checkout.
 use anyhow::{Context as _, Result, bail};
+use shoal_links::place::{Access, Place};
 use shoal_links::space::LinkSpace;
+use shoal_links::target::NOTHING_LINKED;
 
 use crate::{
-    daemon::{
-        links::place::{Access, Place},
-        manager::Manager,
-        scope::Caller,
-    },
+    daemon::{manager::Manager, scope::Caller},
     forge::{
         ForgeRepo,
         capability::Capability,
@@ -94,7 +92,7 @@ impl Manager {
         let target = (self.selection_target(target, selection, true, caller)).await?;
         let account = match target.own {
             true => self.links.agent_account(),
-            false => self.elsewhere_account(Access::Read, caller),
+            false => self.links.elsewhere_account(Access::Read, caller),
         };
         let space = target.own_place().and_then(Place::space);
         let forge = target.forge()?;
@@ -114,7 +112,7 @@ impl Manager {
             bail!(ONE_PR);
         }
         let Some(space) = space else {
-            let input = (selection.input.as_ref()).context(super::actions::NOTHING_LINKED)?;
+            let input = (selection.input.as_ref()).context(NOTHING_LINKED)?;
             return ItemRef::in_repository(forge, LinkKind::Pr, input);
         };
         let selection = Selection {

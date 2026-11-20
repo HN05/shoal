@@ -1,11 +1,12 @@
 //! The accounts requests to a forge go out as: the user's own logins for
 //! reads and the user's decisions, the review account for a scoped
-//! caller's verdicts, the agent account for the rest. Each remembers what
-//! the forge's responses taught it.
+//! caller's verdicts, the agent account for the rest, and which one a
+//! request takes. Each remembers what the forge's responses taught it.
 use shoal_core::config::forges::{Forges, Whose};
+use shoal_daemon_base::callers::Caller;
 use shoal_forge::account::Account;
 
-use crate::Links;
+use crate::{Links, place::Place};
 
 /// What names the account of the user's own tokens, `forges` sets, in
 /// forge memories.
@@ -47,5 +48,24 @@ impl Links {
         Account::user(forges.logins(Whose::Review))
             .remembering(self.memories.of(&identity))
             .naming_missing(Whose::Review.missing())
+    }
+
+    /// The account `caller`'s read goes out as: the agent account for a
+    /// scoped caller and the user's own logins for the user.
+    pub fn read_account(&self, caller: Option<&Caller>) -> Account {
+        match caller {
+            Some(_) => self.agent_account(),
+            None => self.user_account(),
+        }
+    }
+
+    /// The account that changes items from `place`: the agent account in a
+    /// space, and the user's own logins in a registered checkout, where only
+    /// the user acts.
+    pub fn place_account(&self, place: &Place) -> Account {
+        match place {
+            Place::Checkout(_) => self.user_account(),
+            Place::Space(_) => self.agent_account(),
+        }
     }
 }

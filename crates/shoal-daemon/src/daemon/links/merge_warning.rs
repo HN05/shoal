@@ -4,12 +4,11 @@
 //! fast without one.
 use anyhow::{Context, Result, ensure};
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::place::Access;
 use shoal_refs::CommitId;
 
 use crate::{
-    daemon::{
-        links::place::Access, manager::Manager, scope::Caller, workspace::conflicts::recorded,
-    },
+    daemon::{manager::Manager, scope::Caller, workspace::conflicts::recorded},
     forge::{
         ForgeRepo,
         items::{
@@ -115,9 +114,15 @@ impl Manager {
         action: &mut Action,
         caller: &Caller,
     ) -> Result<String> {
-        let (target, url) = self
-            .target_item(target, input, ItemKind::Pr, Access::Change, Some(caller))
-            .await?;
+        let item = (self.links).target_item(
+            self,
+            target,
+            input,
+            ItemKind::Pr,
+            Access::Change,
+            Some(caller),
+        );
+        let (target, url) = item.await?;
         self.configure_merge(target.own_place(), action).await?;
         if action.merges() && action.merge_head().is_none() {
             let forge = target.into_forge()?;
@@ -146,7 +151,10 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<(ForgeRepo, ItemRef)> {
         let (target, pull) =
-            (self.target_item(target, input, ItemKind::Pr, access, caller)).await?;
+            (self
+                .links
+                .target_item(self, target, input, ItemKind::Pr, access, caller))
+            .await?;
         Ok((target.into_forge()?, pull))
     }
 

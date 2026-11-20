@@ -3,10 +3,12 @@
 //! branch must cover the head the merge names, with every finding resolved.
 use anyhow::{Context, Result, bail};
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_links::place::Access;
+use shoal_links::target::ForgeTarget;
 use shoal_refs::CommitId;
 use shoal_reviews::required::{Gate, Unreviewed};
 
-use super::{place::Access, pr::current_head, target::ForgeTarget};
+use super::pr::current_head;
 use crate::{
     daemon::{manager::Manager, scope::Caller},
     forge::{
@@ -62,7 +64,9 @@ impl Manager {
         binding: Option<Capability>,
         caller: Option<&Caller>,
     ) -> Result<Option<CommitId>> {
-        let pull = self.target_item(target, input, ItemKind::Pr, Access::Read, caller);
+        let pull = self
+            .links
+            .target_item(self, target, input, ItemKind::Pr, Access::Read, caller);
         let (target, url) = pull.await?;
         let repository = self.target_repository(&target).await?;
         let settings = self.space_settings_in(repository.as_ref()).await?;
@@ -73,7 +77,7 @@ impl Manager {
         if let Some(binding) = binding {
             forge.require(binding).context(UNBOUND)?;
         }
-        let account = self.target_account(&target, Access::Read, caller);
+        let account = self.links.target_account(&target, Access::Read, caller);
         let pull = forge.pull_request(&account, &url).await?;
         let owner = self.pull_owner(repository.as_ref(), &pull).await?;
         let owner = owner.with_context(|| unowned(&pull))?;

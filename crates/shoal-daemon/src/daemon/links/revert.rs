@@ -71,7 +71,14 @@ impl Manager {
             shoal_links::forges::of_space(self, &space).await?,
             self.links.agent_account(),
         );
-        let pull = (self.named_or_linked(input, Some(&space.id), &forge, ItemKind::Pr)).await?;
+        let pull = (shoal_links::target::named_or_linked(
+            self,
+            input,
+            Some(&space.id),
+            &forge,
+            ItemKind::Pr,
+        ))
+        .await?;
         let current = forge.merged(&account, pull.pull()?).await?;
         let options = revert_options(&current.item, options);
         let required = &settings.pr.required_labels;
@@ -121,7 +128,14 @@ impl Manager {
             shoal_links::forges::of_space(self, &space).await?,
             self.links.agent_account(),
         );
-        let pull = (self.named_or_linked(input, Some(&space.id), &forge, ItemKind::Pr)).await?;
+        let pull = (shoal_links::target::named_or_linked(
+            self,
+            input,
+            Some(&space.id),
+            &forge,
+            ItemKind::Pr,
+        ))
+        .await?;
         forge.merged_pull(&account, pull.pull()?).await
     }
 }

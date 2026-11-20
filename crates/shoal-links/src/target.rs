@@ -4,24 +4,28 @@
 //! Every caller reads another repository; only the user changes one.
 use anyhow::{Result, bail, ensure};
 
-use super::place::{Access, Place};
-use crate::{
-    daemon::{manager::Manager, scope::Caller},
-    forge::{
-        ForgeRepo,
-        items::{
-            link::ItemKind,
-            reference::{ItemInput, ItemRef},
-        },
-    },
-    protocol::{ItemContext, RepoTarget},
-};
-use shoal_forge::RepoRequests;
+use shoal_daemon_base::callers::Caller;
 use shoal_forge::account::Account;
+use shoal_forge_types::{
+    ForgeRepo,
+    items::{
+        link::ItemKind,
+        reference::{ItemInput, ItemRef},
+    },
+};
+use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::protocol::{ItemContext, RepoTarget};
+
+use crate::{
+    Links,
+    daemon::Daemon,
+    forges,
+    place::{Access, Place},
+};
 
 /// The refusal of a scoped caller's change in another repository than its
 /// own.
-pub(in crate::daemon) const ELSEWHERE: &str = "agents change issues, PRs and CI runs only in \
+pub const ELSEWHERE: &str = "agents change issues, PRs and CI runs only in \
      their own repository; ask the user to change those of another repository";
 
 /// What a request names when nothing gives it a repository.
@@ -31,7 +35,7 @@ const NO_REPOSITORY: &str = "name the repository with --repo, or the item by its
 const CONFLICTING: &str = "the URL names another repository than --repo; leave out --repo";
 
 /// The repository a request acts in and where the request came from.
-pub(in crate::daemon::links) struct ForgeTarget {
+pub struct ForgeTarget {
     /// The space or registered checkout the request came from, if any.
     pub origin: Option<Place>,
     /// An error in the request's own repository when its checkout or
@@ -44,39 +48,40 @@ pub(in crate::daemon::links) struct ForgeTarget {
 
 impl ForgeTarget {
     /// The forge of the repository the request acts in.
-    pub(in crate::daemon::links) fn forge(&self) -> Result<&ForgeRepo> {
+    pub fn forge(&self) -> Result<&ForgeRepo> {
         (self.forge.as_ref()).map_err(|error| anyhow::anyhow!("{error:#}"))
     }
 
     /// [`Self::forge`], taken.
-    pub(in crate::daemon::links) fn into_forge(self) -> Result<ForgeRepo> {
+    pub fn into_forge(self) -> Result<ForgeRepo> {
         self.forge
     }
 
     /// The place the request acts in as its own repository.
-    pub(in crate::daemon::links) fn own_place(&self) -> Option<&Place> {
+    pub fn own_place(&self) -> Option<&Place> {
         self.origin.as_ref().filter(|_| self.own)
     }
 }
 
-impl Manager {
+impl Links {
     /// The repository a request from `target` acts in with `access`: the
     /// one `target` names, else `named`, the one an item's, run's or
     /// workflow's URL names, else the context's own. A scoped `caller`
     /// changes only its own repository.
-    pub(in crate::daemon::links) async fn forge_target(
+    pub async fn forge_target(
         &self,
+        daemon: &dyn Daemon,
         target: &RepoTarget,
         named: Option<ForgeRepo>,
         access: Access,
         caller: Option<&Caller>,
     ) -> Result<ForgeTarget> {
         let origin = match &target.context {
-            Some(context) => self.origin(context, access).await?,
+            Some(context) => self.origin(daemon, context, access).await?,
             None => None,
         };
         let own_forge = match &origin {
-            Some(place) => shoal_links::forges::origin(self, place.origin_path()).await,
+            Some(place) => forges::origin(daemon, place.origin_path()).await,
             None => Err(anyhow::anyhow!(NO_REPOSITORY)),
         };
         // The origin's forge is needed only where something else is named
@@ -87,7 +92,7 @@ impl Manager {
                 (own_forge, true)
             }
             (Some(repository), named) => {
-                let forge = self.target_named(own_forge.as_ref().ok(), repository);
+                let forge = target_named(daemon, own_forge.as_ref().ok(), repository);
                 let forge = forge.await?;
                 ensure!(named.is_none_or(|named| named == forge), CONFLICTING);
                 let own = own_forge.as_ref().ok() == Some(&forge);
@@ -105,8 +110,9 @@ impl Manager {
     /// The `kind` item `input` names in the `target` repository, by number
     /// or URL, else the one item of `kind` assigned to the space the
     /// request comes from in its own repository, with where it is.
-    pub(in crate::daemon::links) async fn target_item(
+    pub async fn target_item(
         &self,
+        daemon: &dyn Daemon,
         target: &RepoTarget,
         input: Option<ItemInput>,
         kind: ItemKind,
@@ -114,12 +120,12 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<(ForgeTarget, ItemRef)> {
         let named = match &input {
-            Some(input) => shoal_links::forges::of_input(self, input).await?,
+            Some(input) => forges::of_input(daemon, input).await?,
             None => None,
         };
-        let target = self.forge_target(target, named, access, caller).await?;
+        let target = (self.forge_target(daemon, target, named, access, caller)).await?;
         let space = target.own_place().and_then(Place::space_id).cloned();
-        let item = self.named_or_linked(input, space.as_ref(), target.forge()?, kind);
+        let item = named_or_linked(daemon, input, space.as_ref(), target.forge()?, kind);
         let item = item.await?;
         Ok((target, item))
     }
@@ -129,7 +135,7 @@ impl Manager {
     /// in another.
     ///
     /// [`elsewhere_account`]: Self::elsewhere_account
-    pub(in crate::daemon::links) fn target_account(
+    pub fn target_account(
         &self,
         target: &ForgeTarget,
         access: Access,
@@ -144,43 +150,80 @@ impl Manager {
     /// The account a request acts as in `target` when that is not its own
     /// repository: the caller's to read, and the user's own logins for a
     /// change, which only the user makes there.
-    pub(in crate::daemon::links) fn elsewhere_account(
-        &self,
-        access: Access,
-        caller: Option<&Caller>,
-    ) -> Account {
+    pub fn elsewhere_account(&self, access: Access, caller: Option<&Caller>) -> Account {
         match access {
             Access::Read => self.read_account(caller),
-            Access::Change => self.links.user_account(),
+            Access::Change => self.user_account(),
         }
     }
 
     /// Where `context` comes from, or nowhere for a chat without a
     /// repository naming none it acts in.
-    async fn origin(&self, context: &ItemContext, access: Access) -> Result<Option<Place>> {
+    async fn origin(
+        &self,
+        daemon: &dyn Daemon,
+        context: &ItemContext,
+        access: Access,
+    ) -> Result<Option<Place>> {
         if let ItemContext::Space {
             space,
             repository: None,
         } = context
-            && self.space(space).await?.repository_id.is_none()
+            && daemon.space(space).await?.repository_id.is_none()
         {
             return Ok(None);
         }
-        self.place(context, access).await.map(Some)
+        self.place(daemon, context, access).await.map(Some)
     }
+}
 
-    /// The repository `named` names: by URL on any forge, or as OWNER/NAME
-    /// on the forge of `own`, the repository the request comes from.
-    async fn target_named(&self, own: Option<&ForgeRepo>, named: &str) -> Result<ForgeRepo> {
-        match own {
-            Some(own) => shoal_links::forges::named(self, own.clone(), Some(named)).await,
-            None if ForgeRepo::named_by_url(named) => {
-                ForgeRepo::resolve(named, &self.forge_hosts()).await
-            }
-            None => bail!(
-                "{named} names a repository on the current repository's forge, and there is \
-                 none here; name it by its URL"
-            ),
+/// The repository `named` names: by URL on any forge, or as OWNER/NAME
+/// on the forge of `own`, the repository the request comes from.
+async fn target_named(
+    daemon: &dyn Daemon,
+    own: Option<&ForgeRepo>,
+    named: &str,
+) -> Result<ForgeRepo> {
+    match own {
+        Some(own) => forges::named(daemon, own.clone(), Some(named)).await,
+        None if ForgeRepo::named_by_url(named) => daemon.resolve_forge(named).await,
+        None => bail!(
+            "{named} names a repository on the current repository's forge, and there is \
+             none here; name it by its URL"
+        ),
+    }
+}
+
+/// The `kind` item `named` names in the repository of `forge`, else the
+/// one item of `kind` assigned to the space `space`.
+pub async fn named_or_linked(
+    daemon: &dyn Daemon,
+    named: Option<ItemInput>,
+    space: Option<&SpaceId>,
+    forge: &ForgeRepo,
+    kind: ItemKind,
+) -> Result<ItemRef> {
+    match (named, space) {
+        (Some(named), _) => ItemRef::in_repository(forge, kind.into(), &named),
+        (None, Some(id)) => {
+            let linked = only_assigned(kind, daemon.linked_items(id, kind).await?)?;
+            linked.belongs_to(forge)?;
+            Ok(linked)
         }
+        (None, None) => bail!(NOTHING_LINKED),
+    }
+}
+
+/// Why an action outside a space needs its item named.
+pub const NOTHING_LINKED: &str =
+    "outside a workspace or chat, nothing is linked; pass a number or URL";
+
+/// The one assigned item of `kind` among `assigned`.
+fn only_assigned(kind: ItemKind, assigned: Vec<ItemRef>) -> Result<ItemRef> {
+    let noun = kind.noun();
+    match assigned.as_slice() {
+        [url] => Ok(url.clone()),
+        [] => bail!("no {noun} is linked; pass a number or URL"),
+        _ => bail!("several {noun}s are linked; pass a number or URL"),
     }
 }

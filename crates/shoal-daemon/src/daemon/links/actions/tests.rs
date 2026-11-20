@@ -184,9 +184,15 @@ async fn a_linked_item_of_an_earlier_origin_is_not_taken_for_the_current_ones() 
         let manager = &manager;
         let id = workspace.id.clone();
         async move {
-            (manager.named_or_linked(None, Some(&id), &forge, ItemKind::Issue))
-                .await
-                .map(|issue| issue.number().get())
+            shoal_links::target::named_or_linked(
+                &**manager,
+                None,
+                Some(&id),
+                &forge,
+                ItemKind::Issue,
+            )
+            .await
+            .map(|issue| issue.number().get())
         }
     };
     assert_eq!(linked("https://forge.example/team/old").await.unwrap(), 7);
@@ -229,9 +235,15 @@ async fn several_assigned_issues_need_the_number_of_the_one_acted_on() {
         let named = named.map(|named| named.parse().unwrap());
         let (manager, forge, id) = (&manager, &forge, workspace.id.clone());
         async move {
-            (manager.named_or_linked(named, Some(&id), forge, ItemKind::Issue))
-                .await
-                .map(|issue| issue.number().get())
+            shoal_links::target::named_or_linked(
+                &**manager,
+                named,
+                Some(&id),
+                forge,
+                ItemKind::Issue,
+            )
+            .await
+            .map(|issue| issue.number().get())
         }
     };
     let error = linked(None).await.unwrap_err();

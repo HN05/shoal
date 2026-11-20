@@ -22,7 +22,9 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<Vec<Item>> {
         let forge = self.read_forge(target, caller).await?;
-        forge.list(&self.read_account(caller), kind, search).await
+        forge
+            .list(&self.links.read_account(caller), kind, search)
+            .await
     }
 }
 

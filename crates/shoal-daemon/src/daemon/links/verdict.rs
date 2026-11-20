@@ -5,11 +5,12 @@
 use anyhow::Result;
 use serde::Serialize;
 use shoal_daemon_base::permitted_actions::Action;
+use shoal_links::place::Access;
 use shoal_refs::CommitId;
 
 use crate::{
     config::permissions::PermissionKey,
-    daemon::{links::place::Access, manager::Manager, scope::Caller},
+    daemon::{manager::Manager, scope::Caller},
     forge::items::{
         reference::ItemInput,
         review::{LineComment, NewReview, ReviewVerdict},

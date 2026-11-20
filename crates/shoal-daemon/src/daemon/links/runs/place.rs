@@ -4,16 +4,11 @@
 //! caller only reads, and the branch a run starts on there.
 use anyhow::{Context, Result, ensure};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_links::place::{Access, Place};
+use shoal_links::target::ForgeTarget;
 
 use crate::{
-    daemon::{
-        links::{
-            place::{Access, Place},
-            target::ForgeTarget,
-        },
-        manager::Manager,
-        scope::Caller,
-    },
+    daemon::{manager::Manager, scope::Caller},
     forge::{
         ForgeRepo,
         items::{
@@ -98,8 +93,11 @@ impl Manager {
         access: Access,
         caller: Option<&Caller>,
     ) -> Result<RunPlace> {
-        let target = self.forge_target(target, named, access, caller).await?;
-        let account = self.target_account(&target, access, caller);
+        let target = self
+            .links
+            .forge_target(self, target, named, access, caller)
+            .await?;
+        let account = self.links.target_account(&target, access, caller);
         let forge = target.forge()?.clone();
         Ok(RunPlace {
             target,

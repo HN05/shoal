@@ -5,13 +5,13 @@
 //! own logins.
 mod deletion;
 
+use shoal_links::place::Access;
 use std::path::Path;
 
 use anyhow::Result;
 use futures_util::{StreamExt, TryStreamExt, stream};
 use shoal_refs::{BranchName, CommitId};
 
-use super::{place::Access, target::ForgeTarget};
 use crate::{
     branches::{BranchSpace, ListedBranch, SpaceWork},
     daemon::{manager::Manager, scope::Caller},
@@ -24,6 +24,7 @@ use crate::{
     protocol::RepoTarget,
 };
 use shoal_forge::{account::Account, branches::BranchRequests, ci::workflow::WorkflowRequests};
+use shoal_links::target::ForgeTarget;
 
 /// How many branches the merged check reads at once.
 const CHECKS_AT_ONCE: usize = 8;
@@ -70,9 +71,12 @@ impl Manager {
         access: Access,
         caller: Option<&Caller>,
     ) -> Result<ReadBranches> {
-        let target = self.forge_target(target, None, access, caller).await?;
+        let target = self
+            .links
+            .forge_target(self, target, None, access, caller)
+            .await?;
         let checkout = self.target_checkout(&target).await?;
-        let (forge, account) = (target.into_forge()?, self.read_account(caller));
+        let (forge, account) = (target.into_forge()?, self.links.read_account(caller));
         let (branches, pulls, default) = tokio::try_join!(
             forge.branches(&account),
             forge.open_pulls(&account),

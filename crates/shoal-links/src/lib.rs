@@ -6,8 +6,10 @@ pub mod forges;
 pub mod issue;
 pub mod linked;
 mod memories;
+pub mod place;
 pub mod pr;
 pub mod space;
+pub mod target;
 pub mod wait;
 
 use std::sync::Arc;

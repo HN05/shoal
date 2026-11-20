@@ -5,16 +5,13 @@ mod place;
 mod reach;
 
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::place::{Access, Place};
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, bail, ensure};
 
 use crate::{
-    daemon::{
-        links::place::{Access, Place},
-        manager::Manager,
-        scope::Caller,
-    },
+    daemon::{manager::Manager, scope::Caller},
     forge::{
         ForgeRepo,
         capability::Capability,

@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::{
-    daemon::{links::place::Place, manager::Manager},
+    daemon::manager::Manager,
     forge::ForgeRepo,
     model::{Repository, Workspace},
 };
@@ -30,15 +30,5 @@ impl Manager {
             shoal_links::forges::of_checkout(self, repository).await?,
             self.links.agent_account(),
         ))
-    }
-
-    /// The account that changes items from `place`: the agent account in a
-    /// space, and the user's own logins in a registered checkout, where only
-    /// the user acts.
-    pub(in crate::daemon::links) fn place_account(&self, place: &Place) -> Account {
-        match place {
-            Place::Checkout(_) => self.links.user_account(),
-            Place::Space(_) => self.links.agent_account(),
-        }
     }
 }

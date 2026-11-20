@@ -1,9 +1,10 @@
 //! Issues and PRs the daemon reads for `shoal view` and apps, as the forge
 //! reports them now, with the logs of failed checks.
 use anyhow::Result;
+use shoal_links::place::Place;
 use shoal_links::space::LinkSpace;
+use shoal_links::target::ForgeTarget;
 
-use super::{place::Place, target::ForgeTarget};
 use crate::{
     daemon::{manager::Manager, scope::Caller},
     forge::{
@@ -31,7 +32,7 @@ impl Manager {
         comments: bool,
         caller: Option<&Caller>,
     ) -> Result<Viewed> {
-        let account = self.read_account(caller);
+        let account = self.links.read_account(caller);
         let target = self
             .selection_target(target, selection, true, caller)
             .await?;

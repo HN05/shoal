@@ -23,7 +23,9 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<Capabilities> {
         let forge = self.read_forge(target, caller).await?;
-        forge.server_capabilities(&self.read_account(caller)).await
+        forge
+            .server_capabilities(&self.links.read_account(caller))
+            .await
     }
 
     /// The reactions the forge of the `target` repository allows.
@@ -33,12 +35,14 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<AllowedReactions> {
         let forge = self.read_forge(target, caller).await?;
-        forge.allowed_reactions(&self.read_account(caller)).await
+        forge
+            .allowed_reactions(&self.links.read_account(caller))
+            .await
     }
 
     /// The labels of the `target` repository.
     pub async fn labels(&self, target: &RepoTarget, caller: Option<&Caller>) -> Result<Vec<Label>> {
         let forge = self.read_forge(target, caller).await?;
-        forge.labels(&self.read_account(caller)).await
+        forge.labels(&self.links.read_account(caller)).await
     }
 }

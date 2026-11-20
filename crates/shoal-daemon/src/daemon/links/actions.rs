@@ -1,15 +1,15 @@
 //! Issue and PR actions the daemon carries out for a workspace, so its
 //! scope rules apply and each change reaches the event journal.
 use crate::daemon::links::proposals::OpenOutcomeExt;
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::place::{Access, Place};
 use shoal_links::space::LinkSpace;
 use shoal_refs::BranchName;
 
 use super::{
     issue::{Assigner, AssignerOf},
-    place::{Access, Place},
     proposals::OpenOutcome,
     wait::{OwnChange, record_received_change},
 };
@@ -58,7 +58,10 @@ impl Manager {
     ) -> Result<Item> {
         action.validate(kind)?;
         let (target, item) =
-            (self.target_item(target, input, kind, Access::Change, caller)).await?;
+            (self
+                .links
+                .target_item(self, target, input, kind, Access::Change, caller))
+            .await?;
         let mut action = action;
         self.configure_merge(target.own_place(), &mut action)
             .await?;
@@ -125,36 +128,6 @@ impl Manager {
             .await?;
         self.sync_after_merge(space.repository_id(), &action, &item);
         Ok(item)
-    }
-
-    /// The `kind` item `named` names in the repository of `forge`, else the
-    /// one item of `kind` assigned to the space `space`.
-    pub(super) async fn named_or_linked(
-        &self,
-        named: Option<ItemInput>,
-        space: Option<&SpaceId>,
-        forge: &ForgeRepo,
-        kind: ItemKind,
-    ) -> Result<ItemRef> {
-        match (named, space) {
-            (Some(named), _) => ItemRef::in_repository(forge, kind.into(), &named),
-            (None, Some(id)) => {
-                let linked = self.linked_item(id, kind).await?;
-                linked.belongs_to(forge)?;
-                Ok(linked)
-            }
-            (None, None) => bail!(NOTHING_LINKED),
-        }
-    }
-
-    /// The one assigned item of `kind` of the space `id`.
-    pub(super) async fn linked_item(&self, id: &SpaceId, kind: ItemKind) -> Result<ItemRef> {
-        let id = id.to_owned();
-        let assigned = self
-            .store
-            .run(move |db| super::wait::linked_items(db, &id, Some(kind)))
-            .await?;
-        only_assigned(kind, assigned)
     }
 
     /// Apply `action` to `item` with the user's own logins, from the
@@ -832,20 +805,6 @@ pub(super) async fn head_repository(
         forge.host
     );
     Ok(Some(pushed.path))
-}
-
-/// Why an action outside a space needs its item named.
-pub(in crate::daemon::links) const NOTHING_LINKED: &str =
-    "outside a workspace or chat, nothing is linked; pass a number or URL";
-
-/// The one assigned item of `kind` among `assigned`.
-fn only_assigned(kind: ItemKind, assigned: Vec<ItemRef>) -> Result<ItemRef> {
-    let noun = kind.noun();
-    match assigned.as_slice() {
-        [url] => Ok(url.clone()),
-        [] => bail!("no {noun} is linked; pass a number or URL"),
-        _ => bail!("several {noun}s are linked; pass a number or URL"),
-    }
 }
 
 impl Manager {

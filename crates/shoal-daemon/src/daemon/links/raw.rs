@@ -5,10 +5,11 @@
 use anyhow::Result;
 use serde_json::Value;
 use shoal_daemon_base::permitted_actions::Action;
+use shoal_links::place::Access;
 
 use crate::{
     config::permissions::PermissionKey,
-    daemon::{links::place::Access, manager::Manager, scope::Caller},
+    daemon::{manager::Manager, scope::Caller},
     forge::{
         ForgeRepo,
         download::Download,
@@ -56,7 +57,10 @@ impl Manager {
             Some(_) => Access::Change,
             None => Access::Read,
         };
-        let target = self.forge_target(target, None, access, caller).await?;
+        let target = self
+            .links
+            .forge_target(self, target, None, access, caller)
+            .await?;
         let Some(caller) = caller else {
             return Ok((target.into_forge()?, self.links.user_account()));
         };
