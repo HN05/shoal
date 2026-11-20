@@ -8,17 +8,34 @@ use shoal_protocol::space_names::SpaceSelector;
 use crate::{
     cli::context::Context,
     config::{Effective, modes::ModeShapes},
-    launches::{LaunchState, SpaceRepository},
+    launches::{LaunchState, SpaceRepository, shape},
+    model::Repository,
     protocol::ConfigTarget,
     refusal::{Reason, Refusal},
 };
 
-/// What resolving `launch` reads: the registered repositories, the
-/// workspaces this process sees and the repository of the space it goes
-/// below.
-pub(in crate::cli::commands) async fn launch_state(
+/// The registered repository `launch` starts in, as
+/// [`shape::launch_repository`] finds it, which reads the space it goes
+/// below and the workspaces only where it names or links none.
+pub(in crate::cli::commands) async fn launch_repository(
     ctx: &Context,
     launch: &Launch,
+) -> Result<Option<Repository>> {
+    let repositories = crate::client::repositories::list(&ctx.paths).await?;
+    if let Some(repository) = shape::named_repository(&repositories, launch).await {
+        return Ok(Some(repository));
+    }
+    let state = inherited_state(ctx, launch, repositories).await?;
+    shape::inherited_repository(&state, launch).await
+}
+
+/// What [`shape::inherited_repository`] reads of `launch` beside the
+/// registered `repositories`: the workspaces this process sees and the
+/// repository of the space it goes below, from one listing of the spaces.
+async fn inherited_state(
+    ctx: &Context,
+    launch: &Launch,
+    repositories: Vec<Repository>,
 ) -> Result<LaunchState> {
     let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let parent = match &launch.parent {
@@ -26,21 +43,37 @@ pub(in crate::cli::commands) async fn launch_state(
         None => SpaceRepository::Without,
     };
     Ok(LaunchState {
-        repositories: crate::client::repositories::list(&ctx.paths).await?,
+        repositories,
         workspaces: spaces.into_workspaces(),
         parent,
     })
 }
 
 /// The settings whose modes decide the kind of `launch`, those of the
-/// target [`crate::launches::shape::settings_target`] finds.
+/// target [`shape::settings_target`] finds.
 pub(in crate::cli::commands) async fn launch_settings(
     ctx: &Context,
     launch: &Launch,
 ) -> Result<Effective> {
-    let state = launch_state(ctx, launch).await?;
-    let target = crate::launches::shape::settings_target(&state, launch).await?;
+    let target = match shape::workspace_target(launch) {
+        Some(target) => target,
+        None => repository_settings_target(ctx, launch).await?,
+    };
     target_settings(ctx, target).await
+}
+
+/// The target [`shape::repository_target`] finds for `launch` in the
+/// repository it starts in, which reads the workspaces only for a launch
+/// that names a branch.
+async fn repository_settings_target(ctx: &Context, launch: &Launch) -> Result<ConfigTarget> {
+    let repository = launch_repository(ctx, launch).await?;
+    let workspaces = match launch.branch {
+        Some(_) => crate::client::spaces::list(&ctx.paths)
+            .await?
+            .into_workspaces(),
+        None => Vec::new(),
+    };
+    shape::repository_target(launch, repository, &workspaces).await
 }
 
 /// The repository of the space `selector` names.

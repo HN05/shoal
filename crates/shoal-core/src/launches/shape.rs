@@ -77,45 +77,82 @@ pub fn kind_in_workspace(modes: &ModeShapes, mode: &ModeName) -> Result<SpaceKin
     Ok(found.kind)
 }
 
-/// The target whose settings' modes decide the kind of `launch`: the
-/// workspace it starts in, or that already has the branch it names, which
-/// it goes into as `--in` does, else the repository [`launch_repository`]
-/// finds, else the global config.
+/// The target whose settings' modes decide the kind of `launch`, from
+/// what `state` holds: that of [`workspace_target`], else of
+/// [`repository_target`] in the repository [`launch_repository`] finds.
 pub async fn settings_target(state: &LaunchState, launch: &Launch) -> Result<ConfigTarget> {
-    if let Some(workspace) = launch_workspace(launch) {
-        return Ok(ConfigTarget::Space(workspace.clone()));
+    if let Some(target) = workspace_target(launch) {
+        return Ok(target);
     }
-    let Some(repository) = launch_repository(state, launch).await? else {
+    let repository = launch_repository(state, launch).await?;
+    repository_target(launch, repository, &state.workspaces).await
+}
+
+/// The target of the existing workspace `launch` starts in, whose
+/// settings' modes decide its kind, if it names one.
+pub fn workspace_target(launch: &Launch) -> Option<ConfigTarget> {
+    launch_workspace(launch).map(|workspace| ConfigTarget::Space(workspace.clone()))
+}
+
+/// The target whose settings' modes decide the kind of `launch`, which
+/// names no existing workspace, in `repository`: the one of `workspaces`
+/// that already has the branch it names, which it goes into as `--in`
+/// does, else `repository`, else the global config. Only a launch that
+/// names a branch reads `workspaces`.
+pub async fn repository_target(
+    launch: &Launch,
+    repository: Option<Repository>,
+    workspaces: &[Workspace],
+) -> Result<ConfigTarget> {
+    let Some(repository) = repository else {
         return Ok(ConfigTarget::Global);
     };
     Ok(
-        match branch_workspace(&state.workspaces, launch, &repository).await? {
+        match branch_workspace(workspaces, launch, &repository).await? {
             Some(workspace) => ConfigTarget::Space(SpaceSelector::Id(workspace.id)),
             None => ConfigTarget::Repository(repository.id.into()),
         },
     )
 }
 
-/// The registered repository `launch` names, else the one an issue or item
-/// URL it names belongs to, else that of the space it goes below, which a
-/// child shares, else that of the checkout or worktree the start was made
-/// in; none below another machine's space in a repository this machine has
-/// not registered, which no other repository stands in for.
+/// The registered repository `launch` starts in, from what `state` holds:
+/// the one it names or links, else the one it inherits.
 pub async fn launch_repository(state: &LaunchState, launch: &Launch) -> Result<Option<Repository>> {
-    let repos = &state.repositories;
+    match named_repository(&state.repositories, launch).await {
+        Some(repo) => Ok(Some(repo)),
+        None => inherited_repository(state, launch).await,
+    }
+}
+
+/// The repository among `repos` that `launch` names, else the one an issue
+/// or item URL it names belongs to.
+pub async fn named_repository(repos: &[Repository], launch: &Launch) -> Option<Repository> {
     let named = (launch.repository.as_deref()).or(positional_repository(launch));
     let directory = launch.directory.as_deref();
     if let Some(Ok(selector)) =
         named.map(|named| crate::repository::named_in(named.to_owned(), directory))
         && let Ok(repo) = crate::repository::select(repos, selector).await
     {
-        return Ok(Some(repo.clone()));
+        return Some(repo.clone());
     }
     for item in linked_items(launch) {
         if let Ok(Some(repo)) = crate::repository::registered_for_item(repos, item).await {
-            return Ok(Some(repo.clone()));
+            return Some(repo.clone());
         }
     }
+    None
+}
+
+/// The repository among those `state` holds that `launch`, naming none,
+/// inherits: that of the space it goes below, which a child shares, else
+/// that of the checkout or worktree the start was made in; none below
+/// another machine's space in a repository this machine has not
+/// registered, which no other repository stands in for.
+pub async fn inherited_repository(
+    state: &LaunchState,
+    launch: &Launch,
+) -> Result<Option<Repository>> {
+    let repos = &state.repositories;
     let id = match &state.parent {
         SpaceRepository::Registered(id) => Some(id.clone()),
         SpaceRepository::Unregistered => None,

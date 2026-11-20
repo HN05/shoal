@@ -10,7 +10,7 @@ use crate::{
     cli::{
         commands::{
             issues, repositories,
-            start::{launch_state, space_repository, target_settings},
+            start::{launch_repository, space_repository, target_settings},
         },
         context::Context,
         ui,
@@ -62,8 +62,7 @@ pub(super) async fn found(ctx: &Context, launch: &mut Launch) -> Result<Option<R
         }
         return Ok(repos.into_iter().find(|repo| repo.id == id));
     }
-    let state = launch_state(ctx, launch).await?;
-    crate::launches::shape::launch_repository(&state, launch).await
+    launch_repository(ctx, launch).await
 }
 
 /// The repository a start in `mode`, one of the `modes` it may take, goes

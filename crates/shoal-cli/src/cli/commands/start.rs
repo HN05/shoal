@@ -42,7 +42,7 @@ pub(in crate::cli::commands) use attach::{Placed, place, run as run_attached};
 pub(in crate::cli::commands) use detached::{leaves_caller, place_agent};
 pub(in crate::cli::commands) use placement::{Attach, StartOptions};
 pub(in crate::cli::commands) use reads::{
-    launch_settings, launch_state, space_repository, start_modes, target_settings,
+    launch_repository, launch_settings, space_repository, start_modes, target_settings,
 };
 pub(in crate::cli::commands) use reports::report_queued_in;
 pub(in crate::cli) use run::run_entry;
