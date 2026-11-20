@@ -123,6 +123,7 @@ mod turn_ends;
 pub(crate) mod turn_retry;
 mod untracked;
 pub(crate) mod upstream_limits;
+mod viewer_terminals;
 pub(crate) mod wake_timers;
 mod warnings;
 mod work_memory;

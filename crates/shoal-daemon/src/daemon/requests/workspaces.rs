@@ -244,7 +244,9 @@ pub(super) async fn handle(
             let terminal = manager.open_viewer_terminal(&space, &viewer).await?;
             let manager = manager.clone();
             return Ok(Answer::connection(move |stream, request_id, guard| {
-                manager.relay_viewer_terminal(stream, request_id, terminal, guard)
+                let answer = (request_id, Body::Ok);
+                let until = std::future::pending();
+                manager.relay_viewer_terminal(stream, answer, terminal, until, guard)
             }));
         }
         WorkspaceMethod::CopySpace {
