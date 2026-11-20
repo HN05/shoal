@@ -6265,18 +6265,19 @@ agent starts, may be lost. The first of these that holds decides the report:
 | A [thread](#threads) of the space waits for the user | `blocked`, `kind=question` | the thread's number and the first line of its latest post |
 | An [approval request](#resource-approvals) of the space waits for the user | `blocked`, `kind=permission` | the request's number and what it asks for |
 | The agent's turn failed and Shoal does not [retry](#agents) it | `error` | the failure |
-| The agent exited with an error | `error` | the exit code or signal |
 | `shoal done` recorded completion, between the agent's turns | `done` | the summary |
 | A [ready mark](#ready-for-review) stands, between the agent's turns | `done` | the marked item |
 | Shoal stopped the agent and brings it back on its own | `idle` | why it stopped |
 | The agent's hooks report `working`, for an agent that does not report itself | `working`, with the share of its [steps](#progress) done | its status line |
 | The hooks report `waiting`, likewise | `blocked`, `kind=permission` | |
 | The hooks report `idle`, likewise | `idle` | |
-| Nothing above, or the agent exited cleanly | `clear` | |
+| Nothing above | `clear` | |
 
 A thread or request a coordinating agent holds blocks nothing. The report
-changes as the space does, and the wrapper writes the agent's exit itself,
-also while the daemon is away.
+changes as the space does. The wrapper reports the agent's exit itself, also
+while the daemon is away: an exit with an error replaces the report with
+`error` and the exit code or signal, and a clean exit clears a report of the
+hooks' turn.
 
 ### Progress
 
