@@ -1,13 +1,10 @@
-//! What the runner's claims need of the daemon's workspaces, leases and
-//! executions: a job's workspace recorded, checked out, moved and removed,
-//! its settings, a permit from a pool, and the execution its runner's
-//! command runs as.
-use std::path::PathBuf;
+//! What the runner's claims need of the daemon's workspaces and leases: a
+//! job's workspace recorded, checked out, moved and removed, its settings,
+//! and a permit from a pool.
 
 use anyhow::{Result, bail};
 use futures_util::future::BoxFuture;
-use shoal_forge::ci::runner::JobCommand;
-use shoal_ids::{execution_ids::ExecutionId, repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     resources::ResourceRequest,
     space_names::{SpaceName, SpaceSelector},
@@ -107,47 +104,5 @@ impl<'a> RecordedJobWorkspace<'a> for Recorded<'a> {
     fn check_out(self: Box<Self>) -> BoxFuture<'a, Result<Workspace>> {
         let Recorded { manager, recorded } = *self;
         Box::pin(manager.check_out_job_workspace(recorded))
-    }
-}
-
-impl Manager {
-    /// Run `command` in `workspace` as a tracked execution that outlives the
-    /// daemon, and the service it runs as, with its output in `log`,
-    /// returning the execution's ID.
-    #[cfg(not(test))]
-    pub(super) async fn launch_job_command(
-        &self,
-        workspace: &Workspace,
-        log: PathBuf,
-        command: JobCommand,
-    ) -> Result<ExecutionId> {
-        let env: Vec<(&str, String)> = (command.env.iter())
-            .map(|(name, value)| (name.as_str(), value.clone()))
-            .collect();
-        let wrapper = crate::execution::Wrapper {
-            env: &env,
-            ..Default::default()
-        };
-        let execution = crate::execution::launch_detached(
-            &self.paths,
-            &workspace.into(),
-            log,
-            command.argv,
-            &wrapper,
-            None,
-        )
-        .await?;
-        Ok(execution.launch.execution_id)
-    }
-
-    /// Tests run no command; they record it with an execution they end.
-    #[cfg(test)]
-    pub(super) async fn launch_job_command(
-        &self,
-        workspace: &Workspace,
-        _log: PathBuf,
-        command: JobCommand,
-    ) -> Result<ExecutionId> {
-        super::tests::launch(self, workspace, command).await
     }
 }

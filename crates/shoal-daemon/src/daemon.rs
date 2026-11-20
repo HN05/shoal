@@ -113,7 +113,7 @@ pub(crate) mod test_daemon;
 pub(crate) mod test_support;
 mod tmp_dirs;
 mod tree;
-mod triggers;
+
 mod turn_ends;
 pub(crate) mod turn_retry;
 mod untracked;
