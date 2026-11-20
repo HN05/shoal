@@ -966,6 +966,21 @@ CREATE TABLE chat_marks (
     CHECK((thread_id IS NULL) <> (alert IS NULL))
 );
 
+CREATE TABLE hub_packages (
+    space_id TEXT PRIMARY KEY,
+    member_id TEXT NOT NULL REFERENCES hub_members(id),
+    built_at INTEGER NOT NULL,
+    size INTEGER NOT NULL,
+    kept_at INTEGER NOT NULL
+);
+
+CREATE TABLE hub_package_states (
+    space_id TEXT PRIMARY KEY,
+    sent TEXT,
+    tried_at INTEGER,
+    unsent_since INTEGER
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -1060,6 +1075,8 @@ CREATE INDEX thread_code_post ON thread_code(post_id);
 CREATE INDEX thread_code_space ON thread_code(space_id);
 
 CREATE INDEX thread_code_repository ON thread_code(repository_id);
+
+CREATE INDEX hub_packages_member ON hub_packages(member_id);
 
 CREATE VIEW space_refs AS
     SELECT spaces.id, CASE spaces.kind
@@ -1516,4 +1533,13 @@ END;
 CREATE TRIGGER thread_removal_forgotten AFTER DELETE ON removed_spaces BEGIN
     DELETE FROM threads WHERE space_id=OLD.space_id
         AND NOT EXISTS (SELECT 1 FROM spaces WHERE id=OLD.space_id);
+END;
+
+CREATE TRIGGER hub_packages_ended AFTER DELETE ON hub_spaces BEGIN
+    DELETE FROM hub_packages
+        WHERE space_id=OLD.space_id AND member_id=OLD.member_id;
+END;
+
+CREATE TRIGGER hub_package_states_removed AFTER DELETE ON spaces BEGIN
+    DELETE FROM hub_package_states WHERE space_id=OLD.id;
 END;

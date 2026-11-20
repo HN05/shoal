@@ -155,6 +155,9 @@ states!(AlertKind {
     /// The hub dropped a request or event it held for an offline machine
     /// once it expired.
     HubExpired => "hub_expired",
+    /// The hub refused an intermittent machine's package of a space, as
+    /// while its disk is low.
+    HubPackageRefused => "hub_package_refused",
 });
 
 states!(Sender {

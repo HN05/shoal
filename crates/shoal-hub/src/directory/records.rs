@@ -75,7 +75,7 @@ pub(super) fn read(tx: &Transaction<'_>) -> Result<(Vec<Listed>, Vec<Conflict>)>
 }
 
 /// The machine that owns the space `id`, if any reported it.
-pub(super) fn owner(tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<MemberId>> {
+pub(crate) fn owner(tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<MemberId>> {
     Ok(tx
         .query_row(
             "SELECT member_id FROM hub_spaces WHERE space_id=?1",

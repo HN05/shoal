@@ -21,13 +21,14 @@ mod fences;
 mod numbers;
 mod records;
 
-pub(super) use records::forget;
+pub(super) use records::{forget, owner};
 
 impl Hub {
     /// Record the machine `member`'s `report` of its spaces, and the
     /// numbers it holds without a space, `reserved`, alerting the user to
-    /// each space ID it reported that another machine owns, and return the
-    /// numbers the hub keeps for the machine.
+    /// each space ID it reported that another machine owns, deleting the
+    /// packages of the spaces that ended there, and return the numbers the
+    /// hub keeps for the machine.
     pub(super) async fn record_report(
         &self,
         daemon: &dyn Daemon,
@@ -36,6 +37,10 @@ impl Hub {
         reserved: Vec<SpaceNumber>,
     ) -> Result<Numbering> {
         let member = member.clone();
+        let ends = match &report {
+            Report::Whole(_) => true,
+            Report::Changes { removed, .. } => !removed.is_empty(),
+        };
         let (conflicts, numbering) = (self.store)
             .write(move |tx| {
                 numbers::reserve_held(tx, &member, &reserved)?;
@@ -44,6 +49,9 @@ impl Hub {
                 Ok((conflicts, numbers::kept_for(tx, &member)?))
             })
             .await?;
+        if ends {
+            self.delete_ended_packages().await;
+        }
         self.alert_conflicts(daemon, conflicts).await?;
         Ok(numbering)
     }

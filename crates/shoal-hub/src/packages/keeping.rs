@@ -1,0 +1,263 @@
+//! The hub's side of packages: it takes a machine's package of a space it
+//! lists under that machine whole, in its state directory, before it
+//! replaces the one it kept, refuses packages while its disk is below the
+//! overload warning threshold, and deletes a package once the directory
+//! drops its space on that machine.
+use std::{
+    collections::HashSet,
+    io::Write as _,
+    path::{Path, PathBuf},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
+
+use anyhow::{Context as _, Result, bail, ensure};
+use rusqlite::{Transaction, params};
+use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
+
+use shoal_core::fsutil::off_runtime;
+use shoal_daemon_base::notifications::About;
+use shoal_protocol::alerts::AlertKind;
+
+use crate::{
+    Hub,
+    daemon::Daemon,
+    directory, log,
+    streams::{Incoming, Streams},
+    time::UnixTime,
+};
+
+/// The extension of a kept package's file, named by its space's ID.
+const EXTENSION: &str = "shoal";
+
+/// What the hub keeps of its packages while it runs.
+#[derive(Default)]
+pub(crate) struct Kept {
+    /// Held while a package's file takes its place or goes, so a sweep never
+    /// deletes one whose record is being written.
+    files: tokio::sync::Mutex<()>,
+    /// Whether the user heard that the hub refuses packages for its disk,
+    /// which they hear again once it took one meanwhile.
+    refusal_alerted: AtomicBool,
+}
+
+/// A package `member` sends of `space`, which it built at `built_at`.
+pub(crate) struct Sent {
+    pub member: MemberId,
+    pub space: SpaceId,
+    pub built_at: UnixTime,
+}
+
+impl Hub {
+    /// Take the package `sent` that its machine writes up the duplex stream
+    /// `stream` of `streams`, ending this side of it once the package is
+    /// kept whole, or with why not; refused at once while the hub's disk is
+    /// low or the directory lists the space under another machine or none.
+    pub(crate) async fn keep_package(
+        self: &Arc<Self>,
+        daemon: &dyn Daemon,
+        sent: Sent,
+        (streams, stream): (&Streams, u64),
+    ) -> Result<()> {
+        self.ensure_package_room(daemon).await?;
+        let (member, space) = (sent.member.clone(), sent.space.clone());
+        let listed = (self.store).read(move |tx| lists_under(tx, &space, &member));
+        ensure!(
+            listed.await?,
+            "the hub lists space {} under another machine or none",
+            sent.space
+        );
+        let (out, up) = streams.answering(stream, true);
+        let up = up.context("a package comes up a duplex stream")?;
+        let hub = self.clone();
+        tokio::spawn(async move {
+            let space = sent.space.clone();
+            let received = hub.receive_package(up).await;
+            // Kept and answered within one operation, so an update never
+            // exits between the two.
+            let operation = hub.gates.operation_unless_exiting().await;
+            let kept = match (received, &operation) {
+                (Ok((incoming, size)), Some(_)) => hub.place_package(sent, size, incoming).await,
+                (Ok(_), None) => Err(anyhow::anyhow!(
+                    "the hub's daemon is restarting; send it again once it is back"
+                )),
+                (Err(error), _) => Err(error),
+            };
+            if let Err(error) = &kept {
+                log!("hub: could not keep the package of space {space}: {error:#}");
+            }
+            out.end(kept.err().map(|error| format!("{error:#}"))).await;
+            drop(operation);
+        });
+        Ok(())
+    }
+
+    /// The package its machine writes up `up`, read to its end into a new
+    /// file beside the kept ones, with its size.
+    async fn receive_package(&self, mut up: Incoming) -> Result<(tempfile::NamedTempFile, u64)> {
+        let directory = self.package_directory();
+        let incoming = off_runtime::run(move || {
+            std::fs::create_dir_all(&directory)
+                .with_context(|| format!("create {}", directory.display()))?;
+            (tempfile::Builder::new()
+                .prefix(".incoming-")
+                .tempfile_in(&directory))
+            .with_context(|| format!("create a file in {}", directory.display()))
+        })
+        .await?;
+        let mut file = incoming.reopen()?;
+        let mut size = 0;
+        while let Some(bytes) = up.next().await? {
+            size += bytes.len() as u64;
+            file = off_runtime::run(move || Ok(file.write_all(&bytes).map(|()| file)?)).await?;
+        }
+        off_runtime::run(move || Ok(file.sync_all()?)).await?;
+        Ok((incoming, size))
+    }
+
+    /// Move `incoming`, which holds the package `sent` of `size` bytes, to
+    /// its place, then record it while the directory still lists its space
+    /// under its machine. A file that cannot take its place leaves the one
+    /// before and its record as they were; one that cannot be recorded, as
+    /// once its space ended, goes, and its machine sends the space again.
+    async fn place_package(
+        &self,
+        sent: Sent,
+        size: u64,
+        incoming: tempfile::NamedTempFile,
+    ) -> Result<()> {
+        let path = self.package_path(&sent.space);
+        let _files = self.packages.files.lock().await;
+        let Sent {
+            member,
+            space,
+            built_at,
+        } = sent;
+        (incoming.persist(&path))
+            .map_err(|error| error.error)
+            .with_context(|| format!("write {}", path.display()))?;
+        let recorded = (self.store)
+            .write(move |tx| record(tx, &member, &space, built_at, size))
+            .await;
+        if recorded.is_err() {
+            let _ = off_runtime::run(move || Ok(std::fs::remove_file(path)?)).await;
+        }
+        recorded
+    }
+
+    /// Refuse a package while the disk of the hub's state directory has less
+    /// free space than the overload warning threshold, alerting the user
+    /// the first time since the hub last took one.
+    async fn ensure_package_room(&self, daemon: &dyn Daemon) -> Result<()> {
+        let threshold = (self.config.current().machine.overload.warning).disk_free_bytes();
+        let state = self.paths.state.clone();
+        let free = tokio::task::spawn_blocking(move || {
+            shoal_core::fsutil::disk_space::available_bytes(&state)
+        })
+        .await??;
+        let alerted = &self.packages.refusal_alerted;
+        if free >= threshold {
+            alerted.store(false, Ordering::Relaxed);
+            return Ok(());
+        }
+        let message = format!(
+            "The hub keeps no new packages of intermittent machines' spaces while its disk has {:.1} GiB free, below the overload warning threshold of {} GiB; once space is free, the machines send the spaces that changed",
+            free as f64 / f64::from(1 << 30),
+            threshold >> 30,
+        );
+        if !alerted.swap(true, Ordering::Relaxed) {
+            let about = About::named(None);
+            (self.notify(daemon, about, AlertKind::HubPackageRefused, message.clone())).await;
+        }
+        bail!("{message}")
+    }
+
+    /// Delete the files of the packages whose records went, as with their
+    /// spaces.
+    pub(crate) async fn delete_ended_packages(&self) {
+        let directory = self.package_directory();
+        let _files = self.packages.files.lock().await;
+        let deleted = async {
+            let kept = self.store.read(kept_spaces).await?;
+            off_runtime::run(move || delete_files_without(&directory, &kept)).await
+        };
+        if let Err(error) = deleted.await {
+            log!("hub: could not delete the packages of ended spaces: {error:#}");
+        }
+    }
+
+    /// Where the hub keeps packages.
+    fn package_directory(&self) -> PathBuf {
+        self.paths.state.join("hub").join("packages")
+    }
+
+    /// The file of the package of the space `id`.
+    pub(crate) fn package_path(&self, id: &SpaceId) -> PathBuf {
+        (self.package_directory()).join(format!("{id}.{EXTENSION}"))
+    }
+}
+
+/// Whether the directory lists the space `id` under `member`.
+fn lists_under(tx: &Transaction<'_>, id: &SpaceId, member: &MemberId) -> Result<bool> {
+    Ok(directory::owner(tx, id)?.as_ref() == Some(member))
+}
+
+/// Record `member`'s package of the space `id`, built at `built_at`, of
+/// `size` bytes, in place of the one before, while the directory lists the
+/// space under `member`.
+fn record(
+    tx: &Transaction<'_>,
+    member: &MemberId,
+    id: &SpaceId,
+    built_at: UnixTime,
+    size: u64,
+) -> Result<()> {
+    ensure!(
+        lists_under(tx, id, member)?,
+        "space {id} ended on this machine while its package came"
+    );
+    tx.execute(
+        "INSERT INTO hub_packages(space_id, member_id, built_at, size, kept_at)
+         VALUES (?1,?2,?3,?4,?5)
+         ON CONFLICT(space_id) DO UPDATE SET member_id=excluded.member_id,
+            built_at=excluded.built_at, size=excluded.size, kept_at=excluded.kept_at",
+        params![id, member, built_at, size as i64, UnixTime::now()],
+    )?;
+    Ok(())
+}
+
+/// The spaces the hub keeps a package of.
+fn kept_spaces(tx: &Transaction<'_>) -> Result<HashSet<String>> {
+    let mut statement = tx.prepare("SELECT space_id FROM hub_packages")?;
+    let ids = statement.query_map([], |row| row.get(0))?;
+    Ok(ids.collect::<rusqlite::Result<_>>()?)
+}
+
+/// Delete the package files in `directory` whose spaces are not among
+/// `kept`, leaving those still arriving.
+fn delete_files_without(directory: &Path, kept: &HashSet<String>) -> Result<()> {
+    let entries = match std::fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    };
+    for entry in entries {
+        let path = entry?.path();
+        let space = (path
+            .extension()
+            .is_some_and(|extension| extension == EXTENSION))
+        .then(|| path.file_stem().and_then(|stem| stem.to_str()))
+        .flatten();
+        if let Some(space) = space
+            && !kept.contains(space)
+        {
+            std::fs::remove_file(&path)?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests;

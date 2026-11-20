@@ -14,7 +14,7 @@ use std::sync::Arc;
 use shoal_ids::member_ids::MemberId;
 use tokio::sync::OwnedRwLockReadGuard;
 
-use super::{directory, members, session::Calls};
+use super::{directory, members, packages::Sent, session::Calls};
 use crate::{
     Hub,
     daemon::Daemon,
@@ -149,6 +149,21 @@ impl Hub {
                     .serve_app_request(member, method, data, out)?;
                 Reply::Streaming
             }
+            Call::Keep {
+                space,
+                built_at,
+                stream,
+            } => {
+                ensure_machine(member)?;
+                let sent = Sent {
+                    member: member.id.clone(),
+                    space,
+                    built_at,
+                };
+                let streams = (calls.streams(), stream);
+                self.keep_package(&**daemon, sent, streams).await?;
+                Reply::Streaming
+            }
             Call::Serve { .. }
             | Call::ServeStream { .. }
             | Call::Expired { .. }
@@ -231,6 +246,7 @@ impl Hub {
         if caller != Some(&member.id) {
             self.links.stop(&member.id);
         }
+        self.delete_ended_packages().await;
         Ok(member)
     }
 
@@ -245,7 +261,9 @@ impl Hub {
                 directory::forget(tx, &member)?;
                 super::queue::forget(tx, &member)
             })
-            .await
+            .await?;
+        self.delete_ended_packages().await;
+        Ok(())
     }
 
     /// A pairing code, from the hub itself or through this machine's link.
@@ -277,7 +295,7 @@ impl Hub {
 fn ensure_machine(member: &Member) -> Result<()> {
     anyhow::ensure!(
         member.kind == MemberKind::Machine,
-        "only a machine reports, claims and passes up spaces at the hub"
+        "only a machine reports, claims, keeps and passes up spaces at the hub"
     );
     Ok(())
 }

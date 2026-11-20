@@ -48,6 +48,7 @@ pub mod members;
 pub mod membership;
 pub mod numbering;
 mod owners;
+mod packages;
 mod pairing;
 pub mod pieces;
 pub mod presence;
@@ -104,6 +105,8 @@ pub struct Hub {
     outbox: tokio::sync::Notify,
     /// As the hub: who delivers what it holds for each machine now.
     deliveries: queue::Deliveries,
+    /// As the hub: the packages of intermittent machines' spaces it keeps.
+    packages: packages::Kept,
     /// As a member: the tree across machines it last learned, as its store
     /// keeps it.
     known_tree: std::sync::Mutex<Option<known_tree::Known>>,
@@ -142,6 +145,7 @@ impl Hub {
             vouches: Default::default(),
             outbox: Default::default(),
             deliveries: Default::default(),
+            packages: Default::default(),
             known_tree: Default::default(),
             parent_permissions: Default::default(),
             reported: Default::default(),

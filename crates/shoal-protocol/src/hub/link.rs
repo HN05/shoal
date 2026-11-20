@@ -42,6 +42,8 @@ use shoal_ids::{
 };
 use shoal_states::states;
 
+use crate::time::UnixTime;
+
 use super::{
     ExchangeKey, Mac, MemberKind, Nonce, Overview, PublicKey, Signature,
     availability::{Classified, Description},
@@ -331,6 +333,16 @@ pub enum Call {
     /// The hub's call to a machine whose availability changed. Answered
     /// with [`Reply::Delivered`].
     Availability { availability: Classified },
+    /// The latest package of the space `space`, which an intermittent
+    /// machine built at `built_at` and writes up the duplex stream `stream`
+    /// it opened, for the hub to keep in place of the one before. The hub
+    /// ends its side of the stream once it kept the package whole, with an
+    /// error when it did not. Answered with [`Reply::Streaming`].
+    Keep {
+        space: SpaceId,
+        built_at: UnixTime,
+        stream: u64,
+    },
     /// The directory of every machine's spaces. Answered with
     /// [`Reply::Directory`].
     Directory,
