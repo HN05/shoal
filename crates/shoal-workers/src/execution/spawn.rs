@@ -308,10 +308,9 @@ pub(super) fn spawn(
         Some(auth) => auth.route(command, &plan.environment, &plan.space.path)?,
         None => command.to_vec(),
     };
-    anyhow::ensure!(!command.is_empty(), "no command to run");
-    let mut argv = launcher.iter().chain(&command);
-    let mut process = Command::new(argv.next().expect("the command is not empty"));
-    process.args(argv).current_dir(&plan.space.path);
+    let (program, args) = command.split_first().context("no command to run")?;
+    let mut process = Command::new(program);
+    process.args(args).current_dir(&plan.space.path);
     configure_environment(&mut process, paths, plan);
     if let Some(auth) = auth {
         auth.apply(&mut process, &plan.environment);
@@ -349,6 +348,7 @@ pub(super) fn spawn(
         ),
         _ => (Stdio::inherit(), Stdio::inherit(), Stdio::inherit()),
     };
+    let mut process = shoal_core::service::work::launched(process, launcher);
     restore_terminal_stops(&mut process);
     shoal_core::process::oom::start_at_last(&mut process);
     if let Some(terminal) = terminal {

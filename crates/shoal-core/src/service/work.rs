@@ -31,6 +31,43 @@ pub async fn launcher() -> &'static [OsString] {
         .await
 }
 
+/// `command`, whose environment and directory are set, started through
+/// `launcher` instead, which [`launcher`] gives: with the same arguments,
+/// environment and directory, and the bus variables its environment sets
+/// given back to it after the launcher reached the user's service manager
+/// with this process's. Its standard streams and hooks are set after.
+pub fn launched(
+    command: tokio::process::Command,
+    launcher: &[OsString],
+) -> tokio::process::Command {
+    if launcher.is_empty() {
+        return command;
+    }
+    let own = command.as_std();
+    let set = |name: &str| {
+        (own.get_envs())
+            .find(|(variable, _)| *variable == name)
+            .map(|(_, value)| value.map(ToOwned::to_owned))
+    };
+    let restore = super::scope::restore_bus(launcher, set);
+    let mut argv = launcher.iter().chain(&restore);
+    let mut through = tokio::process::Command::new(argv.next().expect("a launcher has a program"));
+    through
+        .args(argv)
+        .arg(own.get_program())
+        .args(own.get_args());
+    for (name, value) in own.get_envs() {
+        match value {
+            Some(value) => through.env(name, value),
+            None => through.env_remove(name),
+        };
+    }
+    if let Some(directory) = own.get_current_dir() {
+        through.current_dir(directory);
+    }
+    through
+}
+
 /// The slice's control group, where the user's service manager keeps it;
 /// `None` in a build that leaves the slice to the installed Shoal, whose
 /// work runs there.

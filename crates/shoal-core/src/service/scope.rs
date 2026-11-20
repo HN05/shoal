@@ -62,6 +62,41 @@ fn systemd_run_with_bus(
     Some(command)
 }
 
+/// What follows `launcher`'s `--` so the program it starts gets the values
+/// its own environment gives the bus variables, which the launcher sets to
+/// this process's: `env` removing or setting each one `own` says the
+/// program's environment removes, `Some(None)`, or sets; none where it
+/// changes none.
+pub(crate) fn restore_bus(
+    launcher: &[OsString],
+    own: impl Fn(&str) -> Option<Option<OsString>>,
+) -> Vec<OsString> {
+    let (Some(env), changed) = (
+        launcher.first(),
+        BUS_VARIABLES.map(|name| (name, own(name))),
+    ) else {
+        return Vec::new();
+    };
+    if changed.iter().all(|(_, value)| value.is_none()) {
+        return Vec::new();
+    }
+    let mut restore = vec![env.clone()];
+    // `env` takes its removals before its assignments.
+    for (name, value) in &changed {
+        if let Some(None) = value {
+            restore.extend(["-u".into(), OsString::from(name)]);
+        }
+    }
+    for (name, value) in changed {
+        if let Some(Some(value)) = value {
+            let mut assignment = OsString::from(format!("{name}="));
+            assignment.push(value);
+            restore.push(assignment);
+        }
+    }
+    restore
+}
+
 /// Whether `launcher` starts a program in an empty environment, which `true`
 /// tries once.
 async fn starts_scopes(launcher: &[OsString]) -> bool {
