@@ -23,3 +23,17 @@ fn a_stop_of_this_machine_s_turns_or_processes_offers_only_its_spaces() {
     assert!(!reaches(&["shoal", "stop", "--processes"]));
     assert!(!reaches(&["shoal", "stop", "--leftovers"]));
 }
+
+#[test]
+fn a_command_that_attaches_files_offers_only_this_machine_s_spaces() {
+    assert!(reaches(&["shoal", "send", "Rebase onto main"]));
+    assert!(!reaches(&[
+        "shoal",
+        "send",
+        "See the log",
+        "--attach",
+        "log.txt"
+    ]));
+    assert!(reaches(&["shoal", "done"]));
+    assert!(!reaches(&["shoal", "done", "--attach", "report.md"]));
+}
