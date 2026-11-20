@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::{
-    space_names::SpaceSelector,
+    space_names::{SpaceName, SpaceSelector},
     threads::{
         CloseCause, NewPost, Outcome, OutcomeKind, Sender, Side, Thread, ThreadKind, ThreadNumber,
     },
@@ -324,6 +324,32 @@ async fn a_post_that_would_outgrow_one_response_is_refused_whole() {
     // The refused post left nothing behind, and the thread still fits.
     let kept = manager.thread(None, full(&thread)).await.unwrap();
     assert_eq!(kept.posts.len(), posted);
+    let bytes = serde_json::to_vec(&kept).unwrap().len();
+    assert!(
+        bytes <= shoal_protocol::threads::MAX_THREAD_BYTES,
+        "{bytes}"
+    );
+}
+
+#[tokio::test]
+async fn a_rename_keeps_a_full_thread_within_one_response() {
+    let tree = tree().await;
+    let manager = &tree.manager;
+    let thread = open(manager, None, Some(&tree.beside)).await;
+    let beside = caller(&tree.beside);
+    // Short posts from the space, until the thread is full.
+    for index in 0.. {
+        let text = format!("Step {index}");
+        let posted = manager.post_to_thread(Some(&beside), full(&thread), post(&text), Vec::new());
+        if posted.await.is_err() {
+            break;
+        }
+    }
+    let renamed = SpaceName::parse(&"w".repeat(shoal_protocol::space_names::MAX_SPACE_NAME_LEN));
+    (manager.rename_space(&SpaceSelector::id(&tree.beside.id), &renamed.unwrap()))
+        .await
+        .unwrap();
+    let kept = manager.thread(None, full(&thread)).await.unwrap();
     let bytes = serde_json::to_vec(&kept).unwrap().len();
     assert!(
         bytes <= shoal_protocol::threads::MAX_THREAD_BYTES,

@@ -4,9 +4,9 @@ use std::collections::HashMap;
 
 use anyhow::{Context as _, Result};
 use rusqlite::{Connection, OptionalExtension as _, Transaction, params};
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::{
-    space_names::SpaceName,
+    space_names::{MAX_SPACE_NAME_LEN, SpaceName},
     threads::{
         Holder, MAX_THREAD_BYTES, NewPost, Outcome, Post, Resolution, Sender, Side, Thread,
         ThreadKind, ThreadSpace,
@@ -382,14 +382,41 @@ pub(super) fn set_link(
 }
 
 /// Refuse `thread` once it takes more than one response carries, which
-/// rolls back the post that made it so.
+/// rolls back the post that made it so. It is measured with every space it
+/// names at its longest name and number, since a rename or a renumbering
+/// of a space it names later changes what it takes.
 pub(super) fn ensure_fits(thread: &Thread) -> Result<()> {
     anyhow::ensure!(
-        serde_json::to_vec(thread)?.len() <= MAX_THREAD_BYTES,
+        serde_json::to_vec(&at_longest(thread))?.len() <= MAX_THREAD_BYTES,
         "thread {} would take more than {MAX_THREAD_BYTES} bytes; open a new thread to go on",
         thread.number
     );
     Ok(())
+}
+
+/// `thread` with the names and numbers of the spaces it names, and the
+/// alerts of its posts, as long as they get.
+fn at_longest(thread: &Thread) -> Thread {
+    let name = SpaceName::derive(&"\u{10FFFF}".repeat(MAX_SPACE_NAME_LEN), "");
+    let number = Some(SpaceNumber::new(u32::MAX));
+    let longest = |space: &mut ThreadSpace| {
+        space.name = Some(name.clone());
+        space.number = number;
+    };
+    let mut thread = thread.clone();
+    thread.space = name.clone();
+    thread.number.space = SpaceNumber::new(u32::MAX);
+    if let Holder::Space(holder) = &mut thread.holder {
+        longest(holder);
+    }
+    for post in &mut thread.posts {
+        post.space.iter_mut().for_each(longest);
+        if let Some(Holder::Space(to)) = &mut post.forwarded_to {
+            longest(to);
+        }
+        post.alert_id = Some(i64::MAX);
+    }
+    thread
 }
 
 /// The thread `id` as recorded now, which the caller just changed.
