@@ -18,7 +18,7 @@ use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, spa
 use shoal_protocol::{
     config::permissions::PermissionKey,
     launches::{Launch, LaunchSource},
-    model::{QueuedJob, Repository, Space},
+    model::{QueuedJob, Repository, Space, WorkspaceUsage},
     protocol::ItemContext,
     space_names::SpaceName,
 };
@@ -117,10 +117,13 @@ pub trait Forges: Send + Sync {
     fn item_forge<'a>(&'a self, item: &'a ItemRef) -> BoxFuture<'a, Result<ForgeRepo>>;
 }
 
-/// The spaces a job's run is for.
+/// The spaces a job's run is for, and those jobs run in.
 pub trait Spaces: Send + Sync {
     /// The spaces this machine has.
     fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>>;
+
+    /// What the workspace `id` used at its latest usage sample.
+    fn workspace_usage(&self, id: &SpaceId) -> Option<WorkspaceUsage>;
 }
 
 /// Everything the triggers and the runner need of the daemon, which each of

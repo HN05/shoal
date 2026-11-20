@@ -408,7 +408,7 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
     // The forge lists the job until its runner takes it, which queues it no more.
     refresh_waiting_jobs(manager).await;
     assert!(job_entries(manager).await.is_empty());
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     assert_eq!(claimed.len(), 1);
     let workspace = manager
         .workspace_by_id(&claimed[0].workspace_id)
@@ -481,7 +481,7 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
     assert!(manager.runner.jobs().take_wake());
     manager.finish_ended_jobs().await.unwrap();
     assert!(manager.workspace_by_id(&workspace.id).await.is_err());
-    assert!(manager.claimed_jobs().await.unwrap().is_empty());
+    assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     assert!(!directory.exists());
 }
 
@@ -503,7 +503,7 @@ async fn the_cargo_presets_jobs_build_incrementally_as_its_seed_did() {
         .await
         .unwrap();
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     let (command, _) = launched(claimed[0].workspace_id.as_str());
     assert_eq!(job_variable(&command, "CARGO_INCREMENTAL"), Some("1"));
 }
@@ -527,7 +527,7 @@ async fn waiting_jobs_are_read_every_minute_while_none_could_start() {
     };
     // Two running jobs fill max_jobs.
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     assert_eq!(claimed.len(), 2);
     for job in &claimed {
         LAUNCHED.lock().unwrap().remove(&job.workspace_id);
@@ -565,7 +565,7 @@ async fn a_job_whose_checkout_fails_is_passed_over_and_its_workspace_removed() {
         }),
         "{notifications:?}"
     );
-    assert!(manager.claimed_jobs().await.unwrap().is_empty());
+    assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     let workspaces = manager.list_workspaces().await.unwrap();
     assert!(
         workspaces.iter().all(|workspace| !workspace.disposable),
@@ -614,7 +614,7 @@ async fn a_job_waits_while_its_permit_pool_is_full() {
     let waiting = job_entries(manager).await;
     assert_eq!(waiting.len(), 1);
     assert_eq!(waiting[0].state, QueueState::Queued);
-    assert!(manager.claimed_jobs().await.unwrap().is_empty());
+    assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     assert!(
         manager
             .workspace(&manager.named("ci-rust-4").await)
@@ -642,7 +642,7 @@ async fn a_job_waits_while_its_permit_pool_is_full() {
         .await
         .unwrap();
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     assert_eq!(claimed.len(), 1);
     let leases = manager
         .leases
@@ -661,7 +661,7 @@ async fn a_restart_during_a_claim_keeps_a_started_command_and_removes_the_rest()
     let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     let (_, started) = LAUNCHED
         .lock()
         .unwrap()
@@ -678,7 +678,7 @@ async fn a_restart_during_a_claim_keeps_a_started_command_and_removes_the_rest()
     // execution was recorded: the running command is kept.
     forget_execution().await.unwrap();
     manager.finish_ended_jobs().await.unwrap();
-    let kept = manager.claimed_jobs().await.unwrap();
+    let kept = manager.runner.claimed_jobs().await.unwrap();
     assert_eq!(
         kept[0].execution_id.as_ref().map(ExecutionId::as_str),
         Some(started.plan.id.as_str())
@@ -691,7 +691,7 @@ async fn a_restart_during_a_claim_keeps_a_started_command_and_removes_the_rest()
         .unwrap();
     forget_execution().await.unwrap();
     manager.finish_ended_jobs().await.unwrap();
-    assert!(manager.claimed_jobs().await.unwrap().is_empty());
+    assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     assert!(
         manager
             .workspace_by_id(&claimed[0].workspace_id)
@@ -705,7 +705,7 @@ async fn a_jobs_directory_goes_however_its_workspace_went() {
     let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
     let directory = manager.job_directory(&claimed[0].id);
     assert!(directory.join("token").exists());
@@ -735,7 +735,7 @@ async fn turning_the_runner_off_withdraws_its_jobs_without_claiming_them() {
     // An admitted job leaves the queue unclaimed, and every other with it.
     manager.claim_job(&admitted[0]).await;
     assert!(job_entries(manager).await.is_empty());
-    assert!(manager.claimed_jobs().await.unwrap().is_empty());
+    assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     let notifications = manager.notifications.list(false, 50).await.unwrap();
     assert!(
         notifications
@@ -768,7 +768,7 @@ async fn a_jobs_workspace_names_its_job_and_lists_with_its_branchs_workspace() {
         .await
         .unwrap();
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     assert_eq!(claimed.len(), 1);
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
 
@@ -901,7 +901,7 @@ async fn every_space_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
         .await
         .unwrap();
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     assert_eq!(claimed.len(), 1);
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
     let status = chat_status().await;
@@ -928,7 +928,7 @@ async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_for
     let fixture = fixture(vec![job("h3", 7, 3)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     let (_, started) = LAUNCHED
         .lock()
         .unwrap()
@@ -975,13 +975,13 @@ async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_for
     assert_eq!(logged_stops(manager), [JobStop::Stop]);
     // The job runs until the forge's runner stops it.
     manager.finish_ended_jobs().await.unwrap();
-    assert_eq!(manager.claimed_jobs().await.unwrap().len(), 1);
+    assert_eq!(manager.runner.claimed_jobs().await.unwrap().len(), 1);
     manager
         .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(1))
         .await
         .unwrap();
     manager.finish_ended_jobs().await.unwrap();
-    assert!(manager.claimed_jobs().await.unwrap().is_empty());
+    assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
 }
 
 /// The next message on `stream`, failing the test when none comes.
@@ -1035,7 +1035,7 @@ async fn a_signal_to_the_daemon_leaves_a_jobs_runner_running_for_the_next_daemon
     let fixture = fixture(vec![job("h3", 7, 3)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     let ConnectedRunner {
         mut connection,
         executing,
@@ -1050,7 +1050,7 @@ async fn a_signal_to_the_daemon_leaves_a_jobs_runner_running_for_the_next_daemon
     executing.await.unwrap().unwrap();
     assert!(!cancelled(&fixture, 3));
     assert!(logged_stops(manager).is_empty());
-    assert_eq!(manager.claimed_jobs().await.unwrap().len(), 1);
+    assert_eq!(manager.runner.claimed_jobs().await.unwrap().len(), 1);
 }
 
 #[tokio::test]
@@ -1063,7 +1063,7 @@ async fn a_signal_to_a_jobs_wrapper_cancels_its_run_before_the_runner_stops() {
     let fixture = fixture(vec![job("h3", 7, 3)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     let (_, started) = (LAUNCHED.lock().unwrap())
         .remove(&claimed[0].workspace_id)
         .unwrap();
@@ -1233,7 +1233,7 @@ async fn daemon_exit_with_runner(job: Value, cancelling: Cancelling) -> Fixture 
     let fixture = fixture(vec![job], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     let ConnectedRunner {
         mut connection,
         executing,
@@ -1282,7 +1282,7 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
     let fixture = fixture(vec![job("h6", 8, 6)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     let workspace = manager
         .workspace_by_id(&claimed[0].workspace_id)
         .await
@@ -1308,7 +1308,7 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
 
     // The forge cancelled run 6, but the runner gets its grace period.
     manager.finish_ended_jobs().await.unwrap();
-    assert_eq!(manager.claimed_jobs().await.unwrap().len(), 1);
+    assert_eq!(manager.runner.claimed_jobs().await.unwrap().len(), 1);
     assert!(identity::alive(&left.0).unwrap());
 
     manager
@@ -1330,7 +1330,7 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
     executing.await.unwrap().unwrap();
     finishing.await.unwrap().unwrap();
 
-    assert!(manager.claimed_jobs().await.unwrap().is_empty());
+    assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     assert!(manager.workspace_by_id(&workspace.id).await.is_err());
     let ended: Vec<_> = manager
         .space_events(None, 1000)
@@ -1366,7 +1366,7 @@ async fn a_job_admitted_as_the_system_shuts_down_waits_in_the_queue() {
     let waiting = job_entries(manager).await;
     assert_eq!(waiting.len(), 1);
     assert_eq!(waiting[0].state, QueueState::Queued);
-    assert!(manager.claimed_jobs().await.unwrap().is_empty());
+    assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     assert!(
         manager
             .workspace(&manager.named("ci-rust-4").await)
@@ -1421,7 +1421,7 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
     manager.finish_ended_jobs().await.unwrap();
     assert!(manager.workspace_by_id(&workspace.id).await.is_err());
     manager.claim_job(entry).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     assert_eq!(claimed.len(), 1);
     assert_ne!(claimed[0].workspace_id, workspace.id);
     let leases = manager
@@ -1466,7 +1466,7 @@ async fn workspace_a_restart_caught_preparing(fixture: &Fixture) -> Workspace {
 async fn removed_with_its_claim(manager: &Manager, workspace: &Workspace) -> bool {
     manager.finish_ended_jobs().await.unwrap();
     manager.workspace_by_id(&workspace.id).await.is_err()
-        && manager.claimed_jobs().await.unwrap().is_empty()
+        && manager.runner.claimed_jobs().await.unwrap().is_empty()
 }
 
 #[tokio::test]
@@ -1585,7 +1585,7 @@ async fn removing_a_running_jobs_workspace_cancels_its_run_first() {
     let fixture = fixture(vec![job("h3", 7, 3)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
     manager
         .remove_job_workspace(&claimed[0].workspace_id)
@@ -1599,7 +1599,7 @@ async fn removing_a_running_jobs_workspace_cancels_its_run_first() {
             .any(|request| request.line == "POST /api/v1/repos/team/repo/actions/runs/3/cancel")
     );
     assert_eq!(logged_stops(manager), [JobStop::Removal]);
-    assert!(manager.claimed_jobs().await.unwrap().is_empty());
+    assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -1607,7 +1607,7 @@ async fn removing_a_job_whose_execution_is_not_recorded_yet_cancels_its_run() {
     let fixture = fixture(vec![job("h3", 7, 3)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
     let id = claimed[0].id.clone();
     // As if removal came between the runner's start and its record.
@@ -1653,7 +1653,7 @@ async fn a_job_counts_as_just_started_until_its_runner_starts() {
     manager.dispatch_queue().await.unwrap();
     assert_eq!(ages().await, [std::time::Duration::ZERO]);
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
     let id = claimed[0].id.clone();
     let set = |sql: &'static str| {
@@ -1679,7 +1679,7 @@ async fn a_job_whose_runner_ended_reserves_nothing_while_its_workspace_remains()
     let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     let (_, started) = LAUNCHED
         .lock()
         .unwrap()
@@ -1722,7 +1722,7 @@ async fn the_sweep_keeps_the_directory_of_a_recorded_claim() {
     let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
     let stray = manager.job_directory(&"stray".into());
     std::fs::create_dir_all(&stray).unwrap();
@@ -1737,7 +1737,7 @@ async fn a_runner_gone_while_the_daemon_was_away_gives_its_job_up_once_nothing_o
     let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
     let execution = claimed[0].execution_id.clone().unwrap();
     let mark = |wrapper: &Identity, child: &Identity| {
@@ -1769,7 +1769,7 @@ async fn a_runner_gone_while_the_daemon_was_away_gives_its_job_up_once_nothing_o
     let alive = capture(std::process::id()).unwrap().unwrap();
     mark(&alive, &gone).await.unwrap();
     manager.finish_ended_jobs().await.unwrap();
-    assert_eq!(manager.claimed_jobs().await.unwrap().len(), 1);
+    assert_eq!(manager.runner.claimed_jobs().await.unwrap().len(), 1);
 
     // A descendant carrying the execution's marker keeps it too, and is
     // stopped.
@@ -1785,12 +1785,12 @@ async fn a_runner_gone_while_the_daemon_was_away_gives_its_job_up_once_nothing_o
     let mut survivor = crate::daemon::test_support::spawn_marked_child(&mut marked);
     mark(&gone, &gone).await.unwrap();
     manager.finish_ended_jobs().await.unwrap();
-    assert_eq!(manager.claimed_jobs().await.unwrap().len(), 1);
+    assert_eq!(manager.runner.claimed_jobs().await.unwrap().len(), 1);
     survivor.wait().await.unwrap();
 
     // Once nothing of it runs, the job ends here.
     manager.finish_ended_jobs().await.unwrap();
-    assert!(manager.claimed_jobs().await.unwrap().is_empty());
+    assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     assert!(
         manager
             .workspace_by_id(&claimed[0].workspace_id)

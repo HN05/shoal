@@ -31,7 +31,7 @@ async fn a_jobs_runner_runs_from_its_copy_and_goes_once_no_job_is_left_for_it() 
     let manager = &fixture.manager;
     fixture.state.lock().unwrap().queued = vec![github_job(11, 1)];
     admit_and_claim(manager).await;
-    let claimed = manager.claimed_jobs().await.unwrap();
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
     let [job] = &claimed[..] else {
         panic!("{claimed:?}");
     };
@@ -85,7 +85,7 @@ async fn a_runner_that_took_a_job_stays_until_the_job_ends() {
     let manager = &fixture.manager;
     fixture.state.lock().unwrap().queued = vec![github_job(11, 1)];
     admit_and_claim(manager).await;
-    let job = manager.claimed_jobs().await.unwrap().remove(0);
+    let job = manager.runner.claimed_jobs().await.unwrap().remove(0);
     let (_, started) = launched(job.workspace_id.as_str());
     launched_ago(manager, job.id.as_str(), 120).await;
     // Its hook reported the job it took, which the forge no longer lists.

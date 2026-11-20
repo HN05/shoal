@@ -9,7 +9,6 @@
 //! outlives the run or the signal. Shoal's log names what stopped each
 //! runner.
 use crate::forge::items::reference::ItemRef;
-use crate::forge::numbers::RunnerId;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
@@ -31,22 +30,7 @@ use crate::{
 };
 use shoal_forge::ci::run_action::RunActionRequests;
 use shoal_protocol::space_names::SpaceSelector;
-
-/// A job the runner claimed.
-#[derive(Debug, Clone)]
-pub(crate) struct ClaimedJob {
-    /// The ID its queue entry had.
-    pub id: QueueEntryId,
-    pub repository_id: RepositoryId,
-    pub workspace_id: SpaceId,
-    /// The execution running the forge's runner, once it started.
-    pub execution_id: Option<ExecutionId>,
-    /// When that execution started.
-    pub launched_at: Option<crate::time::UnixTime>,
-    pub job: QueuedJob,
-    /// The runner the forge registered for this job alone, if it did.
-    pub runner_id: Option<RunnerId>,
-}
+use shoal_runner::jobs::ClaimedJob;
 
 /// A job starting or running, as admission counts it.
 struct ActiveJob {
@@ -61,36 +45,11 @@ struct ActiveJob {
 }
 
 impl Manager {
-    /// The jobs the runner claimed.
-    pub(crate) async fn claimed_jobs(&self) -> Result<Vec<ClaimedJob>> {
-        self.store
-            .run(|db| {
-                Ok(db
-                    .prepare(
-                        "SELECT id,repository_id,workspace_id,execution_id,job,launched_at,runner_id
-                         FROM ci_jobs ORDER BY started_at",
-                    )?
-                    .query_map([], |row| {
-                        Ok(ClaimedJob {
-                            id: row.get(0)?,
-                            repository_id: row.get(1)?,
-                            workspace_id: row.get(2)?,
-                            execution_id: row.get(3)?,
-                            launched_at: row.get(5)?,
-                            runner_id: row.get(6)?,
-                            job: queued_job(row, 4)?,
-                        })
-                    })?
-                    .collect::<rusqlite::Result<_>>()?)
-            })
-            .await
-    }
-
     /// Remove the workspace of each claimed job whose execution ended, or
     /// that never started one and whose claim no longer runs, as after a
     /// daemon restart. A removal that fails is tried again on the next pass.
     pub(crate) async fn finish_ended_jobs(&self) -> Result<()> {
-        let jobs = self.claimed_jobs().await?;
+        let jobs = self.runner.claimed_jobs().await?;
         self.runner
             .jobs()
             .keep_runs(&jobs.iter().map(|job| job.id.clone()).collect());
@@ -106,7 +65,7 @@ impl Manager {
             if running && !self.ended_overrun_job(&job).await {
                 continue;
             }
-            self.record_job_usage(&job).await?;
+            self.runner.record_job_usage(&job).await?;
             if let Err(error) = self.delete_job_runner(&job).await {
                 crate::daemon::log!("runner: {error:#}");
             }
@@ -297,7 +256,7 @@ impl Manager {
 
     /// The workspaces of the claimed jobs, none when they cannot be read.
     pub(crate) async fn job_workspaces(&self) -> HashSet<SpaceId> {
-        match self.claimed_jobs().await {
+        match self.runner.claimed_jobs().await {
             Ok(jobs) => jobs.into_iter().map(|job| job.workspace_id).collect(),
             Err(error) => {
                 crate::daemon::log!("runner: claimed jobs unavailable: {error:#}");
@@ -309,6 +268,7 @@ impl Manager {
     /// The job claimed in the workspace `workspace_id`, if any.
     async fn workspace_claim(&self, workspace_id: &SpaceId) -> Result<Option<ClaimedJob>> {
         Ok(self
+            .runner
             .claimed_jobs()
             .await?
             .into_iter()
@@ -416,7 +376,7 @@ impl Manager {
         for job in self.starting_or_running_jobs().await? {
             activities.push(Activity::Job {
                 age: now.duration_since(job.launched_at.unwrap_or(now)),
-                cost: self.job_cost(&job.repository_id, &job.job).await?,
+                cost: (self.runner.job_cost(&job.repository_id, &job.job)).await?,
                 memory: (job.workspace_id.and_then(|id| self.workspace_usage(&id)))
                     .map(|usage| usage.memory_bytes),
             });

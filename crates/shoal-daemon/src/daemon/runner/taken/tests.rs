@@ -15,7 +15,7 @@ use shoal_protocol::space_names::SpaceSelector;
 /// directory.
 async fn report(manager: &Manager, run: u64) -> (ClaimedJob, std::path::PathBuf) {
     admit_and_claim(manager).await;
-    let job = manager.claimed_jobs().await.unwrap().remove(0);
+    let job = manager.runner.claimed_jobs().await.unwrap().remove(0);
     launched(job.workspace_id.as_str());
     let directory = manager.job_directory(&job.id);
     // The hook holds a job of another run than the claimed one back.
@@ -42,7 +42,7 @@ async fn a_job_of_the_claimed_run_goes_on_and_its_claim_names_it() {
     let (job, directory) = report(manager, 1).await;
     manager.follow_taken_jobs().await.unwrap();
     assert!(directory.join("prepared").exists());
-    let claimed = manager.claimed_jobs().await.unwrap().remove(0);
+    let claimed = manager.runner.claimed_jobs().await.unwrap().remove(0);
     assert_eq!(
         (claimed.job.job.id, claimed.job.job.name.as_str()),
         (JobId::new(12), "docs")
@@ -72,7 +72,7 @@ async fn a_job_of_another_run_waits_until_its_workspace_is_at_that_runs_commit()
         fixture.topic
     );
     assert_eq!(workspace.at().unwrap().commit, fixture.topic);
-    let claimed = manager.claimed_jobs().await.unwrap().remove(0);
+    let claimed = manager.runner.claimed_jobs().await.unwrap().remove(0);
     assert_eq!(
         (claimed.job.job.id, claimed.job.job.run),
         (JobId::new(21), RunId::new(2))
@@ -89,7 +89,7 @@ async fn a_workspace_that_cannot_move_fails_the_job() {
     manager.follow_taken_jobs().await.unwrap();
     assert!(directory.join("refused").exists());
     // Run 3 cannot be read, and stopping the job still cancels it.
-    let claimed = manager.claimed_jobs().await.unwrap().remove(0);
+    let claimed = manager.runner.claimed_jobs().await.unwrap().remove(0);
     assert!(claimed.job.run.url.url().ends_with("/actions/runs/3"));
     let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     assert_eq!(
@@ -126,7 +126,7 @@ async fn a_job_whose_commit_cannot_be_fetched_still_names_its_run() {
     manager.follow_taken_jobs().await.unwrap();
     assert!(directory.join("refused").exists());
     // Stopping the job cancels the run it took, not the claimed one.
-    let claimed = manager.claimed_jobs().await.unwrap().remove(0);
+    let claimed = manager.runner.claimed_jobs().await.unwrap().remove(0);
     assert!(claimed.job.run.url.url().ends_with("/actions/runs/4"));
     let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     assert_eq!(
@@ -143,7 +143,7 @@ async fn a_job_whose_name_cannot_be_read_still_runs_at_its_runs_commit() {
     let (job, directory) = report(manager, 5).await;
     manager.follow_taken_jobs().await.unwrap();
     assert!(directory.join("prepared").exists());
-    let claimed = manager.claimed_jobs().await.unwrap().remove(0);
+    let claimed = manager.runner.claimed_jobs().await.unwrap().remove(0);
     assert!(claimed.job.run.url.url().ends_with("/actions/runs/5"));
     assert_eq!(claimed.job.job.id, JobId::new(11));
     let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();

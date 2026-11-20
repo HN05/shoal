@@ -11,7 +11,6 @@
 //! forge's waiting jobs are read while one could start, and every
 //! [`INTERVAL`] while none can.
 mod claims;
-mod costs;
 mod ends;
 mod listing;
 mod overrun;
@@ -27,8 +26,8 @@ use anyhow::Result;
 use futures_util::future::BoxFuture;
 use rusqlite::{Connection, params};
 use shoal_forge::{RepoRequests, account::Account};
-use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceName;
 use shoal_runner::{
     daemon::{Forges, Spaces, WaitingEntry},
@@ -39,7 +38,7 @@ use tokio::time::Instant;
 use crate::{
     daemon::{log, manager::Manager},
     forge::{ForgeRepo, items::reference::ItemRef},
-    model::{QueuedJob, Repository, Space},
+    model::{QueuedJob, Repository, Space, WorkspaceUsage},
     state::{QueueKind, QueueState},
 };
 
@@ -85,7 +84,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
 /// instead, release the runners the forge gave no job, claim the jobs
 /// admission admitted, and read the forge's waiting jobs when due.
 async fn pass(manager: &Arc<Manager>) -> anyhow::Result<()> {
-    manager.sample_job_usage().await?;
+    manager.runner.sample_job_usage(&**manager).await?;
     manager.finish_ended_jobs().await?;
     manager.follow_taken_jobs().await?;
     manager.release_idle_runners().await?;
@@ -246,6 +245,10 @@ impl Forges for Manager {
 impl Spaces for Manager {
     fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>> {
         Box::pin(Manager::present_spaces(self))
+    }
+
+    fn workspace_usage(&self, id: &SpaceId) -> Option<WorkspaceUsage> {
+        Manager::workspace_usage(self, id)
     }
 }
 

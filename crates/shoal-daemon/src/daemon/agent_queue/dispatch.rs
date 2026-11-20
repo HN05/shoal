@@ -310,7 +310,7 @@ impl Manager {
                     }
                     let job = serde_json::from_str(&job.context("a job's entry names no job")?)?;
                     Work::Job {
-                        cost: self.job_cost(repository, &job).await?,
+                        cost: self.runner.job_cost(repository, &job).await?,
                     }
                 }
                 (QueueKind::Restore, Some(execution), Some(workspace)) => {

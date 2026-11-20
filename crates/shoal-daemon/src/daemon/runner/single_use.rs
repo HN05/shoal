@@ -7,10 +7,10 @@ use std::time::Duration;
 use anyhow::Result;
 use rusqlite::params;
 
-use super::ends::ClaimedJob;
 use crate::{daemon::manager::Manager, forge::numbers::RunnerId};
 use shoal_forge::ci::runner::{RunnerRequests, took_job};
 use shoal_ids::queue_entry_ids::QueueEntryId;
+use shoal_runner::jobs::ClaimedJob;
 
 /// How long a runner may wait for the forge to give it a job before the
 /// daemon asks whether one is left for it.
@@ -51,7 +51,7 @@ impl Manager {
     /// again on the next pass.
     pub(crate) async fn release_idle_runners(&self) -> Result<()> {
         let now = crate::time::UnixTime::now();
-        for job in self.claimed_jobs().await? {
+        for job in self.runner.claimed_jobs().await? {
             let (Some(runner), Some(launched)) = (job.runner_id, job.launched_at) else {
                 continue;
             };

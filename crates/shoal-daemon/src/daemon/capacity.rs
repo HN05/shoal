@@ -31,12 +31,7 @@ pub(crate) struct HostSample {
     pub disk_free: Option<u64>,
 }
 
-/// What a CI job is expected to use: the resident memory its earlier runs
-/// reached, `None` before it has run, when it counts as an agent's start.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct JobCost {
-    pub memory: Option<u64>,
-}
+pub(crate) use shoal_runner::jobs::JobCost;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MemoryState {

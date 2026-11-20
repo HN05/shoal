@@ -4,12 +4,12 @@
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 
-use super::ends::ClaimedJob;
 use crate::{
     daemon::{manager::Manager, spaces::worktrees_mut},
     model::{QueueEntry, QueuedJob, Space, Workspace},
     state::{QueueKind, QueueState},
 };
+use shoal_runner::jobs::ClaimedJob;
 
 impl Manager {
     /// Name the job each workspace among `spaces` that runs one runs.
@@ -83,7 +83,7 @@ impl Manager {
 
     /// The claimed jobs, each linked to the spaces its run is for now.
     async fn linked_claimed_jobs(&self) -> Result<Vec<ClaimedJob>> {
-        let mut claimed = self.claimed_jobs().await?;
+        let mut claimed = self.runner.claimed_jobs().await?;
         if claimed.is_empty() {
             return Ok(claimed);
         }

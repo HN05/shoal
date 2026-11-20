@@ -33,7 +33,7 @@ use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, spa
 use shoal_protocol::{
     config::permissions::PermissionKey,
     launches::{Launch, LaunchSource},
-    model::{QueuedJob, Repository, Space},
+    model::{QueuedJob, Repository, Space, WorkspaceUsage},
     notifications::NotificationKind,
     protocol::ItemContext,
     space_names::SpaceName,
@@ -124,6 +124,29 @@ impl Fixture {
 
     pub(crate) fn repository(&self) -> &RepositoryId {
         &self.daemon.repository.id
+    }
+
+    /// Record a workspace of the repository named `name`, as a claimed
+    /// job's runs in.
+    pub(crate) async fn record_workspace(&self, name: &str) -> SpaceId {
+        let (id, repository) = (SpaceId::generate(), self.repository().clone());
+        let (row, name) = (id.clone(), name.to_owned());
+        (self.runner.store)
+            .write(move |tx| {
+                tx.execute(
+                    "INSERT INTO spaces(id,kind,repository_id,name) VALUES (?1,'workspace',?2,?3)",
+                    rusqlite::params![row, repository, name],
+                )?;
+                tx.execute(
+                    "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
+                     VALUES (?1,'/work/'||?2,?2,'ready','abc','/admin')",
+                    rusqlite::params![row, name],
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        id
     }
 }
 
@@ -359,6 +382,11 @@ impl Spaces for StandIn {
     fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>> {
         let spaces = self.spaces.lock().unwrap().clone();
         Box::pin(async move { Ok(spaces) })
+    }
+
+    /// No workspace has a usage sample.
+    fn workspace_usage(&self, _: &SpaceId) -> Option<WorkspaceUsage> {
+        None
     }
 }
 

@@ -44,7 +44,7 @@ async fn a_claimed_job_whose_pr_moved_on_has_its_run_cancelled_without_a_workspa
     let cancel = "POST /api/v1/repos/team/repo/actions/runs/2/cancel";
     assert_eq!(received(&fixture, cancel), 1);
     assert!(job_entries(manager).await.is_empty());
-    assert!(manager.claimed_jobs().await.unwrap().is_empty());
+    assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     assert!(
         manager
             .list_workspaces()

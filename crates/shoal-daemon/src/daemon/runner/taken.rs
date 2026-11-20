@@ -7,7 +7,6 @@ use crate::forge::items::reference::ItemRef;
 use anyhow::{Context, Result};
 use rusqlite::params;
 
-use super::ends::ClaimedJob;
 use crate::{
     daemon::manager::Manager,
     forge::{
@@ -19,13 +18,14 @@ use crate::{
 };
 use shoal_forge::ci::runner::{RunnerRequests, TookRun, answer_took_run, reported_run, took_run};
 use shoal_ids::queue_entry_ids::QueueEntryId;
+use shoal_runner::jobs::ClaimedJob;
 
 impl Manager {
     /// Follow each running job whose runner reported the run of the job it
     /// took and has no answer yet. One whose report cannot be read or
     /// answered is tried again on the next pass.
     pub(crate) async fn follow_taken_jobs(&self) -> Result<()> {
-        for job in self.claimed_jobs().await? {
+        for job in self.runner.claimed_jobs().await? {
             let Some(runner) = job.runner_id else {
                 continue;
             };

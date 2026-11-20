@@ -6,26 +6,27 @@
 use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::model::QueuedJob;
 
-use super::ends::ClaimedJob;
-use crate::{
-    daemon::{capacity::JobCost, manager::Manager},
-    model::QueuedJob,
-};
+use super::ClaimedJob;
+use crate::{Runner, daemon::Daemon, time::UnixTime};
 
 /// How many of a job's latest runs its cost reads.
 const RECENT_RUNS: i64 = 5;
 
-impl Manager {
+/// What a CI job is expected to use: the resident memory its earlier runs
+/// reached, `None` before it has run, when it counts as an agent's start.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct JobCost {
+    pub memory: Option<u64>,
+}
+
+impl Runner {
     /// Raise each claimed job's peak memory to what its workspace's latest
     /// usage sample shows.
-    pub(crate) async fn sample_job_usage(&self) -> Result<()> {
-        let now = tokio::time::Instant::now();
+    pub async fn sample_job_usage(&self, daemon: &dyn Daemon) -> Result<()> {
         for job in self.claimed_jobs().await? {
-            let Some(usage) = self
-                .usage
-                .with_workspaces(|usages| usages.get(&job.workspace_id, now))
-            else {
+            let Some(usage) = daemon.workspace_usage(&job.workspace_id) else {
                 continue;
             };
             let memory = i64::try_from(usage.memory_bytes).unwrap_or(i64::MAX);
@@ -46,10 +47,10 @@ impl Manager {
     /// Keep the peak memory of the ended `job` as its latest run, unless no
     /// sample saw it run or it is kept already, as before a removal that is
     /// tried again, forgetting runs older than [`RECENT_RUNS`].
-    pub(super) async fn record_job_usage(&self, job: &ClaimedJob) -> Result<()> {
+    pub async fn record_job_usage(&self, job: &ClaimedJob) -> Result<()> {
         let (id, repository) = (job.id.clone(), job.repository_id.clone());
         let (workflow, name) = key(&job.job);
-        let now = crate::time::UnixTime::now();
+        let now = UnixTime::now();
         self.store
             .write(move |tx| {
                 let peak: Option<Option<i64>> = tx
@@ -82,11 +83,7 @@ impl Manager {
 
     /// What a run of `job` in `repository_id` is expected to use: the most
     /// memory its recent runs reached, none before it has run.
-    pub(crate) async fn job_cost(
-        &self,
-        repository_id: &RepositoryId,
-        job: &QueuedJob,
-    ) -> Result<JobCost> {
+    pub async fn job_cost(&self, repository_id: &RepositoryId, job: &QueuedJob) -> Result<JobCost> {
         let repository = repository_id.to_owned();
         let (workflow, name) = key(job);
         let peak: Option<i64> = self

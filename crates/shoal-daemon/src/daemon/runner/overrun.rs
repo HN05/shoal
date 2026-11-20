@@ -9,7 +9,6 @@ use std::time::Duration;
 use anyhow::Result;
 
 use super::JobStop;
-use super::ends::ClaimedJob;
 use crate::daemon::{
     events::{JobEndedEvent, StoppedProcess},
     executions::{Save, StopRequest},
@@ -18,6 +17,7 @@ use crate::daemon::{
 };
 use shoal_forge::ci::{run_view::RunViewRequests, runner::took_job};
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_runner::jobs::ClaimedJob;
 
 /// How long a runner may run after the forge finished its job's run, as it
 /// reports the job's end.

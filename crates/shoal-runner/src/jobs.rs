@@ -13,12 +13,16 @@ use tokio::{sync::Notify, time::Instant};
 
 use crate::Runner;
 
+mod claimed;
+mod costs;
 mod linked;
 mod queue;
 mod registration;
 mod superseded;
 mod waiting;
 
+pub use claimed::ClaimedJob;
+pub use costs::JobCost;
 pub use registration::Registration;
 
 impl Runner {
