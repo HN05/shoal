@@ -19,7 +19,9 @@ pub mod wait;
 
 use std::sync::Arc;
 
-use shoal_daemon_base::{config_state::ConfigState, gates::Gates, notifications::Notifications};
+use shoal_daemon_base::{
+    config_state::ConfigState, file_access::FileAccess, gates::Gates, notifications::Notifications,
+};
 use shoal_store::Store;
 
 /// The links' service, which `Manager` holds.
@@ -28,6 +30,7 @@ pub struct Links {
     gates: Arc<Gates>,
     config: Arc<ConfigState>,
     notifications: Arc<Notifications>,
+    file_access: Arc<FileAccess>,
     records: Arc<dyn daemon::Records>,
     memories: memories::ForgeMemories,
     waits: wait::ActiveWaits,
@@ -39,6 +42,7 @@ impl Links {
         gates: Arc<Gates>,
         config: Arc<ConfigState>,
         notifications: Arc<Notifications>,
+        file_access: Arc<FileAccess>,
         records: Arc<dyn daemon::Records>,
     ) -> Self {
         Self {
@@ -46,6 +50,7 @@ impl Links {
             gates,
             config,
             notifications,
+            file_access,
             records,
             memories: Default::default(),
             waits: Default::default(),

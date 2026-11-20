@@ -12,15 +12,11 @@ use crate::{
     },
     forge::{
         ForgeRepo,
-        items::{
-            link::LinkKind,
-            reference::{ItemInput, ItemRef},
-        },
+        items::reference::{ItemInput, ItemRef},
         review::status::PrStatus,
     },
     git,
     model::Workspace,
-    repository,
 };
 use shoal_forge::{RepoRequests, account::Account, review::status::StatusRequests};
 pub(crate) use shoal_protocol::links::pr::{Action, Registration, RegistrationKind};
@@ -118,7 +114,10 @@ impl Manager {
         input: ItemInput,
         check: WatchCheck,
     ) -> Result<(RegistrationKind, ItemRef)> {
-        let (forge, url) = self.pr_forge(space.origin_path(), &input).await?;
+        let (forge, url) = self
+            .links
+            .pr_forge(self, space.origin_path(), &input)
+            .await?;
         // Detect missing tools or login and invalid PRs now.
         if check == WatchCheck::Lookup {
             forge
@@ -153,7 +152,7 @@ impl Manager {
         id: &SpaceId,
         input: ItemInput,
     ) -> Result<Option<RegistrationKind>> {
-        let (_, url) = self.pr_forge(checkout, &input).await?;
+        let (_, url) = self.links.pr_forge(self, checkout, &input).await?;
         let Some(Registration {
             kind:
                 RegistrationKind::Watch {
@@ -171,38 +170,6 @@ impl Manager {
         );
         urls.retain(|watched| watched != &url);
         Ok((!urls.is_empty()).then_some(RegistrationKind::Watch { urls, merged_head }))
-    }
-
-    /// The forge of the repository whose origin `checkout` has, with the PR
-    /// `input` names there.
-    pub(super) async fn pr_forge(
-        &self,
-        checkout: &std::path::Path,
-        input: &ItemInput,
-    ) -> Result<(ForgeRepo, ItemRef)> {
-        let forge = (self.guarded_forge(checkout, "PR lookup needs an origin remote")).await?;
-        let pull = ItemRef::in_repository(&forge, LinkKind::Pr, input)?;
-        Ok((forge, pull))
-    }
-
-    /// The forge of the repository whose origin `checkout` has, reading the
-    /// origin under the file-access stall guard; `missing` is the error
-    /// without one.
-    pub(super) async fn guarded_forge(
-        &self,
-        checkout: &std::path::Path,
-        missing: &'static str,
-    ) -> Result<ForgeRepo> {
-        let remote = self
-            .file_access
-            .checked(
-                &self.notifications,
-                checkout,
-                repository::remote_url_from_path(checkout),
-            )
-            .await?
-            .context(missing)?;
-        self.forge(&remote).await
     }
 
     /// Watches survive restarts. A failed lookup never counts as a merge and a
@@ -416,7 +383,10 @@ impl Manager {
     ) -> Result<bool> {
         let mut contains_head = false;
         for url in urls {
-            let (forge, pull) = self.pr_forge(&workspace.path, &url.clone().into()).await?;
+            let (forge, pull) = self
+                .links
+                .pr_forge(self, &workspace.path, &url.clone().into())
+                .await?;
             let account = self.links.user_account();
             let Some(commits) = forge.merged_commits(&account, pull.pull()?).await? else {
                 return Ok(false);

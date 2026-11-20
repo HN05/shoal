@@ -337,7 +337,9 @@ impl Manager {
             },
             LinkKind::Issue | LinkKind::Pr => {
                 let missing = "item lookup needs an origin remote";
-                self.guarded_forge(space.origin_path(), missing).await?
+                self.links
+                    .guarded_forge(self, space.origin_path(), missing)
+                    .await?
             }
         };
         ItemRef::in_repository(&forge, kind, input)

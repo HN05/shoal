@@ -107,7 +107,10 @@ impl Manager {
         base: &Workspace,
         url: &ItemRef,
     ) -> Result<Option<Vec<CommitId>>> {
-        let (forge, pull) = self.pr_forge(&base.path, &url.clone().into()).await?;
+        let (forge, pull) = self
+            .links
+            .pr_forge(self, &base.path, &url.clone().into())
+            .await?;
         forge
             .merged_commits(&self.links.user_account(), pull.pull()?)
             .await
@@ -117,7 +120,10 @@ impl Manager {
     async fn base_pulls(&self, base: &Workspace, urls: &[ItemRef]) -> Result<Vec<PullRequest>> {
         let mut pulls = Vec::new();
         for url in urls {
-            let (forge, pull) = self.pr_forge(&base.path, &url.clone().into()).await?;
+            let (forge, pull) = self
+                .links
+                .pr_forge(self, &base.path, &url.clone().into())
+                .await?;
             pulls.push(
                 forge
                     .pull_request(&self.links.user_account(), &pull)
@@ -214,7 +220,10 @@ impl Manager {
             merged_heads,
         } = pr;
         let lookup = async {
-            let (forge, pull) = self.pr_forge(&workspace.path, &url.clone().into()).await?;
+            let (forge, pull) = self
+                .links
+                .pr_forge(self, &workspace.path, &url.clone().into())
+                .await?;
             let number = pull.pull()?;
             let current = forge.pull_request(account, &pull).await?.base;
             Ok::<_, anyhow::Error>(

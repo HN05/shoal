@@ -1,12 +1,24 @@
-//! The forge of the repository a checkout, a space or an item names.
+//! The forge of the repository a checkout, a space or an item names, and
+//! the PR a checkout's origin names, read under the file-access stall
+//! guard.
 use std::path::Path;
 
 use anyhow::{Context, Result};
 use shoal_core::repository::remote_url_from_path;
-use shoal_forge_types::{ForgeRepo, items::reference::ItemInput};
+use shoal_forge_types::{
+    ForgeRepo,
+    items::{
+        link::LinkKind,
+        reference::{ItemInput, ItemRef},
+    },
+};
 use shoal_protocol::model::Repository;
 
-use crate::{daemon::Forges, space::LinkSpace};
+use crate::{
+    Links,
+    daemon::{Daemon, Forges},
+    space::LinkSpace,
+};
 
 /// The forge of the `origin` of the checkout or worktree at `path`.
 pub async fn origin(daemon: &dyn Forges, path: &Path) -> Result<ForgeRepo> {
@@ -42,4 +54,41 @@ pub async fn of_input(daemon: &dyn Forges, input: &ItemInput) -> Result<Option<F
         ItemInput::Url(item) => Some(daemon.item_forge(item).await?),
         ItemInput::Number(_) => None,
     })
+}
+
+impl Links {
+    /// The forge of the repository whose origin `checkout` has, with the PR
+    /// `input` names there.
+    pub async fn pr_forge(
+        &self,
+        daemon: &dyn Daemon,
+        checkout: &std::path::Path,
+        input: &ItemInput,
+    ) -> Result<(ForgeRepo, ItemRef)> {
+        let forge =
+            (self.guarded_forge(daemon, checkout, "PR lookup needs an origin remote")).await?;
+        let pull = ItemRef::in_repository(&forge, LinkKind::Pr, input)?;
+        Ok((forge, pull))
+    }
+
+    /// The forge of the repository whose origin `checkout` has, reading the
+    /// origin under the file-access stall guard; `missing` is the error
+    /// without one.
+    pub async fn guarded_forge(
+        &self,
+        daemon: &dyn Daemon,
+        checkout: &std::path::Path,
+        missing: &'static str,
+    ) -> Result<ForgeRepo> {
+        let remote = self
+            .file_access
+            .checked(
+                &self.notifications,
+                checkout,
+                remote_url_from_path(checkout),
+            )
+            .await?
+            .context(missing)?;
+        daemon.resolve_forge(&remote).await
+    }
 }

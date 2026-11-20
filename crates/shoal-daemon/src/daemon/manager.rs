@@ -130,11 +130,13 @@ impl Manager {
             Arc::new(super::runner::RunnerRecords),
             paths.clone(),
         ));
+        let file_access = Arc::new(super::file_access::FileAccess::default());
         let links = Arc::new(shoal_links::Links::new(
             store.clone(),
             gates.clone(),
             config_state.clone(),
             notifications.clone(),
+            file_access.clone(),
             Arc::new(super::links::records::LinkRecords),
         ));
         let reviews = Arc::new(shoal_reviews::Reviews::new(
@@ -191,7 +193,7 @@ impl Manager {
             upstream_limits: Default::default(),
             rejected_configs: Default::default(),
             report_times: Default::default(),
-            file_access: Default::default(),
+            file_access,
             hub,
             apps: Default::default(),
             carried_holds: Default::default(),
