@@ -134,9 +134,16 @@ async fn exited_run(manager: &Manager, execution: &ExecutionId) {
 }
 
 /// A shell command that starts a helper writing its PID to `pid_file`,
-/// which runs well past every wait here unless something stops it.
+/// which runs well past every wait here unless something stops it. It is
+/// this test binary, whose marker a scan reads where a system binary's
+/// environment is hidden, as on macOS.
 fn helper(pid_file: &std::path::Path) -> String {
-    format!("sleep 600 & echo $! > {}", pid_file.display())
+    let binary = std::env::current_exe().unwrap();
+    format!(
+        "'{}' --exact helper_tests::run_until_stopped --ignored >/dev/null 2>&1 & echo $! > {}",
+        binary.display(),
+        pid_file.display()
+    )
 }
 
 /// A shell command that waits until `gate` exists.
