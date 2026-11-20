@@ -25,19 +25,29 @@ impl Manager {
         launch: &Launch,
         caller: Option<&Caller>,
     ) -> Result<Option<Workspace>> {
+        let workspace = self.check_workspace_creation(launch, caller).await?;
+        if let Some(workspace) = &workspace {
+            self.check_takes_worker(launch, workspace).await?;
+        }
+        Ok(workspace)
+    }
+
+    /// Refuse what creating the workspace `launch` names for `caller` would
+    /// refuse, as [`Self::check_workspace_placement`] checks a start, short
+    /// of the agent it starts; returns instead the existing workspace it
+    /// opens.
+    pub(in crate::daemon::launches) async fn check_workspace_creation(
+        &self,
+        launch: &Launch,
+        caller: Option<&Caller>,
+    ) -> Result<Option<Workspace>> {
         match self.settle_workspace(launch, false, caller).await? {
             Settling::New(settled) => {
                 let reopened = self.reopened_workspace(&settled, caller).await?;
-                if let Some(workspace) = &reopened {
-                    self.check_takes_worker(launch, workspace).await?;
-                }
                 (self.check_settled(launch, *settled, caller).await)?;
                 Ok(reopened)
             }
-            Settling::Existing(workspace) => {
-                self.check_takes_worker(launch, &workspace).await?;
-                Ok(Some(*workspace))
-            }
+            Settling::Existing(workspace) => Ok(Some(*workspace)),
         }
     }
 

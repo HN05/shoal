@@ -7,6 +7,7 @@ use crate::{
     execution::recovery,
 };
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::launches::StartTarget;
 
 /// A workspace whose agent stopped and awaits `shoal resume`, on a machine
 /// that starts agents without limits, with the path of its agent's record.
@@ -97,6 +98,33 @@ async fn a_replacing_start_that_is_refused_keeps_the_stopped_agent() {
 
     assert!(refused.is_err(), "an unknown agent started");
     assert!(record.exists());
+}
+
+/// A creation on an existing workspace's branch starts no agent, so the
+/// workspace's stopped agent refuses its check, unlike a start's.
+#[tokio::test]
+async fn a_creation_check_passes_a_workspace_with_a_stopped_agent() {
+    let (temp, manager) = manager().await;
+    let (workspace, _record) = stopped_workspace(&manager, &temp).await;
+    let branch = workspace.branch().map(ToString::to_string);
+    let launch = Launch {
+        target: Some(StartTarget::Repository(workspace.repository().to_string())),
+        branch,
+        mode: Some(crate::config::modes::ModeName::DEFAULT),
+        ..Launch::default()
+    };
+
+    let created = manager.check_creation_launch(launch.clone(), None).await;
+    let started = manager.check_launch(launch, None).await;
+
+    let created = created.unwrap().map(|workspace| workspace.id);
+    assert_eq!(created, Some(workspace.id));
+    assert!(
+        started
+            .as_ref()
+            .is_err_and(|error| error.is::<StoppedAgent>()),
+        "{started:?}"
+    );
 }
 
 #[tokio::test]

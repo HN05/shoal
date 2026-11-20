@@ -23,6 +23,14 @@ pub async fn check(daemon: &impl Daemon, launch: Launch) -> Result<Option<Worksp
     request(daemon, LaunchMethod::CheckLaunch { launch }).await
 }
 
+/// Refuse what the daemon would refuse of the workspace a creation
+/// `launch` makes, as [`check`] does, except that the agent of an existing
+/// workspace it opens refuses nothing, since a creation starts none.
+pub async fn check_creation(daemon: &impl Daemon, launch: Launch) -> Result<Option<Workspace>> {
+    let launch = Box::new(launch);
+    request(daemon, LaunchMethod::CheckCreation { launch }).await
+}
+
 /// The modes `launch` may start in, each with the space it starts, as the
 /// machine it starts on defines them.
 pub async fn modes(daemon: &impl Daemon, launch: Launch) -> Result<ModeShapes> {

@@ -66,7 +66,7 @@ pub(in crate::cli::commands) async fn pick_start_source(
         mode: Some(ModeName::DEFAULT),
         ..launch.clone()
     };
-    crate::client::launches::check(&ctx.paths, checked).await?;
+    crate::client::launches::check_creation(&ctx.paths, checked).await?;
     if !names_no_branch(launch) {
         return Ok(());
     }

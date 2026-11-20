@@ -23,7 +23,31 @@ impl Manager {
     /// since that machine checks it as it starts it.
     pub(crate) async fn check_launch(
         &self,
+        launch: Launch,
+        caller: Option<&Caller>,
+    ) -> Result<Option<Workspace>> {
+        self.check_starting(launch, Starts::Agent, caller).await
+    }
+
+    /// Refuse what creating the workspace `launch` makes for `caller` would
+    /// refuse, as [`Self::check_launch`] checks a worker's start in it,
+    /// except that a creation starts no agent, so the agent of an existing
+    /// workspace it opens refuses nothing.
+    pub(crate) async fn check_creation_launch(
+        &self,
+        launch: Launch,
+        caller: Option<&Caller>,
+    ) -> Result<Option<Workspace>> {
+        self.check_starting(launch, Starts::Nothing, caller).await
+    }
+
+    /// Refuse what starting `launch` for `caller` would refuse, as
+    /// [`Self::check_launch`] says, where it `starts` what it says in the
+    /// workspace it goes into.
+    async fn check_starting(
+        &self,
         mut launch: Launch,
+        starts: Starts,
         caller: Option<&Caller>,
     ) -> Result<Option<Workspace>> {
         if self.launches_elsewhere(&launch).await? {
@@ -37,7 +61,8 @@ impl Manager {
         match launches::decides_kind(&launch) {
             true => {
                 let shape = self.launch_shape(&launch, caller).await?;
-                self.check_placement(&launch, &shape, caller).await
+                self.check_placement(&launch, (&shape, starts), caller)
+                    .await
             }
             false => {
                 self.check_shared(&launch, repository.as_ref(), caller)
@@ -47,20 +72,26 @@ impl Manager {
     }
 
     /// Refuse what placing `launch` in `shape` for `caller` would refuse,
-    /// as [`Self::launch`] places it.
+    /// as [`Self::launch`] places it, where it `starts` what it says in the
+    /// existing workspace it goes into.
     async fn check_placement(
         &self,
         launch: &Launch,
-        shape: &Shape,
+        (shape, starts): (&Shape, Starts),
         caller: Option<&Caller>,
     ) -> Result<Option<Workspace>> {
         launches::ensure_fits(launch, &[], shape.kind, Some(&shape.mode))?;
         if shape.starts_worker(launch) {
             return self.check_worker(launch, shape, caller).await.map(Some);
         }
-        match shape.kind {
-            SpaceKind::Chat => self.check_chat_placement(launch, shape, caller).await,
-            SpaceKind::Workspace => self.check_workspace_placement(launch, caller).await,
+        match (shape.kind, starts) {
+            (SpaceKind::Chat, _) => self.check_chat_placement(launch, shape, caller).await,
+            (SpaceKind::Workspace, Starts::Agent) => {
+                self.check_workspace_placement(launch, caller).await
+            }
+            (SpaceKind::Workspace, Starts::Nothing) => {
+                self.check_workspace_creation(launch, caller).await
+            }
         }
     }
 
@@ -155,6 +186,15 @@ impl Manager {
         let found = launches::shape::launch_repository(&state, launch).await?;
         Ok(found.map(|repository| repository.id))
     }
+}
+
+/// What a checked launch starts in the existing workspace it goes into: a
+/// start its own agent, which an agent of the workspace's own may refuse,
+/// and a creation nothing.
+#[derive(Clone, Copy)]
+enum Starts {
+    Agent,
+    Nothing,
 }
 
 /// The existing workspace `launch` names with `--in`, once named by ID.

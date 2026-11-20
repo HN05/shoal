@@ -139,6 +139,7 @@ const REQUESTS: &[&str] = &[
     // Chats.
     r#"{"launch":{"launch":{"target":"app","in":{"space":"3"},"mode":"chat","agent":"claude","task":["Read the build"]}}}"#,
     r#"{"check_launch":{"launch":{"target":"app","base":"main","issue":{"named":"https://forge.example/team/app/issues/42"}}}}"#,
+    r#"{"check_creation":{"launch":{"target":"app","branch":"fix","mode":"worker"}}}"#,
     r#"{"launch_modes":{"launch":{"target":"app","machine":"laptop"}}}"#,
     r#"{"take_parent_repository":{"launch":{"branch":"fix","parent":"7"}}}"#,
     r#""chat_root""#,

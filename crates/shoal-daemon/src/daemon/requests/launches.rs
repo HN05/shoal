@@ -26,6 +26,9 @@ pub(super) async fn handle(
         LaunchMethod::CheckLaunch { launch } => {
             Body::CheckedLaunch(manager.check_launch(*launch, caller).await?)
         }
+        LaunchMethod::CheckCreation { launch } => {
+            Body::CheckedLaunch(manager.check_creation_launch(*launch, caller).await?)
+        }
         LaunchMethod::LaunchModes { launch } => {
             Body::LaunchModes(manager.launch_modes(&launch, caller).await?)
         }
@@ -49,7 +52,9 @@ impl Scoped for LaunchMethod {
             // existing workspace it names as in the new spaces it creates,
             // which the launch puts below its own space or one below it; a
             // check confines them as the start does.
-            LaunchMethod::Launch { launch } | LaunchMethod::CheckLaunch { launch } => {
+            LaunchMethod::Launch { launch }
+            | LaunchMethod::CheckLaunch { launch }
+            | LaunchMethod::CheckCreation { launch } => {
                 manager.select_launch_spaces(launch).await?;
                 match &mut launch.in_workspace {
                     Some(SpaceChoice::Space(workspace)) => Some(workspace),

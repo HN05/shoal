@@ -20,7 +20,9 @@ fn takes_more_than_it_reads(operation: &Operation) -> bool {
         Operation::Agent(AgentMethod::AgentUpdates { .. } | AgentMethod::GitCredential { .. })
             | Operation::Item(ItemMethod::ForgeDownload { .. })
             | Operation::Launch(
-                LaunchMethod::CheckLaunch { .. } | LaunchMethod::LaunchModes { .. }
+                LaunchMethod::CheckLaunch { .. }
+                    | LaunchMethod::CheckCreation { .. }
+                    | LaunchMethod::LaunchModes { .. }
             )
             | Operation::Execution(ExecutionMethod::CheckMerge | ExecutionMethod::CheckUnmerge)
             | Operation::Removal(

@@ -22,7 +22,11 @@ impl Operation {
                 | Self::Approval(
                     ApprovalMethod::ListApprovals { .. } | ApprovalMethod::ShowApproval { .. }
                 )
-                | Self::Launch(LaunchMethod::CheckLaunch { .. } | LaunchMethod::LaunchModes { .. })
+                | Self::Launch(
+                    LaunchMethod::CheckLaunch { .. }
+                        | LaunchMethod::CheckCreation { .. }
+                        | LaunchMethod::LaunchModes { .. }
+                )
                 | Self::Ci(
                     CiMethod::CheckLog { .. }
                         | CiMethod::ViewCiRun { .. }

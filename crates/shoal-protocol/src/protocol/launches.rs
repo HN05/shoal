@@ -27,6 +27,12 @@ pub enum LaunchMethod {
     /// workspace that already has the branch it names, which the start goes
     /// into, if any.
     CheckLaunch { launch: Box<Launch> },
+    /// Refuse what the daemon would refuse of the workspace a creation
+    /// `launch` makes, as [`Self::CheckLaunch`] checks a worker's start,
+    /// except that it starts no agent, so the agent of an existing
+    /// workspace it opens refuses nothing. Answers with
+    /// [`super::Body::CheckedLaunch`].
+    CheckCreation { launch: Box<Launch> },
     /// The modes `launch` may start in, each with the space it starts, as
     /// the machine it starts on defines them where it would start: another
     /// joined machine the launch names answers through the hub. Answers
@@ -48,6 +54,7 @@ impl LaunchMethod {
             // starts it.
             Self::Launch { .. } => Lifetime::Open,
             Self::CheckLaunch { .. }
+            | Self::CheckCreation { .. }
             | Self::LaunchModes { .. }
             | Self::TakeParentRepository { .. } => Lifetime::Reply,
         }
