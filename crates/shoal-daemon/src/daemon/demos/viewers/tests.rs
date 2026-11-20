@@ -556,6 +556,45 @@ async fn an_open_after_a_recorded_viewer_exited_stops_what_it_left() {
 }
 
 #[tokio::test]
+async fn an_earlier_viewer_whose_group_cannot_be_proven_stopped_keeps_its_record() {
+    let (temp, manager) = manager().await;
+    let (_, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
+    let port = manager.reserve_viewer_port(&demo, None).await.unwrap();
+    let (pid_file, gate) = (temp.path().join("helper.pid"), temp.path().join("exit"));
+    // Its helper lacks the demo's marker, as one whose environment cannot
+    // be read does, so nothing proves it the demo's.
+    let unmarked = format!("env -u {} {}", env::EXECUTION_ID, helper(&pid_file));
+    let script = format!("{unmarked}; {}; exit 0", await_file(&gate));
+    let mut earlier = ProcessGroup::spawn(
+        std::process::Command::new("sh")
+            .args(["-c", &script])
+            .env(env::EXECUTION_ID, &demo.execution_id),
+    );
+    let process = crate::process::identity::capture(earlier.id())
+        .unwrap()
+        .unwrap();
+    let helper = Helper::read(&pid_file).await;
+    let serving = Viewer {
+        port,
+        process: process.clone(),
+        serving: true,
+    };
+    (manager.record_viewer(&demo.execution_id, &serving))
+        .await
+        .unwrap();
+    std::fs::write(&gate, "").unwrap();
+    let _ = earlier.wait();
+    let refused = manager.open_viewer(&demo, None).await.err().unwrap();
+    assert_eq!(Reason::of(&refused), Some(Reason::NotReady), "{refused:#}");
+    let kept = manager.recorded_viewer(&demo.execution_id).await.unwrap();
+    assert_eq!(kept.map(|viewer| viewer.process), Some(process));
+    assert!(
+        helper.process.as_ref().is_some_and(runs),
+        "the unproven helper was stopped"
+    );
+}
+
+#[tokio::test]
 async fn a_viewer_port_another_process_listens_on_starts_no_viewer() {
     let (temp, manager) = manager().await;
     let (_, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;

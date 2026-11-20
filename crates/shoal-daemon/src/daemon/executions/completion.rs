@@ -96,8 +96,13 @@ impl Manager {
         }
         // A demo's viewer goes with it.
         self.viewers.end(id);
-        if let Some(viewer) = viewer {
-            crate::daemon::demos::viewers::stop_recorded(id, &viewer.process).await;
+        // The record goes with the execution's, so a viewer that cannot be
+        // proven stopped is only logged.
+        if let Some(viewer) = viewer
+            && let Err(error) =
+                crate::daemon::demos::viewers::stop_recorded(id, &viewer.process).await
+        {
+            crate::daemon::log!("viewer of execution {id} not stopped: {error:#}");
         }
         Ok(demo)
     }

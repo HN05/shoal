@@ -41,6 +41,9 @@ use crate::{
 const START_POLL: Duration = Duration::from_millis(100);
 /// A hang guard for a viewer that never takes a connection.
 const START_LIMIT: Duration = Duration::from_secs(60);
+/// How many checks, [`START_POLL`] apart, a stopped viewer's group gets to
+/// end in.
+const GROUP_SETTLE_POLLS: u32 = 50;
 /// How many of a viewer's last lines of errors its failure shows, and how
 /// many bytes those may take at most.
 const ERROR_LINES: usize = 10;
@@ -162,8 +165,7 @@ impl Manager {
         let exited = || Ok((!runs(&viewer.process)).then(|| "exited".to_owned()));
         if let Err(error) = await_port(viewer.port, program, exited).await {
             // Stopped and forgotten, so the next open starts another.
-            stop_recorded(&demo.execution_id, &viewer.process).await;
-            self.forget_viewer(&demo.execution_id).await;
+            self.retire_viewer(demo, &viewer).await?;
             return Err(error);
         }
         self.record_serving(&demo.execution_id, viewer).await
@@ -197,8 +199,7 @@ impl Manager {
             return Ok(None);
         };
         if !runs(&viewer.process) {
-            stop_recorded(&demo.execution_id, &viewer.process).await;
-            self.forget_viewer(&demo.execution_id).await;
+            self.retire_viewer(demo, &viewer).await?;
             return Ok(None);
         }
         let port = viewer.port;
@@ -206,6 +207,18 @@ impl Manager {
             self.await_recorded_viewer(demo, viewer).await?;
         }
         Ok(Some(port))
+    }
+
+    /// Stop `demo`'s recorded `viewer` and forget it once nothing of its
+    /// process group runs; while something does, the record stays, so the
+    /// next open tries again.
+    async fn retire_viewer(&self, demo: &Running, viewer: &Viewer) -> Result<()> {
+        if let Err(error) = stop_recorded(&demo.execution_id, &viewer.process).await {
+            let message = format!("the earlier viewer of demo {}: {error:#}", demo.launch.name);
+            return Err(Refusal::new(Reason::NotReady, message).into());
+        }
+        self.forget_viewer(&demo.execution_id).await;
+        Ok(())
     }
 
     /// Where `demo`'s viewer runs: the demo's verified worktree, with the
@@ -329,7 +342,9 @@ fn scope_token(db: &Connection, execution: &ExecutionId) -> Result<ScopeToken> {
 /// group: the whole group while the leader verifies, and otherwise each
 /// member that carries the execution's marker, verified one by one. A
 /// viewer serves only its demo, so nothing in its group has work to save.
-pub(crate) async fn stop_recorded(execution: &ExecutionId, process: &Identity) {
+/// Fails while a live process remains in the group, such as one whose
+/// environment cannot be read, which unknown ownership leaves running.
+pub(crate) async fn stop_recorded(execution: &ExecutionId, process: &Identity) -> Result<()> {
     if runs(process) {
         // SAFETY: the group the live, verified viewer leads.
         unsafe {
@@ -339,9 +354,20 @@ pub(crate) async fn stop_recorded(execution: &ExecutionId, process: &Identity) {
     let mut targets = group_members(execution, process.pid).await;
     targets.push(process.clone());
     targets.retain(runs);
-    if let Err(error) = process::stop_verified(&targets).await {
-        log!("viewer {} not stopped: {error:#}", process.pid);
+    process::stop_verified(&targets).await?;
+    group_ended(process.pid).await
+}
+
+/// Wait a few seconds at most until no live process remains in process
+/// group `group`.
+async fn group_ended(group: u32) -> Result<()> {
+    for _ in 0..GROUP_SETTLE_POLLS {
+        if !process::group_alive(group).await.unwrap_or(true) {
+            return Ok(());
+        }
+        tokio::time::sleep(START_POLL).await;
     }
+    bail!("processes of its process group {group} still run; stop them, then open the demo again")
 }
 
 /// The live processes of process group `group` that carry the marker of
