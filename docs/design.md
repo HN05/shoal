@@ -120,6 +120,10 @@ its timer loop and webhook listener and launches their agents through the
 interface, as `shoal start` does, and registers each repository's runner,
 queues, claims and ends its jobs, while their workspaces, permits and
 executions stay with the daemon, which the interface reaches.
+`shoal-links` holds the issues, PRs and CI runs spaces link: its `Links`
+service keeps the watches' running waits and the forge's remembered
+answers, and its record functions read and write what spaces link, which
+other subsystems call in their own transactions.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
 the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
 `shoal-workers` neither the daemon nor its tests: the daemon depends on no
