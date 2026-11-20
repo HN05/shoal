@@ -296,6 +296,7 @@ impl Records for HubRecords {
     }
 }
 
+pub(crate) mod sending;
 mod socket;
 #[cfg(test)]
 mod tests;

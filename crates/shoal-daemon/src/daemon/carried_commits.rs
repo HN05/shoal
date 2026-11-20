@@ -5,13 +5,9 @@
 //! fetches it into the repository the start goes in, registering it as a
 //! URL clone where it has none, under a ref of Shoal's own, and the start
 //! then names the commit by its full ID.
-use std::{
-    io::{Read as _, Write as _},
-    path::Path,
-    sync::Arc,
-};
+use std::{io::Write as _, path::Path, sync::Arc};
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result};
 use shoal_protocol::{
     hub::Member,
     protocol::{self, Body, Operation, RepositoryMethod, Response},
@@ -21,7 +17,7 @@ use tokio::{io::AsyncReadExt as _, net::UnixStream};
 
 use super::{
     answer::{self, OperationGuard},
-    hub::{Incoming, Outgoing},
+    hub::sending::{Answers, blocking, send_file},
     manager::Manager,
     scope::Caller,
 };
@@ -33,7 +29,7 @@ pub(crate) use retention::CarriedHolds;
 /// The name of a carried bundle in the temporary directory that holds it.
 const BUNDLE: &str = "carried.bundle";
 
-/// The most bytes of a bundle read or written at once.
+/// The most bytes of a bundle written at once.
 const CHUNK: usize = 64 << 10;
 
 impl Manager {
@@ -83,7 +79,7 @@ impl Manager {
         answers.next().await?;
         send_file(file, &mut outgoing).await?;
         outgoing.end(None).await;
-        answers.next().await
+        answers.next().await.map(drop)
     }
 
     /// Take the bundle of `commit` that the caller writes on `stream` once
@@ -116,26 +112,6 @@ impl Manager {
     }
 }
 
-/// Write the file `file` on `outgoing`, a chunk at a time.
-async fn send_file(file: &Path, outgoing: &mut Outgoing) -> Result<()> {
-    let path = file.to_owned();
-    let mut input = blocking(move || std::fs::File::open(path)).await?;
-    loop {
-        let (file, chunk) = blocking(move || {
-            let mut chunk = vec![0; CHUNK];
-            let read = input.read(&mut chunk)?;
-            chunk.truncate(read);
-            Ok((input, chunk))
-        })
-        .await?;
-        if chunk.is_empty() {
-            return Ok(());
-        }
-        input = file;
-        outgoing.write(&chunk).await?;
-    }
-}
-
 /// Write what `stream` reads until the caller ends its side to the new
 /// file `file`, a chunk at a time.
 async fn receive_file(stream: &mut UnixStream, file: &Path) -> Result<()> {
@@ -152,14 +128,6 @@ async fn receive_file(stream: &mut UnixStream, file: &Path) -> Result<()> {
     }
 }
 
-/// What `work`, which blocks on the file system, returns, run on the
-/// blocking pool.
-async fn blocking<T: Send + 'static>(
-    work: impl FnOnce() -> std::io::Result<T> + Send + 'static,
-) -> Result<T> {
-    Ok(tokio::task::spawn_blocking(work).await??)
-}
-
 /// Fetch `commit` into `repo`, after the origin's `branch`, from the bundle
 /// read from `stream` until the caller ends its side.
 async fn take_bundle(
@@ -171,38 +139,4 @@ async fn take_bundle(
     let file = directory.path().join(BUNDLE);
     receive_file(stream, &file).await?;
     crate::git::clone_base::fetch_carried(repo, &file, carried).await
-}
-
-/// The answers another machine's daemon writes on a stream, frame by frame.
-struct Answers {
-    incoming: Incoming,
-    read: Vec<u8>,
-}
-
-impl Answers {
-    fn new(incoming: Incoming) -> Self {
-        Self {
-            incoming,
-            read: Vec::new(),
-        }
-    }
-
-    /// The next answer, past any the daemon sent while it still prepared
-    /// it; its refusal as an error.
-    async fn next(&mut self) -> Result<()> {
-        loop {
-            if let Some(end) = self.read.iter().position(|byte| *byte == b'\n') {
-                let line: Vec<u8> = self.read.drain(..=end).collect();
-                let response: Response = serde_json::from_slice(&line)?;
-                if !matches!(response.body, Body::Keepalive) {
-                    return response.body.into_result().map(drop);
-                }
-                continue;
-            }
-            match self.incoming.next().await? {
-                Some(bytes) => self.read.extend(bytes),
-                None => bail!("the other machine's daemon ended the stream unanswered"),
-            }
-        }
-    }
 }
