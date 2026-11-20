@@ -494,6 +494,20 @@ impl Manager {
         Ok(OpenTarget::Reopen(Box::new(workspace)))
     }
 
+    /// The workspace that owns the existing local or remote branch
+    /// `selector` names in `repo`, which opening that branch reopens.
+    pub(in crate::daemon) async fn opening_owner(
+        &self,
+        repo: &Repository,
+        selector: &str,
+    ) -> Result<Option<Workspace>> {
+        let options = NewWorktreeOptions::default();
+        Ok(match self.open_target(repo, selector, options).await? {
+            OpenTarget::Reopen(workspace) => Some(*workspace),
+            OpenTarget::Create(_) => None,
+        })
+    }
+
     /// Resolve and validate the local or remote branch selected by the caller.
     async fn select_existing_branch(&self, repo: &Repository, selector: &str) -> Result<Branch> {
         let local = git::strip_local(selector).unwrap_or(selector);

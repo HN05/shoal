@@ -43,7 +43,7 @@ impl Manager {
     ) -> Result<Option<Workspace>> {
         match self.settle_workspace(launch, false, caller).await? {
             Settling::New(settled) => {
-                let reopened = self.reopened_workspace(&settled, caller).await?;
+                let reopened = self.reopened_workspace(&settled).await?;
                 (self.check_settled(launch, *settled, caller).await)?;
                 Ok(reopened)
             }
@@ -51,21 +51,14 @@ impl Manager {
         }
     }
 
-    /// The workspace `caller` sees on the existing branch `settled` opens,
-    /// such as the one an issue's earlier work left, which the start
-    /// reopens.
-    async fn reopened_workspace(
-        &self,
-        settled: &Settled,
-        caller: Option<&Caller>,
-    ) -> Result<Option<Workspace>> {
-        let Some(branch) = &settled.creation.existing else {
-            return Ok(None);
-        };
-        let workspaces = self.launch_workspaces(caller).await?;
-        let workspaces =
-            crate::launches::workspace::repository_workspaces(&workspaces, &settled.repo);
-        Ok(crate::launches::on_branch(&workspaces, branch, None).cloned())
+    /// The workspace that owns the existing branch `settled` opens, such
+    /// as the one an issue's earlier work left, which the start reopens,
+    /// found as opening the branch finds it.
+    async fn reopened_workspace(&self, settled: &Settled) -> Result<Option<Workspace>> {
+        match &settled.creation.existing {
+            Some(branch) => self.opening_owner(&settled.repo, branch).await,
+            None => Ok(None),
+        }
     }
 
     /// Refuse what creating the workspace `settled` describes for `launch`
