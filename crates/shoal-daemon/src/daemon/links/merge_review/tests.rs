@@ -18,7 +18,7 @@ use shoal_reviews::store;
 /// `require_for_merge` is `holds`.
 struct Fixture {
     _root: tempfile::TempDir,
-    _server: shoal_forge::test_support::Server,
+    server: shoal_forge::test_support::Server,
     manager: Arc<Manager>,
     workspace: Workspace,
     head: CommitId,
@@ -72,7 +72,7 @@ impl Fixture {
         );
         Self {
             _root: root,
-            _server: server,
+            server,
             manager,
             workspace,
             head,
@@ -120,7 +120,7 @@ impl Fixture {
             Default::default(),
         );
         let workspace = created.await.unwrap();
-        let host = &self._server.host;
+        let host = &self.server.host;
         let pull: ItemInput = format!("http://{host}/team/repo/pulls/1").parse().unwrap();
         let selector = SpaceSelector::id(&workspace.id);
         let (kind, relation) = (
@@ -313,7 +313,7 @@ async fn a_held_auto_merge_needs_a_forge_that_keeps_it_at_the_reviewed_head() {
 #[tokio::test]
 async fn the_global_config_holds_a_pr_of_an_unregistered_repository() {
     let f = Fixture::new("all", "topic").await;
-    let host = &f._server.host;
+    let host = &f.server.host;
     let elsewhere: ItemInput = format!("http://{host}/team/other/pulls/1").parse().unwrap();
     let context = f.context();
     let gated = f
