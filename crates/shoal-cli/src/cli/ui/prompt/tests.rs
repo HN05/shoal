@@ -74,3 +74,19 @@ fn a_setup_that_did_not_start_offers_only_a_retry() {
         assert_eq!(choice, expected, "{ran} {answers:?}");
     }
 }
+
+#[test]
+fn a_stopped_agent_choice_defaults_to_cancel_and_repeats_unknown_answers() {
+    for (answers, expected) in [
+        ("\n", StoppedAgentChoice::Cancel),
+        ("", StoppedAgentChoice::Cancel),
+        ("r\n", StoppedAgentChoice::Resume),
+        ("replace\n", StoppedAgentChoice::Replace),
+        ("x\np\n", StoppedAgentChoice::Replace),
+    ] {
+        let mut output = Vec::new();
+        let choice =
+            stopped_agent_with_io("workspace 3", &mut answers.as_bytes(), &mut output).unwrap();
+        assert_eq!(choice, expected, "{answers:?}");
+    }
+}

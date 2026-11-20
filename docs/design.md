@@ -3397,7 +3397,8 @@ CLI, coordinators and apps get one answer; a last session gives way, since its
 agent ended on its own. A stopped or asleep agent gives way only to a start
 with `--replace`, which discards it through the same operation as
 `shoal restore --discard-agent`, so replacing needs the right to discard; a
-running one never does, so a start never cuts off a live turn. It stays a chat, with its own identity, scope,
+running one never does, so a start never cuts off a live turn. A start on a
+terminal asks instead of refusing, since the user is there to choose. It stays a chat, with its own identity, scope,
 temporary directory and messages, and is not the workspace's child, since a
 child's threads and approvals go to its parent's agent while the user attends
 a chat; so Shoal commands it runs never act as the workspace's agent. Its scope

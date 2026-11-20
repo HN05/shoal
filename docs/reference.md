@@ -2725,7 +2725,8 @@ in the queue, including while a blocker holds it back, naming `shoal attach`,
 it too, naming `shoal resume` and `--replace`, unless the start passes
 `--replace`: the launch then discards that agent, with its last sessions and
 stopped commands, as `shoal restore --discard-agent` does, and queues its own.
-`--replace` applies only to a start of a
+Without `--replace`, a start on a terminal asks whether to resume the stopped
+agent, replace it or cancel. `--replace` applies only to a start of a
 workspace's own agent, with `--in` or on a branch or issue the workspace has,
 so a chat in its worktree refuses it, and a scoped caller replaces only the
 agent of a space below its own, as it discards one. A last session, whose agent

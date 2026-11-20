@@ -188,6 +188,44 @@ fn setup_failure_with_io(
 }
 
 #[derive(Debug, PartialEq, Eq)]
+pub enum StoppedAgentChoice {
+    Resume,
+    Replace,
+    Cancel,
+}
+
+/// What a start does with the stopped agent of the workspace it goes into,
+/// which it names as `workspace`, such as `workspace 3`: resume that agent,
+/// replace it with the new one, or cancel the start.
+pub fn stopped_agent_choice(ctx: &Context, workspace: &str) -> Result<StoppedAgentChoice> {
+    ensure!(
+        ctx.interactive(),
+        "{workspace} has a stopped agent; resume it with `shoal resume`, or pass --replace"
+    );
+    stopped_agent_with_io(workspace, &mut io::stdin().lock(), &mut io::stderr().lock())
+}
+
+fn stopped_agent_with_io(
+    workspace: &str,
+    input: &mut impl io::BufRead,
+    output: &mut impl Write,
+) -> Result<StoppedAgentChoice> {
+    loop {
+        write!(
+            output,
+            "{workspace} has a stopped agent: [r]esume it, re[p]lace it with a new agent, or [c]ancel [c]: "
+        )?;
+        output.flush()?;
+        match read_answer(input)?.as_deref() {
+            None | Some("" | "c" | "cancel") => return Ok(StoppedAgentChoice::Cancel),
+            Some("r" | "resume") => return Ok(StoppedAgentChoice::Resume),
+            Some("p" | "replace") => return Ok(StoppedAgentChoice::Replace),
+            Some(_) => writeln!(output, "Please enter r, p, or c.")?,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum ModifiedSkillChoice {
     Keep,
     Replace,

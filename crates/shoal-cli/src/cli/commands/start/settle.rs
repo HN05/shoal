@@ -19,6 +19,7 @@ mod located;
 mod mode;
 mod pickers;
 mod repository;
+mod stopped;
 
 pub(in crate::cli::commands) use arguments::check_start_arguments;
 pub(in crate::cli::commands) use located::launch_args;
@@ -39,7 +40,8 @@ pub(in crate::cli::commands) async fn start(ctx: &Context, args: StartArgs) -> R
 /// its agent as `options` ask: refuse what its arguments alone refuse,
 /// find its repository and settings without asking, decide its mode where
 /// nothing needs asking and check its agent, have the daemon refuse
-/// what it would refuse, then pick on a terminal what the launch leaves
+/// what it would refuse, asking on a terminal about a stopped agent the
+/// launch does not replace, then pick on a terminal what the launch leaves
 /// open, and send it.
 pub(in crate::cli::commands) async fn settle(
     ctx: &Context,
@@ -61,7 +63,11 @@ pub(in crate::cli::commands) async fn settle(
         None => repository::required(ctx, &mut launch, (found, settings)).await?,
     };
     pickers::check_agent(&launch, &settings)?;
-    let checked = check::check(ctx, &launch, options).await?;
+    let kind_checked = launch.mode.is_some();
+    let checked = match stopped::checked(ctx, &mut launch, options).await? {
+        stopped::Checked::Goes(workspace) => workspace.map(|workspace| *workspace),
+        stopped::Checked::Resumed(code) => return Ok(code),
+    };
     if let Some(workspace) = &checked {
         settings = check::workspace_settings(ctx, workspace).await?;
     }
@@ -72,6 +78,15 @@ pub(in crate::cli::commands) async fn settle(
     let settled = (&mode, &modes);
     (found, settings) = repository::settled(ctx, &mut launch, settled, (found, settings)).await?;
     let worker = mode::starts_workspace(&launch, &mode, &modes)?;
+    // The first check left the kind open, so the workspace's own agent is
+    // checked once the mode starts it.
+    if worker
+        && checked.is_some()
+        && !kind_checked
+        && let Some(code) = stopped::resumed(ctx, &mut launch, options).await?
+    {
+        return Ok(code);
+    }
     if worker && checked.is_none() {
         pickers::pick_source(ctx, &mut launch, found.as_ref()).await?;
     }
