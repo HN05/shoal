@@ -64,6 +64,8 @@ pub(in crate::cli::commands) async fn settle(
     let (mut found, mut settings) = match choice.clone().named() {
         Some(mode) => {
             mode::ensure_fits(&launch, &mode, &modes)?;
+            // The daemon's checks then read no labels again.
+            launch.mode = Some(mode.clone());
             let mode = (&mode, &modes);
             repository::settled(ctx, &mut launch, mode, (found, settings)).await?
         }
