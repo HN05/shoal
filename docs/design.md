@@ -580,7 +580,12 @@ above it is throttled, reclaimed and swapped out before anything dies, and
 `MemoryMax` a twentieth above it as the last resort, whose kills stay inside the slice, so
 the desktop and the daemon keep their memory whatever work does. The daemon
 sets both at runtime rather than in a unit file, so the cap follows `shoal
-config reload` and nothing outlives the boot. Whether a terminal
+config reload` and nothing outlives the boot. Protection and admission count
+the limit as the machine's memory, and read the slice's own stall, so Shoal
+warns and stops work before the kernel throttles it; the slice's memory
+leaves out its page cache, which throttling reclaims first and which would
+otherwise read as full. macOS has no such control, so there the limit holds
+only through protection and admission, on the usage Shoal samples. Whether a terminal
 shows an agent plays no part, since a host such as Herdr may count every agent
 as shown and a user who attaches may walk away. An idle agent with a running subagent, which
 its hooks report, or processes outside its process group counts as working,

@@ -59,7 +59,7 @@ impl Readings {
     /// dynamic job admission.
     fn take(settings: &crate::config::overload::Overload, cpu: bool, manager: &Manager) -> Self {
         Self {
-            memory: memory_pressure(settings),
+            memory: memory_pressure(settings, manager.work_limit()),
             cpu: if cpu {
                 load::cpu_ticks()
             } else {
@@ -70,13 +70,17 @@ impl Readings {
     }
 }
 
-/// This sample's memory pressure against the configured levels, `None` with
+/// This sample's memory pressure against the configured levels, the
+/// machine's with that of Shoal's work against its `work` limit, `None` with
 /// memory protection off or a failed reading, which is logged.
-fn memory_pressure(settings: &crate::config::overload::Overload) -> Option<MemoryPressure> {
+fn memory_pressure(
+    settings: &crate::config::overload::Overload,
+    work: Option<load::WorkLimit>,
+) -> Option<MemoryPressure> {
     if !settings.memory.enabled {
         return None;
     }
-    load::memory(&settings.memory_levels())
+    load::memory(&settings.memory_levels(), work)
         .map(|reading| reading.pressure)
         .inspect_err(|error| log!("memory overload monitor: {error:#}"))
         .ok()

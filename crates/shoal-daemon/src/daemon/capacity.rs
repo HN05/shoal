@@ -243,11 +243,16 @@ impl Agents {
     }
 }
 
-/// Probe the same memory and disk sources used by overload protection. The
-/// first path is daemon state; later paths are workspaces awaiting cleanup.
-/// A failed probe never authorizes more work; deleted workspaces are skipped.
-pub(crate) fn sample(paths: &[&Path], settings: &Overload) -> HostSample {
-    let (memory, memory_room) = sample_memory(settings);
+/// Probe the same memory and disk sources used by overload protection, with
+/// Shoal's work against its `work` limit. The first path is daemon state;
+/// later paths are workspaces awaiting cleanup. A failed probe never
+/// authorizes more work; deleted workspaces are skipped.
+pub(crate) fn sample(
+    paths: &[&Path],
+    settings: &Overload,
+    work: Option<load::WorkLimit>,
+) -> HostSample {
+    let (memory, memory_room) = sample_memory(settings, work);
     HostSample {
         memory,
         memory_room,
@@ -257,14 +262,14 @@ pub(crate) fn sample(paths: &[&Path], settings: &Overload) -> HostSample {
 
 /// The memory state and room of one reading: healthy and unlimited with
 /// memory protection off, unavailable without room after a failed reading.
-fn sample_memory(settings: &Overload) -> (MemoryState, Option<u64>) {
+fn sample_memory(settings: &Overload, work: Option<load::WorkLimit>) -> (MemoryState, Option<u64>) {
     if !settings.memory.enabled {
         return (MemoryState::Healthy, Some(u64::MAX));
     }
-    match load::memory(&settings.memory_levels()) {
+    match load::memory(&settings.memory_levels(), work) {
         Ok(reading) => (
             memory_state(reading.pressure),
-            Some(memory_room(reading.memory, settings)),
+            Some(reading_room(&reading, settings)),
         ),
         Err(_) => (MemoryState::Unavailable, None),
     }
@@ -280,6 +285,16 @@ fn memory_state(pressure: load::MemoryPressure) -> MemoryState {
     } else {
         MemoryState::Healthy
     }
+}
+
+/// The bytes new work may use under `reading`: the least that the
+/// machine's memory, and the work's under its limit, leave below the
+/// warning threshold.
+fn reading_room(reading: &load::MemoryReading, settings: &Overload) -> u64 {
+    (std::iter::once(reading.memory).chain(reading.work))
+        .map(|memory| memory_room(memory, settings))
+        .min()
+        .expect("a reading has the machine's memory")
 }
 
 /// The bytes new work may use before `memory` in use reaches the warning

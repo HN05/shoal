@@ -6,7 +6,7 @@
 //! Where no scope can start, as without a user bus or before systemd 254,
 //! and in a build that leaves the user's files to the installed Shoal, the
 //! command starts directly.
-use std::ffi::OsString;
+use std::{ffi::OsString, path::PathBuf};
 
 use tokio::sync::OnceCell;
 
@@ -29,6 +29,39 @@ pub async fn launcher() -> &'static [OsString] {
             (super::scope::launcher(Some(SLICE)).await).unwrap_or_default()
         })
         .await
+}
+
+/// The slice's control group, where the user's service manager keeps it;
+/// `None` in a build that leaves the slice to the installed Shoal, whose
+/// work runs there.
+pub fn control_group() -> Option<PathBuf> {
+    if !crate::build::changes_user_files() {
+        return None;
+    }
+    let own = std::fs::read_to_string("/proc/self/cgroup").ok();
+    // SAFETY: getuid has no arguments or memory-safety preconditions.
+    let manager = manager_group(own.as_deref(), unsafe { libc::getuid() });
+    Some(
+        PathBuf::from("/sys/fs/cgroup")
+            .join(manager)
+            .join("shoal.slice")
+            .join(SLICE),
+    )
+}
+
+/// The control group of user `uid`'s service manager, relative to the
+/// hierarchy's root: the part of `own`, this process's control groups, up
+/// to it where this process runs below it, as in a terminal or a service,
+/// and otherwise where systemd keeps it.
+fn manager_group(own: Option<&str>, uid: u32) -> String {
+    let manager = format!("user@{uid}.service");
+    let below = own
+        .and_then(|own| own.lines().find_map(|line| line.strip_prefix("0::/")))
+        .and_then(|path| Some(&path[..path.find(&manager)? + manager.len()]));
+    below.map_or_else(
+        || format!("user.slice/user-{uid}.slice/{manager}"),
+        str::to_owned,
+    )
 }
 
 /// What the slice's memory may reach: above `high` the kernel throttles

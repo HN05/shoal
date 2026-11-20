@@ -130,6 +130,16 @@ impl WorkspaceUsages {
         })
     }
 
+    /// The memory every space's processes and containers held at the latest
+    /// sample, while sampling has not stalled.
+    pub(crate) fn memory(&self, now: Instant) -> Option<u64> {
+        let latest = self.latest.as_ref()?;
+        if now.duration_since(latest.time) > STALE {
+            return None;
+        }
+        Some((self.usage.values()).fold(0, |total, usage| total.saturating_add(usage.memory_bytes)))
+    }
+
     /// The latest usage of the workspace `id`, while it has processes or
     /// containers and sampling has not stalled.
     pub(crate) fn get(&self, id: &SpaceId, now: Instant) -> Option<WorkspaceUsage> {

@@ -83,7 +83,7 @@ fn stall_reads_both_lines_of_the_pressure_file() {
 fn filling_swap_counts_though_ram_alone_stays_below_a_level() {
     let pressure = |available, swap_free| {
         let memory = linux_memory(&meminfo(available, swap_free)).unwrap();
-        linux_pressure(memory, None, &LEVELS)
+        pressure(memory, None, &LEVELS)
     };
     // RAM alone is 80% used; with full swap, 90% of both is.
     let filled = pressure(2000, 0);
@@ -98,7 +98,7 @@ fn filling_swap_counts_though_ram_alone_stays_below_a_level() {
 #[test]
 fn stall_warns_stops_and_holds_recovery_apart_from_memory_in_use() {
     let memory = linux_memory(&meminfo(9000, 10000)).unwrap();
-    let pressure = |stall| linux_pressure(memory, Some(stall), &LEVELS);
+    let pressure = |stall| pressure(memory, Some(stall), &LEVELS);
     assert_eq!(
         pressure(CALM),
         MemoryPressure {
@@ -130,9 +130,23 @@ fn stall_warns_stops_and_holds_recovery_apart_from_memory_in_use() {
 
 #[test]
 fn this_machine_reports_its_memory() {
-    let reading = memory(&LEVELS).unwrap();
+    let reading = memory(&LEVELS, None).unwrap();
     assert!(
         reading.memory.available <= reading.memory.total,
         "{reading:?}"
     );
+}
+
+#[test]
+fn work_past_its_limit_presses_however_calm_the_machine() {
+    // A test build reads no slice, so the sampled use counts.
+    let work = |sampled| WorkLimit {
+        limit: 1000,
+        sampled,
+    };
+    let reading = memory(&LEVELS, Some(work(Some(2000)))).unwrap();
+    assert_eq!(reading.work.map(|work| work.available), Some(0));
+    assert!(reading.pressure.critical && reading.pressure.warning && !reading.pressure.safe);
+    // Without a sample there is no reading to admit work on.
+    assert!(memory(&LEVELS, Some(work(None))).is_err());
 }

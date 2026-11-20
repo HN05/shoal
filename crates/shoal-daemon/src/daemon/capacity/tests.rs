@@ -324,3 +324,37 @@ fn memory_stall_holds_starts_as_memory_in_use_does() {
     assert_eq!(memory_state(warning), MemoryState::Warning);
     assert_eq!(memory_state(calm), MemoryState::Healthy);
 }
+
+#[test]
+fn work_under_a_limit_has_the_room_its_limit_leaves() {
+    let settings = Overload::default();
+    let gib = |count: u64| count << 30;
+    let pressure = load::MemoryPressure {
+        critical: false,
+        stalled: false,
+        warning: false,
+        safe: true,
+    };
+    let machine = load::Memory {
+        total: gib(100),
+        available: gib(90),
+    };
+    let reading = |work| load::MemoryReading {
+        memory: machine,
+        work,
+        pressure,
+    };
+    let warning = u64::from(settings.warning.memory_used_percent);
+    assert_eq!(
+        reading_room(&reading(None), &settings),
+        gib(100) * warning / 100 - gib(10)
+    );
+    let work = load::Memory {
+        total: gib(10),
+        available: gib(4),
+    };
+    assert_eq!(
+        reading_room(&reading(Some(work)), &settings),
+        gib(10) * warning / 100 - gib(6)
+    );
+}

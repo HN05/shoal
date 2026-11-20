@@ -310,6 +310,17 @@ reclaiming its cache and swapping it out, and where that cannot keep it below
 `MemoryMax`, its OOM killer kills inside the slice only, in the order of the
 OOM scores above, while the daemon and the desktop keep their memory. The service manager keeps the cap until the next boot.
 
+Overload protection and dynamic admission count the limit as the machine's
+memory too, so Shoal warns agents, holds back starts and stops work before
+the kernel throttles it: the work's memory against the limit, and on Linux
+the slice's own stall, at the same levels as the machine's, press as the
+machine's do, and a start fits only where both leave room. On Linux the
+work's memory is what the slice holds that reclaim cannot free, its page
+cache aside, with what it swapped out; before the slice exists, and on
+macOS, where the kernel does not enforce the limit, it is the memory the
+latest usage sample counts for every space's processes and containers, and
+without a sample nothing starts.
+
 When space available to unprivileged processes on a filesystem holding
 workspaces or daemon state falls below `disk.cleanup_free_gib`, the daemon
 deletes the Xcode data there that removing a workspace of a repository using

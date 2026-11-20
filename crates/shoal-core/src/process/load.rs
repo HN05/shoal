@@ -4,4 +4,6 @@ mod cpu;
 mod memory;
 
 pub use cpu::{CpuTicks, cpu_ticks};
-pub use memory::{Memory, MemoryLevel, MemoryLevels, MemoryPressure, MemoryReading, memory, ram};
+pub use memory::{
+    Memory, MemoryLevel, MemoryLevels, MemoryPressure, MemoryReading, WorkLimit, memory, ram,
+};

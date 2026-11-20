@@ -475,7 +475,8 @@ impl Manager {
     /// A failed reading defers it.
     fn seed_headroom(&self, layout: &Layout) -> bool {
         let overload = &self.config().machine.overload;
-        let sample = capacity::sample(&[self.paths.state.as_path(), layout.root()], overload);
+        let paths = [self.paths.state.as_path(), layout.root()];
+        let sample = capacity::sample(&paths, overload, self.work_limit());
         let disk_floor = if overload.warning.enabled {
             overload.warning.disk_free_bytes()
         } else {

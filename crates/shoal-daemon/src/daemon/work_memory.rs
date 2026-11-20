@@ -1,11 +1,23 @@
 //! The memory limit of Shoal's work, `[machine] memory_limit`: what it
 //! comes to on this machine, and on Linux the cap the daemon gives the work
 //! slice from it, at startup and whenever the config changes it.
-use super::log;
+use super::{log, manager::Manager};
 use crate::{
     config::{Config, memory_limit::MemoryLimit},
-    process::load,
+    process::load::{self, WorkLimit},
 };
+
+impl Manager {
+    /// The user's limit on Shoal's work, with what the latest usage sample
+    /// counts of it, which protection and admission count as the machine's
+    /// memory; none without a limit.
+    pub(crate) fn work_limit(&self) -> Option<WorkLimit> {
+        let limit = limit(&self.config())?;
+        let now = tokio::time::Instant::now();
+        let sampled = self.usage.with_workspaces(|usages| usages.memory(now));
+        Some(WorkLimit { limit, sampled })
+    }
+}
 
 /// The bytes `config` limits Shoal's work to on this machine; none without
 /// a limit, or for a share of RAM that cannot be read, which is logged.
@@ -24,7 +36,7 @@ pub(crate) fn limit(config: &Config) -> Option<u64> {
 /// limit is removed. A development build leaves the slice to the installed
 /// Shoal, as its wrappers do.
 #[cfg(target_os = "linux")]
-pub(super) async fn run(manager: std::sync::Arc<super::manager::Manager>) {
+pub(super) async fn run(manager: std::sync::Arc<Manager>) {
     use crate::service::work::{self, Cap};
     if !crate::build::changes_user_files() {
         return;

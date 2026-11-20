@@ -475,7 +475,7 @@ impl Manager {
         let paths = self.admission_paths().await?;
         let paths: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
         Ok(capacity::room(
-            capacity::sample(&paths, overload),
+            capacity::sample(&paths, overload, self.work_limit()),
             Agents::count(activities.iter().copied()),
             overload,
         ))

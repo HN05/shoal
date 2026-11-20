@@ -1,7 +1,11 @@
 use anyhow::{Context, Result, ensure};
 
-/// The machine's memory in bytes: all of it, and what new work can use
-/// without pushing other memory out. On Linux both count swap.
+mod work;
+
+pub use work::WorkLimit;
+
+/// Memory in bytes: all of it, and what new work can use without pushing
+/// other memory out. On Linux the machine's both count swap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Memory {
     pub total: u64,
@@ -10,7 +14,6 @@ pub struct Memory {
 
 impl Memory {
     /// Whether at least `percent` of the memory is in use.
-    #[cfg(any(target_os = "linux", test))]
     fn used_at_least(self, percent: u8) -> bool {
         u128::from(self.available) * 100
             <= u128::from(self.total) * u128::from(100u8.saturating_sub(percent))
@@ -49,21 +52,60 @@ pub struct MemoryPressure {
     pub safe: bool,
 }
 
-/// One reading of the machine's memory and its pressure.
+impl MemoryPressure {
+    /// The pressure of two readings together: past a level where either
+    /// is, and safe only where both are.
+    fn or(self, other: Self) -> Self {
+        Self {
+            critical: self.critical || other.critical,
+            stalled: self.stalled || other.stalled,
+            warning: self.warning || other.warning,
+            safe: self.safe && other.safe,
+        }
+    }
+}
+
+/// One reading of the machine's memory and its pressure, with Shoal's
+/// work's against the user's limit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MemoryReading {
     pub memory: Memory,
+    /// The limit as `total` and what Shoal's work leaves of it; none
+    /// without a limit.
+    pub work: Option<Memory>,
+    /// The machine's and the work's together.
     pub pressure: MemoryPressure,
+}
+
+/// Read the machine's memory and its pressure, and with `work` Shoal's
+/// work's against its limit, which counts as the machine's own: pressure is
+/// past a level where either is.
+pub fn memory(levels: &MemoryLevels, work: Option<WorkLimit>) -> Result<MemoryReading> {
+    let machine = machine(levels)?;
+    let Some(work) = work else {
+        return Ok(machine);
+    };
+    let (used, stall) = work.read()?;
+    Ok(MemoryReading {
+        work: Some(used),
+        pressure: machine.pressure.or(pressure(used, stall, levels)),
+        ..machine
+    })
 }
 
 /// Read memory in use with swap, and the stall where the kernel reports it.
 #[cfg(target_os = "linux")]
-pub fn memory(levels: &MemoryLevels) -> Result<MemoryReading> {
+fn machine(levels: &MemoryLevels) -> Result<MemoryReading> {
     let text = std::fs::read_to_string("/proc/meminfo").context("read memory availability")?;
     let memory = linux_memory(&text)?;
     Ok(MemoryReading {
         memory,
-        pressure: linux_pressure(memory, read_stall()?, levels),
+        work: None,
+        pressure: pressure(
+            memory,
+            read_stall("/proc/pressure/memory".as_ref())?,
+            levels,
+        ),
     })
 }
 
@@ -90,14 +132,15 @@ fn meminfo_bytes(text: &str, name: &str) -> Result<u64> {
     value.checked_mul(1024).context("memory reading overflow")
 }
 
-/// The memory stall the kernel reports, `None` without PSI: a kernel built
-/// without it, or booted with `psi=0`, has no pressure file.
+/// The memory stall the kernel reports in the pressure file `path`, `None`
+/// without PSI: a kernel built without it, or booted with `psi=0`, has no
+/// pressure file.
 #[cfg(target_os = "linux")]
-fn read_stall() -> Result<Option<Stall>> {
-    match std::fs::read_to_string("/proc/pressure/memory") {
+fn read_stall(path: &std::path::Path) -> Result<Option<Stall>> {
+    match std::fs::read_to_string(path) {
         Ok(text) => linux_stall(&text).map(Some),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error).context("read memory stall"),
+        Err(error) => Err(error).with_context(|| format!("read {}", path.display())),
     }
 }
 
@@ -125,7 +168,6 @@ fn linux_memory(text: &str) -> Result<Memory> {
 /// The share of time, in percent, that tasks stalled waiting for memory:
 /// some of them over ten seconds and over a minute, and all of them over ten
 /// seconds.
-#[cfg(any(target_os = "linux", test))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Stall {
     some_avg10: f64,
@@ -166,8 +208,7 @@ fn linux_stall(text: &str) -> Result<Stall> {
 
 /// How `memory` and `stall`, `None` without PSI, stand against `levels`:
 /// either signal past its level counts.
-#[cfg(any(target_os = "linux", test))]
-fn linux_pressure(memory: Memory, stall: Option<Stall>, levels: &MemoryLevels) -> MemoryPressure {
+fn pressure(memory: Memory, stall: Option<Stall>, levels: &MemoryLevels) -> MemoryPressure {
     let stalled = |average: fn(&Stall) -> f64, percent: u8| {
         stall.is_some_and(|stall| average(&stall) >= f64::from(percent))
     };
@@ -184,10 +225,11 @@ fn linux_pressure(memory: Memory, stall: Option<Stall>, levels: &MemoryLevels) -
 /// macOS's native pressure level alone decides, whatever `levels` say:
 /// critical stops at once, and only normal is safe.
 #[cfg(target_os = "macos")]
-pub fn memory(_levels: &MemoryLevels) -> Result<MemoryReading> {
+fn machine(_levels: &MemoryLevels) -> Result<MemoryReading> {
     let level = native_level()?;
     Ok(MemoryReading {
         memory: native_memory()?,
+        work: None,
         pressure: MemoryPressure {
             critical: level == 4,
             stalled: false,
@@ -264,7 +306,7 @@ pub fn ram() -> Result<u64> {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-pub fn memory(_levels: &MemoryLevels) -> Result<MemoryReading> {
+fn machine(_levels: &MemoryLevels) -> Result<MemoryReading> {
     anyhow::bail!("memory monitoring is unsupported on this platform")
 }
 
