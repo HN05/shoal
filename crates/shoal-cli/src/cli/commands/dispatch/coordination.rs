@@ -79,9 +79,9 @@ pub(in crate::cli::commands) async fn run(
         } => alerts::clear(&ctx).await,
         CoordinationCommand::Messages { hook: _ } => alerts::delivery::deliver(&ctx).await,
         CoordinationCommand::Alerts {
-            follow: _,
             keep_unread,
             resume,
+            ..
         } => alerts::follow(&ctx, keep_unread, resume.unwrap_or(0)).await,
         CoordinationCommand::Files {
             command: Some(FilesCommand::Add { files, space }),

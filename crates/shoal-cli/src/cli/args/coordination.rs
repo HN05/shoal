@@ -62,6 +62,10 @@ pub enum CoordinationCommand {
         keep_unread: bool,
         #[arg(long)]
         resume: Option<i64>,
+        /// Kept from the listing the follower started as, which a follow
+        /// does not read.
+        #[arg(long)]
+        limit: Option<u32>,
     },
     /// Review and answer questions from the agents of workspaces and chats.
     #[command(args_conflicts_with_subcommands = true)]

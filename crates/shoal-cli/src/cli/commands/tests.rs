@@ -190,6 +190,30 @@ fn a_resumed_watch_names_its_space_or_an_earlier_releases_workspace() {
 }
 
 #[test]
+fn an_earlier_releases_alert_follower_hands_over_with_every_flag_it_took() {
+    let cli = <Cli as clap::Parser>::try_parse_from([
+        "shoal",
+        "alerts",
+        "--follow",
+        "--keep-unread",
+        "--limit",
+        "100",
+        "--resume",
+        "7",
+    ])
+    .unwrap();
+    let Some(Command::Coordination(CoordinationCommand::Alerts {
+        keep_unread,
+        resume,
+        ..
+    })) = cli.command
+    else {
+        panic!("expected the earlier release's follow");
+    };
+    assert_eq!((keep_unread, resume), (true, Some(7)));
+}
+
+#[test]
 fn an_earlier_releases_review_watch_hands_over_its_workspace_unchanged() {
     let cli = <Cli as clap::Parser>::try_parse_from([
         "shoal",
