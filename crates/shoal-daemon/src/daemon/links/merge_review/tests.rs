@@ -127,8 +127,10 @@ impl Fixture {
             crate::forge::items::link::LinkKind::Pr,
             crate::model::Relation::Assigned,
         );
+        let title = Some("Fix".into());
+        let manager = &*self.manager;
         let linked =
-            (self.manager).link_item(&selector, kind, &pull, relation, Some("Fix".into()), None);
+            (manager.links).link_item(manager, &selector, kind, &pull, relation, title, None);
         linked.await.unwrap();
         workspace
     }
