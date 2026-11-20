@@ -3,7 +3,10 @@
 //! burst of changes settles, each with the numbers the machine holds
 //! without a space. The hub's own machine reports to its own directory the
 //! same way, for as long as it takes the hub role.
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 use anyhow::{Result, anyhow};
 use shoal_ids::{
@@ -14,7 +17,7 @@ use shoal_protocol::hub::{
     directory::{Report, SpaceSummary},
     link::{Call, Reply},
 };
-use tokio::time::Instant;
+use tokio::{sync::watch, time::Instant};
 
 use super::session::Calls;
 use crate::{Hub, daemon::Daemon, log};
@@ -32,6 +35,14 @@ const QUIET: Duration = Duration::from_secs(5 * 60);
 /// How long a machine waits to report all its spaces again after a report
 /// failed.
 const RETRY: Duration = Duration::from_secs(30);
+
+/// How long a machine waits for the hub to take a report of a space it
+/// started for another machine before it answers that machine anyway.
+const LISTED_WAIT: Duration = Duration::from_secs(30);
+
+/// The spaces of this machine the hub took in its last report.
+#[derive(Default)]
+pub(crate) struct Reported(watch::Sender<HashSet<SpaceId>>);
 
 /// Where a machine's reports go.
 enum Sink<'a> {
@@ -57,6 +68,7 @@ impl Hub {
         let whole = sent.values().map(|(summary, _)| summary.clone()).collect();
         self.report(daemon, &sink, Report::Whole(whole), reserved.clone())
             .await?;
+        self.reported.0.send_replace(sent.keys().cloned().collect());
         // Counted from the last report, so changes that report nothing do
         // not put the next one off.
         let mut reported = Instant::now();
@@ -78,10 +90,24 @@ impl Hub {
                     removed: Vec::new(),
                 });
                 self.report(daemon, &sink, changes, held.clone()).await?;
+                self.reported
+                    .0
+                    .send_replace(current.keys().cloned().collect());
                 reported = Instant::now();
             }
             (sent, reserved) = (current, held);
         }
+    }
+
+    /// Wait until the hub took a report of this machine's space `id`, so
+    /// that the other machines find it there, as a machine that started it
+    /// for another one does before it answers that machine, which then
+    /// follows, attaches to and names it at once; after [`LISTED_WAIT`] it
+    /// stops waiting, as when the link went down meanwhile.
+    pub async fn listed(&self, id: &SpaceId) {
+        let mut reported = self.reported.0.subscribe();
+        let listed = reported.wait_for(|reported| reported.contains(id));
+        let _ = tokio::time::timeout(LISTED_WAIT, listed).await;
     }
 
     /// Report the hub's own machine's spaces to its directory while this

@@ -112,6 +112,8 @@ pub struct Hub {
     /// asked.
     parent_permissions:
         std::sync::Mutex<std::collections::HashMap<shoal_ids::space_ids::SpaceId, tree::Reported>>,
+    /// The spaces of this machine the hub took in its last report.
+    reported: reports::Reported,
 }
 
 impl Hub {
@@ -142,6 +144,7 @@ impl Hub {
             deliveries: Default::default(),
             known_tree: Default::default(),
             parent_permissions: Default::default(),
+            reported: Default::default(),
         }
     }
 }
