@@ -428,3 +428,30 @@ impl Drop for BlockedWorktrees {
         std::fs::set_permissions(&self.0, writable).unwrap();
     }
 }
+
+/// Move the space `selector` names, with the spaces below it that
+/// `carrying` carries, to the new file `file`, as `shoal move -o` does:
+/// pack it, letting its end delete the `unsaved` work, then end it here,
+/// or forget the move when packing fails.
+pub async fn move_to_file(
+    manager: &Manager,
+    selector: &shoal_protocol::space_names::SpaceSelector,
+    unsaved: crate::removal::UnsavedWork,
+    file: std::path::PathBuf,
+    carrying: &crate::transfer::Carrying,
+) -> anyhow::Result<(
+    crate::transfer::ExportedSpace,
+    crate::removal::RemovalResult,
+)> {
+    let destination = crate::transfer::MoveDestination::File { path: file };
+    let packing = manager.export_moving_space(selector, unsaved, &destination, carrying);
+    let exported = match packing.await {
+        Ok(exported) => exported,
+        Err(error) => {
+            let _ = manager.abandon_move(selector).await;
+            return Err(error);
+        }
+    };
+    let removal = manager.end_moved_space(selector).await?;
+    Ok((exported, removal))
+}

@@ -32,7 +32,6 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         | RemovalMethod::StartRemoval { .. }
         | RemovalMethod::AbsorbSpace(_)
         | RemovalMethod::RestoreSpace { .. }
-        | RemovalMethod::ExportSpace { .. }
         | RemovalMethod::ExportMovingSpace { .. }
         | RemovalMethod::ImportPackage(_) => true,
         RemovalMethod::Cleanup { dry_run, .. } => !dry_run,
@@ -42,7 +41,8 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         | RemovalMethod::CheckRemoval { .. }
         | RemovalMethod::RemovedSpaces
         | RemovalMethod::RemovedSpace { .. }
-        | RemovalMethod::DropRestoredSessions { .. } => false,
+        | RemovalMethod::DropRestoredSessions { .. }
+        | RemovalMethod::ExportRemovedSpace { .. } => false,
         // A move in progress finishes, which an exit that waits for it
         // waits for.
         RemovalMethod::EndMovedSpace { .. } | RemovalMethod::AbandonMove { .. } => false,
@@ -141,14 +141,13 @@ pub(super) async fn handle(
             manager.drop_restored_sessions(&space).await?;
             Body::Ok
         }
-        RemovalMethod::ExportSpace {
+        RemovalMethod::ExportRemovedSpace {
             space,
-            unsaved,
             file,
             carrying,
         } => Body::ExportedSpace(
             manager
-                .export_space(&space, unsaved, InspectionPolicy::GitOnly, file, &carrying)
+                .export_removed_space(&space, file, &carrying)
                 .await?,
         ),
         RemovalMethod::ExportMovingSpace {
@@ -328,7 +327,7 @@ impl Scoped for RemovalMethod {
             // Cleaning up and moving spaces is the `admin` permission's.
             RemovalMethod::Cleanup { .. }
             | RemovalMethod::DropRestoredSessions { .. }
-            | RemovalMethod::ExportSpace { .. }
+            | RemovalMethod::ExportRemovedSpace { .. }
             | RemovalMethod::ExportMovingSpace { .. }
             | RemovalMethod::EndMovedSpace { .. }
             | RemovalMethod::AbandonMove { .. }
@@ -372,8 +371,7 @@ async fn administer<'a>(
 /// on: one it moves, or a restored workspace whose kept sessions it drops.
 fn administered(method: &mut RemovalMethod) -> Option<&mut SpaceSelector> {
     match method {
-        RemovalMethod::ExportSpace { space, .. }
-        | RemovalMethod::ExportMovingSpace { space, .. }
+        RemovalMethod::ExportMovingSpace { space, .. }
         | RemovalMethod::EndMovedSpace { space }
         | RemovalMethod::AbandonMove { space }
         | RemovalMethod::DropRestoredSessions { space } => Some(space),

@@ -19,19 +19,17 @@ use shoal_protocol::{
 
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
-/// End `space` with the spaces below it that `carrying` carries,
-/// deleting only the `unsaved` work the caller saw, and package them into
-/// `file`.
-pub async fn export(
+/// Package the removal record of the removed space `space` names by ID,
+/// which stays, with the records of the spaces its removal took that
+/// `carrying` carries, into `file`.
+pub async fn export_removed(
     daemon: &impl Daemon,
     space: SpaceSelector,
-    unsaved: UnsavedWork,
     file: PathBuf,
     carrying: Carrying,
 ) -> Result<ExportedSpace> {
-    let method = RemovalMethod::ExportSpace {
+    let method = RemovalMethod::ExportRemovedSpace {
         space,
-        unsaved,
         file,
         carrying,
     };

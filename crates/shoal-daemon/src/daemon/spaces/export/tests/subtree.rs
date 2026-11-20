@@ -55,16 +55,15 @@ async fn import_package(manager: &Manager, repo: &Repository, bytes: &[u8]) -> V
 /// the package back.
 async fn export_tree(manager: &Manager, id: &SpaceId, directory: &std::path::Path) -> Vec<u8> {
     let file = directory.join("tree.shoal");
-    manager
-        .export_space(
-            &SpaceSelector::id(id),
-            UnsavedWork::All,
-            InspectionPolicy::GitOnly,
-            file.clone(),
-            &Carrying::Subtree,
-        )
-        .await
-        .unwrap();
+    let (selector, all) = (SpaceSelector::id(id), UnsavedWork::All);
+    let moving = crate::daemon::test_support::move_to_file(
+        manager,
+        &selector,
+        all,
+        file.clone(),
+        &Carrying::Subtree,
+    );
+    moving.await.unwrap();
     fs::read(file).unwrap()
 }
 
@@ -122,7 +121,12 @@ async fn a_removed_workspace_exports_with_the_spaces_its_removal_took() {
     .await
     .unwrap();
 
-    let bytes = export_tree(&exporting, &worker, source.path()).await;
+    let file = source.path().join("tree.shoal");
+    let selector = SpaceSelector::id(&worker);
+    (exporting.export_removed_space(&selector, file.clone(), &Carrying::Subtree))
+        .await
+        .unwrap();
+    let bytes = fs::read(file).unwrap();
     // The records stay for a restore here.
     assert_eq!(exporting.removed_spaces().await.unwrap().len(), 3);
 
@@ -205,15 +209,15 @@ async fn a_carried_space_that_cannot_go_refuses_before_anything_ends() {
         .unwrap();
     let file = source.path().join("worker.shoal");
 
-    let refused = manager
-        .export_space(
-            &SpaceSelector::id(&worker.id),
-            UnsavedWork::All,
-            InspectionPolicy::GitOnly,
-            file.clone(),
-            &Carrying::Subtree,
-        )
-        .await;
+    let (selector, all) = (SpaceSelector::id(&worker.id), UnsavedWork::All);
+    let refused = crate::daemon::test_support::move_to_file(
+        &manager,
+        &selector,
+        all,
+        file.clone(),
+        &Carrying::Subtree,
+    )
+    .await;
 
     let error = format!("{:#}", refused.unwrap_err());
     assert!(error.contains("scratch"), "{error}");
@@ -291,15 +295,11 @@ async fn a_selection_leaves_the_other_spaces_below_one_level_up() {
     assert_eq!(decider().await, Some(worker.id.clone()));
     let file = source.path().join("worker.shoal");
 
-    (manager.export_space(
-        &below,
-        UnsavedWork::All,
-        InspectionPolicy::GitOnly,
-        file.clone(),
-        &Carrying::Selected(vec![picked.id.clone()]),
-    ))
-    .await
-    .unwrap();
+    let carrying = Carrying::Selected(vec![picked.id.clone()]);
+    let all = UnsavedWork::All;
+    (crate::daemon::test_support::move_to_file(&manager, &below, all, file.clone(), &carrying))
+        .await
+        .unwrap();
 
     let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
     let carried: Vec<&SpaceId> = (import.manifest.carried.iter())
@@ -332,15 +332,18 @@ async fn a_selection_moves_nothing_while_a_removal_holds_the_space_above() {
         .unwrap();
     let _removing = manager.space_removals.reserve(&top.id).unwrap();
 
-    let refused = manager
-        .export_space(
-            &below,
-            UnsavedWork::All,
-            InspectionPolicy::GitOnly,
-            source.path().join("worker.shoal"),
-            &Carrying::Selected(Vec::new()),
-        )
-        .await;
+    let (file, carrying) = (
+        source.path().join("worker.shoal"),
+        Carrying::Selected(Vec::new()),
+    );
+    let refused = crate::daemon::test_support::move_to_file(
+        &manager,
+        &below,
+        UnsavedWork::All,
+        file,
+        &carrying,
+    )
+    .await;
 
     assert!(refused.is_err());
     assert!(manager.find_space(&worker.id).await.unwrap().is_some());

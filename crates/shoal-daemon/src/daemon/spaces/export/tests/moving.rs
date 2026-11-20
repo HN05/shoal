@@ -103,7 +103,6 @@ async fn a_moving_workspace_stays_until_its_import_ends_it() {
     let selector = SpaceSelector::id(&workspace.id);
 
     let (exported, file) = export_moving(&exporting, &selector, source.path()).await;
-    assert!(exported.removal.is_none());
     assert!(workspace.path.join("work").exists());
     let packaged = packaged_workspace(&exported.manifest);
     assert_eq!(packaged.record.agents.len(), 1);

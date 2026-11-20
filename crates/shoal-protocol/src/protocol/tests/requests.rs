@@ -93,7 +93,7 @@ const REQUESTS: &[&str] = &[
     r#"{"removed_space":{"space":"fix"}}"#,
     r#"{"restore_space":{"space":"fix"}}"#,
     r#"{"drop_restored_sessions":{"space":"fix"}}"#,
-    r#"{"export_space":{"space":"fix","unsaved":{"confirmed":{"files":true,"detached_head":null,"files_restorable":false}},"file":"/work/fix.shoal","carrying":"subtree"}}"#,
+    r#"{"export_removed_space":{"space":"fix","file":"/work/fix.shoal","carrying":"subtree"}}"#,
     r#"{"export_moving_space":{"space":"fix","unsaved":"all","destination":{"kind":"ssh","host":"mini","resume":true},"carrying":{"selected":["split"]}}}"#,
     r#"{"end_moved_space":{"space":"fix"}}"#,
     r#"{"abandon_move":{"space":"fix"}}"#,

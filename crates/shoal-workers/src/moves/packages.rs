@@ -9,7 +9,6 @@ use crate::client::connection::CommandPaths;
 use shoal_core::transfer::{Carrying, MoveDestination, MoveOrder, MoveReport, SpaceMoved};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::RemovedSpace;
-use shoal_protocol::removal::UnsavedWork;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The file the package of the space `id` goes to on its way to
@@ -57,16 +56,15 @@ pub(super) async fn export_removed(
     carrying: &Carrying,
 ) -> Result<SpaceMoved> {
     let selector = SpaceSelector::id(&space.space_id);
-    let unsaved = UnsavedWork::default();
     let exporting =
-        crate::client::transfer::export(paths, selector, unsaved, file.clone(), carrying.clone());
+        crate::client::transfer::export_removed(paths, selector, file.clone(), carrying.clone());
     let exported = exporting.await?;
     Ok(SpaceMoved {
         id: space.space_id.clone(),
         name: space.name.clone(),
         manifest: Some(exported.manifest),
         file: Some(file),
-        removal: exported.removal,
+        removal: None,
         arrived: None,
         warnings: exported.warnings,
     })

@@ -76,30 +76,20 @@ pub(super) async fn importer(origin: &Path) -> (tempfile::TempDir, Arc<Manager>,
 async fn export_removed(manager: &Manager, workspace: &SpaceId) -> Vec<u8> {
     let directory = tempfile::tempdir().unwrap();
     let file = directory.path().join("workspace.shoal");
-    let exported = manager
-        .export_space(
-            &SpaceSelector::id(workspace),
-            UnsavedWork::All,
-            InspectionPolicy::GitOnly,
-            file.clone(),
-            &Carrying::Subtree,
-        )
-        .await
-        .unwrap();
-    assert!(exported.removal.is_some());
-    // The daemon writes new files only.
-    assert!(
-        manager
-            .export_space(
-                &SpaceSelector::from(workspace.as_str()),
-                UnsavedWork::All,
-                InspectionPolicy::GitOnly,
-                file.clone(),
-                &Carrying::Subtree,
-            )
-            .await
-            .is_err()
+    let selector = SpaceSelector::id(workspace);
+    let all = UnsavedWork::All;
+    let moving = crate::daemon::test_support::move_to_file(
+        manager,
+        &selector,
+        all,
+        file.clone(),
+        &Carrying::Subtree,
     );
+    let (_, removal) = moving.await.unwrap();
+    assert!(removal.removed);
+    // The daemon writes new files only.
+    let again = manager.export_removed_space(&selector, file.clone(), &Carrying::Subtree);
+    assert!(again.await.is_err());
     fs::read(file).unwrap()
 }
 
@@ -358,14 +348,8 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
     // Exported again, the record takes them along.
     let directory = tempfile::tempdir().unwrap();
     let again = directory.path().join("again.shoal");
-    importing
-        .export_space(
-            &SpaceSelector::id(&removed[0].space_id),
-            UnsavedWork::All,
-            InspectionPolicy::GitOnly,
-            again.clone(),
-            &Carrying::Subtree,
-        )
+    let selector = SpaceSelector::id(&removed[0].space_id);
+    (importing.export_removed_space(&selector, again.clone(), &Carrying::Subtree))
         .await
         .unwrap();
     let reread = Import::read(&mut &fs::read(again).unwrap()[..]).unwrap();
@@ -443,15 +427,17 @@ async fn export_the_daemon_cannot_write_keeps_the_workspace() {
     let blocked = source.path().join("file");
     fs::write(&blocked, "").unwrap();
 
-    let exported = exporting
-        .export_space(
-            &SpaceSelector::id(&workspace.id),
-            UnsavedWork::All,
-            InspectionPolicy::GitOnly,
-            blocked.join("workspace.shoal"),
-            &Carrying::Subtree,
-        )
-        .await;
+    let selector = SpaceSelector::id(&workspace.id);
+    let file = blocked.join("workspace.shoal");
+    let all = UnsavedWork::All;
+    let exported = crate::daemon::test_support::move_to_file(
+        &exporting,
+        &selector,
+        all,
+        file,
+        &Carrying::Subtree,
+    )
+    .await;
     assert!(exported.is_err());
     assert!(exporting.workspace_by_id(&workspace.id).await.is_ok());
     assert!(workspace.path.exists());
@@ -510,7 +496,6 @@ async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
         )
         .await
         .unwrap();
-    assert!(exported.removal.is_none());
     assert_eq!(exported.manifest.copy, Some(Copied::default()));
     let kept = manager.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(kept.path, workspace.path);

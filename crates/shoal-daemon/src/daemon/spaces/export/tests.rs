@@ -128,16 +128,19 @@ async fn written_pid(file: &Path) -> u32 {
     panic!("{} names no process", file.display());
 }
 
+/// Move the space `selector` names to the new file `file`, letting its end
+/// delete any unsaved work.
 async fn export(manager: &Manager, selector: &str, file: &Path) -> anyhow::Result<ExportedSpace> {
-    manager
-        .export_space(
-            &manager.named(selector).await,
-            UnsavedWork::All,
-            InspectionPolicy::GitOnly,
-            file.to_owned(),
-            &Carrying::Subtree,
-        )
-        .await
+    let selector = manager.named(selector).await;
+    let (all, file) = (UnsavedWork::All, file.to_owned());
+    let moving = crate::daemon::test_support::move_to_file(
+        manager,
+        &selector,
+        all,
+        file,
+        &Carrying::Subtree,
+    );
+    Ok(moving.await?.0)
 }
 
 #[tokio::test]
@@ -148,7 +151,6 @@ async fn a_chat_ends_into_a_package_that_continues_its_session() {
     let file = root.path().join("plan-cache.shoal");
 
     let exported = export(&manager, "plan-cache", &file).await.unwrap();
-    assert!(exported.removal.is_some_and(|removal| removal.removed));
     assert!(exported.warnings.is_empty(), "{:?}", exported.warnings);
     assert!(manager.chats().await.unwrap().is_empty());
     assert_eq!(identity::capture(pid).unwrap(), None);
@@ -212,20 +214,16 @@ async fn a_chat_ends_with_the_agent_its_launcher_started() {
 }
 
 #[tokio::test]
-async fn a_chat_whose_package_cannot_be_written_names_how_it_continues() {
-    let (root, manager, pid) = chat("unwritten").await;
+async fn a_chat_whose_package_cannot_be_written_stays_here() {
+    let (root, manager, _pid) = chat("unwritten").await;
     let chat = manager.chats().await.unwrap().remove(0);
     crate::daemon::test_support::report_session(&manager, &chat.id, "s1").await;
     // A file the package would replace, which it never does.
     let file = root.path().join("unwritten.shoal");
     fs::write(&file, "kept").unwrap();
 
-    let error = export(&manager, "unwritten", &file).await.unwrap_err();
-    let error = format!("{error:#}");
-    let restore = format!("shoal restore {}", chat.id);
-    assert!(error.contains(&restore), "{error}");
-    assert!(manager.chats().await.unwrap().is_empty());
-    assert_eq!(identity::capture(pid).unwrap(), None);
+    assert!(export(&manager, "unwritten", &file).await.is_err());
+    assert_eq!(manager.chats().await.unwrap()[0].id, chat.id);
     assert_eq!(fs::read_to_string(&file).unwrap(), "kept");
 }
 
@@ -316,16 +314,15 @@ async fn a_workspace_moves_with_the_chats_in_it_and_below_it() {
     let grandchild = chat("grandchild", Some(&child.id)).await;
     let file = source.path().join("worker.shoal");
 
-    exporting
-        .export_space(
-            &selector,
-            UnsavedWork::All,
-            InspectionPolicy::GitOnly,
-            file.clone(),
-            &Carrying::Subtree,
-        )
-        .await
-        .unwrap();
+    let all = UnsavedWork::All;
+    let moving = crate::daemon::test_support::move_to_file(
+        &exporting,
+        &selector,
+        all,
+        file.clone(),
+        &Carrying::Subtree,
+    );
+    moving.await.unwrap();
     assert!(exporting.chats().await.unwrap().is_empty());
     let bytes = fs::read(&file).unwrap();
     let import = Import::read(&mut &bytes[..]).unwrap();
@@ -509,13 +506,7 @@ async fn export_removed(
     file: &Path,
 ) -> anyhow::Result<ExportedSpace> {
     manager
-        .export_space(
-            &SpaceSelector::id(id),
-            UnsavedWork::default(),
-            InspectionPolicy::GitOnly,
-            file.to_owned(),
-            &Carrying::Subtree,
-        )
+        .export_removed_space(&SpaceSelector::id(id), file.to_owned(), &Carrying::Subtree)
         .await
 }
 
@@ -524,8 +515,7 @@ async fn a_removed_chat_exports_from_its_record_which_stays() {
     let (root, manager, chat) = removed_chat("notes", "plan", Some("s1")).await;
     let file = root.path().join("notes.shoal");
 
-    let exported = export_removed(&manager, &chat.id, &file).await.unwrap();
-    assert!(exported.removal.is_none());
+    export_removed(&manager, &chat.id, &file).await.unwrap();
     let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
     let packaged = &import.manifest.space.record;
     let kept = packaged.chat().expect("a chat's record");
@@ -571,17 +561,16 @@ async fn a_chat_without_a_repository_moves_and_copies_for_root_dir() {
         .copy_space(&selector, None, copy.clone(), &Carrying::Subtree)
         .await
         .unwrap();
-    let exported = manager
-        .export_space(
-            &selector,
-            UnsavedWork::All,
-            InspectionPolicy::GitOnly,
-            moved.clone(),
-            &Carrying::Subtree,
-        )
-        .await
-        .unwrap();
-    assert!(exported.removal.is_some());
+    let all = UnsavedWork::All;
+    let moving = crate::daemon::test_support::move_to_file(
+        &manager,
+        &selector,
+        all,
+        moved.clone(),
+        &Carrying::Subtree,
+    );
+    let (_, removal) = moving.await.unwrap();
+    assert!(removal.removed);
     assert!(manager.chats().await.unwrap().is_empty());
     for file in [&copy, &moved] {
         let import = Import::read(&mut &fs::read(file).unwrap()[..]).unwrap();
@@ -602,15 +591,15 @@ async fn a_chat_without_a_repository_below_one_moves_with_it_into_root_dir() {
             .await;
     let file = root.path().join("lead.shoal");
     let selector = SpaceSelector::id(&lead.id);
-    (manager.export_space(
+    let all = UnsavedWork::All;
+    let moving = crate::daemon::test_support::move_to_file(
+        &manager,
         &selector,
-        UnsavedWork::All,
-        InspectionPolicy::GitOnly,
+        all,
         file.clone(),
         &Carrying::Subtree,
-    ))
-    .await
-    .unwrap();
+    );
+    moving.await.unwrap();
     let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
     let [carried] = import.manifest.carried.as_slice() else {
         panic!("one chat goes with it: {:?}", import.manifest.carried);
@@ -722,15 +711,15 @@ async fn a_moved_chat_keeps_its_id_with_the_chats_it_carried_below_it() {
     }
     let file = source.path().join("lead.shoal");
     let selector = SpaceSelector::id(&lead.id);
-    (exporting.export_space(
+    let all = UnsavedWork::All;
+    let moving = crate::daemon::test_support::move_to_file(
+        &exporting,
         &selector,
-        UnsavedWork::All,
-        InspectionPolicy::GitOnly,
+        all,
         file.clone(),
         &Carrying::Subtree,
-    ))
-    .await
-    .unwrap();
+    );
+    moving.await.unwrap();
 
     let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
     let sessions = (import.manifest).sessions_on(Some("elsewhere"), None);

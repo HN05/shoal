@@ -1,9 +1,9 @@
-//! Packages of spaces for `shoal move`: the daemon removes a space here,
-//! copies one that keeps running, or stops one's agents for a move that
-//! ends it once imported, each with the spaces below it that the package
-//! carries, and writes what continues them on another machine. Each runs
-//! one path for a space of either kind; what a workspace's worktree adds is
-//! its worktree step.
+//! Packages of spaces for `shoal move`: the daemon stops a space's agents
+//! for a move that ends it once its destination has the package, copies
+//! one that keeps running, or writes a removed one's record, each with the
+//! spaces below it that the package carries, and writes what continues
+//! them on another machine. Each runs one path for a space of either kind;
+//! what a workspace's worktree adds is its worktree step.
 use crate::transfer::ManifestExt;
 use anyhow::{Context, Result};
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
@@ -27,15 +27,13 @@ mod records;
 mod staying;
 mod worktree;
 
-/// A space prepared for its package, ended here or copied, with the
+/// A space prepared for its package, moving, removed or copied, with the
 /// spaces it carries: the repositories they belong to, the package without
-/// its session files, the removal that ended them, the settings describing
-/// their agents, the session files an import kept for them, and what the
-/// package leaves out.
+/// its session files, the settings describing their agents, the session
+/// files an import kept for them, and what the package leaves out.
 struct Prepared {
     repos: Vec<Repository>,
     manifest: Manifest,
-    removal: Option<RemovalResult>,
     settings: Vec<Result<Effective>>,
     kept_sessions: Vec<SessionSource>,
     warnings: Vec<String>,
@@ -59,7 +57,6 @@ impl Prepared {
         Ok(Self {
             repos,
             manifest,
-            removal: None,
             settings,
             kept_sessions,
             warnings,
@@ -68,57 +65,19 @@ impl Prepared {
 }
 
 impl Manager {
-    /// Write a space for another Shoal to the new file `file`, removing it
-    /// here first with the spaces below it that `carrying` carries, of
-    /// those `unsaved` confirms. A selector that names no space exports the
-    /// removal record of the space with that ID, which stays, with those
-    /// its removal took. The daemon writes the file, so closing the
-    /// caller's terminal with the space cannot cut the export short; it
-    /// checks that it can before ending anything, since its file access can
-    /// differ from the caller's. Writing it that fails names the restore
-    /// that opens the space here again.
-    pub async fn export_space(
+    /// Write the removal record of the space with the ID `selector` gives,
+    /// which stays, with the records of the spaces its removal took that
+    /// `carrying` carries, for another Shoal to the new file `file`, once
+    /// the daemon can write there.
+    pub async fn export_removed_space(
         &self,
         selector: &SpaceSelector,
-        unsaved: UnsavedWork,
-        inspection: InspectionPolicy,
         file: std::path::PathBuf,
         carrying: &Carrying,
     ) -> Result<ExportedSpace> {
         crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
-        let prepared = match self.space(selector).await {
-            Ok(space) => (self.end_for_export(space, unsaved, inspection, carrying)).await?,
-            Err(_) => self.prepare_kept_record(selector, carrying).await?,
-        };
-        let id = prepared.manifest.space.record.space_id.clone();
-        (self.write_prepared(prepared, file).await)
-            .with_context(|| format!("shoal restore {id} opens it here again"))
-    }
-
-    /// End `space` for its export through the removal path, with the
-    /// spaces below it that `carrying` carries, stopping their agents, so
-    /// their sessions' files stop changing and only writing them is left,
-    /// and prepare the package of the records their removal keeps.
-    async fn end_for_export(
-        &self,
-        space: Space,
-        unsaved: UnsavedWork,
-        inspection: InspectionPolicy,
-        carrying: &Carrying,
-    ) -> Result<Prepared> {
-        let carried = self.carried_by(&space.id, carrying).await?;
-        carried::ensure_packable(&space, &carried)?;
-        // Each one's own config may describe its agents, and goes with it.
-        let settings = self
-            .agent_settings_of(std::iter::once(&space).chain(&carried))
-            .await;
-        self.leave_uncarried(&space, &carried, carrying).await?;
-        let removal = (self.remove_packaged(&space, &carried, unsaved, inspection, None)).await?;
-        let removed = self.removal_record(&space.id).await?;
-        let carried = self.removal_records(&carried).await?;
-        let mut prepared = self.prepare_removed(removed, carried, settings).await?;
-        prepared.removal = Some(removal);
-        Ok(prepared)
+        let prepared = self.prepare_kept_record(selector, carrying).await?;
+        self.write_prepared(prepared, file).await
     }
 
     /// Prepare the package of the removal record of the space `selector`
@@ -225,7 +184,6 @@ impl Manager {
         let Prepared {
             repos,
             manifest,
-            removal,
             settings,
             kept_sessions,
             mut warnings,
@@ -234,11 +192,7 @@ impl Manager {
             .write_package(&repos, manifest, settings, kept_sessions, file)
             .await?;
         warnings.extend(left_out);
-        Ok(ExportedSpace {
-            manifest,
-            removal,
-            warnings,
-        })
+        Ok(ExportedSpace { manifest, warnings })
     }
 
     /// Write `manifest`'s package, spaces of `repos` or of none, whose

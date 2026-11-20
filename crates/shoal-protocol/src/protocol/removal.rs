@@ -110,13 +110,11 @@ pub enum RemovalMethod {
     /// Delete the agents' session files the restore that opened `space`
     /// returned, once the caller has put them in place.
     DropRestoredSessions { space: SpaceSelector },
-    /// End a space here through the removal path, with the spaces below it
-    /// that `carrying` carries, or take a removed space with those its
-    /// removal took, and write them for another Shoal to the new file
-    /// `file`. The spaces below that it does not carry stay here.
-    ExportSpace {
+    /// Write the removal record of the removed space `space` names by ID,
+    /// which stays, with those of the spaces its removal took that
+    /// `carrying` carries, for another Shoal to the new file `file`.
+    ExportRemovedSpace {
         space: SpaceSelector,
-        unsaved: UnsavedWork,
         file: std::path::PathBuf,
         #[serde(default)]
         carrying: crate::transfer::Carrying,

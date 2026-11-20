@@ -1,7 +1,7 @@
 //! The spaces a package carries with its space: which go with it, and what
 //! the package holds of each once its removal recorded it.
 use crate::model::EventCause;
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::{
     daemon::manager::Manager,
@@ -34,22 +34,6 @@ impl Manager {
             settings.push(self.space_settings(space).await);
         }
         settings
-    }
-
-    /// The records the removals of the spaces `carried` saved.
-    pub(super) async fn removal_records(&self, carried: &[Space]) -> Result<Vec<RemovedSpace>> {
-        let mut records = Vec::new();
-        for space in carried {
-            records.push(self.removal_record(&space.id).await?);
-        }
-        Ok(records)
-    }
-
-    /// The record the removal of the space `id` saved.
-    pub(super) async fn removal_record(&self, id: &SpaceId) -> Result<RemovedSpace> {
-        (self.removed_spaces().await?.into_iter())
-            .find(|removed| &removed.space_id == id)
-            .with_context(|| format!("the removal of {id} kept no record"))
     }
 
     /// What the removal of `space`, whose agents stopped, would record of

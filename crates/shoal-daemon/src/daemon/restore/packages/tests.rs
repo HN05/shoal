@@ -8,7 +8,7 @@ use crate::{
     },
     model::Repository,
     refusal::Reason,
-    removal::{InspectionPolicy, UnsavedWork},
+    removal::UnsavedWork,
     shoal_dirs::{Contents, ShoalDir},
     transfer::Carrying,
 };
@@ -45,10 +45,15 @@ async fn exported_worker_with(
     commit(&worker.path, "work");
     let file = root.path().join("worker.shoal");
     let selector = SpaceSelector::id(&worker.id);
-    let (all, policy) = (UnsavedWork::All, InspectionPolicy::GitOnly);
-    (manager.export_space(&selector, all, policy, file.clone(), &Carrying::Subtree))
-        .await
-        .unwrap();
+    let all = UnsavedWork::All;
+    let moving = crate::daemon::test_support::move_to_file(
+        &manager,
+        &selector,
+        all,
+        file.clone(),
+        &Carrying::Subtree,
+    );
+    moving.await.unwrap();
     (root, fs::read(file).unwrap(), url)
 }
 
@@ -134,15 +139,15 @@ async fn a_scoped_import_records_no_space_outside_its_own_repository() {
     test_support::working_below(&exporting, &other, "worker", &lead.id, "worker").await;
     let file = source.path().join("lead.shoal");
     let selector = SpaceSelector::id(&lead.id);
-    (exporting.export_space(
+    let all = UnsavedWork::All;
+    let moving = crate::daemon::test_support::move_to_file(
+        &exporting,
         &selector,
-        UnsavedWork::All,
-        InspectionPolicy::GitOnly,
+        all,
         file.clone(),
         &Carrying::Subtree,
-    ))
-    .await
-    .unwrap();
+    );
+    moving.await.unwrap();
     let (target, importing) = manager().await;
     let own = repository(target.path(), "own");
     let own = (importing.register_repository(own.to_str().unwrap().into(), None, None))

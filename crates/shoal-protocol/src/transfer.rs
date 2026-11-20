@@ -124,13 +124,10 @@ impl Sessions {
     }
 }
 
-/// A package the daemon wrote, and the removal that preceded it for a
-/// workspace that still existed.
+/// A package the daemon wrote.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExportedSpace {
     pub manifest: Manifest,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub removal: Option<RemovalResult>,
     /// What the package left out, such as session files it could not read.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
