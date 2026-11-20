@@ -1022,7 +1022,12 @@ space's files or processes, such as `setup`, leases, demos,
 `stop --interrupt`, `--leftovers` and `--processes`, `files` and an agent's
 hooks, run only
 on its machine and are refused elsewhere, naming it, as is a command that
-attaches files, which that machine cannot read.
+attaches files, which that machine cannot read. Without a target, the
+pickers of `stop`, `restart`, `rm`, `rename`, `done`, `priority`,
+`progress`, `sleep`, `send`, `conflicts` and `diff` offer the other
+machines' spaces after this machine's, each naming its machine, and an
+offline one with when the hub last saw it; choosing one acts as naming it
+does.
 
 While a space's machine is offline, a message, an answer, an approval
 decision or a stop for it waits at the hub, and the command says so, naming

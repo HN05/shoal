@@ -27,6 +27,8 @@
 //!   picked ([`select_workspace`]), listed by what the command needs of it,
 //!   or picked among running chats as well as a space ([`select_space`],
 //!   [`pick_space`]), or several spaces at once ([`select_spaces`]).
+//! - [`elsewhere`]: the other joined machines' spaces those pickers offer
+//!   after this machine's, for a command that acts on them ([`Offered`]).
 //! - [`rows`]: the aligned labels pickers and lists show ([`workspace_rows`],
 //!   [`aligned`]).
 //!
@@ -36,6 +38,7 @@
 //! caller names with [`require_argument`], or one of several with
 //! [`require_one_of`]. A new kind of input or choice
 //! belongs here, built on these operations, so the next command can use it too.
+mod elsewhere;
 mod fzf;
 mod keys;
 mod linked;
@@ -47,6 +50,8 @@ mod several;
 mod views;
 mod workspaces;
 
+pub use elsewhere::Offered;
+use elsewhere::elsewhere_entries;
 pub use keys::Key;
 pub use linked::pick_linked;
 pub use modes::{ModeChoice, ModeFit};

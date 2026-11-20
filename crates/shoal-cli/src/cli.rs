@@ -14,6 +14,7 @@ pub mod internal;
 pub mod list_status;
 pub mod output;
 mod progress;
+mod reach;
 pub mod recent;
 pub mod scoping;
 pub mod shell;

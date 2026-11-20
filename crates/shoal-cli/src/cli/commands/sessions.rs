@@ -170,7 +170,7 @@ async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Target> {
     let workspaces = crate::client::spaces::list(&ctx.paths)
         .await?
         .into_workspaces();
-    let id = ui::pick_space(ctx, workspaces, &chats, "workspace").await?;
+    let id = ui::pick_space(ctx, workspaces, &chats, ui::Offered::Spaces, "workspace").await?;
     Target::among(&ctx.paths, chats, id).await
 }
 

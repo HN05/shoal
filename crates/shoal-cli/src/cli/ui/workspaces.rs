@@ -6,8 +6,8 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, ensure};
 
 use super::{
-    Cell, Entries, chat_entries, pick, pick_many, picker_width, require_argument, rows_with_status,
-    status_cell,
+    Cell, Entries, Offered, chat_entries, elsewhere_entries, pick, pick_many, picker_width,
+    require_argument, rows_with_status, status_cell,
 };
 use crate::client::output::resume::ResumableSpace;
 use crate::{
@@ -88,9 +88,10 @@ pub async fn choose_workspace(
 /// The spaces, workspaces or chats, a command that acts on several takes:
 /// those named, each once and in order, otherwise the current workspace,
 /// otherwise those picked among the workspaces and the running chats, or
-/// every chat when `stopped_chats`. It ends what it acts on, so it never
-/// defaults to the chat it runs in. A name no workspace has stays as given,
-/// for a chat or the daemon's refusal.
+/// every chat when `stopped_chats`, of this machine and, for a command that
+/// acts on them, the other joined machines. It ends what it acts on, so it
+/// never defaults to the chat it runs in. A name no workspace has stays as
+/// given, for a chat or the daemon's refusal.
 pub async fn select_spaces(
     ctx: &Context,
     names: Vec<SpaceSelector>,
@@ -103,12 +104,12 @@ pub async fn select_spaces(
             Resolution::Current(id) => vec![SpaceSelector::Id(id)],
             Resolution::Picker(workspaces) => {
                 let spaces = crate::client::spaces::list(&ctx.paths).await?;
-                let chats = match stopped_chats {
-                    true => spaces.into_chats(),
-                    false => spaces.into_running_chats(),
+                let (chats, offered) = match stopped_chats {
+                    true => (spaces.into_chats(), Offered::Spaces),
+                    false => (spaces.into_running_chats(), Offered::RunningChats),
                 };
                 require_argument(ctx, "spaces", SPACE)?;
-                let entries = space_entries(ctx, workspaces, &chats).await;
+                let entries = space_entries(ctx, workspaces, &chats, offered).await;
                 ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
                 picked_ids(pick_many(ctx, "Spaces> ", entries)?)
             }
@@ -278,6 +279,7 @@ async fn pick_workspace_or_all(
     workspaces: Vec<Workspace>,
 ) -> Result<Option<SpaceId>> {
     let mut entries = workspace_entries(ctx, workspaces, true).await;
+    entries.extend(elsewhere_entries(ctx, Offered::Workspaces).await);
     entries.push((ALL_ID.to_owned(), ALL_WORKSPACES.to_owned()));
     require_argument(ctx, "workspace", WORKSPACE)?;
     let id = pick(ctx, "Workspace> ", entries)?;
@@ -363,14 +365,17 @@ pub async fn workspace_picker(ctx: &Context) -> Result<SpaceId> {
 /// The command's argument that names the workspace it acts on.
 const WORKSPACE: &str = "workspace";
 
-/// Pick one of `workspaces` for the command's `argument`, the ID or value
-/// name that a refusal without a terminal names.
+/// Pick one of `workspaces`, or for a command that acts on them one of the
+/// other joined machines' workspaces after them, for the command's
+/// `argument`, the ID or value name that a refusal without a terminal
+/// names.
 pub async fn pick_workspace(
     ctx: &Context,
     workspaces: Vec<Workspace>,
     argument: &str,
 ) -> Result<SpaceId> {
-    let entries = workspace_entries(ctx, workspaces, true).await;
+    let mut entries = workspace_entries(ctx, workspaces, true).await;
+    entries.extend(elsewhere_entries(ctx, Offered::Workspaces).await);
     ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
     require_argument(ctx, "workspace", argument)?;
     Ok(SpaceId::from(pick(ctx, "Workspace> ", entries)?))
@@ -381,7 +386,7 @@ pub async fn pick_any_space(ctx: &Context) -> Result<SpaceSelector> {
     let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let workspaces = spaces.workspaces();
     let chats = spaces.into_running_chats();
-    let space = pick_space(ctx, workspaces, &chats, SPACE).await?;
+    let space = pick_space(ctx, workspaces, &chats, Offered::RunningChats, SPACE).await?;
     Ok(SpaceSelector::Id(space))
 }
 
@@ -480,7 +485,8 @@ pub async fn select_other_space(
             let chats = crate::client::spaces::list(&ctx.paths)
                 .await?
                 .into_running_chats();
-            SpaceSelector::Id(pick_space(ctx, workspaces, &chats, SPACE).await?)
+            let offered = Offered::RunningChats;
+            SpaceSelector::Id(pick_space(ctx, workspaces, &chats, offered, SPACE).await?)
         }
     };
     recent::record(ctx, &space).await;
@@ -530,7 +536,7 @@ async fn pick_space_or_all(
     workspaces: Vec<Workspace>,
     chats: &[Chat],
 ) -> Result<Option<SpaceId>> {
-    let mut entries = space_entries(ctx, workspaces, chats).await;
+    let mut entries = space_entries(ctx, workspaces, chats, Offered::RunningChats).await;
     entries.push((ALL_ID.to_owned(), ALL_SPACES.to_owned()));
     require_argument(ctx, "space", SPACE)?;
     let id = pick(ctx, "Space> ", entries)?;
@@ -543,24 +549,31 @@ const SPACE: &str = "space";
 /// How the space picker names `--all`.
 const ALL_SPACES: &str = "All spaces";
 
-/// Pick a space: a workspace, as [`pick_workspace`] offers them, or one of
-/// `chats`, listed after them by name, for the command's `argument`.
-/// Returns the chosen workspace's or chat's ID.
+/// Pick a space: one of `workspaces`, or one of `chats`, listed after them
+/// by name, or for a command that acts on them one of the other joined
+/// machines' spaces `offered` names, for the command's `argument`. Returns
+/// the chosen space's ID.
 pub async fn pick_space(
     ctx: &Context,
     workspaces: Vec<Workspace>,
     chats: &[Chat],
+    offered: Offered,
     argument: &str,
 ) -> Result<SpaceId> {
-    let entries = space_entries(ctx, workspaces, chats).await;
+    let entries = space_entries(ctx, workspaces, chats, offered).await;
     ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
     require_argument(ctx, "space", argument)?;
     Ok(SpaceId::from(pick(ctx, "Space> ", entries)?))
 }
 
 /// The picker entries for `workspaces`, then the `chats` the command's need
-/// offers.
-async fn space_entries(ctx: &Context, workspaces: Vec<Workspace>, chats: &[Chat]) -> Entries {
+/// offers, then the other machines' spaces `offered` names.
+async fn space_entries(
+    ctx: &Context,
+    workspaces: Vec<Workspace>,
+    chats: &[Chat],
+    offered: Offered,
+) -> Entries {
     let mut entries = workspace_entries(ctx, workspaces, true).await;
     let chats: Vec<Chat> = (chats.iter())
         .filter(|chat| ctx.need.offers_chat(chat))
@@ -571,6 +584,7 @@ async fn space_entries(ctx: &Context, workspaces: Vec<Workspace>, chats: &[Chat]
         Palette::stderr(ctx.json),
         picker_width(),
     ));
+    entries.extend(elsewhere_entries(ctx, offered).await);
     entries
 }
 

@@ -19,12 +19,10 @@ pub(in crate::cli::commands) async fn diff(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
-    if let Some(selector) = &workspace
-        && let Some((remote, _)) = machines::space_elsewhere(ctx, selector).await?
-    {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    if let Some((remote, _)) = machines::space_elsewhere(ctx, &workspace).await? {
         return elsewhere::diff(ctx, SpaceSelector::id(&remote.space.id)).await;
     }
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let base = crate::client::workspaces::diff_base(&ctx.paths, workspace.clone()).await?;
     let command = git::diff_command(base.commit.as_str());
     if crate::env::own_chat().is_some() {
