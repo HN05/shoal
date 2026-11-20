@@ -64,6 +64,22 @@ pub enum CoordinationCommand {
         #[command(subcommand)]
         command: crate::cli::args::threads::ThreadCommand,
     },
+    /// List your space's latest changes, numbered, each with who made it
+    /// and its thread, or say who made changes.
+    ///
+    /// Shoal records what your agent's tools change; claim the changes it
+    /// could not tell were yours and unclaim those you did not make.
+    #[command(args_conflicts_with_subcommands = true)]
+    Changes {
+        #[command(subcommand)]
+        command: Option<ChangeCommand>,
+        /// List this thread's changes instead, such as 3.4.
+        #[arg(long)]
+        thread: Option<shoal_protocol::threads::ThreadNumber>,
+        /// Space, a workspace, whose changes to list; defaults to your own.
+        #[arg(short = 's', long, conflicts_with = "thread")]
+        space: Option<SpaceSelector>,
+    },
     /// List, withdraw or clear alerts.
     Alert {
         #[command(subcommand)]
@@ -309,4 +325,33 @@ pub struct SleepTimerArgs {
     /// Wake the agent when the local clock next shows this time, HH:MM.
     #[arg(long, value_name = "HH:MM")]
     pub until: Option<shoal_core::triggers::timer::ClockTime>,
+}
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
+pub enum ChangeCommand {
+    /// Say you made these changes, and with --thread which thread they are
+    /// for.
+    Claim {
+        /// Change numbers, as shoal changes lists them, such as 12, or 3.12
+        /// for change 12 of space 3.
+        #[arg(required = true)]
+        changes: Vec<shoal_protocol::changes::ChangeNumber>,
+        /// Thread they are for, such as 3.4, out of any other.
+        #[arg(long)]
+        thread: Option<shoal_protocol::threads::ThreadNumber>,
+        /// Space whose changes bare numbers name; defaults to your own.
+        #[arg(short = 's', long)]
+        space: Option<SpaceSelector>,
+    },
+    /// Say you did not make these changes, which takes them out of their
+    /// thread.
+    Unclaim {
+        /// Change numbers, as shoal changes lists them.
+        #[arg(required = true)]
+        changes: Vec<shoal_protocol::changes::ChangeNumber>,
+        /// Space whose changes bare numbers name; defaults to your own.
+        #[arg(short = 's', long)]
+        space: Option<SpaceSelector>,
+    },
 }

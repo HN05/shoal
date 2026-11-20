@@ -294,7 +294,11 @@ async fn workspace_command(
             target: workspace,
             session: None,
         }),
-        Action::Diff => Command::Changes(ChangesCommand::Diff { workspace }),
+        Action::Diff => Command::Changes(ChangesCommand::Diff {
+            workspace,
+            thread: None,
+            since: None,
+        }),
         Action::View => view_command(ctx, workspace).await?,
         Action::Execute => execute_command(ctx, workspace).await?,
         Action::Add => add(),

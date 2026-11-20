@@ -194,3 +194,53 @@ pub async fn await_post(
         await_reply(daemon, method, restarted).await?,
     )?)
 }
+
+/// From now on the changes of `space`'s agent are for the thread `thread`,
+/// or for none; the thread they are for.
+pub async fn switch(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+    thread: Option<ThreadNumber>,
+) -> Result<Option<Thread>> {
+    let switched: Option<Box<Thread>> =
+        request(daemon, ThreadMethod::SwitchThread { space, thread }).await?;
+    Ok(switched.map(|thread| *thread))
+}
+
+/// The thread the changes of `space`'s agent are for now.
+pub async fn current(daemon: &impl Daemon, space: SpaceSelector) -> Result<Option<Thread>> {
+    let current: Option<Box<Thread>> =
+        request(daemon, ThreadMethod::CurrentThread { space }).await?;
+    Ok(current.map(|thread| *thread))
+}
+
+/// Put the changes `changes`, bare numbers of `space` or else the caller's
+/// own, into the thread `thread`, out of any other.
+pub async fn add_changes(
+    daemon: &impl Daemon,
+    thread: ThreadNumber,
+    space: Option<SpaceSelector>,
+    changes: Vec<shoal_protocol::changes::ChangeNumber>,
+) -> Result<Vec<shoal_protocol::changes::Change>> {
+    let method = ThreadMethod::AddChanges {
+        thread,
+        space,
+        changes,
+    };
+    request(daemon, method).await
+}
+
+/// Take the changes `changes` out of the thread `thread`.
+pub async fn remove_changes(
+    daemon: &impl Daemon,
+    thread: ThreadNumber,
+    space: Option<SpaceSelector>,
+    changes: Vec<shoal_protocol::changes::ChangeNumber>,
+) -> Result<Vec<shoal_protocol::changes::Change>> {
+    let method = ThreadMethod::RemoveChanges {
+        thread,
+        space,
+        changes,
+    };
+    request(daemon, method).await
+}

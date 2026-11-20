@@ -110,6 +110,8 @@ outputs!(
     shoal_protocol::threads::Listing,
     shoal_protocol::threads::Thread,
     shoal_protocol::chat_marks::ChatMarked,
+    shoal_protocol::changes::Change,
+    shoal_protocol::changes::ChangeDiff,
     shoal_protocol::resources::Overview,
     shoal_protocol::resources::ResourceLease,
     shoal_protocol::reviews::Review,

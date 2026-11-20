@@ -12,7 +12,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ChangesCommand)
         ChangesCommand::Issue { command } => items::issue(&ctx, command).await,
         ChangesCommand::Ci { command } => ci::run(&ctx, command).await,
         ChangesCommand::Branch { command } => branch(&ctx, command).await,
-        ChangesCommand::Diff { workspace } => workspaces::diff(&ctx, workspace).await,
+        ChangesCommand::Diff { workspace, .. } => workspaces::diff(&ctx, workspace).await,
         ChangesCommand::Conflicts { target, workspace } => {
             workspaces::conflicts(&ctx, workspace, target).await
         }

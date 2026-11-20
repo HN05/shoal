@@ -2,10 +2,10 @@ use anyhow::Result;
 
 use crate::cli::{
     args::{
-        coordination::{AlertCommand, CoordinationCommand, FilesCommand},
+        coordination::{AlertCommand, ChangeCommand, CoordinationCommand, FilesCommand},
         threads::ThreadCommand,
     },
-    commands::{alerts, files, priority, progress, send, sleep, spaces, threads},
+    commands::{alerts, changes, files, priority, progress, send, sleep, spaces, threads},
     context::Context,
 };
 
@@ -54,6 +54,28 @@ pub(in crate::cli::commands) async fn run(
             }
         }
         CoordinationCommand::Thread { command } => thread(&ctx, command).await,
+        CoordinationCommand::Changes {
+            command: None,
+            thread,
+            space,
+        } => changes::list(&ctx, thread, space).await,
+        CoordinationCommand::Changes {
+            command:
+                Some(ChangeCommand::Claim {
+                    changes: numbers,
+                    thread,
+                    space,
+                }),
+            ..
+        } => changes::claim(&ctx, numbers, thread, space).await,
+        CoordinationCommand::Changes {
+            command:
+                Some(ChangeCommand::Unclaim {
+                    changes: numbers,
+                    space,
+                }),
+            ..
+        } => changes::unclaim(&ctx, numbers, space).await,
         CoordinationCommand::Alert {
             command: AlertCommand::List(args),
         } => alerts::list(&ctx, args).await,
@@ -194,5 +216,27 @@ async fn thread(ctx: &Context, command: ThreadCommand) -> Result<i32> {
             state,
             print,
         } => threads::list(ctx, space, state, print).await,
+        ThreadCommand::Switch {
+            thread,
+            none,
+            space,
+        } => {
+            let switch = match (thread, none) {
+                (Some(thread), _) => threads::Switch::To(Some(thread)),
+                (None, true) => threads::Switch::To(None),
+                (None, false) => threads::Switch::Show,
+            };
+            threads::switch(ctx, switch, space).await
+        }
+        ThreadCommand::Add {
+            thread,
+            changes,
+            space,
+        } => threads::add(ctx, thread, changes, space).await,
+        ThreadCommand::Remove {
+            thread,
+            changes,
+            space,
+        } => threads::remove(ctx, thread, changes, space).await,
     }
 }

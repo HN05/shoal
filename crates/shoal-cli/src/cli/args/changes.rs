@@ -96,8 +96,18 @@ pub enum ChangesCommand {
         #[command(subcommand)]
         command: BranchCommand,
     },
-    /// Show changes since the branch's fork point.
-    Diff { workspace: Option<SpaceSelector> },
+    /// Show changes since the branch's fork point, or with --thread the
+    /// changes agents made for a thread.
+    Diff {
+        workspace: Option<SpaceSelector>,
+        /// Show the changes made for this thread instead, such as 3.4.
+        #[arg(long, conflicts_with = "workspace")]
+        thread: Option<shoal_protocol::threads::ThreadNumber>,
+        /// Only those made since this post of the thread, numbered as shoal
+        /// view thread shows them.
+        #[arg(long, value_name = "POST", requires = "thread")]
+        since: Option<u32>,
+    },
     /// Check whether the branch merges cleanly into another branch.
     ///
     /// Compares committed HEAD with the target: by default the base workspace's

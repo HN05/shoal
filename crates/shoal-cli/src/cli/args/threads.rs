@@ -5,6 +5,7 @@ use std::{path::PathBuf, str::FromStr};
 use anyhow::{Result, ensure};
 use clap::{Args, Subcommand};
 
+use shoal_protocol::changes::ChangeNumber;
 use shoal_protocol::code::Lines;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::threads::{OutcomeKind, ThreadKind, ThreadNumber, ThreadState};
@@ -66,6 +67,45 @@ pub enum ThreadCommand {
         /// Reopen a resolved thread.
         #[arg(long, conflicts_with_all = ["outcome", "choose", "of", "reason"])]
         undo: bool,
+    },
+    /// Say which thread your changes from now on are for, until the next
+    /// switch or the thread is resolved; without a thread, show the one
+    /// they are for, or pick one on a terminal.
+    Switch {
+        /// Thread number, such as 3.4, or 4 for one of your own space: an
+        /// open thread your space takes part in.
+        #[arg(conflicts_with = "none")]
+        thread: Option<ThreadNumber>,
+        /// Your changes from now on are for no thread.
+        #[arg(long)]
+        none: bool,
+        /// Space, a workspace or chat, whose agent's changes to switch;
+        /// defaults to your own.
+        #[arg(short = 's', long)]
+        space: Option<SpaceSelector>,
+    },
+    /// Put changes into a thread, out of any other.
+    Add {
+        /// Thread number, such as 3.4, or 4 for one of your own space.
+        thread: ThreadNumber,
+        /// Change numbers, as shoal changes lists them, such as 12, or 3.12
+        /// for change 12 of space 3.
+        #[arg(required = true)]
+        changes: Vec<ChangeNumber>,
+        /// Space whose changes bare numbers name; defaults to your own.
+        #[arg(short = 's', long)]
+        space: Option<SpaceSelector>,
+    },
+    /// Take changes out of a thread.
+    Remove {
+        /// Thread number, such as 3.4, or 4 for one of your own space.
+        thread: ThreadNumber,
+        /// Change numbers, as shoal changes lists them.
+        #[arg(required = true)]
+        changes: Vec<ChangeNumber>,
+        /// Space whose changes bare numbers name; defaults to your own.
+        #[arg(short = 's', long)]
+        space: Option<SpaceSelector>,
     },
     /// Choose a thread to read and reply to on a terminal, else list them.
     List {

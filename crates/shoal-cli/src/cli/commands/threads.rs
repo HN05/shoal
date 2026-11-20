@@ -22,10 +22,12 @@ use shoal_protocol::{
 mod listing;
 mod posting;
 mod render;
+mod switching;
 
 pub(super) use listing::{list, view};
 pub(in crate::cli) use posting::{Posting, post, post_in_chat};
 pub(in crate::cli) use render::summary;
+pub(super) use switching::{Switch, add, remove, switch};
 
 /// The daemon takes a scoped process's posts as its space's; this refuses
 /// a descendant that cleared its scope token, which it would take for the

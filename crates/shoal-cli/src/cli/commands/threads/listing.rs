@@ -62,7 +62,7 @@ pub(in crate::cli::commands) async fn read(ctx: &Context, thread: Thread) -> Res
     Ok(0)
 }
 
-fn pick(ctx: &Context, threads: Vec<Thread>) -> Result<Thread> {
+pub(super) fn pick(ctx: &Context, threads: Vec<Thread>) -> Result<Thread> {
     let picked = ui::pick(ctx, "Thread> ", picker_rows(&threads))?;
     threads
         .into_iter()
