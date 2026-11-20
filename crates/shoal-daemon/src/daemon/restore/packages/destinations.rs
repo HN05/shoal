@@ -37,7 +37,7 @@ impl Manager {
     /// The repositories the spaces of the package `manifest` go to: the
     /// one `repository` names for its own space and every space of the
     /// same repository, else the one with the origin each space records.
-    /// `caller`, when scoped, imports its own space only into its own
+    /// `caller`, when scoped, imports every space only into its own
     /// repository and clones none.
     pub(super) async fn destinations(
         &self,
@@ -74,7 +74,7 @@ impl Manager {
     }
 
     /// The repository with the origin of the package `manifest`, as
-    /// [`Self::with_origin`] finds it, a scoped `caller`'s own.
+    /// [`Self::with_origin`] finds it for `caller`.
     async fn own_destination(
         &self,
         manifest: &Manifest,
@@ -83,23 +83,22 @@ impl Manager {
         let origin = (manifest.remote_url.clone()).context(
             "the exported repository has no origin; select the repository to import into with --repo",
         )?;
-        let Some(caller) = caller else {
-            return self.with_origin(origin, None).await;
-        };
-        const REFUSAL: &str = "scoped processes import only into their own repository";
-        let selector = crate::repository::named(origin)?;
-        let own = self.own_repository(caller, &selector, REFUSAL).await?;
-        Ok(self.repository(&own).await?.id)
+        self.with_origin(origin, caller).await
     }
 
     /// The registered repository with `origin`, which the user's import
     /// registers as a clone of it when none here has it; a scoped `caller`
-    /// clones none.
+    /// imports only into its own repository and clones none.
     async fn with_origin(&self, origin: String, caller: Option<&Caller>) -> Result<RepositoryId> {
         let selector = crate::repository::named(origin.clone())?;
+        if let Some(caller) = caller {
+            const REFUSAL: &str = "scoped processes import only into their own repository";
+            let own = self.own_repository(caller, &selector, REFUSAL).await?;
+            return Ok(self.repository(&own).await?.id);
+        }
         match self.repository(selector).await {
             Ok(repository) => Ok(repository.id),
-            Err(error) if caller.is_none() && NotRegistered::refused(&error) => {
+            Err(error) if NotRegistered::refused(&error) => {
                 let source = clone_source(origin).into();
                 let cloned = self.register_repository(source, None, None).await?;
                 Ok(cloned.id)

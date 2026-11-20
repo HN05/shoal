@@ -18,6 +18,16 @@ pub async fn import_file(
     repository: Option<&crate::model::Repository>,
     bytes: &[u8],
 ) -> anyhow::Result<crate::transfer::ImportedPackage> {
+    import_file_as(manager, repository, bytes, None).await
+}
+
+/// [`import_file`] as `caller` asks for it.
+pub async fn import_file_as(
+    manager: &Manager,
+    repository: Option<&crate::model::Repository>,
+    bytes: &[u8],
+    caller: Option<&super::scope::Caller>,
+) -> anyhow::Result<crate::transfer::ImportedPackage> {
     let directory = tempfile::tempdir()?;
     let file = directory.path().join("space.shoal");
     fs::write(&file, bytes)?;
@@ -27,7 +37,7 @@ pub async fn import_file(
         sessions: None,
     };
     let input = super::restore::PackageInput::File(file);
-    manager.import_package(&import, input, None).await
+    manager.import_package(&import, input, caller).await
 }
 
 /// Keep the temporary root alive until all manager operations have finished.

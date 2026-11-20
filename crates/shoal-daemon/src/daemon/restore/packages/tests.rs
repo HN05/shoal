@@ -1,7 +1,12 @@
-use std::fs;
+use std::{fs, path::Path};
 
 use crate::{
-    daemon::test_support::{commit, git, import_file, manager, repository},
+    daemon::manager::Manager,
+    daemon::{
+        scope::Caller,
+        test_support::{self, commit, git, import_file, import_file_as, manager, repository},
+    },
+    model::Repository,
     refusal::Reason,
     removal::{InspectionPolicy, UnsavedWork},
     shoal_dirs::{Contents, ShoalDir},
@@ -104,6 +109,65 @@ async fn a_package_cut_short_records_nothing_and_keeps_none_of_it() {
         .filter(|name| name.to_string_lossy().starts_with("package-"))
         .collect();
     assert!(left.is_empty(), "{left:?}");
+}
+
+/// A repository `name` in `root` whose origin is the URL of a bare
+/// repository beside it, registered with `manager`; that URL.
+async fn with_origin(manager: &Manager, root: &Path, name: &str) -> (Repository, String) {
+    let path = repository(root, name);
+    let origin = root.join(format!("{name}.git"));
+    let origin = origin.to_str().unwrap();
+    git(root, &["init", "-q", "--bare", "-b", "main", origin]);
+    let url = format!("file://{origin}");
+    git(&path, &["remote", "add", "origin", &url]);
+    git(&path, &["push", "-q", "-u", "origin", "main"]);
+    git(&path, &["remote", "set-head", "origin", "main"]);
+    let registered = manager.register_repository(path.to_str().unwrap().into(), None, None);
+    (registered.await.unwrap(), url)
+}
+
+#[tokio::test]
+async fn a_scoped_import_records_no_space_outside_its_own_repository() {
+    let (source, exporting) = manager().await;
+    let (other, url) = with_origin(&exporting, source.path(), "other").await;
+    let lead = test_support::chat(&exporting, "lead", "chat", None, None).await;
+    test_support::working_below(&exporting, &other, "worker", &lead.id, "worker").await;
+    let file = source.path().join("lead.shoal");
+    let selector = SpaceSelector::id(&lead.id);
+    (exporting.export_space(
+        &selector,
+        UnsavedWork::All,
+        InspectionPolicy::GitOnly,
+        file.clone(),
+        &Carrying::Subtree,
+    ))
+    .await
+    .unwrap();
+    let (target, importing) = manager().await;
+    let own = repository(target.path(), "own");
+    let own = (importing.register_repository(own.to_str().unwrap().into(), None, None))
+        .await
+        .unwrap();
+    git(target.path(), &["clone", "-q", &url, "other"]);
+    let clone = target.path().join("other");
+    (importing.register_repository(clone.to_str().unwrap().into(), None, None))
+        .await
+        .unwrap();
+    let here = (importing.create_workspace(&own.id, "here".into(), None, None, None))
+        .await
+        .unwrap();
+    let caller = Caller::of_space(here.id);
+
+    let bytes = fs::read(file).unwrap();
+    let refused = (import_file_as(&importing, None, &bytes, Some(&caller)).await).unwrap_err();
+
+    assert_eq!(Reason::of(&refused), Some(Reason::NotImported));
+    assert!(
+        format!("{refused:#}").contains("own repository"),
+        "{refused:#}"
+    );
+    assert!(importing.removed_spaces().await.unwrap().is_empty());
+    assert!(importing.find_space(&lead.id).await.unwrap().is_none());
 }
 
 /// The manifest of a copy of chat `plan`, whose sessions are newer than its
