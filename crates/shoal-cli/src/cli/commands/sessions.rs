@@ -14,7 +14,6 @@ use shoal_protocol::status::Inspection;
 
 use crate::{
     cli::{
-        agents,
         args::SpaceTargets,
         context::Context,
         recent,
@@ -402,7 +401,7 @@ impl Target {
             Self::Workspace(inspection) => {
                 format!("{} has no agent sessions", inspection.workspace.name)
             }
-            Self::Chat(chat) => match chat.agent.as_ref().and_then(agents::chat_place) {
+            Self::Chat(chat) => match chat.agent.as_ref().and_then(crate::agents::chat_place) {
                 Some(place) => {
                     format!("{} runs in {place}; it has no session to attach", chat.name)
                 }

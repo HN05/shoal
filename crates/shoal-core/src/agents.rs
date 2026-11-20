@@ -258,6 +258,13 @@ pub fn added(name: &Agent) -> Option<&'static Added> {
     ADDED.iter().find(|added| *name == added.name)
 }
 
+/// Where a chat of agent `name` runs when an integration it adds starts it
+/// outside any terminal, such as an app.
+pub fn chat_place(name: &Agent) -> Option<&'static str> {
+    let app = added(name).and_then(|added| added.integration.detached());
+    app.map(detached::App::place)
+}
+
 /// The integration agent `name` runs with under `settings`: its AI tool's,
 /// else that of the integration adding it.
 pub fn agent_integration(settings: &Effective, name: &Agent) -> &'static dyn Integration {

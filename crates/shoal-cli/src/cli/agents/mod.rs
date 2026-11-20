@@ -18,8 +18,8 @@ use anyhow::{Context as _, Result, ensure};
 use crate::{
     agent::{Agent, ModelChoice},
     agents::{
-        ADDED, Added, AgentHome, HomeRecords, added, agent_integration, ensure_available,
-        ensure_forks, integration, resolve_model,
+        ADDED, Added, AgentHome, HomeRecords, agent_integration, ensure_available, ensure_forks,
+        integration, resolve_model,
     },
     ai::IntegrationKind,
     cli::{context::Context, ui},
@@ -34,13 +34,6 @@ pub(in crate::cli) use crate::agents::{installed, names};
 pub(in crate::cli) use desktop::{app, ensure_opens, hand_off};
 pub(in crate::cli) use sessions::{SessionHome, install_kept_session_files};
 pub(in crate::cli) use trust::{cleanup_moved_trust, cleanup_repository_trust};
-
-/// Where a chat of agent `name` runs when an integration it adds starts it
-/// outside any terminal, such as an app.
-pub(in crate::cli) fn chat_place(name: &Agent) -> Option<&'static str> {
-    let app = added(name).and_then(|added| added.integration.detached());
-    app.map(crate::agents::detached::App::place)
-}
 
 /// One launch of an agent in a space, a ready workspace or a chat; settings
 /// are never cached across launches.
