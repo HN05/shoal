@@ -90,7 +90,8 @@ impl Manager {
     }
 
     /// The target of `launch` on the PR `--pr` names, which completes
-    /// `creation` as a positional PR link does.
+    /// `creation` as a positional PR link does, refusing what that link
+    /// refuses beside it.
     async fn flagged_pull_target(
         &self,
         launch: &Launch,
@@ -101,6 +102,10 @@ impl Manager {
         let Some(pull) = pull.named() else {
             anyhow::bail!("--pr needs a number or URL; a terminal picks one without it");
         };
+        ensure!(
+            creation.branch.is_none() && launch.issue.is_none(),
+            "--pr cannot be combined with --branch or --issue"
+        );
         let repo = self.flagged_pull_repository(launch, pull, state).await?;
         let reading = (state.workspaces.as_slice(), fetches, caller);
         (self.pull_target(&repo, pull.clone(), creation, reading)).await?;
@@ -117,7 +122,13 @@ impl Manager {
         state: &LaunchState,
     ) -> Result<Repository> {
         let named = match crate::launches::decided_target(launch)? {
-            Some(StartTarget::Repository(named)) => Some(named),
+            Some(StartTarget::Repository(named)) => {
+                ensure!(
+                    launch.repository.is_none(),
+                    "a positional repository cannot be combined with --repo"
+                );
+                Some(named)
+            }
             Some(_) => anyhow::bail!("--pr cannot be combined with an item or branch link"),
             None => launch.repository.clone(),
         };

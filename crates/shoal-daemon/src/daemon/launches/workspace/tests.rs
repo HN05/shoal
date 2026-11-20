@@ -50,3 +50,36 @@ async fn a_workspace_on_an_unread_issue_is_refused() {
     assert!(manager.list_workspaces().await.unwrap().is_empty());
     assert!(manager.queue_entries().await.unwrap().is_empty());
 }
+
+/// A launch on a PR `--pr` names refuses what a PR link refuses beside it,
+/// before it reads the PR.
+#[tokio::test]
+async fn a_pr_launch_refuses_another_branch_issue_or_repository() {
+    let (temp, manager) = manager().await;
+    let repo = offline_machine(&manager, &temp).await;
+    let on_pr = |change: fn(&mut Launch)| {
+        let mut launch = Launch {
+            pr: Some(ItemChoice::Named("7".parse().unwrap())),
+            issue: None,
+            ..launch_on_issue(&repo, None)
+        };
+        change(&mut launch);
+        launch
+    };
+    for (launch, refusal) in [
+        (
+            on_pr(|l| l.issue = Some(ItemChoice::Named("3".parse().unwrap()))),
+            "--pr cannot",
+        ),
+        (on_pr(|l| l.branch = Some("fix".into())), "--pr cannot"),
+        (
+            on_pr(|l| l.repository = Some("repo".into())),
+            "positional repository",
+        ),
+    ] {
+        let refused = manager.launch(launch, LaunchSource::Manual, None).await;
+        let error = format!("{:#}", refused.unwrap_err());
+        assert!(error.contains(refusal), "{error}");
+    }
+    assert!(manager.list_workspaces().await.unwrap().is_empty());
+}
