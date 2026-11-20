@@ -11,8 +11,8 @@ use shoal_core::execution::recovery::SavedExt as _;
 use shoal_daemon::test_daemon::{
     Manager, StopRequest,
     overload::{
-        bounded, configure_fixture, execution_agent, fixture, record_group, report_session,
-        serve_fixture, wait_launched, wait_paused, wait_started,
+        bounded, configure_disk_fixture, configure_fixture, execution_agent, fixture, record_group,
+        report_session, serve_fixture, wait_launched, wait_paused, wait_started,
     },
 };
 use shoal_ids::execution_ids::ExecutionId;
@@ -1602,6 +1602,7 @@ async fn recovery_disconnect_closes_the_connection_without_forgetting_ownership(
 #[tokio::test]
 async fn critical_disk_space_stops_commands_and_restores_agents_once_space_recovers() {
     let (_root, manager, workspace, serving) = fixture().await;
+    configure_disk_fixture(&manager, "[cleanup]\ngrace_minutes = 0").await;
     let agent = launch(&manager, &workspace);
     let command = launch_child(
         &manager,

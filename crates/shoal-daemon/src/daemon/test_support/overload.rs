@@ -32,13 +32,28 @@ pub fn bounded<T>(future: impl Future<Output = T>) -> impl Future<Output = T> {
 }
 
 /// Replace the fixture's global config with `text`, keeping admission off
-/// the host's memory readings: under the default measured limit, critical
-/// memory on the machine running the tests holds a restore back for as long
-/// as it lasts.
+/// the host's readings: under the default measured limit, critical memory
+/// or disk on the machine running the tests holds a restore back for as
+/// long as it lasts, and under a fixed one, disk does.
 pub async fn configure_fixture(manager: &Manager, text: &str) {
+    configure_limits(manager, text, "enabled = false\n").await;
+}
+
+/// [`configure_fixture`] with disk protection on, for the tests that feed
+/// its monitor readings: at its lowest thresholds, admission's own reading
+/// holds a start only on a host with less than 1 GiB free.
+pub async fn configure_disk_fixture(manager: &Manager, text: &str) {
+    let lowest = "stop_free_gib = 1\ncleanup_free_gib = 1\n\
+                  [machine.overload.warning]\ndisk_free_gib = 1\n";
+    configure_limits(manager, text, lowest).await;
+}
+
+/// Replace the fixture's global config with `text`, a fixed agent limit
+/// and `disk`, the body of `[machine.overload.disk]`.
+async fn configure_limits(manager: &Manager, text: &str, disk: &str) {
     super::configure(
         manager,
-        &format!("{text}\n[machine]\nmax_heavy_agents = 1000\n"),
+        &format!("{text}\n[machine]\nmax_heavy_agents = 1000\n[machine.overload.disk]\n{disk}"),
     )
     .await;
 }
