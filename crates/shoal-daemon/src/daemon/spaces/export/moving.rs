@@ -218,11 +218,11 @@ impl Manager {
             self.hand_over_assignees(&handed.id).await?;
         }
         let leaving = (&record.carrying, &record.destination);
-        let detached = self.leave_uncarried(space, &carried, leaving).await?;
+        self.leave_uncarried(space, &carried, leaving).await?;
         let inspection = InspectionPolicy::GitOnly;
         let removal = self.remove_packaged(space, &carried, moved, inspection, Some(exported));
         let removed = removal.await;
-        self.attach_behind(detached).await;
+        self.attach_behind(space, &carried).await;
         removed
     }
 

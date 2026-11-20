@@ -925,6 +925,11 @@ CREATE TABLE "space_moves" (
     created_at INTEGER NOT NULL
 );
 
+CREATE TABLE moved_parents (
+    space_id TEXT PRIMARY KEY REFERENCES spaces(id) ON DELETE CASCADE,
+    parent_id TEXT NOT NULL
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);

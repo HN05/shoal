@@ -13,13 +13,6 @@ use crate::{
 };
 use shoal_ids::space_ids::SpaceId;
 
-/// A space a move to a joined machine leaves here, detached from the
-/// space it is below while the removal here of that space runs.
-pub(super) struct Detached {
-    space: SpaceId,
-    parent: SpaceId,
-}
-
 impl Manager {
     /// Move the spaces directly below `space` and the spaces `carried` that
     /// do not go with them up to the space above `space`, or to the top
@@ -39,12 +32,9 @@ impl Manager {
     /// Detach the spaces directly below `space` and the spaces `carried`
     /// that do not go with them, which keep the space they are below once
     /// it runs on the joined machine it moves to, so that its removal here
-    /// leaves them; [`Self::attach_behind`] links them to it again.
-    pub(super) async fn detach_behind(
-        &self,
-        space: &Space,
-        carried: &[Space],
-    ) -> Result<Vec<Detached>> {
+    /// leaves them, recording each with that space until
+    /// [`Self::attach_behind`] links it again.
+    pub(super) async fn detach_behind(&self, space: &Space, carried: &[Space]) -> Result<()> {
         let leaving = leaving(space, carried);
         let held = [self.space_removals.clone(), self.completed_owners.clone()];
         (self.store)
@@ -52,19 +42,22 @@ impl Manager {
             .await
     }
 
-    /// Link each of the `detached` spaces below the space it was below
-    /// again, which runs on another joined machine now, or still here when
-    /// its removal failed.
-    pub(super) async fn attach_behind(&self, detached: Vec<Detached>) {
-        let attached = (self.store).write(move |tx| {
-            for Detached { space, parent } in &detached {
-                crate::daemon::tree::set_parent(tx, space, Some(parent))?;
-            }
-            Ok(())
-        });
+    /// Link each space a move left here below the space it was below again,
+    /// which runs on another joined machine now, or still here where its
+    /// removal failed: those below `space` and the spaces `carried`, once
+    /// their removal ended.
+    pub(super) async fn attach_behind(&self, space: &Space, carried: &[Space]) {
+        let leaving = leaving(space, carried);
+        let attached = (self.store).write(move |tx| attach(tx, &leaving));
         if let Err(error) = attached.await {
             crate::daemon::log!("link the spaces a move left here again: {error:#}");
         }
+    }
+
+    /// Link again each space a move left here whose parent no move takes
+    /// any longer, as when the daemon stopped during its removal.
+    pub(crate) async fn attach_settled_behind(&self) -> Result<()> {
+        (self.store).write(attach_settled).await
     }
 }
 
@@ -103,21 +96,54 @@ fn move_up(
 }
 
 /// Detach each space directly below one of `leaving` that is not among
-/// them, as [`staying`] finds them, with the space it was below.
-fn detach(
-    tx: &Transaction<'_>,
-    leaving: &[SpaceId],
-    held: &[Removing; 2],
-) -> Result<Vec<Detached>> {
-    let mut detached = Vec::new();
+/// them, as [`staying`] finds them, recording the space it was below.
+fn detach(tx: &Transaction<'_>, leaving: &[SpaceId], held: &[Removing; 2]) -> Result<()> {
     for (space, parent) in staying(tx, leaving, None, held)? {
         crate::daemon::tree::set_parent(tx, &space.id, None)?;
-        detached.push(Detached {
-            space: space.id,
-            parent,
-        });
+        tx.execute(
+            "INSERT INTO moved_parents(space_id,parent_id) VALUES (?1,?2)
+                ON CONFLICT(space_id) DO UPDATE SET parent_id=excluded.parent_id",
+            params![space.id, parent],
+        )?;
     }
-    Ok(detached)
+    Ok(())
+}
+
+/// Link each space detached from one of `leaving` below it again.
+fn attach(tx: &Transaction<'_>, leaving: &[SpaceId]) -> Result<()> {
+    for parent in leaving {
+        let detached: Vec<SpaceId> = tx
+            .prepare("SELECT space_id FROM moved_parents WHERE parent_id=?1")?
+            .query_map([parent], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        for space in detached {
+            relink(tx, &space, parent)?;
+        }
+    }
+    Ok(())
+}
+
+/// Link each detached space whose parent has no recorded move below it
+/// again.
+fn attach_settled(tx: &Transaction<'_>) -> Result<()> {
+    let detached: Vec<(SpaceId, SpaceId)> = tx
+        .prepare(
+            "SELECT space_id,parent_id FROM moved_parents
+                WHERE parent_id NOT IN (SELECT space_id FROM space_moves)",
+        )?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    for (space, parent) in detached {
+        relink(tx, &space, &parent)?;
+    }
+    Ok(())
+}
+
+/// Link the detached `space` below `parent` again.
+fn relink(tx: &Transaction<'_>, space: &SpaceId, parent: &SpaceId) -> Result<()> {
+    crate::daemon::tree::set_parent(tx, space, Some(parent))?;
+    tx.execute("DELETE FROM moved_parents WHERE space_id=?1", [space])?;
+    Ok(())
 }
 
 /// Each space directly below one of `leaving` that is not among them, with

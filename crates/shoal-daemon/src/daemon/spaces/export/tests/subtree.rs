@@ -358,6 +358,33 @@ async fn a_move_to_a_joined_machine_leaves_the_spaces_below_it_below_it() {
 }
 
 #[tokio::test]
+async fn a_space_left_detached_links_again_once_no_move_takes_its_parent() {
+    let (_source, manager, repo, _origin) = exporter().await;
+    let worker = (manager.create_workspace(&repo.id, "worker".into(), None, None, None))
+        .await
+        .unwrap();
+    let below = SpaceSelector::id(&worker.id);
+    let child = (manager.create_child(&below, "child".into(), None, Default::default()))
+        .await
+        .unwrap();
+    let parent = async || {
+        let id = child.id.clone();
+        (manager.store)
+            .read(move |db| crate::daemon::tree::parent_id(db, &id))
+            .await
+            .unwrap()
+    };
+    // As a daemon that stopped during the moved space's removal left it.
+    let moving = manager.space(&below).await.unwrap();
+    manager.detach_behind(&moving, &[]).await.unwrap();
+    assert_eq!(parent().await, None);
+
+    manager.finish_interrupted_moves().await.unwrap();
+
+    assert_eq!(parent().await, Some(worker.id));
+}
+
+#[tokio::test]
 async fn a_selection_moves_nothing_while_a_removal_holds_the_space_above() {
     let (source, manager, repo, _origin) = exporter().await;
     let top = test_support::chat(&manager, "top", "chat", Some(&repo), None).await;

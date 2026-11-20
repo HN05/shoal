@@ -4268,7 +4268,8 @@ one more flag; each destination sets whether the spaces below go by default,
 and both flags are accepted with every one. `--machine` leaves them by
 default, below the moved space, which keeps its ID on the other machine, so the
 hub routes their events there and they need no new parent; they are detached
-while its removal here runs, which would take them along, and linked again. Without a destination a terminal
+while its removal here runs, which would take them along, and recorded with
+it until they are linked again, which a restart during the removal finishes. Without a destination a terminal
 asks for one, and anything else is refused, so an archive reaches standard
 output only through `-o -`.
 Each package uses the lowest format version that reads it, so an older importer

@@ -78,8 +78,11 @@ impl Manager {
     }
 
     /// Start a worker that finishes each recorded move whose worker went:
-    /// one that holds no lock on it and that no operation runs.
+    /// one that holds no lock on it and that no operation runs; and link
+    /// the spaces a finished move left here below the space they are below
+    /// again, where its daemon stopped before it did.
     pub(crate) async fn finish_interrupted_moves(&self) -> Result<()> {
+        self.attach_settled_behind().await?;
         for record in self.recorded_moves().await? {
             let space = record.space.clone();
             if self.operation_runs_in(&space) || MoveLock::try_take(&self.paths, &space)?.is_none()

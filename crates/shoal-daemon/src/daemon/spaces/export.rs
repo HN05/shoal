@@ -120,24 +120,21 @@ impl Manager {
     /// Leave the spaces below `space` that a selection does not carry here,
     /// as [`Self::leave_behind`] does, or for a move to a joined machine
     /// below the spaces they are below, detached until the removal here
-    /// ends, which [`Self::attach_behind`] then links again; carrying
-    /// every space below it leaves none, and one that joins it meanwhile
-    /// retains it.
+    /// ends, when [`Self::attach_behind`] links them again; carrying every
+    /// space below it leaves none, and one that joins it meanwhile retains
+    /// it.
     async fn leave_uncarried(
         &self,
         space: &Space,
         carried: &[Space],
         (carrying, destination): (&Carrying, &MoveDestination),
-    ) -> Result<Vec<staying::Detached>> {
+    ) -> Result<()> {
         match (carrying, destination) {
-            (Carrying::Subtree, _) => Ok(Vec::new()),
+            (Carrying::Subtree, _) => Ok(()),
             (Carrying::Selected(_), MoveDestination::Machine(_)) => {
                 self.detach_behind(space, carried).await
             }
-            (Carrying::Selected(_), _) => {
-                self.leave_behind(space, carried).await?;
-                Ok(Vec::new())
-            }
+            (Carrying::Selected(_), _) => self.leave_behind(space, carried).await,
         }
     }
 
