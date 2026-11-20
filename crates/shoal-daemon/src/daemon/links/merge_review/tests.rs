@@ -13,9 +13,9 @@ use crate::{
 use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
 use shoal_reviews::store;
 
-/// A workspace on `topic`, whose forge serves PR 1 from `head_branch` at
-/// the workspace's HEAD, in a repository whose `require_for_merge` is
-/// `holds`.
+/// A workspace on `topic`, whose forge serves PR 1 from `head_branch` of
+/// `head_repository` at the workspace's HEAD, in a repository whose
+/// `require_for_merge` is `holds`.
 struct Fixture {
     _root: tempfile::TempDir,
     _server: shoal_forge::test_support::Server,
@@ -26,6 +26,10 @@ struct Fixture {
 
 impl Fixture {
     async fn new(holds: &str, head_branch: &str) -> Self {
+        Self::serving(holds, head_branch, "team/repo").await
+    }
+
+    async fn serving(holds: &str, head_branch: &str, head_repository: &str) -> Self {
         let (root, manager) = manager().await;
         let repo = repository(root.path(), "repo");
         let repo_id = (manager.register_repository(repo.to_str().unwrap().into(), None, None))
@@ -37,11 +41,12 @@ impl Fixture {
             .unwrap();
         let head = shoal_links::pr::current_head(&workspace).await.unwrap();
         let (sha, branch) = (head.to_string(), head_branch.to_owned());
+        let head_repository = head_repository.to_owned();
         let server = shoal_forge::test_support::Server::start(move |_| {
             let pull = serde_json::json!({
                 "number": 1, "title": "Fix", "state": "open", "merged": false,
                 "draft": false,
-                "head": {"ref": branch, "sha": sha, "repo": {"full_name": "team/repo"}},
+                "head": {"ref": branch, "sha": sha, "repo": {"full_name": head_repository}},
                 "base": {"ref": "main"}, "labels": [],
             });
             (200, Vec::new(), pull.to_string().into())
@@ -103,10 +108,41 @@ impl Fixture {
         Ok(merge.merge_head().cloned())
     }
 
+    /// The workspace at a commit linked to PR 1 that `shoal review run`
+    /// reviews a fork's PR in, at the PR's head.
+    async fn at_pull_head(&self) -> Workspace {
+        let repository = self.workspace.repository().into();
+        let start = crate::protocol::CommitStart::Revision(Some(self.head.to_string()));
+        let created = (self.manager).create_commit_workspace(
+            repository,
+            (None, None),
+            start,
+            Default::default(),
+        );
+        let workspace = created.await.unwrap();
+        let host = &self._server.host;
+        let pull: ItemInput = format!("http://{host}/team/repo/pulls/1").parse().unwrap();
+        let selector = SpaceSelector::id(&workspace.id);
+        let (kind, relation) = (
+            crate::forge::items::link::LinkKind::Pr,
+            crate::model::Relation::Assigned,
+        );
+        let linked =
+            (self.manager).link_item(&selector, kind, &pull, relation, Some("Fix".into()), None);
+        linked.await.unwrap();
+        workspace
+    }
+
     /// Record a finished review of the workspace at its HEAD that found
     /// nothing.
     async fn reviewed(&self) {
-        let (id, head) = (self.workspace.id.clone(), self.head.clone());
+        self.reviewed_in(&self.workspace).await;
+    }
+
+    /// Record a finished review of `workspace` at the PR's head that found
+    /// nothing.
+    async fn reviewed_in(&self, workspace: &Workspace) {
+        let (id, head) = (workspace.id.clone(), self.head.clone());
         let write = move |tx: &rusqlite::Transaction<'_>| {
             let at = UnixTime::from_seconds;
             let target = ReviewTarget::Workspace;
@@ -188,6 +224,22 @@ async fn a_pr_whose_branch_no_workspace_owns_is_refused() {
     let refused = f.gate(None, Some(&f.agent())).await.unwrap_err();
     let refused = refused.to_string();
     assert!(refused.contains("elsewhere"), "{refused}");
+    assert!(refused.contains("shoal review run"), "{refused}");
+}
+
+#[tokio::test]
+async fn a_fork_prs_merge_reads_the_reviews_of_the_workspace_at_its_head() {
+    let f = Fixture::serving("agents", "topic", "someone/repo").await;
+    let agent = f.agent();
+    // The fork's branch is not the workspace's own, whatever its name.
+    let refused = f.gate(None, Some(&agent)).await.unwrap_err().to_string();
+    assert!(refused.contains("shoal review run"), "{refused}");
+
+    let at_head = f.at_pull_head().await;
+    f.gate(None, Some(&agent)).await.unwrap_err();
+    f.reviewed_in(&at_head).await;
+    let bound = f.gate(None, Some(&agent)).await.unwrap();
+    assert_eq!(bound, Some(f.head.clone()));
 }
 
 #[tokio::test]
@@ -268,5 +320,5 @@ async fn the_global_config_holds_a_pr_of_an_unregistered_repository() {
         .manager
         .require_pull_review(&context, Some(elsewhere), None, None, None);
     let refused = gated.await.unwrap_err().to_string();
-    assert!(refused.contains("no workspace owns"), "{refused}");
+    assert!(refused.contains("not registered"), "{refused}");
 }

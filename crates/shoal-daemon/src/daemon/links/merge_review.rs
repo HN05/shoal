@@ -1,6 +1,7 @@
 //! The review gate of a PR merge: with `[review] require_for_merge` holding
-//! the caller, a finished review by the workspace that owns the PR's head
-//! branch must cover the head the merge names, with every finding resolved.
+//! the caller, a finished review by the PR's workspace, the one that owns
+//! its head branch or, for a fork's, the one at a commit made for or linked
+//! to it, must cover the head the merge names, with every finding resolved.
 use anyhow::{Context, Result, bail};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_links::place::Access;
@@ -52,10 +53,10 @@ impl Manager {
     /// `head`, else at the head it has now, where `[review]
     /// require_for_merge` of its repository, or of the global config for an
     /// unregistered one, holds `caller`, unless a finished review of the
-    /// workspace that owns its head branch covers that head with every
-    /// finding resolved, and the forge has `binding`, which keeps the merge
-    /// at that head. Returns the head checked, which the merge must name, or
-    /// none where the gate does not hold `caller`.
+    /// PR's workspace covers that head with every finding resolved, and the
+    /// forge has `binding`, which keeps the merge at that head. Returns the
+    /// head checked, which the merge must name, or none where the gate does
+    /// not hold `caller`.
     pub(crate) async fn require_pull_review(
         &self,
         target: &RepoTarget,
@@ -80,7 +81,7 @@ impl Manager {
         let account = self.links.target_account(&target, Access::Read, caller);
         let pull = forge.pull_request(&account, &url).await?;
         let owner = self.pull_owner(repository.as_ref(), &pull).await?;
-        let owner = owner.with_context(|| unowned(&pull))?;
+        let owner = owner.with_context(|| unreviewable(&pull, repository.is_some()))?;
         let head = match head {
             Some(head) => head,
             None => (pull.head_commit.clone()).context("the forge names no PR head")?,
@@ -144,19 +145,22 @@ impl Manager {
         Ok(None)
     }
 
-    /// The workspace of the registered `repository` that owns `pull`'s head
-    /// branch, whose reviews are the PR's; a fork's head branch is in no
-    /// repository here.
+    /// The workspace of the registered `repository` whose reviews are
+    /// `pull`'s, the one `shoal review run` reviews it in: the one that
+    /// owns its head branch, or for a fork's, which is in no repository
+    /// here, the one at a commit made for or linked to it.
     async fn pull_owner(
         &self,
         repository: Option<&RepositoryId>,
         pull: &PullRequest,
     ) -> Result<Option<Workspace>> {
-        let owner = match repository.filter(|_| !pull.fork) {
-            Some(repository) => self.branch_owner_in(repository, &pull.head).await?,
-            None => None,
+        let Some(repository) = repository else {
+            return Ok(None);
         };
-        match owner {
+        if pull.fork {
+            return (self.pull_workspace(repository, &pull.url, pull.number)).await;
+        }
+        match self.branch_owner_in(repository, &pull.head).await? {
             Some(owner) => self.workspace_by_id(&owner).await.map(Some),
             None => Ok(None),
         }
@@ -166,12 +170,21 @@ impl Manager {
 /// Why a merge the gate holds needs the forge to keep it at its head.
 const UNBOUND: &str = "[review] require_for_merge merges only the reviewed head, which this forge cannot hold the merge to";
 
-/// The refusal of a merge of `pull`, which no workspace owns, so no review
-/// covers it.
-fn unowned(pull: &PullRequest) -> String {
+/// The refusal of a merge of `pull`, which has no workspace, so no review
+/// covers it; only a PR of a `registered` repository can have one.
+fn unreviewable(pull: &PullRequest, registered: bool) -> String {
+    let url = &pull.url;
+    let missing = match (registered, pull.fork) {
+        (false, _) => {
+            return format!(
+                "merging {url} needs a review of its head, and its repository is not registered here; merge it on the forge"
+            );
+        }
+        (true, true) => "no workspace is at a commit of it".to_owned(),
+        (true, false) => format!("no workspace owns {}", pull.head),
+    };
     format!(
-        "merging needs a review by the workspace that owns the branch of {}, and no workspace owns {}; merge it on the forge",
-        pull.url, pull.head
+        "merging {url} needs a review of its head, and {missing}; shoal review run {url} reviews the PR"
     )
 }
 

@@ -1645,8 +1645,9 @@ existing PR is not. With `require_for_ready`, `shoal ready` is checked, not
 `ready --undo`. With `require_for_merge`, a local [`shoal merge`](#merge-into-the-default-branch) is checked for the
 commit of the branch that merges, and a [PR merge](#issue-and-pr-actions), with or without
 `--auto`, for the PR's head, which the merge then names to the forge, against the
-reviews of the workspace that owns the PR's branch; a PR whose branch no
-workspace owns, such as a fork's, is refused, to merge on the forge, as is a
+reviews of the workspace `shoal review run <url>` reviews it in: the one that
+owns the PR's branch, or for a fork's PR the one at a commit of it. A PR with no
+such workspace is refused, naming `shoal review run <url>`, as is a
 merge the forge cannot hold to that head, such as `--auto` where `shoal forge
 capabilities` lists `auto_merge_at_head` as unsupported. A merge's gate follows
 the config of the repository it merges into, its checkout's file, local config

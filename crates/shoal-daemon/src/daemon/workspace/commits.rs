@@ -247,7 +247,7 @@ impl Manager {
 
     /// The workspace at a commit of `repository_id` made for PR `number` or
     /// linked to it at `url`.
-    async fn pull_workspace(
+    pub(crate) async fn pull_workspace(
         &self,
         repository_id: &RepositoryId,
         url: &crate::forge::items::reference::ItemRef,
