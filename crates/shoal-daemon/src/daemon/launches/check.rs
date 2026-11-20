@@ -65,9 +65,9 @@ impl Manager {
     }
 
     /// Refuse what every kind of space `launch` could start in for
-    /// `caller` refuses, in `repository`, if any: the parent it goes below
-    /// and the blockers it names; returns the workspace it names with
-    /// `--in`.
+    /// `caller` refuses, in `repository`, if any: the parent it goes below,
+    /// the blockers it names and the issue it starts on, which every kind
+    /// reads; returns the workspace it names with `--in`.
     async fn check_shared(
         &self,
         launch: &Launch,
@@ -77,11 +77,30 @@ impl Manager {
         (self.check_launch_parent(launch, repository, caller)).await?;
         if let Some(repository) = repository {
             (self.named_blockers(repository, &launch.blockers, caller)).await?;
+            self.check_launch_issue(launch, repository, caller).await?;
         }
         match named_workspace(launch) {
             Some(workspace) => self.workspace(workspace).await.map(Some),
             None => Ok(None),
         }
+    }
+
+    /// Refuse the issue `launch` starts on in `repository` where neither
+    /// kind of space could read it, as a chat it names reads it by its URL.
+    async fn check_launch_issue(
+        &self,
+        launch: &Launch,
+        repository: &RepositoryId,
+        caller: Option<&Caller>,
+    ) -> Result<()> {
+        let Some(issue) = launches::named_issue(launch)? else {
+            return Ok(());
+        };
+        let by_url = launch.name.is_some();
+        (self
+            .launch_issue(&issue, (repository, by_url), caller)
+            .await)
+            .map(drop)
     }
 
     /// Refuse the parent `launch` names where its new space, in

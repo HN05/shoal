@@ -53,3 +53,20 @@ async fn a_check_without_a_mode_answers_the_workspace_in_names() {
 
     assert_eq!(checked.map(|workspace| workspace.id), Some(fix.id));
 }
+
+/// A check of a start on an issue whose mode a terminal has yet to pick
+/// refuses an issue no kind of space could read, before the mode picker.
+#[tokio::test]
+async fn a_check_without_a_mode_refuses_an_unreadable_issue() {
+    let (temp, manager) = manager().await;
+    let repo = registered(&manager, &temp).await;
+    let launch = Launch {
+        target: Some(StartTarget::Repository(repo.id.to_string())),
+        issue: Some(shoal_protocol::launches::IssueChoice::Named(
+            "34".parse().unwrap(),
+        )),
+        ..Launch::default()
+    };
+
+    assert!(manager.check_launch(launch, None).await.is_err());
+}
