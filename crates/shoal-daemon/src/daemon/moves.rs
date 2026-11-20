@@ -53,20 +53,23 @@ impl Manager {
     }
 
     /// Refuse a space `id` that is not here to move to `destination`: a
-    /// file takes a removed space too.
+    /// file takes a removed space too, and only a move to another machine
+    /// goes to the machine that has the space, since a file would land
+    /// there rather than where the caller named it.
     async fn ensure_movable(&self, id: &SpaceId, destination: &MoveDestination) -> Result<()> {
         let selector = SpaceSelector::id(id);
         let absent = match self.space(&selector).await {
             Ok(_) => return Ok(()),
             Err(absent) => absent,
         };
-        match destination {
-            MoveDestination::Ssh(_) => Err(absent),
-            _ => self
-                .removed_space(&selector)
-                .await
-                .map(drop)
-                .or(Err(absent)),
+        if let MoveDestination::Ssh(_) = destination {
+            return Err(absent);
+        }
+        match self.removed_space(&selector).await {
+            Ok(_) => Ok(()),
+            Err(_) => anyhow::bail!(
+                "no space {id} here, where the move would write its file; a space on another machine moves from there, or with --ssh"
+            ),
         }
     }
 

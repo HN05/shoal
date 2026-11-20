@@ -22,28 +22,38 @@ pub(super) async fn select(ctx: &Context, args: &MoveArgs, files: bool) -> Resul
     Ok(ids)
 }
 
-/// The IDs of the spaces `names` select, or with `files` of the removed
-/// spaces they select by ID.
+/// The IDs of the spaces `names` select, here or on another joined
+/// machine, or with `files` of the removed spaces they select by ID.
 async fn named(ctx: &Context, names: &[SpaceSelector], files: bool) -> Result<Vec<SpaceId>> {
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let mut ids = Vec::new();
     for selector in names {
-        let present = crate::client::workspaces::present_space(&ctx.paths, selector).await?;
-        let id = match present {
-            Some(space) => space.id,
-            None if files => {
-                let removed = crate::client::removal::removed_space(&ctx.paths, selector.clone());
-                removed
-                    .await
-                    .with_context(|| format!("no space {selector}"))?
-                    .space_id
-            }
-            None => anyhow::bail!("no space {selector}"),
+        let id = match spaces.find(selector) {
+            Some(space) => space.id.clone(),
+            None => elsewhere_or_removed(ctx, selector, files).await?,
         };
         if !ids.contains(&id) {
             ids.push(id);
         }
     }
     Ok(ids)
+}
+
+/// The ID of the space another joined machine has that `selector` names,
+/// or with `files` of the removed space it names by ID.
+async fn elsewhere_or_removed(
+    ctx: &Context,
+    selector: &SpaceSelector,
+    files: bool,
+) -> Result<SpaceId> {
+    if let Some((remote, _)) = super::super::machines::space_elsewhere(ctx, selector).await? {
+        return Ok(remote.space.id);
+    }
+    ensure!(files, "no space {selector}");
+    let removed = crate::client::removal::removed_space(&ctx.paths, selector.clone());
+    Ok((removed.await)
+        .with_context(|| format!("no space {selector}"))?
+        .space_id)
 }
 
 /// The IDs of the current space or those the user picks.

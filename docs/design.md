@@ -4241,7 +4241,11 @@ differs by destination: `-o` writes the package where the daemon writes it,
 stays a plain command and the key must work without a prompt, as Git's
 fetches need. The worker checks the spaces before any ends,
 and where ending them needs the user it ends nothing and asks, so the command,
-or an app, starts the move again with consent to what the question listed.
+or an app, starts the move again with consent to what the question listed. A
+move request for another joined machine's space goes through the hub to that
+machine, which runs it as it runs its own; only the user moves a space from
+another machine, since `ssh` reaches outside the hub's trust, and a file
+stays where its machine writes it, so `-o` takes only this machine's spaces.
 The daemon records each space's move, with its destination and the stopped
 work its spaces saved, before any agent stops, and the package's checkpoints
 and phase once written, and the worker holds a lock on the space while it

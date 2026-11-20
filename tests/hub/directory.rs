@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use super::support::{
     fixture::{Base, home},
-    git, install_test_script, shoal_binary,
+    git, install_test_script, printed, shoal_binary,
     wait::wait_for,
 };
 
@@ -212,4 +212,30 @@ fn a_move_between_joined_machines_hands_the_space_over_with_its_number() {
     let conflict =
         (alerts.as_array().unwrap().iter()).find(|alert| alert["kind"] == "space_conflict");
     assert!(conflict.is_none(), "{alerts}");
+}
+
+#[test]
+fn a_move_from_another_machine_runs_on_the_machine_of_the_space() {
+    let hub = machine(true, "app");
+    let laptop = machine(false, "app");
+    let desk = machine(false, "desk-app");
+    let laptop_id = join(&laptop, &hub, "laptop");
+    let desk_id = join(&desk, &hub, "desk");
+    // Only the laptop's ssh reaches the desk.
+    reach(&laptop, &desk);
+    let work = workspace(&laptop, "work");
+    listed(&hub, &work, &laptop_id);
+
+    let moved = hub.ok(&["move", "--ssh", "desk", &work, "--shoal", shoal_binary()]);
+    assert_eq!(moved["failed"], serde_json::json!([]), "{moved}");
+    listed(&hub, &work, &desk_id);
+
+    // A file the hub names is no file the laptop writes.
+    let other = workspace(&laptop, "other");
+    listed(&hub, &other, &laptop_id);
+    let file = hub.root.path().join("other.shoal");
+    let refused = hub.run(&["move", &other, "-o", file.to_str().unwrap(), "--yes"]);
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    assert!(!file.exists());
+    assert_eq!(listed(&hub, &other, &laptop_id)["name"], "other");
 }

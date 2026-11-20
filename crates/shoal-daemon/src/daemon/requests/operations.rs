@@ -65,6 +65,9 @@ pub(super) async fn handle(
         OperationMethod::StartMove { order, env } => {
             let id = manager.start_move(*order, env, caller).await?;
             let entry = manager.operation(&id, caller).await?;
+            // Another machine's move is followed there as it goes, its
+            // token here standing for its caller only while it starts.
+            let scope = scope.filter(|token| manager.hub.vouched_caller(token).is_none());
             let follower = Follower {
                 manager: manager.clone(),
                 scope: scope.cloned(),

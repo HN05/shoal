@@ -4934,7 +4934,10 @@ space with `ssh -o BatchMode=yes <host> shoal --json restore --from -`, after
 `ssh <host> shoal repo ls` shows Shoal answers there; when it does not, nothing
 ends. The daemon runs `ssh`, which never prompts there: the host must take a
 key that works without a prompt, as Git's fetches need, and a host alias is
-read from the SSH config of the machine that runs the move. `--shoal <path>` names the program there when the remote shell's `PATH`
+read from the SSH config of the machine that runs the move. On a machine
+joined to a hub, the move of another machine's space runs on that machine, as
+the user's, so its `ssh` reaches the host; `-o` writes no file for such a
+space, since that machine would write it. `--shoal <path>` names the program there when the remote shell's `PATH`
 lacks it, and `--no-resume` leaves the agents stopped there, a chat's as a
 workspace's. It checks the spaces as a batch export does and
 asks once before ending them. Each space then moves on its own, after the
