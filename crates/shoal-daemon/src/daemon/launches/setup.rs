@@ -4,7 +4,6 @@
 use anyhow::{Context as _, Result};
 use shoal_protocol::launches::{Launch, Setup};
 
-use super::ManagerReads;
 use crate::{
     config::permissions::PermissionKey,
     daemon::{manager::Manager, permissions::Action, scope::Caller},
@@ -44,8 +43,8 @@ impl Manager {
     /// The action of the repository setup `launch` asks for, in the
     /// repository it names.
     async fn repository_setup(&self, launch: &Launch, caller: &Caller) -> Result<Action> {
-        let reads = ManagerReads::new(self, Some(caller));
-        let repo = (launches::shape::launch_repository(&reads, launch).await?)
+        let state = self.launch_state(launch, Some(caller)).await?;
+        let repo = (launches::shape::launch_repository(&state, launch).await?)
             .context("a repository's setup names its repository")?;
         let action = Action::new(
             PermissionKey::Admin,

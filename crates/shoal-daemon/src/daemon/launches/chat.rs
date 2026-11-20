@@ -131,12 +131,11 @@ impl Manager {
             Some(_) => "pass --repo <repository> or a forge URL",
             None => "pass <repository>",
         };
-        let reads = super::ManagerReads::new(self, caller);
-        let parent = launches::shape::parent_repository(&reads, launch).await?;
-        if let Some(parent) = parent.here()? {
+        let state = self.launch_state(launch, caller).await?;
+        if let Some(parent) = state.parent.here()? {
             return Ok(parent);
         }
-        (launches::shape::directory_repository(&reads, launch, &repos).await?)
+        (launches::shape::directory_repository(launch, &repos, &state.workspaces).await?)
             .with_context(|| format!("no current registered repository; {hint}"))
     }
 }

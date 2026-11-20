@@ -8,7 +8,7 @@ use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::launches::{Launch, SpaceChoice, StartTarget};
 
-use super::{ManagerReads, shape::Shape};
+use super::shape::Shape;
 use crate::{
     daemon::{manager::Manager, scope::Caller},
     launches,
@@ -151,8 +151,8 @@ impl Manager {
                     .clone(),
             ));
         }
-        let reads = ManagerReads::new(self, caller);
-        let found = launches::shape::launch_repository(&reads, launch).await?;
+        let state = self.launch_state(launch, caller).await?;
+        let found = launches::shape::launch_repository(&state, launch).await?;
         Ok(found.map(|repository| repository.id))
     }
 }

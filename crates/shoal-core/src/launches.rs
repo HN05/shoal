@@ -330,7 +330,7 @@ mod reads;
 pub mod shape;
 pub mod workspace;
 
-pub use reads::{LaunchReads, SpaceRepository};
+pub use reads::{LaunchState, SpaceRepository};
 
 #[cfg(test)]
 mod tests;

@@ -8,7 +8,7 @@ use crate::{
         args::create::StartArgs,
         commands::{
             issues,
-            start::{DaemonReads, start_modes},
+            start::{launch_settings, start_modes},
         },
         context::Context,
         ui::{self, ModeChoice, ModeFit},
@@ -64,7 +64,7 @@ pub(super) async fn ensure_located_fit(ctx: &Context, args: &StartArgs) -> Resul
         directory: ui::current_directory()?,
         ..args.launch()
     };
-    let settings = launches::shape::launch_settings(&DaemonReads(ctx), &launch).await?;
+    let settings = launch_settings(ctx, &launch).await?;
     let modes = start_modes(ctx, &launch, &settings).await?;
     let kind = modes::get(&modes, mode)?.kind;
     super::arguments::ensure_flags_fit(args, kind, mode)

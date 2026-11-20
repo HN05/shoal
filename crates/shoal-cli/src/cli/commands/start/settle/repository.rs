@@ -8,7 +8,10 @@ use shoal_protocol::launches::{IssueChoice, Launch, SpaceChoice, StartTarget};
 use super::mode;
 use crate::{
     cli::{
-        commands::{issues, repositories, start::DaemonReads},
+        commands::{
+            issues, repositories,
+            start::{launch_state, space_repository, target_settings},
+        },
         context::Context,
         ui,
     },
@@ -17,7 +20,7 @@ use crate::{
         modes::{ModeName, ModeShapes},
     },
     forge::items::reference::ItemInput,
-    launches::{LaunchReads, SpaceRepository},
+    launches::SpaceRepository,
     model::{Repository, SpaceKind},
     protocol::ConfigTarget,
 };
@@ -59,7 +62,8 @@ pub(super) async fn found(ctx: &Context, launch: &mut Launch) -> Result<Option<R
         }
         return Ok(repos.into_iter().find(|repo| repo.id == id));
     }
-    crate::launches::shape::launch_repository(&DaemonReads(ctx), launch).await
+    let state = launch_state(ctx, launch).await?;
+    crate::launches::shape::launch_repository(&state, launch).await
 }
 
 /// The repository a start in `mode`, one of the `modes` it may take, goes
@@ -78,14 +82,14 @@ pub(super) async fn settled(
 ) -> Result<(Option<Repository>, Effective)> {
     let configured = mode::configured(launch, mode, modes)?;
     if configured.is_some_and(|mode| !mode.repository) {
-        let settings = DaemonReads(ctx).settings(ConfigTarget::Global).await?;
+        let settings = target_settings(ctx, ConfigTarget::Global).await?;
         return Ok((None, settings));
     }
     let hosted = launch.in_workspace.is_some()
         && configured.is_some_and(|mode| mode.kind == SpaceKind::Chat);
     if let (true, Some(repo)) = (hosted, &found) {
         let target = ConfigTarget::Repository(repo.id.clone().into());
-        let settings = DaemonReads(ctx).settings(target).await?;
+        let settings = target_settings(ctx, target).await?;
         return Ok((found, settings));
     }
     if found.is_some() || configured.is_none() || !picks(ctx, launch).await? {
@@ -93,7 +97,7 @@ pub(super) async fn settled(
     }
     let repo = pick(ctx, launch).await?;
     let target = ConfigTarget::Repository(repo.id.clone().into());
-    let settings = DaemonReads(ctx).settings(target).await?;
+    let settings = target_settings(ctx, target).await?;
     Ok((Some(repo), settings))
 }
 
@@ -111,7 +115,7 @@ pub(super) async fn required(
     }
     let repo = pick(ctx, launch).await?;
     let target = ConfigTarget::Repository(repo.id.clone().into());
-    let settings = DaemonReads(ctx).settings(target).await?;
+    let settings = target_settings(ctx, target).await?;
     Ok((Some(repo), settings))
 }
 
@@ -133,8 +137,10 @@ async fn picks(ctx: &Context, launch: &Launch) -> Result<bool> {
     if !ui::can_pick(ctx) {
         return Ok(false);
     }
-    let parent = crate::launches::shape::parent_repository(&DaemonReads(ctx), launch).await?;
-    Ok(parent != SpaceRepository::Unregistered)
+    let Some(parent) = &launch.parent else {
+        return Ok(true);
+    };
+    Ok(space_repository(ctx, parent).await? != SpaceRepository::Unregistered)
 }
 
 /// The current registered repository, else one a terminal picks, which

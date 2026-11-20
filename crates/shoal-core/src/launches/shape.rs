@@ -1,54 +1,57 @@
 //! The kind of space a launch starts in, and whether it has a repository,
 //! from what the launch names and the modes the settings that apply to it
-//! define, which the CLI's start and the daemon's launch decide alike.
+//! define, which the CLI's start and the daemon's launch decide alike from
+//! what they read first.
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::launches::{Launch, Setup, SpaceChoice};
 use shoal_protocol::space_names::SpaceSelector;
 
 use super::{
-    LaunchReads, SpaceRepository, linked_items, positional_repository, workspace::owning_workspace,
+    LaunchState, SpaceRepository, linked_items, positional_repository, workspace::owning_workspace,
 };
 use crate::{
-    config::{
-        Effective, modes,
-        modes::{ModeName, ModeShapes},
-    },
-    model::{Repository, SpaceKind},
+    config::modes::{self, ModeName, ModeShapes},
+    model::{Repository, SpaceKind, Workspace},
     protocol::ConfigTarget,
 };
 
-/// The kind of space `launch` creates in `mode`, which must exist, and
-/// whether `mode` starts it in a repository. A setup starts where [`setup_kind`] says, and the default
-/// mode always exists and always starts in a workspace, so neither reads
-/// settings. In the existing workspace the launch names, the mode's kind
-/// decides whether the agent is the workspace's worker or a chat in its
-/// worktree.
-pub async fn launch_kind(
-    reads: &impl LaunchReads,
-    launch: &Launch,
-    mode: &ModeName,
-) -> Result<(SpaceKind, bool)> {
-    if let Some(setup) = launch.setup {
-        return Ok(setup_kind(setup));
-    }
-    if let Some(workspace) = launch_workspace(launch) {
-        let kind = kind_in_workspace(reads, workspace, mode).await?;
-        return Ok((kind, true));
-    }
-    if *mode == ModeName::DEFAULT {
-        return Ok((SpaceKind::Workspace, true));
-    }
-    let modes = reads.launch_modes(launch).await?;
-    let found = modes::get(&modes, mode)?;
-    Ok((found.kind, found.repository))
+/// What decides the kind of space a launch creates in a mode, and whether
+/// the mode starts it in a repository.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KindSource<'a> {
+    /// The launch alone: a setup starts where [`setup_kind`] says, and the
+    /// default mode always exists and always starts in a workspace, so
+    /// neither reads settings.
+    Decided(SpaceKind, bool),
+    /// The modes of the existing workspace the launch names, which
+    /// [`kind_in_workspace`] reads.
+    Workspace(&'a SpaceSelector),
+    /// The modes the launch may start in, as the machine it starts on
+    /// defines them, which [`mode_kind`] reads.
+    Modes,
 }
 
-/// The modes `launch` may start in on this machine, each with the space it
-/// starts, from the settings [`launch_settings`] finds.
-pub async fn local_modes(reads: &impl LaunchReads, launch: &Launch) -> Result<ModeShapes> {
-    let settings = launch_settings(reads, launch).await?;
-    Ok(modes::shapes(&settings.modes))
+/// What decides the kind of space `launch` creates in `mode`.
+pub fn kind_source<'a>(launch: &'a Launch, mode: &ModeName) -> KindSource<'a> {
+    if let Some(setup) = launch.setup {
+        let (kind, repository) = setup_kind(setup);
+        return KindSource::Decided(kind, repository);
+    }
+    if let Some(workspace) = launch_workspace(launch) {
+        return KindSource::Workspace(workspace);
+    }
+    match *mode == ModeName::DEFAULT {
+        true => KindSource::Decided(SpaceKind::Workspace, true),
+        false => KindSource::Modes,
+    }
+}
+
+/// The kind of space `mode`, which `modes` must define, starts, and
+/// whether it starts it in a repository.
+pub fn mode_kind(modes: &ModeShapes, mode: &ModeName) -> Result<(SpaceKind, bool)> {
+    let found = modes::get(modes, mode)?;
+    Ok((found.kind, found.repository))
 }
 
 /// The kind of space `setup` starts in, and whether it has a repository: a
@@ -61,18 +64,12 @@ fn setup_kind(setup: Setup) -> (SpaceKind, bool) {
     }
 }
 
-/// The role of the agent a launch starts in `mode` in `workspace`: its
-/// worker for a mode that starts in a workspace, else a chat in its
-/// worktree. A mode without a repository is refused.
-async fn kind_in_workspace(
-    reads: &impl LaunchReads,
-    workspace: &SpaceSelector,
-    mode: &ModeName,
-) -> Result<SpaceKind> {
-    let settings = reads
-        .settings(ConfigTarget::Space(workspace.clone()))
-        .await?;
-    let found = modes::get(&settings.modes, mode)?;
+/// The role of the agent a launch starts in `mode` in the existing
+/// workspace it names, whose settings define `modes`: its worker for a
+/// mode that starts in a workspace, else a chat in its worktree. A mode
+/// without a repository is refused.
+pub fn kind_in_workspace(modes: &ModeShapes, mode: &ModeName) -> Result<SpaceKind> {
+    let found = modes::get(modes, mode)?;
     anyhow::ensure!(
         found.repository,
         "mode {mode} starts a chat without a repository, which --in cannot"
@@ -80,22 +77,23 @@ async fn kind_in_workspace(
     Ok(found.kind)
 }
 
-/// The settings whose modes decide the kind of `launch`: those of the
+/// The target whose settings' modes decide the kind of `launch`: the
 /// workspace it starts in, or that already has the branch it names, which
-/// it goes into as `--in` does, else those of the repository
-/// [`launch_repository`] finds, else the global config's.
-pub async fn launch_settings(reads: &impl LaunchReads, launch: &Launch) -> Result<Effective> {
+/// it goes into as `--in` does, else the repository [`launch_repository`]
+/// finds, else the global config.
+pub async fn settings_target(state: &LaunchState, launch: &Launch) -> Result<ConfigTarget> {
     if let Some(workspace) = launch_workspace(launch) {
-        return reads.settings(ConfigTarget::Space(workspace.clone())).await;
+        return Ok(ConfigTarget::Space(workspace.clone()));
     }
-    let target = match launch_repository(reads, launch).await? {
-        Some(repository) => match branch_workspace(reads, launch, &repository).await? {
+    let Some(repository) = launch_repository(state, launch).await? else {
+        return Ok(ConfigTarget::Global);
+    };
+    Ok(
+        match branch_workspace(&state.workspaces, launch, &repository).await? {
             Some(workspace) => ConfigTarget::Space(SpaceSelector::Id(workspace.id)),
             None => ConfigTarget::Repository(repository.id.into()),
         },
-        None => ConfigTarget::Global,
-    };
-    reads.settings(target).await
+    )
 }
 
 /// The registered repository `launch` names, else the one an issue or item
@@ -103,50 +101,35 @@ pub async fn launch_settings(reads: &impl LaunchReads, launch: &Launch) -> Resul
 /// child shares, else that of the checkout or worktree the start was made
 /// in; none below another machine's space in a repository this machine has
 /// not registered, which no other repository stands in for.
-pub async fn launch_repository(
-    reads: &impl LaunchReads,
-    launch: &Launch,
-) -> Result<Option<Repository>> {
-    let repos = reads.repositories().await?;
+pub async fn launch_repository(state: &LaunchState, launch: &Launch) -> Result<Option<Repository>> {
+    let repos = &state.repositories;
     let named = (launch.repository.as_deref()).or(positional_repository(launch));
     let directory = launch.directory.as_deref();
     if let Some(Ok(selector)) =
         named.map(|named| crate::repository::named_in(named.to_owned(), directory))
-        && let Ok(repo) = crate::repository::select(&repos, selector).await
+        && let Ok(repo) = crate::repository::select(repos, selector).await
     {
         return Ok(Some(repo.clone()));
     }
     for item in linked_items(launch) {
-        if let Ok(Some(repo)) = crate::repository::registered_for_item(&repos, item).await {
+        if let Ok(Some(repo)) = crate::repository::registered_for_item(repos, item).await {
             return Ok(Some(repo.clone()));
         }
     }
-    let id = match parent_repository(reads, launch).await? {
-        SpaceRepository::Registered(id) => Some(id),
+    let id = match &state.parent {
+        SpaceRepository::Registered(id) => Some(id.clone()),
         SpaceRepository::Unregistered => None,
-        SpaceRepository::Without => directory_repository(reads, launch, &repos).await?,
+        SpaceRepository::Without => directory_repository(launch, repos, &state.workspaces).await?,
     };
-    Ok(id.and_then(|id| repos.into_iter().find(|repo| repo.id == id)))
-}
-
-/// The repository of the space `launch` names to go below, which a child
-/// shares; [`SpaceRepository::Without`] without a parent.
-pub async fn parent_repository(
-    reads: &impl LaunchReads,
-    launch: &Launch,
-) -> Result<SpaceRepository> {
-    match &launch.parent {
-        Some(parent) => reads.space_repository(parent).await,
-        None => Ok(SpaceRepository::Without),
-    }
+    Ok(id.and_then(|id| repos.iter().find(|repo| repo.id == id).cloned()))
 }
 
 /// The ID of the repository among `repos` of the checkout or worktree the
-/// start of `launch` was made in, or of a workspace there the caller sees.
+/// start of `launch` was made in, or of one of `workspaces` there.
 pub async fn directory_repository(
-    reads: &impl LaunchReads,
     launch: &Launch,
     repos: &[Repository],
+    workspaces: &[Workspace],
 ) -> Result<Option<RepositoryId>> {
     let Some(directory) = &launch.directory else {
         return Ok(None);
@@ -154,21 +137,20 @@ pub async fn directory_repository(
     let Some(root) = crate::repository::worktree_root(directory).await? else {
         return Ok(None);
     };
-    let workspaces = reads.workspaces().await?;
-    Ok(crate::repository::at_root(&root, repos, &workspaces).cloned())
+    Ok(crate::repository::at_root(&root, repos, workspaces).cloned())
 }
 
-/// The workspace of `repo` that already has the branch `launch` names, if
-/// any.
+/// The one of `workspaces` in `repo` that already has the branch `launch`
+/// names, if any.
 async fn branch_workspace(
-    reads: &impl LaunchReads,
+    workspaces: &[Workspace],
     launch: &Launch,
     repo: &Repository,
-) -> Result<Option<crate::model::Workspace>> {
+) -> Result<Option<Workspace>> {
     let Some(branch) = &launch.branch else {
         return Ok(None);
     };
-    owning_workspace(reads, repo, branch).await
+    owning_workspace(workspaces, repo, branch).await
 }
 
 /// The existing workspace `launch` starts in, once named by ID.

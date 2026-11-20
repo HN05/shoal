@@ -214,6 +214,16 @@ impl Manager {
         }
     }
 
+    /// The settings of `target` with the mode and rule files beside the
+    /// global config, which a launch's mode may come from.
+    pub(crate) async fn target_settings_with_templates(
+        &self,
+        target: ConfigTarget,
+    ) -> Result<Effective> {
+        let layers = self.config_layers_for(target).await?;
+        (self.config()).resolve_with_template_files(&layers, &self.paths)
+    }
+
     /// The settings of `space` after every layer of [`Self::space_layers`],
     /// over the daemon's current global config.
     pub(crate) async fn space_settings(&self, space: &Space) -> Result<Effective> {

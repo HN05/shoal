@@ -1,11 +1,10 @@
 //! What a launch that creates or reopens a workspace starts on, as far as
-//! the CLI and the daemon both settle it from what [`LaunchReads`] reads:
-//! a PR's head, the workspace that owns a branch, and the branch an issue
+//! the CLI and the daemon both settle it from the workspaces they read: a
+//! PR's head, the workspace that owns a branch, and the branch an issue
 //! names.
 use anyhow::{Context as _, Result, ensure};
 use shoal_refs::BranchName;
 
-use super::LaunchReads;
 use crate::{
     forge::{ForgeRepo, PullRequest},
     git,
@@ -73,8 +72,9 @@ pub async fn ensure_link_in(repo: &Repository, linked: Option<&ForgeRepo>) -> Re
 
 /// Reopen the workspace that owns the PR's head branch, or open the pushed
 /// branch compared against the PR's base; either way the PR is linked.
+/// `workspaces` are those the caller sees.
 pub async fn pull_creation(
-    reads: &impl LaunchReads,
+    workspaces: &[Workspace],
     repo: &Repository,
     pull: PullRequest,
     creation: &mut Creation,
@@ -89,7 +89,7 @@ pub async fn pull_creation(
         creation.pr = Some(pull.url.into());
         return Ok(());
     }
-    let owned = pull_head_settled(reads, repo, &pull, creation).await?;
+    let owned = pull_head_settled(workspaces, repo, &pull, creation);
     if !owned && creation.base.is_none() {
         let base = pull.base.as_str();
         creation.base = Some(fetch_pull_branch(&repo.path, "base", &base.into()).await?);
@@ -99,16 +99,16 @@ pub async fn pull_creation(
 }
 
 /// Settle `creation` on the head branch of `pull`, a PR from `repo`'s own
-/// origin, without fetching: the local branch of the workspace that owns
-/// it, which reopens, else the pushed branch; returns whether a workspace
-/// owns it.
-pub async fn pull_head_settled(
-    reads: &impl LaunchReads,
+/// origin, without fetching: the local branch of the one of `workspaces`
+/// that owns it, which reopens, else the pushed branch; returns whether a
+/// workspace owns it.
+pub fn pull_head_settled(
+    workspaces: &[Workspace],
     repo: &Repository,
     pull: &PullRequest,
     creation: &mut Creation,
-) -> Result<bool> {
-    let owned = reads.workspaces().await?.iter().any(|workspace| {
+) -> bool {
+    let owned = workspaces.iter().any(|workspace| {
         workspace.repository() == &repo.id
             && workspace.branch().map(BranchName::as_str) == Some(pull.head.as_str())
     });
@@ -116,7 +116,7 @@ pub async fn pull_head_settled(
         true => pull.head.as_str().to_owned(),
         false => git::remote_ref("origin", pull.head.as_str()),
     });
-    Ok(owned)
+    owned
 }
 
 /// Refuse what `creation` asks of a branch when it opens `pull`, a PR from
@@ -167,26 +167,24 @@ pub async fn fetch_pull_branch(
         .with_context(|| format!("could not fetch the PR {role} {branch}"))
 }
 
-/// The workspace of `repo` that already has the branch `name` selects, as
-/// typed or as a remote's, which a start on it goes into.
+/// The one of `workspaces` in `repo` that already has the branch `name`
+/// selects, as typed or as a remote's, which a start on it goes into.
 pub async fn owning_workspace(
-    reads: &impl LaunchReads,
+    workspaces: &[Workspace],
     repo: &Repository,
     name: &str,
 ) -> Result<Option<Workspace>> {
     let remote = git::remote_branch(&repo.path, name).await?;
-    let workspaces = repository_workspaces(reads, repo).await?;
+    let workspaces = repository_workspaces(workspaces, repo);
     Ok(super::on_branch(&workspaces, name, remote.as_ref()).cloned())
 }
 
-/// The workspaces of `repo`.
-pub async fn repository_workspaces(
-    reads: &impl LaunchReads,
-    repo: &Repository,
-) -> Result<Vec<Workspace>> {
-    Ok((reads.workspaces().await?.into_iter())
+/// The ones of `workspaces` in `repo`.
+pub fn repository_workspaces(workspaces: &[Workspace], repo: &Repository) -> Vec<Workspace> {
+    (workspaces.iter())
         .filter(|workspace| workspace.repository() == &repo.id)
-        .collect())
+        .cloned()
+        .collect()
 }
 
 #[cfg(test)]

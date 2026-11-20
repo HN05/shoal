@@ -5,12 +5,12 @@ use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::launches::Launch;
 
-use super::ManagerReads;
 use crate::{
     config::modes::{self, ModeName, ModeShapes},
     daemon::{manager::Manager, scope::Caller},
-    launches,
+    launches::{self, shape::KindSource},
     model::SpaceKind,
+    protocol::ConfigTarget,
 };
 
 /// What a launch starts as.
@@ -39,13 +39,36 @@ impl Manager {
     ) -> Result<Shape> {
         let mode = (launch.mode.clone()).unwrap_or_else(|| launches::default_mode(launch));
         launches::ensure_mode_fits(launch, &mode)?;
-        let reads = ManagerReads::new(self, caller);
-        let (kind, repository) = launches::shape::launch_kind(&reads, launch, &mode).await?;
+        let (kind, repository) = self.launch_kind(launch, &mode, caller).await?;
         Ok(Shape {
             kind,
             mode,
             repository,
         })
+    }
+
+    /// The kind of space `launch` creates in `mode`, which must exist, for
+    /// `caller`, and whether `mode` starts it in a repository: in the
+    /// existing workspace the launch names, the mode's kind there decides
+    /// whether the agent is the workspace's worker or a chat in its
+    /// worktree.
+    async fn launch_kind(
+        &self,
+        launch: &Launch,
+        mode: &ModeName,
+        caller: Option<&Caller>,
+    ) -> Result<(SpaceKind, bool)> {
+        match launches::shape::kind_source(launch, mode) {
+            KindSource::Decided(kind, repository) => Ok((kind, repository)),
+            KindSource::Workspace(workspace) => {
+                let modes = (self.target_modes(ConfigTarget::Space(workspace.clone()))).await?;
+                Ok((launches::shape::kind_in_workspace(&modes, mode)?, true))
+            }
+            KindSource::Modes => {
+                let modes = self.launch_modes(launch, caller).await?;
+                launches::shape::mode_kind(&modes, mode)
+            }
+        }
     }
 
     /// The modes `launch` may start in for `caller`, each with the space it
@@ -70,8 +93,27 @@ impl Manager {
         if let Some(tracked) = tracked {
             return Ok(modes::shapes(&self.tracked_settings(&tracked)?.modes));
         }
-        let reads = ManagerReads::new(self, caller);
-        launches::shape::local_modes(&reads, &launch).await
+        self.local_launch_modes(&launch, caller).await
+    }
+
+    /// The modes `launch` may start in on this machine for `caller`, each
+    /// with the space it starts, from the settings of the target
+    /// [`launches::shape::settings_target`] finds.
+    async fn local_launch_modes(
+        &self,
+        launch: &Launch,
+        caller: Option<&Caller>,
+    ) -> Result<ModeShapes> {
+        let state = self.launch_state(launch, caller).await?;
+        let target = launches::shape::settings_target(&state, launch).await?;
+        self.target_modes(target).await
+    }
+
+    /// The modes the settings of `target` define, each with the space it
+    /// starts.
+    async fn target_modes(&self, target: ConfigTarget) -> Result<ModeShapes> {
+        let settings = self.target_settings_with_templates(target).await?;
+        Ok(modes::shapes(&settings.modes))
     }
 
     /// The ID of the workspace whose worktree the start of `launch` was

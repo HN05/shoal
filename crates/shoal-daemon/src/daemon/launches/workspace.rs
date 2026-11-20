@@ -10,7 +10,6 @@ use shoal_protocol::space_names::SpaceSelector;
 use anyhow::Result;
 
 use super::{
-    ManagerReads,
     shape::Shape,
     space::{Placed, PlacedHome, Placement},
 };
@@ -96,16 +95,17 @@ impl Manager {
         fetches: bool,
         caller: Option<&Caller>,
     ) -> Result<Settling> {
-        let reads = ManagerReads::new(self, caller);
+        let state = self.launch_state(launch, caller).await?;
         let (mut creation, copied) = self.launch_creation(launch, caller).await?;
-        let target =
-            self.workspace_target(launch, &mut creation, copied.as_ref(), (&reads, fetches));
+        let reading = (&state, fetches, caller);
+        let target = self.workspace_target(launch, &mut creation, copied.as_ref(), reading);
         let target = target.await?;
         // What it names to wait for holds a new workspace's agent and an
         // existing one's alike.
         let blockers = (self.named_blockers(&target.repo.id, &launch.blockers, caller)).await?;
         let selector = (&target.repo.id).into();
-        let settled = branch::settle(&reads, (&selector, &target.repo), &mut creation);
+        let settled =
+            self.settle_branch(&state.workspaces, (&selector, &target.repo), &mut creation);
         if let Some(workspace) = settled.await? {
             ensure_takes_existing(launch, &creation, &workspace)?;
             return Ok(Settling::Existing(Box::new(workspace)));
@@ -117,7 +117,8 @@ impl Manager {
             }
             None => None,
         };
-        let creation = self.issue_creation(&reads, &target.repo, creation, issue.as_ref());
+        let creation =
+            self.issue_creation(&state.workspaces, &target.repo, creation, issue.as_ref());
         Ok(Settling::New(Box::new(Settled {
             creation: creation.await?,
             repo: target.repo,
@@ -127,16 +128,16 @@ impl Manager {
     }
 
     /// `creation` on the branch `issue`, read with its title, settles in
-    /// `repo` when nothing else names one.
+    /// `repo` when nothing else names one, among `workspaces`.
     async fn issue_creation(
         &self,
-        reads: &ManagerReads<'_>,
+        workspaces: &[Workspace],
         repo: &Repository,
         creation: Creation,
         issue: Option<&StartIssue>,
     ) -> Result<Creation> {
         let titled = issue.and_then(|issue| Some((&issue.url, issue.title.as_deref()?)));
-        branch::issue_settled(reads, repo, creation, titled).await
+        branch::issue_settled(workspaces, repo, creation, titled).await
     }
 
     /// The issues the forge records as blocking `issue` of `repo`.

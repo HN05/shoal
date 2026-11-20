@@ -6,15 +6,14 @@
 use anyhow::{Context as _, Result, ensure};
 use shoal_protocol::launches::{IssueChoice, Launch, StartTarget};
 
-use super::ManagerReads;
 use crate::{
-    daemon::manager::Manager,
+    daemon::{manager::Manager, scope::Caller},
     forge::{
         PullRequest,
         items::reference::{ItemInput, ItemRef},
     },
-    launches::workspace,
-    model::Repository,
+    launches::{LaunchState, workspace},
+    model::{Repository, Workspace},
     start_plan::Creation,
 };
 
@@ -27,14 +26,15 @@ pub(super) struct Target {
 impl Manager {
     /// The target of `launch`, whose positional argument classifies as a
     /// repository, an issue, or a PR or branch link, which completes
-    /// `creation`, fetching a PR's branches where it `fetches`. A copy goes
-    /// in the copied workspace's repository unless the launch names one.
+    /// `creation`, fetching a PR's branches where it `fetches`, from what
+    /// `state` holds for `caller`. A copy goes in the copied workspace's
+    /// repository unless the launch names one.
     pub(super) async fn workspace_target(
         &self,
         launch: &Launch,
         creation: &mut Creation,
         copied: Option<&Repository>,
-        (reads, fetches): (&ManagerReads<'_>, bool),
+        (state, fetches, caller): (&LaunchState, bool, Option<&Caller>),
     ) -> Result<Target> {
         let issue = match &launch.issue {
             Some(IssueChoice::Pick) => {
@@ -48,7 +48,7 @@ impl Manager {
                 .repository
                 .clone()
                 .or(copied.map(|repo| repo.id.to_string()));
-            return self.target(launch, named, issue, reads).await;
+            return self.target(launch, named, issue, state).await;
         };
         let names_branch = creation.branch.is_some() || issue.is_some();
         if let StartTarget::Repository(named) = positional {
@@ -56,7 +56,7 @@ impl Manager {
                 launch.repository.is_none(),
                 "a positional repository cannot be combined with --repo"
             );
-            return self.target(launch, Some(named), issue, reads).await;
+            return self.target(launch, Some(named), issue, state).await;
         }
         ensure!(
             !names_branch,
@@ -64,13 +64,14 @@ impl Manager {
         );
         if let StartTarget::Issue(issue) = positional {
             let named = launch.repository.clone();
-            return self.target(launch, named, Some(issue), reads).await;
+            return self.target(launch, named, Some(issue), state).await;
         }
-        let repo = self.linked_repository(launch, &positional, reads).await?;
+        let repo = self.linked_repository(launch, &positional, state).await?;
         workspace::ensure_link_in(&repo, positional.linked_repository()).await?;
         match positional {
             StartTarget::Pull(pull) => {
-                (self.pull_target(&repo, pull, creation, (reads, fetches))).await?
+                let reading = (state.workspaces.as_slice(), fetches, caller);
+                (self.pull_target(&repo, pull, creation, reading)).await?
             }
             StartTarget::Branch { branch, .. } => {
                 super::branch::branch_creation(&branch, creation).await?
@@ -84,111 +85,113 @@ impl Manager {
 
     /// The target in the repository `named` names, else that of `issue`'s
     /// URL, else that of the space the launch goes below, which a child
-    /// shares, else that of the checkout or worktree the start was made in.
+    /// shares, else that of the checkout or worktree the start was made in,
+    /// as `state` holds them.
     async fn target(
         &self,
         launch: &Launch,
         named: Option<String>,
         issue: Option<ItemInput>,
-        reads: &ManagerReads<'_>,
+        state: &LaunchState,
     ) -> Result<Target> {
-        let repos = self.repositories().await?;
+        let repos = &state.repositories;
         let repo = match (named, &issue) {
             (Some(named), _) => {
                 let selector = crate::repository::named_in(named, launch.directory.as_deref())?;
-                crate::repository::select(&repos, selector).await?.clone()
+                crate::repository::select(repos, selector).await?.clone()
             }
-            (None, Some(ItemInput::Url(item))) => item_repository(&repos, item).await?.clone(),
+            (None, Some(ItemInput::Url(item))) => item_repository(repos, item).await?.clone(),
             (None, issue) => {
                 let hint = match issue {
                     Some(_) => "pass --repo <repository> or a forge URL",
                     None => "pass <repository>",
                 };
-                let parent = crate::launches::shape::parent_repository(reads, launch).await?;
-                match parent.here()? {
+                match state.parent.clone().here()? {
                     Some(repository) => self.repository(repository).await?,
-                    None => self.current_repository(launch, &repos, reads, hint).await?,
+                    None => self.current_repository(launch, state, hint).await?,
                 }
             }
         };
         Ok(Target { repo, issue })
     }
 
-    /// The registered repository a PR or branch link of `launch` belongs to:
-    /// the one `--repo` names, else its remote's, else the current one.
+    /// The registered repository a PR or branch link of `launch` belongs to,
+    /// among those `state` holds: the one `--repo` names, else its
+    /// remote's, else the current one.
     async fn linked_repository(
         &self,
         launch: &Launch,
         positional: &StartTarget,
-        reads: &ManagerReads<'_>,
+        state: &LaunchState,
     ) -> Result<Repository> {
-        let repos = self.repositories().await?;
+        let repos = &state.repositories;
         if let Some(named) = &launch.repository {
             let directory = launch.directory.as_deref();
             let selector = crate::repository::named_in(named.clone(), directory)?;
-            return Ok(crate::repository::select(&repos, selector).await?.clone());
+            return Ok(crate::repository::select(repos, selector).await?.clone());
         }
         match positional.linked_repository() {
             Some(linked) => {
                 let retry = "shoal start <link> --repo <repository>";
-                let repo = crate::repository::with_remote(&repos, linked.clone(), retry).await?;
+                let repo = crate::repository::with_remote(repos, linked.clone(), retry).await?;
                 Ok(repo.clone())
             }
             None => {
                 let hint = "pass --repo <repository> or a forge URL";
-                self.current_repository(launch, &repos, reads, hint).await
+                self.current_repository(launch, state, hint).await
             }
         }
     }
 
     /// The repository of the checkout or worktree the start of `launch` was
-    /// made in, refused with `hint` when there is none.
+    /// made in, as `state` holds them, refused with `hint` when there is
+    /// none.
     async fn current_repository(
         &self,
         launch: &Launch,
-        repos: &[Repository],
-        reads: &ManagerReads<'_>,
+        state: &LaunchState,
         hint: &str,
     ) -> Result<Repository> {
-        let id = (crate::launches::shape::directory_repository(reads, launch, repos).await?)
+        let (repos, workspaces) = (&state.repositories, &state.workspaces);
+        let id = (crate::launches::shape::directory_repository(launch, repos, workspaces).await?)
             .with_context(|| format!("no current registered repository; {hint}"))?;
         self.repository(id).await
     }
 
-    /// Complete `creation` for the PR `pull` names in `repo`, fetching its
-    /// branches where it `fetches`.
+    /// Complete `creation` for the PR `pull` names in `repo`, which
+    /// `caller` reads, among the `workspaces` it sees, fetching its branches
+    /// where it `fetches`.
     async fn pull_target(
         &self,
         repo: &Repository,
         pull: ItemRef,
         creation: &mut Creation,
-        (reads, fetches): (&ManagerReads<'_>, bool),
+        (workspaces, fetches, caller): (&[Workspace], bool, Option<&Caller>),
     ) -> Result<()> {
-        let context = self.launch_read_context(&repo.id, reads.caller).await?;
-        let pull = self
-            .pull_request(&context, &pull.into(), reads.caller)
-            .await?;
+        let context = self.launch_read_context(&repo.id, caller).await?;
+        let pull = self.pull_request(&context, &pull.into(), caller).await?;
         match fetches {
-            true => workspace::pull_creation(reads, repo, pull, creation).await,
-            false => pull_settled(reads, repo, &pull, creation).await,
+            true => workspace::pull_creation(workspaces, repo, pull, creation).await,
+            false => pull_settled(workspaces, repo, &pull, creation),
         }
     }
 }
 
 /// Settle `creation` on `pull` as [`workspace::pull_creation`] does, short
 /// of fetching its branches: a fork's head refuses what only a branch
-/// takes, and another PR opens its head branch, in the workspace that owns
-/// it if any.
-async fn pull_settled(
-    reads: &ManagerReads<'_>,
+/// takes, and another PR opens its head branch, in the one of `workspaces`
+/// that owns it if any.
+fn pull_settled(
+    workspaces: &[Workspace],
     repo: &Repository,
     pull: &PullRequest,
     creation: &mut Creation,
 ) -> Result<()> {
-    match pull.fork {
-        true => workspace::ensure_fork_opens(pull, creation),
-        false => (workspace::pull_head_settled(reads, repo, pull, creation).await).map(drop),
+    if pull.fork {
+        return workspace::ensure_fork_opens(pull, creation);
     }
+    workspace::pull_head_settled(workspaces, repo, pull, creation);
+    Ok(())
 }
 
 /// The only registered repository among `repos` whose origin the issue

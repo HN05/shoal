@@ -9,7 +9,7 @@ use shoal_protocol::launches::Launch;
 use super::StartOptions;
 use crate::cli::{
     args::create::StartArgs,
-    commands::start::{DaemonReads, start_modes},
+    commands::start::{launch_settings, start_modes},
     context::Context,
 };
 
@@ -49,7 +49,7 @@ pub(in crate::cli::commands) async fn settle(
     arguments::check(&mut launch)?;
     repository::take_parents(ctx, &launch).await?;
     let found = repository::found(ctx, &mut launch).await?;
-    let settings = crate::launches::shape::launch_settings(&DaemonReads(ctx), &launch).await?;
+    let settings = launch_settings(ctx, &launch).await?;
     let modes = start_modes(ctx, &launch, &settings).await?;
     let choice = mode::decided(ctx, &launch, found.as_ref(), (&settings, &modes)).await?;
     let (mut found, mut settings) = match choice.clone().named() {

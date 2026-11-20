@@ -9,11 +9,8 @@ use shoal_protocol::protocol::Launched;
 use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
-    config::{Effective, modes::ModeShapes},
     daemon::{manager::Manager, scope::Caller},
-    launches::{self, LaunchReads, SpaceRepository},
-    model::{Repository, Workspace},
-    protocol::ConfigTarget,
+    launches,
 };
 
 mod blockers;
@@ -24,61 +21,9 @@ mod elsewhere;
 mod setup;
 mod shape;
 mod space;
+mod state;
 mod worker;
 mod workspace;
-
-/// Shoal's state as a launch for `caller` reads it.
-pub(super) struct ManagerReads<'a> {
-    manager: &'a Manager,
-    caller: Option<&'a Caller>,
-}
-
-impl<'a> ManagerReads<'a> {
-    fn new(manager: &'a Manager, caller: Option<&'a Caller>) -> Self {
-        Self { manager, caller }
-    }
-
-    /// Refuse what opening the existing branch `existing` in the repository
-    /// `repository` names would refuse, such as a local branch of its name
-    /// that does not track it.
-    async fn check_opens(
-        &self,
-        repository: &crate::repository::Selector,
-        existing: &str,
-    ) -> Result<()> {
-        let options = crate::daemon::workspace::NewWorktreeOptions::default();
-        (self
-            .manager
-            .check_creation(repository, None, Some(existing), options))
-        .await
-    }
-}
-
-impl LaunchReads for ManagerReads<'_> {
-    async fn repositories(&self) -> Result<Vec<Repository>> {
-        self.manager.repositories().await
-    }
-
-    async fn workspaces(&self) -> Result<Vec<Workspace>> {
-        let spaces = self.manager.visible_spaces(self.caller).await?;
-        Ok((spaces.into_iter())
-            .filter_map(|space| space.into_workspace().ok())
-            .collect())
-    }
-
-    async fn space_repository(&self, space: &SpaceSelector) -> Result<SpaceRepository> {
-        self.manager.parent_repository(space).await
-    }
-
-    async fn settings(&self, target: ConfigTarget) -> Result<Effective> {
-        let layers = self.manager.config_layers_for(target).await?;
-        (self.manager.config()).resolve_with_template_files(&layers, &self.manager.paths)
-    }
-
-    async fn launch_modes(&self, launch: &Launch) -> Result<ModeShapes> {
-        self.manager.launch_modes(launch, self.caller).await
-    }
-}
 
 impl Manager {
     /// Start an agent as `launch`, which `source` made, asks for `caller`.

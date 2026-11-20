@@ -16,7 +16,6 @@ use shoal_protocol::protocol::{LaunchMethod, Launched, Operation, WorkspaceMetho
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::CommitId;
 
-use super::ManagerReads;
 use crate::{
     daemon::{hub::Named, manager::Manager, scope::Caller},
     git::clone_base::CloneBase,
@@ -368,11 +367,11 @@ impl Manager {
             let repository = crate::repository::select(&repositories, selector).await?;
             return Ok(Some(repository.clone()));
         }
-        if self.parent_unregistered(launch).await? {
+        let state = self.launch_state(launch, caller).await?;
+        if state.parent == launches::SpaceRepository::Unregistered {
             return Ok(None);
         }
-        let reads = ManagerReads::new(self, caller);
-        launches::shape::launch_repository(&reads, launch).await
+        launches::shape::launch_repository(&state, launch).await
     }
 
     /// Whether the space `launch` goes below runs on another machine in a

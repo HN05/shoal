@@ -6,9 +6,8 @@ use shoal_protocol::space_names::SpaceSelector;
 
 use super::super::StartOptions;
 use crate::{
-    cli::{commands::start::DaemonReads, context::Context},
+    cli::{commands::start::target_settings, context::Context},
     config::Effective,
-    launches::LaunchReads,
     model::Workspace,
     protocol::ConfigTarget,
 };
@@ -32,7 +31,7 @@ pub(super) async fn check(
 /// The settings of `workspace`, which the start goes into.
 pub(super) async fn workspace_settings(ctx: &Context, workspace: &Workspace) -> Result<Effective> {
     let target = ConfigTarget::Space(SpaceSelector::id(&workspace.id));
-    DaemonReads(ctx).settings(target).await
+    target_settings(ctx, target).await
 }
 
 /// Whether the issue of the `checked` workspace the start goes into

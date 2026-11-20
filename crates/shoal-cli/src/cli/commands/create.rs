@@ -13,14 +13,12 @@ use crate::client::{
 use crate::{
     cli::{
         args::create::CreateArgs,
-        commands::start::DaemonReads,
         context::Context,
         output::{Palette, Style},
         shell, terminal,
         ui::{self, Fallback},
     },
     client::connection::CommandPaths,
-    launches::LaunchReads,
     model::{SpaceRef, Workspace},
     protocol::{
         CommitStart, CreationOptions,
@@ -204,7 +202,9 @@ async fn commit_repository(
     copied: Option<RepositoryId>,
 ) -> Result<crate::repository::Selector> {
     let own = match parent {
-        Some(parent) => DaemonReads(ctx).space_repository(parent).await?.here()?,
+        Some(parent) => crate::cli::commands::start::space_repository(ctx, parent)
+            .await?
+            .here()?,
         None => None,
     };
     let repository = match own.or(copied) {

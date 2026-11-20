@@ -1,37 +1,20 @@
-//! What resolving a launch reads of Shoal's state: the CLI asks the
-//! daemon, which reads its own.
+//! What resolving a launch reads of Shoal's state, which its caller reads
+//! first: the CLI asks the daemon, which reads its own.
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_protocol::launches::Launch;
-use shoal_protocol::space_names::SpaceSelector;
 
-use crate::{
-    config::{Effective, modes::ModeShapes},
-    model::{Repository, Workspace},
-    protocol::ConfigTarget,
-};
+use crate::model::{Repository, Workspace};
 
 /// What resolving a launch reads of Shoal's state, for its caller.
-// Only Shoal's own crates implement and await it.
-#[allow(async_fn_in_trait)]
-pub trait LaunchReads {
+#[derive(Debug, Clone)]
+pub struct LaunchState {
     /// The registered repositories.
-    async fn repositories(&self) -> Result<Vec<Repository>>;
-
+    pub repositories: Vec<Repository>,
     /// The workspaces the caller sees.
-    async fn workspaces(&self) -> Result<Vec<Workspace>>;
-
-    /// The repository of the space `space` names.
-    async fn space_repository(&self, space: &SpaceSelector) -> Result<SpaceRepository>;
-
-    /// The settings of `target`, with the mode and rule files beside the
-    /// global config, which a launch's mode may come from.
-    async fn settings(&self, target: ConfigTarget) -> Result<Effective>;
-
-    /// The modes `launch` may start in, each with the space it starts, as
-    /// the machine it starts on defines them where
-    /// [`super::shape::launch_settings`] would find them there.
-    async fn launch_modes(&self, launch: &Launch) -> Result<ModeShapes>;
+    pub workspaces: Vec<Workspace>,
+    /// The repository of the space the launch goes below, which a child
+    /// shares; [`SpaceRepository::Without`] without one.
+    pub parent: SpaceRepository,
 }
 
 /// The repository of a space as this machine knows it.

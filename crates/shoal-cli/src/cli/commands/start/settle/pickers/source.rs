@@ -5,12 +5,7 @@ use anyhow::Result;
 use shoal_protocol::launches::{IssueChoice, Launch, StartTarget};
 
 use crate::{
-    cli::{
-        client,
-        commands::{issues, start::DaemonReads},
-        context::Context,
-        ui,
-    },
+    cli::{client, commands::issues, context::Context, ui},
     config::modes::ModeName,
     forge::items::{link::ItemKind, list::Search, reference::ItemInput},
     launches::workspace,
@@ -170,7 +165,9 @@ async fn pick_add_source(
             let number = ui::pick_item(ctx, "Pull request> ", "pull requests", pulls.await?)?;
             let pull = client::pull_request(&ctx.paths, context, ItemInput::Number(number));
             let pull = pull.await?;
-            workspace::pull_creation(&DaemonReads(ctx), repo, pull, creation).await?;
+            let workspaces = crate::client::spaces::list(&ctx.paths).await?;
+            let workspaces = workspaces.into_workspaces();
+            workspace::pull_creation(&workspaces, repo, pull, creation).await?;
         }
     }
     Ok(None)
