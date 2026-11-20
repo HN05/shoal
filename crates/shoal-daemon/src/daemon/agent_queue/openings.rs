@@ -59,7 +59,10 @@ impl Manager {
     async fn link_start_pr(&self, workspace: Workspace, pr: &ItemInput, caller: Option<&Caller>) {
         let selector = SpaceSelector::id(&workspace.id);
         let (kind, relation) = (LinkKind::Pr, Relation::Assigned);
-        let linked = (self.link_item(&selector, kind, pr, relation, None, caller)).await;
+        let linked = (self
+            .links
+            .link_item(self, &selector, kind, pr, relation, None, caller))
+        .await;
         let warnings = match linked {
             Ok(linked) => linked.warnings,
             Err(error) => vec![format!("cannot link PR {pr}: {error:#}")],

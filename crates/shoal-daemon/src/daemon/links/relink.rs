@@ -62,7 +62,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Vec<String> {
         let Some(caller) = caller else {
-            return match self.record_items(id, recorded(links)).await {
+            return match self.links.record_items(id, recorded(links)).await {
                 Ok(()) => Vec::new(),
                 Err(error) => vec![format!("cannot link opened and related items: {error:#}")],
             };
@@ -70,7 +70,8 @@ impl Manager {
         let mut warnings = Vec::new();
         for (relation, item) in recorded(links) {
             let (selector, input) = (SpaceSelector::id(id), item.url.clone().into());
-            let linked = self.link_item(
+            let linked = self.links.link_item(
+                self,
                 &selector,
                 item.kind(),
                 &input,

@@ -14,12 +14,12 @@ use shoal_forge_types::{
     ForgeRepo,
     items::{
         link::{ItemKind, Selection},
-        reference::ItemRef,
+        reference::{ItemInput, ItemRef},
     },
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    model::{Repository, Selected, Space, Workspace},
+    model::{LinkedItem, Repository, Selected, Space, Workspace},
     space_names::SpaceSelector,
 };
 
@@ -73,6 +73,19 @@ pub trait Spaces: Send + Sync {
     fn wake_cleanup(&self);
 }
 
+/// The CI runs spaces link, which the daemon reads until they move.
+pub trait Runs: Send + Sync {
+    /// The CI run `input` names, by number in the repository `space` acts
+    /// in or by URL, as `caller` may link it, with its workflow as its
+    /// title.
+    fn linked_run<'a>(
+        &'a self,
+        space: &'a LinkSpace,
+        input: &'a ItemInput,
+        caller: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<LinkedItem>>;
+}
+
 /// The watches of a space's linked items.
 pub trait Watches: Send + Sync {
     /// Start the watches of `items`, which the space `id` just linked; the
@@ -124,9 +137,9 @@ pub trait Forges: Send + Sync {
 
 /// Everything links need of the daemon, which each of their operations
 /// that reaches beyond them takes.
-pub trait Daemon: Spaces + Watches + Forges + Permissions + Coordinators {}
+pub trait Daemon: Spaces + Watches + Runs + Forges + Permissions + Coordinators {}
 
-impl<T> Daemon for T where T: Spaces + Watches + Forges + Permissions + Coordinators {}
+impl<T> Daemon for T where T: Spaces + Watches + Runs + Forges + Permissions + Coordinators {}
 
 /// What links check of a space in their own transactions. Its methods run
 /// on the store's thread, so they are not futures.

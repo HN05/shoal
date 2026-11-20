@@ -6,7 +6,7 @@ use crate::test_daemon::Connect as _;
 use shoal_core::execution::recovery::LastSessionExt as _;
 use shoal_core::removal::{InspectionPolicy, UnsavedWork};
 use shoal_daemon::test_daemon::{
-    ApprovalRequestExt as _, HANG, TestDaemon, link_space, store_issue_proposal,
+    ApprovalRequestExt as _, HANG, TestDaemon, link_item, link_space, store_issue_proposal,
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::alerts::Sender;
@@ -142,17 +142,16 @@ async fn a_subscription_sends_its_snapshot_then_each_kind_of_change() {
     })
     .await;
 
-    manager
-        .link_item(
-            &SpaceSelector::id(&workspace.id),
-            LinkKind::Issue,
-            &"40".parse().unwrap(),
-            Relation::Related,
-            Some("Report".into()),
-            None,
-        )
-        .await
-        .unwrap();
+    link_item(
+        manager,
+        &SpaceSelector::id(&workspace.id),
+        LinkKind::Issue,
+        &"40".parse().unwrap(),
+        Relation::Related,
+        Some("Report".into()),
+    )
+    .await
+    .unwrap();
     until(&mut subscription, changed(RecordKind::Link)).await;
 
     let question = ask(manager, &workspace.id).await;
@@ -344,17 +343,16 @@ async fn a_chat_reaches_a_subscription_with_its_agent_links_and_messages() {
         .await
         .unwrap();
     let selector = SpaceSelector::id(&chat.id);
-    manager
-        .link_item(
-            &selector,
-            LinkKind::Issue,
-            &"40".parse().unwrap(),
-            Relation::Related,
-            Some("Report".into()),
-            None,
-        )
-        .await
-        .unwrap();
+    link_item(
+        manager,
+        &selector,
+        LinkKind::Issue,
+        &"40".parse().unwrap(),
+        Relation::Related,
+        Some("Report".into()),
+    )
+    .await
+    .unwrap();
     manager
         .send_space_message(None, &selector, "Plan it".into(), Vec::new())
         .await

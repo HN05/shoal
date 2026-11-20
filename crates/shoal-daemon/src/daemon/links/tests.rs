@@ -1,4 +1,5 @@
 use super::*;
+use crate::{daemon::manager::Manager, forge::items::link::LinkKind, model::Relation};
 use crate::{
     daemon::test_support::{git, manager, repository},
     model::LinkedItem,
@@ -6,6 +7,7 @@ use crate::{
 use shoal_daemon_base::events::EventKind;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::events::{EventItem, LinkEvent};
+use shoal_protocol::links::Linked;
 use shoal_protocol::space_names::SpaceSelector;
 
 async fn workspace_with_origin() -> (tempfile::TempDir, std::sync::Arc<Manager>, SpaceId) {
@@ -54,7 +56,9 @@ async fn linking_an_item_again_replaces_its_recorded_relation() {
     let issue = "https://github.com/team/repo/issues/40";
     let pr = "https://github.com/team/repo/pull/41";
     manager
+        .links
         .link_item(
+            &*manager,
             &SpaceSelector::id(&id),
             LinkKind::Issue,
             &"40".parse().unwrap(),
@@ -65,7 +69,9 @@ async fn linking_an_item_again_replaces_its_recorded_relation() {
         .await
         .unwrap();
     manager
+        .links
         .link_item(
+            &*manager,
             &SpaceSelector::id(&id),
             LinkKind::Issue,
             &issue.parse().unwrap(),
@@ -76,7 +82,9 @@ async fn linking_an_item_again_replaces_its_recorded_relation() {
         .await
         .unwrap();
     manager
+        .links
         .link_item(
+            &*manager,
             &SpaceSelector::id(&id),
             LinkKind::Pr,
             &"41".parse().unwrap(),
@@ -87,7 +95,9 @@ async fn linking_an_item_again_replaces_its_recorded_relation() {
         .await
         .unwrap();
     manager
+        .links
         .link_item(
+            &*manager,
             &SpaceSelector::id(&id),
             LinkKind::Issue,
             &"40".parse().unwrap(),
@@ -117,7 +127,9 @@ async fn linking_an_item_again_replaces_its_recorded_relation() {
     assert_eq!(linked[1].relation, Relation::Related);
     assert!(
         manager
+            .links
             .link_item(
+                &*manager,
                 &SpaceSelector::id(&id),
                 LinkKind::Issue,
                 &"https://github.com/other/repo/issues/1".parse().unwrap(),
@@ -130,7 +142,9 @@ async fn linking_an_item_again_replaces_its_recorded_relation() {
     );
 
     manager
+        .links
         .unlink_items(
+            &*manager,
             &SpaceSelector::id(&id),
             Relation::Related,
             Some(LinkKind::Pr),
@@ -140,7 +154,9 @@ async fn linking_an_item_again_replaces_its_recorded_relation() {
         .unwrap();
     assert!(
         manager
+            .links
             .unlink_items(
+                &*manager,
                 &SpaceSelector::id(&id),
                 Relation::Related,
                 Some(LinkKind::Pr),
@@ -150,12 +166,26 @@ async fn linking_an_item_again_replaces_its_recorded_relation() {
             .is_err()
     );
     manager
-        .unlink_items(&SpaceSelector::id(&id), Relation::Related, None, None)
+        .links
+        .unlink_items(
+            &*manager,
+            &SpaceSelector::id(&id),
+            Relation::Related,
+            None,
+            None,
+        )
         .await
         .unwrap();
     assert!(
         manager
-            .unlink_items(&SpaceSelector::id(&id), Relation::Related, None, None)
+            .links
+            .unlink_items(
+                &*manager,
+                &SpaceSelector::id(&id),
+                Relation::Related,
+                None,
+                None
+            )
             .await
             .is_err()
     );
@@ -172,7 +202,8 @@ async fn linking_an_item_again_replaces_its_recorded_relation() {
 async fn link_issue(manager: &Manager, id: &SpaceId, relation: Relation) -> Result<Linked> {
     let input = "7".parse().unwrap();
     let title = Some("Fix".into());
-    (manager.link_item(
+    (manager.links.link_item(
+        manager,
         &SpaceSelector::id(id),
         LinkKind::Issue,
         &input,
@@ -206,7 +237,9 @@ async fn assigned_relation_uses_the_issue_link() {
     let (_root, manager, id) = workspace_with_origin().await;
     let issue = "https://github.com/team/repo/issues/7";
     manager
+        .links
         .link_item(
+            &*manager,
             &SpaceSelector::id(&id),
             LinkKind::Issue,
             &"7".parse().unwrap(),
@@ -224,7 +257,9 @@ async fn assigned_relation_uses_the_issue_link() {
         Relation::Assigned
     );
     manager
+        .links
         .unlink_items(
+            &*manager,
             &SpaceSelector::id(&id),
             Relation::Assigned,
             Some(LinkKind::Issue),
@@ -235,7 +270,14 @@ async fn assigned_relation_uses_the_issue_link() {
     assert!((manager.workspace_by_id(&id).await.unwrap().links.issues).is_empty());
     for kind in [Some(LinkKind::Issue), None] {
         let unlinked = manager
-            .unlink_items(&SpaceSelector::id(&id), Relation::Assigned, kind, None)
+            .links
+            .unlink_items(
+                &*manager,
+                &SpaceSelector::id(&id),
+                Relation::Assigned,
+                kind,
+                None,
+            )
             .await;
         assert!(unlinked.is_err());
     }
@@ -248,7 +290,9 @@ async fn a_moved_worktree_takes_no_recorded_relations() {
     std::fs::remove_dir_all(&path).unwrap();
     assert!(
         manager
+            .links
             .link_item(
+                &*manager,
                 &SpaceSelector::id(&id),
                 LinkKind::Issue,
                 &"40".parse().unwrap(),
@@ -261,7 +305,14 @@ async fn a_moved_worktree_takes_no_recorded_relations() {
     );
     assert!(
         manager
-            .unlink_items(&SpaceSelector::id(&id), Relation::Related, None, None)
+            .links
+            .unlink_items(
+                &*manager,
+                &SpaceSelector::id(&id),
+                Relation::Related,
+                None,
+                None
+            )
             .await
             .is_err()
     );
@@ -330,7 +381,18 @@ async fn an_issue_linked_without_its_title_gets_the_forges() {
     let link = |input: &str, relation| {
         let input = input.parse().unwrap();
         let (manager, selector) = (&manager, &selector);
-        async move { (manager.link_item(selector, LinkKind::Issue, &input, relation, None, None)).await }
+        async move {
+            (manager.links.link_item(
+                &**manager,
+                selector,
+                LinkKind::Issue,
+                &input,
+                relation,
+                None,
+                None,
+            ))
+            .await
+        }
     };
     for (input, relation) in [("5", Relation::Assigned), ("6", Relation::Related)] {
         assert_eq!(link(input, relation).await.unwrap().title_error, None);
@@ -353,7 +415,18 @@ async fn an_assigned_pr_keeps_its_title_until_it_is_unlinked() {
     let link = |input: &str, relation, title: Option<&str>| {
         let (input, title) = (input.parse().unwrap(), title.map(Into::into));
         let (manager, selector) = (&manager, &selector);
-        async move { (manager.link_item(selector, LinkKind::Pr, &input, relation, title, None)).await }
+        async move {
+            (manager.links.link_item(
+                &**manager,
+                selector,
+                LinkKind::Pr,
+                &input,
+                relation,
+                title,
+                None,
+            ))
+            .await
+        }
     };
     let titles = async || {
         let links = manager.workspace_by_id(&id).await.unwrap().links;
@@ -376,7 +449,13 @@ async fn an_assigned_pr_keeps_its_title_until_it_is_unlinked() {
     let assigned = vec![Some("Renamed".into()), Some("PR 6".into())];
     assert_eq!(titles().await, (assigned, Vec::new()));
     // An unlinked PR takes its title with it.
-    let unlink = manager.unlink_items(&selector, Relation::Assigned, Some(LinkKind::Pr), None);
+    let unlink = manager.links.unlink_items(
+        &*manager,
+        &selector,
+        Relation::Assigned,
+        Some(LinkKind::Pr),
+        None,
+    );
     unlink.await.unwrap();
     let recorded: i64 = (manager.store)
         .read(|tx| Ok(tx.query_row("SELECT COUNT(*) FROM space_pr_titles", [], |row| row.get(0))?))

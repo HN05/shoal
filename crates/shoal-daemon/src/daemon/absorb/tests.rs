@@ -122,9 +122,11 @@ async fn a_done_workspace_folds_into_its_parent_which_takes_its_work_and_records
         url: ISSUE.parse().unwrap(),
         title: Some("Related issue".into()),
     };
-    (manager.record_items(&worker.id, vec![(Relation::Related, related)]))
-        .await
-        .unwrap();
+    (manager
+        .links
+        .record_items(&worker.id, vec![(Relation::Related, related)]))
+    .await
+    .unwrap();
     let report = worker.path.join("report.md");
     fs::write(&report, "findings\n").unwrap();
     let attached = NewFile::from(report.clone());

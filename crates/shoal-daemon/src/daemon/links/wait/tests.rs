@@ -2997,6 +2997,7 @@ async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
         title: None,
     };
     manager
+        .links
         .record_items(&id, vec![(crate::model::Relation::Related, run)])
         .await
         .unwrap();
@@ -3064,6 +3065,7 @@ async fn background_polls_a_finished_run_until_its_finish_is_queued() {
         title: None,
     };
     manager
+        .links
         .record_items(&id, vec![(crate::model::Relation::Related, run)])
         .await
         .unwrap();

@@ -463,6 +463,7 @@ async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
     let pr = item("https://forge.test/o/r/pulls/2");
     let issue = item("https://forge.test/o/r/issues/3");
     manager
+        .links
         .record_items(
             &workspace.id,
             vec![(Relation::Opened, pr), (Relation::Related, issue.clone())],

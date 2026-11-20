@@ -289,7 +289,9 @@ async fn links_cannot_change_while_a_checkpoint_is_restored() {
         .await
         .unwrap();
     f.manager
+        .links
         .link_item(
+            &*f.manager,
             &SpaceSelector::id(&f.workspace.id),
             LinkKind::Pr,
             &"5".parse().unwrap(),

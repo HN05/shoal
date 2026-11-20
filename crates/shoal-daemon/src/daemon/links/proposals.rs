@@ -911,6 +911,23 @@ pub async fn link_space(
     manager.links.link_space(manager, selector).await
 }
 
+/// Link the item `input` names to the space `selector` names, as the user
+/// links it, for other crates' tests.
+#[cfg(feature = "test-support")]
+pub async fn link_item(
+    manager: &Manager,
+    selector: &shoal_protocol::space_names::SpaceSelector,
+    kind: LinkKind,
+    input: &ItemInput,
+    relation: crate::model::Relation,
+    title: Option<String>,
+) -> Result<shoal_protocol::links::Linked> {
+    let link = manager
+        .links
+        .link_item(manager, selector, kind, input, relation, title, None);
+    link.await
+}
+
 /// A pending issue proposal from `workspace`, which tests read.
 #[cfg(any(test, feature = "test-support"))]
 pub async fn store_issue_proposal(manager: &Manager, space: &LinkSpace) -> ApprovalRequest {

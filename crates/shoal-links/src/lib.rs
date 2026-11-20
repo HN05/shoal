@@ -5,6 +5,7 @@ pub mod daemon;
 pub mod forges;
 pub mod issue;
 pub mod linked;
+mod linking;
 mod memories;
 pub mod place;
 pub mod pr;

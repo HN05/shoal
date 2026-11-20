@@ -28,7 +28,7 @@ pub mod test_daemon {
     pub use crate::daemon::approvals::ApprovalRequestExt;
     pub use crate::daemon::capacity::fake_disk_free;
     pub use crate::daemon::disk::Monitor as DiskMonitor;
-    pub use crate::daemon::links::proposals::{link_space, store_issue_proposal};
+    pub use crate::daemon::links::proposals::{link_item, link_space, store_issue_proposal};
     pub use crate::daemon::operations::fake;
     pub use crate::daemon::overload::Pressure;
     pub use crate::daemon::queued_starts::fake::STARTED as STARTED_QUEUED;

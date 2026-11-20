@@ -6,6 +6,7 @@ mod reach;
 
 use shoal_ids::space_ids::SpaceId;
 use shoal_links::place::{Access, Place};
+use shoal_links::space::LinkSpace;
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -92,7 +93,11 @@ impl Manager {
             return;
         };
         let url = item.url.clone();
-        match self.record_items(id, vec![(Relation::Opened, item)]).await {
+        match self
+            .links
+            .record_items(id, vec![(Relation::Opened, item)])
+            .await
+        {
             Ok(()) => started.linked = true,
             Err(error) => started.warnings.push(format!(
                 "could not link {url}: {error:#}; link it with shoal link ci {url} opened"
@@ -252,3 +257,37 @@ fn started_link(forge: &ForgeRepo, started: &StartedRun) -> Option<LinkedItem> {
 
 #[cfg(test)]
 mod tests;
+
+impl Manager {
+    /// The CI run `input` names, by number in the repository `space` acts
+    /// in or by URL, as `caller` may link it, with its workflow as its
+    /// title. A watch reads the run as the user where it is not the
+    /// space's own, so linking it is a change there.
+    async fn linked_run(
+        &self,
+        space: &LinkSpace,
+        input: &ItemInput,
+        caller: Option<&Caller>,
+    ) -> Result<LinkedItem> {
+        let target = space.item_context().into();
+        let linked = self.named_run(&target, input, Access::Change, caller);
+        let (place, url) = linked.await?;
+        let run = (place.forge().view_run(&place.account, &url).await)
+            .with_context(|| format!("could not read CI run {url}"))?;
+        Ok(LinkedItem {
+            url,
+            title: run.workflow,
+        })
+    }
+}
+
+impl shoal_links::daemon::Runs for Manager {
+    fn linked_run<'a>(
+        &'a self,
+        space: &'a LinkSpace,
+        input: &'a ItemInput,
+        caller: Option<&'a Caller>,
+    ) -> futures_util::future::BoxFuture<'a, Result<LinkedItem>> {
+        Box::pin(self.linked_run(space, input, caller))
+    }
+}

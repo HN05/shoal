@@ -219,7 +219,8 @@ pub(super) async fn handle(
             title,
         } => Body::Linked(
             manager
-                .link_item(&workspace, kind, &item, relation, title, caller)
+                .links
+                .link_item(&**manager, &workspace, kind, &item, relation, title, caller)
                 .await?,
         ),
         ItemMethod::RelinkSpace { space, links } => {
@@ -242,7 +243,8 @@ pub(super) async fn handle(
             item,
         } => Body::Unlinked(
             manager
-                .unlink_items(&workspace, relation, kind, item.as_ref())
+                .links
+                .unlink_items(&**manager, &workspace, relation, kind, item.as_ref())
                 .await?,
         ),
         ItemMethod::SetPr {

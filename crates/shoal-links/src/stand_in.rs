@@ -16,17 +16,17 @@ use shoal_forge_types::{
     ForgeRepo,
     items::{
         link::{ItemKind, Selection},
-        reference::ItemRef,
+        reference::{ItemInput, ItemRef},
     },
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    model::{Repository, Selected, Space, Workspace},
+    model::{LinkedItem, Repository, Selected, Space, Workspace},
     space_names::SpaceSelector,
 };
 
 use crate::{
-    daemon::{Forges, Permissions, SpaceAgent, Spaces, Watches},
+    daemon::{Forges, Permissions, Runs, SpaceAgent, Spaces, Watches},
     space::LinkSpace,
 };
 
@@ -91,6 +91,17 @@ impl Spaces for StandIn {
     }
 
     fn wake_cleanup(&self) {}
+}
+
+impl Runs for StandIn {
+    fn linked_run<'a>(
+        &'a self,
+        _: &'a LinkSpace,
+        _: &'a ItemInput,
+        _: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<LinkedItem>> {
+        Box::pin(async { bail!(NOT_HERE) })
+    }
 }
 
 impl Watches for StandIn {

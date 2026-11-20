@@ -610,7 +610,9 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
         &["remote", "add", "origin", "https://github.com/acme/repo"],
     );
     manager
+        .links
         .link_item(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             LinkKind::Pr,
             &"3".parse().unwrap(),
@@ -621,7 +623,9 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
         .await
         .unwrap();
     manager
+        .links
         .link_item(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             LinkKind::Pr,
             &"4".parse().unwrap(),
@@ -632,7 +636,9 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
         .await
         .unwrap();
     manager
+        .links
         .unlink_items(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             Relation::Related,
             Some(LinkKind::Pr),
@@ -641,7 +647,9 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
         .await
         .unwrap();
     manager
+        .links
         .link_item(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             LinkKind::Issue,
             &"7".parse().unwrap(),
@@ -657,7 +665,9 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
         .unwrap();
     assert!(
         manager
+            .links
             .unlink_items(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 Relation::Assigned,
                 Some(LinkKind::Issue),
@@ -668,7 +678,9 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
     );
     assert!(
         manager
+            .links
             .link_item(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 LinkKind::Pr,
                 &"5".parse().unwrap(),
@@ -681,7 +693,9 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
     );
     assert!(
         manager
+            .links
             .unlink_items(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 Relation::Related,
                 None,

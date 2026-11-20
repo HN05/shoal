@@ -106,7 +106,9 @@ impl Manager {
         ];
         for (relation, kind, items) in linked {
             if !items.is_empty() {
-                self.unlink_items(&selector, relation, kind, None).await?;
+                self.links
+                    .unlink_items(self, &selector, relation, kind, None)
+                    .await?;
             }
         }
         Ok(())
