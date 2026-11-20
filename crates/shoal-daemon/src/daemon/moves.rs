@@ -92,8 +92,8 @@ impl Manager {
     /// Start a worker that finishes each recorded move whose worker went:
     /// one that holds no lock on it and that no operation runs; link the
     /// spaces a finished move left here below the space they are below
-    /// again, where its daemon stopped before it did; and forget the moves
-    /// that waited for an agent's turn whose operation a restart cut off.
+    /// again, where its daemon stopped before it did; and settle the moves
+    /// that waited for an agent's turn whose operation no longer runs.
     pub(crate) async fn finish_interrupted_moves(&self) -> Result<()> {
         self.attach_settled_behind().await?;
         self.forget_moves_cut_off().await?;

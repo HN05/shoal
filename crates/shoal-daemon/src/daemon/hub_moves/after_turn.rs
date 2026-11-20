@@ -120,12 +120,17 @@ impl Manager {
         self.tell_mover(&space, stayed_message(&space, ended)).await;
     }
 
-    /// Forget each recorded move whose operation this daemon does not run,
-    /// as one a restart cut off, which Shoal finishes as it finishes any
-    /// interrupted move, telling its agent so.
+    /// Settle each recorded move whose operation no longer runs: one that
+    /// ended without telling, as when its worker went without reporting,
+    /// tells its agent how it ended; one this daemon does not know, as one
+    /// a restart cut off, which Shoal finishes as it finishes any
+    /// interrupted move, tells its agent so.
     pub(crate) async fn forget_moves_cut_off(&self) -> Result<()> {
         for (space, operation) in self.store.read(started_moves).await? {
-            if self.operation(&operation, None).await.is_ok() {
+            if let Ok(entry) = self.operation(&operation, None).await {
+                if let Some(ended) = entry.ending() {
+                    self.tell_move_after_turn(&operation, &ended).await;
+                }
                 continue;
             }
             self.forget_move_after_turn(&space).await;
