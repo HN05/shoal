@@ -171,8 +171,15 @@ async fn file_contents(path: &Path, contents: Option<String>) -> Result<Vec<u8>>
         .with_context(|| format!("read {}", path.display()))
 }
 
-/// Refuse `lines` past the end of the file at `path`, which holds `bytes`.
+/// Refuse `lines` that end before they start, or past the end of the file
+/// at `path`, which holds `bytes`.
 fn ensure_has(path: &Path, bytes: &[u8], lines: Lines) -> Result<()> {
+    ensure!(
+        lines.start < lines.end,
+        "lines end after they start, from {} to {}",
+        lines.start,
+        lines.end
+    );
     let count = line_count(bytes);
     ensure!(
         lines.end <= count,

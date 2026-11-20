@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use shoal_protocol::{
-    code::{CodeState, NewCodeRef},
+    code::{CodeState, Lines, NewCodeRef},
     threads::{ThreadKind, ThreadNumber},
 };
 
@@ -94,6 +94,22 @@ async fn code_outside_the_caller_s_scope_is_refused() {
         .await;
     let refused = posted.unwrap_err().to_string();
     assert!(refused.contains("has 5 lines"), "{refused}");
+    // A client sends lines as numbers, which may run backwards.
+    let backwards = vec![NewCodeRef {
+        lines: Some(Lines { start: 3, end: 1 }),
+        ..at(parser(&tree.child), "1")
+    }];
+    let posted = manager
+        .post_to_thread(
+            Some(&child),
+            full(&thread),
+            post("Look"),
+            Vec::new(),
+            backwards,
+        )
+        .await;
+    let refused = posted.unwrap_err().to_string();
+    assert!(refused.contains("end after they start"), "{refused}");
 }
 
 #[tokio::test]
