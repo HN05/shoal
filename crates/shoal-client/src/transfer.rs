@@ -4,7 +4,7 @@ use shoal_protocol::transfer::{Carrying, ExportedSpace, ImportedPackage, Package
 use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::{Context, Result};
-use tokio::io::{AsyncRead, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::connection::{Daemon, open_buffered, request};
 use shoal_protocol::repository::Selector;
@@ -115,17 +115,42 @@ pub async fn import_streamed(
     let method = RemovalMethod::ImportPackage(Box::new(import));
     let (mut stream, asked) = open_buffered(daemon, method).await?;
     <()>::try_from(asked)?;
-    let sent = async {
-        tokio::io::copy(package, stream.get_mut()).await?;
-        stream.get_mut().shutdown().await
-    };
-    let sent = sent.await;
+    let read = send_package(package, stream.get_mut()).await;
     // A daemon that refuses the package answers before reading all of it.
-    match protocol::read_response(&mut stream).await {
-        Ok(response) => response.body.try_into(),
-        Err(error) => match sent {
-            Err(sending) => Err(sending).context("send the package"),
-            Ok(()) => Err(error),
-        },
+    let imported = match protocol::read_response(&mut stream).await {
+        Ok(response) => ImportedPackage::try_from(response.body),
+        Err(error) => Err(error),
+    };
+    match read {
+        Ok(()) => imported,
+        Err(read) => imported.map_err(|refused| refused.context(format!("{read:#}"))),
     }
 }
+
+/// Send what `package` holds to the daemon on `stream` until it ends, the
+/// daemon stops reading or reading it fails, then shut the sending half, so
+/// the daemon always reaches the end of what it received and answers; the
+/// error reading `package`.
+async fn send_package(
+    package: &mut (impl AsyncRead + Unpin),
+    stream: &mut (impl AsyncWrite + Unpin),
+) -> Result<()> {
+    let mut buffer = vec![0; 64 * 1024];
+    let read = loop {
+        let length = match package.read(&mut buffer).await {
+            Ok(0) => break Ok(()),
+            Ok(length) => length,
+            Err(error) => break Err(error),
+        };
+        // The daemon stopped reading; its answer says why.
+        if stream.write_all(&buffer[..length]).await.is_err() {
+            break Ok(());
+        }
+    };
+    // A daemon that hung up needs no end.
+    let _ = stream.shutdown().await;
+    read.context("read the package")
+}
+
+#[cfg(test)]
+mod tests;
