@@ -701,6 +701,9 @@ async fn finish(
     // inventory, so its spawn waits, then finds the execution completing.
     let spawning = manager.viewers.spawn_lock(&execution_id);
     let spawning = spawning.lock().await;
+    let reported = manager
+        .reported_end(&execution_id, result.as_ref().ok().copied())
+        .await;
     // Setup instead fails on what it leaves running, and merge runs Git.
     if kind == ExecutionKind::Command && result.is_ok() {
         manager
@@ -718,7 +721,7 @@ async fn finish(
         .executions
         .set_completing(&execution_id, Completing::Verifying);
     let complete = manager
-        .finish_execution(execution_id.clone(), kind, result.as_ref().ok().copied())
+        .finish_execution(execution_id.clone(), kind, reported)
         .await?;
     drop(spawning);
     manager.viewers.end(&execution_id);

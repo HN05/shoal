@@ -55,16 +55,37 @@ async fn started(
     root: &std::path::Path,
     viewer: Option<&[&str]>,
 ) -> (crate::model::Workspace, Running) {
+    let workspace = workspace(manager, root).await;
+    let wrapper = crate::process::identity::capture(std::process::id()).unwrap();
+    manager
+        .begin_execution_running(
+            workspace.id.as_str(),
+            wrapper,
+            ExecutionKind::Command,
+            None,
+            Some(launch(viewer)),
+        )
+        .await
+        .unwrap();
+    let demo = listed(manager, &workspace.id).await;
+    (workspace, demo)
+}
+
+async fn workspace(manager: &Manager, root: &std::path::Path) -> crate::model::Workspace {
     let checkout = repository(root, "repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let workspace = manager
+    manager
         .create_workspace(&repo.id, "tried".into(), None, None, None)
         .await
-        .unwrap();
-    let launch = Launch {
+        .unwrap()
+}
+
+/// The simulator demo `app` on device `UDID-1` with `viewer`.
+fn launch(viewer: Option<&[&str]>) -> Launch {
+    Launch {
         id: "launch".into(),
         name: "app".into(),
         preset: Some(Preset::Simulator),
@@ -73,20 +94,43 @@ async fn started(
         viewer_command: viewer.map(|viewer| viewer.iter().map(|arg| (*arg).to_owned()).collect()),
         environment: BTreeMap::from([(SIM_UDID.to_owned(), "UDID-1".to_owned())]),
         origin: crate::sessions::Origin::created(crate::sessions::HostName::Zmx, "app".into()),
+    }
+}
+
+/// Record for `demo` a serving viewer an earlier daemon started whose
+/// leader exited, leaving a helper of its group without the demo's marker,
+/// as one whose environment cannot be read is: nothing proves the helper
+/// the demo's. Returns the leader and the helper, which runs until the test
+/// ends.
+async fn unprovable_viewer(
+    manager: &Manager,
+    root: &std::path::Path,
+    demo: &Running,
+) -> (Identity, Helper) {
+    let port = manager.reserve_viewer_port(demo, None).await.unwrap();
+    let (pid_file, gate) = (root.join("helper.pid"), root.join("exit"));
+    let unmarked = format!("env -u {} {}", env::EXECUTION_ID, helper(&pid_file));
+    let script = format!("{unmarked}; {}; exit 0", await_file(&gate));
+    let mut earlier = ProcessGroup::spawn(
+        std::process::Command::new("sh")
+            .args(["-c", &script])
+            .env(env::EXECUTION_ID, &demo.execution_id),
+    );
+    let process = crate::process::identity::capture(earlier.id())
+        .unwrap()
+        .unwrap();
+    let helper = Helper::read(&pid_file).await;
+    let serving = Viewer {
+        port,
+        process: process.clone(),
+        serving: true,
     };
-    let wrapper = crate::process::identity::capture(std::process::id()).unwrap();
-    manager
-        .begin_execution_running(
-            workspace.id.as_str(),
-            wrapper,
-            ExecutionKind::Command,
-            None,
-            Some(launch),
-        )
+    (manager.record_viewer(&demo.execution_id, &serving))
         .await
         .unwrap();
-    let demo = listed(manager, &workspace.id).await;
-    (workspace, demo)
+    std::fs::write(&gate, "").unwrap();
+    let _ = earlier.wait();
+    (process, helper)
 }
 
 /// Reserve the demo's port at one nothing listens on.
@@ -559,31 +603,7 @@ async fn an_open_after_a_recorded_viewer_exited_stops_what_it_left() {
 async fn an_earlier_viewer_whose_group_cannot_be_proven_stopped_keeps_its_record() {
     let (temp, manager) = manager().await;
     let (_, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
-    let port = manager.reserve_viewer_port(&demo, None).await.unwrap();
-    let (pid_file, gate) = (temp.path().join("helper.pid"), temp.path().join("exit"));
-    // Its helper lacks the demo's marker, as one whose environment cannot
-    // be read does, so nothing proves it the demo's.
-    let unmarked = format!("env -u {} {}", env::EXECUTION_ID, helper(&pid_file));
-    let script = format!("{unmarked}; {}; exit 0", await_file(&gate));
-    let mut earlier = ProcessGroup::spawn(
-        std::process::Command::new("sh")
-            .args(["-c", &script])
-            .env(env::EXECUTION_ID, &demo.execution_id),
-    );
-    let process = crate::process::identity::capture(earlier.id())
-        .unwrap()
-        .unwrap();
-    let helper = Helper::read(&pid_file).await;
-    let serving = Viewer {
-        port,
-        process: process.clone(),
-        serving: true,
-    };
-    (manager.record_viewer(&demo.execution_id, &serving))
-        .await
-        .unwrap();
-    std::fs::write(&gate, "").unwrap();
-    let _ = earlier.wait();
+    let (process, helper) = unprovable_viewer(&manager, temp.path(), &demo).await;
     let refused = manager.open_viewer(&demo, None).await.err().unwrap();
     assert_eq!(Reason::of(&refused), Some(Reason::NotReady), "{refused:#}");
     let kept = manager.recorded_viewer(&demo.execution_id).await.unwrap();
@@ -598,33 +618,73 @@ async fn an_earlier_viewer_whose_group_cannot_be_proven_stopped_keeps_its_record
 async fn a_demo_whose_viewer_cannot_be_proven_stopped_keeps_its_records() {
     let (temp, manager) = manager().await;
     let (workspace, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
-    let port = manager.reserve_viewer_port(&demo, None).await.unwrap();
-    let (pid_file, gate) = (temp.path().join("helper.pid"), temp.path().join("exit"));
-    let unmarked = format!("env -u {} {}", env::EXECUTION_ID, helper(&pid_file));
-    let script = format!("{unmarked}; {}; exit 0", await_file(&gate));
-    let mut earlier = ProcessGroup::spawn(
-        std::process::Command::new("sh")
-            .args(["-c", &script])
-            .env(env::EXECUTION_ID, &demo.execution_id),
-    );
-    let process = crate::process::identity::capture(earlier.id())
-        .unwrap()
-        .unwrap();
-    let _helper = Helper::read(&pid_file).await;
-    let serving = Viewer {
-        port,
-        process,
-        serving: true,
-    };
-    (manager.record_viewer(&demo.execution_id, &serving))
-        .await
-        .unwrap();
-    std::fs::write(&gate, "").unwrap();
-    let _ = earlier.wait();
+    let _helper = unprovable_viewer(&manager, temp.path(), &demo).await;
     // As a stop of a demo whose wrapper is away ends it.
     assert!(manager.forget_execution(&demo.execution_id).await.is_err());
     let still = listed(&manager, &workspace).await;
     assert_eq!(still.execution_id, demo.execution_id);
+}
+
+#[tokio::test]
+async fn a_demo_that_ends_while_its_viewer_cannot_be_proven_stopped_keeps_its_records() {
+    use crate::daemon::execution_connection::{ExecutionContext, execute};
+    use crate::protocol::{Control, ExecutionEvent, Response};
+    use tokio::io::BufReader;
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&manager, temp.path()).await;
+    let wrapper = crate::process::identity::capture(std::process::id())
+        .unwrap()
+        .unwrap();
+    let (client, server) = tokio::net::UnixStream::pair().unwrap();
+    let context = ExecutionContext {
+        space: SpaceSelector::id(&workspace.id),
+        wrapper: wrapper.clone(),
+        kind: ExecutionKind::Command,
+        agent: None,
+        recover: false,
+        reattach: true,
+        caller: None,
+        queue_entry: None,
+        demo: Some(launch(Some(ECHO_VIEWER))),
+        origin: None,
+        merge: None,
+    };
+    let operation = manager.gates.owned_operation().await;
+    let executing = tokio::spawn(execute(server, 1, manager.clone(), context, operation));
+    let mut wrapper_side = BufReader::new(client);
+    let _: Response = crate::protocol::read_buffered(&mut wrapper_side)
+        .await
+        .unwrap();
+    let started = ExecutionEvent::Started {
+        child: None,
+        group_id: wrapper.pid,
+        restored: false,
+        restored_from: Vec::new(),
+    };
+    crate::protocol::write(wrapper_side.get_mut(), &started)
+        .await
+        .unwrap();
+    let control: Control = crate::protocol::read_buffered(&mut wrapper_side)
+        .await
+        .unwrap();
+    assert!(matches!(control, Control::Started));
+    let demo = listed(&manager, &workspace.id).await;
+    let _helper = unprovable_viewer(&manager, temp.path(), &demo).await;
+    let finished = ExecutionEvent::Finished { exit_code: 0 };
+    crate::protocol::write(wrapper_side.get_mut(), &finished)
+        .await
+        .unwrap();
+    let control: Control = crate::protocol::read_buffered(&mut wrapper_side)
+        .await
+        .unwrap();
+    assert!(
+        matches!(control, Control::Finished { complete: false }),
+        "the demo ended as proven"
+    );
+    let still = listed(&manager, &workspace.id).await;
+    assert_eq!(still.execution_id, demo.execution_id);
+    drop(wrapper_side);
+    let _ = executing.await;
 }
 
 #[tokio::test]

@@ -219,6 +219,24 @@ impl Manager {
         (stop_recorded(execution, &viewer.process).await).context("its demo's viewer")
     }
 
+    /// The exit code the execution `execution` ends with, its wrapper having
+    /// reported `exit_code`: none while its demo's viewer is not proven
+    /// stopped, which keeps the execution's records, its end unproven, until
+    /// recovery forgets it once the viewer is.
+    pub(crate) async fn reported_end(
+        &self,
+        execution: &ExecutionId,
+        exit_code: Option<i32>,
+    ) -> Option<i32> {
+        match self.retire_execution_viewer(execution).await {
+            Ok(()) => exit_code,
+            Err(error) => {
+                log!("execution {execution} kept: {error:#}");
+                None
+            }
+        }
+    }
+
     /// Stop `demo`'s recorded `viewer` and forget it once nothing of its
     /// process group runs; while something does, the record stays, so the
     /// next open tries again.
