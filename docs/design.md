@@ -209,7 +209,9 @@ space's, and never forwards a forwarded request again. A request that can
 cross machines names a space, or an item of a space, never a handle only
 one machine knows, such as an execution ID, and a long wait is state on the
 owning daemon, never a connection held open or a client polling across the
-hub. A command's selection is this machine's spaces; `--machine NAME|ID`,
+hub. A command's selection is this machine's spaces, and the picker of a
+command whose requests reach a space wherever it runs offers the other
+machines' spaces from the hub's directory after them; `--machine NAME|ID`,
 which repeats, makes it the named machines' spaces from the hub's
 directory, a selector that, as `--all` does, takes no named spaces, and
 narrows a picker to them, while a named space is selected wherever it runs.
