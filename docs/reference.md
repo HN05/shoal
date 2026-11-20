@@ -4034,10 +4034,9 @@ workspace, and sends setup output to stderr. The agent `shoal start` or an app
 launches there waits in the [agent queue](#agent-queue) for the setup,
 holding no slot, even when the process that prepared the workspace ended
 before it could queue the agent; `shoal queue cancel` removes it. Once a retried or ignored setup gets past the post-setup
-hook, from the prompt, `shoal setup` or `shoal resume <workspace>`, the queue
-starts it with its mode, task and permissions, or `shoal resume` does as its
-options say, linking the PR a start from a PR names, and a failed hook keeps
-it waiting. Then choose explicitly; `--skip`
+hook, from the prompt or `shoal setup`, the queue starts it with its mode,
+task and permissions, linking the PR a start from a PR names, and a failed
+hook keeps it waiting. Then choose explicitly; `--skip`
 leaves what setup did, which a scoped process does as its space's
 [`admin` permission](#permitted-actions) allows:
 
@@ -6246,8 +6245,8 @@ workspace builds on: its base workspace's branch, otherwise the local branch
 it was created from; no fetch.
 A restore of an idle agent waiting for an update, without a
 [timer](#idle-wakes) that will wake it, blocks nothing: removal cancels
-it and keeps the agent stopped, so `shoal resume` brings it back for
-`shoal resume`.
+it and keeps the agent stopped, so `shoal restore` brings it back with its
+space.
 Sweeps run about every 30 seconds; a failed step does not skip the others, and
 timers reset on restart.
 
