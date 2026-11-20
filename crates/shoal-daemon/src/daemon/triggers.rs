@@ -12,7 +12,6 @@ use tokio::sync::{Mutex, Notify};
 mod commands;
 mod configured;
 mod firing;
-mod state;
 mod timer;
 mod webhooks;
 

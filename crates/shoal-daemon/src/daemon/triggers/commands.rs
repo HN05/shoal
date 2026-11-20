@@ -8,13 +8,14 @@ use anyhow::{Context as _, Result};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::triggers::{Fired, RunOrigin, TriggerAction, TriggerStatus, WebhookRequest};
 
-use super::{Configured, firing::Firing, state};
+use super::{Configured, firing::Firing};
 use crate::{
     config::permissions::PermissionKey,
     daemon::{manager::Manager, permissions::Action, scope::Caller},
     protocol::ItemContext,
     time::UnixTime,
 };
+use shoal_runner::triggers::state;
 
 impl Manager {
     /// The triggers of the repository `context` acts in, after the global

@@ -8,10 +8,9 @@ use anyhow::{Context as _, Result};
 use shoal_protocol::launches::{Launch, LaunchSource};
 use shoal_protocol::triggers::{Fired, RunOrigin, RunOutcome, TriggerRun};
 
-use super::{
-    Configured,
-    state::{self, Started, Waiting},
-};
+use shoal_runner::triggers::state::{self, Started, Waiting};
+
+use super::Configured;
 use crate::{
     daemon::manager::Manager,
     model::QueueEntry,

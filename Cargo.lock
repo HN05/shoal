@@ -2533,6 +2533,7 @@ dependencies = [
  "shoal-protocol",
  "shoal-refs",
  "shoal-reviews",
+ "shoal-runner",
  "shoal-schedule",
  "shoal-store",
  "shoal-subprocess",
@@ -2742,6 +2743,18 @@ dependencies = [
  "toml",
  "toml_edit",
  "uuid",
+]
+
+[[package]]
+name = "shoal-runner"
+version = "0.19.0"
+dependencies = [
+ "anyhow",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "shoal-ids",
+ "shoal-protocol",
 ]
 
 [[package]]

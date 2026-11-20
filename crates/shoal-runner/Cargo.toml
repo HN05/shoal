@@ -1,0 +1,16 @@
+[package]
+name = "shoal-runner"
+version.workspace = true
+description = "The CI jobs a Shoal daemon runs, and its triggers"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+rusqlite = { workspace = true, features = ["bundled"] }
+serde.workspace = true
+serde_json.workspace = true
+shoal-ids = { workspace = true, features = ["rusqlite"] }
+shoal-protocol = { workspace = true, features = ["rusqlite"] }

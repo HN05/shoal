@@ -11,11 +11,11 @@ use crate::time::UnixTime;
 
 /// How many runs a trigger's history keeps, besides its queued run and
 /// its last started one, which overlap reads.
-pub(super) const HISTORY: i64 = 50;
+pub const HISTORY: i64 = 50;
 
 /// A trigger's runtime state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct State {
+pub struct State {
     pub paused: bool,
     /// When Shoal first read the trigger.
     pub created_at: UnixTime,
@@ -36,7 +36,7 @@ impl State {
 /// What a queued run launches once the agent of the trigger's last space
 /// stops: its launch, and the key it keeps once started.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub(super) struct Waiting {
+pub struct Waiting {
     pub launch: Launch,
     pub key: Option<String>,
 }
@@ -44,7 +44,7 @@ pub(super) struct Waiting {
 /// What a started run launched: the space it started, or the agent queue
 /// entry of a new space's launch that waits there to open it.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum Started {
+pub enum Started {
     Space(SpaceId),
     Entry(QueueEntryId),
 }
@@ -74,7 +74,7 @@ impl std::fmt::Display for Started {
 }
 
 /// A queued run of a trigger.
-pub(super) struct Queued {
+pub struct Queued {
     pub id: i64,
     /// What it waits for: the trigger's last launch, until its agent stops.
     pub waits_for: Started,
@@ -83,7 +83,7 @@ pub(super) struct Queued {
 
 /// The state of the trigger `name` of `scope`, recorded as new and active
 /// at `now` the first time it is read.
-pub(super) fn state(db: &Connection, scope: &str, name: &str, now: UnixTime) -> Result<State> {
+pub fn state(db: &Connection, scope: &str, name: &str, now: UnixTime) -> Result<State> {
     db.execute(
         "INSERT OR IGNORE INTO trigger_states(scope,name,created_at,counted_from)
             VALUES (?1,?2,?3,?3)",
@@ -106,7 +106,7 @@ pub(super) fn state(db: &Connection, scope: &str, name: &str, now: UnixTime) -> 
 
 /// Pause the trigger, or resume it counting from `now`, so a resume never
 /// catches up.
-pub(super) fn set_paused(
+pub fn set_paused(
     db: &Connection,
     scope: &str,
     name: &str,
@@ -124,7 +124,7 @@ pub(super) fn set_paused(
 }
 
 /// Have the trigger's source count from `to`.
-pub(super) fn count_from(db: &Connection, scope: &str, name: &str, to: UnixTime) -> Result<()> {
+pub fn count_from(db: &Connection, scope: &str, name: &str, to: UnixTime) -> Result<()> {
     db.execute(
         "UPDATE trigger_states SET counted_from=?3 WHERE scope=?1 AND name=?2",
         params![scope, name, to],
@@ -133,7 +133,7 @@ pub(super) fn count_from(db: &Connection, scope: &str, name: &str, to: UnixTime)
 }
 
 /// Record that the trigger fired at `at`.
-pub(super) fn fired(db: &Connection, scope: &str, name: &str, at: UnixTime) -> Result<()> {
+pub fn fired(db: &Connection, scope: &str, name: &str, at: UnixTime) -> Result<()> {
     db.execute(
         "UPDATE trigger_states SET last_fired_at=?3 WHERE scope=?1 AND name=?2",
         params![scope, name, at],
@@ -144,7 +144,7 @@ pub(super) fn fired(db: &Connection, scope: &str, name: &str, at: UnixTime) -> R
 /// Add `run` to the trigger's history, with what a queued run waits to
 /// launch, and drop the oldest runs beyond the history but the queued run
 /// and the last started one.
-pub(super) fn record(
+pub fn record(
     db: &Connection,
     scope: &str,
     name: &str,
@@ -187,7 +187,7 @@ pub(super) fn record(
 }
 
 /// The trigger's newest run.
-pub(super) fn last_run(db: &Connection, scope: &str, name: &str) -> Result<Option<TriggerRun>> {
+pub fn last_run(db: &Connection, scope: &str, name: &str) -> Result<Option<TriggerRun>> {
     Ok(db
         .query_row(
             "SELECT at,origin,outcome,reason,space_id,queue_entry FROM trigger_runs
@@ -209,11 +209,7 @@ pub(super) fn last_run(db: &Connection, scope: &str, name: &str) -> Result<Optio
 
 /// The trigger's newest started run that launched something, by its ID,
 /// with what it launched.
-pub(super) fn last_started(
-    db: &Connection,
-    scope: &str,
-    name: &str,
-) -> Result<Option<(i64, Started)>> {
+pub fn last_started(db: &Connection, scope: &str, name: &str) -> Result<Option<(i64, Started)>> {
     let row = db
         .query_row(
             "SELECT id,space_id,queue_entry FROM trigger_runs
@@ -229,7 +225,7 @@ pub(super) fn last_started(
 
 /// Record that the run `id`, whose launch waited in the agent queue,
 /// opened `space`.
-pub(super) fn opened(db: &Connection, id: i64, space: &SpaceId) -> Result<()> {
+pub fn opened(db: &Connection, id: i64, space: &SpaceId) -> Result<()> {
     db.execute(
         "UPDATE trigger_runs SET space_id=?2 WHERE id=?1",
         params![id, space],
@@ -238,7 +234,7 @@ pub(super) fn opened(db: &Connection, id: i64, space: &SpaceId) -> Result<()> {
 }
 
 /// The trigger's run that waits to launch, if any.
-pub(super) fn queued(db: &Connection, scope: &str, name: &str) -> Result<Option<Queued>> {
+pub fn queued(db: &Connection, scope: &str, name: &str) -> Result<Option<Queued>> {
     let row = db
         .query_row(
             "SELECT id,space_id,queue_entry,launch FROM trigger_runs
@@ -262,7 +258,7 @@ pub(super) fn queued(db: &Connection, scope: &str, name: &str) -> Result<Option<
 
 /// Record how the queued run `id` ended, as `run` did: started, with what
 /// it launched, or failed for its reason.
-pub(super) fn settle(db: &Connection, id: i64, run: &TriggerRun) -> Result<()> {
+pub fn settle(db: &Connection, id: i64, run: &TriggerRun) -> Result<()> {
     db.execute(
         "UPDATE trigger_runs SET outcome=?2,reason=?3,space_id=?4,queue_entry=?5,launch=NULL
             WHERE id=?1",
@@ -273,7 +269,7 @@ pub(super) fn settle(db: &Connection, id: i64, run: &TriggerRun) -> Result<()> {
 
 /// Whether a run the trigger started within its window had `key`; keys
 /// whose window ended are forgotten.
-pub(super) fn key_is_live(
+pub fn key_is_live(
     db: &Connection,
     scope: &str,
     name: &str,
@@ -295,7 +291,7 @@ pub(super) fn key_is_live(
 }
 
 /// Keep `key` of a run the trigger started until `expires_at`.
-pub(super) fn keep_key(
+pub fn keep_key(
     db: &Connection,
     scope: &str,
     name: &str,

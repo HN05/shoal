@@ -227,7 +227,7 @@ async fn record_started(
     };
     manager
         .store
-        .write(move |tx| super::state::record(tx, &scope, &name, &run, None))
+        .write(move |tx| shoal_runner::triggers::state::record(tx, &scope, &name, &run, None))
         .await
         .unwrap();
 }
@@ -326,7 +326,7 @@ async fn overlap_outlasts_a_history_longer_than_it_keeps() {
     let (_temp, manager, repo) = with_triggers(&overlapping("skip")).await;
     let last = chat(&manager, "last", "chat", Some(&repo), None).await;
     started_in(&manager, &repo, "check", &last.id).await;
-    for _ in 0..=super::state::HISTORY {
+    for _ in 0..=shoal_runner::triggers::state::HISTORY {
         let skipped = fire(&manager, &repo, "check").await;
         assert_eq!(skipped.unwrap().outcome, RunOutcome::Skipped);
     }

@@ -6,12 +6,13 @@ use std::{sync::Arc, time::Duration};
 use anyhow::Result;
 use shoal_protocol::triggers::{RunOrigin, RunOutcome, TriggerRun};
 
-use super::{Configured, firing::Firing, state};
+use super::{Configured, firing::Firing};
 use crate::{
     daemon::{log, manager::Manager},
     time::UnixTime,
     triggers::{Source, timer::Timer},
 };
+use shoal_runner::triggers::state;
 
 /// The longest the loop sleeps: a sleeping machine stops its clock for
 /// timers but not for the wall clock, which the loop reads again after it.
