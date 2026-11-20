@@ -76,18 +76,12 @@ impl Manager {
         Ok(thread)
     }
 
-    /// Every open thread with a post, oldest first, which the hub lists on
-    /// its own passes, without following code.
+    /// Every open thread with a post, oldest first, which subscription
+    /// snapshots page and the hub lists. Neither follows code: both run
+    /// on their own, a snapshot after each store change, where following
+    /// would make a background pass over the worktrees.
     pub(crate) async fn open_threads(&self) -> Result<Vec<Thread>> {
         self.store.run(records::open_with_posts).await
-    }
-
-    /// [`Manager::open_threads`] with their code followed to where it is
-    /// now, which subscription snapshots page for apps and editors.
-    pub(crate) async fn followed_open_threads(&self) -> Result<Vec<Thread>> {
-        let mut threads = self.open_threads().await?;
-        self.follow_code(&mut threads).await;
-        Ok(threads)
     }
 
     /// Whether a thread the space `id` opened waits for its holder.

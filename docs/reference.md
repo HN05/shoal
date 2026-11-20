@@ -6960,7 +6960,9 @@ receives each as `Code: path:first-last` with the snippet, naming the space
 whose worktree it is in when that is not its own.
 
 Shoal follows each reference as its code changes. Reading a thread, with
-`view thread`, `thread list` or `shoal-client`, compares the file of each
+`view thread`, `thread list` or `shoal-client`'s requests for threads, but
+not a subscription's snapshot, which shows where its references were last
+followed, compares the file of each
 reference in a ready worktree with the version the reference was last followed
 to, and on a change maps its lines through a diff of that version against the
 file now: lines added or removed above them move them, edits inside them grow
