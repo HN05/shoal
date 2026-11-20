@@ -46,9 +46,14 @@ impl Manager {
         let prepared = self.prepare_moving(space, carrying).await?;
         let exported = self.write_prepared(prepared, file).await?;
         record.checkpoints = exported.manifest.checkpoints();
+        // A file holds the package once written; another machine, or the
+        // command that copies it to its standard output, has it once it
+        // took it.
         record.phase = match destination {
-            MoveDestination::Ssh(_) => MovePhase::Delivering,
-            _ => MovePhase::Delivered,
+            MoveDestination::File { .. } | MoveDestination::Directory { .. } => {
+                MovePhase::Delivered
+            }
+            MoveDestination::Ssh(_) | MoveDestination::Client { .. } => MovePhase::Delivering,
         };
         let advanced = record.clone();
         (self.store)

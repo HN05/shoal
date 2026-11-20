@@ -42,7 +42,9 @@ pub(super) struct Moving<'a> {
 
 /// Move the `checked` space, with the spaces it carries, as `order` says,
 /// its package going to `file` on the way, telling `steps` how far it got,
-/// while it holds the move's lock.
+/// while it holds the move's lock. A package for its command's standard
+/// output is the command's to copy, under the lock it holds, before it
+/// ends the space.
 pub(super) async fn move_one(
     paths: &CommandPaths,
     order: &MoveOrder,
@@ -57,6 +59,10 @@ pub(super) async fn move_one(
         unsaved: checked.unsaved(),
         file,
     };
+    if let MoveDestination::Client { .. } = moving.destination {
+        let exported = pack(paths, &moving, steps).await?;
+        return Ok(moving.packed(exported));
+    }
     let lock = MoveLock::take(paths, &moving.id).await?;
     let moved = move_locked(paths, &moving, steps).await;
     lock.release();
@@ -109,6 +115,20 @@ pub(super) async fn deliver_and_end(
 }
 
 impl Moving<'_> {
+    /// The report of this space, packed as `exported`, which has not ended
+    /// here.
+    fn packed(&self, exported: ExportedSpace) -> SpaceMoved {
+        SpaceMoved {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            manifest: Some(exported.manifest),
+            file: Some(self.file.clone()),
+            removal: None,
+            arrived: None,
+            warnings: exported.warnings,
+        }
+    }
+
     /// The report of this space, whose package `manifest` describes where
     /// known, once it ended here with `removal`, where it `arrived` on
     /// another machine.
@@ -166,13 +186,13 @@ async fn deliver(
     }
 }
 
-/// `error`, which left it unknown whether `host` has the space `id`, once
-/// its move is forgotten and its agents stay stopped here, since the space
-/// may continue there.
+/// `error`, which left it unknown whether `holder`, another machine or
+/// what read its package, has the space `id`, once its move is forgotten
+/// and its agents stay stopped here, since the space may continue there.
 pub(super) async fn maybe_there(
     paths: &CommandPaths,
     id: &SpaceId,
-    host: &str,
+    holder: &str,
     error: anyhow::Error,
 ) -> anyhow::Error {
     let space = SpaceSelector::id(id);
@@ -180,7 +200,7 @@ pub(super) async fn maybe_there(
         super::warn(&format!("warning: {abandoned:#}"));
     }
     error.context(format!(
-        "{host} may already have it, so its agents stay stopped here; if it arrived there, shoal rm {id} removes it here, and otherwise shoal resume {id} continues it here"
+        "{holder} may already have it, so its agents stay stopped here; if it arrived there, shoal rm {id} removes it here, and otherwise shoal resume {id} continues it here"
     ))
 }
 

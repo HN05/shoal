@@ -62,6 +62,11 @@ async fn finish_locked(
             let error = anyhow!("the move stopped while {} imported it", destination.host);
             Err(moving::maybe_there(paths, &moving.id, &destination.host, error).await)
         }
+        (MovePhase::Delivering, MoveDestination::Client { .. }) => {
+            let error = anyhow!("the command that took its package went before it ended it");
+            let holder = "what read its package";
+            Err(moving::maybe_there(paths, &moving.id, holder, error).await)
+        }
         (MovePhase::Delivering | MovePhase::Delivered, _) => {
             let removal = moving::end(paths, moving, steps).await?;
             Ok(moving.moved(packed, removal, None))

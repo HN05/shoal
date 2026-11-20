@@ -4236,7 +4236,8 @@ package, delivers it, and has the daemon end the spaces here once their
 destination has it, so a move finishes when the terminal that started it
 closes and is the one move path every destination takes. Only delivery
 differs by destination: `-o` writes the package where the daemon writes it,
-`-o -` hands it to the command, and `--ssh` pipes it into
+`-o -` hands it to the command, which holds the move's lock and ends the
+spaces once it copied the package, and `--ssh` pipes it into
 `ssh -o BatchMode=yes <host> shoal --json restore --from -`, so the other side
 stays a plain command and the key must work without a prompt, as Git's
 fetches need. The worker checks the spaces before any ends,

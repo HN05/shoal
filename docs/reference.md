@@ -4793,16 +4793,17 @@ following, leaving it running. Shoal records each space's move before its
 agents stop, and finishes a move whose worker went, as when the machine
 restarted during it, from how far it got: a space whose destination has its
 package ends here, one nothing of which left moves again, one whose package
-was going to `-o -` stays here with its agents' restores queued, and one
-another machine may have imported stays here with its agents stopped, as
-when the connection drops. An alert tells how each one finished.
+`-o -` had yet to write stays here with its agents' restores queued, and one
+another machine, or what read a package `-o -` wrote, may have taken stays
+here with its agents stopped, as when the connection drops. An alert tells how each one finished.
 
 `shoal move [space] -o <file>` writes a workspace or chat to a new file, or
 to standard output for `-`, refusing a terminal, and ends it here once the file
 holds it. Its argument names a workspace or chat, else the current workspace,
 else a picker offers both. The daemon stops the space's agents, saving their
 sessions, writes the file and ends the space, so only `-o -` needs the
-command, which copies the file to standard output once the move ends. It
+command, which copies the package to standard output and then ends the
+space. It
 refuses before ending anything when the file exists, when the daemon cannot
 create a file in its directory within 30 seconds, or when `-` would stream from
 a place that closes with the space. A workspace is removed as `shoal rm`

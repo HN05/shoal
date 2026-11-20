@@ -7,8 +7,6 @@ mod leaving;
 mod stream;
 mod targets;
 
-use std::io::Write as _;
-
 use anyhow::{Result, ensure};
 
 use super::operations::Lines;
@@ -16,7 +14,6 @@ use crate::cli::{args::transfer::MoveArgs, context::Context, ui};
 use crate::client::operations::Following;
 use crate::protocol::operations::{Ended, Failure};
 use crate::transfer::{Consent, MoveDestination, MoveOrder, MoveReport};
-use destination::Chosen;
 
 /// The file name that reads or writes the standard streams.
 pub(super) const STANDARD_STREAM: &str = "-";
@@ -34,9 +31,7 @@ pub(super) async fn run(ctx: &Context, args: MoveArgs) -> Result<i32> {
         checkpoint: args.checkpoint,
         consent: args.confirmation.yes.then_some(Consent::Any),
     };
-    if let MoveDestination::Client { .. } = order.destination {
-        stream::ensure_survives(ctx, &order).await?;
-    }
+    let streaming = stream::Streaming::start(ctx, &order).await?;
     let leaving = leaving::Leaving::find(ctx).await?;
     let report = loop {
         match follow(ctx, order.clone()).await? {
@@ -47,8 +42,11 @@ pub(super) async fn run(ctx: &Context, args: MoveArgs) -> Result<i32> {
             }
         }
     };
+    if let Some(streaming) = streaming {
+        return streaming.deliver(ctx, &order, report).await;
+    }
     leaving.navigate(ctx)?;
-    finish(ctx, &chosen, report)
+    finish(ctx, report)
 }
 
 /// How a move the daemon ran ended: what it did, or the question it asks
@@ -75,31 +73,11 @@ async fn follow(ctx: &Context, order: MoveOrder) -> Result<Moved> {
     }
 }
 
-/// Report the move that `report` describes, copying a package that goes to
-/// standard output there, exiting 1 when any space failed to move.
-fn finish(ctx: &Context, chosen: &Chosen, report: MoveReport) -> Result<i32> {
-    if let MoveDestination::Client { path } = &chosen.destination {
-        let [moved] = report.moved.as_slice() else {
-            anyhow::bail!("the move wrote no package");
-        };
-        let mut file = std::fs::File::open(path)?;
-        crate::stdout::write(|stdout| {
-            std::io::copy(&mut file, stdout)?;
-            stdout.flush()
-        })?;
-        match moved
-            .manifest
-            .as_ref()
-            .and_then(|manifest| manifest.copy.as_ref())
-        {
-            Some(_) => eprintln!("Exported a copy of {}", moved.name),
-            None => eprintln!("Exported {}", moved.name),
-        }
-        return Ok(0);
-    }
-    let failed = !report.failed.is_empty();
+/// Report the move that `report` describes, exiting 1 when any space
+/// failed to move.
+fn finish(ctx: &Context, report: MoveReport) -> Result<i32> {
     if ctx.json {
         outln!("{}", crate::client::output::json(&report)?);
     }
-    Ok(if failed { 1 } else { 0 })
+    Ok(if report.failed.is_empty() { 0 } else { 1 })
 }

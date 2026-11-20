@@ -53,7 +53,7 @@ async fn left_move(
     );
     packing.await.unwrap();
     let phase = match destination {
-        MoveDestination::Ssh(_) => MovePhase::Delivering,
+        MoveDestination::Ssh(_) | MoveDestination::Client { .. } => MovePhase::Delivering,
         _ => MovePhase::Delivered,
     };
     let record = MoveRecord {
@@ -144,4 +144,30 @@ async fn a_move_whose_worker_still_runs_is_left_to_it_child() {
     assert!(report.moved.is_empty() && report.failed.is_empty());
     assert!(path.exists());
     held.release();
+}
+
+#[tokio::test]
+async fn a_package_its_command_took_before_it_went_leaves_the_space_stopped_here() {
+    isolated("a_package_its_command_took_before_it_went_leaves_the_space_stopped_here_child").await;
+}
+
+#[tokio::test]
+#[ignore = "isolated helper of a_package_its_command_took_before_it_went_leaves_the_space_stopped_here"]
+async fn a_package_its_command_took_before_it_went_leaves_the_space_stopped_here_child() {
+    if !helper() {
+        return;
+    }
+    let daemon = TestDaemon::start().await;
+    let stream = |home: &std::path::Path| MoveDestination::Client {
+        path: home.join("streamed.shoal"),
+    };
+    let (paths, record, path) = left_move(&daemon, stream).await;
+
+    let report = finish(&paths, record, &Unfollowed).await.unwrap();
+    assert!(
+        report.failed[0]
+            .error
+            .contains("what read its package may already have it")
+    );
+    assert!(path.exists());
 }
