@@ -10,7 +10,6 @@ mod assignees;
 
 use crate::forge::items::reference::ItemRef;
 pub(crate) use crate::model::Assigner;
-pub(crate) use assignees::AssignerOf;
 use shoal_links::issue::{
     agents::{self as agent_records},
     assignees::{self as assignee_records, Dropped},

@@ -1,8 +1,7 @@
-use super::*;
 use crate::daemon::links::issue::test_support::{AGENT_TOKEN, Fixture, Refuse, USER};
 use crate::{
     forge::items::reference::ItemRef,
-    model::{IssueAssignee, Workspace},
+    model::{Assigner, IssueAssignee, Workspace},
     removal::{InspectionPolicy, UnsavedWork},
 };
 use serde_json::json;

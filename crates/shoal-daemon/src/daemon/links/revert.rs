@@ -3,11 +3,9 @@
 //! new workspace needs.
 use crate::daemon::links::proposals::OpenOutcomeExt;
 use anyhow::{Result, ensure};
+use shoal_links::issue::assignees::AssignerOf;
 
-use super::{
-    issue::{Assigner, AssignerOf},
-    proposals::OpenOutcome,
-};
+use super::{issue::Assigner, proposals::OpenOutcome};
 use crate::{
     config::permissions::{Opening, Pushes},
     daemon::{manager::Manager, scope::Caller},

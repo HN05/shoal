@@ -4,12 +4,13 @@ use crate::daemon::links::proposals::OpenOutcomeExt;
 use anyhow::{Context, Result};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::issue::assignees::AssignerOf;
 use shoal_links::place::{Access, Place};
 use shoal_links::space::LinkSpace;
 use shoal_refs::BranchName;
 
 use super::{
-    issue::{Assigner, AssignerOf},
+    issue::Assigner,
     proposals::OpenOutcome,
     wait::{OwnChange, record_received_change},
 };

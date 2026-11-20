@@ -3,6 +3,7 @@
 //! user's approval where the repository asks for that.
 use crate::daemon::links::proposals::OpenOutcomeExt;
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_links::issue::assignees::AssignerOf;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
@@ -15,7 +16,7 @@ use crate::{
     daemon::{
         links::{
             LinkSpace,
-            issue::{Assigner, AssignerOf},
+            issue::Assigner,
             proposals::{OpenOutcome, Proposer},
         },
         manager::Manager,

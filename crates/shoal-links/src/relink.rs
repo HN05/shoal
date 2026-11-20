@@ -12,7 +12,7 @@ use shoal_protocol::{
     space_names::SpaceSelector,
 };
 
-use crate::{Links, daemon::Daemon};
+use crate::{Links, daemon::Daemon, issue::assignees::AssignerOf};
 
 impl Links {
     /// Link `links` to the space `id` again. For the user, each assigned
@@ -91,8 +91,7 @@ fn assigned_as(carried: &[IssueAssignee], url: &ItemRef, caller: Option<&Caller>
         .any(|assignee| assignee.url == *url && assignee.account == Assigner::Agent);
     match agents {
         true => Assigner::Agent,
-        false if caller.is_some() => Assigner::Agent,
-        false => Assigner::User,
+        false => Assigner::of(caller),
     }
 }
 

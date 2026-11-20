@@ -7,6 +7,7 @@ use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension};
 use shoal_daemon_base::{
     alerts::{About, NewAlert},
+    callers::Caller,
     log,
 };
 use shoal_forge::{
@@ -19,6 +20,21 @@ use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::model::{Assigner, IssueAssignee};
 
 use crate::{Links, daemon::Daemon};
+
+/// Who a caller assigns an issue to a space as.
+pub trait AssignerOf {
+    /// An agent for a scoped `caller`, else the user.
+    fn of(caller: Option<&Caller>) -> Self;
+}
+
+impl AssignerOf for Assigner {
+    fn of(caller: Option<&Caller>) -> Self {
+        match caller {
+            Some(_) => Self::Agent,
+            None => Self::User,
+        }
+    }
+}
 
 /// The login a space stood for among an issue's assignees, until it
 /// dropped the issue's link.

@@ -19,7 +19,7 @@ use shoal_protocol::{
     space_names::SpaceSelector,
 };
 
-use crate::{Links, daemon::Daemon, forges, space::LinkSpace};
+use crate::{Links, daemon::Daemon, forges, issue::assignees::AssignerOf, space::LinkSpace};
 
 impl Links {
     /// Link the item `input` names with `relation`; an issue or PR linked
@@ -68,10 +68,7 @@ impl Links {
         title: Option<String>,
         caller: Option<&Caller>,
     ) -> Result<Vec<String>> {
-        let assigner = match caller {
-            Some(_) => Assigner::Agent,
-            None => Assigner::User,
-        };
+        let assigner = Assigner::of(caller);
         match (relation, kind) {
             (Relation::Assigned, LinkKind::Issue) => {
                 return self
