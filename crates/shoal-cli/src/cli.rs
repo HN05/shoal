@@ -8,6 +8,7 @@ pub mod context;
 mod desktop;
 pub(crate) mod entry;
 mod help;
+mod hub_view;
 pub(crate) mod installed;
 pub mod internal;
 pub mod list_status;

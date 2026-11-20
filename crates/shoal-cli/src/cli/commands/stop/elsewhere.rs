@@ -16,7 +16,7 @@ use shoal_protocol::{
 };
 
 use crate::{
-    cli::{commands::machines, context::Context, output::Style},
+    cli::{commands::machines, context::Context, hub_view, output::Style},
     client::output::agents::SpaceStopped,
     model::Space,
     protocol::{QueuedLaunches, UntrackedProcesses},
@@ -56,7 +56,7 @@ pub(super) async fn stop_tree(
     let view = match elsewhere.first() {
         Some((_, view)) => Some(view.clone()),
         None if skip_children => None,
-        None => machines::view(ctx).await,
+        None => hub_view::view(ctx).await,
     };
     let Some(view) = view else {
         return Ok(targets);
@@ -112,7 +112,7 @@ pub(super) async fn stop(
 /// Stop the spaces below each of `stopped`, spaces of this machine that
 /// stopped already, on every machine, as the hub lists them.
 pub(super) async fn stop_below(ctx: &Context, stopped: &[Space], yes: bool) -> Result<()> {
-    let Some(view) = machines::view(ctx).await else {
+    let Some(view) = hub_view::view(ctx).await else {
         return Ok(());
     };
     let stopped = Stopped {

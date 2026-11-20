@@ -11,12 +11,13 @@ use std::collections::HashSet;
 
 use anyhow::{Result, ensure};
 
-use super::{listing::ListFilter, machines};
+use super::listing::ListFilter;
 use crate::client::output::inbox::{Item, Need};
 use crate::{
     cli::{
         client,
         context::Context,
+        hub_view,
         list_status::{self, ListStatus},
         output::{self, Palette, Style},
         ui::{self, Cell, WidthLimit},
@@ -136,7 +137,7 @@ impl Inbox {
                     .map(|sync| Item::SyncFailed { sync }),
             );
         }
-        let view = machines::view(ctx).await;
+        let view = hub_view::view(ctx).await;
         items.extend(elsewhere::items(view.as_ref(), |remote| {
             filter.keeps_remote(remote)
         }));

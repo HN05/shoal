@@ -10,20 +10,7 @@ use shoal_protocol::{
     space_names::SpaceSelector,
 };
 
-use crate::cli::{context::Context, output::Style};
-
-/// The hub's view of the other machines' spaces the caller sees; none on a
-/// machine that takes no part in a hub, and none, with a warning, while the
-/// hub cannot be asked.
-pub(super) async fn view(ctx: &Context) -> Option<HubView> {
-    match crate::client::hub::directory(&ctx.paths).await {
-        Ok(view) => view,
-        Err(error) => {
-            eprintln!("warning: the other machines' spaces are left out: {error:#}");
-            None
-        }
-    }
-}
+use crate::cli::{context::Context, hub_view, output::Style};
 
 /// The other machine's space `selector` names when no space of this
 /// machine has it: by its ID, or by a number only one other machine's
@@ -36,7 +23,7 @@ pub(super) async fn space_elsewhere(
     if spaces.find(selector).is_some() {
         return Ok(None);
     }
-    let Some(view) = view(ctx).await else {
+    let Some(view) = hub_view::view(ctx).await else {
         return Ok(None);
     };
     let mut found = (view.directory.spaces.iter())
