@@ -164,8 +164,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
 - A subsystem moved out of the daemon is a crate of its own, such as
   `crates/shoal-leases` for ports, resource permits, simulators, containers
   and secrets, `crates/shoal-reviews` for local reviews, the gate agent
-  and the one-shot agent runs they start, and `crates/shoal-hub` for the hub
-  role and membership of a hub. Its service, a field of `Manager`, holds what the subsystem
+  and the one-shot agent runs they start, `crates/shoal-hub` for the hub
+  role and membership of a hub, and `crates/shoal-runner` for triggers.
+  Its service, a field of `Manager`, holds what the subsystem
   keeps in memory and offers its operations; what it needs of other
   subsystems is an interface it declares, as the base does, which the daemon
   implements and passes each operation, except what runs in the subsystem's
@@ -177,7 +178,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   none but `shoal-core`, `shoal-daemon-base`, `shoal-forge`,
   `shoal-forge-types`, `shoal-ids`, `shoal-protocol`, `shoal-refs` and
   `shoal-store`; `shoal-hub` on none but `shoal-core`, `shoal-daemon-base`,
-  `shoal-ids`, `shoal-protocol`, `shoal-schedule` and `shoal-store`.
+  `shoal-ids`, `shoal-protocol`, `shoal-schedule` and `shoal-store`;
+  `shoal-runner` on none but `shoal-core`, `shoal-daemon-base`, `shoal-ids`,
+  `shoal-protocol` and `shoal-store`.
 - `crates/shoal-time` holds the wall-clock timestamp type,
   `crates/shoal-refs` the commit and branch name types, `crates/shoal-ids`
   the record IDs and numbers, and `crates/shoal-states` the macros that

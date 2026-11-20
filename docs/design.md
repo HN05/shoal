@@ -114,7 +114,9 @@ until it ends. `shoal-hub` holds the hub role and membership of a hub: its
 `Hub` service owns the links, pairing codes, vouches and outbox, and reads
 the spaces, permissions, messages and approvals it routes across machines
 through the interface; request dispatch, which answers what the hub
-forwards here, stays in the daemon.
+forwards here, stays in the daemon. `shoal-runner` holds the triggers: its
+`Runner` service fires them from its timer loop and webhook listener and
+launches their agents through the interface, as `shoal start` does.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
 the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
 `shoal-workers` neither the daemon nor its tests: the daemon depends on no
