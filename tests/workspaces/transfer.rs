@@ -843,7 +843,7 @@ fn a_move_without_a_destination_asks_for_one_on_a_terminal() {
     assert!(!refused.status.success(), "{}", printed(&refused));
     let error = String::from_utf8_lossy(&refused.stderr);
     assert!(
-        error.contains("--ssh <host> or --output <file>"),
+        error.contains("missing destination"),
         "{}",
         printed(&refused)
     );

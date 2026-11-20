@@ -1,5 +1,6 @@
-//! `shoal move`: moving spaces to another Shoal, over SSH or through a file
-//! that `shoal restore --from` continues. The daemon runs the move, so it
+//! `shoal move`: moving spaces to another Shoal, over SSH, to a machine
+//! joined to the same hub, or through a file that `shoal restore --from`
+//! continues. The daemon runs the move, so it
 //! goes on when this command goes; the command picks what it moves and
 //! where, asks before ending what needs the user, and follows it.
 mod destination;
@@ -23,10 +24,13 @@ pub(super) const STANDARD_STREAM: &str = "-";
 /// more than the spaces named or releases holds.
 pub(super) async fn run(ctx: &Context, args: MoveArgs) -> Result<i32> {
     let (spaces, chosen) = destination::choose(ctx, &args).await?;
+    // A space that stays here keeps a parent that moved to a joined
+    // machine, which keeps its ID there.
+    let joined = matches!(chosen.destination, MoveDestination::Machine(_));
     let mut order = MoveOrder {
         spaces,
         destination: chosen.destination.clone(),
-        recursive: args.recursive(true),
+        recursive: args.recursive(!joined),
         keep: args.keep,
         checkpoint: args.checkpoint,
         consent: args.confirmation.yes.then_some(Consent::Any),

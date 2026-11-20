@@ -5,6 +5,7 @@ mod attaching;
 mod demos;
 mod directory;
 mod following;
+mod moves;
 mod numbers;
 mod routing;
 mod starts;

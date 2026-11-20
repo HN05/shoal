@@ -34,7 +34,8 @@ impl Manager {
     /// Start `order` in a worker that acts with `caller`'s scope, in `env`
     /// when given, returning the operation's ID, once every space it takes
     /// is here: live, or for a file a removed one. A space another machine
-    /// has refuses it, naming that space, which the hub forwards it for.
+    /// has refuses it, naming that space, which the hub forwards it for, as
+    /// does a joined machine to move to that is this one or offline.
     pub(crate) async fn start_move(
         &self,
         order: MoveOrder,
@@ -44,6 +45,9 @@ impl Manager {
         ensure!(!order.spaces.is_empty(), "a move takes at least one space");
         for ordered in &order.spaces {
             self.ensure_movable(ordered, &order.destination).await?;
+        }
+        if let MoveDestination::Machine(destination) = &order.destination {
+            self.receiving_machine(&destination.machine).await?;
         }
         let first = order.spaces[0].clone();
         let spec = OperationSpec::Move {

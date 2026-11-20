@@ -9,13 +9,15 @@ use anyhow::{Context as _, Result, ensure};
 
 use super::{STANDARD_STREAM, targets};
 use crate::cli::{args::transfer::MoveArgs, context::Context, ui};
-use crate::transfer::{MoveDestination, SshDestination};
+use crate::transfer::{MachineDestination, MoveDestination, SshDestination};
 use shoal_ids::space_ids::SpaceId;
 
 /// Where a move takes spaces, as the user names it.
 enum Named {
     /// Another machine's Shoal, through this SSH destination.
     Ssh(String),
+    /// Another machine joined to the same hub, by its name or ID.
+    Machine(String),
     /// A file, a directory of them or standard output, which
     /// `shoal restore --from` reads.
     File(PathBuf),
@@ -40,18 +42,20 @@ enum Kind {
 /// repository it names exist and a checkpoint names one space, after
 /// picking the spaces when it names none.
 pub(super) async fn choose(ctx: &Context, args: &MoveArgs) -> Result<(Vec<SpaceId>, Chosen)> {
-    let named = match (&args.ssh, &args.output) {
-        (Some(host), _) => Some(Named::Ssh(host.clone())),
-        (None, Some(path)) => Some(Named::File(path.clone())),
-        (None, None) => None,
+    let named = match (&args.ssh, &args.machine, &args.output) {
+        (Some(host), _, _) => Some(Named::Ssh(host.clone())),
+        (None, Some(machine), _) => Some(Named::Machine(machine.clone())),
+        (None, None, Some(path)) => Some(Named::File(path.clone())),
+        (None, None, None) => None,
     };
     if named.is_none() {
-        ui::require_one_of(ctx, "destination", &["ssh", "output"])?;
+        ui::require_one_of(ctx, "destination", &["ssh", "machine", "output"])?;
     }
     if let Some(Named::File(path)) = &named {
         ensure_new_file(path)?;
     }
-    let files = !matches!(named, Some(Named::Ssh(_)));
+    // Only a file takes a removed space's record.
+    let files = matches!(named, Some(Named::File(_)) | None);
     let spaces = targets::select(ctx, args, files).await?;
     ensure!(
         args.checkpoint.is_none() || spaces.len() == 1,
@@ -69,6 +73,13 @@ pub(super) async fn choose(ctx: &Context, args: &MoveArgs) -> Result<(Vec<SpaceI
             destination: MoveDestination::Ssh(SshDestination {
                 host,
                 shoal: args.shoal.clone(),
+                resume: !args.no_resume,
+            }),
+            _stream: None,
+        },
+        Named::Machine(machine) => Chosen {
+            destination: MoveDestination::Machine(MachineDestination {
+                machine,
                 resume: !args.no_resume,
             }),
             _stream: None,
