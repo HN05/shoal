@@ -138,6 +138,14 @@ pub fn fitting_kind(launch: &Launch) -> Option<SpaceKind> {
     (links_branch(launch) || !workspace_flags(launch).is_empty()).then_some(SpaceKind::Workspace)
 }
 
+/// Whether `launch` decides the kind of space it starts in: it names its
+/// mode, starts a setup, or names what only a workspace takes, which the
+/// default mode starts. One whose mode a terminal has yet to pick decides
+/// none.
+pub fn decides_kind(launch: &Launch) -> bool {
+    launch.mode.is_some() || launch.setup.is_some() || fitting_kind(launch).is_some()
+}
+
 /// Whether the positional argument links a PR or branch, which only a
 /// workspace starts on.
 fn links_branch(launch: &Launch) -> bool {

@@ -63,7 +63,7 @@ pub(in crate::cli::commands) async fn settle(
         None => repository::required(ctx, &mut launch, (found, settings)).await?,
     };
     pickers::check_agent(&launch, &settings)?;
-    let kind_checked = launch.mode.is_some();
+    let kind_checked = crate::launches::decides_kind(&launch);
     let checked = match stopped::checked(ctx, &mut launch, options).await? {
         stopped::Checked::Goes(workspace) => workspace.map(|workspace| *workspace),
         stopped::Checked::Resumed(code) => return Ok(code),
@@ -78,17 +78,17 @@ pub(in crate::cli::commands) async fn settle(
     let settled = (&mode, &modes);
     (found, settings) = repository::settled(ctx, &mut launch, settled, (found, settings)).await?;
     let worker = mode::starts_workspace(&launch, &mode, &modes)?;
-    // The first check left the kind open, so the workspace's own agent is
-    // checked once the mode starts it.
+    let picked = worker && checked.is_none() && {
+        pickers::pick_source(ctx, &mut launch, found.as_ref()).await?
+    };
+    // Where the first check left the kind open or a picker named the
+    // source, a terminal asks about the stopped agent of the workspace the
+    // start goes into once that is known.
     if worker
-        && checked.is_some()
-        && !kind_checked
+        && (picked || !kind_checked)
         && let Some(code) = stopped::resumed(ctx, &mut launch, options).await?
     {
         return Ok(code);
-    }
-    if worker && checked.is_none() {
-        pickers::pick_source(ctx, &mut launch, found.as_ref()).await?;
     }
     pickers::pick_plan_issue(ctx, &mut launch, (found.as_ref(), &settings)).await?;
     pickers::pick_agent(ctx, &mut launch, &settings)?;

@@ -17,8 +17,9 @@ impl Manager {
     /// would refuse, settled as [`Self::workspace_placement`] settles it
     /// short of fetching a PR's branches, and with what a picker has yet to
     /// choose left open; returns instead the existing workspace that has
-    /// the branch it names, which the start goes into, refusing one with an
-    /// agent of its own the launch does not replace.
+    /// the branch it names or that its issue reopens, which the start goes
+    /// into, refusing one with an agent of its own the launch does not
+    /// replace.
     pub(in crate::daemon::launches) async fn check_workspace_placement(
         &self,
         launch: &Launch,
@@ -26,13 +27,35 @@ impl Manager {
     ) -> Result<Option<Workspace>> {
         match self.settle_workspace(launch, false, caller).await? {
             Settling::New(settled) => {
-                (self.check_settled(launch, *settled, caller).await).map(|()| None)
+                let reopened = self.reopened_workspace(&settled, caller).await?;
+                if let Some(workspace) = &reopened {
+                    self.check_takes_worker(launch, workspace).await?;
+                }
+                (self.check_settled(launch, *settled, caller).await)?;
+                Ok(reopened)
             }
             Settling::Existing(workspace) => {
                 self.check_takes_worker(launch, &workspace).await?;
                 Ok(Some(*workspace))
             }
         }
+    }
+
+    /// The workspace `caller` sees on the existing branch `settled` opens,
+    /// such as the one an issue's earlier work left, which the start
+    /// reopens.
+    async fn reopened_workspace(
+        &self,
+        settled: &Settled,
+        caller: Option<&Caller>,
+    ) -> Result<Option<Workspace>> {
+        let Some(branch) = &settled.creation.existing else {
+            return Ok(None);
+        };
+        let workspaces = self.launch_workspaces(caller).await?;
+        let workspaces =
+            crate::launches::workspace::repository_workspaces(&workspaces, &settled.repo);
+        Ok(crate::launches::on_branch(&workspaces, branch, None).cloned())
     }
 
     /// Refuse what creating the workspace `settled` describes for `launch`

@@ -52,15 +52,19 @@ pub(super) async fn checked(
     }
 }
 
-/// Check `launch`, whose mode now starts the agent of the existing
-/// workspace it goes into, as [`checked`] does where the first check left
-/// the kind of space open, returning the exit code of the resume the user
-/// chose instead of the start.
+/// Check `launch`, whose mode now starts a workspace's agent, again on a
+/// terminal as [`checked`] does, once the workspace it goes into is known,
+/// returning the exit code of the resume the user chose instead of the
+/// start. Without a terminal nothing asks, and the launch meets the
+/// daemon's refusal.
 pub(super) async fn resumed(
     ctx: &Context,
     launch: &mut Launch,
     options: &StartOptions,
 ) -> Result<Option<i32>> {
+    if !ctx.interactive() || launch.replace {
+        return Ok(None);
+    }
     Ok(match checked(ctx, launch, options).await? {
         Checked::Goes(_) => None,
         Checked::Resumed(code) => Some(code),

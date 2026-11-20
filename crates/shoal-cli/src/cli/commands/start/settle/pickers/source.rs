@@ -17,18 +17,21 @@ use crate::{
 /// starts from when it names nothing: an existing branch or PR, or an
 /// issue. A new branch it leaves unnamed, which the daemon begins as a
 /// chat whose agent makes it a workspace once it knows the work, so what
-/// only a branch takes is refused before another picker asks.
+/// only a branch takes is refused before another picker asks. Returns
+/// whether it picked one.
 pub(in crate::cli::commands::start::settle) async fn pick_source(
     ctx: &Context,
     launch: &mut Launch,
     repository: Option<&Repository>,
-) -> Result<()> {
-    if let Some(repo) = repository.filter(|_| names_nothing(launch) && ctx.interactive()) {
+) -> Result<bool> {
+    let repo = repository.filter(|_| names_nothing(launch) && ctx.interactive());
+    if let Some(repo) = repo {
         let mut creation = Creation::default();
         let picked = pick_add_source(ctx, repo, &mut creation).await?;
         picked_source(launch, creation, picked);
     }
-    ensure_branch_takes(launch)
+    ensure_branch_takes(launch)?;
+    Ok(repo.is_some())
 }
 
 /// Refuse what only a new workspace's branch takes in `launch` when it

@@ -34,7 +34,7 @@ impl Manager {
         self.select_launch_spaces(&mut launch).await?;
         let repository = self.checked_repository(&launch, caller).await?;
         (self.ensure_caller_holds(caller, &launch.permissions, repository.as_ref())).await?;
-        match decides_kind(&launch) {
+        match launches::decides_kind(&launch) {
             true => {
                 let shape = self.launch_shape(&launch, caller).await?;
                 self.check_placement(&launch, &shape, caller).await
@@ -155,14 +155,6 @@ impl Manager {
         let found = launches::shape::launch_repository(&state, launch).await?;
         Ok(found.map(|repository| repository.id))
     }
-}
-
-/// Whether `launch` decides the kind of space it starts in: it names its
-/// mode, starts a setup, or names what only a workspace takes, which the
-/// default mode starts. One whose mode a terminal has yet to pick decides
-/// none.
-fn decides_kind(launch: &Launch) -> bool {
-    launch.mode.is_some() || launch.setup.is_some() || launches::fitting_kind(launch).is_some()
 }
 
 /// The existing workspace `launch` names with `--in`, once named by ID.
