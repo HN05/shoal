@@ -916,6 +916,9 @@ async fn a_waiting_agent_whose_terminal_closes_leaves_its_restore_to_the_queue()
     wait_paused(&manager, &workspace).await;
     wait_restore_queued(&manager).await;
 
+    // Dispatch, which queues a requested restore once its execution ends and
+    // forgets the request, waits while the request is read.
+    let gate = manager.agent_queue.lock_admission().await;
     let wrapper = execution.wrapper.clone().unwrap();
     crate::process::identity::signal(&wrapper, libc::SIGHUP).unwrap();
 
@@ -925,6 +928,7 @@ async fn a_waiting_agent_whose_terminal_closes_leaves_its_restore_to_the_queue()
         .into_iter()
         .map(|(id, _)| id)
         .collect();
+    drop(gate);
     assert_eq!(requested, [execution.id]);
     serving.abort();
 }
