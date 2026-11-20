@@ -185,7 +185,7 @@ pub(super) async fn register(
         stop,
         records: RecordChange::of(&plan),
         source,
-        memory: None,
+        memory: Default::default(),
     };
     Ok(Registered {
         execution,

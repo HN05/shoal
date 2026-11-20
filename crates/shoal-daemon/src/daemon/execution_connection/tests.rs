@@ -544,8 +544,10 @@ async fn an_exit_that_waits_refuses_commands_that_would_stop_with_it() {
     crate::daemon::operations::fake::take(&operation).exit(0);
 }
 
-#[tokio::test]
-async fn an_agents_pause_records_the_kills_of_the_run_it_stopped() {
+/// The kills an agent's log records on its stop or exit and its last
+/// alert, once a run that a pause with 2 kills stopped finished without a
+/// memory report.
+async fn kills_after_a_pause() -> (Vec<(String, Option<i64>)>, String) {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
@@ -582,27 +584,25 @@ async fn an_agents_pause_records_the_kills_of_the_run_it_stopped() {
     let mut wrapper_side = BufReader::new(client);
     let response: Response = read(&mut wrapper_side).await;
     assert!(matches!(response.body, Body::Execution(_)));
-    let events = [
-        ExecutionEvent::Started {
-            child: None,
-            group_id: wrapper.pid,
-            restored: false,
-            restored_from: Vec::new(),
-        },
-        ExecutionEvent::Paused {
-            memory: Some(ScopeMemory {
-                oom_kills: 2,
-                peak: 1 << 30,
-            }),
-        },
-    ];
-    for event in events {
+    let started = ExecutionEvent::Started {
+        child: None,
+        group_id: wrapper.pid,
+        restored: false,
+        restored_from: Vec::new(),
+    };
+    let paused = ExecutionEvent::Paused {
+        memory: Some(ScopeMemory {
+            oom_kills: 2,
+            peak: 1 << 30,
+        }),
+    };
+    for event in [started, paused] {
         protocol::write(wrapper_side.get_mut(), &event)
             .await
             .unwrap();
     }
     assert!(matches!(read(&mut wrapper_side).await, Control::Started));
-    // The wrapper then finishes without a restore, its run already reported.
+    // The wrapper then finishes, its paused run already reported.
     let finished = ExecutionEvent::Finished {
         exit_code: 143,
         memory: None,
@@ -616,7 +616,7 @@ async fn an_agents_pause_records_the_kills_of_the_run_it_stopped() {
     ));
     bounded(executing).await.unwrap().unwrap();
     let id = workspace.id.clone();
-    let kills: Vec<(String, Option<i64>)> = (manager.store)
+    let kills = (manager.store)
         .run(move |db| {
             let mut query = db.prepare(
                 "SELECT json_extract(record,'$.kind'), json_extract(record,'$.agent.oom_kills')
@@ -629,11 +629,32 @@ async fn an_agents_pause_records_the_kills_of_the_run_it_stopped() {
         })
         .await
         .unwrap();
-    assert_eq!(kills, [("agent_stopped".to_owned(), Some(2))]);
     let alerts = manager.notifications.list(false, 1).await.unwrap();
-    assert!(
-        alerts[0].message.contains("killed 2"),
-        "{}",
-        alerts[0].message
-    );
+    (kills, alerts[0].message.clone())
+}
+
+#[tokio::test]
+async fn an_agents_pause_records_the_kills_of_the_run_it_stopped() {
+    let (kills, alert) = kills_after_a_pause().await;
+    assert_eq!(kills, [("agent_stopped".to_owned(), Some(2))]);
+    assert!(alert.contains("killed 2"), "{alert}");
+}
+
+#[test]
+fn a_run_restored_after_a_pause_reports_its_own_memory_alone() {
+    let killed = Some(ScopeMemory {
+        oom_kills: 2,
+        peak: 1 << 30,
+    });
+    // A pause's report stays for an end that reports nothing more.
+    let mut paused = ReportedMemory::default();
+    paused.paused(killed);
+    paused.finished(None);
+    assert_eq!(paused.last(), killed);
+    // A restored run's end reports its own, here none, not the pause's.
+    let mut restored = ReportedMemory::default();
+    restored.paused(killed);
+    restored.started();
+    restored.finished(None);
+    assert_eq!(restored.last(), None);
 }

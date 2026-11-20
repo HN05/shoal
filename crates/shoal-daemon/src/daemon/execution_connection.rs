@@ -86,8 +86,38 @@ struct Connected {
     /// its start records.
     source: Option<LaunchSource>,
     /// What the command's scope recorded of its memory, as the wrapper
-    /// reported with its end.
-    memory: Option<ScopeMemory>,
+    /// reported it.
+    memory: ReportedMemory,
+}
+
+/// What the scope of an execution's run recorded of its memory, as the
+/// wrapper reports it: a pause reports the run it stopped, a run restored
+/// after it reports its own, and the end reports the last run's.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct ReportedMemory(Option<ScopeMemory>);
+
+impl ReportedMemory {
+    /// The run a pause stopped recorded `reported`.
+    fn paused(&mut self, reported: Option<ScopeMemory>) {
+        self.0 = reported;
+    }
+
+    /// A run started, which reports its own, so a paused run's goes with
+    /// its pause.
+    fn started(&mut self) {
+        self.0 = None;
+    }
+
+    /// The command finished, reporting `reported` for its last run, or
+    /// nothing after its pause reported it.
+    fn finished(&mut self, reported: Option<ScopeMemory>) {
+        self.0 = reported.or(self.0);
+    }
+
+    /// What the last run recorded, for the execution's end.
+    fn last(self) -> Option<ScopeMemory> {
+        self.0
+    }
 }
 
 /// How the wrapper's connection ended.
@@ -178,7 +208,7 @@ pub(super) async fn reattach(
         stop,
         records: None,
         source: None,
-        memory: None,
+        memory: ReportedMemory::default(),
     };
     serve(
         stream,
@@ -404,6 +434,7 @@ async fn relay(
                     ))
                     .await;
                 }
+                memory.started();
                 protocol::write(writer, &Control::Started).await?;
                 // A slow host close holds back no daemon update; a stop
                 // that arrives meanwhile waits in `stop` until it returns.
@@ -415,8 +446,7 @@ async fn relay(
                 memory: reported,
             } => {
                 *stopped = sent_stop;
-                // A pause reported the memory of the run it stopped.
-                *memory = reported.or(*memory);
+                memory.finished(reported);
                 return Ok(Ended::Finished(exit_code));
             }
             ExecutionEvent::ChildExited => {
@@ -464,7 +494,7 @@ async fn relay(
                 *handoff_claimed = true;
                 // Named again by the stop's alert once the wrapper finishes
                 // without a restore; a restored run reports its own.
-                *memory = reported;
+                memory.paused(reported);
                 if let Some(tracked) = agent {
                     let stopped = AgentEvent {
                         oom_kills: reported.map_or(0, |memory| memory.oom_kills),
@@ -703,6 +733,7 @@ async fn finish(
         memory,
         ..
     } = execution;
+    let memory = memory.last();
     if let Some(memory) = memory {
         manager.record_scope_memory(&execution_id, memory).await;
     }
