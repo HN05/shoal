@@ -5,7 +5,7 @@ use clap::{Args, Subcommand};
 
 use crate::{
     agent::Agent,
-    cli::args::{AgentParser, ModelArgs, issue_input, permission_assignment},
+    cli::args::{AgentParser, ModelArgs, issue_input, permission_assignment, pull_input},
     config::permissions::PermissionChange,
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
@@ -269,6 +269,10 @@ pub struct StartArgs {
     /// carrying the plan mode's label.
     #[arg(short = 'i', long, num_args = 0..=1, value_parser = issue_input)]
     pub issue: Option<Option<crate::forge::items::reference::ItemInput>>,
+    /// The forge PR number or URL whose branch a new workspace starts on, as
+    /// a PR link does.
+    #[arg(long, num_args = 0..=1, value_parser = pull_input)]
+    pub pr: Option<Option<crate::forge::items::reference::ItemInput>>,
     /// Create this worktree at an exact new directory instead of the repository default.
     #[arg(long)]
     pub path: Option<PathBuf>,
@@ -327,6 +331,7 @@ impl StartArgs {
             base: self.base.clone(),
             git_profile: self.git_profile.clone(),
             issue: self.issue.clone().map(ItemChoice::from),
+            pr: self.pr.clone().map(ItemChoice::from),
             copy: self.copy.copy.clone().map(SpaceChoice::from),
             checkpoint: self.copy.checkpoint,
             skip_setup: self.creation.skip_setup,

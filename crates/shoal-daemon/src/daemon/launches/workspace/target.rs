@@ -43,6 +43,12 @@ impl Manager {
             Some(ItemChoice::Named(issue)) => Some(issue.clone()),
             None => None,
         };
+        if let Some(pull) = &launch.pr {
+            let reading = (state, fetches, caller);
+            return self
+                .flagged_pull_target(launch, pull, creation, reading)
+                .await;
+        }
         let Some(positional) = crate::launches::decided_target(launch)? else {
             let named = launch
                 .repository
@@ -71,7 +77,7 @@ impl Manager {
         match positional {
             StartTarget::Pull(pull) => {
                 let reading = (state.workspaces.as_slice(), fetches, caller);
-                (self.pull_target(&repo, pull, creation, reading)).await?
+                (self.pull_target(&repo, pull.into(), creation, reading)).await?
             }
             StartTarget::Branch { branch, .. } => {
                 super::branch::branch_creation(&branch, creation).await?
@@ -81,6 +87,52 @@ impl Manager {
             }
         }
         Ok(Target { repo, issue: None })
+    }
+
+    /// The target of `launch` on the PR `--pr` names, which completes
+    /// `creation` as a positional PR link does.
+    async fn flagged_pull_target(
+        &self,
+        launch: &Launch,
+        pull: &ItemChoice,
+        creation: &mut Creation,
+        (state, fetches, caller): (&LaunchState, bool, Option<&Caller>),
+    ) -> Result<Target> {
+        let Some(pull) = pull.named() else {
+            anyhow::bail!("--pr needs a number or URL; a terminal picks one without it");
+        };
+        let repo = self.flagged_pull_repository(launch, pull, state).await?;
+        let reading = (state.workspaces.as_slice(), fetches, caller);
+        (self.pull_target(&repo, pull.clone(), creation, reading)).await?;
+        Ok(Target { repo, issue: None })
+    }
+
+    /// The registered repository of the PR `pull` that `--pr` names, among
+    /// those `state` holds: the one `launch` names, else that of the PR's
+    /// URL, else as for an issue number; a URL must be a PR's in it.
+    async fn flagged_pull_repository(
+        &self,
+        launch: &Launch,
+        pull: &ItemInput,
+        state: &LaunchState,
+    ) -> Result<Repository> {
+        let named = match crate::launches::decided_target(launch)? {
+            Some(StartTarget::Repository(named)) => Some(named),
+            Some(_) => anyhow::bail!("--pr cannot be combined with an item or branch link"),
+            None => launch.repository.clone(),
+        };
+        let repo = match (named, pull) {
+            (None, ItemInput::Url(link)) => {
+                let positional = StartTarget::Pull(link.clone());
+                self.linked_repository(launch, &positional, state).await?
+            }
+            (named, _) => self.target(launch, named, None, state).await?.repo,
+        };
+        if let ItemInput::Url(link) = pull {
+            link.of_kind(crate::forge::items::link::ItemKind::Pr.into())?;
+            workspace::ensure_link_in(&repo, Some(link.repository())).await?;
+        }
+        Ok(repo)
     }
 
     /// The target in the repository `named` names, else that of `issue`'s
@@ -164,14 +216,13 @@ impl Manager {
     async fn pull_target(
         &self,
         repo: &Repository,
-        pull: ItemRef,
+        pull: ItemInput,
         creation: &mut Creation,
         (workspaces, fetches, caller): (&[Workspace], bool, Option<&Caller>),
     ) -> Result<()> {
         let context = self.launch_read_context(&repo.id, caller).await?;
-        let pull = self
-            .links
-            .pull_request(self, &context, &pull.into(), caller)
+        let pull = (self.links)
+            .pull_request(self, &context, &pull, caller)
             .await?;
         match fetches {
             true => workspace::pull_creation(workspaces, repo, pull, creation).await,

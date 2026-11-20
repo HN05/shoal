@@ -257,6 +257,7 @@ fn the_arguments_other_than_the_mode_decide_the_kind_they_fit() {
     assert_eq!(fits("repo", |l| l.branch = Some("topic".into())), workspace);
     assert_eq!(fits("repo", |l| l.base = Some("main".into())), workspace);
     assert_eq!(fits("https://forge.example/o/r/pulls/8", |_| ()), workspace);
+    assert_eq!(fits("repo", |l| l.pr = issue("8")), workspace);
     // A name and --now fit either kind.
     assert_eq!(fits("repo", |l| l.name = Some("talk".into())), None);
     assert_eq!(fits("repo", |l| l.now = true), None);
@@ -280,6 +281,21 @@ fn an_items_labels_name_its_mode() {
             (ModeName::DEFAULT, "planned".to_owned())
         ]
     );
+}
+
+#[test]
+fn a_start_names_a_pr_with_pr_or_a_link() {
+    let named = |launch: Launch| named_pull(&launch).map(|pull| pull.to_string());
+    let url = "https://forge.example/o/r/pulls/8";
+    assert_eq!(
+        named(launch(None, |l| l.pr = issue("8"))).as_deref(),
+        Some("8")
+    );
+    assert_eq!(named(launch(Some(url), |_| ())).as_deref(), Some(url));
+    assert_eq!(named(launch(Some("8"), |_| ())), None);
+    // Beside --pr, a positional number names the repository.
+    let target = decided_target(&launch(Some("8"), |l| l.pr = issue("9"))).unwrap();
+    assert_eq!(target, Some(StartTarget::Repository("8".into())));
 }
 
 #[test]

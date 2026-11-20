@@ -84,6 +84,7 @@ fn ensure_worker_fits(launch: &Launch) -> Result<()> {
         ("<repository>", launch.target.is_some()),
         ("--repo", launch.repository.is_some()),
         ("--issue", launch.issue.is_some()),
+        ("--pr", launch.pr.is_some()),
         ("--parent", launch.parent.is_some()),
         ("--name", launch.name.is_some()),
         // `shoal priority` sets an existing workspace's.
@@ -101,6 +102,7 @@ fn ensure_worker_fits(launch: &Launch) -> Result<()> {
 pub fn workspace_flags(launch: &Launch) -> Vec<&'static str> {
     [
         ("--branch", launch.branch.is_some()),
+        ("--pr", launch.pr.is_some()),
         ("--path", launch.path.is_some()),
         ("--base", launch.base.is_some()),
         ("--git-profile", launch.git_profile.is_some()),
@@ -167,9 +169,9 @@ pub fn ensure_copy_fits(launch: &Launch) -> Result<()> {
 }
 
 /// The positional argument once the launch says whether a number names an
-/// issue: beside a branch or issue of its own, it names a repository.
+/// issue: beside a branch, issue or PR of its own, it names a repository.
 pub fn decided_target(launch: &Launch) -> Result<Option<StartTarget>> {
-    let names_branch = launch.branch.is_some() || launch.issue.is_some();
+    let names_branch = launch.branch.is_some() || launch.issue.is_some() || launch.pr.is_some();
     (launch.target.clone())
         .map(|target| target.decided(names_branch))
         .transpose()
@@ -269,17 +271,28 @@ pub fn positional_repository(launch: &Launch) -> Option<&str> {
     }
 }
 
+/// The PR `--pr` or the positional argument names by number or URL.
+pub fn named_pull(launch: &Launch) -> Option<ItemInput> {
+    match (&launch.pr, &launch.target) {
+        (Some(ItemChoice::Named(pull)), _) => Some(pull.clone()),
+        (_, Some(StartTarget::Pull(pull))) => Some(ItemInput::Url(pull.clone())),
+        _ => None,
+    }
+}
+
 /// The issue and PR the arguments name by URL.
 pub fn linked_items(launch: &Launch) -> impl Iterator<Item = &ItemRef> {
-    let issue = match &launch.issue {
-        Some(ItemChoice::Named(ItemInput::Url(issue))) => Some(issue),
-        _ => None,
-    };
+    let flagged = [&launch.issue, &launch.pr]
+        .into_iter()
+        .filter_map(|item| match item {
+            Some(ItemChoice::Named(ItemInput::Url(item))) => Some(item),
+            _ => None,
+        });
     let positional = match &launch.target {
         Some(StartTarget::Issue(ItemInput::Url(item)) | StartTarget::Pull(item)) => Some(item),
         _ => None,
     };
-    issue.into_iter().chain(positional)
+    flagged.chain(positional)
 }
 
 /// The workspace among `workspaces` on the local branch `name` selects: its

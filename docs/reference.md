@@ -1210,7 +1210,8 @@ names the issue's number, title and URL, includes its description when it has
 one, and points to `shoal view` for comments and later edits; options after
 `--` go to the agent. Codex uses CLI mode for issue prompts.
 
-PR links open their head branch against the refreshed remote base, reusing an
+PR links, and `--pr` with a PR's number or URL, open its head branch against
+the refreshed remote base, reusing an
 owned workspace when present, and link the PR once the workspace is ready; a
 refused link only warns. A PR from a fork, which has no branch in the
 repository, opens in a [workspace at a commit](#child-workspaces) at its head,
@@ -3104,7 +3105,7 @@ only the modes of the kind of space they ask for, a workspace for a branch,
 modes in a repository when they name a repository or issue or ask for a kind
 of space; when only one fits, the start takes it without asking, as it takes
 `plan` for `--issue` without a value, which no other mode accepts. A start
-on an issue carrying a mode's `label` takes that mode, with or without a
+on an issue or PR carrying a mode's `label` takes that mode, with or without a
 terminal, among the modes that fit its other arguments; one carrying the
 labels of several opens the picker on a terminal and is refused without one. A
 new agent in an existing space may start in another mode; a running agent's mode never changes. A space records the mode its agent started in, a workspace that of its

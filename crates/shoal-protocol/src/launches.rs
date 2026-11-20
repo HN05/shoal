@@ -47,6 +47,9 @@ pub struct Launch {
     /// The issue the agent starts on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue: Option<ItemChoice>,
+    /// The PR whose branch a new workspace starts on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr: Option<ItemChoice>,
     /// The workspace whose files a new workspace copies.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copy: Option<SpaceChoice>,

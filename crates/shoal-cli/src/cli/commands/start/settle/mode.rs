@@ -1,11 +1,12 @@
-//! The mode a start's agent starts in: named, else the one its issue's
-//! labels call for, else on a terminal a picked one, else the default mode.
+//! The mode a start's agent starts in: named, else the one its PR's or
+//! issue's labels call for, else on a terminal a picked one, else the default mode.
 use anyhow::Result;
 use shoal_protocol::launches::{ItemChoice, Launch};
 
 use crate::{
     cli::{
         args::create::StartArgs,
+        client,
         commands::{
             issues,
             start::{launch_settings, start_modes},
@@ -23,8 +24,8 @@ use crate::{
 
 /// The mode of `launch` as far as nothing needs asking: the one it names,
 /// on a terminal the plan mode for an issue to pick, which no other mode
-/// takes, else the [`item_mode`] of the issue it names in the `found`
-/// repository; otherwise one a terminal picks once the daemon has checked
+/// takes, else the [`item_mode`] of the PR or issue it names in the
+/// `found` repository; otherwise one a terminal picks once the daemon has checked
 /// the rest, and off one the [`launches::default_mode`].
 pub(super) async fn decided(
     ctx: &Context,
@@ -147,30 +148,48 @@ pub(super) fn starts_workspace(
     Ok(configured.is_some_and(|mode| mode.kind == SpaceKind::Workspace))
 }
 
-/// The mode the labels of the issue `launch` names in `repo` call for, by
-/// [`launches::labelled_mode`] among the [`labelled`] modes of `settings`;
-/// a pick on a terminal where they call for several, and refused off one;
-/// none without such an issue or a mode with a label it carries.
+/// The mode the labels of the PR `launch` names in `repo`, else of the
+/// issue it names, call for, by [`launches::labelled_mode`] among the
+/// [`labelled`] modes of `settings`; a pick on a terminal where they call
+/// for several, and refused off one; none without such an item or a mode
+/// with a label it carries.
 async fn item_mode(
     ctx: &Context,
     launch: &Launch,
     repo: &Repository,
     (settings, modes): (&Effective, &ModeShapes),
 ) -> Result<Option<ModeChoice>> {
-    let Some(input) = launches::named_issue(launch)? else {
-        return Ok(None);
-    };
     let labelled = labelled(launch, settings, modes)?;
     if labelled.is_empty() {
         return Ok(None);
     }
-    let context = issues::read_context(ctx, repo).await?;
-    let issue = issues::load(ctx, context, input.clone()).await?;
-    match launches::labelled_mode(labelled, &issue.labels) {
+    let Some((item, labels)) = item_labels(ctx, launch, repo).await? else {
+        return Ok(None);
+    };
+    match launches::labelled_mode(labelled, &labels) {
         Ok(mode) => Ok(mode.map(ModeChoice::Named)),
         Err(_) if ui::can_pick(ctx) => Ok(Some(ModeChoice::Pick)),
-        Err(several) => anyhow::bail!("issue {input}: {several}"),
+        Err(several) => anyhow::bail!("{item}: {several}"),
     }
+}
+
+/// What `launch` starts on in `repo`, the PR it names, else the issue, as
+/// refusals name it, with its labels; none where it names neither.
+async fn item_labels(
+    ctx: &Context,
+    launch: &Launch,
+    repo: &Repository,
+) -> Result<Option<(String, Vec<String>)>> {
+    let context = issues::read_context(ctx, repo).await?;
+    if let Some(pull) = launches::named_pull(launch) {
+        let pull = client::pull_request(&ctx.paths, context, pull).await?;
+        return Ok(Some((format!("PR {}", pull.url), pull.labels)));
+    }
+    let Some(input) = launches::named_issue(launch)? else {
+        return Ok(None);
+    };
+    let issue = issues::load(ctx, context, input.clone()).await?;
+    Ok(Some((format!("issue {input}"), issue.labels)))
 }
 
 /// Each mode of `settings` with a label, by name with its label, among the

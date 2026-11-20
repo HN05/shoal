@@ -190,13 +190,19 @@ async fn named_repository(
 }
 
 /// The registered repository of the issue, PR or branch `launch` links,
-/// offering to register an unregistered one; none for a start on no link.
+/// positionally or with `--pr`, offering to register an unregistered one;
+/// none for a start on no link.
 async fn linked_repository(
     ctx: &Context,
     launch: &Launch,
     repos: &mut Vec<Repository>,
 ) -> Result<Option<shoal_ids::repository_ids::RepositoryId>> {
-    if let Some(linked) = (launch.target.as_ref()).and_then(StartTarget::linked_repository) {
+    let flagged = match &launch.pr {
+        Some(ItemChoice::Named(ItemInput::Url(pull))) => Some(pull.repository()),
+        _ => None,
+    };
+    let positional = (launch.target.as_ref()).and_then(StartTarget::linked_repository);
+    if let Some(linked) = positional.or(flagged) {
         let retry = "shoal start <link> --repo <repository>";
         return issues::registered_remote(ctx, repos, linked.clone(), retry)
             .await

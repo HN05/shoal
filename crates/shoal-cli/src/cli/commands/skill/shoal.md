@@ -50,12 +50,13 @@ shoal contribute https://github.com/other/repo/issues/12 --agent claude
 ```
 
 `start` accepts a registered repository and branch, or an issue, PR or branch
-URL; an issue becomes the agent's first message, followed by its mode's
-instructions, and text after `--` is the task. Every start starts an agent:
+URL, and `--pr` a PR's number or URL; an issue becomes the agent's first
+message, followed by its mode's instructions, and text after `--` is the task. Every start starts an agent:
 `--agent`, else `agent.default`, else one picked on a terminal; without
 either it is refused, and `shoal create` makes a workspace without an agent.
-`--mode` picks the mode,
-`worker` by default, which starts in a workspace; `chat` and `plan` start in a
+`--mode` picks the mode, else
+the one whose `label` the PR or issue carries, else `worker`, which starts in
+a workspace; `chat` and `plan` start in a
 chat; the mode alone decides the kind of space. `--name` names
 the new space; without it, it takes the issue's or PR's title, else its
 branch. `--base` naming another workspace's branch stacks the new workspace on

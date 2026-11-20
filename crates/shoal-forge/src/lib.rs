@@ -107,6 +107,7 @@ impl ForgeRepo {
             number,
             title: pull.item.title,
             url,
+            labels: pull.item.labels,
             head: pr.head,
             base: pr.base,
             head_commit: pull.head_sha,

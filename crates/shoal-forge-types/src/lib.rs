@@ -196,12 +196,13 @@ impl ForgeRepo {
     }
 }
 
-/// A PR's branches, for checking it out locally.
+/// A PR's branches, for checking it out locally, and its labels.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct PullRequest {
     pub number: PullNumber,
     pub title: String,
     pub url: ItemRef,
+    pub labels: Vec<String>,
     /// Its head branch, in this repository or in `fork`.
     pub head: BranchName,
     pub base: BranchName,

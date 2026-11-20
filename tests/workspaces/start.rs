@@ -3,7 +3,7 @@
 use super::chats::{
     chat_args, chat_session_fixture, install_recording_agent, journal, save_running_chat,
 };
-use super::forge::{forge_origin, github_issue, install_api_curl, script_api};
+use super::forge::{forge_origin, forgejo_pull, github_issue, install_api_curl, script_api};
 use super::zmx::{created_zmx_session, wait_zmx_sessions_ended, zmx_calls};
 use super::*;
 
@@ -3085,6 +3085,37 @@ fn a_start_off_a_terminal_takes_the_mode_an_issues_labels_name() {
         error.contains("plan (label needs-plan) and worker (label planned)"),
         "{error}"
     );
+}
+
+#[test]
+fn a_start_on_a_pr_number_takes_its_branch_and_the_mode_its_labels_name() {
+    let fixture = Fixture::with_config(Some(
+        "[modes.fixer]\nkind = 'workspace'\nlabel = 'fix-review'\n\
+         [modes.plan]\nlabel = 'needs-plan'\n",
+    ));
+    let author = forge_origin(&fixture);
+    git(&author, &["switch", "-c", "fix"]);
+    fs::write(author.join("fix"), "change\n").unwrap();
+    git(&author, &["add", "fix"]);
+    git_with_identity(&author, &["commit", "-m", "fix"]);
+    git(&author, &["push", "origin", "fix"]);
+    install_api_curl(&fixture.root.path().join("bin"));
+    let mut pull = forgejo_pull(7, "open", "fix", &"7".repeat(40));
+    pull["head"]["repo"]["full_name"] = "team/project".into();
+    // The plan mode's label names a chat, which a PR's workspace cannot be.
+    pull["labels"] = serde_json::json!([{"name": "fix-review"}, {"name": "needs-plan"}]);
+    script_api(fixture.root.path(), "repos/team/project/pulls/7", &pull);
+    install_recording_agent(&fixture, "pi");
+    let args = [
+        "--json", "start", "--wait", "--pr", "7", "--agent", "pi", "--here",
+    ];
+    let output = fixture.output(fixture.command().args(args).current_dir(&fixture.repo));
+    assert!(output.status.success(), "{}", printed(&output));
+    let workspace: Value =
+        serde_json::from_slice(output.stdout.split(|b| *b == b'\n').next().unwrap()).unwrap();
+    assert_eq!(workspace["branch"], "fix", "{workspace}");
+    let status = fixture.ok(&["status", workspace["id"].as_str().unwrap()]);
+    assert_eq!(status["workspace"]["mode"], "fixer", "{status}");
 }
 
 #[test]

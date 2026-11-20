@@ -240,6 +240,7 @@ fn on_branch(launch: &Launch, workspace: &Workspace) -> Launch {
         target: None,
         repository: None,
         branch: None,
+        pr: None,
         parent: None,
         in_workspace: Some(SpaceChoice::Space(SpaceSelector::id(&workspace.id))),
         ..launch.clone()
