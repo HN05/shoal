@@ -148,22 +148,23 @@ pub fn decides_kind(launch: &Launch) -> bool {
     launch.mode.is_some() || launch.setup.is_some() || fitting_kind(launch).is_some()
 }
 
-/// Whether the positional argument links a PR or branch, which only a
-/// workspace starts on.
+/// Whether the arguments name a PR, positionally or with `--pr`, or link
+/// a branch, which only a workspace starts on.
 fn links_branch(launch: &Launch) -> bool {
-    matches!(
+    let linked = matches!(
         launch.target,
         Some(StartTarget::Pull(_) | StartTarget::Branch { .. })
-    )
+    );
+    linked || launch.pr.is_some()
 }
 
-/// Refuse a copy beside a PR or branch link, which would open that branch
-/// instead, before anything is asked or looked up.
+/// Refuse a copy beside a PR or branch link or `--pr`, which would open
+/// that branch instead, before anything is asked or looked up.
 pub fn ensure_copy_fits(launch: &Launch) -> Result<()> {
     let copies = launch.copy.is_some() || launch.checkpoint.is_some();
     ensure!(
         !copies || !links_branch(launch),
-        "a copy starts from the workspace it copies, not a PR or branch link"
+        "a copy starts from the workspace it copies, not a PR or branch link or --pr"
     );
     Ok(())
 }
