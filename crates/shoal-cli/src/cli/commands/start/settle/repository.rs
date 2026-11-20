@@ -20,7 +20,7 @@ use crate::{
         modes::{ModeName, ModeShapes},
     },
     forge::items::reference::ItemInput,
-    launches::{SpaceRepository, labels},
+    launches::{SpaceRepository, fit},
     model::{Repository, SpaceKind},
     protocol::ConfigTarget,
 };
@@ -109,7 +109,7 @@ pub(super) async fn required(
     launch: &mut Launch,
     (found, settings): (Option<Repository>, Effective),
 ) -> Result<(Option<Repository>, Effective)> {
-    if found.is_some() || !labels::requires_repository(launch)? || !picks(ctx, launch).await? {
+    if found.is_some() || !fit::requires_repository(launch)? || !picks(ctx, launch).await? {
         return Ok((found, settings));
     }
     let repo = pick(ctx, launch).await?;

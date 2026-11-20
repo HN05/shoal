@@ -338,6 +338,7 @@ fn positional_target(
     }
 }
 
+pub mod fit;
 pub mod labels;
 mod reads;
 pub mod shape;

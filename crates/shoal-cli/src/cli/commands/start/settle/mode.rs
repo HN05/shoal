@@ -12,7 +12,7 @@ use crate::{
         ui::{self, ModeChoice},
     },
     config::modes::{self, ModeShapes},
-    launches::{self, labels},
+    launches::{self, fit},
     model::SpaceKind,
 };
 
@@ -68,7 +68,7 @@ pub(super) fn chosen(
     if let (ModeChoice::Named(mode), Some(_)) = (&choice, launch.setup) {
         return Ok(mode.clone());
     }
-    choice.chosen(ctx, modes, labels::fit(launch)?)
+    choice.chosen(ctx, modes, fit::fit(launch)?)
 }
 
 /// The space `mode` of `launch` starts among the `modes` the start may

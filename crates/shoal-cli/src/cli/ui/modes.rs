@@ -8,7 +8,7 @@ use crate::{
         output::{Palette, Style},
     },
     config::modes::{self, ModeName, ModeShapes},
-    launches::labels::ModeFit,
+    launches::fit::ModeFit,
     model::SpaceKind,
 };
 
