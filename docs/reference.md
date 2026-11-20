@@ -1024,9 +1024,11 @@ hooks, run only
 on its machine and are refused elsewhere, naming it, as is a command that
 attaches files, which that machine cannot read. Without a target, the
 picker of a command this covers, outside `resume` and the issue, PR and CI
-groups, offers the other machines' spaces after this machine's, those
-with an agent for `attach`, each naming its machine, and an offline one
-with when the hub last saw it; choosing one acts as naming it does.
+groups, offers the other machines' spaces after this machine's where the
+hub's listing shows what the command needs, such as an agent for
+`attach`, but none where it does not, such as a hold for `release hold`,
+each naming its machine, and an offline one with when the hub last saw
+it; choosing one acts as naming it does.
 
 While a space's machine is offline, a message, an answer, an approval
 decision or a stop for it waits at the hub, and the command says so, naming

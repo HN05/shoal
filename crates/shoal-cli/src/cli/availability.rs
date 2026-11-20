@@ -106,10 +106,26 @@ impl Need {
     }
 
     /// Whether a command of this need offers `space`, another joined
-    /// machine's, as the hub lists it: for one that attaches, a space with
-    /// an agent.
+    /// machine's, as the hub lists it: one that attaches a space with an
+    /// agent, one that stops a space whose agent or a process runs, and one
+    /// whose need the listing says nothing of, such as holds, none. A need
+    /// of the space's state is that machine's to judge.
     pub fn offers_elsewhere(self, space: &SpaceSummary) -> bool {
-        self != Self::Session || space.agent
+        match self {
+            Self::Any | Self::Ready | Self::Settled | Self::Links => true,
+            Self::Session => space.agent,
+            Self::Running => {
+                space.agent_runs_or_sleeps() || space.status == ListStatus::ProcessRunning
+            }
+            Self::Setup
+            | Self::Checkpoint
+            | Self::Directory
+            | Self::Untracked
+            | Self::Done
+            | Self::Base
+            | Self::Holds
+            | Self::Marks => false,
+        }
     }
 
     /// What a picker reports when no workspace is left to offer.
