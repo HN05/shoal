@@ -202,65 +202,25 @@ fn setup_failed(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<b
     )
 }
 
-/// Record `launch` unless its repository already queues a launch in the
-/// same workspace, or is being removed; names repeat, so they tell no two
-/// launches apart. A launch in a workspace needs it ready in the same
-/// transaction, or failed in its setup for one that waits its turn, which
-/// then waits for a preparation there to get past its post-setup hook and
-/// takes the place of the start whose setup failed, and one a space queued
-/// needs that space present and not being removed: removal reserves the space before its final checks, so the
-/// launch either precedes them, which keeps the space, or is refused here.
+/// Record `launch` once [`ensure_recordable`] lets it: it takes the place
+/// of the start whose setup failed in a workspace it waits in, and of its
+/// space's failed launch.
 pub(super) fn insert_launch(
     tx: &rusqlite::Transaction<'_>,
     launch: &Launch,
     removing: &crate::daemon::spaces::Removing,
 ) -> Result<()> {
-    if let Some(repository) = &launch.repository {
-        ensure!(
-            !crate::daemon::store::repository_removing(tx, repository)?,
-            "the repository is being removed"
-        );
-    }
-    let waits_for_setup = match (&launch.opens, launch.awaits) {
-        (Some(_), Awaits::Preparation { .. }) => true,
-        (Some(workspace), Awaits::FailedSetup) => {
-            !launch.request.now && setup_failed(tx, workspace)?
-        }
-        (None, _) => false,
-    };
-    if let (Some(workspace), Awaits::FailedSetup) = (&launch.opens, launch.awaits) {
-        if waits_for_setup {
-            end_failed_starts(tx, workspace)?;
-        } else {
-            crate::daemon::store::require_ready(tx, workspace)
-                .context("start agents in a ready workspace")?;
-        }
+    let waits_for_setup = ensure_recordable(tx, launch, removing)?;
+    if let (Some(workspace), Awaits::FailedSetup) = (&launch.opens, launch.awaits)
+        && waits_for_setup
+    {
+        end_failed_starts(tx, workspace)?;
     }
     let at_once = matches!(launch.awaits, Awaits::Preparation { at_once: true });
-    if let Some(space) = &launch.scope {
-        (removing.require_taking_work(tx, space))
-            .context("the space that queued the launch is being removed")?;
-    }
-    if let Some(chat) = &launch.chat {
-        ensure!(
-            !queues_launch_in(tx, chat)?,
-            "chat {chat} has an agent waiting in the agent queue"
-        );
-    }
     for space in [&launch.opens, &launch.chat].into_iter().flatten() {
         super::failures::replace(tx, space)?;
     }
     let request = &launch.request;
-    ensure!(
-        !crate::daemon::store::exists(
-            tx,
-            "SELECT 1 FROM agent_queue WHERE repository_id=?1 AND kind=?2
-                AND opens_workspace_id=?3",
-            params![launch.repository, QueueKind::Launch, launch.opens],
-        )?,
-        "{} is already in the agent queue",
-        request.name
-    );
     let now = UnixTime::now();
     tx.execute(
         "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode,narrowing,scope_space_id,priority,issue_labels,source,starts_at_once,space_id)
@@ -297,6 +257,70 @@ pub(super) fn insert_launch(
         blockers::wait_for_setup(tx, &launch.id, workspace)?;
     }
     Ok(())
+}
+
+/// Refuse `launch` unless its repository already queues no launch in the
+/// same workspace and is not being removed; names repeat, so they tell no
+/// two launches apart. A launch in a workspace needs it ready in the same
+/// transaction, or failed in its setup for one that waits its turn, which
+/// then waits for a preparation there to get past its post-setup hook, and
+/// one a space queued needs that space present and not being removed:
+/// removal reserves the space before its final checks, so the launch either
+/// precedes them, which keeps the space, or is refused here. Returns
+/// whether it waits for the workspace's setup.
+pub(super) fn ensure_recordable(
+    tx: &rusqlite::Transaction<'_>,
+    launch: &Launch,
+    removing: &crate::daemon::spaces::Removing,
+) -> Result<bool> {
+    if let Some(repository) = &launch.repository {
+        ensure!(
+            !crate::daemon::store::repository_removing(tx, repository)?,
+            "the repository is being removed"
+        );
+    }
+    let waits_for_setup = match (&launch.opens, launch.awaits) {
+        (Some(_), Awaits::Preparation { .. }) => true,
+        (Some(workspace), Awaits::FailedSetup) => {
+            !launch.request.now && setup_failed(tx, workspace)?
+        }
+        (None, _) => false,
+    };
+    if let (Some(workspace), Awaits::FailedSetup) = (&launch.opens, launch.awaits)
+        && !waits_for_setup
+    {
+        crate::daemon::store::require_ready(tx, workspace)
+            .context("start agents in a ready workspace")?;
+    }
+    if let Some(space) = &launch.scope {
+        (removing.require_taking_work(tx, space))
+            .context("the space that queued the launch is being removed")?;
+    }
+    if let Some(chat) = &launch.chat {
+        ensure!(
+            !queues_launch_in(tx, chat)?,
+            "chat {chat} has an agent waiting in the agent queue"
+        );
+    }
+    // The starts whose setup failed give way to a launch that waits there.
+    let replaces_failed_starts = waits_for_setup && matches!(launch.awaits, Awaits::FailedSetup);
+    ensure!(
+        !crate::daemon::store::exists(
+            tx,
+            "SELECT 1 FROM agent_queue WHERE repository_id=?1 AND kind=?2
+                AND opens_workspace_id=?3 AND NOT (?4 AND state=?5)",
+            params![
+                launch.repository,
+                QueueKind::Launch,
+                launch.opens,
+                replaces_failed_starts,
+                QueueState::Starting
+            ],
+        )?,
+        "{} is already in the agent queue",
+        launch.request.name
+    );
+    Ok(waits_for_setup)
 }
 
 /// Record a launch `id`, waiting to open `workspace`, that keeps what

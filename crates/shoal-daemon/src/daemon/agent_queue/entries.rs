@@ -4,6 +4,7 @@
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::ByKind;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, params};
@@ -11,7 +12,9 @@ use rusqlite::{OptionalExtension, params};
 use super::{
     blockers,
     dispatch::Start,
-    store::{Awaits, ENTRY_COLUMNS, Launch, LaunchRequest, entry, insert_launch},
+    store::{
+        Awaits, ENTRY_COLUMNS, Launch, LaunchRequest, ensure_recordable, entry, insert_launch,
+    },
 };
 use crate::{
     daemon::{manager::Manager, notifications::AlertKind},
@@ -35,7 +38,7 @@ impl Manager {
     }
 
     /// [`Self::queue_add`] for a launch that `awaits` what it says in its
-    /// space, discarding first the stopped or asleep agent it replaces.
+    /// space, in place of the stopped or asleep agent it replaces.
     pub(super) async fn queue_add_awaiting(
         &self,
         request: QueueRequest,
@@ -51,12 +54,7 @@ impl Manager {
             Some(repository) => self.launch_priority(&request, repository).await?,
             None => None,
         };
-        if request.replace {
-            self.replace_stopped_worker(&space).await?;
-        }
-        let _gate = self.agent_queue.lock_admission().await;
-        self.ensure_takes_worker(&space).await?;
-        let caller_starts = request.starts_in_caller;
+        let (caller_starts, replace) = (request.starts_in_caller, request.replace);
         let id = QueueEntryId::generate();
         let state = if request.now {
             QueueState::Starting
@@ -87,6 +85,12 @@ impl Manager {
             awaits,
         };
         let now = launch.request.now;
+        let launch = std::sync::Arc::new(launch);
+        let _gate = self.agent_queue.lock_admission().await;
+        if replace {
+            self.replace_for(&space, &launch).await?;
+        }
+        self.ensure_takes_worker(&space).await?;
         let removing = self.space_removals.clone();
         self.store
             .write(move |tx| insert_launch(tx, &launch, &removing))
@@ -105,6 +109,18 @@ impl Manager {
             self.start_launches(vec![start], None).await?;
         }
         Ok(admission)
+    }
+
+    /// Discard the stopped or asleep agent of `space` that `launch`
+    /// replaces, once nothing but that agent would refuse to record the
+    /// launch, so a refused launch keeps it. Requires the queue gate, which
+    /// keeps another launch out until this one is recorded.
+    async fn replace_for(&self, space: &crate::model::Space, launch: &Arc<Launch>) -> Result<()> {
+        let (launch, removing) = (launch.clone(), self.space_removals.clone());
+        (self.store)
+            .read(move |tx| ensure_recordable(tx, &launch, &removing))
+            .await?;
+        self.replace_stopped_worker(space).await
     }
 
     /// The answer to the launch `id`, which the caller starts when `start`:

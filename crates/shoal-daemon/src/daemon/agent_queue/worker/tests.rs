@@ -168,6 +168,38 @@ async fn a_start_s_agent_that_replaces_discards_the_stopped_agent() {
     assert!(!record.exists(), "the stopped agent's record stayed");
 }
 
+/// A replacing launch the queue refuses for another reason, such as a
+/// workspace no longer ready, keeps the stopped agent.
+#[tokio::test]
+async fn a_replacing_launch_the_queue_refuses_keeps_the_stopped_agent() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let workspace = create(&manager, &repo, "failed").await;
+    let record = stopped_agent(&manager, &workspace);
+    let id = workspace.id.clone();
+    (manager.store)
+        .run(move |db| {
+            db.execute("UPDATE workspaces SET state='failed' WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    let refused = manager
+        .queue_add(QueueRequest {
+            replace: true,
+            now: true,
+            ..launch_in(&workspace, false)
+        })
+        .await;
+
+    assert!(
+        refused.is_err(),
+        "a launch in a failed workspace was queued"
+    );
+    assert!(record.exists());
+}
+
 #[tokio::test]
 async fn replacing_refuses_a_running_agent() {
     let (temp, manager) = manager().await;
