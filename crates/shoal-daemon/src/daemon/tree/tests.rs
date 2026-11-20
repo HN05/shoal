@@ -448,6 +448,7 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
             narrowing: Default::default(),
             mode: "worker".into(),
             model: Default::default(),
+            turn: None,
             execution: "stopped".into(),
             agent: "claude".into(),
             session: None,

@@ -236,6 +236,7 @@ fn manifest_with_sessions() -> Manifest {
         narrowing: Default::default(),
         mode: "worker".into(),
         model: Default::default(),
+        turn: None,
         execution: "quit".into(),
         agent: "codex".into(),
         session: Some("s2".into()),

@@ -446,6 +446,7 @@ fn each_agent_keeps_a_last_session() {
         &SpaceId::from("workspace"),
         &shoal_protocol::executions::TrackedAgent::named("claude code"),
         &ExecutionId::from("execution"),
+        None,
     )
     .unwrap();
     let mut saved = Saved::load(&paths, &SpaceId::from("workspace")).unwrap();
@@ -534,8 +535,8 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
             stop: Some(Stop {
                 reason: Some("its terminal closed".into()),
                 at: Some(UnixTime::from_seconds(1_800_000_000)),
-                turn: None,
             }),
+            turn: None,
             converted: false,
         }]
     );
@@ -585,42 +586,47 @@ fn a_restored_session_learns_why_and_when_it_stopped_and_what_the_stop_ended() {
         Stop {
             reason: Some("critical memory pressure".into()),
             at: Some(UnixTime::from_seconds(1_800_000_000)),
-            turn: None,
         }
     );
     // A stop whose turn is unknown came mid-turn.
     let at = UnixTime::from_seconds(1_800_000_000).local_minutes();
-    let prompt = resumed_prompt(Ending::Stopped(&stop), Some("handoff")).unwrap();
+    let stopped = Ending {
+        stop: Some(&stop),
+        turn: None,
+    };
+    let prompt = resumed_prompt(stopped, Some("handoff")).unwrap();
     assert!(prompt.contains(&at), "{prompt}");
     assert!(prompt.contains("critical memory pressure"), "{prompt}");
     assert!(prompt.ends_with("\n\nhandoff"), "{prompt}");
     // Without a stop to describe, it is still told to continue.
-    let unrecorded = resumed_prompt(Ending::Unrecorded, None).unwrap();
+    let unrecorded = resumed_prompt(Ending::default(), None).unwrap();
     assert!(unrecorded.starts_with("Continue"), "{unrecorded}");
 }
 
 #[test]
 fn a_session_that_ended_between_turns_is_told_only_its_handoff() {
-    let idle = Stop {
-        turn: Some(AgentState::Idle),
-        ..Stop::default()
-    };
-    for ending in [Ending::Stopped(&idle), Ending::Exited] {
-        assert_eq!(resumed_prompt(ending, None), None);
+    let stop = Stop::default();
+    for stop in [Some(&stop), None] {
+        let between = Ending {
+            stop,
+            turn: Some(AgentState::Idle),
+        };
+        assert_eq!(resumed_prompt(between, None), None);
         assert_eq!(
-            resumed_prompt(ending, Some("handoff")).as_deref(),
+            resumed_prompt(between, Some("handoff")).as_deref(),
             Some("handoff")
         );
+        // An agent that exited or stopped mid-turn is told to continue.
+        let working = Ending {
+            stop,
+            turn: Some(AgentState::Working),
+        };
+        assert!(resumed_prompt(working, None).is_some());
     }
-    let working = Stop {
-        turn: Some(AgentState::Working),
-        ..Stop::default()
-    };
-    assert!(resumed_prompt(Ending::Stopped(&working), None).is_some());
 }
 
 #[test]
-fn a_stop_keeps_the_turn_its_record_saved() {
+fn a_last_session_keeps_the_turn_its_agent_ended_in() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let (space, execution) = (SpaceId::from("workspace"), ExecutionId::from("execution"));
@@ -630,6 +636,12 @@ fn a_stop_keeps_the_turn_its_record_saved() {
     let record = Record::load(&path).unwrap().unwrap();
     let last = record.into_last_session(execution, &path);
     assert!(!last.ending().mid_turn());
+    // One that exited on its own keeps the turn the daemon gives it.
+    let exited = ExecutionId::from("exited");
+    let working = Some(AgentState::Working);
+    LastSession::save(&paths, &space, &agent, &exited, working).unwrap();
+    let saved = LastSession::load(&LastSession::path(&paths, &space, &exited));
+    assert!(saved.unwrap().unwrap().ending().mid_turn());
 }
 
 #[test]
@@ -673,7 +685,7 @@ fn a_permission_change_reaches_each_saved_agent_and_keeps_the_rest() {
         None,
     )
     .unwrap();
-    LastSession::save(&paths, &workspace, &agent, &ExecutionId::from("last")).unwrap();
+    LastSession::save(&paths, &workspace, &agent, &ExecutionId::from("last"), None).unwrap();
     let change = crate::config::permissions::PermissionChange {
         set: crate::config::permissions::PermissionsConfig::assigned(&["api_writes=deny".into()])
             .unwrap(),
@@ -708,7 +720,14 @@ fn a_permission_change_reaches_each_saved_agent_and_keeps_the_rest() {
     // A record a restore claimed is refused, and none changes, in any
     // workspace.
     let other = SpaceId::from("other");
-    LastSession::save(&paths, &other, &agent, &ExecutionId::from("other-last")).unwrap();
+    LastSession::save(
+        &paths,
+        &other,
+        &agent,
+        &ExecutionId::from("other-last"),
+        None,
+    )
+    .unwrap();
     let record = record_path(&paths, &workspace, &ExecutionId::from("stopped"));
     let _restoring = claim(&record).unwrap();
     let saved = [&other, &workspace].map(|id| Saved::load(&paths, id).unwrap());

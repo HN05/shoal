@@ -647,6 +647,7 @@ async fn discarding_a_stopped_session_reaches_a_subscription() {
         &workspace.id,
         &shoal_protocol::executions::TrackedAgent::named("claude"),
         &shoal_ids::execution_ids::ExecutionId::from("execution"),
+        None,
     )
     .unwrap();
     let mut subscription = subscribe(daemon.connector(), &[Topic::Spaces]).await;

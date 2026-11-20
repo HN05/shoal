@@ -129,7 +129,7 @@ pub(super) async fn for_launch(
         narrowing: agent.narrowing,
         session: None,
     };
-    let resolved = resolve_in(paths, workspace, restored, Ending::Unrecorded).await;
+    let resolved = resolve_in(paths, workspace, restored, Ending::default()).await;
     resolved.unwrap_or_else(|error| {
         eprintln!("warning: automatic agent recovery unavailable: {error:#}");
         Recovery {
@@ -269,7 +269,11 @@ pub(super) async fn restore_command(
         session: record.session.as_ref(),
     };
     let space = SpaceSelector::id(&space.id);
-    match resolve_in(paths, &space, restored, Ending::Stopped(&stop)).await {
+    let ending = Ending {
+        stop: Some(&stop),
+        turn: record.turn,
+    };
+    match resolve_in(paths, &space, restored, ending).await {
         Ok(resolved) if !resolved.command.is_empty() => (resolved.command, resolved.proxy),
         Ok(_) => launched(),
         Err(error) => {

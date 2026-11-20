@@ -61,7 +61,6 @@ impl StopExt for Stop {
         Self {
             reason: record.stop_reason.clone(),
             at: saved_at(path),
-            turn: record.turn,
         }
     }
 
@@ -88,25 +87,20 @@ pub fn saved_at(path: &Path) -> Option<crate::time::UnixTime> {
 
 /// How a restored agent's session ended, which decides whether it is told
 /// to continue.
-#[derive(Debug, Clone, Copy)]
-pub enum Ending<'a> {
-    /// Shoal stopped it, as the stop says.
-    Stopped(&'a Stop),
-    /// It exited on its own, between turns.
-    Exited,
-    /// Nothing records how, which counts as mid-turn.
-    Unrecorded,
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Ending<'a> {
+    /// Why and when Shoal stopped it; none for one that exited on its own
+    /// or whose end nothing records.
+    pub stop: Option<&'a Stop>,
+    /// What it was doing then, as its hooks last reported it.
+    pub turn: Option<AgentState>,
 }
 
 impl Ending<'_> {
     /// Whether it ended in the middle of a turn: one whose turn is unknown
     /// counts as such.
     pub fn mid_turn(self) -> bool {
-        match self {
-            Self::Stopped(stop) => !idle(stop.turn),
-            Self::Exited => false,
-            Self::Unrecorded => true,
-        }
+        !idle(self.turn)
     }
 }
 
@@ -117,10 +111,9 @@ pub fn resumed_prompt(ending: Ending<'_>, handoff: Option<&str>) -> Option<Strin
     if !ending.mid_turn() {
         return handoff.map(str::to_owned);
     }
-    let mut prompt = match ending {
-        Ending::Stopped(stop) => format!("{} ", stop.describe()),
-        Ending::Exited | Ending::Unrecorded => String::new(),
-    };
+    let mut prompt = (ending.stop)
+        .map(|stop| format!("{} ", stop.describe()))
+        .unwrap_or_default();
     prompt.push_str("Continue working on the unfinished assignment from where you left off.");
     if let Some(handoff) = handoff {
         prompt.push_str("\n\n");
@@ -295,6 +288,7 @@ impl RecordExt for Record {
             converted: self.converted,
             origin: self.origin,
             stop: Some(stop),
+            turn: self.turn,
             model: self.model,
             mode: self.mode,
             narrowing: self.narrowing,
@@ -703,18 +697,20 @@ pub trait LastSessionExt: Sized {
     /// This session where it is not available, which starts a new one.
     fn moved(self) -> Self;
 
-    /// How the session ended: as Shoal stopped it, or on its own.
+    /// How the session ended: as Shoal stopped it, or on its own, in the
+    /// turn it kept.
     fn ending(&self) -> Ending<'_>;
 
     fn path(paths: &Paths, space_id: &SpaceId, execution: &ExecutionId) -> PathBuf;
 
-    /// Save execution `id` of `agent` as one of the space's last
-    /// sessions.
+    /// Save execution `id` of `agent`, which last reported `turn`, as one
+    /// of the space's last sessions.
     fn save(
         paths: &Paths,
         space_id: &SpaceId,
         agent: &TrackedAgent,
         id: &ExecutionId,
+        turn: Option<AgentState>,
     ) -> Result<()>;
 
     /// Save this as one of the space's last sessions.
@@ -741,7 +737,10 @@ impl LastSessionExt for LastSession {
     }
 
     fn ending(&self) -> Ending<'_> {
-        self.stop.as_ref().map_or(Ending::Exited, Ending::Stopped)
+        Ending {
+            stop: self.stop.as_ref(),
+            turn: self.turn,
+        }
     }
 
     fn path(paths: &Paths, space_id: &SpaceId, execution: &ExecutionId) -> PathBuf {
@@ -755,6 +754,7 @@ impl LastSessionExt for LastSession {
         space_id: &SpaceId,
         agent: &TrackedAgent,
         id: &ExecutionId,
+        turn: Option<AgentState>,
     ) -> Result<()> {
         Self {
             execution: id.to_owned(),
@@ -765,6 +765,7 @@ impl LastSessionExt for LastSession {
             converted: false,
             origin: None,
             stop: None,
+            turn,
             model: agent.model.clone(),
             mode: agent.mode.clone(),
             narrowing: agent.narrowing,

@@ -50,7 +50,7 @@ async fn a_permission_change_changes_no_agent_when_one_is_refused() {
         let execution = ExecutionId::from(format!("{name}-agent"));
         if name != "running" {
             let agent = TrackedAgent::named("claude");
-            LastSession::save(&manager.paths, space, &agent, &execution).unwrap();
+            LastSession::save(&manager.paths, space, &agent, &execution, None).unwrap();
         }
         agents.push(SavedAgent {
             workspace: SpaceSelector::id(space),
@@ -112,7 +112,7 @@ async fn only_stopped_agents_or_commands_are_unfinished_work() {
         None,
     )
     .unwrap();
-    LastSession::save(&manager.paths, exited, &agent, &execution).unwrap();
+    LastSession::save(&manager.paths, exited, &agent, &execution, None).unwrap();
 
     let summaries = manager.saved_summaries(None).await.unwrap();
     let summarized = summaries

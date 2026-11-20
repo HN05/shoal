@@ -334,9 +334,9 @@ impl Manager {
         }
     }
 
-    /// Forget an ended agent's reported session, first keeping it as one of
-    /// the last sessions of the space `space_id` while its assignment is
-    /// unfinished.
+    /// Forget an ended agent's reported session, first keeping it, with the
+    /// turn it reported last, as one of the last sessions of the space
+    /// `space_id` while its assignment is unfinished.
     pub(crate) async fn keep_agent_session(
         &self,
         space_id: &SpaceId,
@@ -345,7 +345,11 @@ impl Manager {
     ) -> anyhow::Result<()> {
         use crate::execution::recovery::{self, LastSession};
         if self.completion(space_id).await?.is_none() {
-            LastSession::save(&self.paths, space_id, agent, execution)?;
+            let id = execution.clone();
+            let turn = (self.store)
+                .read(move |db| crate::daemon::agent_state::reported_by_execution(db, &id))
+                .await?;
+            LastSession::save(&self.paths, space_id, agent, execution, turn)?;
         }
         recovery::forget_session(&self.paths, space_id, execution)
     }

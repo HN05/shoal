@@ -229,6 +229,7 @@ async fn a_workspace_whose_agent_exited_still_becomes_a_chat_with_its_session() 
     // The agent exited on its own after the conversion was asked for,
     // keeping its session as a last session.
     let exited = LastSession {
+        turn: None,
         execution: execution.clone(),
         agent: "claude".into(),
         session: Some("s2".into()),

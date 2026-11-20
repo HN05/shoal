@@ -681,8 +681,14 @@ async fn an_agent_records_its_mode_with_its_execution_workspace_and_last_session
         .with_agent(&id, |agent| agent.tracked())
         .await
         .unwrap();
-    crate::execution::recovery::LastSession::save(&manager.paths, &workspace.id, &tracked, &id)
-        .unwrap();
+    crate::execution::recovery::LastSession::save(
+        &manager.paths,
+        &workspace.id,
+        &tracked,
+        &id,
+        None,
+    )
+    .unwrap();
     let path = crate::execution::recovery::LastSession::path(&manager.paths, &workspace.id, &id);
     let saved: crate::execution::recovery::LastSession =
         serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();

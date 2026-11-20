@@ -121,15 +121,9 @@ async fn chat_restore_child() {
         mode: &crate::model::chat_mode(),
         ..restored("claude", Some(&session))
     };
-    let recovery = crate::execution::resolve(
-        &paths,
-        home,
-        restored,
-        None,
-        shoal_core::execution::recovery::Ending::Unrecorded,
-    )
-    .await
-    .unwrap();
+    let recovery = crate::execution::resolve(&paths, home, restored, None, Default::default())
+        .await
+        .unwrap();
 
     // It continues its session, told the chat's rules again, with the
     // hooks of a chat and its directories: `/tmp`, the default agent
@@ -204,7 +198,7 @@ async fn built_in_restore_child() {
             &workspace,
             restored(agent, None),
             handoff,
-            shoal_core::execution::recovery::Ending::Unrecorded,
+            Default::default(),
         )
         .await
         .unwrap();
@@ -263,7 +257,7 @@ async fn built_in_restore_child() {
             &workspace,
             restored(agent, Some(&"s1".into())),
             None,
-            shoal_core::execution::recovery::Ending::Unrecorded,
+            Default::default(),
         )
         .await
         .unwrap();
@@ -285,15 +279,9 @@ async fn built_in_restore_child() {
         mode: &"triage".into(),
         ..restored("claude", Some(&session))
     };
-    let recovery = crate::execution::resolve(
-        &paths,
-        &workspace,
-        triage,
-        None,
-        shoal_core::execution::recovery::Ending::Unrecorded,
-    )
-    .await
-    .unwrap();
+    let recovery = crate::execution::resolve(&paths, &workspace, triage, None, Default::default())
+        .await
+        .unwrap();
     let told =
         |text: &str| (recovery.command.iter()).any(|arg| arg.to_string_lossy().contains(text));
     assert!(told("\n\nTriage load"), "{:?}", recovery.command);
@@ -337,15 +325,10 @@ async fn built_in_restore_child() {
             model: &model,
             session: Some(&"s1".into()),
         };
-        let recovery = crate::execution::resolve(
-            &paths,
-            &workspace,
-            restored,
-            None,
-            shoal_core::execution::recovery::Ending::Unrecorded,
-        )
-        .await
-        .unwrap();
+        let recovery =
+            crate::execution::resolve(&paths, &workspace, restored, None, Default::default())
+                .await
+                .unwrap();
         let restore = restore.iter().map(std::ffi::OsString::from);
         assert!(
             recovery.command.starts_with(&restore.collect::<Vec<_>>()),
@@ -359,7 +342,7 @@ async fn built_in_restore_child() {
         &workspace,
         restored("custom", None),
         None,
-        shoal_core::execution::recovery::Ending::Unrecorded,
+        Default::default(),
     )
     .await
     .unwrap();
@@ -375,7 +358,7 @@ async fn built_in_restore_child() {
         &workspace,
         restored("codex", None),
         Some("handoff"),
-        shoal_core::execution::recovery::Ending::Unrecorded,
+        Default::default(),
     )
     .await
     .unwrap();
@@ -395,7 +378,7 @@ async fn built_in_restore_child() {
         &workspace,
         restored("codex", None),
         Some("handoff"),
-        shoal_core::execution::recovery::Ending::Unrecorded,
+        Default::default(),
     )
     .await
     .unwrap();
@@ -413,7 +396,7 @@ async fn built_in_restore_child() {
         &workspace,
         restored("codex", None),
         None,
-        shoal_core::execution::recovery::Ending::Unrecorded,
+        Default::default(),
     )
     .await
     .unwrap();
@@ -444,7 +427,7 @@ async fn built_in_restore_child() {
         &workspace,
         with_model(&codex),
         None,
-        shoal_core::execution::recovery::Ending::Unrecorded,
+        Default::default(),
     )
     .await
     .unwrap();
@@ -458,7 +441,7 @@ async fn built_in_restore_child() {
         &workspace,
         with_model(&custom),
         None,
-        shoal_core::execution::recovery::Ending::Unrecorded,
+        Default::default(),
     );
     assert!(refused.await.is_err());
     // So does the restore of an agent config turns off.
@@ -473,17 +456,19 @@ async fn built_in_restore_child() {
         &workspace,
         with_model(&codex),
         None,
-        shoal_core::execution::recovery::Ending::Unrecorded,
+        Default::default(),
     );
     assert!(off.await.is_err());
     fs::write(workspace.path.join(".shoal.toml"), config).unwrap();
     // A restore tells the session why and when it stopped.
-    let mut stop = shoal_core::execution::recovery::Stop {
+    let stop = shoal_core::execution::recovery::Stop {
         reason: Some("critical memory pressure".into()),
         at: None,
+    };
+    let mut ending = shoal_core::execution::recovery::Ending {
+        stop: Some(&stop),
         turn: None,
     };
-    let ending = shoal_core::execution::recovery::Ending::Stopped(&stop);
     let told = crate::execution::resolve(&paths, &workspace, restored("codex", None), None, ending)
         .await
         .unwrap();
@@ -498,8 +483,7 @@ async fn built_in_restore_child() {
     );
     // One stopped between turns waits, without the argument its prompt
     // would have been.
-    stop.turn = Some(crate::state::AgentState::Idle);
-    let ending = shoal_core::execution::recovery::Ending::Stopped(&stop);
+    ending.turn = Some(crate::state::AgentState::Idle);
     let waits =
         crate::execution::resolve(&paths, &workspace, restored("codex", None), None, ending)
             .await
@@ -516,7 +500,6 @@ async fn built_in_restore_child() {
     )
     .unwrap();
     let opens = async || {
-        let ending = shoal_core::execution::recovery::Ending::Stopped(&stop);
         let resolved =
             crate::execution::resolve(&paths, &workspace, restored("codex", None), None, ending);
         let command = resolved.await.unwrap().command;

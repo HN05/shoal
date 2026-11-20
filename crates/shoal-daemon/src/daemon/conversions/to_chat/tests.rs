@@ -121,6 +121,7 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
         .unwrap();
     let execution = ExecutionId::generate();
     let carried_on = crate::execution::recovery::LastSession {
+        turn: None,
         execution: execution.clone(),
         agent: "claude".into(),
         session: Some("s1".into()),

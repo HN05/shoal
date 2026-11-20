@@ -84,6 +84,7 @@ async fn a_workspace_lists_each_reported_session_once_the_running_ones_first() -
             narrowing: Default::default(),
             mode: "worker".into(),
             model: Default::default(),
+            turn: None,
             execution: execution.into(),
             agent: "claude".into(),
             session: Some(session.into()),

@@ -623,7 +623,7 @@ which then waits only for a heavy slot, rather than refusing the agent as runnin
 or starting a second beside it. A restore, manual or automatic, of an agent stopped mid-turn, or
 whose turn is unknown, prompts it to continue its unfinished assignment, naming when and why it
 stopped, which every stop that saves an agent records and a last session keeps, and that its
-subagents and background commands ended. One stopped between turns, or that exited on its own,
+subagents and background commands ended. One that stopped or exited on its own between turns
 is not told to continue: its session opens with only the handoff it needs, or with the wake
 prompt whose hook delivers the updates that wait for it, or with no prompt, and waits.
 Configured restore commands receive the prompt through `{prompt}`, which an argument of

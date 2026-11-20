@@ -739,6 +739,7 @@ async fn a_last_session_queues_and_takes_a_slot_once_admitted() {
             narrowing: Default::default(),
             mode: "worker".into(),
             model: Default::default(),
+            turn: None,
             execution: execution.clone(),
             agent: "claude".into(),
             session: None,

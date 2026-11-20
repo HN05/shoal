@@ -392,7 +392,7 @@ hooks last reported, otherwise the latest session in the workspace, without a
 session picker. An agent stopped mid-turn, or whose turn is unknown, such as one
 without Shoal's hooks, is prompted to continue its unfinished assignment, told when
 and why it stopped and that its subagents and background commands ended. One
-stopped between turns, such as an asleep agent, or that exited on its own opens
+that stopped or exited on its own between turns, such as an asleep agent, opens
 its session with no prompt and waits; when updates or messages wait for it, a
 built-in resume opens with the prompt that wakes an idle agent, whose hook
 delivers them as its first message. Resume commands receive the prompt through
