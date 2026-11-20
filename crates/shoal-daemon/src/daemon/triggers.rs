@@ -1,6 +1,7 @@
-//! What the triggers of `shoal-runner` need of the rest of the daemon: the
-//! registered repositories and their config, the agents a trigger's launch
-//! meets and starts, and the permission a scoped caller acts with.
+//! What `shoal-runner` needs of the rest of the daemon for its triggers and
+//! its runner: the registered repositories and their config, the agents a
+//! trigger's launch meets and starts, and the permission a scoped caller
+//! acts with.
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -15,7 +16,7 @@ use shoal_runner::daemon::{Agents, Permissions, Repositories};
 
 use super::{manager::Manager, permissions::Action, scope::Caller};
 use crate::{
-    config::repo::ConfigLayers,
+    config::{Config, Effective, repo::ConfigLayers},
     model::Repository,
     protocol::{ConfigTarget, ItemContext},
     state::QueueState,
@@ -43,6 +44,21 @@ impl Repositories for Manager {
         context: Option<ItemContext>,
     ) -> BoxFuture<'_, Result<Option<RepositoryId>>> {
         Box::pin(self.context_repository(context))
+    }
+
+    fn repository_settings_from<'a>(
+        &'a self,
+        config: &'a Config,
+        id: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<Effective>> {
+        Box::pin(Manager::repository_settings_from(self, config, id))
+    }
+
+    fn ensure_repository_available<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(Manager::ensure_repository_available(self, id))
     }
 
     fn acts_on_global_config(&self) -> bool {

@@ -8,7 +8,6 @@
 //! whose runner was turned off. A job admitted as the
 //! system shuts down waits in the queue again.
 use shoal_ids::execution_ids::ExecutionId;
-use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use std::{
     collections::BTreeMap,
@@ -80,7 +79,7 @@ impl Manager {
             Ok(Claim::Superseded) => None,
             Ok(Claim::Withdrawn) => {
                 let forgotten = match entry.job_repository() {
-                    Ok(repository) => self.forget_job_entries(repository).await,
+                    Ok(repository) => self.runner.forget_job_entries(repository).await,
                     Err(error) => Err(error),
                 };
                 if let Err(error) = forgotten {
@@ -132,6 +131,7 @@ impl Manager {
             return Ok(Claim::Suspended);
         }
         let registration = self
+            .runner
             .runner_registration(repository)
             .await?
             .context("the repository's runner is no longer registered")?;
@@ -368,7 +368,7 @@ impl Manager {
 
     /// The forge's command that runs `claim`'s job.
     async fn forge_job_command(&self, claim: &Claimed<'_>, job: &QueuedJob) -> Result<JobCommand> {
-        let program = self.runner_program(claim.forge)?;
+        let program = self.runner.runner_program(claim.forge)?;
         let labels = runner_labels(&claim.runner.labels);
         // Named for the claim: a job claimed again, after an earlier runner
         // took another job, may find that runner still registered.
@@ -448,21 +448,6 @@ impl Manager {
         command: JobCommand,
     ) -> Result<ExecutionId> {
         super::tests::launch(self, workspace, command).await
-    }
-
-    /// Take `repository_id`'s jobs out of the queue, as once its runner is
-    /// turned off; the forge keeps them for other runners.
-    pub(crate) async fn forget_job_entries(&self, repository_id: &RepositoryId) -> Result<()> {
-        let id = repository_id.to_owned();
-        self.store
-            .run(move |db| {
-                db.execute(
-                    "DELETE FROM agent_queue WHERE repository_id=?1 AND kind=?2",
-                    params![id, QueueKind::Job],
-                )?;
-                Ok(())
-            })
-            .await
     }
 
     /// Put the admitted job `id` back in the queue, where it waits again.

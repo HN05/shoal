@@ -755,7 +755,7 @@ async fn turning_the_runner_off_withdraws_its_jobs_without_claiming_them() {
         .write_local_config(&id, Some("[runner]\nenabled = false\n".into()))
         .await
         .unwrap();
-    manager.reconcile_runners().await.unwrap();
+    manager.runner.reconcile_runners(&**manager).await.unwrap();
     assert!(job_entries(manager).await.is_empty());
 }
 
@@ -942,9 +942,10 @@ async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_for
         )
         .await
         .unwrap();
-    manager.reconcile_runners().await.unwrap();
+    manager.runner.reconcile_runners(&**manager).await.unwrap();
     assert!(
         manager
+            .runner
             .runner_registration(&fixture.repository)
             .await
             .unwrap()
@@ -1795,5 +1796,51 @@ async fn a_runner_gone_while_the_daemon_was_away_gives_its_job_up_once_nothing_o
             .workspace_by_id(&claimed[0].workspace_id)
             .await
             .is_err()
+    );
+}
+
+#[tokio::test]
+async fn removing_a_repository_deletes_its_runner_on_the_forge() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = (manager.register_repository(path.to_str().unwrap().into(), None, None))
+        .await
+        .unwrap();
+    let deleted = Arc::new(Mutex::new(Vec::new()));
+    let seen = deleted.clone();
+    let server = Server::start(move |request| {
+        let body = match request.line.as_str() {
+            "GET /api/v1/version" => json!({"version": "17.0.1+gitea-1.22.0"}),
+            "POST /api/v1/repos/team/repo/actions/runners" => {
+                json!({"id": 5, "uuid": "u", "token": "t"})
+            }
+            line if line.starts_with("DELETE ") => {
+                seen.lock().unwrap().push(request.line.clone());
+                return (204, Vec::new(), Vec::new());
+            }
+            _ => return (404, Vec::new(), b"{}".to_vec()),
+        };
+        (200, Vec::new(), body.to_string().into())
+    });
+    crate::forge::hosts::learn(&server.host, ForgeKind::Forgejo);
+    let origin = format!("http://{}/team/repo", server.host);
+    git(&path, &["remote", "add", "origin", &origin]);
+    *manager.runner.jobs().path.lock().unwrap() =
+        Some(runner_program(root.path(), "forgejo-runner"));
+    configure(
+        &manager,
+        &format!(
+            "[machine.forges.\"{}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n[runner]\nenabled = true\n",
+            server.host
+        ),
+    )
+    .await;
+    manager.runner.reconcile_runners(&*manager).await.unwrap();
+
+    manager.remove_repository(&repo.id).await.unwrap();
+
+    assert_eq!(
+        *deleted.lock().unwrap(),
+        ["DELETE /api/v1/repos/team/repo/actions/runners/5"]
     );
 }

@@ -2762,6 +2762,8 @@ dependencies = [
  "sha2",
  "shoal-core",
  "shoal-daemon-base",
+ "shoal-forge",
+ "shoal-forge-types",
  "shoal-ids",
  "shoal-protocol",
  "shoal-store",

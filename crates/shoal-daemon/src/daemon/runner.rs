@@ -16,21 +16,30 @@ mod ends;
 mod linked;
 mod listing;
 mod overrun;
-mod registration;
 mod single_use;
 mod superseded;
 mod taken;
 mod waiting;
 
-pub(crate) use registration::Registration;
 pub(crate) use shoal_runner::jobs::JobStop;
+pub(crate) use shoal_runner::jobs::Registration;
 
 use std::{sync::Arc, time::Duration};
 
-use shoal_runner::jobs::INTERVAL;
+use anyhow::Result;
+use futures_util::future::BoxFuture;
+use rusqlite::{Connection, params};
+use shoal_forge::{RepoRequests, account::Account};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_runner::{daemon::Forges, jobs::INTERVAL};
 use tokio::time::Instant;
 
-use crate::daemon::{log, manager::Manager};
+use crate::{
+    daemon::{log, manager::Manager},
+    forge::ForgeRepo,
+    model::Repository,
+    state::QueueKind,
+};
 
 /// How often the forge's waiting jobs are read while one could start.
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
@@ -49,7 +58,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
                 manager.runner.jobs().forget_failures();
             }
             if changed || reconciled.is_none_or(|at| at.elapsed() >= INTERVAL) {
-                if let Err(error) = manager.reconcile_runners().await {
+                if let Err(error) = manager.runner.reconcile_runners(&*manager).await {
                     log!("runner: {error:#}");
                 }
                 reconciled = Some(Instant::now());
@@ -99,6 +108,36 @@ async fn claim_admitted_jobs(manager: &Arc<Manager>) -> anyhow::Result<()> {
         });
     }
     Ok(())
+}
+
+/// The agent queue's rows the runner changes in its own transactions.
+pub(crate) struct RunnerRecords;
+
+impl shoal_runner::daemon::Records for RunnerRecords {
+    fn forget_job_entries(&self, db: &Connection, repository: &RepositoryId) -> Result<()> {
+        db.execute(
+            "DELETE FROM agent_queue WHERE repository_id=?1 AND kind=?2",
+            params![repository, QueueKind::Job],
+        )?;
+        Ok(())
+    }
+}
+
+impl Forges for Manager {
+    fn user_account(&self) -> Account {
+        Manager::user_account(self)
+    }
+
+    fn checkout_forge<'a>(
+        &'a self,
+        repository: &'a Repository,
+    ) -> BoxFuture<'a, Result<ForgeRepo>> {
+        Box::pin(Manager::checkout_forge(self, repository))
+    }
+
+    fn resolve_forge<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<ForgeRepo>> {
+        Box::pin(async move { ForgeRepo::resolve(url, &self.forge_hosts()).await })
+    }
 }
 
 #[cfg(test)]

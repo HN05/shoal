@@ -1,15 +1,30 @@
 //! A stand-in for the rest of the daemon, which the tests of the triggers
-//! build the service over: one registered repository, whose checkout's
-//! file and local config a test gives, an agent queue and agents a test
-//! sets, and launches that each open a space whose agent then runs.
+//! and the runner build the service over: one registered repository, whose
+//! checkout's file, local config and forge a test gives, recorded in the
+//! store as the runner's own records reference it, an agent queue and
+//! agents a test sets, launches that each open a space whose agent then
+//! runs, and the user's account from the global config.
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use futures_util::future::BoxFuture;
-use shoal_core::config::repo::{self, ConfigLayers};
-use shoal_daemon_base::{callers::Caller, config_state::ConfigState, notifications::Notifications};
+use rusqlite::Connection;
+use shoal_core::config::{
+    Config, Effective,
+    forges::Whose,
+    repo::{self, ConfigLayers},
+};
+use shoal_daemon_base::{
+    callers::Caller, config_state::ConfigState, gates::Gates, notifications::Notifications,
+};
+use shoal_forge::{
+    RepoRequests,
+    account::Account,
+    hosts::{HostType, HostTypes},
+};
+use shoal_forge_types::{ForgeRepo, backends::ForgeKind};
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     config::permissions::PermissionKey,
@@ -20,7 +35,7 @@ use shoal_protocol::{
 
 use crate::{
     Runner,
-    daemon::{Agents, Daemon, Permissions, Repositories},
+    daemon::{Agents, Daemon, Forges, Permissions, Records, Repositories},
 };
 
 /// The service over a stand-in daemon with one registered repository.
@@ -35,7 +50,6 @@ impl Fixture {
     /// global config without triggers.
     pub(crate) async fn new(local: &str) -> Self {
         let root = tempfile::tempdir().unwrap();
-        let runner = runner(&root).await;
         let path = root.path().join("repo");
         let repository = Repository {
             id: "repo".into(),
@@ -46,16 +60,33 @@ impl Fixture {
             workspaces_dir: root.path().join("workspaces"),
             contribution: false,
         };
+        let config = shoal_core::test_support::global_config("");
         let daemon = Arc::new(StandIn {
             repository,
+            config: Arc::new(ConfigState::new(config)),
             tracked: Mutex::new(String::new()),
             local: Mutex::new(local.to_owned()),
             contribution: AtomicBool::new(false),
+            removing: AtomicBool::new(false),
+            forge: Mutex::default(),
             launched: Mutex::default(),
             agents: Mutex::default(),
             queue: Mutex::default(),
             opened: Mutex::default(),
+            forgotten: Mutex::default(),
         });
+        let runner = runner(&root, &daemon).await;
+        let record = daemon.repository.clone();
+        (runner.store)
+            .write(move |tx| {
+                tx.execute(
+                    "INSERT INTO repositories(id,path,source,last_used) VALUES (?1,?2,?3,1)",
+                    rusqlite::params![record.id, record.path.to_str(), record.source],
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
         Self {
             root,
             runner,
@@ -65,13 +96,13 @@ impl Fixture {
 
     /// The service as a daemon started again over the same store has it.
     pub(crate) async fn restarted(&self) -> Arc<Runner> {
-        runner(&self.root).await
+        runner(&self.root, &self.daemon).await
     }
 
     /// Make `text` the global config.
     pub(crate) fn configure(&self, text: &str) {
         let config = shoal_core::test_support::global_config(text);
-        self.runner.config.publish(config);
+        self.daemon.config.publish(config);
     }
 
     /// The daemon the service's operations take.
@@ -89,29 +120,38 @@ impl Fixture {
     }
 }
 
-/// The service over the store in `root`.
-async fn runner(root: &tempfile::TempDir) -> Arc<Runner> {
+/// The service over the store in `root`, reading the config of `daemon`
+/// and changing its queue rows.
+async fn runner(root: &tempfile::TempDir, daemon: &Arc<StandIn>) -> Arc<Runner> {
     let path = root.path().join("state.sqlite3");
     let store = shoal_store::test_support::unsynced_store(path)
         .await
         .unwrap();
-    let config = shoal_core::test_support::global_config("");
     Arc::new(Runner::new(
         store.clone(),
-        Arc::new(ConfigState::new(config)),
+        Arc::new(Gates::default()),
+        daemon.config.clone(),
         Arc::new(Notifications::new(store)),
+        daemon.clone(),
     ))
 }
 
 /// A daemon with one registered repository.
 pub(crate) struct StandIn {
     repository: Repository,
+    /// The global config, which the service reads too.
+    config: Arc<ConfigState>,
     /// The repository's checkout's file.
     pub(crate) tracked: Mutex<String>,
     /// The repository's local config.
     pub(crate) local: Mutex<String>,
     /// Whether `shoal contribute` registered the repository.
     pub(crate) contribution: AtomicBool,
+    /// Whether the repository is being removed.
+    pub(crate) removing: AtomicBool,
+    /// The web URL of the checkout's forge repository, and the forge every
+    /// host serves.
+    pub(crate) forge: Mutex<Option<(String, ForgeKind)>>,
     /// What each launch asked for, with the space it opened, oldest first.
     pub(crate) launched: Mutex<Vec<(SpaceId, Launch)>>,
     /// The spaces whose agent runs or waits.
@@ -120,6 +160,8 @@ pub(crate) struct StandIn {
     pub(crate) queue: Mutex<HashSet<QueueEntryId>>,
     /// The space each queued launch opened, once it did.
     pub(crate) opened: Mutex<HashMap<QueueEntryId, SpaceId>>,
+    /// The repositories whose job entries left the queue, in order.
+    pub(crate) forgotten: Mutex<Vec<RepositoryId>>,
 }
 
 impl StandIn {
@@ -147,6 +189,33 @@ impl StandIn {
     pub(crate) fn stop_agent(&self, id: &SpaceId) {
         self.agents.lock().unwrap().remove(id);
     }
+
+    /// The repository's config layers: its checkout's file and its local
+    /// config.
+    fn layers(&self) -> Result<ConfigLayers> {
+        let tracked = self.tracked.lock().unwrap().clone();
+        let local = self.local.lock().unwrap().clone();
+        Ok(ConfigLayers {
+            worktree_file: repo::parse(&tracked)?,
+            local_config: repo::parse(&local)?,
+            ..Default::default()
+        })
+    }
+
+    /// The forge every host serves.
+    fn hosts(&self) -> Hosts {
+        let forge = self.forge.lock().unwrap();
+        Hosts((forge.as_ref()).map_or(ForgeKind::Forgejo, |(_, kind)| *kind))
+    }
+}
+
+/// Every host serves the one forge.
+struct Hosts(ForgeKind);
+
+impl HostTypes for Hosts {
+    async fn forge_type(&self, _host: &str, _scheme: &'static str) -> Result<HostType> {
+        Ok(HostType::Settled(self.0))
+    }
 }
 
 impl Repositories for StandIn {
@@ -166,14 +235,27 @@ impl Repositories for StandIn {
     }
 
     fn repository_layers<'a>(&'a self, _: &'a RepositoryId) -> BoxFuture<'a, Result<ConfigLayers>> {
-        let tracked = self.tracked.lock().unwrap().clone();
-        let local = self.local.lock().unwrap().clone();
+        let layers = self.layers();
+        Box::pin(async move { layers })
+    }
+
+    fn repository_settings_from<'a>(
+        &'a self,
+        config: &'a Config,
+        _: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<Effective>> {
+        let layers = self.layers();
+        Box::pin(async move { config.resolve(&layers?) })
+    }
+
+    fn ensure_repository_available<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<()>> {
+        let removing = self.removing.load(Ordering::Relaxed);
         Box::pin(async move {
-            Ok(ConfigLayers {
-                worktree_file: repo::parse(&tracked)?,
-                local_config: repo::parse(&local)?,
-                ..Default::default()
-            })
+            anyhow::ensure!(!removing, "repository {id} is being removed");
+            Ok(())
         })
     }
 
@@ -235,4 +317,43 @@ impl Permissions for StandIn {
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { Ok(()) })
     }
+}
+
+impl Forges for StandIn {
+    fn user_account(&self) -> Account {
+        Account::user(self.config.current().machine.forges.logins(Whose::User))
+    }
+
+    fn checkout_forge<'a>(&'a self, _: &'a Repository) -> BoxFuture<'a, Result<ForgeRepo>> {
+        let url = (self.forge.lock().unwrap().as_ref()).map(|(url, _)| url.clone());
+        Box::pin(async move {
+            let url = url.context("the checkout has no forge remote")?;
+            ForgeRepo::resolve(&url, &self.hosts()).await
+        })
+    }
+
+    fn resolve_forge<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<ForgeRepo>> {
+        Box::pin(async move { ForgeRepo::resolve(url, &self.hosts()).await })
+    }
+}
+
+/// The agent queue's rows, which the stand-in only records the runner
+/// changing.
+impl Records for StandIn {
+    fn forget_job_entries(&self, _: &Connection, repository: &RepositoryId) -> Result<()> {
+        self.forgotten.lock().unwrap().push(repository.clone());
+        Ok(())
+    }
+}
+
+/// A directory holding an executable `program`, as the runner finds a
+/// forge's runner program on its `PATH`.
+pub(crate) fn runner_program(root: &std::path::Path, program: &str) -> std::ffi::OsString {
+    use std::os::unix::fs::PermissionsExt as _;
+    let bin = root.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let path = bin.join(program);
+    std::fs::write(&path, "#!/bin/sh\n").unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    bin.into_os_string()
 }

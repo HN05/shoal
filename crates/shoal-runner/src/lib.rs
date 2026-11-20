@@ -5,7 +5,9 @@
 use std::sync::Arc;
 
 use shoal_core::config;
-use shoal_daemon_base::{config_state::ConfigState, log, notifications::Notifications};
+use shoal_daemon_base::{
+    config_state::ConfigState, gates::Gates, log, notifications::Notifications,
+};
 use shoal_protocol::time;
 use shoal_store::Store;
 
@@ -19,18 +21,28 @@ mod stand_in;
 /// The triggers' service, which `Manager` holds.
 pub struct Runner {
     store: Store,
+    gates: Arc<Gates>,
     config: Arc<ConfigState>,
     notifications: Arc<Notifications>,
+    records: Arc<dyn daemon::Records>,
     triggers: triggers::Triggers,
     jobs: jobs::Runners,
 }
 
 impl Runner {
-    pub fn new(store: Store, config: Arc<ConfigState>, notifications: Arc<Notifications>) -> Self {
+    pub fn new(
+        store: Store,
+        gates: Arc<Gates>,
+        config: Arc<ConfigState>,
+        notifications: Arc<Notifications>,
+        records: Arc<dyn daemon::Records>,
+    ) -> Self {
         Self {
             store,
+            gates,
             config,
             notifications,
+            records,
             triggers: Default::default(),
             jobs: Default::default(),
         }

@@ -147,6 +147,7 @@ async fn a_job_admitted_while_its_pr_is_checked_is_left_to_its_claim() {
 async fn forge(fixture: &Fixture) -> crate::forge::ForgeRepo {
     let registration = fixture
         .manager
+        .runner
         .runner_registration(&fixture.repository)
         .await
         .unwrap()

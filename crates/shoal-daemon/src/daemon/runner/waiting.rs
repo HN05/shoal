@@ -49,7 +49,7 @@ impl Manager {
             if !settings.runner.enabled {
                 continue;
             }
-            let Some(registration) = self.runner_registration(&repository.id).await? else {
+            let Some(registration) = self.runner.runner_registration(&repository.id).await? else {
                 continue;
             };
             let labels = runner_labels(&settings.runner.labels);

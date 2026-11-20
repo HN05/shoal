@@ -3,37 +3,40 @@
 //! the forge once the setting is off or the repository is removed. On a
 //! forge whose runners each take one job, registration only checks that the
 //! login may register them and keeps no runner.
-use shoal_ids::repository_ids::RepositoryId;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use rusqlite::{OptionalExtension, params};
-
-use crate::daemon::manager::Manager;
-use crate::{daemon::notifications::NotificationKind, forge::ForgeRepo, model::Repository};
+use shoal_core::fsutil::executables::find_executable;
+use shoal_daemon_base::notifications::About;
 use shoal_forge::{
-    RepoRequests,
     account::Account,
     ci::runner::{RegisteredRunner, RunnerRequests},
 };
+use shoal_forge_types::ForgeRepo;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::{model::Repository, notifications::NotificationKind};
+
+use crate::{Runner, daemon::Daemon};
 
 /// A repository's runner as the daemon keeps it.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Registration {
+pub struct Registration {
     /// The web URL of the forge repository it serves.
     pub forge_repository: String,
     /// The repository's runner, on a forge that keeps one.
     pub runner: Option<RegisteredRunner>,
 }
 
-impl Manager {
+impl Runner {
     /// Register a runner for each repository that has `runner.enabled` on
     /// and none, and delete the runner of each that turned it off. A failure
     /// leaves that repository for the next pass and tells the user once.
-    pub(crate) async fn reconcile_runners(&self) -> Result<()> {
+    pub async fn reconcile_runners(&self, daemon: &dyn Daemon) -> Result<()> {
         let config = self.config();
-        for repository in self.repositories().await? {
-            let enabled = match self.repository_settings_from(&config, &repository.id).await {
+        for repository in daemon.repositories().await? {
+            let settings = daemon.repository_settings_from(&config, &repository.id);
+            let enabled = match settings.await {
                 Ok(settings) => settings.runner.enabled,
                 // A config that does not resolve leaves the runner as it is.
                 Err(_) => continue,
@@ -44,23 +47,22 @@ impl Manager {
             }
             let registered = self.runner_registration(&repository.id).await?;
             let result = match (enabled, registered) {
-                (true, None) if self.runner.jobs().due(&repository.id) => {
-                    self.register_runner_unless_removed(&repository).await
+                (true, None) if self.jobs.due(&repository.id) => {
+                    self.register_runner_unless_removed(daemon, &repository)
+                        .await
                 }
-                (false, Some(registration)) => self.delete_runner(&repository, &registration).await,
+                (false, Some(registration)) => {
+                    self.delete_runner(daemon, &repository, &registration).await
+                }
                 _ => continue,
             };
             if let Err(error) = result {
-                self.runner.jobs().failed(&repository.id);
-                self.notify(
-                    None,
-                    NotificationKind::RunnerFailed,
-                    format!(
-                        "The runner of {} could not change: {error:#}",
-                        repository.display_name()
-                    ),
-                )
-                .await;
+                self.jobs.failed(&repository.id);
+                let message = format!(
+                    "The runner of {} could not change: {error:#}",
+                    repository.display_name()
+                );
+                self.notify_runner_failed(message).await;
             }
         }
         Ok(())
@@ -69,27 +71,27 @@ impl Manager {
     /// Delete `repository`'s runner on the forge before the repository goes;
     /// a forge that cannot be reached leaves the runner there, which the
     /// user is told to delete.
-    pub(crate) async fn delete_runner_of_removed(&self, repository: &Repository) -> Result<()> {
+    pub async fn delete_runner_of_removed(
+        &self,
+        daemon: &dyn Daemon,
+        repository: &Repository,
+    ) -> Result<()> {
         let Some(registration) = self.runner_registration(&repository.id).await? else {
             return Ok(());
         };
-        if let Err(error) = self.delete_runner(repository, &registration).await {
-            self.notify(
-                None,
-                NotificationKind::RunnerFailed,
-                format!(
-                    "The runner of {} stays registered at {}; delete it in the repository's Actions settings: {error:#}",
-                    repository.display_name(),
-                    registration.forge_repository
-                ),
-            )
-            .await;
+        if let Err(error) = self.delete_runner(daemon, repository, &registration).await {
+            let message = format!(
+                "The runner of {} stays registered at {}; delete it in the repository's Actions settings: {error:#}",
+                repository.display_name(),
+                registration.forge_repository
+            );
+            self.notify_runner_failed(message).await;
         }
         Ok(())
     }
 
     /// The runner `repository_id` registered, if any.
-    pub(crate) async fn runner_registration(
+    pub async fn runner_registration(
         &self,
         repository_id: &RepositoryId,
     ) -> Result<Option<Registration>> {
@@ -123,8 +125,13 @@ impl Manager {
     /// The forge of `repository`'s checkout, refused unless this machine
     /// can run its jobs as `account`: the forge supports it and its runner
     /// program is on the daemon's `PATH`.
-    async fn runner_forge(&self, repository: &Repository, account: &Account) -> Result<ForgeRepo> {
-        let forge = self.checkout_forge(repository).await?;
+    async fn runner_forge(
+        &self,
+        daemon: &dyn Daemon,
+        repository: &Repository,
+        account: &Account,
+    ) -> Result<ForgeRepo> {
+        let forge = daemon.checkout_forge(repository).await?;
         self.runner_program(&forge)?;
         forge.require_runner(account).await?;
         Ok(forge)
@@ -132,35 +139,38 @@ impl Manager {
 
     /// Where `forge`'s runner program is on the daemon's `PATH`, which each
     /// job's command inherits.
-    pub(super) fn runner_program(&self, forge: &ForgeRepo) -> Result<PathBuf> {
+    pub fn runner_program(&self, forge: &ForgeRepo) -> Result<PathBuf> {
         let program = forge.runner_program()?;
-        let path = self.runner.jobs().search_path();
-        crate::fsutil::executables::find_executable(program.as_ref(), &path)
+        let path = self.jobs.search_path();
+        find_executable(program.as_ref(), &path)
             .with_context(|| format!("{program} is not on the daemon's PATH; install it"))
     }
 
     /// Register a runner for `repository` unless it is being removed, under
     /// the registry gate removal holds, so removal, which deletes the
     /// runner, never misses one registered meanwhile.
-    async fn register_runner_unless_removed(&self, repository: &Repository) -> Result<()> {
+    async fn register_runner_unless_removed(
+        &self,
+        daemon: &dyn Daemon,
+        repository: &Repository,
+    ) -> Result<()> {
         let _registry = self.gates.lock_registry().await;
-        if self.repository(&repository.id).await.is_err()
-            || self
-                .ensure_repository_available(&repository.id)
+        if daemon.repository(&repository.id).await.is_err()
+            || (daemon.ensure_repository_available(&repository.id))
                 .await
                 .is_err()
         {
             return Ok(());
         }
-        self.register_runner(repository).await
+        self.register_runner(daemon, repository).await
     }
 
     /// Register a runner for `repository` on its forge and keep it.
-    async fn register_runner(&self, repository: &Repository) -> Result<()> {
+    async fn register_runner(&self, daemon: &dyn Daemon, repository: &Repository) -> Result<()> {
         // One account, so a token from a command is fetched once.
-        let account = self.user_account();
-        let forge = self.runner_forge(repository, &account).await?;
-        let name = format!("shoal-{}", crate::process::machine::hostname());
+        let account = daemon.user_account();
+        let forge = self.runner_forge(daemon, repository, &account).await?;
+        let name = format!("shoal-{}", shoal_core::process::machine::hostname());
         let registration = Registration {
             forge_repository: forge.repository_url(),
             runner: forge.register_runner(&account, &name).await?,
@@ -205,13 +215,15 @@ impl Manager {
     /// and forget it.
     async fn delete_runner(
         &self,
+        daemon: &dyn Daemon,
         repository: &Repository,
         registration: &Registration,
     ) -> Result<()> {
         if let Some(runner) = &registration.runner {
-            let forge =
-                ForgeRepo::resolve(&registration.forge_repository, &self.forge_hosts()).await?;
-            forge.delete_runner(&self.user_account(), runner.id).await?;
+            let forge = daemon.resolve_forge(&registration.forge_repository).await?;
+            forge
+                .delete_runner(&daemon.user_account(), runner.id)
+                .await?;
         }
         let id = repository.id.clone();
         self.store
@@ -220,6 +232,14 @@ impl Manager {
                 Ok(())
             })
             .await
+    }
+
+    /// Tell the user `message` about a runner that failed.
+    async fn notify_runner_failed(&self, message: String) {
+        let kind = NotificationKind::RunnerFailed;
+        (self.notifications)
+            .notify_user(About::default(), kind, message)
+            .await;
     }
 }
 

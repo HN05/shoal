@@ -1,13 +1,18 @@
-//! What the triggers need of the rest of the daemon, which implements it:
-//! the registered repositories and their config, the agents a trigger's
-//! launch meets and starts, and the permission a scoped caller acts with.
+//! What the triggers and the runner need of the rest of the daemon, which
+//! implements it: the registered repositories and their config, the agents
+//! a trigger's launch meets and starts, the permission a scoped caller acts
+//! with, the forges the runner registers on, and the agent queue's rows it
+//! changes in its own transactions.
 use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::Result;
 use futures_util::future::BoxFuture;
-use shoal_core::config::repo::ConfigLayers;
+use rusqlite::Connection;
+use shoal_core::config::{Config, Effective, repo::ConfigLayers};
 use shoal_daemon_base::callers::Caller;
+use shoal_forge::account::Account;
+use shoal_forge_types::ForgeRepo;
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     config::permissions::PermissionKey,
@@ -36,6 +41,18 @@ pub trait Repositories: Send + Sync {
         &self,
         context: Option<ItemContext>,
     ) -> BoxFuture<'_, Result<Option<RepositoryId>>>;
+
+    /// The settings of the registered repository `id` under the global
+    /// `config`.
+    fn repository_settings_from<'a>(
+        &'a self,
+        config: &'a Config,
+        id: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<Effective>>;
+
+    /// Refuse the registered repository `id` while it is being removed.
+    fn ensure_repository_available<'a>(&'a self, id: &'a RepositoryId)
+    -> BoxFuture<'a, Result<()>>;
 
     /// Whether this daemon acts on what the global config sets up for the
     /// machine, such as its global triggers and its webhook listener.
@@ -78,8 +95,29 @@ pub trait Permissions: Send + Sync {
     ) -> BoxFuture<'a, Result<()>>;
 }
 
-/// Everything the triggers need of the daemon, which each of their
-/// operations that reaches beyond them takes.
-pub trait Daemon: Repositories + Agents + Permissions {}
+/// The forges the runner registers on and acts on, as the user.
+pub trait Forges: Send + Sync {
+    /// The account the user acts as on forges.
+    fn user_account(&self) -> Account;
 
-impl<T> Daemon for T where T: Repositories + Agents + Permissions {}
+    /// The forge repository of `repository`'s checkout.
+    fn checkout_forge<'a>(&'a self, repository: &'a Repository)
+    -> BoxFuture<'a, Result<ForgeRepo>>;
+
+    /// The forge repository at the web URL `url`.
+    fn resolve_forge<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<ForgeRepo>>;
+}
+
+/// Everything the triggers and the runner need of the daemon, which each of
+/// their operations that reaches beyond them takes.
+pub trait Daemon: Repositories + Agents + Permissions + Forges {}
+
+impl<T> Daemon for T where T: Repositories + Agents + Permissions + Forges {}
+
+/// The agent queue's rows the runner changes in its own connection or
+/// transaction. Its methods run on the store's thread, so they are not
+/// futures.
+pub trait Records: Send + Sync {
+    /// Take the job entries of `repository` out of the agent queue.
+    fn forget_job_entries(&self, db: &Connection, repository: &RepositoryId) -> Result<()>;
+}

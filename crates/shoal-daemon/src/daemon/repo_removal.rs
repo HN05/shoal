@@ -140,7 +140,7 @@ impl Manager {
         self.reviews.ensure_no_runs_left(self, &repo.id).await?;
         // A gate run works in the checkout and writes into `.gate`.
         self.reviews.ensure_no_gate_runs_in(self, &repo.id).await?;
-        self.delete_runner_of_removed(&repo).await?;
+        self.runner.delete_runner_of_removed(self, &repo).await?;
         let progress = match self.removal_progress(&repo.id).await? {
             Some(progress) => progress,
             None => Progress {
