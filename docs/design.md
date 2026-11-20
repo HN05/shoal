@@ -3477,11 +3477,13 @@ implements without asking. The label lives on the mode, so any mode, built in
 or the user's, joins the flow the same way; labels are configuration, so Shoal
 assumes no label scheme, ships none, and refuses two modes with the same
 label, and issues with no mode's label stay outside the flow.
-The labels answer the mode picker of a start on an issue, since the label
-already says which work comes next; an issue with no mode's label, or with the
-labels of several, still gets the picker. A start without a terminal keeps its
-default mode, so a script or agent that omits `--mode` gets the same space
-whatever the issue's labels.
+The labels decide the mode of a start on an issue that omits `--mode`, with or
+without a terminal, since the label already says which work comes next and an
+agent starting work on an issue means the same as the user; a script that
+wants a fixed mode passes `--mode`. An issue with no mode's label gets the
+picker on a terminal and the default mode without one; one with the labels of
+several gets the picker on a terminal and is refused without one, naming them,
+since no default is right.
 The plan mode settles a plan in a chat, not a workspace: planning changes no
 code, needs the user's attention and their authority to rewrite the issue, and
 the chat coordinates the implementing workspace when the user has it start

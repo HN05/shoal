@@ -197,8 +197,8 @@ impl CreateArgs {
 // Arguments of `shoal start`.
 #[derive(Debug, Default, Clone, Args)]
 pub struct StartArgs {
-    /// The mode the agent starts in; on a terminal, a picker, which an issue
-    /// carrying a mode's [modes.NAME] label answers with that mode; else
+    /// The mode the agent starts in; for an issue carrying a mode's
+    /// [modes.NAME] label, that mode; else on a terminal, a picker; else
     /// worker.
     #[arg(short = 'm', long)]
     pub mode: Option<crate::config::modes::ModeName>,

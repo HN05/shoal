@@ -2937,8 +2937,10 @@ fn remove_guidance(text: &str) -> String {
     text
 }
 
-#[test]
-fn start_takes_the_mode_an_issues_labels_name() {
+/// A fixture whose modes `plan` and `worker` have labels, with the issues
+/// 9, labelled for `plan`, 5 for `worker`, 4 for both and 3 for neither,
+/// and the recording agent `pi`.
+fn labelled_issues() -> Fixture {
     let fixture = Fixture::with_config(Some(
         "[modes.plan]\nlabel = 'needs-plan'\n[modes.worker]\nlabel = 'planned'\n",
     ));
@@ -2947,6 +2949,7 @@ fn start_takes_the_mode_an_issues_labels_name() {
     for (number, title, labels) in [
         (9, "Pick a cache", vec!["needs-plan"]),
         (5, "Retry uploads", vec!["planned"]),
+        (4, "Split the store", vec!["needs-plan", "planned"]),
         (3, "Track releases", vec![]),
     ] {
         let labels: Vec<_> = (labels.iter())
@@ -2961,11 +2964,20 @@ fn start_takes_the_mode_an_issues_labels_name() {
         );
     }
     install_recording_agent(&fixture, "pi");
-    let started_in = || {
-        let workspace = fs::read_to_string(fixture.root.path().join("chat-workspace")).unwrap();
-        let chat = fs::read_to_string(fixture.root.path().join("chat-id")).unwrap();
-        (!workspace.trim().is_empty(), !chat.trim().is_empty())
-    };
+    fixture
+}
+
+/// Whether the recording agent last started in a workspace and in a chat.
+fn started_in(fixture: &Fixture) -> (bool, bool) {
+    let workspace = fs::read_to_string(fixture.root.path().join("chat-workspace")).unwrap();
+    let chat = fs::read_to_string(fixture.root.path().join("chat-id")).unwrap();
+    (!workspace.trim().is_empty(), !chat.trim().is_empty())
+}
+
+#[test]
+fn start_takes_the_mode_an_issues_labels_name() {
+    let fixture = labelled_issues();
+    let started_in = || started_in(&fixture);
 
     // An issue that needs a plan starts the plan mode's chat without asking.
     let (output, rows) = fixture.pick_in(
@@ -3000,6 +3012,17 @@ fn start_takes_the_mode_an_issues_labels_name() {
     assert!(output.status.success(), "{}", printed(&output));
     assert!(rows.contains("worker") && rows.contains("plan"), "{rows}");
     assert_eq!(started_in(), (false, true));
+
+    // An issue with the labels of two modes asks for the mode.
+    let (output, rows) = fixture.pick_in(
+        &fixture.repo,
+        &["start", "--wait", "--issue", "4", "--agent", "pi", "--here"],
+        "worker",
+        "",
+    );
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(rows.contains("worker") && rows.contains("plan"), "{rows}");
+    assert_eq!(started_in(), (true, false));
 
     // In an existing workspace, the issue's mode starts a chat in its
     // worktree, in the workspace's repository.
@@ -3036,6 +3059,31 @@ fn start_takes_the_mode_an_issues_labels_name() {
     assert!(
         transcript.contains("Register https://forge.example/team/other"),
         "{transcript}"
+    );
+}
+
+#[test]
+fn a_start_off_a_terminal_takes_the_mode_an_issues_labels_name() {
+    let fixture = labelled_issues();
+    let start = |issue: &str| {
+        let args = [
+            "start", "--wait", "--issue", issue, "--agent", "pi", "--here",
+        ];
+        fixture.output(fixture.command().args(args).current_dir(&fixture.repo))
+    };
+    let output = start("9");
+    assert!(output.status.success(), "{}", printed(&output));
+    assert_eq!(started_in(&fixture), (false, true));
+    let output = start("3");
+    assert!(output.status.success(), "{}", printed(&output));
+    assert_eq!(started_in(&fixture), (true, false));
+    // The labels of two modes leave the choice to --mode.
+    let output = start("4");
+    assert!(!output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        error.contains("plan (label needs-plan) and worker (label planned)"),
+        "{error}"
     );
 }
 

@@ -1,5 +1,5 @@
-//! The mode a start's agent starts in: named, else on a terminal the one
-//! its issue's labels call for or a picked one, else the default mode.
+//! The mode a start's agent starts in: named, else the one its issue's
+//! labels call for, else on a terminal a picked one, else the default mode.
 use anyhow::Result;
 use shoal_protocol::launches::{IssueChoice, Launch};
 
@@ -22,10 +22,10 @@ use crate::{
 };
 
 /// The mode of `launch` as far as nothing needs asking: the one it names,
-/// off a terminal the [`launches::default_mode`], on one the plan mode for
-/// an issue to pick, which no other mode takes, or the [`item_mode`] of
-/// the issue it names in the `found` repository; otherwise one a terminal
-/// picks once the daemon has checked the rest.
+/// on a terminal the plan mode for an issue to pick, which no other mode
+/// takes, else the [`item_mode`] of the issue it names in the `found`
+/// repository; otherwise one a terminal picks once the daemon has checked
+/// the rest, and off one the [`launches::default_mode`].
 pub(super) async fn decided(
     ctx: &Context,
     launch: &Launch,
@@ -35,17 +35,18 @@ pub(super) async fn decided(
     if let Some(mode) = &launch.mode {
         return Ok(ModeChoice::Named(mode.clone()));
     }
-    if !ui::can_pick(ctx) {
-        return Ok(ModeChoice::Named(launches::default_mode(launch)));
-    }
-    if launch.issue == Some(IssueChoice::Pick) {
+    let picks = ui::can_pick(ctx);
+    if picks && launch.issue == Some(IssueChoice::Pick) {
         return Ok(ModeChoice::Named(modes::ModeName::PLAN));
     }
     let labelled = match found {
         Some(repo) => item_mode(ctx, launch, repo, (settings, modes)).await?,
         None => None,
     };
-    Ok(labelled.unwrap_or(ModeChoice::Pick))
+    Ok(labelled.unwrap_or_else(|| match picks {
+        true => ModeChoice::Pick,
+        false => ModeChoice::Named(launches::default_mode(launch)),
+    }))
 }
 
 /// Refuse the copy and fork pickers that making the launch of `args`
