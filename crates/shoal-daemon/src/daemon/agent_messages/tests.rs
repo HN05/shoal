@@ -878,14 +878,21 @@ async fn assert_fits_one_delivery(manager: &Manager, workspace: &crate::model::W
 /// Twenty files, each with a long name and the longest title of
 /// four-byte characters.
 fn long_titled_files(temp: &tempfile::TempDir) -> Vec<crate::daemon::workspace_files::NewFile> {
-    let title = "🦀".repeat(crate::validate::MAX_FILE_TITLE_LEN);
+    titled_files(temp, &"🦀".repeat(crate::validate::MAX_FILE_TITLE_LEN))
+}
+
+/// Twenty files, each with a long name and the title `title`.
+fn titled_files(
+    temp: &tempfile::TempDir,
+    title: &str,
+) -> Vec<crate::daemon::workspace_files::NewFile> {
     (0..20)
         .map(|n| {
             let path = temp.path().join(format!("{n:02}{}.log", "x".repeat(200)));
             std::fs::write(&path, "log").unwrap();
             crate::daemon::workspace_files::NewFile {
                 path,
-                title: Some(title.clone()),
+                title: Some(title.to_owned()),
             }
         })
         .collect()
@@ -920,5 +927,19 @@ async fn an_alert_s_copied_files_count_toward_a_nearly_full_queue() {
     let to = SpaceSelector::id(&workspace.id);
     let attached = manager.send_space_message(None, &to, "logs".into(), files);
     assert!(attached.await.is_err());
+    assert_fits_one_delivery(&manager, &workspace).await;
+}
+
+#[tokio::test]
+async fn a_repeated_alert_s_longer_titles_count_toward_a_nearly_full_queue() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager, "receiver").await;
+    let to = SpaceSelector::id(&workspace.id);
+    let send = |files| manager.send_space_message(None, &to, "logs".into(), files);
+    send(titled_files(&temp, "log")).await.unwrap();
+    let text = |n| format!("{n}{}", "x".repeat(1000));
+    assert!(queue_until_refused(&manager, &workspace, text, Vec::new()).await > 0);
+    let retitled = long_titled_files(&temp);
+    assert!(send(retitled).await.is_err());
     assert_fits_one_delivery(&manager, &workspace).await;
 }

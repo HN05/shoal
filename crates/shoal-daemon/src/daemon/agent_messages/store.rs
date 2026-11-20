@@ -64,7 +64,9 @@ pub(super) fn insert(
         )
         .optional()?;
     if let Some(copied) = copied {
+        // An identical alert's copies may take new titles.
         copied.record(tx, space_id)?;
+        ensure_fits(tx, space_id)?;
     }
     if let Some((id, woke)) = pending {
         if woke || !wakes {
@@ -83,11 +85,18 @@ pub(super) fn insert(
         "the space already has {MAX_UNREAD} unread alerts"
     );
     let id = alerts::insert(tx, Some(space_id), alert, wakes, for_user)?;
+    ensure_fits(tx, space_id)?;
+    Ok(Queued { id, new: true })
+}
+
+/// Fail when the unread alerts of the space `space_id` take more than its
+/// agent receives at once.
+fn ensure_fits(db: &Connection, space_id: &SpaceId) -> Result<()> {
     ensure!(
-        delivered_bytes(tx, space_id)? <= MAX_UNREAD_BYTES,
+        delivered_bytes(db, space_id)? <= MAX_UNREAD_BYTES,
         "the space's unread alerts would exceed {MAX_UNREAD_BYTES} bytes"
     );
-    Ok(Queued { id, new: true })
+    Ok(())
 }
 
 /// The bytes the unread alerts of the space `space_id` take as its agent
