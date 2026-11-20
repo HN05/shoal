@@ -162,7 +162,7 @@ pub enum PreparationWait {
     Blockers { blocked_by: Vec<String> },
     /// Free disk space, which is below the warning threshold or unread.
     Disk,
-    /// `shoal resume`, since a stop or the cancelled start of its agent
+    /// `shoal setup`, since a stop or the cancelled start of its agent
     /// stopped it.
     Stopped,
 }
@@ -173,7 +173,7 @@ impl std::fmt::Display for PreparationWait {
         match self {
             Self::Blockers { blocked_by } => f.write_str(&blocked_by.join(", ")),
             Self::Disk => f.write_str("disk space"),
-            Self::Stopped => f.write_str("`shoal resume`"),
+            Self::Stopped => f.write_str("`shoal setup`"),
         }
     }
 }
