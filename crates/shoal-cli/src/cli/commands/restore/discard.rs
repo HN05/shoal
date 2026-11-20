@@ -1,7 +1,7 @@
 //! `shoal restore --discard-agent`: discarding a space's stopped agent, last
 //! sessions, stopped commands and failed launch instead of bringing them
 //! back, which leaves its files, branch and worktree as they are.
-use anyhow::Result;
+use anyhow::{Result, ensure};
 
 use crate::cli::commands::resume::{self, failed_starts, saved, targets::Selected};
 use crate::client::assignments;
@@ -28,6 +28,7 @@ pub(super) async fn run(
     let Some(selected) = Selected::load(ctx, targets).await? else {
         return Ok(0);
     };
+    ensure_one_space(&selected, execution.as_ref())?;
     let launches = match execution {
         None => failed_starts::of(ctx, selected.spaces.as_deref()).await?,
         Some(_) => Vec::new(),
@@ -36,6 +37,17 @@ pub(super) async fn run(
         Some([space]) if launches.is_empty() => discard_one(ctx, space.clone(), execution).await,
         _ => discard_each(ctx, &selected, &launches, execution.as_ref()).await,
     }
+}
+
+/// Refuse `--execution`, which selects a stopped execution of one space,
+/// unless the `selected` spaces come to one, before anything is discarded.
+fn ensure_one_space(selected: &Selected, execution: Option<&ExecutionId>) -> Result<()> {
+    let one = matches!(selected.spaces.as_deref(), Some([_]));
+    ensure!(
+        execution.is_none() || one,
+        "--execution selects a stopped execution of one space"
+    );
+    Ok(())
 }
 
 /// Discard the space's stopped agent, last sessions and stopped commands,

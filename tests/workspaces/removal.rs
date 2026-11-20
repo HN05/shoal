@@ -157,6 +157,27 @@ fn restore_refuses_a_live_space_and_keeps_its_stopped_work() {
 }
 
 #[test]
+fn discarding_one_execution_of_several_spaces_is_refused_before_anything_goes() {
+    let fixture = Fixture::new();
+    let (first, second) = (fixture.add("first"), fixture.add("second"));
+    fixture.save_stopped_command(&first);
+    fixture.save_stopped_command(&second);
+    let (first_id, second_id) = (fixture.id("first"), fixture.id("second"));
+    let args = [
+        "restore",
+        &first_id,
+        &second_id,
+        "--discard-agent",
+        "--execution",
+        "saved",
+    ];
+    let refused = fixture.run(&args);
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    let listed = fixture.ok(&["resume"]);
+    assert_eq!(listed["spaces"].as_array().unwrap().len(), 2, "{listed}");
+}
+
+#[test]
 fn without_a_terminal_resume_lists_stopped_spaces_and_restore_removed_ones() {
     let fixture = Fixture::new();
     let stopped = fixture.add("stopped");
