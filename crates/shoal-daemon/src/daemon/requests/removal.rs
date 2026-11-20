@@ -392,7 +392,9 @@ async fn moves_to_joined_machine(
         RemovalMethod::ExportMovingSpace { destination, .. } => {
             Ok(matches!(destination, MoveDestination::Machine(_)))
         }
-        RemovalMethod::DeliverCopy { .. } => Ok(true),
+        RemovalMethod::DeliverCopy { space, .. } => {
+            manager.copies_below_caller(caller, space).await
+        }
         RemovalMethod::EndMovedSpace { space } => {
             let joined = manager.moves_to_joined_machine(space).await?;
             if joined {

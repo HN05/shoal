@@ -200,7 +200,7 @@ impl Manager {
     }
 
     /// The recorded move of the space `id`, while one is recorded.
-    async fn move_record(&self, id: &SpaceId) -> Result<Option<MoveRecord>> {
+    pub(crate) async fn move_record(&self, id: &SpaceId) -> Result<Option<MoveRecord>> {
         let space = id.clone();
         self.store.read(move |db| records::read(db, &space)).await
     }

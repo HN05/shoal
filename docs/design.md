@@ -4345,7 +4345,9 @@ SSH or to a file from another machine, since `ssh` reaches outside the hub's
 trust, and a file stays where its machine writes it, so `-o` takes only this
 machine's spaces. A move to a joined machine stays within the hub, so it
 takes no permission key: a space's agent moves every space its scope
-reaches there, from any machine, as it renames or converts them. A move that
+reaches there, from any machine, as it renames or converts them, except a
+copy of its own space, which opens beside it, where a scoped caller creates
+nothing, and so takes the `admin` permission. A move that
 would stop the agent asking for it waits for its turn to end, as a
 conversion does, recorded so a restart keeps it, since stopping the agent
 mid-turn would cut off the command that asked.

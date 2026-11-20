@@ -8,7 +8,10 @@ use anyhow::{Result, ensure};
 use shoal_ids::space_ids::SpaceId;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
-use super::{log, manager::Manager, notifications::AlertKind, scope::Caller};
+use super::{
+    hub_moves::moves_without_permission, log, manager::Manager, notifications::AlertKind,
+    scope::Caller,
+};
 use crate::protocol::operations::{Ended, OperationSpec, Outcome};
 use crate::transfer::{DeferredMove, MoveDestination, MoveLock, MoveOrder, MoveReport};
 use shoal_protocol::space_names::SpaceSelector;
@@ -130,7 +133,7 @@ impl Manager {
     /// allows, and never for a move another machine sent, since such a move
     /// reaches outside the hub's trust.
     pub(crate) async fn authorize_move(&self, caller: &Caller, order: &MoveOrder) -> Result<()> {
-        if let MoveDestination::Machine(_) = order.destination {
+        if moves_without_permission(caller, order) {
             return self.authorize_joined_move(caller, &order.spaces).await;
         }
         ensure!(

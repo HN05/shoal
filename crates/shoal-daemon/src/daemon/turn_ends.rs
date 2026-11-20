@@ -1,7 +1,7 @@
 //! Acting on spaces once their agents' turns end, through one loop that
-//! looks whenever an agent's state changes and every few seconds besides:
-//! a converted space's agent moves to its new place, and a recorded restart
-//! restarts its agent.
+//! looks whenever an agent's state changes and every few seconds besides,
+//! for whatever Shoal recorded to happen to an agent or its space only
+//! between turns.
 use shoal_ids::space_ids::SpaceId;
 use std::{sync::Arc, time::Duration};
 

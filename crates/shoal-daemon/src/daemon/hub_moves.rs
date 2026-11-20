@@ -9,4 +9,5 @@ mod authorization;
 mod delivering;
 mod receiving;
 
+pub(crate) use authorization::moves_without_permission;
 pub(crate) use receiving::Receiving;
