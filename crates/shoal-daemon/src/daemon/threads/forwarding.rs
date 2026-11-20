@@ -34,11 +34,14 @@ impl Manager {
             crate::validate::agent_message(&note).context("invalid note")?;
         }
         let holder = self.next_holder(&thread, to).await?;
-        let poster = self.poster(caller, Side::Holder).await?;
+        let poster = self.poster(caller, Side::Holder, &thread.holder).await?;
         let id = thread.id;
         let (thread, delivered) = self
             .store
             .write(move |tx| {
+                let current = records::reread(tx, id)?;
+                ensure_open(&current)?;
+                records::ensure_held_by(&current, &poster.seen)?;
                 let post = NewPost {
                     text: note,
                     ..NewPost::default()

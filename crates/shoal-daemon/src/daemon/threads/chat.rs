@@ -255,6 +255,7 @@ impl Manager {
                 let poster = Poster {
                     side,
                     space: Some((space.id.clone(), space.name.clone())),
+                    seen: thread.holder.clone(),
                 };
                 let (_, delivered) = record_post(tx, id, &poster, &post, &[], true, &removing)?;
                 Ok(delivered)

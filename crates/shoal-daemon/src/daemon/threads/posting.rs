@@ -5,7 +5,7 @@ use rusqlite::Transaction;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     space_names::{SpaceName, SpaceSelector},
-    threads::{MAX_CHOICES, MAX_POST_LEN, NewPost, Sender, Side, Thread, ThreadNumber},
+    threads::{Holder, MAX_CHOICES, MAX_POST_LEN, NewPost, Sender, Side, Thread, ThreadNumber},
 };
 
 use super::{
@@ -73,6 +73,8 @@ fn picked(thread: &Thread, side: Side, mut post: NewPost) -> Result<NewPost> {
 pub(super) struct Poster {
     pub(super) side: Side,
     pub(super) space: Option<(SpaceId, SpaceName)>,
+    /// Who held the thread when the poster's side was checked.
+    pub(super) seen: Holder,
 }
 
 impl Poster {
@@ -103,6 +105,9 @@ pub(super) fn record_post(
 ) -> Result<(Thread, Delivered)> {
     let thread = records::reread(tx, id)?;
     ensure_open(&thread)?;
+    if poster.side == Side::Holder {
+        records::ensure_held_by(&thread, &poster.seen)?;
+    }
     if poster.side == Side::Opener && thread.opener == Sender::Space {
         removing.require_taking_work(tx, &thread.space_id)?;
     }
@@ -140,7 +145,7 @@ impl Manager {
         let side = self.side(caller, &thread).await?;
         let post = picked(&thread, side, post)?;
         validate(&post)?;
-        let poster = self.poster(caller, side).await?;
+        let poster = self.poster(caller, side, &thread.holder).await?;
         // A poster on another machine keeps its files in the thread's space.
         let files_space = match &poster.space {
             Some((id, _)) => self.find_space(id).await?,
@@ -171,13 +176,22 @@ impl Manager {
         Ok(thread)
     }
 
-    /// Who posts for `caller` on `side`: its space, here or on another
-    /// machine, or the user.
-    pub(super) async fn poster(&self, caller: Option<&Caller>, side: Side) -> Result<Poster> {
+    /// Who posts for `caller` on `side`, checked while `seen` held the
+    /// thread: its space, here or on another machine, or the user.
+    pub(super) async fn poster(
+        &self,
+        caller: Option<&Caller>,
+        side: Side,
+        seen: &Holder,
+    ) -> Result<Poster> {
         let space = match caller {
             Some(caller) => Some(self.speaker(caller).await?),
             None => None,
         };
-        Ok(Poster { side, space })
+        Ok(Poster {
+            side,
+            space,
+            seen: seen.clone(),
+        })
     }
 }

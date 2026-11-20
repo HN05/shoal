@@ -419,6 +419,20 @@ fn at_longest(thread: &Thread) -> Thread {
     thread
 }
 
+/// Refuse `thread` once it went to another holder than `seen`, the one
+/// whose side a caller was checked to post or forward from, which it may
+/// have lost meanwhile.
+pub(super) fn ensure_held_by(thread: &Thread, seen: &Holder) -> Result<()> {
+    let id = |holder: &Holder| holder.space().map(|space| space.id.clone());
+    anyhow::ensure!(
+        id(&thread.holder) == id(seen),
+        "thread {} went to {} meanwhile; act on it again if it is still yours",
+        thread.number,
+        thread.holder.label()
+    );
+    Ok(())
+}
+
 /// The thread `id` as recorded now, which the caller just changed.
 pub(super) fn reread(db: &Connection, id: i64) -> Result<Thread> {
     by_id(db, id)?.context("the thread was deleted meanwhile")

@@ -411,6 +411,36 @@ async fn a_marked_turn_posts_nothing_in_a_thread_that_went_elsewhere() {
 }
 
 #[tokio::test]
+async fn a_post_from_a_side_lost_meanwhile_is_refused() {
+    let tree = tree().await;
+    let manager = &tree.manager;
+    let thread = open(manager, None, Some(&tree.child)).await;
+    send(manager, None, &thread, "Which port?").await;
+    // The child's side was checked while it held the thread, which then
+    // went up before its post was recorded.
+    let poster = super::posting::Poster {
+        side: Side::Holder,
+        space: Some((tree.child.id.clone(), tree.child.name.clone())),
+        seen: thread.holder.clone(),
+    };
+    let child = caller(&tree.child);
+    (manager.forward_thread(Some(&child), full(&thread), None, None))
+        .await
+        .unwrap();
+    let removing = manager.space_removals.clone();
+    let (id, reply) = (thread.id, post("8080"));
+    let posted = manager
+        .store
+        .write(move |tx| {
+            super::posting::record_post(tx, id, &poster, &reply, &[], false, &removing)
+        })
+        .await;
+    assert!(posted.is_err());
+    let kept = manager.thread(None, full(&thread)).await.unwrap();
+    assert!(!kept.posts.iter().any(|post| post.post.text == "8080"));
+}
+
+#[tokio::test]
 async fn the_opener_resolves_its_thread_and_takes_back_an_unread_notice() {
     let tree = tree().await;
     let manager = &tree.manager;
