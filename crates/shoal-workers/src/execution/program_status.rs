@@ -5,16 +5,17 @@
 //! while the daemon is away.
 mod query;
 mod sequence;
+mod writer;
 
 use std::{
     fs::File,
-    io::Write as _,
     os::unix::fs::OpenOptionsExt as _,
     sync::{Arc, Mutex, MutexGuard},
     time::Duration,
 };
 
 use shoal_protocol::program_status::{ProgramState, ProgramStatus};
+use writer::{Writer, Written};
 
 /// How long the query waits for replies: only a terminal that answers
 /// neither request keeps it waiting.
@@ -23,21 +24,13 @@ const QUERY_LIMIT: Duration = Duration::from_secs(3);
 /// Shared by the link that receives the daemon's reports and the
 /// supervisor that sees the agent exit.
 #[derive(Clone, Default)]
-pub(super) struct Reporter(Arc<Shared>);
-
-#[derive(Default)]
-struct Shared {
-    reporting: Mutex<Reporting>,
-    /// Held while a report is written, so reports reach the terminal in
-    /// the order they were made.
-    writing: tokio::sync::Mutex<()>,
-}
+pub(super) struct Reporter(Arc<Mutex<Reporting>>);
 
 #[derive(Default)]
 struct Reporting {
-    /// The terminal, while it reads the protocol.
-    terminal: Option<File>,
-    /// The last report written, which the agent's exit follows.
+    /// What writes to the terminal, while it reads the protocol.
+    writer: Option<Writer>,
+    /// The last report, which the agent's exit follows.
     last: Option<ProgramStatus>,
 }
 
@@ -47,73 +40,52 @@ impl Reporter {
     pub(super) fn query(&self) -> bool {
         let terminal =
             controlling_terminal().filter(|terminal| query::reads_protocol(terminal, QUERY_LIMIT));
-        let reads = terminal.is_some();
-        self.lock().terminal = terminal;
+        let writer = terminal.map(Writer::start);
+        let reads = writer.is_some();
+        self.lock().writer = writer;
         reads
     }
 
     /// Whether the terminal reads the protocol, as its last query found.
     pub(super) fn reports(&self) -> bool {
-        self.lock().terminal.is_some()
+        self.lock().writer.is_some()
     }
 
-    /// Write `status`, the daemon's report of the space.
-    pub(super) async fn report(&self, status: ProgramStatus) {
-        let _writing = self.0.writing.lock().await;
-        let write = self.lock().record(status);
-        write_out(write).await;
+    /// Report `status`, the daemon's report of the space, without waiting
+    /// for the terminal.
+    pub(super) fn report(&self, status: ProgramStatus) {
+        self.lock().record(status);
     }
 
     /// Report that the agent exited with `code`, after a report of the
-    /// space the daemon sent.
+    /// space the daemon sent, waiting a while for the terminal to take it.
     pub(super) async fn agent_exited(&self, code: i32) {
-        let _writing = self.0.writing.lock().await;
-        let write = {
+        let written = {
             let mut reporting = self.lock();
             let end = (reporting.last.as_ref()).and_then(|last| exit_report(last, code));
             end.and_then(|end| reporting.record(end))
         };
-        write_out(write).await;
+        if let Some(written) = written {
+            written.wait().await;
+        }
     }
 
     fn lock(&self) -> MutexGuard<'_, Reporting> {
-        (self.0.reporting.lock()).unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
 impl Reporting {
-    /// Remember `status` as the last report, and what writes it to the
-    /// terminal, if the terminal reads the protocol.
-    fn record(&mut self, status: ProgramStatus) -> Option<Write> {
-        let write = (self.terminal.as_ref())
-            .and_then(|terminal| terminal.try_clone().ok())
-            .map(|terminal| Write {
-                terminal,
-                sequence: sequence::sequence(&status),
-            });
+    /// Remember `status` as the last report, and queue it for the terminal
+    /// if the terminal reads the protocol.
+    fn record(&mut self, status: ProgramStatus) -> Option<Written> {
+        let written =
+            (self.writer.as_ref()).map(|writer| writer.queue(sequence::sequence(&status)));
         self.last = Some(status);
-        write
+        written
     }
-}
-
-/// A report's sequence and the terminal it goes to.
-struct Write {
-    terminal: File,
-    sequence: Vec<u8>,
-}
-
-/// Write `write`'s sequence in one write, off the runtime's workers, since a
-/// terminal paused by flow control blocks it; a failed write leaves the
-/// agent's terminal alone.
-async fn write_out(write: Option<Write>) {
-    let Some(Write {
-        mut terminal,
-        sequence,
-    }) = write
-    else {
-        return;
-    };
-    let _ = tokio::task::spawn_blocking(move || terminal.write_all(&sequence)).await;
 }
 
 /// What follows `last` once the agent exits with `code`: its failure, or

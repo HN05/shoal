@@ -1,7 +1,10 @@
 use super::*;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use shoal_protocol::program_status::Waits;
-use std::{io::Read as _, os::fd::FromRawFd as _};
+use std::{
+    io::{Read as _, Write as _},
+    os::fd::FromRawFd as _,
+};
 
 fn status(state: ProgramState, message: Option<&str>) -> ProgramStatus {
     ProgramStatus {
@@ -159,4 +162,21 @@ fn a_terminal_that_answers_only_the_attributes_request_does_not() {
 fn a_terminal_that_answers_neither_request_does_not() {
     let (device, _controller) = terminal();
     assert!(!query::reads_protocol(&device, Duration::ZERO));
+}
+
+#[tokio::test]
+async fn the_writer_writes_the_latest_report_and_says_when() {
+    let (device, mut controller) = terminal();
+    let writer = writer::Writer::start(device);
+    writer.queue(b"first".to_vec());
+    let latest = writer.queue(b"latest".to_vec());
+    tokio::time::timeout(Duration::from_secs(60), latest.wait())
+        .await
+        .expect("the wait has its own limit");
+    let mut read = Vec::new();
+    while !read.ends_with(b"latest") {
+        let mut chunk = [0; 64];
+        let count = controller.read(&mut chunk).unwrap();
+        read.extend_from_slice(&chunk[..count]);
+    }
 }
