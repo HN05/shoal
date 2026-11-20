@@ -12,7 +12,7 @@ use crate::{
         ui::{self, ModeChoice},
     },
     config::modes::{self, ModeShapes},
-    launches::{self, fit},
+    launches::{self, fit, labels},
     model::SpaceKind,
 };
 
@@ -21,17 +21,31 @@ use crate::{
 /// otherwise one a terminal picks once the daemon has checked the rest,
 /// and off one the [`launches::default_mode`], or the refusal of labels
 /// that call for several.
-pub(super) async fn decided(ctx: &Context, launch: &Launch) -> Result<ModeChoice> {
+pub(super) async fn decided(
+    ctx: &Context,
+    launch: &Launch,
+    modes: &ModeShapes,
+) -> Result<ModeChoice> {
     if let Some(mode) = &launch.mode {
         return Ok(ModeChoice::Named(mode.clone()));
     }
-    let labelled = crate::client::launches::labelled_mode(&ctx.paths, launch.clone()).await?;
+    let labelled = labelled(ctx, launch, modes).await?;
     Ok(match (labelled, ui::can_pick(ctx)) {
         (LabelledMode::Called(mode), _) => ModeChoice::Named(mode),
         (_, true) => ModeChoice::Pick,
         (LabelledMode::Several(several), false) => return Err(several.into()),
         (LabelledMode::Unlabelled, false) => ModeChoice::Named(launches::default_mode(launch)),
     })
+}
+
+/// The mode the labels of the issue or PR `launch` names call for, as the
+/// daemon finds it; unlabelled without asking where it names neither or
+/// none of the `modes` it may take has a label.
+async fn labelled(ctx: &Context, launch: &Launch, modes: &ModeShapes) -> Result<LabelledMode> {
+    if !labels::names_item(launch)? || labels::labelled(launch, modes)?.is_empty() {
+        return Ok(LabelledMode::Unlabelled);
+    }
+    crate::client::launches::labelled_mode(&ctx.paths, launch.clone()).await
 }
 
 /// Refuse the copy and fork pickers that making the launch of `args`
