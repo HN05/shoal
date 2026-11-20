@@ -21,20 +21,6 @@ impl Manager {
         }
     }
 
-    /// Tell the user that the work's memory cannot be read under a limit,
-    /// since `missed`, the containers a sample could not read, so nothing
-    /// starts or recovers until it can.
-    pub(crate) async fn warn_of_unread_work(&self, missed: &str) {
-        if limit(&self.config()).is_none() {
-            return;
-        }
-        let message = format!(
-            "Shoal's work memory cannot be read under memory_limit, so no agent starts and no stopped agent recovers, until every running container project can be read: {missed}; start the container runtime, or stop the workspace's containers with shoal release containers --space <workspace>"
-        );
-        let kind = crate::daemon::alerts::AlertKind::LoadWarning;
-        self.notify(None, kind, message).await;
-    }
-
     /// The user's limit on Shoal's work, with what the latest usage sample
     /// counts of it, which protection and admission count as the machine's
     /// memory; none without a limit.
@@ -43,6 +29,45 @@ impl Manager {
         let now = tokio::time::Instant::now();
         let sampled = self.usage.with_workspaces(|usages| usages.memory(now));
         Some(WorkLimit { limit, sampled })
+    }
+}
+
+/// Whether work that cannot be read holds back starts and recovery under
+/// `config`: with a limit, which memory protection reads.
+fn unread_work_holds(config: &Config) -> bool {
+    config.machine.overload.memory.enabled && config.machine.memory_limit.is_some()
+}
+
+/// Tells the user once, while containers the usage samples cannot read hold
+/// back work under the limit, and again after they have been read.
+#[derive(Default)]
+pub(crate) struct UnreadContainers {
+    warned: bool,
+}
+
+impl UnreadContainers {
+    /// Follow a sample that could not read the containers `missed` names,
+    /// or read them all without it, telling the user when unread work
+    /// begins to hold back starts.
+    pub(crate) async fn observe(&mut self, manager: &Manager, missed: Option<String>) {
+        let holding = missed.filter(|_| unread_work_holds(&manager.config()));
+        if !self.begins(holding.is_some()) {
+            return;
+        }
+        let message = format!(
+            "Shoal's work memory cannot be read under memory_limit, so no agent starts and no stopped agent recovers, until every running container project can be read: {}; start the container runtime, or stop the workspace's containers with shoal release containers --space <workspace>",
+            holding.unwrap_or_default()
+        );
+        let kind = crate::daemon::alerts::AlertKind::LoadWarning;
+        manager.notify(None, kind, message).await;
+    }
+
+    /// Whether unread work that now holds back starts, `holding`, began to
+    /// with this sample.
+    fn begins(&mut self, holding: bool) -> bool {
+        let began = holding && !self.warned;
+        self.warned = holding;
+        began
     }
 }
 
@@ -100,3 +125,6 @@ pub(super) async fn run(manager: std::sync::Arc<Manager>) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

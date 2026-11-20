@@ -118,16 +118,13 @@ pub(crate) struct WorkspaceUsages {
     /// The latest sample read every project's containers it tried, so its
     /// memory holds all of theirs.
     containers_complete: bool,
-    /// The samples have missed containers since the one that said so, which
-    /// says it once until a sample reads them all again.
-    missing_containers: bool,
 }
 
 impl WorkspaceUsages {
     /// Add a sample with what the workspaces' containers used meanwhile. A
     /// failed or late one forgets the previous sample, so no CPU use spans a
     /// gap in what was measured. Returns why its containers could not all
-    /// be read, when the samples began to miss them with this one.
+    /// be read, when they could not.
     fn record(&mut self, sample: Result<Sample>, containers: ContainerReadings) -> Option<String> {
         match sample {
             Ok(sample) => {
@@ -139,10 +136,7 @@ impl WorkspaceUsages {
                 let (containers, missed) = self.read_containers(containers);
                 add_containers(&mut self.usage, containers, previous.is_some());
                 self.latest = Some(sample);
-                let began = !self.containers_complete
-                    && !std::mem::replace(&mut self.missing_containers, true);
-                self.missing_containers &= !self.containers_complete;
-                began.then(|| missed.join("; "))
+                (!self.containers_complete).then(|| missed.join("; "))
             }
             Err(error) => {
                 // Once per gap: a platform without readings would repeat it forever.
@@ -426,6 +420,7 @@ fn reaper<'a>(
 }
 
 pub(super) async fn run(manager: Arc<Manager>) {
+    let mut unread = crate::daemon::work_memory::UnreadContainers::default();
     loop {
         let tracked = manager.usage.with_workspaces(|usages| usages.tracked());
         let (sample, containers) = tokio::join!(
@@ -433,9 +428,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
             manager.leases.container_usage(CONTAINER_READ_LIMIT)
         );
         let missed = (manager.usage).with_workspaces(|usages| usages.record(sample, containers));
-        if let Some(missed) = missed {
-            manager.warn_of_unread_work(&missed).await;
-        }
+        unread.observe(&manager, missed).await;
         tokio::select! {
             () = manager.leases.containers_started() => {}
             () = tokio::time::sleep(SAMPLE_INTERVAL) => {}
