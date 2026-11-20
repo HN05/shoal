@@ -35,8 +35,8 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<Vec<SpaceRef>> {
         let account = match caller {
-            Some(_) => self.agent_account(),
-            None => self.user_account(),
+            Some(_) => self.links.agent_account(),
+            None => self.links.user_account(),
         };
         // Base changes take these gates, so the stack stays as planned.
         let _gates = self.lock_stack_gates(parties).await?;

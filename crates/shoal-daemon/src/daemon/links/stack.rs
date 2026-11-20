@@ -94,7 +94,7 @@ impl Manager {
             onto: Onto::Remote,
             new_base: base.base_workspace.as_ref().map(|base| base.id.clone()),
             cause: EventCause::Pr,
-            account: &self.user_account(),
+            account: &self.links.user_account(),
         };
         for stacked in stacked {
             self.restack(&stacked, &restack).await?;
@@ -109,7 +109,7 @@ impl Manager {
     ) -> Result<Option<Vec<CommitId>>> {
         let (forge, pull) = self.pr_forge(&base.path, &url.clone().into()).await?;
         forge
-            .merged_commits(&self.user_account(), pull.pull()?)
+            .merged_commits(&self.links.user_account(), pull.pull()?)
             .await
     }
 
@@ -118,7 +118,11 @@ impl Manager {
         let mut pulls = Vec::new();
         for url in urls {
             let (forge, pull) = self.pr_forge(&base.path, &url.clone().into()).await?;
-            pulls.push(forge.pull_request(&self.user_account(), &pull).await?);
+            pulls.push(
+                forge
+                    .pull_request(&self.links.user_account(), &pull)
+                    .await?,
+            );
         }
         Ok(pulls)
     }

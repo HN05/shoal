@@ -90,7 +90,7 @@ impl Manager {
 
     /// Ask `host` which forge it serves and record the answer.
     async fn ask_forge_type(&self, host: &str, scheme: &'static str) -> Result<ForgeKind> {
-        let kind = hosts::probe(host, scheme, &self.user_account())
+        let kind = hosts::probe(host, scheme, &self.links.user_account())
             .await
             .map_err(|error| {
                 anyhow!(

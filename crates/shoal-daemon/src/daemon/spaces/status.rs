@@ -143,7 +143,7 @@ impl Manager {
                 repository::remote_url_from_path(origin),
             )
             .await;
-        let account = self.user_account();
+        let account = self.links.user_account();
         let hosts = self.forge_hosts();
         tokio::join!(
             pr::watched(&hosts, &account, &remote, records.pr_cleanup.as_ref()),

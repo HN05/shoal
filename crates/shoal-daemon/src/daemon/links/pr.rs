@@ -145,7 +145,7 @@ impl Manager {
         // Detect missing tools or login and invalid PRs now.
         if check == WatchCheck::Lookup {
             forge
-                .merged_commits(&self.user_account(), url.pull()?)
+                .merged_commits(&self.links.user_account(), url.pull()?)
                 .await?;
         }
         let kind = self.adding_pr_watch(&space.id, url.clone()).await?;
@@ -440,7 +440,7 @@ impl Manager {
         let mut contains_head = false;
         for url in urls {
             let (forge, pull) = self.pr_forge(&workspace.path, &url.clone().into()).await?;
-            let account = self.user_account();
+            let account = self.links.user_account();
             let Some(commits) = forge.merged_commits(&account, pull.pull()?).await? else {
                 return Ok(false);
             };

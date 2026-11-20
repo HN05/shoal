@@ -19,8 +19,8 @@ impl Manager {
     /// scoped caller and the user's own logins for the user.
     pub(in crate::daemon::links) fn read_account(&self, caller: Option<&Caller>) -> Account {
         match caller {
-            Some(_) => self.agent_account(),
-            None => self.user_account(),
+            Some(_) => self.links.agent_account(),
+            None => self.links.user_account(),
         }
     }
 

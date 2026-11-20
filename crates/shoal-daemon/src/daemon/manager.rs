@@ -130,6 +130,7 @@ impl Manager {
             Arc::new(super::runner::RunnerRecords),
             paths.clone(),
         ));
+        let links = Arc::new(shoal_links::Links::new(config_state.clone()));
         let reviews = Arc::new(shoal_reviews::Reviews::new(
             store.clone(),
             gates.clone(),
@@ -178,7 +179,7 @@ impl Manager {
             space_removals: Default::default(),
             completed_owners: Default::default(),
             seeds: Default::default(),
-            links: Default::default(),
+            links,
             reviews,
             proxy_retries: Default::default(),
             upstream_limits: Default::default(),

@@ -198,7 +198,7 @@ impl Manager {
         items: Vec<ItemRef>,
         selection: &Selection,
     ) -> Result<Vec<(String, Snapshot)>> {
-        let account = &self.user_account();
+        let account = &self.links.user_account();
         let linked = selection.input.is_none();
         stream::iter(items)
             .map(|url| async move {
@@ -213,7 +213,7 @@ impl Manager {
     /// The activity of each of `items` the forge reads in full, leaving out
     /// the others.
     pub(super) async fn complete_reads(&self, items: Vec<ItemRef>) -> Vec<(String, Snapshot)> {
-        let account = &self.user_account();
+        let account = &self.links.user_account();
         stream::iter(items)
             .map(|item| async move {
                 let read = self.read_item_activity(account, &item, false).await.ok()?;

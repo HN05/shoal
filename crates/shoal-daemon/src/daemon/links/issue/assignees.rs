@@ -72,7 +72,7 @@ impl Manager {
         url: &ItemRef,
     ) -> Result<Option<Assignment>> {
         let gate = self.gates.lock_issue_assignees(url.url()).await;
-        let assigned = forge.assign_own(&self.user_account(), url).await?;
+        let assigned = forge.assign_own(&self.links.user_account(), url).await?;
         let Some(assignment) = assigned else {
             return Ok(None);
         };
@@ -141,7 +141,9 @@ impl Manager {
         }
         let url: ItemRef = url.parse()?;
         let forge = self.item_forge(&url).await?;
-        let removal = forge.unassign(&self.user_account(), &url, login).await?;
+        let removal = forge
+            .unassign(&self.links.user_account(), &url, login)
+            .await?;
         self.record_assignee_change(&url, removal.edited).await;
         Ok(())
     }

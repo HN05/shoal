@@ -177,7 +177,7 @@ impl Manager {
             "a contribution clones a repository URL; {source} is a local path"
         );
         let forge = self.forge(source).await?;
-        let account = self.user_account();
+        let account = self.links.user_account();
         if forge.pushable(&account).await? {
             return Ok(None);
         }

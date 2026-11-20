@@ -163,7 +163,7 @@ impl Manager {
     ) -> Account {
         match access {
             Access::Read => self.read_account(caller),
-            Access::Change => self.user_account(),
+            Access::Change => self.links.user_account(),
         }
     }
 

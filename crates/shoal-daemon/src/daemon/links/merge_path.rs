@@ -42,7 +42,7 @@ impl Manager {
             return Ok(linked);
         }
         let forge = self.space_forge(&space).await?;
-        let account = self.agent_account();
+        let account = self.links.agent_account();
         let mut open = Vec::new();
         for pull in linked {
             pull.belongs_to(&forge)?;

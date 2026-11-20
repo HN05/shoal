@@ -95,7 +95,7 @@ impl Manager {
         validate_check_name(name)?;
         let target = (self.selection_target(target, selection, true, caller)).await?;
         let account = match target.own {
-            true => self.agent_account(),
+            true => self.links.agent_account(),
             false => self.elsewhere_account(Access::Read, caller),
         };
         let space = target.own_place().and_then(Place::space);

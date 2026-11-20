@@ -13,7 +13,7 @@ use crate::{
 
 impl Forges for Manager {
     fn user_account(&self) -> Account {
-        Manager::user_account(self)
+        self.links.user_account()
     }
 
     fn checkout_forge<'a>(

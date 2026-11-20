@@ -44,7 +44,7 @@ impl Manager {
             return Ok(pulls);
         }
         let forge = self.space_forge(space).await?;
-        let account = self.agent_account();
+        let account = self.links.agent_account();
         for url in urls {
             url.belongs_to(&forge)?;
             let pull = (forge.read(&account, ItemKind::Pr, url.pull()?.get()).await)

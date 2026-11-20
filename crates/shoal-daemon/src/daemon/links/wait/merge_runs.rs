@@ -198,7 +198,7 @@ impl Manager {
             // it holds start between two polls.
             limit: MAX_RUNS,
         };
-        (forge.list_runs(&self.user_account(), &filter).await)
+        (forge.list_runs(&self.links.user_account(), &filter).await)
             .with_context(|| format!("could not list the CI runs of {}", lookup.commit))
     }
 

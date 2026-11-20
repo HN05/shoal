@@ -112,9 +112,9 @@ impl Manager {
     ) -> Result<Item> {
         let (number, url) = (item.number().get(), item.to_string());
         let account = match caller {
-            None if users_decision(&action) => self.user_account(),
-            Some(_) if has_verdict(&action) => self.review_account(),
-            _ => self.agent_account(),
+            None if users_decision(&action) => self.links.user_account(),
+            Some(_) if has_verdict(&action) => self.links.review_account(),
+            _ => self.links.agent_account(),
         };
         // Held from before the change, so a poll that observes it records
         // it after the cursors that take it as the space's own know it.
@@ -171,7 +171,7 @@ impl Manager {
     ) -> Result<Item> {
         let number = item.number().get();
         let changed = forge
-            .apply(&self.user_account(), kind, number, &action)
+            .apply(&self.links.user_account(), kind, number, &action)
             .await
             .with_context(|| format!("could not {} {item}", action.verb()))?
             .item;
@@ -203,7 +203,7 @@ impl Manager {
             return Ok(());
         }
         let forge = self.space_forge(space).await?;
-        let account = self.agent_account();
+        let account = self.links.agent_account();
         let action = Action::edit(Edit {
             draft: Some(draft),
             ..Edit::default()
@@ -239,7 +239,7 @@ impl Manager {
         section: Option<&str>,
     ) -> Result<()> {
         let forge = self.space_forge(space).await?;
-        let account = self.agent_account();
+        let account = self.links.agent_account();
         pull.belongs_to(&forge)?;
         let (number, url) = (pull.pull()?, pull.to_string());
         let current = forge.read(&account, ItemKind::Pr, number.get()).await?;
@@ -278,7 +278,7 @@ impl Manager {
         let Ok(forge) = self.space_forge(space).await else {
             return;
         };
-        let account = self.agent_account();
+        let account = self.links.agent_account();
         for mark in marks {
             let Some(item) = marked_item(&forge, &account, mark).await else {
                 continue;

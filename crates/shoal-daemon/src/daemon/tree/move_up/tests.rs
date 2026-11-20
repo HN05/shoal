@@ -57,7 +57,7 @@ async fn a_space_moves_below_its_grandparent_and_its_branch_past_its_old_base() 
         onto: Onto::Local,
         new_base: Some(root.id.clone()),
         cause: EventCause::Absorbed,
-        account: &manager.user_account(),
+        account: &manager.links.user_account(),
     };
 
     let above = manager

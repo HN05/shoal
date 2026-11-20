@@ -63,7 +63,7 @@ impl Manager {
         let context = match &target.context {
             Some(ItemContext::Checkout(id)) => {
                 anyhow::ensure!(!link, "{LINK_NEEDS_SPACE}");
-                let account = self.user_account();
+                let account = self.links.user_account();
                 return (self.open_checkout_issue(id, issue, repository, account)).await;
             }
             Some(context) => context,
@@ -148,8 +148,8 @@ impl Manager {
             );
         }
         let account = match caller {
-            Some(_) => self.agent_account(),
-            None => self.user_account(),
+            Some(_) => self.links.agent_account(),
+            None => self.links.user_account(),
         };
         let Created { item, unfinished } =
             (destination.forge).create_issue(&account, &issue).await?;
@@ -200,7 +200,7 @@ impl Manager {
             return (self.propose_issue_at(&space, &destination, required, issue, link, proposer))
                 .await;
         }
-        let account = self.agent_account();
+        let account = self.links.agent_account();
         let created = destination.create(&account, &directory, &issue, required);
         let (item, warnings) = created.await?;
         (self.keep_opened_issue(&space, item, warnings, link, caller)).await
@@ -265,7 +265,7 @@ impl Manager {
         link: bool,
         proposer: Proposer,
     ) -> Result<OpenOutcome> {
-        let (forge, account) = (&destination.forge, self.agent_account());
+        let (forge, account) = (&destination.forge, self.links.agent_account());
         conventions::require(forge, &account, ItemKind::Issue, required, &issue.labels).await?;
         forge.check_uploads(&account, &issue.attachments).await?;
         let repository = destination.repository();

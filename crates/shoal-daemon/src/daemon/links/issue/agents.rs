@@ -126,7 +126,7 @@ impl Manager {
     /// all of them when the forge does not say which is the user's.
     async fn besides_user(&self, url: &ItemRef, logins: Vec<String>) -> Vec<String> {
         let user = match self.item_forge(url).await {
-            Ok(forge) => forge.assignee_login(&self.user_account()).await,
+            Ok(forge) => forge.assignee_login(&self.links.user_account()).await,
             Err(error) => Err(error),
         };
         match user {
@@ -152,7 +152,7 @@ impl Manager {
     /// record that this Shoal did.
     async fn keep_agent_on(&self, url: &ItemRef) -> Result<Option<Vec<String>>> {
         let forge = self.item_forge(url).await?;
-        let Some(assigned) = forge.assign_own(&self.agent_account(), url).await? else {
+        let Some(assigned) = forge.assign_own(&self.links.agent_account(), url).await? else {
             return Ok(None);
         };
         self.record_assignee_change(url, assigned.edited).await;
@@ -169,7 +169,7 @@ impl Manager {
     /// account may have, whose agent may still work the issue.
     async fn take_agent_off(&self, url: &ItemRef) -> Result<Option<Vec<String>>> {
         let forge = self.item_forge(url).await?;
-        let account = self.agent_account();
+        let account = self.links.agent_account();
         let issue = url.url().to_owned();
         if !(self.store.read(move |tx| agent_assigned_here(tx, &issue))).await? {
             return forge.others_assigned(&account, url).await;

@@ -2677,6 +2677,8 @@ dependencies = [
  "anyhow",
  "rusqlite",
  "serde_json",
+ "shoal-core",
+ "shoal-daemon-base",
  "shoal-forge",
  "shoal-forge-types",
  "shoal-ids",

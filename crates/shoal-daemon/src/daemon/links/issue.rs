@@ -171,7 +171,7 @@ impl Manager {
     ) -> Result<OpenIssue> {
         let (forge, url) = self.issue_forge(checkout, input).await?;
         let issue = forge
-            .open_issue_details(&self.user_account(), url.issue()?)
+            .open_issue_details(&self.links.user_account(), url.issue()?)
             .await?;
         Ok(OpenIssue {
             url,
@@ -192,7 +192,10 @@ impl Manager {
             .context("PR lookup needs an origin remote")?;
         let forge = self.forge(&remote).await?;
         let pull = ItemRef::in_repository(&forge, LinkKind::Pr, input)?;
-        Ok(forge.pull_request(&self.user_account(), &pull).await?.title)
+        Ok(forge
+            .pull_request(&self.links.user_account(), &pull)
+            .await?
+            .title)
     }
 
     /// The forge of the repository whose origin `checkout` has, with the

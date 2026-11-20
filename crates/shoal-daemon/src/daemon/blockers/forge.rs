@@ -13,7 +13,7 @@ use shoal_forge::clearance::{Clearance, NewestRuns, clearance};
 impl Manager {
     /// What the forge says of each of the forge blockers among `targets`.
     pub(super) async fn look_up_blockers(&self, targets: HashSet<Target>) -> Lookups {
-        let account = self.user_account();
+        let account = self.links.user_account();
         let hosts = self.forge_hosts();
         let mut newest = NewestRuns::default();
         let mut lookups = Lookups::new();

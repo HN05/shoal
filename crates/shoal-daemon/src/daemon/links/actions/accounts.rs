@@ -1,68 +1,16 @@
-//! The forge and the accounts item actions go out with: the user's own
-//! logins for reads and the user's decisions, the review account for a
-//! scoped caller's verdicts, the agent account for the rest.
+//! The forge item actions go to, and the account a place changes items as.
 use std::path::Path;
 
 use anyhow::{Context, Result};
 
 use crate::{
-    config::{
-        Config,
-        forges::{Forges, Whose},
-    },
     daemon::{links::place::Place, manager::Manager},
     forge::ForgeRepo,
     model::{Repository, Workspace},
 };
 use shoal_forge::{RepoRequests, account::Account};
 
-/// What names the account of the user's own tokens, `forges` sets, in
-/// forge memories.
-fn user_identity(forges: &Forges) -> String {
-    format!("user {}", forges.identity(Whose::User))
-}
-
 impl Manager {
-    /// The user's own logins, which reads and the user's decisions use.
-    pub(crate) fn user_account(&self) -> Account {
-        let forges = &self.config().machine.forges;
-        Account::user(forges.logins(Whose::User))
-            .remembering(self.links.forge_memory(&user_identity(forges)))
-            .naming_missing(Whose::User.missing())
-    }
-
-    /// The agent account of the current configuration.
-    pub(crate) fn agent_account(&self) -> Account {
-        self.agent_account_from(&self.config())
-    }
-
-    /// The agent account of `config`: the hosts' agent tokens, and the
-    /// user's own logins for hosts without one.
-    pub(in crate::daemon::links) fn agent_account_from(&self, config: &Config) -> Account {
-        let forges = &config.machine.forges;
-        // An agent with the user's logins shares what the user's requests taught.
-        let tokens = forges.identity(Whose::Agent);
-        let user = user_identity(forges);
-        let identity = if tokens.is_empty() {
-            user
-        } else {
-            format!("agent {tokens} {user}")
-        };
-        Account::agent(forges.logins(Whose::Agent), forges.logins(Whose::User))
-            .remembering(self.links.forge_memory(&identity))
-            .naming_missing(Whose::Agent.missing())
-    }
-
-    /// The account scoped callers approve and request changes on PRs as:
-    /// the hosts' review tokens, with no other login to fall back on.
-    pub(in crate::daemon::links) fn review_account(&self) -> Account {
-        let forges = &self.config().machine.forges;
-        let identity = format!("review {}", forges.identity(Whose::Review));
-        Account::user(forges.logins(Whose::Review))
-            .remembering(self.links.forge_memory(&identity))
-            .naming_missing(Whose::Review.missing())
-    }
-
     /// The forge of the `origin` of the checkout or worktree at `path`.
     pub(crate) async fn origin_forge(&self, path: &Path) -> Result<ForgeRepo> {
         let remote = crate::repository::remote_url_from_path(path)
@@ -96,7 +44,10 @@ impl Manager {
         &self,
         workspace: &Workspace,
     ) -> Result<(ForgeRepo, Account)> {
-        Ok((self.workspace_forge(workspace).await?, self.agent_account()))
+        Ok((
+            self.workspace_forge(workspace).await?,
+            self.links.agent_account(),
+        ))
     }
 
     /// The forge of the registered checkout's `origin`.
@@ -110,7 +61,10 @@ impl Manager {
         &self,
         repository: &Repository,
     ) -> Result<(ForgeRepo, Account)> {
-        Ok((self.checkout_forge(repository).await?, self.agent_account()))
+        Ok((
+            self.checkout_forge(repository).await?,
+            self.links.agent_account(),
+        ))
     }
 
     /// The account that changes items from `place`: the agent account in a
@@ -118,8 +72,8 @@ impl Manager {
     /// the user acts.
     pub(in crate::daemon::links) fn place_account(&self, place: &Place) -> Account {
         match place {
-            Place::Checkout(_) => self.user_account(),
-            Place::Space(_) => self.agent_account(),
+            Place::Checkout(_) => self.links.user_account(),
+            Place::Space(_) => self.links.agent_account(),
         }
     }
 }

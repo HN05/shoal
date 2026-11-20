@@ -46,8 +46,8 @@ impl Manager {
         let forge = target.forge()?;
         // A scoped caller approves as the agent account.
         let account = match caller {
-            Some(_) => self.agent_account(),
-            None => self.user_account(),
+            Some(_) => self.links.agent_account(),
+            None => self.links.user_account(),
         };
         let approved = match run {
             Some(input) => {

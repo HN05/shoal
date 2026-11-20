@@ -169,7 +169,7 @@ async fn a_report_recorded_before_a_restart_still_moves_the_workspace() {
     let mut recorded = job.job.clone();
     let forge = manager.item_forge(&job.job.run.url).await.unwrap();
     recorded.run = forge
-        .job_run(&manager.user_account(), RunId::new(2))
+        .job_run(&manager.links.user_account(), RunId::new(2))
         .await
         .unwrap();
     let (id, recorded) = (job.id.clone(), serde_json::to_string(&recorded).unwrap());

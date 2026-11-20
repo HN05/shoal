@@ -48,7 +48,7 @@ impl Manager {
         // one's for a scoped caller and the user's without one of its own.
         let own_token =
             caller.is_none() && self.config().machine.forges.has_agent_token(&forge.host);
-        let agent = own_token.then(|| self.agent_account());
+        let agent = own_token.then(|| self.links.agent_account());
         forge
             .read_failed_logs(agent.as_ref().unwrap_or(&account), &mut views)
             .await;
