@@ -58,7 +58,8 @@ pub(super) async fn attach(
 }
 
 /// Attach to `remote`, a space of another machine `view` lists, through
-/// that machine, and remember it for `attach -` once its session was shown.
+/// that machine, and remember it for `attach -` once its session was shown
+/// and still runs there.
 async fn attach_elsewhere(
     ctx: &Context,
     remote: &Listed,
@@ -66,11 +67,11 @@ async fn attach_elsewhere(
     session: Option<String>,
 ) -> Result<i32> {
     let machine = view.machine_name(remote);
-    let code = viewer::attach(ctx, remote.space.id.clone(), machine, session).await?;
-    if code == 0 {
+    let ended = viewer::attach(ctx, remote.space.id.clone(), machine, session).await?;
+    if ended.open {
         recent::record_attach_elsewhere(ctx, &remote.space.id);
     }
-    Ok(code)
+    Ok(ended.code)
 }
 
 /// `shoal internal attach`: attach this terminal, which `viewer` views

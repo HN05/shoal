@@ -9,17 +9,18 @@ use std::{
 
 use anyhow::{Context as _, Result};
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::attaching::{ChosenSession, Viewer};
+use shoal_protocol::attaching::{AttachReport, ChosenSession, Viewer};
 
 use super::{Attaching, Target, sessions::Steps};
 use crate::{
     client::connection::CommandPaths,
-    terminal::{self, Elsewhere, Session},
+    terminal::{self, Elsewhere},
 };
 
 /// Attach this terminal, which `viewer` views from another machine, to a
 /// session of `space` as `shoal attach` would on `machine`, this one, and
-/// write the session it chose to the descriptor `report`. Attaching again
+/// report to the descriptor `report` the session it chose, then whether
+/// that session still runs once the viewer left it. Attaching again
 /// after a lost connection finds the session at the place it names,
 /// without waking or restoring its agent a second time.
 pub async fn for_viewer(
@@ -31,7 +32,7 @@ pub async fn for_viewer(
     attaching: &impl Attaching,
 ) -> Result<i32> {
     // SAFETY: the daemon opened `report` for this process alone.
-    let report = std::fs::File::from(unsafe { OwnedFd::from_raw_fd(report) });
+    let mut report = std::fs::File::from(unsafe { OwnedFd::from_raw_fd(report) });
     let target = Target::by_id(paths, space).await?;
     super::report_attach(paths, &target).await?;
     let (target, session) = match &viewer.again {
@@ -41,20 +42,21 @@ pub async fn for_viewer(
             (steps.awake_session(target, viewer.session.clone(), Some(&machine))).await?
         }
     };
-    report_chosen(report, &session)?;
-    let shown = Elsewhere {
-        machine: &machine,
-        app: viewer.app(session.place.host),
-    };
-    terminal::show_elsewhere(&target.number().to_string(), &session, &shown).await?;
-    Ok(0)
-}
-
-/// Write `session`, the one chosen, to `report` for the daemon, closing it.
-fn report_chosen(mut report: std::fs::File, session: &Session) -> Result<()> {
     let chosen = ChosenSession {
         name: session.name.clone(),
         place: session.place.clone(),
     };
-    writeln!(report, "{}", serde_json::to_string(&chosen)?).context("report the session")
+    send_report(&mut report, &AttachReport::Chosen(chosen))?;
+    let shown = Elsewhere {
+        machine: &machine,
+        app: viewer.app(session.place.host),
+    };
+    let open = terminal::show_elsewhere(&target.number().to_string(), &session, &shown).await?;
+    send_report(&mut report, &AttachReport::Left { open })?;
+    Ok(0)
+}
+
+/// Write `line` to `report` for the daemon.
+fn send_report(report: &mut std::fs::File, line: &AttachReport) -> Result<()> {
+    writeln!(report, "{}", serde_json::to_string(line)?).context("report to the daemon")
 }

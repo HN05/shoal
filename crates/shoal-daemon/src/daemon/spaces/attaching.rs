@@ -16,7 +16,7 @@ use std::{
 
 use anyhow::{Context as _, Result};
 use shoal_protocol::{
-    attaching::{FromSession, ToSession, Viewer},
+    attaching::{AttachReport, FromSession, ToSession, Viewer},
     protocol::{self, Body, Response},
     space_names::SpaceSelector,
 };
@@ -56,7 +56,8 @@ const REPORT: i32 = 3;
 pub(crate) struct ViewerTerminal {
     pty: Arc<Pty>,
     attach: Child,
-    /// Where the attach writes the session it chose, until it closes it.
+    /// Where the attach reports the session it chose and whether it left it
+    /// open, until it closes it.
     report: Option<Lines<BufReader<UnixStream>>>,
     /// How the attach exited, while its terminal may still show more.
     exited: Option<ExitStatus>,
@@ -162,8 +163,8 @@ impl ViewerTerminal {
                 }
                 line = next_report(&mut self.report), if self.report.is_some() => match line? {
                     Some(line) => {
-                        let chosen = serde_json::from_str(&line).context("the attach's session")?;
-                        return Ok(Some(Step::Show(FromSession::Session(chosen))));
+                        let report = serde_json::from_str(&line).context("the attach's report")?;
+                        return Ok(Some(Step::Show(shown_report(report))));
                     }
                     None => self.report = None,
                 },
@@ -206,7 +207,15 @@ impl ViewerTerminal {
     }
 }
 
-/// The next session the attach reports on `report`; none once it closes.
+/// The frame that shows the viewer what the attach reported.
+fn shown_report(report: AttachReport) -> FromSession {
+    match report {
+        AttachReport::Chosen(chosen) => FromSession::Session(chosen),
+        AttachReport::Left { open } => FromSession::Left(open),
+    }
+}
+
+/// The next line the attach reports on `report`; none once it closes.
 async fn next_report(report: &mut Option<Lines<BufReader<UnixStream>>>) -> Result<Option<String>> {
     match report {
         Some(report) => Ok(report.next_line().await?),

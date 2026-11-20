@@ -65,6 +65,16 @@ pub struct ChosenSession {
     pub place: Origin,
 }
 
+/// What an attach run for a viewer on another machine reports to the
+/// daemon that runs it, a line each: the session it chose, then whether
+/// that session still runs once the viewer left it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AttachReport {
+    Chosen(ChosenSession),
+    Left { open: bool },
+}
+
 /// What the viewer sends once the owning machine answered.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToSession {
@@ -81,6 +91,8 @@ pub enum FromSession {
     Screen(Vec<u8>),
     /// The session the attach chose, whose place attaching again names.
     Session(ChosenSession),
+    /// The attach left its session, which still runs when `true`.
+    Left(bool),
     /// The attach ended with this exit code; the last frame.
     Exited(i32),
 }
@@ -90,6 +102,7 @@ const RESIZE: u8 = 2;
 const SCREEN: u8 = 3;
 const SESSION: u8 = 4;
 const EXITED: u8 = 5;
+const LEFT: u8 = 6;
 
 impl ToSession {
     pub fn encode(&self) -> Vec<u8> {
@@ -120,6 +133,7 @@ impl FromSession {
                 SESSION,
                 &serde_json::to_vec(chosen).expect("a session serializes"),
             ),
+            Self::Left(open) => frame(LEFT, &[u8::from(*open)]),
             Self::Exited(code) => frame(EXITED, &code.to_be_bytes()),
         }
     }
@@ -132,6 +146,10 @@ impl FromSession {
         Ok(Some(match tag {
             SCREEN => Self::Screen(bytes),
             SESSION => Self::Session(serde_json::from_slice(&bytes).context("a chosen session")?),
+            LEFT => match bytes.as_slice() {
+                [open] => Self::Left(*open != 0),
+                _ => bail!("a left session's frame holds one byte"),
+            },
             EXITED => {
                 let code = <[u8; 4]>::try_from(bytes.as_slice()).context("an exit code")?;
                 Self::Exited(i32::from_be_bytes(code))

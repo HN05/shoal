@@ -40,6 +40,8 @@ async fn frames_from_the_session_read_back_as_written() {
             place: Origin::created(HostName::Zmx, "shoal-7".into()),
         }),
         FromSession::Screen(vec![0x1b, b'[', b'H']),
+        FromSession::Left(true),
+        FromSession::Left(false),
         FromSession::Exited(-2),
     ];
     let read = read_back(&frames, FromSession::encode, async |r| {
@@ -56,4 +58,19 @@ async fn a_frame_cut_short_is_an_error_and_one_too_long_is_refused() {
     let mut long = vec![SCREEN];
     long.extend_from_slice(&(MAX_FRAME as u32 + 1).to_be_bytes());
     assert!(FromSession::read(&mut long.as_slice()).await.is_err());
+}
+
+#[test]
+fn an_attach_reports_the_session_it_chose_and_whether_it_left_it_open() {
+    let chosen = AttachReport::Chosen(ChosenSession {
+        name: "shoal-7".into(),
+        place: Origin::created(HostName::Zmx, "shoal-7".into()),
+    });
+    let left = AttachReport::Left { open: true };
+    for report in [chosen, left] {
+        let line = serde_json::to_string(&report).unwrap();
+        assert_eq!(serde_json::from_str::<AttachReport>(&line).unwrap(), report);
+    }
+    let left = serde_json::to_value(AttachReport::Left { open: false }).unwrap();
+    assert_eq!(left, serde_json::json!({"left": {"open": false}}));
 }

@@ -236,14 +236,19 @@ pub async fn attach(space: &str, session: &Session) -> Result<bool> {
 }
 
 /// Show `session` to `viewer`, a user on another machine, through the host
-/// that keeps it, then say how to return to it as [`attach`] does.
-pub async fn show_elsewhere(space: &str, session: &Session, viewer: &Elsewhere<'_>) -> Result<()> {
+/// that keeps it, then say how to return to it as [`attach`] does. Returns
+/// whether the session still runs once the viewer left it.
+pub async fn show_elsewhere(
+    space: &str,
+    session: &Session,
+    viewer: &Elsewhere<'_>,
+) -> Result<bool> {
     let (places, sessions) = keeping(session)?;
     places
         .show_elsewhere(&session.place, &session.name, viewer)
         .await?;
     report_detach(sessions, space, &session.name).await?;
-    Ok(())
+    Ok(still_open(sessions, &session.place).await)
 }
 
 /// The host that keeps `session`, as it shows and reads its sessions.

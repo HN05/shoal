@@ -38,8 +38,16 @@ const LONGEST_WAIT: Duration = Duration::from_secs(30);
 /// The key that stops attaching again.
 const CTRL_C: u8 = 0x03;
 
+/// How an attach on another machine ended.
+pub(super) struct Ended {
+    /// The attach's exit code, which this one exits with.
+    pub code: i32,
+    /// Whether it left its session running there.
+    pub open: bool,
+}
+
 /// Attach this terminal to a session of `space`, which runs on `machine`,
-/// the one `session` names when given, and exit as the attach there does.
+/// the one `session` names when given, and end as the attach there does.
 /// A signal that ends this process, such as SIGTERM, ends the attach,
 /// leaving the terminal as it found it.
 pub(super) async fn attach(
@@ -47,7 +55,7 @@ pub(super) async fn attach(
     space: SpaceId,
     machine: &str,
     session: Option<String>,
-) -> Result<i32> {
+) -> Result<Ended> {
     let viewer = Viewer {
         session,
         again: None,
@@ -57,25 +65,25 @@ pub(super) async fn attach(
     };
     let mut ended = Termination::watch()?;
     let mut raw = RawTerminal::enter()?;
-    let code = tokio::select! {
-        code = keep_attached(ctx, &space, machine, viewer) => code?,
+    let attached = tokio::select! {
+        attached = keep_attached(ctx, &space, machine, viewer) => attached?,
         signal = ended.signalled() => bail!("stopped by {signal}"),
     };
     raw.left_by_its_client();
-    Ok(code)
+    Ok(attached)
 }
 
 /// Attach to `space` on `machine` as `viewer` asks, again after each
-/// dropped link, until the attach there exits, giving its code.
+/// dropped link, until the attach there exits.
 async fn keep_attached(
     ctx: &Context,
     space: &SpaceId,
     machine: &str,
     mut viewer: Viewer,
-) -> Result<i32> {
+) -> Result<Ended> {
     let mut keys = typed_keys();
     let mut resizes = signal(SignalKind::window_change()).context("watch the terminal's size")?;
-    let mut chosen = None;
+    let mut reported = Reported::default();
     let mut wait = FIRST_WAIT;
     loop {
         let space = SpaceSelector::id(space);
@@ -99,12 +107,13 @@ async fn keep_attached(
         let shown = Shown {
             keys: &mut keys,
             resizes: &mut resizes,
-            chosen: &mut chosen,
+            reported: &mut reported,
         };
         if let Some(code) = shown.show(screen, input).await? {
-            return Ok(code);
+            let open = reported.left_open;
+            return Ok(Ended { code, open });
         }
-        let Some(session) = &chosen else {
+        let Some(session) = &reported.chosen else {
             bail!("lost the connection to machine {machine} before it chose a session");
         };
         lost_notice(machine, &session.name);
@@ -151,8 +160,16 @@ impl Termination {
 struct Shown<'a> {
     keys: &'a mut mpsc::UnboundedReceiver<Vec<u8>>,
     resizes: &'a mut Signal,
-    /// The session the attach chose, once it says.
-    chosen: &'a mut Option<ChosenSession>,
+    reported: &'a mut Reported,
+}
+
+/// What the attach on the other machine said of its session.
+#[derive(Default)]
+struct Reported {
+    /// The session it chose, once it says.
+    chosen: Option<ChosenSession>,
+    /// Whether it left that session running, once it says so.
+    left_open: bool,
 }
 
 impl Shown<'_> {
@@ -162,23 +179,21 @@ impl Shown<'_> {
     /// other machine takes slowly never stops what this terminal shows.
     async fn show(self, screen: Screen, input: Keys) -> Result<Option<i32>> {
         tokio::select! {
-            shown = show_screen(screen, self.chosen) => shown,
+            shown = show_screen(screen, self.reported) => shown,
             typed = type_keys(input, self.keys, self.resizes) => typed.map(|()| None),
         }
     }
 }
 
-/// Show what `screen` brings, keeping the session it says the attach
-/// chose in `chosen`, until the attach exits, giving its code, or the
+/// Show what `screen` brings, keeping what it says of the attach's session
+/// in `reported`, until the attach exits, giving its code, or the
 /// connection drops, giving none.
-async fn show_screen(
-    mut screen: Screen,
-    chosen: &mut Option<ChosenSession>,
-) -> Result<Option<i32>> {
+async fn show_screen(mut screen: Screen, reported: &mut Reported) -> Result<Option<i32>> {
     loop {
         match screen.next().await {
             Ok(Some(FromSession::Screen(bytes))) => show_bytes(&bytes)?,
-            Ok(Some(FromSession::Session(session))) => *chosen = Some(session),
+            Ok(Some(FromSession::Session(session))) => reported.chosen = Some(session),
+            Ok(Some(FromSession::Left(open))) => reported.left_open = open,
             Ok(Some(FromSession::Exited(code))) => return Ok(Some(code)),
             Ok(None) | Err(_) => return Ok(None),
         }

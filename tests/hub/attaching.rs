@@ -81,7 +81,7 @@ fn a_device_attaches_to_an_agent_s_session_on_another_machine() {
     let hub = machine(true, "app");
     let (laptop, space, mut agent) = laptop_agent(&hub);
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let (session, screen, code) = runtime.block_on(async {
+    let (session, screen, left, code) = runtime.block_on(async {
         let (mut frames, _keys) = attach(
             &app(&hub),
             SpaceSelector::id(&space.as_str().into()),
@@ -89,7 +89,7 @@ fn a_device_attaches_to_an_agent_s_session_on_another_machine() {
         )
         .await
         .unwrap();
-        let (mut session, mut screen) = (None, Vec::new());
+        let (mut session, mut screen, mut left) = (None, Vec::new(), None);
         loop {
             match frames
                 .next()
@@ -99,7 +99,8 @@ fn a_device_attaches_to_an_agent_s_session_on_another_machine() {
             {
                 FromSession::Session(chosen) => session = Some(chosen.name),
                 FromSession::Screen(bytes) => screen.extend(bytes),
-                FromSession::Exited(code) => return (session, screen, code),
+                FromSession::Left(open) => left = Some(open),
+                FromSession::Exited(code) => return (session, screen, left, code),
             }
         }
     });
@@ -110,6 +111,7 @@ fn a_device_attaches_to_an_agent_s_session_on_another_machine() {
     assert!(calls.contains(r#"["attach", "persist"]"#), "{calls}");
     // The session outlives the attach, which says how to return.
     assert!(screen.contains("shoal attach"), "{screen}");
+    assert_eq!(left, Some(true), "{screen}");
     agent.kill().unwrap();
     agent.wait().unwrap();
 }
@@ -132,6 +134,61 @@ fn shoal_attach_shows_an_agent_s_session_on_another_machine_in_this_terminal() {
     assert!(transcript.contains("shoal attach"), "{transcript}");
     let calls = fs::read_to_string(laptop.root.path().join("zmx-calls")).unwrap();
     assert!(calls.contains(r#"["attach", "persist"]"#), "{calls}");
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
+/// `shoal attach target` from `hub`'s user's terminal, with its transcript.
+fn attach_from(hub: &Base, target: &str) -> (std::process::Output, String) {
+    let options = AnswerOptions {
+        controlling_terminal: true,
+        kill_on_timeout: true,
+        terminal_stdout: true,
+    };
+    prompt::answer(hub.command().args(["attach", target]), "", options)
+}
+
+#[test]
+fn attach_previous_returns_to_a_session_left_running_on_another_machine() {
+    let hub = machine(true, "app");
+    let (laptop, space, mut agent) = laptop_agent(&hub);
+    let sessions = laptop.root.path().join("zmx-sessions");
+    let listed = fs::read_to_string(&sessions).unwrap();
+    // A session that ends while attached is not one to return to.
+    fs::write(laptop.root.path().join("zmx-attach-ends-session"), "").unwrap();
+    let (output, transcript) = attach_from(&hub, &space);
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
+    fs::remove_file(laptop.root.path().join("zmx-attach-ends-session")).unwrap();
+    fs::write(&sessions, &listed).unwrap();
+    let (output, transcript) = attach_from(&hub, "-");
+    assert!(
+        !output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
+    assert!(transcript.contains("no previous space"), "{transcript}");
+    let (output, transcript) = attach_from(&hub, &space);
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
+    let calls = || fs::read_to_string(laptop.root.path().join("zmx-calls")).unwrap();
+    let before = calls().matches(r#"["attach", "persist"]"#).count();
+    let (output, transcript) = attach_from(&hub, "-");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
+    assert_eq!(
+        calls().matches(r#"["attach", "persist"]"#).count(),
+        before + 1
+    );
     agent.kill().unwrap();
     agent.wait().unwrap();
 }
