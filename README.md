@@ -135,7 +135,7 @@ Agent admission defaults to starting agents and CI jobs one at a time while
 measured memory and disk leave room; `machine.load = "light"`, `"balanced"`
 or `"full"` says how hard to push the machine. `shoal queue` shows what holds
 each waiting entry. Set a fixed machine-wide limit on heavy slots, the agents
-of `heavy` modes (`shoal config set machine.max_heavy_agents 3`) or `none` to disable queuing, and
+of `heavy` modes (`shoal config set machine.max_heavy_agents 3`), or 0 for a machine that runs none, and
 limit one repository's with `agent.max_heavy_running` (`--repo my-project`). `shoal start` queues agents past the effective
 limit and starts them as heavy slots free; `--now` starts one anyway, and `shoal rm
 <name>` drops a queued one. `--add-blocker <space|issue>` holds an agent

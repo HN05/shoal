@@ -2215,7 +2215,7 @@ fn chat_starts_from_the_checkout_without_syncing() {
 /// runs the tab's own call.
 fn chat_with_an_open_tab() -> (Fixture, Command) {
     let fixture = Fixture::with_config(Some(
-        "terminal.focus = false\nmachine.max_heavy_agents = 'none'\n",
+        "terminal.focus = false\nmachine.max_heavy_agents = 1000\nmachine.overload.disk.enabled = false\n",
     ));
     install_fake_herdr(&fixture);
     install_recording_agent(&fixture, "codex");

@@ -69,8 +69,8 @@ git_profile = "work"     # Top level: a Git profile for new worktrees; no defaul
 
 [machine]
 root_dir = "~/shoal"     # Parent of every repository's workspaces and URL clones
-max_heavy_agents = "dynamic" # Or a positive number, or "none"
-max_jobs = "dynamic"     # Or a positive number, or "none"
+max_heavy_agents = "dynamic" # Or a number from 0
+max_jobs = "dynamic"     # Or a number from 0
 schedule = "balanced"    # "balanced", "speed" or "cache"
 load = "balanced"        # "light", "balanced" or "full"
 keep_awake = false       # Keep the machine from sleeping while agents work
@@ -85,7 +85,9 @@ moves existing ones.
 `max_heavy_agents` limits the heavy slots, the agents of [`heavy` modes](#modes-and-rules)
 that run at once on the machine, and `max_jobs` the [CI jobs](../../../../../../docs/reference.md#runner): `dynamic` starts them one at a time while
 measured memory and disk leave room below the [warning thresholds](#overload),
-a number is a fixed limit, and `none` admits everything. See the
+and a number is a fixed limit; 0 starts none, as on a machine that runs
+only light agents, or no CI jobs, while `shoal queue start` still starts an
+entry. See the
 [agent queue](../../../../../../docs/reference.md#agent-queue). `schedule` decides what the queue
 starts first within a priority: `balanced` work closest to finished,
 `speed` the work with the longest chain of work waiting on it, and `cache`

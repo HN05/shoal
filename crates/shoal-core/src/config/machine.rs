@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use super::{RunLimit, forges, overload, same_as};
+use super::{forges, overload, same_as};
 
 shoal_states::states! {
     /// What the agent queue starts first within a priority.
@@ -36,12 +36,11 @@ pub struct Machine {
     /// guesses under `auto`.
     pub availability: shoal_protocol::hub::availability::AvailabilitySetting,
     /// Heavy slots: heavy modes' agents running at once on this machine;
-    /// defaults to measured load and `shoal start` queues past it. Use `none`
-    /// for unlimited admission.
-    pub max_heavy_agents: RunLimit,
+    /// defaults to measured load and `shoal start` queues past it.
+    pub max_heavy_agents: MachineLimit,
     /// CI jobs the runner runs at once on this machine; defaults to measured
-    /// load, which agents and jobs share. Use `none` for unlimited admission.
-    pub max_jobs: RunLimit,
+    /// load, which agents and jobs share.
+    pub max_jobs: MachineLimit,
     /// What the agent queue starts first after priority.
     pub schedule: Schedule,
     pub overload: overload::Overload,
@@ -61,6 +60,59 @@ pub struct Machine {
     /// The options of `[machine]` that take another's value.
     #[serde(skip)]
     pub same_as: same_as::References,
+}
+
+/// How many heavy agents, or CI jobs, this machine runs at once: as
+/// measured load allows, or a fixed number, where 0 admits none.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum MachineLimit {
+    #[default]
+    Dynamic,
+    Fixed(u32),
+}
+
+impl MachineLimit {
+    /// The fixed limit, none under dynamic admission.
+    pub fn fixed(self) -> Option<u32> {
+        match self {
+            Self::Dynamic => None,
+            Self::Fixed(limit) => Some(limit),
+        }
+    }
+}
+
+impl Serialize for MachineLimit {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::Dynamic => serializer.serialize_str("dynamic"),
+            Self::Fixed(limit) => serializer.serialize_u32(*limit),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for MachineLimit {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            Count(u32),
+            Name(String),
+        }
+
+        match Raw::deserialize(deserializer) {
+            Ok(Raw::Count(limit)) => Ok(Self::Fixed(limit)),
+            Ok(Raw::Name(name)) if name == "dynamic" => Ok(Self::Dynamic),
+            _ => Err(serde::de::Error::custom(
+                "the limit must be 'dynamic' or a number from 0 up",
+            )),
+        }
+    }
 }
 
 /// The daemon's HTTP listener for webhook triggers.

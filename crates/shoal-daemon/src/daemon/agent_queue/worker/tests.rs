@@ -38,7 +38,9 @@ async fn a_running_agent_refuses_another_worker() {
 async fn a_queued_agent_refuses_another_worker() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'none'"));
+    manager.publish_config(global_config(
+        "[machine]\nmax_heavy_agents = 1000\n[machine.overload.disk]\nenabled = false",
+    ));
     let workspace = create(&manager, &repo, "waiting").await;
     queue_worker(&manager, &workspace).await.unwrap();
     let refused = refusal(queue_worker(&manager, &workspace).await);

@@ -142,24 +142,41 @@ fn a_home_other_than_the_users_keeps_its_config_inside() {
 }
 
 #[test]
-fn agent_and_job_limits_accept_dynamic_fixed_and_unlimited_values() {
+fn machine_limits_accept_dynamic_and_numbers_from_zero() {
+    for (value, expected) in [
+        ("'dynamic'", MachineLimit::Dynamic),
+        ("0", MachineLimit::Fixed(0)),
+        ("3", MachineLimit::Fixed(3)),
+    ] {
+        let text = format!("[machine]\nmax_heavy_agents = {value}\nmax_jobs = {value}");
+        let config = Config::from_toml(&text).unwrap();
+        assert_eq!(config.machine.max_heavy_agents, expected);
+        assert_eq!(config.machine.max_jobs, expected);
+    }
+    for value in ["'none'", "'unlimited'", "-1", "'automatic'"] {
+        for key in ["max_heavy_agents", "max_jobs"] {
+            let error = Config::from_toml(&format!("[machine]\n{key} = {value}")).unwrap_err();
+            assert!(
+                format!("{error:#}").contains("'dynamic' or a number"),
+                "{error:#}"
+            );
+        }
+    }
+}
+
+#[test]
+fn repository_limits_accept_dynamic_fixed_and_unlimited_values() {
     for (value, expected) in [
         ("'dynamic'", RunLimit::Dynamic),
         ("'none'", RunLimit::Unlimited),
         ("'unlimited'", RunLimit::Unlimited),
         ("3", RunLimit::Fixed(std::num::NonZeroU32::new(3).unwrap())),
     ] {
-        let text = format!(
-            "agent.max_heavy_running = {value}\n[machine]\nmax_heavy_agents = {value}\nmax_jobs = {value}"
-        );
-        let config = Config::from_toml(&text).unwrap();
-        assert_eq!(config.machine.max_heavy_agents, expected);
-        assert_eq!(config.machine.max_jobs, expected);
+        let config = Config::from_toml(&format!("agent.max_heavy_running = {value}")).unwrap();
         assert_eq!(config.repository.agent.max_heavy_running, Some(expected));
     }
     for value in ["0", "'automatic'"] {
         assert!(Config::from_toml(&format!("agent.max_heavy_running = {value}")).is_err());
-        assert!(Config::from_toml(&format!("[machine]\nmax_heavy_agents = {value}")).is_err());
     }
 }
 

@@ -112,6 +112,21 @@ fn admission_fills_free_slots_in_order_and_passes_over_full_repositories() {
 }
 
 #[test]
+fn zero_limits_start_only_light_agents() {
+    let mut queue = waiting(&[("a1", "a"), ("l1", "a")]);
+    queue.push(job("j1", GIB));
+    let none = Limits {
+        jobs: JobLimits {
+            fixed: Some(0),
+            ..JobLimits::default()
+        },
+        ..limits(Some(0), &[])
+    };
+    assert_eq!(admit(&[], &queue, &none, false), ["l1"]);
+    assert!(!room_for_a_job(&[], &none));
+}
+
+#[test]
 fn jobs_count_only_against_their_own_limits_and_share_the_dynamic_start() {
     let mut queue = waiting(&[("a1", "a")]);
     queue.insert(0, job("j1", 4 * GIB));

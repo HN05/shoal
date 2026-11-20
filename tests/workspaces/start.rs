@@ -421,7 +421,9 @@ fn a_scoped_start_records_a_blocked_workspace_at_once() {
 
 #[test]
 fn add_starts_agents_only_after_creation_and_preserves_workspace_on_exit() {
-    let fixture = Fixture::with_config(Some("machine.max_heavy_agents = 'none'"));
+    let fixture = Fixture::with_config(Some(
+        "machine.max_heavy_agents = 1000\nmachine.overload.disk.enabled = false",
+    ));
     let bin = fixture.root.path().join("add-agent-bin");
     fs::create_dir(&bin).unwrap();
     let inspection = fixture.root.path().join("agent-inspection.json");

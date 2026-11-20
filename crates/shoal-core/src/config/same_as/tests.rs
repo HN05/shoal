@@ -1,5 +1,5 @@
 use crate::config::{
-    Config, RunLimit,
+    Config, MachineLimit,
     repo::{ConfigLayer, ConfigLayers, parse},
     resolve::Stack,
 };
@@ -87,13 +87,13 @@ fn machine_options_take_values_over_their_defaults() {
         &paths,
     )
     .unwrap();
-    assert!(matches!(config.machine.max_jobs, RunLimit::Fixed(jobs) if jobs.get() == 3));
+    assert_eq!(config.machine.max_jobs, MachineLimit::Fixed(3));
     assert!(config.machine.forges.has_agent_token("git.example.com"));
     let defaulted = Config::parse(
         "[machine]\nmax_jobs = { same_as = \"max_heavy_agents\" }\n",
         &paths,
     );
-    assert_eq!(defaulted.unwrap().machine.max_jobs, RunLimit::Dynamic);
+    assert_eq!(defaulted.unwrap().machine.max_jobs, MachineLimit::Dynamic);
     let unset =
         "[machine.forges.\"git.example.com\"]\nagent_token = { same_as = \"user_token\" }\n";
     let error = format!("{:#}", Config::parse(unset, &paths).unwrap_err());

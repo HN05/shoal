@@ -906,7 +906,9 @@ async fn dynamic_admission_restores_beside_a_running_agent() {
 async fn launches_in_an_existing_workspace_start_from_the_daemon() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'none'"));
+    manager.publish_config(global_config(
+        "[machine]\nmax_heavy_agents = 1000\n[machine.overload.disk]\nenabled = false",
+    ));
     let parent = manager
         .create_workspace(&repo.id, "parent".into(), None, None, None)
         .await
@@ -950,7 +952,9 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
 async fn a_launch_in_an_existing_workspace_its_caller_starts_is_left_to_it() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'none'"));
+    manager.publish_config(global_config(
+        "[machine]\nmax_heavy_agents = 1000\n[machine.overload.disk]\nenabled = false",
+    ));
     let workspace = create(&manager, &repo, "here").await;
     let admission = manager
         .queue_add(QueueRequest {
@@ -1108,7 +1112,9 @@ async fn a_workspace_reserved_for_removal_refuses_queued_launches() {
 async fn an_expired_launch_in_an_existing_workspace_reports_its_failure() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'none'"));
+    manager.publish_config(global_config(
+        "[machine]\nmax_heavy_agents = 1000\n[machine.overload.disk]\nenabled = false",
+    ));
     let child = manager
         .create_workspace(&repo.id, "child".into(), None, None, None)
         .await
@@ -1350,7 +1356,7 @@ async fn a_restored_agent_ends_its_turn_and_an_update_reaches_it() {
 async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'unlimited'"));
+    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 1000"));
     let idle = create(&manager, &repo, "idle").await;
     let (execution, _stop) = connected_agent(&manager, &idle).await;
     manager
@@ -1544,7 +1550,9 @@ async fn protection_stops_oneshot_runs_which_wait_for_recovery_to_run_again() {
 async fn launch_waiting_for_setup() -> (tempfile::TempDir, Arc<Manager>, Workspace, QueueEntry) {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'none'"));
+    manager.publish_config(global_config(
+        "[machine]\nmax_heavy_agents = 1000\n[machine.overload.disk]\nenabled = false",
+    ));
     let child = manager
         .create_workspace(&repo.id, "child".into(), None, None, None)
         .await
@@ -1748,7 +1756,9 @@ async fn a_start_gives_its_queue_entry_the_workspace_it_reopens() {
 async fn a_launch_waits_for_a_setup_the_daemon_never_started() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'none'"));
+    manager.publish_config(global_config(
+        "[machine]\nmax_heavy_agents = 1000\n[machine.overload.disk]\nenabled = false",
+    ));
     let child = manager
         .create_workspace(&repo.id, "child".into(), None, None, None)
         .await

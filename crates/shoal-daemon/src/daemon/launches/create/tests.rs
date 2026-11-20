@@ -7,7 +7,7 @@ use shoal_protocol::space_names::SpaceSelector;
 /// `agent.default` names.
 async fn machine(manager: &Manager, temp: &tempfile::TempDir) -> crate::model::Repository {
     manager.publish_config(global_config(
-        "[machine]\nmax_heavy_agents = 'none'\n[machine.overload.disk]\nenabled = false\n\
+        "[machine]\nmax_heavy_agents = 1000\n[machine.overload.disk]\nenabled = false\n\
          [agent]\ndefault = 'claude'\n[agents.claude]\ncommand = ['sh']\n",
     ));
     let path = repository(temp.path(), "repo");

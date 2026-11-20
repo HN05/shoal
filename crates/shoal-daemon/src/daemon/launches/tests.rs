@@ -9,7 +9,7 @@ use shoal_protocol::launches::StartTarget;
 /// A repository and an agent that starts without limits.
 async fn machine(manager: &Manager, temp: &tempfile::TempDir) -> Repository {
     manager.publish_config(global_config(
-        "[machine]\nmax_heavy_agents = 'none'\n[machine.overload.disk]\nenabled = false\n\
+        "[machine]\nmax_heavy_agents = 1000\n[machine.overload.disk]\nenabled = false\n\
          [agents.claude]\ncommand = ['sh']\n",
     ));
     let path = repository(temp.path(), "repo");

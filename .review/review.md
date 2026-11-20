@@ -582,8 +582,10 @@ instead of the PR delivery guidance below.
   room; CPU never holds back an agent. Critical or failed memory and disk
   readings start none, and an idle machine starts one. Every caller sees the
   whole queue, each waiting entry with what held it back at the last pass.
-  It accepts a positive fixed value or `none`; the global value limits the
-  machine while a repository's fixed value limits that repository. Heavy slots derive from tracked
+  The machine's `max_heavy_agents` and `max_jobs` take `dynamic` or a number
+  from 0, where 0 starts none of that kind but `queue start`; the repository's
+  `agent.max_heavy_running` takes a positive fixed value or `none`, and its
+  fixed value limits that repository. Heavy slots derive from tracked
   agents, executions awaiting reattachment, resume records and starting queue
   entries, excluding done spaces and agents of a `light` mode, never from a
   separate counter; a mode's weight alone decides this, never the space's

@@ -2487,6 +2487,7 @@ plan splits off. You start an agent on it when you want one, with
 ```sh
 shoal config set machine.max_heavy_agents dynamic   # Start agents while memory and disk allow
 shoal config set machine.max_heavy_agents 3         # Fixed machine-wide limit
+shoal config set machine.max_heavy_agents 0         # Only light agents start here
 shoal config set agent.max_heavy_running 2 --repo shoal  # And at most two of them in this repository
 shoal config set agent.max_heavy_running none --repo docs # No repository limit
 shoal start <issue-url> --agent claude          # Starts now, or queues when no slot is free
@@ -2503,7 +2504,8 @@ shoal priority 30 [space]                     # Any number from 0 to 100; low is
 ```
 
 [`machine.max_heavy_agents`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) limits the heavy slots: the agents of
-[heavy](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules) modes that run at once. It defaults to `dynamic`,
+[heavy](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules) modes that run at once, `dynamic` or a number
+from 0, where 0 keeps every heavy agent queued until `shoal queue start`. It defaults to `dynamic`,
 which starts one agent at a time, at least 10 seconds apart, while measured
 memory and disk leave room below the
 [`[machine.overload.warning]`](#overload-protection) memory and disk
@@ -4287,7 +4289,8 @@ its run links, ahead of a queued agent of the same space. The daemon reads them 
 while a job could start and every minute while none can, so new jobs show in
 the queue and the entries of jobs the forge no longer lists, which another
 runner took or a cancel ended, leave it. `machine.max_jobs`
-limits jobs as [`machine.max_heavy_agents`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) limits agents, counting only jobs. Under
+limits jobs as [`machine.max_heavy_agents`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) limits agents, counting only jobs;
+0 takes none. Under
 `dynamic`, agents and jobs start through one admission, one at a time at least
 10 seconds apart, while measured memory and disk leave room below the
 `[machine.overload.warning]` thresholds: a job is expected to use the most

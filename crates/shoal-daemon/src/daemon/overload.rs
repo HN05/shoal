@@ -225,7 +225,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
             continue;
         }
         let settings = &config.machine.overload;
-        let admission = config.machine.max_jobs == crate::config::RunLimit::Dynamic;
+        let admission = config.machine.max_jobs == crate::config::MachineLimit::Dynamic;
         let readings = Readings::take(settings, settings.cpu.enabled || admission, &manager);
         let now = Instant::now();
         publish_busy_cpu(&manager, now, settings, admission, &readings.cpu);

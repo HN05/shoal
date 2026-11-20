@@ -33,7 +33,7 @@ use std::{
 };
 
 use crate::paths::Paths;
-pub use machine::Machine;
+pub use machine::{Machine, MachineLimit};
 pub use repo::{
     AutoCleanup, Cleanup, Herdr, Issue, MergedCleanup, Ports, Restore, Rex, Runner, Settings,
     Simulators, Tmux, Zellij,
@@ -42,11 +42,8 @@ use repo::{ConfigLayers, RepoConfig};
 pub use resolve::Effective;
 pub use shoal_protocol::config::options;
 
-/// How many tracked agents, or CI jobs, may run concurrently.
-///
-/// Numeric values retain the original fixed limit. `dynamic` starts them
-/// while measured load allows, while `none` disables admission limits for
-/// the selected layer.
+/// How many of a repository's heavy agents may run at once: a fixed
+/// number, or under `dynamic` and `none` only the machine's limit.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum RunLimit {
     #[default]

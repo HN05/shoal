@@ -2222,8 +2222,11 @@ not passed over for good. An AI tool whose upstream a proxied agent finds
 rate-limited or out of quota holds that tool's queued agents, which would only
 fail, while other tools' start; a limit without a named end lifts after 15
 minutes, a fixed value, so a new agent finds out whether it still stands. Dynamic is machine-wide, so a
-repository's `dynamic` adds no limit. A positive number fixes a limit and `none` disables it
-for that layer. Fixed limits keep dynamic admission's disk rule, since an agent
+repository's `dynamic` adds no limit. A positive number fixes a repository's
+limit and `none` disables it. The machine's two limits take a number from 0
+instead, and no `none`: a machine that should run no heavy agents, such as a
+hub box, or no CI jobs sets 0, and one that wants no limit a large number,
+which still keeps the disk rule below. Fixed limits keep dynamic admission's disk rule, since an agent
 started on a nearly full disk is soon stopped by disk protection. Per-agent
 memory profiles remain a proposal. CI jobs go through the same admission and
 order: `machine.max_jobs` limits them apart from agents, and under `dynamic` a

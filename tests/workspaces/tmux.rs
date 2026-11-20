@@ -150,7 +150,7 @@ impl Drop for TmuxServer {
 #[test]
 fn additions_open_owned_windows_that_removal_closes_leaving_the_users_panes() {
     let fixture = Fixture::with_config(Some(&format!(
-        "machine.max_heavy_agents = 'none'\n[terminal.tmux]\nenabled = true\n{SLEEPING_AGENT}"
+        "machine.max_heavy_agents = 1000\nmachine.overload.disk.enabled = false\n[terminal.tmux]\nenabled = true\n{SLEEPING_AGENT}"
     )));
     let Some(tmux) = TmuxServer::start(&fixture) else {
         return;
@@ -191,7 +191,7 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_panes() {
 #[test]
 fn split_placement_opens_additions_beside_the_callers_pane() {
     let fixture = Fixture::with_config(Some(&format!(
-        "machine.max_heavy_agents = 'none'\n[terminal.tmux]\nenabled = true\nplacement = 'split'\n{SLEEPING_AGENT}"
+        "machine.max_heavy_agents = 1000\nmachine.overload.disk.enabled = false\n[terminal.tmux]\nenabled = true\nplacement = 'split'\n{SLEEPING_AGENT}"
     )));
     let Some(tmux) = TmuxServer::start(&fixture) else {
         return;
@@ -222,7 +222,7 @@ fn split_placement_opens_additions_beside_the_callers_pane() {
 fn tmux_off_leaves_launches_from_its_panes_to_zmx() {
     // The agent exits at once, so the attached zmx session ends.
     let fixture = Fixture::with_config(Some(
-        "machine.max_heavy_agents = 'none'\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
+        "machine.max_heavy_agents = 1000\nmachine.overload.disk.enabled = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     let Some(tmux) = TmuxServer::start(&fixture) else {
         return;

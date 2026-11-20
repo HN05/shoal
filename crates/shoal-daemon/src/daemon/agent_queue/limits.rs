@@ -12,7 +12,7 @@ use anyhow::Result;
 
 use super::{Grant, slots::Slot};
 use crate::{
-    config::{RunLimit, overload::Overload},
+    config::{MachineLimit, RunLimit, overload::Overload},
     daemon::{
         capacity::{self, Activity, Agents, Unfit},
         manager::Manager,
@@ -372,9 +372,9 @@ pub(crate) fn room_for_a_job(occupied: &[Option<RepositoryId>], limits: &Limits)
     !admit(occupied, &probe, limits, false).admitted.is_empty()
 }
 
-/// A configured value as a slot count. Dynamic admission measures the whole
-/// machine, so it adds no repository limit of its own.
-fn fixed_limit(limit: RunLimit) -> Option<u32> {
+/// A repository's configured value as a slot count. Dynamic admission
+/// measures the whole machine, so it adds no repository limit of its own.
+fn repository_limit(limit: RunLimit) -> Option<u32> {
     match limit {
         RunLimit::Fixed(value) => Some(value.get()),
         RunLimit::Dynamic | RunLimit::Unlimited => None,
@@ -408,22 +408,22 @@ impl Manager {
                 memory: None,
             }))
             .collect();
-        let measured = match [global, max_jobs].contains(&RunLimit::Dynamic) {
+        let measured = match [global, max_jobs].contains(&MachineLimit::Dynamic) {
             true => Some(self.measure(overload, &activities).await?),
             false => None,
         };
         let mut limits = Limits {
-            global: fixed_limit(global),
-            room: measured.filter(|_| global == RunLimit::Dynamic),
+            global: global.fixed(),
+            room: measured.filter(|_| global == MachineLimit::Dynamic),
             repositories: HashMap::new(),
             disk: None,
             oneshots,
             jobs: JobLimits {
                 running: jobs.len().try_into().unwrap_or(u32::MAX),
-                fixed: fixed_limit(max_jobs),
+                fixed: max_jobs.fixed(),
                 disk: None,
-                room: measured.filter(|_| max_jobs == RunLimit::Dynamic),
-                cpu: (max_jobs == RunLimit::Dynamic).then(|| self.job_cpu(overload)),
+                room: measured.filter(|_| max_jobs == MachineLimit::Dynamic),
+                cpu: (max_jobs == MachineLimit::Dynamic).then(|| self.job_cpu(overload)),
             },
         };
         for id in repositories {
@@ -436,9 +436,9 @@ impl Manager {
             let resolved = config.resolve(&layers)?;
             limits
                 .repositories
-                .insert(id, fixed_limit(resolved.agent.max_heavy_running));
+                .insert(id, repository_limit(resolved.agent.max_heavy_running));
         }
-        if fixed_limit(global).is_some() || limits.repositories.values().any(Option::is_some) {
+        if global.fixed().is_some() || limits.repositories.values().any(Option::is_some) {
             limits.disk = self.disk_limit(overload, slots.len()).await?;
         }
         if limits.jobs.fixed.is_some() {
