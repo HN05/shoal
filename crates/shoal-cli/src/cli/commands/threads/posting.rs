@@ -31,7 +31,7 @@ pub(in crate::cli) struct Posting {
     pub(in crate::cli) options: PostArgs,
 }
 
-pub(in crate::cli) async fn post(ctx: &Context, posting: Posting) -> Result<i32> {
+pub(in crate::cli) async fn post(ctx: &Context, mut posting: Posting) -> Result<i32> {
     let from = super::acting_space(ctx).await?;
     if let Some(after) = posting.options.resume {
         return resume(ctx, posting.thread, after).await;
@@ -43,8 +43,9 @@ pub(in crate::cli) async fn post(ctx: &Context, posting: Posting) -> Result<i32>
     let wait = posting.options.wait;
     let attachments = crate::cli::commands::send::attachments(&posting.attach)?;
     shoal_protocol::files::check_sent(&attachments)?;
+    let code = super::code_refs(std::mem::take(&mut posting.options.code))?;
     let post = new_post(posting)?;
-    let posted = threads::post(&ctx.paths, thread, post, attachments, Vec::new(), from).await?;
+    let posted = threads::post(&ctx.paths, thread, post, attachments, code, from).await?;
     let mine = posted.posts.last().context("the post was not recorded")?;
     if !wait {
         let to = match mine.side {

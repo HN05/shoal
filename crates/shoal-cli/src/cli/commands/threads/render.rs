@@ -1,6 +1,9 @@
 //! How a thread reads on the terminal: one line to choose it by, a row of
 //! a list, and the whole thread with its posts.
-use shoal_protocol::threads::{Post, Side, Thread};
+use shoal_protocol::{
+    code::CodeRef,
+    threads::{Post, Side, Thread},
+};
 
 use crate::cli::{
     commands::alerts::hanging_indent,
@@ -98,5 +101,15 @@ fn post_lines(post: &Post, palette: Palette) -> Vec<String> {
     for file in &post.files {
         lines.push(format!("    Attached file: {}", file.path.display()));
     }
+    lines.extend(post.code.iter().flat_map(code_lines));
     lines
+}
+
+/// A place in code a post points at, where it is now in the worktree of
+/// its space, with its state and snippet.
+pub(super) fn code_lines(code: &CodeRef) -> Vec<String> {
+    let place = format!("    Code: {} in {}", code.place(), code.space.label());
+    let snippet = code.snippet_lines("      ");
+    let snippet = snippet.split('\n').skip(1).map(str::to_owned);
+    std::iter::once(place).chain(snippet).collect()
 }

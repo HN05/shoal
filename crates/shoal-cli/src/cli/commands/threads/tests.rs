@@ -63,3 +63,22 @@ fn a_thread_shows_whose_turn_it_is_or_how_it_ended() {
     let resolved = thread(serde_json::json!([post("opener")]), Some(withdrawn));
     assert_eq!(render::status(&resolved), "withdrawn");
 }
+
+#[test]
+fn a_post_shows_its_code_where_it_is_now() {
+    let code = serde_json::json!({
+        "id": 1, "space": {"id": "w1", "name": "cache", "number": 3},
+        "original": {"path": "src/parse.rs", "lines": {"start": 39, "end": 52}},
+        "latest": {"path": "src/parser.rs", "lines": {"start": 41, "end": 55}},
+        "snippet": "fn parse() {\n}", "state": "changed",
+    });
+    let code: shoal_protocol::code::CodeRef = serde_json::from_value(code).unwrap();
+    assert_eq!(
+        render::code_lines(&code),
+        [
+            "    Code: src/parser.rs:42-55 (changed) in 3 cache",
+            "      fn parse() {",
+            "      }",
+        ]
+    );
+}

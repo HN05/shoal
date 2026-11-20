@@ -1,7 +1,11 @@
 //! Arguments of `shoal thread` and of what `shoal send` takes for a post in
 //! a thread.
+use std::{path::PathBuf, str::FromStr};
+
+use anyhow::{Result, ensure};
 use clap::{Args, Subcommand};
 
+use shoal_protocol::code::Lines;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::threads::{OutcomeKind, ThreadKind, ThreadNumber, ThreadState};
 
@@ -23,6 +27,11 @@ pub enum ThreadCommand {
         /// Space, a workspace or chat, that holds the thread.
         #[arg(short = 's', long)]
         space: Option<SpaceSelector>,
+        /// A file, or its lines as PATH:FIRST-LAST, in a worktree your
+        /// scope reaches that the thread is about; repeat for more. The
+        /// thread's opening post, named as it, carries them at once.
+        #[arg(long, value_name = "PATH[:FIRST-LAST]")]
+        code: Vec<CodeArg>,
     },
     /// Give a thread you hold to a space below you, or up to your
     /// coordinator or the user; the new holder receives its posts from then
@@ -92,12 +101,17 @@ pub struct PostArgs {
     /// never read as a choice number.
     #[arg(long, value_name = "N")]
     pub choose: Option<u32>,
+    /// A file, or its lines as PATH:FIRST-LAST, in a worktree your scope
+    /// reaches that the post points at; repeat for more. The other side
+    /// receives each at its lines then; --attach sends a copy instead.
+    #[arg(long, value_name = "PATH[:FIRST-LAST]")]
+    pub code: Vec<CodeArg>,
     /// Wait for the other side's next post and print it.
     #[arg(long)]
     pub wait: bool,
     /// Post your turn's final message in the thread instead, which a reply
     /// in your conversation answers.
-    #[arg(long, conflicts_with_all = ["body_file", "attach", "choices", "recommend", "choose", "wait"])]
+    #[arg(long, conflicts_with_all = ["body_file", "attach", "code", "choices", "recommend", "choose", "wait"])]
     pub in_chat: bool,
     /// Continue waiting after this post, as the installed release does after
     /// an upgrade restarted the daemon.
@@ -111,8 +125,39 @@ impl PostArgs {
         !self.choices.is_empty()
             || self.recommend.is_some()
             || self.choose.is_some()
+            || !self.code.is_empty()
             || self.wait
             || self.in_chat
             || self.resume.is_some()
     }
 }
+
+/// A place in code `--code` names: a path, and its lines after the last
+/// colon when they read as lines.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CodeArg {
+    pub path: PathBuf,
+    pub lines: Option<Lines>,
+}
+
+impl FromStr for CodeArg {
+    type Err = anyhow::Error;
+
+    fn from_str(text: &str) -> Result<Self> {
+        let (path, lines) = match text.rsplit_once(':') {
+            Some((path, lines)) => match lines.parse() {
+                Ok(lines) => (path, Some(lines)),
+                Err(_) => (text, None),
+            },
+            None => (text, None),
+        };
+        ensure!(!path.is_empty(), "name a file, as PATH or PATH:FIRST-LAST");
+        Ok(Self {
+            path: path.into(),
+            lines,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests;

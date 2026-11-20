@@ -1412,6 +1412,43 @@ fn a_chats_agent_asks_the_user_and_reads_the_answer_in_its_inbox() {
 }
 
 #[test]
+fn a_request_about_code_shows_it_where_it_went_and_ends_done() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("parser");
+    let root = PathBuf::from(workspace["path"].as_str().unwrap());
+    fs::write(root.join("parse.rs"), "fn parse() {\n    todo!()\n}\n").unwrap();
+    // A path relative to the current directory names the file there.
+    let mut command = fixture.command();
+    let opened = fixture.ok_from(
+        command.current_dir(&root),
+        &[
+            "thread",
+            "open",
+            "Implement parse",
+            "--kind",
+            "request",
+            "--space",
+            &fixture.id("parser"),
+            "--code",
+            "parse.rs:1-3",
+        ],
+    );
+    let id = opened["number"].as_str().unwrap().to_owned();
+    assert_eq!(opened["posts"][0]["code"][0]["latest"]["path"], "parse.rs");
+
+    fs::write(root.join("parse.rs"), "use x;\n\nfn parse() {\n    1\n}\n").unwrap();
+    let viewed = fixture.ok(&["view", "thread", &id]);
+    let code = &viewed["posts"][0]["code"][0];
+    assert_eq!(
+        code["latest"]["lines"],
+        serde_json::json!({"start": 2, "end": 5})
+    );
+    assert_eq!(code["state"], "changed", "{viewed}");
+    let done = fixture.ok(&["thread", "resolve", &id, "done"]);
+    assert_eq!(done["resolution"]["outcome"], "done", "{done}");
+}
+
+#[test]
 fn a_wait_prints_the_other_side_s_next_post() {
     let fixture = Fixture::new();
     fixture.add("asker");

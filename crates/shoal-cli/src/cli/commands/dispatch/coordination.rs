@@ -161,7 +161,12 @@ pub(in crate::cli::commands) async fn run(
 /// Run a `shoal thread` command.
 async fn thread(ctx: &Context, command: ThreadCommand) -> Result<i32> {
     match command {
-        ThreadCommand::Open { name, kind, space } => threads::open(ctx, name, kind, space).await,
+        ThreadCommand::Open {
+            name,
+            kind,
+            space,
+            code,
+        } => threads::open(ctx, name, kind, space, code).await,
         ThreadCommand::Forward {
             thread,
             space,

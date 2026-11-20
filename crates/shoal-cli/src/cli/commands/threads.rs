@@ -1,17 +1,18 @@
 //! `shoal thread`: open a thread, forward or resolve one, and list them.
 //! Posting in a thread goes through `shoal send`, reading one through
 //! `shoal view thread`, and following one through `shoal link thread`.
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
     cli::{
-        args::items::RelationArgs,
+        args::{items::RelationArgs, threads::CodeArg},
         context::Context,
         ui::{self, Fallback},
     },
     client::threads::{self, Resolving},
 };
 use shoal_protocol::{
+    code::NewCodeRef,
     item_numbers::ItemNumber,
     model::Relation,
     space_names::SpaceSelector,
@@ -50,28 +51,44 @@ async fn acting_space(ctx: &Context) -> Result<Option<SpaceSelector>> {
 
 /// Open the thread `name` of `kind` with the space `space` names, else with
 /// the caller's coordinator or the user; from the user's terminal with the
-/// current or a picked space.
+/// current or a picked space. With `code`, its opening post points at it.
 pub(super) async fn open(
     ctx: &Context,
     name: String,
     kind: ThreadKind,
     space: Option<SpaceSelector>,
+    code: Vec<CodeArg>,
 ) -> Result<i32> {
+    let code = code_refs(code)?;
     let from = acting_space(ctx).await?;
     let to = match space {
         None if from.is_some() => None,
         space => Some(ui::select_space(ctx, space, Fallback::CurrentDirectory).await?),
     };
-    let thread = threads::open(&ctx.paths, name, kind, to, from, Vec::new()).await?;
+    let thread = threads::open(&ctx.paths, name, kind, to, from, code).await?;
     let number = thread.number;
-    ctx.emit(
-        &format!(
-            "Thread {number} opened with {}; post in it with shoal send {number} \"<text>\".",
-            thread.party(Side::Holder)
+    let holder = thread.party(Side::Holder);
+    let message = match thread.posts.is_empty() {
+        true => format!(
+            "Thread {number} opened with {holder}; post in it with shoal send {number} \"<text>\"."
         ),
-        &thread,
-    )?;
+        false => format!("Thread {number} opened with {holder}, about its code."),
+    };
+    ctx.emit(&message, &thread)?;
     Ok(0)
+}
+
+/// The places in code `code` names, their paths made absolute against the
+/// current directory.
+fn code_refs(code: Vec<CodeArg>) -> Result<Vec<NewCodeRef>> {
+    let here = std::env::current_dir().context("read the current directory")?;
+    Ok((code.into_iter())
+        .map(|code| NewCodeRef {
+            path: here.join(code.path),
+            lines: code.lines,
+            contents: None,
+        })
+        .collect())
 }
 
 /// Give the thread `number` to the space `space` names, else pass it up.
