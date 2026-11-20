@@ -16,9 +16,9 @@ use crate::space_names::SpaceName;
 pub const MAX_POST_LEN: usize = crate::validate::MAX_AGENT_MESSAGE_LEN;
 /// Most choices a post may offer.
 pub const MAX_CHOICES: usize = 20;
-/// Most posts a thread takes, which keeps one thread to a part of a
-/// protocol frame.
-pub const MAX_POSTS: usize = 50;
+/// Most bytes a thread takes as JSON, which keeps it, with the response
+/// around it, to one protocol frame.
+pub const MAX_THREAD_BYTES: usize = crate::protocol::MAX_FRAME - 8 * 1024;
 
 states!(
     /// What a thread is for, which decides the outcomes it takes.

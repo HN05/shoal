@@ -6773,7 +6773,8 @@ the current holder receive posts. `--wait` blocks without a time limit until
 the other side posts or the thread is resolved, prints its posts, and marks
 their alerts read; it survives daemon restarts, waiting up to two minutes for a
 daemon that went away to return and know the caller's scope again, or 10
-seconds for one that was not running. A thread takes at most 50 posts.
+seconds for one that was not running. A post that would make the thread longer
+than one response carries, about 56 KiB, is refused: open a new thread to go on.
 
 `--in-chat` lets an agent with Shoal's hooks, Claude Code or Codex, that Shoal
 tracks in a workspace or runs as a chat's, post in its conversation, where the

@@ -56,6 +56,7 @@ impl Manager {
                 )?;
                 records::set_holder(tx, id, holder.as_ref())?;
                 let thread = records::reread(tx, id)?;
+                records::ensure_fits(&thread)?;
                 let mut delivered = Delivered::default();
                 let forward = thread
                     .posts

@@ -307,6 +307,31 @@ async fn a_thread_the_user_opened_never_goes_back_to_the_user() {
 }
 
 #[tokio::test]
+async fn a_post_that_would_outgrow_one_response_is_refused_whole() {
+    let tree = tree().await;
+    let manager = &tree.manager;
+    let thread = open(manager, None, Some(&tree.beside)).await;
+    let long = "x".repeat(shoal_protocol::threads::MAX_POST_LEN);
+    let mut posted = 0;
+    let refused = loop {
+        let post = manager.post_to_thread(None, full(&thread), post(&long), Vec::new());
+        match post.await {
+            Ok(_) => posted += 1,
+            Err(error) => break error,
+        }
+    };
+    assert!(format!("{refused:#}").contains("new thread"), "{refused:#}");
+    // The refused post left nothing behind, and the thread still fits.
+    let kept = manager.thread(None, full(&thread)).await.unwrap();
+    assert_eq!(kept.posts.len(), posted);
+    let bytes = serde_json::to_vec(&kept).unwrap().len();
+    assert!(
+        bytes <= shoal_protocol::threads::MAX_THREAD_BYTES,
+        "{bytes}"
+    );
+}
+
+#[tokio::test]
 async fn the_opener_resolves_its_thread_and_takes_back_an_unread_notice() {
     let tree = tree().await;
     let manager = &tree.manager;

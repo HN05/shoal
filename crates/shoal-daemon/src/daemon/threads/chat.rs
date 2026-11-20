@@ -45,6 +45,10 @@ fn take_mark(tx: &Transaction<'_>, execution: &ExecutionId) -> Result<Option<i64
     Ok(thread)
 }
 
+/// The reply in the chat that a prompt without text, or one too long for
+/// its thread, records.
+const REPLIED: &str = "The user replied in the chat.";
+
 /// The post an agent makes in its chat: its turn's final `message`, kept
 /// to the length and characters of posts. Without one, as from an agent
 /// whose hook does not pass it, the post points to the chat.
@@ -103,7 +107,7 @@ fn record_replies(
     space_id: &SpaceId,
     prompt: Option<&str>,
 ) -> Result<Delivered> {
-    let text = chat_text(prompt, "The user replied in the chat.");
+    let text = chat_text(prompt, REPLIED);
     let mut delivered = Delivered::default();
     for (thread, post) in answered_in_chat(tx, space_id)? {
         let side = match post.side {
@@ -114,7 +118,7 @@ fn record_replies(
             text: text.clone(),
             ..NewPost::default()
         };
-        records::insert_post(
+        let reply_id = records::insert_post(
             tx,
             &records::NewRecord {
                 thread: thread.id,
@@ -129,6 +133,14 @@ fn record_replies(
                 forwards: None,
             },
         )?;
+        // A prompt too long for the thread records only that the user
+        // replied, which the agent read in its chat.
+        if records::ensure_fits(&records::reread(tx, thread.id)?).is_err() {
+            tx.execute(
+                "UPDATE thread_posts SET text=?2 WHERE id=?1",
+                rusqlite::params![reply_id, REPLIED],
+            )?;
+        }
         let Some(party) = Party::of(&thread, side) else {
             continue;
         };

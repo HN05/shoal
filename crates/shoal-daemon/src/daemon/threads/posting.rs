@@ -5,7 +5,7 @@ use rusqlite::Transaction;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     space_names::{SpaceName, SpaceSelector},
-    threads::{MAX_CHOICES, MAX_POST_LEN, MAX_POSTS, NewPost, Sender, Side, Thread, ThreadNumber},
+    threads::{MAX_CHOICES, MAX_POST_LEN, NewPost, Sender, Side, Thread, ThreadNumber},
 };
 
 use super::{
@@ -99,11 +99,6 @@ pub(super) fn record_post(
 ) -> Result<(Thread, Delivered)> {
     let thread = records::reread(tx, id)?;
     ensure_open(&thread)?;
-    ensure!(
-        thread.posts.len() < MAX_POSTS,
-        "thread {} holds {MAX_POSTS} posts; open a new thread to go on",
-        thread.number
-    );
     records::insert_post(
         tx,
         &NewRecord {
@@ -116,6 +111,7 @@ pub(super) fn record_post(
         },
     )?;
     let thread = records::reread(tx, id)?;
+    records::ensure_fits(&thread)?;
     let mut delivered = Delivered::default();
     delivery::deliver_post(tx, &thread, &mut delivered)?;
     Ok((records::reread(tx, id)?, delivered))

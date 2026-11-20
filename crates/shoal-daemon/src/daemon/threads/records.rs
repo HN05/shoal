@@ -8,7 +8,8 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     space_names::SpaceName,
     threads::{
-        Holder, NewPost, Outcome, Post, Resolution, Sender, Side, Thread, ThreadKind, ThreadSpace,
+        Holder, MAX_THREAD_BYTES, NewPost, Outcome, Post, Resolution, Sender, Side, Thread,
+        ThreadKind, ThreadSpace,
     },
 };
 
@@ -378,6 +379,17 @@ pub(super) fn set_link(
         )?
     };
     Ok(changed > 0)
+}
+
+/// Refuse `thread` once it takes more than one response carries, which
+/// rolls back the post that made it so.
+pub(super) fn ensure_fits(thread: &Thread) -> Result<()> {
+    anyhow::ensure!(
+        serde_json::to_vec(thread)?.len() <= MAX_THREAD_BYTES,
+        "thread {} would take more than {MAX_THREAD_BYTES} bytes; open a new thread to go on",
+        thread.number
+    );
+    Ok(())
 }
 
 /// The thread `id` as recorded now, which the caller just changed.
