@@ -139,12 +139,13 @@ async fn a_move_is_recorded_with_its_package_until_it_ends() {
     assert!(saved.contains(&ExecutionId::from("stopped-agent")));
     // The space is the move's until it ends: another move is refused,
     // and so is packing again, which only waits for a move in its first
-    // phase, and either leaves the move as it was.
+    // phase, before anything else can fail, such as a directory it cannot
+    // write, and either leaves the move as it was.
     for again in [false, true] {
         let packing = MovePacking {
             unsaved: UnsavedWork::default(),
             destination: MoveDestination::File {
-                path: source.path().join("again.shoal"),
+                path: source.path().join("missing").join("again.shoal"),
             },
             carrying: Carrying::Subtree,
             again,

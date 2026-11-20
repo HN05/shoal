@@ -39,16 +39,22 @@ impl Manager {
     /// their sessions, and write them for another Shoal to the new file of
     /// the space's package there, leaving them here: each workspace at a
     /// new checkpoint, which the record keeps for [`Self::end_moved_space`].
+    /// Another move of the space that is recorded refuses it before
+    /// anything else can, so its caller never takes that move for its own.
     pub async fn export_moving_space(
         &self,
         selector: &SpaceSelector,
         packing: MovePacking,
     ) -> Result<ExportedSpace> {
         let space = self.running_space(selector).await?;
+        let resumed = self.resumed_move(&space, &packing).await?;
         let destination = &packing.destination;
         let file = self.move_package(&space.id, destination)?;
         crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
-        let mut record = self.record_space_move(&space, &packing).await?;
+        let mut record = match resumed {
+            Some(record) => record,
+            None => self.record_space_move(&space, &packing).await?,
+        };
         let prepared = self.prepare_moving(space, &packing.carrying).await?;
         let exported = self.write_prepared(prepared, file).await?;
         record.checkpoints = exported.manifest.checkpoints();
@@ -133,17 +139,27 @@ impl Manager {
         self.store.read(records::all).await
     }
 
+    /// The recorded move of `space` that `packing`, its finisher's, packs
+    /// again, one recorded in its first phase; none when no move of it is
+    /// recorded, and any other move of a space with one is refused.
+    async fn resumed_move(
+        &self,
+        space: &Space,
+        packing: &MovePacking,
+    ) -> Result<Option<MoveRecord>> {
+        match self.move_record(&space.id).await? {
+            None => Ok(None),
+            Some(recorded) if packing.again && recorded.phase == MovePhase::Packing => {
+                Ok(Some(recorded))
+            }
+            Some(_) => Err(move_in_progress(space).into()),
+        }
+    }
+
     /// Record the move of `space` and the spaces below it as `packing`
     /// says, with the stopped work they saved so far, before any agent
-    /// stops; its finisher packs a move recorded in its first phase again
-    /// under its record, and any other move of a space with one is refused.
+    /// stops.
     async fn record_space_move(&self, space: &Space, packing: &MovePacking) -> Result<MoveRecord> {
-        if let Some(recorded) = self.move_record(&space.id).await? {
-            if packing.again && recorded.phase == MovePhase::Packing {
-                return Ok(recorded);
-            }
-            return Err(move_in_progress(space).into());
-        }
         let MovePacking {
             unsaved,
             destination,
