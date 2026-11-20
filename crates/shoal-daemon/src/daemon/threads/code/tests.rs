@@ -324,3 +324,26 @@ async fn a_thread_whose_opening_post_is_refused_is_never_opened() {
         .unwrap();
     assert!(listed.threads.is_empty(), "{:?}", listed.threads);
 }
+
+#[tokio::test]
+async fn a_listing_follows_only_the_threads_it_returns() {
+    let tree = tree().await;
+    // The child's coordinator holds it, so it is not the user's turn.
+    let number = about_parser(&tree, "5").await;
+    let file = tree.child.path.join("parse.rs");
+    fs::write(&file, format!("use x;\n{PARSER}")).unwrap();
+    let state = shoal_protocol::threads::ThreadState::Open;
+    let for_user = tree.manager.threads(None, state, true).await.unwrap();
+    assert!(for_user.threads.is_empty());
+    let recorded = tree.manager.open_threads().await.unwrap();
+    assert_eq!(
+        recorded[0].posts[0].code[0].latest.to_string(),
+        "parse.rs:5"
+    );
+    let listed = tree.manager.threads(None, state, false).await.unwrap();
+    assert_eq!(
+        listed.threads[0].posts[0].code[0].latest.to_string(),
+        "parse.rs:6"
+    );
+    assert_eq!(followed(&tree, number).await.0, "parse.rs:6");
+}

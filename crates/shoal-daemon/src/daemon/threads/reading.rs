@@ -57,15 +57,21 @@ impl Manager {
             ThreadState::Resolved => "t.outcome IS NOT NULL",
             ThreadState::All => "1",
         };
-        let mut threads = self
+        let threads = self
             .store
             .run(move |db| records::of_space(db, space.as_ref(), kept))
             .await?;
-        self.follow_code(&mut threads).await;
         let threads = (threads.into_iter())
             .filter(|thread| !for_user || thread.waits_for_user())
             .collect();
-        newest_that_fit(threads)
+        // Only the threads the listing returns follow their code; one a
+        // rename made longer may leave out an older thread more.
+        let mut listing = newest_that_fit(threads)?;
+        self.follow_code(&mut listing.threads).await;
+        let omitted = listing.omitted;
+        let mut followed = newest_that_fit(listing.threads)?;
+        followed.omitted += omitted;
+        Ok(followed)
     }
 
     /// The thread `number` names, for `caller` to read, with its code
