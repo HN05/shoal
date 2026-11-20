@@ -29,7 +29,6 @@ pub(in crate::cli::commands) async fn start(ctx: &Context, mut launch: Launch) -
     );
     launch.now = true;
     let launched = crate::client::launches::launch(&ctx.paths, launch).await?;
-    links::print_warnings(&launched.warnings);
     let (space, machine) = (launched.space.id.clone(), launched.machine.clone());
     if let Some(code) = await_preparation(ctx, launched, machine.as_deref()).await? {
         return Ok(code);
@@ -38,9 +37,10 @@ pub(in crate::cli::commands) async fn start(ctx: &Context, mut launch: Launch) -
 }
 
 /// Follow the preparation of the workspace `launched` opened, which
-/// `machine` runs, to its end; the exit code of a start that leaves the
-/// agent to that machine's queue, as a preparation that waits for other
-/// work or disk space does, which `shoal attach` shows once it starts.
+/// `machine` runs, to its end, after what the launch warned of; the exit
+/// code of a start that leaves the agent to that machine's queue, as a
+/// preparation that waits for other work or disk space does, which `shoal
+/// attach` shows once it starts.
 async fn await_preparation(
     ctx: &Context,
     launched: Launched,
@@ -59,6 +59,9 @@ async fn await_preparation(
         } => preparation::report_launched(ctx, launched, (false, None))
             .await
             .map(Some),
-        Started::Queued { .. } | Started::Worker | Started::Detached(_) => Ok(None),
+        Started::Queued { .. } | Started::Worker | Started::Detached(_) => {
+            links::print_warnings(&launched.warnings);
+            Ok(None)
+        }
     }
 }
