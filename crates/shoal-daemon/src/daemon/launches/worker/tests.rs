@@ -101,7 +101,7 @@ async fn a_replacing_start_that_is_refused_keeps_the_stopped_agent() {
 }
 
 /// A creation on an existing workspace's branch starts no agent, so the
-/// workspace's stopped agent refuses its check, unlike a start's.
+/// workspace's stopped agent refuses a start's check but not its own.
 #[tokio::test]
 async fn a_creation_check_passes_a_workspace_with_a_stopped_agent() {
     let (temp, manager) = manager().await;
