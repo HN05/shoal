@@ -4,52 +4,52 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
+use shoal_core::triggers::{Source, timer::Timer};
 use shoal_protocol::triggers::{RunOrigin, RunOutcome, TriggerRun};
 
-use super::{Configured, firing::Firing};
-use crate::{
-    daemon::{log, manager::Manager},
-    time::UnixTime,
-    triggers::{Source, timer::Timer},
-};
-use shoal_runner::triggers::state;
+use super::{Configured, firing::Firing, state};
+use crate::{Runner, daemon::Daemon, log, time::UnixTime};
 
 /// The longest the loop sleeps: a sleeping machine stops its clock for
 /// timers but not for the wall clock, which the loop reads again after it.
 const MAX_SLEEP: Duration = Duration::from_secs(30);
 
 /// Fire the triggers whose times come, until the daemon stops.
-pub(crate) async fn run(manager: Arc<Manager>) {
+pub async fn run(runner: Arc<Runner>, daemon: Arc<dyn Daemon>) {
     loop {
-        let next = manager.trigger_pass(UnixTime::now()).await;
+        let next = runner.trigger_pass(&daemon, UnixTime::now()).await;
         let sleep = next.map_or(MAX_SLEEP, |next| next.duration_since(UnixTime::now()));
         tokio::select! {
             _ = tokio::time::sleep(sleep.clamp(Duration::from_secs(1), MAX_SLEEP)) => {}
-            _ = manager.triggers.wake.notified() => {}
+            _ = runner.triggers.wake.notified() => {}
         }
     }
 }
 
-impl Manager {
+impl Runner {
     /// Launch every queued run whose wait ended, and fire every active
     /// timer trigger whose time came by `now`; returns the next time a timer
     /// comes.
-    pub(super) async fn trigger_pass(self: &Arc<Self>, now: UnixTime) -> Option<UnixTime> {
+    pub(super) async fn trigger_pass(
+        &self,
+        daemon: &Arc<dyn Daemon>,
+        now: UnixTime,
+    ) -> Option<UnixTime> {
         let _firing = self.triggers.firing.lock().await;
         let mut next: Option<UnixTime> = None;
-        let fires_global = self.acts_on_global_config();
-        let triggers = self.configured_triggers().await.into_iter();
+        let fires_global = daemon.acts_on_global_config();
+        let triggers = self.configured_triggers(&**daemon).await.into_iter();
         for trigger in triggers.filter(|trigger| trigger.repository.is_some() || fires_global) {
             // A queued run whose wait ended launches before a new firing,
             // which then meets it as the trigger's last run.
-            if let Err(error) = self.launch_queued(&trigger, now).await {
+            if let Err(error) = self.launch_queued(daemon, &trigger, now).await {
                 log!(
                     "the queued run of {} did not launch: {error:#}",
                     trigger.label()
                 );
             }
             let fired = match &trigger.trigger.source {
-                Source::Timer(timer) => self.fire_due(&trigger, timer, now).await,
+                Source::Timer(timer) => self.fire_due(daemon, &trigger, timer, now).await,
                 // The webhook listener fires them as requests arrive.
                 Source::Webhook(_) => Ok(None),
             };
@@ -66,7 +66,8 @@ impl Manager {
     /// `now`, once, when it is within `catch_up`, recording the older ones
     /// as skipped; returns its next time while it is active.
     async fn fire_due(
-        self: &Arc<Self>,
+        &self,
+        daemon: &Arc<dyn Daemon>,
         trigger: &Configured,
         timer: &Timer,
         now: UnixTime,
@@ -89,7 +90,7 @@ impl Manager {
                 input,
                 at: now,
             };
-            self.fire_trigger(trigger, firing).await?;
+            self.fire_trigger(daemon, trigger, firing).await?;
         }
         let state = self.trigger_state(trigger, now).await?;
         Ok(Some(timer.next(state.counted_from, state.last_fired_at)))
@@ -117,7 +118,12 @@ impl Manager {
 
     /// Launch the trigger's queued run once the agent it waits for stopped,
     /// unless the trigger is paused, which holds it until it resumes.
-    async fn launch_queued(self: &Arc<Self>, trigger: &Configured, now: UnixTime) -> Result<()> {
+    async fn launch_queued(
+        &self,
+        daemon: &Arc<dyn Daemon>,
+        trigger: &Configured,
+        now: UnixTime,
+    ) -> Result<()> {
         if self.trigger_state(trigger, now).await?.paused {
             return Ok(());
         }
@@ -129,7 +135,7 @@ impl Manager {
         let Some(queued) = queued else {
             return Ok(());
         };
-        if self.still_running(&queued.waits_for).await? {
+        if self.still_running(&**daemon, &queued.waits_for).await? {
             return Ok(());
         }
         let firing = Firing {
@@ -138,7 +144,7 @@ impl Manager {
             at: now,
         };
         let run = self
-            .launch_trigger(trigger, &firing, queued.waiting)
+            .launch_trigger(daemon, trigger, &firing, queued.waiting)
             .await?;
         self.store
             .write(move |tx| state::settle(tx, queued.id, &run))

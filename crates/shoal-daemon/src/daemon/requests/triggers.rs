@@ -19,22 +19,26 @@ pub(super) async fn handle(
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
         TriggerMethod::ListTriggers { context } => {
-            Body::Triggers(manager.list_triggers(context).await?)
+            Body::Triggers(manager.runner.list_triggers(&**manager, context).await?)
         }
         TriggerMethod::PauseTrigger {
             context,
             name,
             paused,
         } => Body::Trigger(
-            manager
-                .pause_trigger(context, &name, paused, caller)
+            (manager.runner)
+                .pause_trigger(&**manager, context, &name, paused, caller)
                 .await?,
         ),
         TriggerMethod::RunTrigger {
             context,
             name,
             request,
-        } => Body::TriggerFired(manager.run_trigger(context, &name, request, caller).await?),
+        } => {
+            let daemon: Arc<dyn shoal_runner::daemon::Daemon> = manager.clone();
+            let fired = (manager.runner).run_trigger(&daemon, context, &name, request, caller);
+            Body::TriggerFired(fired.await?)
+        }
     }))
 }
 

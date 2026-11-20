@@ -113,7 +113,7 @@ pub(crate) mod test_daemon;
 pub(crate) mod test_support;
 mod tmp_dirs;
 mod tree;
-pub(crate) mod triggers;
+mod triggers;
 mod turn_ends;
 pub(crate) mod turn_retry;
 mod untracked;
@@ -245,13 +245,12 @@ pub async fn run(
         shutdown_lock::run,
     );
     spawn_supervised(&mut background, &manager, "agent queue", queued_starts::run);
-    spawn_supervised(&mut background, &manager, "triggers", triggers::run);
-    spawn_supervised(
-        &mut background,
-        &manager,
-        "webhooks",
-        triggers::serve_webhooks,
-    );
+    spawn_supervised(&mut background, &manager, "triggers", |manager| {
+        shoal_runner::triggers::run(manager.runner.clone(), manager)
+    });
+    spawn_supervised(&mut background, &manager, "webhooks", |manager| {
+        shoal_runner::triggers::serve_webhooks(manager.runner.clone(), manager)
+    });
     spawn_supervised(&mut background, &manager, "turn retries", turn_retry::run);
     spawn_supervised(
         &mut background,

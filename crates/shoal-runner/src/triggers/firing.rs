@@ -5,19 +5,15 @@
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
+use shoal_core::triggers::{Overlap, filter, input::Input};
 use shoal_protocol::launches::{Launch, LaunchSource};
 use shoal_protocol::triggers::{Fired, RunOrigin, RunOutcome, TriggerRun};
 
-use shoal_runner::triggers::state::{self, Started, Waiting};
-
-use super::Configured;
-use crate::{
-    daemon::manager::Manager,
-    model::QueueEntry,
-    state::QueueState,
-    time::UnixTime,
-    triggers::{Overlap, filter, input::Input},
+use super::{
+    Configured,
+    state::{self, Started, Waiting},
 };
+use crate::{Runner, daemon::Daemon, time::UnixTime};
 
 /// One firing of a trigger.
 pub(super) struct Firing {
@@ -48,11 +44,12 @@ enum Overlapping {
     Busy(Started),
 }
 
-impl Manager {
+impl Runner {
     /// Fire `trigger` with `firing`: the run it recorded, or the filter
     /// condition that dropped it.
     pub(super) async fn fire_trigger(
-        self: &Arc<Self>,
+        &self,
+        daemon: &Arc<dyn Daemon>,
         trigger: &Configured,
         firing: Firing,
     ) -> Result<Fired> {
@@ -65,7 +62,7 @@ impl Manager {
             .write(move |tx| state::fired(tx, &scope, &name, at))
             .await?;
         let ran = match self.prepared_launch(trigger, &firing).await? {
-            Ok(waiting) => self.run_launch(trigger, &firing, waiting).await?,
+            Ok(waiting) => self.run_launch(daemon, trigger, &firing, waiting).await?,
             Err(run) => run.into(),
         };
         self.record_trigger_run(trigger, &ran).await?;
@@ -107,15 +104,19 @@ impl Manager {
     /// Launch what `firing` asks for, unless the trigger's last space
     /// still has its agent and its overlap skips the firing or queues it.
     async fn run_launch(
-        self: &Arc<Self>,
+        &self,
+        daemon: &Arc<dyn Daemon>,
         trigger: &Configured,
         firing: &Firing,
         waiting: Waiting,
     ) -> Result<Ran> {
-        let overlapping = self.overlapping(trigger, &waiting.launch).await?;
+        let overlapping = (self.overlapping(&**daemon, trigger, &waiting.launch)).await?;
         match (overlapping, trigger.trigger.overlap) {
             (Overlapping::Free, _) | (_, Overlap::Parallel) => {
-                Ok(self.launch_trigger(trigger, firing, waiting).await?.into())
+                let run = self
+                    .launch_trigger(daemon, trigger, firing, waiting)
+                    .await?;
+                Ok(run.into())
             }
             (Overlapping::Waiting, _) => {
                 let reason = "an earlier firing already waits for the last run's agent".to_owned();
@@ -133,7 +134,12 @@ impl Manager {
     /// the trigger, whatever its last agent does now, else the trigger's
     /// last launch while its agent runs or is queued; a launch in an
     /// existing workspace meets none.
-    async fn overlapping(&self, trigger: &Configured, launch: &Launch) -> Result<Overlapping> {
+    async fn overlapping(
+        &self,
+        daemon: &dyn Daemon,
+        trigger: &Configured,
+        launch: &Launch,
+    ) -> Result<Overlapping> {
         if launch.in_workspace.is_some() {
             return Ok(Overlapping::Free);
         }
@@ -151,8 +157,8 @@ impl Manager {
         let Some((run, started)) = last else {
             return Ok(Overlapping::Free);
         };
-        let started = self.opened_space(run, started).await?;
-        Ok(match self.still_running(&started).await? {
+        let started = self.opened_space(daemon, run, started).await?;
+        Ok(match self.still_running(daemon, &started).await? {
             true => Overlapping::Busy(started),
             false => Overlapping::Free,
         })
@@ -160,11 +166,16 @@ impl Manager {
 
     /// What the run `run` launched: the space its queue entry opened once
     /// it did, which the run then records, else what it recorded.
-    async fn opened_space(&self, run: i64, started: Started) -> Result<Started> {
+    async fn opened_space(
+        &self,
+        daemon: &dyn Daemon,
+        run: i64,
+        started: Started,
+    ) -> Result<Started> {
         let Started::Entry(entry) = &started else {
             return Ok(started);
         };
-        let Some(space) = self.started_launch(entry).await? else {
+        let Some(space) = daemon.started_launch(entry).await? else {
             return Ok(started);
         };
         let opened = space.clone();
@@ -177,33 +188,31 @@ impl Manager {
     /// Whether the agent `started` names still runs or waits: a space's
     /// agent, or a launch that waits in the agent queue or runs in the
     /// space it opened.
-    pub(super) async fn still_running(&self, started: &Started) -> Result<bool> {
+    pub(super) async fn still_running(
+        &self,
+        daemon: &dyn Daemon,
+        started: &Started,
+    ) -> Result<bool> {
         let space = match started {
             Started::Space(space) => space.clone(),
             Started::Entry(entry) => {
-                let entries = self.queue_entries().await?;
-                let live = |queued: &&QueueEntry| queued.state != QueueState::Failed;
-                if entries
-                    .iter()
-                    .filter(live)
-                    .any(|queued| queued.id == *entry)
-                {
+                if daemon.live_queue_entries().await?.contains(entry) {
                     return Ok(true);
                 }
-                match self.started_launch(entry).await? {
+                match daemon.started_launch(entry).await? {
                     Some(space) => space,
                     None => return Ok(false),
                 }
             }
         };
-        Ok(self.recorded_agent_spaces().await?.contains(&space)
-            || self.queued_agent_workspaces().await?.contains(&space))
+        Ok(daemon.agent_spaces().await?.contains(&space))
     }
 
     /// Launch what `waiting` names for the trigger as the user, keeping its
     /// key for the trigger's key window once it started.
     pub(super) async fn launch_trigger(
-        self: &Arc<Self>,
+        &self,
+        daemon: &Arc<dyn Daemon>,
         trigger: &Configured,
         firing: &Firing,
         waiting: Waiting,
@@ -212,7 +221,7 @@ impl Manager {
         let source = LaunchSource::Trigger {
             name: trigger.name.clone(),
         };
-        let launched = match self.launch(launch, source, None).await {
+        let launched = match daemon.clone().launch(launch, source).await {
             Ok(launched) => launched,
             Err(error) => return Ok(run(firing, RunOutcome::Failed, Some(format!("{error:#}")))),
         };
@@ -224,7 +233,7 @@ impl Manager {
                 .await?;
         }
         Ok(TriggerRun {
-            space_id: Some(launched.space.id.clone()),
+            space_id: Some(launched),
             ..run(firing, RunOutcome::Started, None)
         })
     }

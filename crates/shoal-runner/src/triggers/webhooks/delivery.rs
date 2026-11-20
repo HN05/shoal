@@ -5,23 +5,19 @@
 use std::{ffi::OsString, os::unix::ffi::OsStrExt, sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result};
+use shoal_core::secrets::{self, Secret};
+use shoal_core::triggers::{
+    Source,
+    webhook::{self, Signed},
+};
 use shoal_protocol::triggers::{RunOrigin, WebhookRequest};
 use tokio::sync::OwnedSemaphorePermit;
 
 use super::super::{Configured, firing::Firing};
-use crate::{
-    daemon::{log, manager::Manager},
-    protocol::ConfigTarget,
-    secrets::Secret,
-    time::UnixTime,
-    triggers::{
-        Source,
-        webhook::{self, Signed},
-    },
-};
+use crate::{Runner, daemon::Daemon, log, time::UnixTime};
 
 /// What a delivery became.
-pub(in crate::daemon::triggers) enum Delivered {
+pub(in crate::triggers) enum Delivered {
     /// Its trigger fires for it.
     Accepted,
     /// No active trigger takes it: none has its route, the trigger is
@@ -36,7 +32,7 @@ const SECRET_TIMEOUT: Duration = Duration::from_secs(15);
 /// The value of the secret `name`, which fails once its command takes
 /// longer than [`SECRET_TIMEOUT`], as one waiting for an unlock would.
 pub(super) async fn fetch_secret(name: &str, secret: &Secret) -> Result<OsString> {
-    let fetched = tokio::time::timeout(SECRET_TIMEOUT, crate::secrets::fetch(name, secret, None));
+    let fetched = tokio::time::timeout(SECRET_TIMEOUT, secrets::fetch(name, secret, None));
     match fetched.await {
         Ok(value) => value,
         Err(_) => anyhow::bail!(
@@ -70,18 +66,19 @@ impl<'a> Route<'a> {
     }
 }
 
-impl Manager {
+impl Runner {
     /// Deliver `request` to the webhook trigger whose route is `path`,
     /// where its signature of `body`, the body as sent, checks out, holding
     /// `permit` until its firing ends.
-    pub(in crate::daemon::triggers) async fn deliver_webhook(
+    pub(in crate::triggers) async fn deliver_webhook(
         self: &Arc<Self>,
+        daemon: &Arc<dyn Daemon>,
         path: &str,
         request: WebhookRequest,
         body: &[u8],
         permit: OwnedSemaphorePermit,
     ) -> Result<Delivered> {
-        let Some((trigger, signed)) = self.routed_trigger(path).await? else {
+        let Some((trigger, signed)) = self.routed_trigger(&**daemon, path).await? else {
             return Ok(Delivered::Refused);
         };
         let at = UnixTime::now();
@@ -90,29 +87,33 @@ impl Manager {
         }
         if let Some(signed) = &signed
             && !self
-                .signature_verifies(&trigger, signed, &request, body)
+                .signature_verifies(&**daemon, &trigger, signed, &request, body)
                 .await?
         {
             return Ok(Delivered::Refused);
         }
-        self.fire_webhook(trigger, request, at, permit);
+        self.fire_webhook(daemon, trigger, request, at, permit);
         Ok(Delivered::Accepted)
     }
 
     /// The webhook trigger whose route is `path`, with how its requests
     /// sign.
-    async fn routed_trigger(&self, path: &str) -> Result<Option<(Configured, Option<Signed>)>> {
+    async fn routed_trigger(
+        &self,
+        daemon: &dyn Daemon,
+        path: &str,
+    ) -> Result<Option<(Configured, Option<Signed>)>> {
         let Some(route) = Route::parse(path) else {
             return Ok(None);
         };
         let repository = match route.repository {
-            Some(name) => match self.repository_named(name).await? {
+            Some(name) => match repository_named(daemon, name).await? {
                 Some(repository) => Some(repository),
                 None => return Ok(None),
             },
             None => None,
         };
-        let triggers = self.triggers_of(repository.as_ref()).await?;
+        let triggers = self.triggers_of(daemon, repository.as_ref()).await?;
         let trigger = (triggers.into_iter())
             .find(|trigger| trigger.repository == repository && trigger.name == route.name);
         Ok(trigger.and_then(|trigger| match &trigger.trigger.source {
@@ -124,30 +125,17 @@ impl Manager {
         }))
     }
 
-    /// The ID of the one registered repository named `name`.
-    async fn repository_named(
-        &self,
-        name: &str,
-    ) -> Result<Option<shoal_ids::repository_ids::RepositoryId>> {
-        let repositories = self.repositories().await?;
-        let mut named =
-            (repositories.into_iter()).filter(|repository| repository.display_name() == name);
-        Ok(match (named.next(), named.next()) {
-            (Some(repository), None) => Some(repository.id),
-            _ => None,
-        })
-    }
-
     /// Whether `request` signs `body` with the secret of `trigger`, whose
     /// value its command fetches now and nothing keeps.
     async fn signature_verifies(
         &self,
+        daemon: &dyn Daemon,
         trigger: &Configured,
         signed: &Signed,
         request: &WebhookRequest,
         body: &[u8],
     ) -> Result<bool> {
-        let secret = self.trigger_secret(trigger, signed).await?;
+        let secret = self.trigger_secret(daemon, trigger, signed).await?;
         let value = fetch_secret(&signed.secret, &secret).await?;
         Ok(signed.signature.verifies(value.as_bytes(), request, body))
     }
@@ -156,11 +144,15 @@ impl Manager {
     /// from that repository's local config alone, which reaches no other
     /// repository's agents, and the global config's from the global
     /// config, whose triggers' secrets reach no agent.
-    async fn trigger_secret(&self, trigger: &Configured, signed: &Signed) -> Result<Secret> {
+    async fn trigger_secret(
+        &self,
+        daemon: &dyn Daemon,
+        trigger: &Configured,
+        signed: &Signed,
+    ) -> Result<Secret> {
         let (mut secrets, file) = match &trigger.repository {
             Some(repository) => {
-                let target = ConfigTarget::Repository(repository.clone().into());
-                let layers = self.config_layers_for(target).await?;
+                let layers = daemon.repository_layers(repository).await?;
                 (layers.local_config.secrets, "the repository's local config")
             }
             None => (
@@ -181,15 +173,16 @@ impl Manager {
     /// fire one at a time, giving `permit` back after.
     fn fire_webhook(
         self: &Arc<Self>,
+        daemon: &Arc<dyn Daemon>,
         trigger: Configured,
         request: WebhookRequest,
         at: UnixTime,
         permit: OwnedSemaphorePermit,
     ) {
-        let manager = self.clone();
+        let (runner, daemon) = (self.clone(), daemon.clone());
         tokio::spawn(async move {
             let _permit = permit;
-            if let Err(error) = manager.fire_accepted(&trigger, &request, at).await {
+            if let Err(error) = runner.fire_accepted(&daemon, &trigger, &request, at).await {
                 log!("{} did not fire: {error:#}", trigger.label());
             }
         });
@@ -198,7 +191,8 @@ impl Manager {
     /// Fire `trigger` for the accepted `request` once no other firing
     /// runs, unless a pause came meanwhile.
     pub(super) async fn fire_accepted(
-        self: &Arc<Self>,
+        &self,
+        daemon: &Arc<dyn Daemon>,
         trigger: &Configured,
         request: &WebhookRequest,
         at: UnixTime,
@@ -212,6 +206,20 @@ impl Manager {
             input: webhook::input(&trigger.name, request, at),
             at,
         };
-        self.fire_trigger(trigger, firing).await.map(drop)
+        self.fire_trigger(daemon, trigger, firing).await.map(drop)
     }
+}
+
+/// The ID of the one registered repository named `name`.
+async fn repository_named(
+    daemon: &dyn Daemon,
+    name: &str,
+) -> Result<Option<shoal_ids::repository_ids::RepositoryId>> {
+    let repositories = daemon.repositories().await?;
+    let mut named =
+        (repositories.into_iter()).filter(|repository| repository.display_name() == name);
+    Ok(match (named.next(), named.next()) {
+        (Some(repository), None) => Some(repository.id),
+        _ => None,
+    })
 }

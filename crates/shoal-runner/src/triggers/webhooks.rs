@@ -13,13 +13,14 @@ use hyper::{
     service::service_fn,
 };
 use hyper_util::rt::{TokioIo, TokioTimer};
-use shoal_protocol::triggers::WebhookRequest;
+use shoal_daemon_base::notifications::About;
+use shoal_protocol::{notifications::NotificationKind, triggers::WebhookRequest};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::Semaphore,
 };
 
-use crate::daemon::{log, manager::Manager, notifications::NotificationKind};
+use crate::{Runner, daemon::Daemon, log};
 
 mod delivery;
 
@@ -46,37 +47,37 @@ struct Bound {
 
 /// Serve webhook requests on the configured address, until the daemon
 /// stops.
-pub(crate) async fn run(manager: Arc<Manager>) {
-    let mut reloaded = manager.config_state.watch();
+pub async fn run(runner: Arc<Runner>, daemon: Arc<dyn Daemon>) {
+    let mut reloaded = runner.config.watch();
     let deliveries = Arc::new(Semaphore::new(MAX_DELIVERIES));
     let mut bound = Bound {
         address: None,
         listener: None,
     };
     loop {
-        let address = manager.webhook_address();
+        let address = runner.webhook_address(&*daemon);
         // A reload may also fix what kept the address from binding.
         if bound.address != address || bound.listener.is_none() {
             drop(bound.listener.take());
             bound = Bound {
                 address,
-                listener: manager.bind_webhooks(address).await,
+                listener: runner.bind_webhooks(address).await,
             };
         }
         tokio::select! {
             _ = reloaded.changed() => {}
-            () = accept(&manager, &deliveries, bound.listener.as_ref()) => {}
+            () = accept(&runner, &daemon, &deliveries, bound.listener.as_ref()) => {}
         }
         reloaded.borrow_and_update();
     }
 }
 
-impl Manager {
+impl Runner {
     /// The address `[machine.webhooks] listen` sets, none without it or in
     /// a daemon that leaves the user's config to the installed Shoal.
-    pub(super) fn webhook_address(&self) -> Option<SocketAddr> {
+    pub(super) fn webhook_address(&self, daemon: &dyn Daemon) -> Option<SocketAddr> {
         let address = self.config().machine.webhooks.listen;
-        address.filter(|_| self.acts_on_global_config())
+        address.filter(|_| daemon.acts_on_global_config())
     }
 
     /// A listener on `address`, none without one or when it cannot bind,
@@ -90,7 +91,10 @@ impl Manager {
                     "Shoal could not listen for webhooks on {address}: {error}; change [machine.webhooks] listen and run shoal config reload"
                 );
                 log!("webhooks: {message}");
-                (self.notify(None, NotificationKind::EnvironmentProblem, message)).await;
+                let kind = NotificationKind::EnvironmentProblem;
+                (self.notifications)
+                    .notify_user(About::default(), kind, message)
+                    .await;
                 None
             }
         }
@@ -100,7 +104,8 @@ impl Manager {
 /// Answer each connection to `listener` on its own, with at most the
 /// `deliveries` permits in flight; none never accepts.
 async fn accept(
-    manager: &Arc<Manager>,
+    runner: &Arc<Runner>,
+    daemon: &Arc<dyn Daemon>,
     deliveries: &Arc<Semaphore>,
     listener: Option<&TcpListener>,
 ) {
@@ -110,7 +115,8 @@ async fn accept(
     loop {
         match listener.accept().await {
             Ok((stream, _)) => {
-                tokio::spawn(serve(manager.clone(), deliveries.clone(), stream));
+                let (runner, daemon) = (runner.clone(), daemon.clone());
+                tokio::spawn(serve(runner, daemon, deliveries.clone(), stream));
             }
             Err(error) => {
                 log!("webhooks: accept failed: {error}");
@@ -121,10 +127,16 @@ async fn accept(
 }
 
 /// Answer the requests on `stream` until it closes.
-async fn serve(manager: Arc<Manager>, deliveries: Arc<Semaphore>, stream: TcpStream) {
+async fn serve(
+    runner: Arc<Runner>,
+    daemon: Arc<dyn Daemon>,
+    deliveries: Arc<Semaphore>,
+    stream: TcpStream,
+) {
     let service = service_fn(move |request| {
-        let (manager, deliveries) = (manager.clone(), deliveries.clone());
-        async move { Ok::<_, Infallible>(respond(&manager, deliveries, request).await) }
+        let (runner, daemon) = (runner.clone(), daemon.clone());
+        let deliveries = deliveries.clone();
+        async move { Ok::<_, Infallible>(respond(&runner, &daemon, deliveries, request).await) }
     });
     let _ = http1::Builder::new()
         .timer(TokioTimer::new())
@@ -138,7 +150,8 @@ async fn serve(manager: Arc<Manager>, deliveries: Arc<Semaphore>, stream: TcpStr
 /// request no trigger takes, `413` for a body over [`MAX_BODY`] and `503`
 /// while every one of the `deliveries` permits is taken.
 async fn respond(
-    manager: &Arc<Manager>,
+    runner: &Arc<Runner>,
+    daemon: &Arc<dyn Daemon>,
     deliveries: Arc<Semaphore>,
     request: Request<Incoming>,
 ) -> Response<Empty<Bytes>> {
@@ -156,7 +169,7 @@ async fn respond(
             path,
             request,
             body,
-        } => match manager.deliver_webhook(&path, request, &body, permit).await {
+        } => match (runner.deliver_webhook(daemon, &path, request, &body, permit)).await {
             Ok(Delivered::Accepted) => StatusCode::ACCEPTED,
             Ok(Delivered::Refused) => StatusCode::NOT_FOUND,
             Err(error) => {

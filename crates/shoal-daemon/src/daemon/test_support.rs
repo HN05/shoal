@@ -302,6 +302,8 @@ pub fn ended(pid: u32) -> bool {
 
 /// The launches the daemon of `manager` queued in its chats, oldest first,
 /// as their plans hold them, while they wait or start.
+// The launch tests in `shoal-client` read it.
+#[cfg_attr(not(feature = "test-support"), allow(dead_code))]
 pub async fn chat_launches(manager: &Manager) -> Vec<crate::protocol::operations::QueuedLaunch> {
     let plans: Vec<String> = (manager.store)
         .run(|db| {

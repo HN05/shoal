@@ -1,16 +1,14 @@
 //! Secrets as the approvals store grants them.
 use anyhow::Result;
 
-use crate::{
-    daemon::{
-        allocation::Allocation,
-        approvals::ApprovalRequest,
-        manager::Manager,
-        scope::Caller,
-        test_support::{manager, repository},
-    },
-    secrets::Secret,
+use crate::daemon::{
+    allocation::Allocation,
+    approvals::ApprovalRequest,
+    manager::Manager,
+    scope::Caller,
+    test_support::{manager, repository},
 };
+use shoal_core::secrets::Secret;
 use shoal_protocol::config::repo::Lifetime;
 use shoal_protocol::secrets::{SecretGrant, SecretRequest};
 

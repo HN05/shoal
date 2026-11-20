@@ -4,30 +4,29 @@
 //! permission allows.
 use std::sync::Arc;
 
-use anyhow::{Context as _, Result};
-use shoal_ids::repository_ids::RepositoryId;
-use shoal_protocol::triggers::{Fired, RunOrigin, TriggerAction, TriggerStatus, WebhookRequest};
-
-use super::{Configured, firing::Firing};
-use crate::{
+use anyhow::Result;
+use shoal_daemon_base::callers::Caller;
+use shoal_protocol::{
     config::permissions::PermissionKey,
-    daemon::{manager::Manager, permissions::Action, scope::Caller},
     protocol::ItemContext,
-    time::UnixTime,
+    triggers::{Fired, RunOrigin, TriggerAction, TriggerStatus, WebhookRequest},
 };
-use shoal_runner::triggers::state;
 
-impl Manager {
+use super::{Configured, firing::Firing, state};
+use crate::{Runner, daemon::Daemon, time::UnixTime};
+
+impl Runner {
     /// The triggers of the repository `context` acts in, after the global
     /// config's, each with its runtime state.
-    pub(crate) async fn list_triggers(
+    pub async fn list_triggers(
         &self,
+        daemon: &dyn Daemon,
         context: Option<ItemContext>,
     ) -> Result<Vec<TriggerStatus>> {
-        let repository = self.context_repository(context).await?;
+        let repository = daemon.context_repository(context).await?;
         let now = UnixTime::now();
         let mut statuses = Vec::new();
-        for trigger in self.triggers_of(repository.as_ref()).await? {
+        for trigger in self.triggers_of(daemon, repository.as_ref()).await? {
             statuses.push(self.trigger_status(&trigger, now).await?);
         }
         Ok(statuses)
@@ -36,8 +35,9 @@ impl Manager {
     /// Pause or resume the trigger `name` of the repository `context` acts
     /// in, else of the global config, as `caller`'s `triggers` permission
     /// allows.
-    pub(crate) async fn pause_trigger(
+    pub async fn pause_trigger(
         &self,
+        daemon: &dyn Daemon,
         context: Option<ItemContext>,
         name: &str,
         paused: bool,
@@ -47,7 +47,7 @@ impl Manager {
             true => TriggerAction::Pause,
             false => TriggerAction::Resume,
         };
-        let trigger = self.acted_on_trigger(context, name, action, caller).await?;
+        let trigger = (self.acted_on_trigger(daemon, context, name, action, caller)).await?;
         let (scope, name, now) = (trigger.scope(), trigger.name.clone(), UnixTime::now());
         self.store
             .write(move |tx| state::set_paused(tx, &scope, &name, paused, now))
@@ -59,14 +59,16 @@ impl Manager {
     /// Fire the trigger `name` of the repository `context` acts in, else of
     /// the global config, now, a webhook trigger with `request`, as
     /// `caller`'s `triggers` permission allows.
-    pub(crate) async fn run_trigger(
-        self: &Arc<Self>,
+    pub async fn run_trigger(
+        &self,
+        daemon: &Arc<dyn Daemon>,
         context: Option<ItemContext>,
         name: &str,
         request: Option<WebhookRequest>,
         caller: Option<&Caller>,
     ) -> Result<Fired> {
-        let trigger = (self.acted_on_trigger(context, name, TriggerAction::Run, caller)).await?;
+        let action = TriggerAction::Run;
+        let trigger = (self.acted_on_trigger(&**daemon, context, name, action, caller)).await?;
         let _firing = self.triggers.firing.lock().await;
         let now = UnixTime::now();
         let state = self.trigger_state(&trigger, now).await?;
@@ -81,26 +83,24 @@ impl Manager {
             input,
             at: now,
         };
-        self.fire_trigger(&trigger, firing).await
+        self.fire_trigger(daemon, &trigger, firing).await
     }
 
     /// The trigger `name` `action` acts on, once `caller`'s `triggers`
     /// permission allows it.
     async fn acted_on_trigger(
         &self,
+        daemon: &dyn Daemon,
         context: Option<ItemContext>,
         name: &str,
         action: TriggerAction,
         caller: Option<&Caller>,
     ) -> Result<Configured> {
-        let repository = self.context_repository(context).await?;
-        let trigger = self.named_trigger(repository.as_ref(), name).await?;
-        let mut authorized = Action::new(
-            PermissionKey::Triggers,
-            format!("{action} the {}", trigger.label()),
-        );
-        authorized.repository = trigger.repository.clone().or(repository);
-        self.authorize_action(caller, authorized).await?;
+        let repository = daemon.context_repository(context).await?;
+        let trigger = (self.named_trigger(daemon, repository.as_ref(), name)).await?;
+        let described = format!("{action} the {}", trigger.label());
+        let acts_in = trigger.repository.clone().or(repository);
+        (daemon.authorize(caller, PermissionKey::Triggers, described, acts_in)).await?;
         Ok(trigger)
     }
 
@@ -123,32 +123,6 @@ impl Manager {
             paused: state.paused,
             next_at,
             last_run,
-        })
-    }
-
-    /// The registered repository `context` acts in: a workspace's or a
-    /// chat's, or the checkout's; none without a context or for a chat
-    /// without a repository.
-    async fn context_repository(
-        &self,
-        context: Option<ItemContext>,
-    ) -> Result<Option<RepositoryId>> {
-        Ok(match context {
-            None => None,
-            Some(
-                ItemContext::Checkout(repository)
-                | ItemContext::Space {
-                    repository: Some(repository),
-                    ..
-                },
-            ) => Some(self.repository(repository).await?.id),
-            Some(ItemContext::Space {
-                space,
-                repository: None,
-            }) => {
-                let space = self.space(&space).await;
-                space.context("find the space to act in")?.repository_id
-            }
         })
     }
 }

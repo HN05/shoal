@@ -24,7 +24,8 @@ pub struct Manager {
     /// The spaces automatic cleanup removed since Shoal's log recorded it.
     pub(crate) cleanup_removals: super::cleanup::Removed,
     pub(crate) syncs: super::checkout_sync::Syncs,
-    pub(crate) triggers: super::triggers::Triggers,
+    /// The triggers.
+    pub runner: Arc<shoal_runner::Runner>,
     /// The spaces whose PRs' progress sections wait for an update.
     pub(crate) publications: super::progress::Publications,
     /// The spaces whose issues wait for the agent account to be settled.
@@ -122,6 +123,11 @@ impl Manager {
             paths.clone(),
             Arc::new(super::hub::HubRecords),
         ));
+        let runner = Arc::new(shoal_runner::Runner::new(
+            store.clone(),
+            config_state.clone(),
+            notifications.clone(),
+        ));
         let reviews = Arc::new(shoal_reviews::Reviews::new(
             store.clone(),
             gates.clone(),
@@ -139,7 +145,7 @@ impl Manager {
             idle_sleep_health: super::cleanup::CleanupHealth::of("Idle sleep"),
             cleanup_removals: Default::default(),
             syncs: Default::default(),
-            triggers: Default::default(),
+            runner,
             publications: Default::default(),
             agent_settles: Default::default(),
             store,
@@ -209,7 +215,7 @@ impl Manager {
         }
         super::forge_hosts::learn_forge_pins(&self.config().machine.forges, &config.machine.forges);
         self.config_state.publish(config);
-        self.triggers.wake();
+        self.runner.wake_triggers();
     }
 
     /// Replace the global config with the file's current contents for later

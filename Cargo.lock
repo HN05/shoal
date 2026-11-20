@@ -2750,11 +2750,23 @@ name = "shoal-runner"
 version = "0.19.0"
 dependencies = [
  "anyhow",
+ "form_urlencoded",
+ "futures-util",
+ "hmac",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2",
+ "shoal-core",
+ "shoal-daemon-base",
  "shoal-ids",
  "shoal-protocol",
+ "shoal-store",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

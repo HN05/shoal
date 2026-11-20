@@ -294,3 +294,67 @@ async fn a_chats_layers_are_its_repositorys() {
         Some("worktree")
     );
 }
+
+/// A registered repository whose local config is `local`.
+async fn repository_with_local_config(
+    local: &str,
+) -> (
+    tempfile::TempDir,
+    std::sync::Arc<super::Manager>,
+    crate::model::Repository,
+) {
+    let (root, manager) = test_support::manager().await;
+    let checkout = test_support::repository(root.path(), "repo");
+    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
+        .await
+        .unwrap();
+    (manager.write_local_config(&repo.id, Some(local.into())))
+        .await
+        .unwrap();
+    (root, manager, repo)
+}
+
+/// The names of the secrets the workspace `id`'s agents receive.
+async fn secret_names(manager: &super::Manager, id: &shoal_ids::space_ids::SpaceId) -> Vec<String> {
+    let selector = SpaceSelector::id(id);
+    let catalog = manager
+        .leases
+        .secret_catalog(manager, &selector)
+        .await
+        .unwrap();
+    (catalog.secrets.into_iter())
+        .map(|secret| secret.name)
+        .collect()
+}
+
+#[tokio::test]
+async fn a_workspace_whose_file_lacks_the_checkouts_trigger_still_never_gets_its_secret() {
+    let secrets =
+        "[secrets.HOOK]\ncommand = ['printf', 's3cret']\n[secrets.API_KEY]\ncommand = ['true']\n";
+    let (_root, manager, repo) = repository_with_local_config(secrets).await;
+    let workspace = (manager.create_workspace(&repo.id, "fix".into(), None, None, None))
+        .await
+        .unwrap();
+    // A trigger the checkout's file gained after the workspace branched.
+    std::fs::write(
+        repo.path.join(".shoal.toml"),
+        "[triggers.labelled]\non = 'webhook'\nsecret = 'HOOK'\nsignature = 'forgejo'\n",
+    )
+    .unwrap();
+
+    assert_eq!(secret_names(&manager, &workspace.id).await, ["API_KEY"]);
+}
+
+#[tokio::test]
+async fn an_unreadable_checkout_file_withholds_every_local_secret() {
+    let local = "[secrets.HOOK]\ncommand = ['true']\n";
+    let (_root, manager, repo) = repository_with_local_config(local).await;
+    test_support::configure(&manager, "[secrets.API_KEY]\ncommand = ['true']\n").await;
+    let workspace = (manager.create_workspace(&repo.id, "fix".into(), None, None, None))
+        .await
+        .unwrap();
+    // Its triggers could sign with any of the local config's secrets.
+    std::fs::write(repo.path.join(".shoal.toml"), "[triggers.labelled\n").unwrap();
+
+    assert_eq!(secret_names(&manager, &workspace.id).await, ["API_KEY"]);
+}

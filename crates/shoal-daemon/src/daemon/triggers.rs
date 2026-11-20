@@ -1,55 +1,132 @@
-//! Triggers, the daemon's side of `[triggers.NAME]`: it reads the
-//! configured triggers, keeps each one's runtime state, and fires them, the
-//! timer source's from a background loop, the webhook source's as requests
-//! reach its listener, and any trigger at once for `shoal trigger run`.
-//! Every firing takes the same steps whatever its source, and launches
-//! through the operation `shoal start` uses.
-use std::collections::HashMap;
+//! What the triggers of `shoal-runner` need of the rest of the daemon: the
+//! registered repositories and their config, the agents a trigger's launch
+//! meets and starts, and the permission a scoped caller acts with.
+use std::collections::HashSet;
+use std::sync::Arc;
 
-use shoal_ids::repository_ids::RepositoryId;
-use tokio::sync::{Mutex, Notify};
+use anyhow::{Context as _, Result};
+use futures_util::future::BoxFuture;
+use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_protocol::{
+    config::permissions::PermissionKey,
+    launches::{Launch, LaunchSource},
+};
+use shoal_runner::daemon::{Agents, Permissions, Repositories};
 
-mod commands;
-mod configured;
-mod firing;
-mod timer;
-mod webhooks;
+use super::{manager::Manager, permissions::Action, scope::Caller};
+use crate::{
+    config::repo::ConfigLayers,
+    model::Repository,
+    protocol::{ConfigTarget, ItemContext},
+    state::QueueState,
+};
 
-pub(crate) use configured::Configured;
-pub(crate) use timer::run;
-pub(crate) use webhooks::run as serve_webhooks;
-
-/// What the triggers' background loop shares with requests.
-#[derive(Default)]
-pub(crate) struct Triggers {
-    /// Wakes the loop for a changed config or runtime state.
-    wake: Notify,
-    /// Held through each firing and each pass of the loop, so a trigger
-    /// never fires twice for one time.
-    firing: Mutex<()>,
-    /// Why each repository's triggers could not be read, last time.
-    unreadable: std::sync::Mutex<HashMap<RepositoryId, String>>,
-}
-
-impl Triggers {
-    /// Have the loop read the triggers and their state again now.
-    pub(crate) fn wake(&self) {
-        self.wake.notify_one();
+impl Repositories for Manager {
+    fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>> {
+        Box::pin(Manager::repositories(self))
     }
 
-    /// Record how reading `repository`'s triggers went, returning whether
-    /// it failed otherwise than last time, so the log names each failure
-    /// once.
-    fn read(&self, repository: &RepositoryId, error: Option<String>) -> bool {
-        let mut unreadable =
-            (self.unreadable.lock()).unwrap_or_else(std::sync::PoisonError::into_inner);
-        match error {
-            Some(error) => unreadable.insert(repository.clone(), error.clone()) != Some(error),
-            None => {
-                unreadable.remove(repository);
-                false
+    fn repository<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Repository>> {
+        Box::pin(Manager::repository(self, id))
+    }
+
+    fn repository_layers<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<ConfigLayers>> {
+        let target = ConfigTarget::Repository(id.clone().into());
+        Box::pin(self.config_layers_for(target))
+    }
+
+    fn context_repository(
+        &self,
+        context: Option<ItemContext>,
+    ) -> BoxFuture<'_, Result<Option<RepositoryId>>> {
+        Box::pin(self.context_repository(context))
+    }
+
+    fn acts_on_global_config(&self) -> bool {
+        Manager::acts_on_global_config(self)
+    }
+}
+
+impl Agents for Manager {
+    fn live_queue_entries(&self) -> BoxFuture<'_, Result<HashSet<QueueEntryId>>> {
+        Box::pin(async move {
+            let entries = self.queue_entries().await?;
+            Ok((entries.into_iter())
+                .filter(|entry| entry.state != QueueState::Failed)
+                .map(|entry| entry.id)
+                .collect())
+        })
+    }
+
+    fn started_launch<'a>(
+        &'a self,
+        entry: &'a QueueEntryId,
+    ) -> BoxFuture<'a, Result<Option<SpaceId>>> {
+        Box::pin(Manager::started_launch(self, entry))
+    }
+
+    fn agent_spaces(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>> {
+        Box::pin(async move {
+            let mut spaces = self.recorded_agent_spaces().await?;
+            spaces.extend(self.queued_agent_workspaces().await?);
+            Ok(spaces)
+        })
+    }
+
+    fn launch(
+        self: Arc<Self>,
+        launch: Launch,
+        source: LaunchSource,
+    ) -> BoxFuture<'static, Result<SpaceId>> {
+        Box::pin(async move {
+            let launched = Manager::launch(&self, launch, source, None).await?;
+            Ok(launched.space.id)
+        })
+    }
+}
+
+impl Permissions for Manager {
+    fn authorize<'a>(
+        &'a self,
+        caller: Option<&'a Caller>,
+        key: PermissionKey,
+        action: String,
+        repository: Option<RepositoryId>,
+    ) -> BoxFuture<'a, Result<()>> {
+        let mut authorized = Action::new(key, action);
+        authorized.repository = repository;
+        Box::pin(self.authorize_action(caller, authorized))
+    }
+}
+
+impl Manager {
+    /// The registered repository `context` acts in: a workspace's or a
+    /// chat's, or the checkout's; none without a context or for a chat
+    /// without a repository.
+    async fn context_repository(
+        &self,
+        context: Option<ItemContext>,
+    ) -> Result<Option<RepositoryId>> {
+        Ok(match context {
+            None => None,
+            Some(
+                ItemContext::Checkout(repository)
+                | ItemContext::Space {
+                    repository: Some(repository),
+                    ..
+                },
+            ) => Some(Manager::repository(self, repository).await?.id),
+            Some(ItemContext::Space {
+                space,
+                repository: None,
+            }) => {
+                let space = self.space(&space).await;
+                space.context("find the space to act in")?.repository_id
             }
-        }
+        })
     }
 }
 

@@ -1,13 +1,10 @@
 //! The triggers the config defines: the global config's, and each
 //! registered repository's, from its checkout's file and its local config.
 use anyhow::{Result, bail};
+use shoal_core::triggers::{Trigger, Triggers};
 use shoal_ids::repository_ids::RepositoryId;
 
-use crate::{
-    daemon::{log, manager::Manager},
-    protocol::ConfigTarget,
-    triggers::{Trigger, Triggers},
-};
+use crate::{Runner, daemon::Daemon, log};
 
 /// The key of the global config's triggers' runtime state, which no
 /// repository's ID equals.
@@ -15,7 +12,7 @@ const GLOBAL: &str = "global";
 
 /// A trigger as the config defines it, with where.
 #[derive(Debug, Clone)]
-pub(crate) struct Configured {
+pub struct Configured {
     /// The registered repository whose config defines it; none for the
     /// global config's.
     pub repository: Option<RepositoryId>,
@@ -38,12 +35,12 @@ impl Configured {
     }
 }
 
-impl Manager {
+impl Runner {
     /// Every configured trigger, the global config's first. A repository
     /// whose config cannot be read has none until it can.
-    pub(crate) async fn configured_triggers(&self) -> Vec<Configured> {
+    pub(crate) async fn configured_triggers(&self, daemon: &dyn Daemon) -> Vec<Configured> {
         let mut triggers = global(self.config().triggers());
-        let repositories = match self.repositories().await {
+        let repositories = match daemon.repositories().await {
             Ok(repositories) => repositories.into_iter().map(|repository| repository.id),
             Err(error) => {
                 log!("cannot list the repositories whose triggers fire: {error:#}");
@@ -51,7 +48,7 @@ impl Manager {
             }
         };
         for repository in repositories {
-            let found = self.repository_triggers(&repository).await;
+            let found = self.repository_triggers(daemon, &repository).await;
             let error = found.as_ref().err().map(|error| format!("{error:#}"));
             if self.triggers.read(&repository, error.clone()) {
                 log!(
@@ -67,11 +64,12 @@ impl Manager {
     /// The triggers of `repository`, if any, after the global config's.
     pub(crate) async fn triggers_of(
         &self,
+        daemon: &dyn Daemon,
         repository: Option<&RepositoryId>,
     ) -> Result<Vec<Configured>> {
         let mut triggers = global(self.config().triggers());
         if let Some(repository) = repository {
-            triggers.extend(self.repository_triggers(repository).await?);
+            triggers.extend(self.repository_triggers(daemon, repository).await?);
         }
         Ok(triggers)
     }
@@ -79,10 +77,11 @@ impl Manager {
     /// The trigger `name` of `repository`, else of the global config.
     pub(crate) async fn named_trigger(
         &self,
+        daemon: &dyn Daemon,
         repository: Option<&RepositoryId>,
         name: &str,
     ) -> Result<Configured> {
-        let triggers = self.triggers_of(repository).await?;
+        let triggers = self.triggers_of(daemon, repository).await?;
         // A repository's trigger, listed last, stands before the global
         // config's.
         match (triggers.into_iter()).rfind(|trigger| trigger.name == name) {
@@ -101,10 +100,13 @@ impl Manager {
     /// The triggers the registered `repository`'s config defines: its
     /// tracked file's and its local config's, or only the local config's
     /// for a contribution, whose tracked file the user does not maintain.
-    async fn repository_triggers(&self, repository: &RepositoryId) -> Result<Vec<Configured>> {
-        let target = ConfigTarget::Repository(repository.clone().into());
-        let mut layers = self.config_layers_for(target).await?;
-        if self.repository(repository).await?.contribution {
+    async fn repository_triggers(
+        &self,
+        daemon: &dyn Daemon,
+        repository: &RepositoryId,
+    ) -> Result<Vec<Configured>> {
+        let mut layers = daemon.repository_layers(repository).await?;
+        if daemon.repository(repository).await?.contribution {
             layers.worktree_file.triggers.clear();
         }
         let settings = self.config().resolve(&layers)?;
