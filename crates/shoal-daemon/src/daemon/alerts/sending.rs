@@ -74,7 +74,7 @@ impl Manager {
             |files| async move { self.record_sent(sent_alert(about, message, &files)).await },
         ))
         .await?;
-        crate::daemon::events::record_alert(&self.store, &id, text).await;
+        crate::daemon::events::record_alert(&self.store, &id, text, sent.alerts.clone()).await;
         Ok(sent)
     }
 
@@ -115,9 +115,10 @@ impl Manager {
             .await
     }
 
-    /// Send `message` from `caller` to each space `route` reaches; a
-    /// refusal fails the whole send when `refusals_fail`, and otherwise
-    /// lists the space that refused it.
+    /// Send `message` from `caller` to each space `route` reaches, which
+    /// the log of the caller's space records; a refusal fails the whole
+    /// send when `refusals_fail`, and otherwise lists the space that
+    /// refused it.
     async fn send_down(
         &self,
         caller: Option<&Caller>,
@@ -144,6 +145,12 @@ impl Manager {
                 sent.alerts.push(id);
             }
             outcome(&mut sent.reached, reader, queued.map(drop)).space(&space);
+        }
+        if let Some(caller) = caller
+            && !sent.alerts.is_empty()
+        {
+            let (id, alerts) = (&caller.space_id, sent.alerts.clone());
+            crate::daemon::events::record_alert(&self.store, id, message, alerts).await;
         }
         Ok(sent)
     }

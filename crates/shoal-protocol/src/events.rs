@@ -464,6 +464,10 @@ pub struct GateEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlertEvent {
     pub message: String,
+    /// The numbers of the alerts recorded on this machine, one for each
+    /// recipient, by which their sender withdraws them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub alerts: Vec<i64>,
 }
 
 /// A merge into the default branch: a PR's, or one `shoal merge` pushed.

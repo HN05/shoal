@@ -174,3 +174,34 @@ async fn files_alone_go_up_as_an_alert_and_text_alone_must_not_be_empty() {
     };
     assert_eq!(std::fs::read_to_string(copy).unwrap(), "findings");
 }
+
+/// The numbers the `alert_sent` entries of `space`'s log name, oldest
+/// first.
+async fn logged_alerts(manager: &Manager, space: &Workspace) -> Vec<Vec<i64>> {
+    let (selector, filter) = (
+        SpaceSelector::id(&space.id),
+        shoal_protocol::log::LogFilter::Entries,
+    );
+    let log = manager.space_log(&selector, filter, 50).await.unwrap();
+    (log.into_iter())
+        .filter_map(|entry| match entry {
+            shoal_protocol::log::LogEntry::Event(event) => event.details.alert,
+            _ => None,
+        })
+        .map(|alert| alert.alerts)
+        .collect()
+}
+
+#[tokio::test]
+async fn a_space_s_log_names_each_alert_it_sent_up_or_down() {
+    let (temp, manager) = manager().await;
+    let (parent, child, _) = tree(&temp, &manager).await;
+    let down = send(&manager, Some(&parent), &child, "Stop the dev server").await;
+    // The user's alert is no space's to log.
+    send(&manager, None, &child, "Rebase onto main").await;
+    let as_child = caller_in(&SpaceSelector::id(&child.id));
+    let up = manager.send_alert(Some(&as_child), AlertTarget::Up, "Done".into(), Vec::new());
+    let up = up.await.unwrap().alerts;
+    assert_eq!(logged_alerts(&manager, &parent).await, [vec![down]]);
+    assert_eq!(logged_alerts(&manager, &child).await, [up]);
+}

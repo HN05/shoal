@@ -449,13 +449,13 @@ pub async fn record_shoal_outcome(
     record_shoal(store, details).await;
 }
 
-/// Record the alert the space `id` sent, which reached its coordinator or
-/// the user.
-pub async fn record_alert(store: &Store, id: &SpaceId, message: String) {
+/// Record the alerts `alerts` the space `id` sent with `message`, up to its
+/// coordinator or the user or down to the agents below it.
+pub async fn record_alert(store: &Store, id: &SpaceId, message: String, alerts: Vec<i64>) {
     let space = id.clone();
     let recorded = store
         .run(move |db| {
-            let alert = AlertEvent { message };
+            let alert = AlertEvent { message, alerts };
             record_with(db, &space, EventKind::AlertSent, "alert", &alert)
         })
         .await;

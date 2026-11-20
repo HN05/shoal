@@ -83,6 +83,11 @@ fn details_name_what_each_entry_is_about() {
         "3.2 Which database?: fix: SQLite"
     );
     assert_eq!(
+        details(serde_json::json!({"kind": "alert_sent",
+            "alert": {"message": "Rebase onto\nmain", "alerts": [12, 13]}})),
+        "12, 13 Rebase onto main"
+    );
+    assert_eq!(
         details(serde_json::json!({"kind": "thread_forwarded", "thread": {
             "space_number": 3, "item": 2, "name": "Which database?", "sender": "fix",
             "to": "the user", "text": ""}})),

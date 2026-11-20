@@ -94,10 +94,7 @@ fn event_line(event: &EventDetails) -> (String, String) {
         EventKind::ApprovalRequested => fixed("Approval requested", approval(event, false)),
         EventKind::ApprovalDecided => fixed("Approval decided", approval(event, true)),
         EventKind::GateDecided => fixed("Gate decided", gate(event)),
-        EventKind::AlertSent => fixed(
-            "Alert sent",
-            (event.alert.as_ref()).map_or_else(String::new, |alert| alert.message.clone()),
-        ),
+        EventKind::AlertSent => fixed("Alert sent", alert(event)),
         EventKind::ProgressChanged => fixed("Progress", progress(event)),
         EventKind::ChildCreated => fixed("Child created", child(event)),
         EventKind::ChildRemoved => fixed("Child removed", child(event)),
@@ -412,6 +409,20 @@ fn gate(event: &EventDetails) -> String {
         "{} {}: {}: {}{rule}",
         gate.number, gate.verdict, gate.subject, gate.reason
     )
+}
+
+/// The numbers of the alerts sent, by which their sender withdraws them,
+/// and their text.
+fn alert(event: &EventDetails) -> String {
+    let Some(alert) = &event.alert else {
+        return String::new();
+    };
+    let message = alert.message.replace('\n', " ");
+    if alert.alerts.is_empty() {
+        return message;
+    }
+    let numbers: Vec<String> = alert.alerts.iter().map(i64::to_string).collect();
+    format!("{} {message}", numbers.join(", "))
 }
 
 fn child(event: &EventDetails) -> String {

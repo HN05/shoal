@@ -6564,7 +6564,7 @@ details, under a heading for each date:
 - the issues, PRs and CI runs it links and unlinks, the changes Shoal made to
   them, and their closing, merging and reopening on the forge;
 - the threads numbered in it, their posts, forwards and resolutions, the approvals it requested and
-  their decisions, and the alerts it sent;
+  their decisions, and the alerts it sent, each with its number;
 - the spaces created and removed below it, its parent changes, and an absorb,
   into which space and by what merge, or what it took over;
 - a CI job Shoal ended after its run finished, with the processes it stopped.
