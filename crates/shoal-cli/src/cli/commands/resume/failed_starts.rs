@@ -36,20 +36,24 @@ pub(in crate::cli::commands) async fn take(ctx: &Context, selected: &mut Selecte
 }
 
 /// The failed launches of the spaces `selectors` name, each space's once,
-/// or every one this process sees for `None`.
+/// or for `None` of every space this process's scope reaches below its
+/// own, as `--all` reaches them.
 pub(in crate::cli::commands) async fn of(
     ctx: &Context,
     selectors: Option<&[SpaceSelector]>,
 ) -> Result<Vec<QueueEntry>> {
     let failed = queued_agents::entries(ctx).await?.into_iter();
     let failed = failed.filter(|entry| entry.state == QueueState::Failed);
-    let Some(selectors) = selectors else {
-        return Ok(failed.collect());
-    };
     let spaces = crate::client::spaces::list(&ctx.paths).await?;
-    let ids: Vec<_> = (selectors.iter())
-        .filter_map(|selector| spaces.find(selector).map(|space| space.id))
-        .collect();
+    let ids: Vec<_> = match selectors {
+        Some(selectors) => (selectors.iter())
+            .filter_map(|selector| spaces.find(selector).map(|space| space.id))
+            .collect(),
+        None => (crate::cli::scoping::Scoping::inherited(&ctx.paths.state).reached_below(spaces))
+            .into_iter()
+            .map(|space| space.id)
+            .collect(),
+    };
     Ok(failed
         .filter(|entry| entry.space().is_some_and(|space| ids.contains(space)))
         .collect())
