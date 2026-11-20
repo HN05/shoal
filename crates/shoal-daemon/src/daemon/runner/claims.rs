@@ -136,8 +136,8 @@ impl Manager {
             .await?
             .context("the repository's runner is no longer registered")?;
         let forge = ForgeRepo::resolve(&registration.forge_repository, &self.forge_hosts()).await?;
-        if self
-            .cancel_if_superseded(&entry.name, &forge, &job.run)
+        if (self.runner)
+            .cancel_if_superseded(self, &entry.name, &forge, &job.run)
             .await?
         {
             return Ok(Claim::Superseded);

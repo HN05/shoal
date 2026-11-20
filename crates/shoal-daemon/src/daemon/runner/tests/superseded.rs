@@ -1,10 +1,6 @@
-use super::super::tests::{
-    Fixture, admit_and_claim, fixture, hold_the_builds_permit, job, job_entries,
-};
-use crate::{
-    daemon::notifications::NotificationKind, forge::numbers::PullNumber, state::QueueState,
-};
-use shoal_forge::RepoRequests;
+//! PR jobs whose PR moved on, as the daemon's polls and claims meet them.
+use super::{Fixture, admit_and_claim, fixture, hold_the_builds_permit, job, job_entries};
+use crate::{daemon::notifications::NotificationKind, state::QueueState};
 
 /// Move PR 12 past the commit its runs wait at.
 fn move_pull_on(fixture: &Fixture) {
@@ -127,35 +123,16 @@ async fn a_job_admitted_while_its_pr_is_checked_is_left_to_its_claim() {
     let fixture = fixture(vec![job("old", 4, 2)], "").await;
     let manager = &fixture.manager;
     manager.refresh_waiting_jobs().await.unwrap();
-    let mut by_pull = manager
-        .waiting_pull_jobs(&fixture.repository)
-        .await
-        .unwrap();
-    let waiting = by_pull.remove(&PullNumber::new(12)).unwrap();
+    let waiting = job_entries(manager).await.remove(0);
 
     manager.dispatch_queue().await.unwrap();
-    manager
-        .pass_over_superseded(&fixture.repository, &forge(&fixture).await, waiting)
+    let job = waiting.job.as_deref().unwrap();
+    let passed = (manager.runner)
+        .pass_over_job(&waiting.id, &fixture.repository, job)
         .await
         .unwrap();
+    assert!(!passed);
     let entries = job_entries(manager).await;
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].state, QueueState::Starting);
-}
-
-/// The forge `fixture`'s runner is registered with.
-async fn forge(fixture: &Fixture) -> crate::forge::ForgeRepo {
-    let registration = fixture
-        .manager
-        .runner
-        .runner_registration(&fixture.repository)
-        .await
-        .unwrap()
-        .unwrap();
-    crate::forge::ForgeRepo::resolve(
-        &registration.forge_repository,
-        &fixture.manager.forge_hosts(),
-    )
-    .await
-    .unwrap()
 }

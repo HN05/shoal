@@ -2766,6 +2766,7 @@ dependencies = [
  "shoal-forge-types",
  "shoal-ids",
  "shoal-protocol",
+ "shoal-refs",
  "shoal-store",
  "tempfile",
  "tokio",

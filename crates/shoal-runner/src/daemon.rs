@@ -11,6 +11,7 @@ use futures_util::future::BoxFuture;
 use rusqlite::Connection;
 use shoal_core::config::{Config, Effective, repo::ConfigLayers};
 use shoal_daemon_base::callers::Caller;
+use shoal_daemon_base::notifications::Coordinators;
 use shoal_forge::account::Account;
 use shoal_forge_types::{ForgeRepo, items::reference::ItemRef};
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
@@ -19,6 +20,7 @@ use shoal_protocol::{
     launches::{Launch, LaunchSource},
     model::{QueuedJob, Repository, Space},
     protocol::ItemContext,
+    space_names::SpaceName,
 };
 
 /// The registered repositories, and the config the daemon reads for them.
@@ -119,9 +121,16 @@ pub trait Spaces: Send + Sync {
 
 /// Everything the triggers and the runner need of the daemon, which each of
 /// their operations that reaches beyond them takes.
-pub trait Daemon: Repositories + Agents + Permissions + Forges + Spaces {}
+pub trait Daemon: Repositories + Agents + Permissions + Forges + Spaces + Coordinators {}
 
-impl<T> Daemon for T where T: Repositories + Agents + Permissions + Forges + Spaces {}
+impl<T> Daemon for T where T: Repositories + Agents + Permissions + Forges + Spaces + Coordinators {}
+
+/// A job waiting in the agent queue for admission.
+pub struct WaitingEntry {
+    pub id: QueueEntryId,
+    pub name: SpaceName,
+    pub job: QueuedJob,
+}
 
 /// The agent queue's rows the runner changes in its own connection or
 /// transaction. Its methods run on the store's thread, so they are not
@@ -133,4 +142,14 @@ pub trait Records: Send + Sync {
     /// Each waiting job's entry ID, repository and job.
     fn waiting_jobs(&self, db: &Connection)
     -> Result<Vec<(QueueEntryId, RepositoryId, QueuedJob)>>;
+
+    /// `repository`'s job entries waiting for admission.
+    fn waiting_job_entries(
+        &self,
+        db: &Connection,
+        repository: &RepositoryId,
+    ) -> Result<Vec<WaitingEntry>>;
+
+    /// Delete the entry `id` if it still waits, returning whether it did.
+    fn delete_waiting_entry(&self, db: &Connection, id: &QueueEntryId) -> Result<bool>;
 }

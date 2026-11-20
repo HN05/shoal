@@ -16,7 +16,6 @@ mod ends;
 mod listing;
 mod overrun;
 mod single_use;
-mod superseded;
 mod taken;
 mod waiting;
 
@@ -32,7 +31,7 @@ use shoal_forge::{RepoRequests, account::Account};
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_runner::{
-    daemon::{Forges, Spaces},
+    daemon::{Forges, Spaces, WaitingEntry},
     jobs::INTERVAL,
 };
 use tokio::time::Instant;
@@ -143,6 +142,39 @@ impl shoal_runner::daemon::Records for RunnerRecords {
             jobs.push((id, repository, serde_json::from_str(&job)?));
         }
         Ok(jobs)
+    }
+
+    fn waiting_job_entries(
+        &self,
+        db: &Connection,
+        repository: &RepositoryId,
+    ) -> Result<Vec<WaitingEntry>> {
+        let entries = db
+            .prepare(
+                "SELECT id,name,job FROM agent_queue
+                 WHERE repository_id=?1 AND kind=?2 AND state=?3",
+            )?
+            .query_map(
+                params![repository, QueueKind::Job, QueueState::Queued],
+                |row| {
+                    let job = crate::daemon::store::json_column(row, "job")?;
+                    Ok((row.get("id")?, row.get("name")?, job))
+                },
+            )?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok((entries.into_iter())
+            .filter_map(|(id, name, job)| {
+                Some(WaitingEntry {
+                    id,
+                    name,
+                    job: job?,
+                })
+            })
+            .collect())
+    }
+
+    fn delete_waiting_entry(&self, db: &Connection, id: &QueueEntryId) -> Result<bool> {
+        super::agent_queue::actions::delete_waiting(db, id)
     }
 }
 

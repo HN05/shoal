@@ -17,7 +17,10 @@ use shoal_core::config::{
     repo::{self, ConfigLayers},
 };
 use shoal_daemon_base::{
-    callers::Caller, config_state::ConfigState, gates::Gates, notifications::Notifications,
+    callers::Caller,
+    config_state::ConfigState,
+    gates::Gates,
+    notifications::{Coordinators, Notifications, Source},
 };
 use shoal_forge::{
     RepoRequests,
@@ -31,12 +34,14 @@ use shoal_protocol::{
     config::permissions::PermissionKey,
     launches::{Launch, LaunchSource},
     model::{QueuedJob, Repository, Space},
+    notifications::NotificationKind,
     protocol::ItemContext,
+    space_names::SpaceName,
 };
 
 use crate::{
     Runner,
-    daemon::{Agents, Daemon, Forges, Permissions, Records, Repositories, Spaces},
+    daemon::{Agents, Daemon, Forges, Permissions, Records, Repositories, Spaces, WaitingEntry},
 };
 
 /// The service over a stand-in daemon with one registered repository.
@@ -352,12 +357,37 @@ impl Spaces for StandIn {
     }
 }
 
+/// No space has a coordinator, so every event reaches the user.
+impl Coordinators for StandIn {
+    fn tell<'a>(
+        &'a self,
+        _: &'a SpaceName,
+        _: Option<&'a SpaceId>,
+        _: NotificationKind,
+        _: String,
+        _: Vec<std::path::PathBuf>,
+        _: Source,
+    ) -> BoxFuture<'a, bool> {
+        Box::pin(async { false })
+    }
+}
+
 /// The agent queue's rows, which the stand-in only records the runner
 /// changing.
 impl Records for StandIn {
     fn forget_job_entries(&self, _: &Connection, repository: &RepositoryId) -> Result<()> {
         self.forgotten.lock().unwrap().push(repository.clone());
         Ok(())
+    }
+
+    /// The stand-in's queue holds no jobs.
+    fn waiting_job_entries(&self, _: &Connection, _: &RepositoryId) -> Result<Vec<WaitingEntry>> {
+        Ok(Vec::new())
+    }
+
+    /// Every entry still waits.
+    fn delete_waiting_entry(&self, _: &Connection, _: &QueueEntryId) -> Result<bool> {
+        Ok(true)
     }
 
     /// The stand-in's queue holds no jobs.

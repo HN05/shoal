@@ -2,7 +2,6 @@
 //! and the cancelling of the launches a stopped workspace waits for. Each holds the queue gate, so dispatch cannot start
 //! the entry meanwhile.
 use shoal_ids::execution_ids::ExecutionId;
-use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use std::collections::{HashMap, HashSet};
 
@@ -16,7 +15,7 @@ use super::{
 };
 use crate::{
     daemon::{executions::StopRequest, manager::Manager, scope::Caller},
-    model::{QueueEntry, QueuedJob},
+    model::QueueEntry,
     state::{QueueKind, QueueState},
 };
 
@@ -194,7 +193,10 @@ impl Manager {
         }
         // A stopped wrapper removes its entry as it finishes, which may come first.
         let deleted = match &entry.job {
-            Some(job) => (self.pass_over_job(&entry.id, entry.job_repository()?, job)).await?,
+            Some(job) => {
+                let repository = entry.job_repository()?;
+                (self.runner.pass_over_job(&entry.id, repository, job)).await?
+            }
             None => self.delete_waiting_entry(entry.id.clone()).await?,
         };
         ensure!(
@@ -305,36 +307,12 @@ impl Manager {
     async fn delete_waiting_entry(&self, id: QueueEntryId) -> Result<bool> {
         self.store.write(move |tx| delete_waiting(tx, &id)).await
     }
-
-    /// Delete `repository`'s job entry `id` if it still waits, leaving its
-    /// `job` to other runners, returning whether it still waited.
-    pub(in crate::daemon) async fn pass_over_job(
-        &self,
-        id: &QueueEntryId,
-        repository: &RepositoryId,
-        job: &QueuedJob,
-    ) -> Result<bool> {
-        let (id, repository, handle) =
-            (id.to_owned(), repository.to_owned(), job.job.handle.clone());
-        self.store
-            .write(move |tx| {
-                let deleted = delete_waiting(tx, &id)?;
-                if deleted {
-                    tx.execute(
-                        "INSERT OR IGNORE INTO ci_passed_jobs(repository_id,handle) VALUES (?1,?2)",
-                        params![repository, handle],
-                    )?;
-                }
-                Ok(deleted)
-            })
-            .await
-    }
 }
 
 /// Delete the entry `id` if it still waits, returning whether it did. The
 /// preparation of the workspace a launch waited to open then waits for its
 /// stopped agent.
-fn delete_waiting(db: &rusqlite::Connection, id: &QueueEntryId) -> Result<bool> {
+pub(crate) fn delete_waiting(db: &rusqlite::Connection, id: &QueueEntryId) -> Result<bool> {
     let opens: Option<SpaceId> = db
         .query_row(
             "SELECT opens_workspace_id FROM agent_queue WHERE id=?1 AND state=?2",

@@ -98,7 +98,9 @@ impl Manager {
             let id = repository.id.clone();
             self.store.write(move |tx| queue_job(tx, &id, &job)).await?;
         }
-        self.pass_over_superseded_jobs(&repository.id, &forge).await
+        (self.runner)
+            .pass_over_superseded_jobs(self, &repository.id, &forge)
+            .await
     }
 }
 

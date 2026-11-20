@@ -14,7 +14,9 @@ use tokio::{sync::Notify, time::Instant};
 use crate::Runner;
 
 mod linked;
+mod queue;
 mod registration;
+mod superseded;
 
 pub use registration::Registration;
 
@@ -22,15 +24,6 @@ impl Runner {
     /// What the runner keeps between passes.
     pub fn jobs(&self) -> &Runners {
         &self.jobs
-    }
-
-    /// Take `repository_id`'s jobs out of the queue, as once its runner is
-    /// turned off; the forge keeps them for other runners.
-    pub async fn forget_job_entries(&self, repository_id: &RepositoryId) -> anyhow::Result<()> {
-        let (records, id) = (self.records.clone(), repository_id.to_owned());
-        self.store
-            .run(move |db| records.forget_job_entries(db, &id))
-            .await
     }
 }
 
