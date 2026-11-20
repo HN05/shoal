@@ -35,7 +35,7 @@ impl Manager {
     }
 
     /// [`Self::queue_add`] for a launch that `awaits` what it says in its
-    /// space.
+    /// space, discarding first the stopped or asleep agent it replaces.
     pub(super) async fn queue_add_awaiting(
         &self,
         request: QueueRequest,
@@ -51,6 +51,9 @@ impl Manager {
             Some(repository) => self.launch_priority(&request, repository).await?,
             None => None,
         };
+        if request.replace {
+            self.replace_stopped_worker(&space).await?;
+        }
         let _gate = self.agent_queue.lock_admission().await;
         self.ensure_takes_worker(&space).await?;
         let caller_starts = request.starts_in_caller;

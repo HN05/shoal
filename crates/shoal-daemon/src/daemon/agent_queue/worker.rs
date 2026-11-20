@@ -4,7 +4,11 @@
 //! its agents and never count.
 use anyhow::{Result, bail};
 
-use crate::{daemon::manager::Manager, execution::recovery, model::Space};
+use crate::{
+    daemon::{manager::Manager, scope::Caller},
+    execution::recovery,
+    model::Space,
+};
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
@@ -36,6 +40,23 @@ impl Manager {
         }
         // An asleep agent's restore leaves the queue once its record goes.
         self.forget_resolved_restores().await
+    }
+
+    /// Refuse the scoped `caller` a launch that `replaces` the stopped
+    /// agent of the workspace `selector` names, unless it may discard that
+    /// agent: one of a space below its own.
+    pub(in crate::daemon) async fn ensure_may_replace(
+        &self,
+        caller: &Caller,
+        selector: &mut SpaceSelector,
+        replaces: bool,
+    ) -> Result<()> {
+        if replaces {
+            const REFUSAL: &str =
+                "scoped processes replace stopped agents only in the spaces below theirs";
+            self.workspace_below(caller, selector, REFUSAL).await?;
+        }
+        Ok(())
     }
 
     /// Refuse a launch in `space` while an agent of its own runs there or

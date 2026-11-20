@@ -85,6 +85,21 @@ async fn a_replacing_start_discards_the_stopped_agent_and_queues_its_own() {
 }
 
 #[tokio::test]
+async fn a_replacing_start_that_is_refused_keeps_the_stopped_agent() {
+    let (temp, manager) = manager().await;
+    let (workspace, record) = stopped_workspace(&manager, &temp).await;
+    let launch = Launch {
+        agent: Some("missing".into()),
+        ..start_in(&workspace, true)
+    };
+
+    let refused = manager.launch(launch, LaunchSource::Manual, None).await;
+
+    assert!(refused.is_err(), "an unknown agent started");
+    assert!(record.exists());
+}
+
+#[tokio::test]
 async fn a_chat_in_the_worktree_replaces_nothing() {
     let (temp, manager) = manager().await;
     let (workspace, record) = stopped_workspace(&manager, &temp).await;

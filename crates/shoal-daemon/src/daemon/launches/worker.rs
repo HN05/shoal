@@ -23,7 +23,7 @@ impl Manager {
     /// the workspace it names, on the workspace's issue unless it names a
     /// task, once what blocks it is done: the agent it names, else
     /// `agent.default`, refused without either. A launch that replaces the
-    /// workspace's stopped agent discards it first.
+    /// workspace's stopped agent discards it as it queues.
     pub(super) async fn launch_worker(
         &self,
         launch: Launch,
@@ -44,10 +44,6 @@ impl Manager {
             ScopeRefusal::of(allowed)?;
         }
         let blockers = self.worker_blockers(&workspace, &request, caller).await?;
-        if request.replace {
-            let space = self.space(&selector).await?;
-            self.replace_stopped_worker(&space).await?;
-        }
         let entry = self
             .queue_agent(&selector, request.launch, blockers, None)
             .await?;
@@ -98,23 +94,6 @@ impl Manager {
         }
     }
 
-    /// Refuse the scoped `caller` a launch that `replaces` the stopped
-    /// agent of the workspace `selector` names, unless it may discard
-    /// that agent: one of a space below its own.
-    async fn ensure_may_replace(
-        &self,
-        caller: &Caller,
-        selector: &mut SpaceSelector,
-        replaces: bool,
-    ) -> Result<()> {
-        if replaces {
-            const REFUSAL: &str =
-                "scoped processes replace stopped agents only in the spaces below theirs";
-            self.workspace_below(caller, selector, REFUSAL).await?;
-        }
-        Ok(())
-    }
-
     /// Refuse the scoped `caller` a worker it may not start in the
     /// workspace `selector` names, or start regardless of the limits.
     async fn ensure_worker_allowed(
@@ -125,7 +104,7 @@ impl Manager {
     ) -> Result<()> {
         let launch = &request.launch;
         let (mode, given) = (launch.mode.as_ref(), &launch.narrowing);
-        (self.ensure_may_replace(caller, selector, request.replace)).await?;
+        (self.ensure_may_replace(caller, selector, launch.replace)).await?;
         let target = self.worker_target(caller, selector, mode, given).await?;
         if launch.now {
             (self.authorize_start_beyond_limits(caller, "start", target)).await?;
@@ -167,12 +146,10 @@ fn queued(workspace: Workspace, entry: crate::model::QueueEntry) -> Launched {
     }
 }
 
-/// A worker's launch, with what the launch names as blocking it and
-/// whether it replaces the workspace's stopped agent.
+/// A worker's launch, with what the launch names as blocking it.
 struct WorkerRequest {
     launch: LaunchRequest,
     blockers: Vec<String>,
-    replace: bool,
 }
 
 /// The worker `launch` asks for in `shape`, which `source` made.
@@ -180,7 +157,6 @@ fn worker_request(launch: Launch, shape: Shape, source: LaunchSource) -> WorkerR
     WorkerRequest {
         launch: super::space::agent_request(&launch, &shape.mode, source),
         blockers: launch.blockers,
-        replace: launch.replace,
     }
 }
 

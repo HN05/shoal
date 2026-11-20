@@ -32,7 +32,10 @@ use shoal_protocol::{
 use shoal_schedule::priority::Priority;
 
 use crate::{
-    daemon::{manager::Manager, scope::Caller},
+    daemon::{
+        manager::Manager,
+        scope::{Caller, ScopeRefusal},
+    },
     forge::items::reference::ItemInput,
     model::{QueueEntry, Space},
     protocol::operations::{LaunchRequest, StartedWorkspace},
@@ -169,6 +172,8 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<StartedSpace> {
         (self.ensure_start_agent_held(&recorded.space, &preparing, caller)).await?;
+        self.ensure_start_may_replace(&recorded.space, &preparing, caller)
+            .await?;
         let warnings = self.link_start_issue(&recorded, issue, caller).await?;
         let admission = self.queue_space_agent(&recorded, &mut preparing).await?;
         let (space, started) = self
@@ -181,6 +186,24 @@ impl Manager {
             warnings,
             started,
         })
+    }
+
+    /// Refuse the scoped `caller` the agent `preparing` names where it
+    /// replaces the stopped agent of the reopened `space` and the caller may
+    /// not discard that agent.
+    async fn ensure_start_may_replace(
+        &self,
+        space: &Space,
+        preparing: &Preparing,
+        caller: Option<&Caller>,
+    ) -> Result<()> {
+        let replaces = (preparing.agent.as_ref()).is_some_and(|agent| agent.replace);
+        let Some(caller) = caller.filter(|_| replaces) else {
+            return Ok(());
+        };
+        let mut selector = SpaceSelector::id(&space.id);
+        let allowed = self.ensure_may_replace(caller, &mut selector, true).await;
+        ScopeRefusal::of(allowed)
     }
 
     /// Open the workspace `opening` names in `repository`, a new one or

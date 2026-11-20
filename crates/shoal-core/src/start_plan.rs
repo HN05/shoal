@@ -158,7 +158,7 @@ pub fn queued_agent_request<P>(
     let issue_labels = (launch.issue.as_ref()).map_or_else(Vec::new, |issue| issue.labels.clone());
     let (agent, now, here) = (launch.agent.clone(), launch.now, launch.here);
     let (mode, narrowing) = (launch.mode.clone(), launch.narrowing);
-    let source = launch.source.clone();
+    let (source, replace) = (launch.source.clone(), launch.replace);
     let plan = QueuedStart { launch, pr };
     Ok(QueueRequest {
         name: space.name.clone(),
@@ -174,6 +174,7 @@ pub fn queued_agent_request<P>(
         starts_in_caller: here,
         blockers: Vec::new(),
         source,
+        replace,
     })
 }
 

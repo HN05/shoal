@@ -62,6 +62,7 @@ pub(crate) async fn request(
 pub(crate) fn launch_in(workspace: &Workspace, now: bool) -> QueueRequest {
     QueueRequest {
         source: None,
+        replace: false,
         issue_labels: Vec::new(),
         narrowing: Default::default(),
         mode: None,

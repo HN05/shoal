@@ -195,6 +195,10 @@ pub struct QueueRequest {
     /// What made the launch, which its agent's start records.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<crate::launches::LaunchSource>,
+    /// Discard the stopped or asleep agent of `space` first, so the launch
+    /// takes its place.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub replace: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

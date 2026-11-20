@@ -111,6 +111,7 @@ async fn waiting_launch(manager: &Manager, workspace: &crate::model::Workspace) 
         .unwrap();
     QueueRequest {
         source: None,
+        replace: false,
         issue_labels: Vec::new(),
         narrowing: Default::default(),
         name: waiting.name.clone(),

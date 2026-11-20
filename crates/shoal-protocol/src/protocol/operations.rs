@@ -311,6 +311,10 @@ pub struct QueuedLaunch<A = crate::agent::Agent> {
     /// its own, while the caller holds it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub here: bool,
+    /// Discard the stopped or asleep agent of the workspace it starts in as
+    /// it queues, so it takes that agent's place.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub replace: bool,
     /// What made the launch, which its agent's start records.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<crate::launches::LaunchSource>,
@@ -331,6 +335,7 @@ impl<A> QueuedLaunch<A> {
             env: None,
             now: false,
             here: false,
+            replace: false,
             source: None,
         }
     }
@@ -359,6 +364,7 @@ impl<A> QueuedLaunch<A> {
             env,
             now,
             here,
+            replace,
             source,
         } = self;
         QueuedLaunch {
@@ -373,6 +379,7 @@ impl<A> QueuedLaunch<A> {
             env,
             now,
             here,
+            replace,
             source,
         }
     }

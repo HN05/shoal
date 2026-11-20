@@ -145,6 +145,29 @@ async fn replacing_a_stopped_agent_discards_it_and_takes_a_worker() {
     queue_worker(&manager, &workspace).await.unwrap();
 }
 
+/// A start that reopens a workspace, such as on its issue, queues its
+/// agent through the start's request, which replaces as a worker's does.
+#[tokio::test]
+async fn a_start_s_agent_that_replaces_discards_the_stopped_agent() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let workspace = create(&manager, &repo, "reopened").await;
+    let record = stopped_agent(&manager, &workspace);
+    let launch = crate::protocol::operations::QueuedLaunch {
+        replace: true,
+        ..crate::protocol::operations::QueuedLaunch::new("claude".parse().unwrap())
+    };
+    let space = space_of(&manager, &workspace).await;
+
+    let admission = manager
+        .queue_start_agent((&space, false), launch, (None, Vec::new()))
+        .await
+        .unwrap();
+
+    assert!(admission.entry.is_some());
+    assert!(!record.exists(), "the stopped agent's record stayed");
+}
+
 #[tokio::test]
 async fn replacing_refuses_a_running_agent() {
     let (temp, manager) = manager().await;

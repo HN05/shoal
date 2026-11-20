@@ -592,6 +592,7 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
     // The child's agent holds a slot, which the parent's scope reaches.
     let request = shoal_protocol::model::QueueRequest {
         source: None,
+        replace: false,
         issue_labels: Vec::new(),
         narrowing: Default::default(),
         mode: None,

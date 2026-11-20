@@ -269,6 +269,7 @@ pub(super) fn agent_request(
         env: launch.env.clone(),
         now: launch.now,
         here: launch.here,
+        replace: launch.replace,
         source: Some(source),
         ..LaunchRequest::new(launch.agent.clone())
     }
