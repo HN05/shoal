@@ -267,6 +267,10 @@ fn sample_memory(settings: &Overload, work: Option<load::WorkLimit>) -> (MemoryS
         return (MemoryState::Healthy, Some(u64::MAX));
     }
     match load::memory(&settings.memory_levels(), work) {
+        // Work that could not be read admits nothing, as a failed probe.
+        Ok(reading) if reading.work == Some(load::WorkMemory::Unread) => {
+            (MemoryState::Unavailable, None)
+        }
         Ok(reading) => (
             memory_state(reading.pressure),
             Some(reading_room(&reading, settings)),
@@ -291,7 +295,11 @@ fn memory_state(pressure: load::MemoryPressure) -> MemoryState {
 /// machine's memory, and the work's under its limit, leave below the
 /// warning threshold.
 fn reading_room(reading: &load::MemoryReading, settings: &Overload) -> u64 {
-    (std::iter::once(reading.memory).chain(reading.work))
+    let work = match reading.work {
+        Some(load::WorkMemory::Read(work)) => Some(work),
+        Some(load::WorkMemory::Unread) | None => None,
+    };
+    (std::iter::once(reading.memory).chain(work))
         .map(|memory| memory_room(memory, settings))
         .min()
         .expect("a reading has the machine's memory")

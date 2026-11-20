@@ -354,7 +354,21 @@ fn work_under_a_limit_has_the_room_its_limit_leaves() {
         available: gib(4),
     };
     assert_eq!(
-        reading_room(&reading(Some(work)), &settings),
+        reading_room(&reading(Some(load::WorkMemory::Read(work))), &settings),
         gib(10) * warning / 100 - gib(6)
+    );
+}
+
+#[test]
+fn unread_work_admits_nothing() {
+    let settings = Overload::default();
+    // A test build reads no slice, so without a sample the work is unread.
+    let unsampled = load::WorkLimit {
+        limit: 1 << 30,
+        sampled: None,
+    };
+    assert_eq!(
+        sample_memory(&settings, Some(unsampled)),
+        (MemoryState::Unavailable, None)
     );
 }

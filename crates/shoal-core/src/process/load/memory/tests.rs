@@ -149,8 +149,16 @@ fn work_past_its_limit_presses_however_calm_the_machine() {
         outside_slice: 2000,
     };
     let reading = memory(&LEVELS, Some(work(Some(sampled)))).unwrap();
-    assert_eq!(reading.work.map(|work| work.available), Some(0));
+    let Some(WorkMemory::Read(used)) = reading.work else {
+        panic!("{reading:?}");
+    };
+    assert_eq!(used.available, 0);
     assert!(reading.pressure.critical && reading.pressure.warning && !reading.pressure.safe);
-    // Without a sample there is no reading to admit work on.
-    assert!(memory(&LEVELS, Some(work(None))).is_err());
+    // Without a sample the work is unread, and nothing is safe to recover
+    // on, but the machine's own pressure stands.
+    let unread = memory(&LEVELS, Some(work(None))).unwrap();
+    let machine = memory(&LEVELS, None).unwrap();
+    assert_eq!(unread.work, Some(WorkMemory::Unread));
+    assert!(!unread.pressure.safe);
+    assert_eq!(unread.pressure.critical, machine.pressure.critical);
 }

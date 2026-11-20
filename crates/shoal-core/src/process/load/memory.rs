@@ -70,26 +70,44 @@ impl MemoryPressure {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MemoryReading {
     pub memory: Memory,
-    /// The limit as `total` and what Shoal's work leaves of it; none
-    /// without a limit.
-    pub work: Option<Memory>,
+    /// Shoal's work against the user's limit; none without a limit.
+    pub work: Option<WorkMemory>,
     /// The machine's and the work's together.
     pub pressure: MemoryPressure,
 }
 
+/// Shoal's work's memory against the user's limit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkMemory {
+    /// The limit as `total` and what the work leaves of it.
+    Read(Memory),
+    /// The work could not be read, as without a current usage sample.
+    Unread,
+}
+
 /// Read the machine's memory and its pressure, and with `work` Shoal's
 /// work's against its limit, which counts as the machine's own: pressure is
-/// past a level where either is.
+/// past a level where either is. Work that cannot be read leaves the
+/// machine's pressure to act on, but nothing safe to recover on.
 pub fn memory(levels: &MemoryLevels, work: Option<WorkLimit>) -> Result<MemoryReading> {
     let machine = machine(levels)?;
     let Some(work) = work else {
         return Ok(machine);
     };
-    let (used, stall) = work.read()?;
-    Ok(MemoryReading {
-        work: Some(used),
-        pressure: machine.pressure.or(pressure(used, stall, levels)),
-        ..machine
+    Ok(match work.read() {
+        Ok((used, stall)) => MemoryReading {
+            work: Some(WorkMemory::Read(used)),
+            pressure: machine.pressure.or(pressure(used, stall, levels)),
+            ..machine
+        },
+        Err(_) => MemoryReading {
+            work: Some(WorkMemory::Unread),
+            pressure: MemoryPressure {
+                safe: false,
+                ..machine.pressure
+            },
+            ..machine
+        },
     })
 }
 
