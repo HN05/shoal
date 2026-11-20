@@ -175,6 +175,20 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             machine,
             report,
         } => sessions::attach_for_viewer(&ctx, space, viewer, machine, report).await,
+        InternalCommand::ShowDemo {
+            name,
+            place,
+            machine,
+            app,
+        } => {
+            let viewer = crate::terminal::Elsewhere {
+                machine: &machine,
+                app: app.as_deref(),
+            };
+            let name = format!("demo {name}");
+            crate::terminal::show_place_elsewhere(&place, &name, &viewer).await?;
+            Ok(0)
+        }
         InternalCommand::Session {
             space,
             agent,

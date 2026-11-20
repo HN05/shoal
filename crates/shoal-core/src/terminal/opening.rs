@@ -1,11 +1,12 @@
 //! Opening places for Shoal's work: a restore of a workspace's agent, or
-//! any Shoal command, with the variables a command in a new place needs, and
-//! running a command in an idle place an agent stopped in.
+//! any Shoal command, with the variables a command in a new place needs,
+//! running a command in an idle place an agent stopped in, and showing a
+//! place to a user on another machine.
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result};
 
-use super::{Beside, Configured, Host, Places, Start, current_origin};
+use super::{Beside, Configured, Elsewhere, Host, Places, Start, current_origin, named};
 use crate::{env, paths::Paths, sessions::Origin};
 
 /// Show `place`, which `host` opened focused, in this terminal when the
@@ -20,6 +21,23 @@ pub async fn show_opened(
         return Ok(());
     }
     places.show(place, name).await
+}
+
+/// Bring `place`, one a host opened, called `name`, before `viewer`, a user
+/// on another machine whose terminal is the one Shoal made here for this
+/// process, as its host shows a place there.
+pub async fn show_place_elsewhere(
+    place: &Origin,
+    name: &str,
+    viewer: &Elsewhere<'_>,
+) -> Result<()> {
+    let places = named(place.host).places().with_context(|| {
+        format!(
+            "{name} runs in {} on machine {}, which shows no places elsewhere; open it there",
+            place.host, viewer.machine
+        )
+    })?;
+    places.show_elsewhere(place, name, viewer).await
 }
 
 /// The variables a command in a new place needs from this process: its

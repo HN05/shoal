@@ -236,6 +236,21 @@ pub enum InternalCommand {
         #[arg(long)]
         report: i32,
     },
+    /// Show a demo on this terminal, which a user on another machine views,
+    /// as its host shows a place there; the daemon runs it.
+    #[command(name = workers::SHOW_DEMO)]
+    ShowDemo {
+        name: String,
+        /// The place the demo runs in, as JSON.
+        #[arg(long, value_parser = place)]
+        place: crate::sessions::Origin,
+        /// This machine's name.
+        #[arg(long)]
+        machine: String,
+        /// The label the user's app for the place's host reports.
+        #[arg(long)]
+        app: Option<String>,
+    },
     /// Start an admitted agent queue entry; the daemon runs it.
     #[command(name = workers::QUEUE_START)]
     QueueStart {
@@ -332,6 +347,11 @@ fn agent(name: &str) -> Result<crate::agent::Agent, String> {
 
 /// The viewer an attach for another machine receives as JSON.
 fn viewer(json: &str) -> Result<shoal_protocol::attaching::Viewer, String> {
+    serde_json::from_str(json).map_err(|error| error.to_string())
+}
+
+/// The place a demo shown to another machine runs in, received as JSON.
+fn place(json: &str) -> Result<crate::sessions::Origin, String> {
     serde_json::from_str(json).map_err(|error| error.to_string())
 }
 

@@ -40,6 +40,7 @@ pub const APPROVAL_DECIDE: &str = "approval-decide";
 pub const PROXY_REPORT: &str = "proxy-report";
 pub const TAKE_OVER: &str = "take-over";
 pub const ATTACH: &str = "attach";
+pub const SHOW_DEMO: &str = "show-demo";
 
 /// An approval decision the picker's decision worker makes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -170,6 +171,17 @@ pub enum Worker<'a> {
         viewer: &'a str,
         machine: &'a str,
         report: i32,
+    },
+    /// Show the demo `name`, which runs in `place`, the JSON of its
+    /// [`Origin`](shoal_protocol::sessions::Origin), on the terminal this
+    /// runs on, which a user on another machine views, as its host shows a
+    /// place to another machine, where that user's app for the host, if
+    /// any, reports `app`; `machine` names this machine.
+    ShowDemo {
+        name: &'a str,
+        place: &'a str,
+        machine: &'a str,
+        app: Option<&'a str>,
     },
     /// Continue an agent's wrapper whose binary an upgrade replaced: resume
     /// the agent of `workspace` from `record` over the daemon connection
@@ -442,6 +454,24 @@ pub(crate) fn internal_command_for(
             "--report".into(),
             report.to_string().into(),
         ]),
+        Worker::ShowDemo {
+            name,
+            place,
+            machine,
+            app,
+        } => {
+            args.extend([
+                SHOW_DEMO.into(),
+                name.into(),
+                "--place".into(),
+                place.into(),
+                "--machine".into(),
+                machine.into(),
+            ]);
+            if let Some(app) = app {
+                args.extend(["--app".into(), app.into()]);
+            }
+        }
         Worker::ApprovalDecide { decision } => {
             let decision = match decision {
                 Decision::Approve => "approve",
