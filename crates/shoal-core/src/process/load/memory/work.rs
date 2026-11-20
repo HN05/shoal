@@ -37,17 +37,17 @@ impl WorkLimit {
 
     /// The bytes work uses, and its stall, beside `slice`, the work slice's
     /// reading where it exists: what the slice holds with what the sample
-    /// counts outside it, otherwise all the sample counts.
+    /// counts outside it, otherwise all the sample counts. Without a current
+    /// sample there is no reading, since work outside the slice may hold
+    /// any amount.
     fn used(self, slice: Option<Slice>) -> Result<(u64, Option<Stall>)> {
+        let sampled = self.sampled.context("no usage sample of Shoal's work")?;
         Ok(match slice {
-            Some(slice) => {
-                let outside = self.sampled.map_or(0, |sampled| sampled.outside_slice);
-                (slice.used.saturating_add(outside), slice.stall)
-            }
-            None => {
-                let sampled = self.sampled.context("no usage sample of Shoal's work")?;
-                (sampled.all, None)
-            }
+            Some(slice) => (
+                slice.used.saturating_add(sampled.outside_slice),
+                slice.stall,
+            ),
+            None => (sampled.all, None),
         })
     }
 
@@ -61,6 +61,7 @@ impl WorkLimit {
 }
 
 /// What the work slice holds, and how long its tasks stall.
+#[derive(Clone, Copy)]
 struct Slice {
     used: u64,
     stall: Option<Stall>,

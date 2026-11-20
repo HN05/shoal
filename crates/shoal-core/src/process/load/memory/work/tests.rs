@@ -30,9 +30,11 @@ fn work_outside_the_slice_counts_beside_it() {
     assert_eq!(work.used(Some(slice)).unwrap().0, 900);
     // Before the slice exists, the sample counts all of it.
     assert_eq!(work.used(None).unwrap().0, 700);
+    // Without a current sample, no reading admits work, slice or not.
     let unsampled = WorkLimit {
         sampled: None,
         ..work
     };
+    assert!(unsampled.used(Some(slice)).is_err());
     assert!(unsampled.used(None).is_err());
 }
