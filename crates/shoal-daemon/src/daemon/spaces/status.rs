@@ -47,8 +47,8 @@ impl Manager {
         let (space, origin) = self.space_detail(space).await?;
         let (prs, issue_states) = self.linked_states(&origin, &records).await;
         let attention = self.attention(&space).await?;
-        let jobs = self.linked_job_workspaces(space.id()).await?;
-        let waiting_jobs = self.linked_waiting_jobs(space.id()).await?;
+        let jobs = self.runner.linked_job_workspaces(self, space.id()).await?;
+        let waiting_jobs = self.runner.linked_waiting_jobs(self, space.id()).await?;
         let (turn_retry, proxy_retry) = self.agent_retries(space.id()).await?;
         Ok(SpaceStatus {
             space,

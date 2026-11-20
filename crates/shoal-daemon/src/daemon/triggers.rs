@@ -17,7 +17,7 @@ use shoal_runner::daemon::{Agents, Permissions, Repositories};
 use super::{manager::Manager, permissions::Action, scope::Caller};
 use crate::{
     config::{Config, Effective, repo::ConfigLayers},
-    model::Repository,
+    model::{QueueEntry, Repository},
     protocol::{ConfigTarget, ItemContext},
     state::QueueState,
 };
@@ -67,6 +67,10 @@ impl Repositories for Manager {
 }
 
 impl Agents for Manager {
+    fn queue_entries(&self) -> BoxFuture<'_, Result<Vec<QueueEntry>>> {
+        Box::pin(Manager::queue_entries(self))
+    }
+
     fn live_queue_entries(&self) -> BoxFuture<'_, Result<HashSet<QueueEntryId>>> {
         Box::pin(async move {
             let entries = self.queue_entries().await?;

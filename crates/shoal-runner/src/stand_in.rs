@@ -33,7 +33,7 @@ use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, spa
 use shoal_protocol::{
     config::permissions::PermissionKey,
     launches::{Launch, LaunchSource},
-    model::{QueuedJob, Repository, Space, WorkspaceUsage},
+    model::{QueueEntry, QueuedJob, Repository, Space, Workspace, WorkspaceUsage},
     notifications::NotificationKind,
     protocol::ItemContext,
     space_names::SpaceName,
@@ -306,6 +306,11 @@ impl Repositories for StandIn {
 }
 
 impl Agents for StandIn {
+    /// The stand-in's queue lists no entries.
+    fn queue_entries(&self) -> BoxFuture<'_, Result<Vec<QueueEntry>>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
     fn live_queue_entries(&self) -> BoxFuture<'_, Result<HashSet<QueueEntryId>>> {
         let queue = self.queue.lock().unwrap().clone();
         Box::pin(async move { Ok(queue) })
@@ -387,6 +392,10 @@ impl Spaces for StandIn {
     /// No workspace has a usage sample.
     fn workspace_usage(&self, _: &SpaceId) -> Option<WorkspaceUsage> {
         None
+    }
+
+    fn workspace_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Workspace>> {
+        Box::pin(async move { anyhow::bail!("no workspace {id}") })
     }
 }
 

@@ -786,7 +786,11 @@ async fn a_jobs_workspace_names_its_job_and_lists_with_its_branchs_workspace() {
         job.path.display()
     );
     assert_eq!(named.space_ids, std::slice::from_ref(&topic.id));
-    let linked = manager.linked_job_workspaces(&topic.id).await.unwrap();
+    let linked = manager
+        .runner
+        .linked_job_workspaces(&**manager, &topic.id)
+        .await
+        .unwrap();
     assert_eq!(linked.len(), 1);
     assert_eq!(linked[0].id, claimed[0].workspace_id);
 }
@@ -807,7 +811,11 @@ async fn a_waiting_job_lists_with_its_branchs_workspace_and_what_holds_it() {
     admit_and_claim(manager).await;
     manager.dispatch_queue().await.unwrap();
 
-    let waiting = manager.linked_waiting_jobs(&topic.id).await.unwrap();
+    let waiting = manager
+        .runner
+        .linked_waiting_jobs(&**manager, &topic.id)
+        .await
+        .unwrap();
     assert_eq!(waiting.len(), 1);
     assert_eq!(waiting[0].job.as_ref().unwrap().job.name, "rust");
     assert_eq!(waiting[0].held_by, Some(crate::model::HeldBy::Permits));
@@ -919,7 +927,11 @@ async fn every_space_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
     // Unlinked, the chat lists it no more, and the workspace still does.
     watch_pull(manager, &chat.id, None).await;
     assert!(chat_status().await.jobs.is_empty());
-    let linked = manager.linked_job_workspaces(&pull.id).await.unwrap();
+    let linked = manager
+        .runner
+        .linked_job_workspaces(&**manager, &pull.id)
+        .await
+        .unwrap();
     assert_eq!(linked.len(), 1);
 }
 

@@ -52,7 +52,7 @@ impl Manager {
         let mut spaces = self.visible_spaces(caller).await?;
         self.load_usage(&mut spaces);
         self.load_coordinator_states(&mut spaces).await?;
-        self.attach_jobs(&mut spaces).await?;
+        self.runner.attach_jobs(self, &mut spaces).await?;
         Ok(spaces)
     }
 

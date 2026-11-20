@@ -18,7 +18,7 @@ use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, spa
 use shoal_protocol::{
     config::permissions::PermissionKey,
     launches::{Launch, LaunchSource},
-    model::{QueuedJob, Repository, Space, WorkspaceUsage},
+    model::{QueueEntry, QueuedJob, Repository, Space, Workspace, WorkspaceUsage},
     protocol::ItemContext,
     space_names::SpaceName,
 };
@@ -63,6 +63,9 @@ pub trait Repositories: Send + Sync {
 
 /// The agents a trigger's launch starts, and those it waits for.
 pub trait Agents: Send + Sync {
+    /// The agent queue's entries, as the user sees them.
+    fn queue_entries(&self) -> BoxFuture<'_, Result<Vec<QueueEntry>>>;
+
     /// The agent queue's entries that wait or start, not those that failed.
     fn live_queue_entries(&self) -> BoxFuture<'_, Result<HashSet<QueueEntryId>>>;
 
@@ -124,6 +127,9 @@ pub trait Spaces: Send + Sync {
 
     /// What the workspace `id` used at its latest usage sample.
     fn workspace_usage(&self, id: &SpaceId) -> Option<WorkspaceUsage>;
+
+    /// The workspace `id`.
+    fn workspace_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Workspace>>;
 }
 
 /// Everything the triggers and the runner need of the daemon, which each of

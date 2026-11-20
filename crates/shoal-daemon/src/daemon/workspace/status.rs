@@ -43,7 +43,7 @@ impl Manager {
             .run(move |db| store::setup_finished(db, &workspace_id))
             .await?;
         workspace.usage = self.workspace_usage(&workspace.id);
-        workspace.job = self.workspace_job(&workspace.id).await?;
+        workspace.job = self.runner.workspace_job(self, &workspace.id).await?;
         simulators.retain(|simulator| simulator.workspace_id.as_ref() == Some(&workspace.id));
         let containers = self.leases.container_project(&workspace.id).await?;
         let (leftover_count, leftovers) = self.leftovers.of(&workspace.id);

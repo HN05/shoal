@@ -16,6 +16,7 @@ use crate::Runner;
 mod claimed;
 mod costs;
 mod linked;
+mod listing;
 mod queue;
 mod registration;
 mod superseded;

@@ -12,7 +12,6 @@
 //! [`INTERVAL`] while none can.
 mod claims;
 mod ends;
-mod listing;
 mod overrun;
 mod single_use;
 mod taken;
@@ -38,7 +37,7 @@ use tokio::time::Instant;
 use crate::{
     daemon::{log, manager::Manager},
     forge::{ForgeRepo, items::reference::ItemRef},
-    model::{QueuedJob, Repository, Space, WorkspaceUsage},
+    model::{QueuedJob, Repository, Space, Workspace, WorkspaceUsage},
     state::{QueueKind, QueueState},
 };
 
@@ -249,6 +248,10 @@ impl Spaces for Manager {
 
     fn workspace_usage(&self, id: &SpaceId) -> Option<WorkspaceUsage> {
         Manager::workspace_usage(self, id)
+    }
+
+    fn workspace_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Workspace>> {
+        Box::pin(Manager::workspace_by_id(self, id))
     }
 }
 
