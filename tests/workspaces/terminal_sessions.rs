@@ -140,11 +140,14 @@ fn assert_failed_labelling_refuses_launches(
         .repo
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("repository path"))?;
+    // A start in a workspace with a stopped agent would ask about it first,
+    // so the worker's start goes into one without.
+    fixture.add("fresh-owner");
     for args in [
         vec![
             "start",
             "--in",
-            &fixture.id("new-owner"),
+            &fixture.id("fresh-owner"),
             "--here",
             "--agent",
             "claude",
