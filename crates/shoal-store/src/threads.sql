@@ -68,9 +68,26 @@ CREATE TABLE thread_links (
     PRIMARY KEY(space_id, thread_id)
 );
 
+-- A question went to its coordinator: the nearest space above with an
+-- agent, a chat or a workspace with an agent's execution recorded, else
+-- to the user.
+CREATE TEMP TABLE question_holders AS
+    WITH RECURSIVE above(question, space_id, depth) AS (
+        SELECT q.id, p.parent_id, 1 FROM questions q JOIN space_parents p ON p.space_id=q.space_id
+        UNION ALL
+        SELECT a.question, p.parent_id, a.depth+1
+            FROM above a JOIN space_parents p ON p.space_id=a.space_id)
+    SELECT question, space_id FROM (
+        SELECT question, space_id,
+            ROW_NUMBER() OVER (PARTITION BY question ORDER BY depth) AS nearest
+        FROM above
+        WHERE EXISTS (SELECT 1 FROM spaces WHERE id=above.space_id AND kind='chat')
+            OR EXISTS (SELECT 1 FROM executions
+                WHERE space_id=above.space_id AND agent IS NOT NULL))
+    WHERE nearest=1;
+
 -- Each question becomes a question thread under its ID and number, opened
--- by its space and held by its parent, which coordinated it, else the
--- user. Its first post keeps what it asked, and an answer not yet
+-- by its space and held by its coordinator. Its first post keeps what it asked, and an answer not yet
 -- delivered follows as the user's post, its alert still carrying it; a
 -- closed question is closed by its space's completion, a withdrawn one
 -- withdrawn by its space.
@@ -78,7 +95,7 @@ INSERT INTO threads(id,space_id,space_number,number,kind,name,created_at,opener,
         outcome,resolved_by,resolver_id,resolved_at)
     SELECT q.id,q.space_id,q.space_number,q.number,'question',
         CASE WHEN q.in_chat THEN 'Asked in the chat' ELSE q.question END,
-        q.created_at,'space',(SELECT parent_id FROM space_parents WHERE space_id=q.space_id),
+        q.created_at,'space',(SELECT space_id FROM question_holders WHERE question=q.id),
         CASE WHEN q.answer IS NOT NULL OR q.closed_at IS NULL THEN NULL
             WHEN q.withdrawn THEN json_object('outcome','withdrawn')
             ELSE json_object('outcome','closed','cause','completion') END,
@@ -102,6 +119,7 @@ DELETE FROM sqlite_sequence WHERE name='threads';
 INSERT INTO sqlite_sequence(name,seq)
     SELECT 'threads', MAX(COALESCE((SELECT seq FROM sqlite_sequence WHERE name='questions'), 0),
         COALESCE((SELECT MAX(id) FROM threads), 0));
+DROP TABLE question_holders;
 DROP TRIGGER question_asked;
 DROP TRIGGER question_answered;
 DROP TABLE questions;

@@ -3937,6 +3937,15 @@ fn questions_become_threads_with_their_posts_and_resolutions() -> Result<()> {
          INSERT INTO spaces(id,kind,repository_id,name,number)
              VALUES ('chat','chat','repo','helper',2);
          INSERT INTO space_parents(space_id,parent_id) VALUES ('chat','workspace');
+         INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
+             VALUES ('plain','/plain','plain','ready','abc','/admin');
+         INSERT INTO spaces(id,kind,repository_id,name,number)
+             VALUES ('plain','workspace','repo','plain',3);
+         INSERT INTO space_parents(space_id,parent_id) VALUES ('plain','workspace');
+         INSERT INTO chats(id) VALUES ('leaf');
+         INSERT INTO spaces(id,kind,repository_id,name,number)
+             VALUES ('leaf','chat','repo','leaf',4);
+         INSERT INTO space_parents(space_id,parent_id) VALUES ('leaf','plain');
          COMMIT;
          INSERT INTO alerts(id,created_at,kind,sender,recipient_id,message)
              VALUES (5,1,'question_answered','user','chat','Answer to question 2.2: B'),
@@ -3950,7 +3959,8 @@ fn questions_become_threads_with_their_posts_and_resolutions() -> Result<()> {
                  (3,'chat',2,3,3,'Which queue?','SQS',NULL,'[]',NULL,NULL,NULL,4,0,0,'[]'),
                  (4,'workspace',1,1,4,'Which port?','80',NULL,'[]',NULL,NULL,NULL,5,1,0,'[]'),
                  (5,'workspace',1,2,5,'Long
-question','',NULL,'[]',NULL,NULL,NULL,NULL,0,1,'[]');
+question','',NULL,'[]',NULL,NULL,NULL,NULL,0,1,'[]'),
+                 (6,'leaf',4,1,6,'Which index?','B-tree',NULL,'[]',NULL,NULL,NULL,NULL,0,0,'[]');
          INSERT INTO space_files(id,space_id,space,source,name,path,bytes,created_at)
              VALUES (7,'chat','helper','question','a.png','/repo/.attachments/a.png',1,1);
          INSERT INTO executions(id,space_id,state,agent,asks_in_chat)
@@ -3992,8 +4002,9 @@ question','',NULL,'[]',NULL,NULL,NULL,NULL,0,1,'[]');
         })?
         .collect::<rusqlite::Result<_>>()?;
     let some = |text: &str| Some(text.to_owned());
-    // Each keeps its ID and number; its parent holds the chat's, and the
-    // user the top-level workspace's.
+    // Each keeps its ID and number, held by its coordinator: the chat's and
+    // the leaf's by the workspace with an agent above them, past the leaf's
+    // agentless parent, and the top-level workspace's by the user.
     assert_eq!(
         threads,
         [
@@ -4023,6 +4034,7 @@ question','',NULL,'[]',NULL,NULL,NULL,NULL,0,1,'[]');
                 some("space")
             ),
             (5, 2, "Asked in the chat".into(), None, None, None),
+            (6, 1, "Which index?".into(), some("workspace"), None, None),
         ]
     );
     type Post = (
@@ -4121,6 +4133,6 @@ question','',NULL,'[]',NULL,NULL,NULL,NULL,0,1,'[]');
             VALUES ('chat',4,'question','Next?',6,'space')",
         [],
     )?;
-    assert_eq!(db.last_insert_rowid(), 6);
+    assert_eq!(db.last_insert_rowid(), 7);
     Ok(())
 }
