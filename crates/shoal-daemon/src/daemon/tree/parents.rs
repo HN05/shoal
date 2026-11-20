@@ -1,6 +1,6 @@
 //! Giving a workspace the space it is opened below: the chat or workspace
 //! whose agent opened it, or the user when one opened it outside any.
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Result, ensure};
 use rusqlite::params;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -150,15 +150,9 @@ impl Manager {
         &self,
         selector: Option<&SpaceSelector>,
     ) -> Result<Option<SpaceId>> {
-        let Some(selector) = selector else {
-            return Ok(None);
-        };
-        match self.space(selector).await {
-            Ok(space) => Ok(Some(space.id)),
-            Err(error) => match self.hub.machine_of(self, selector).await {
-                Ok(Some((_, listed))) => Ok(Some(listed.space.id)),
-                _ => Err(error),
-            },
+        match selector {
+            Some(selector) => Ok(Some(self.space_id_anywhere(selector).await?)),
+            None => Ok(None),
         }
     }
 
@@ -170,7 +164,7 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
     ) -> Result<SpaceRepository> {
-        let id = (self.parent_space_id(Some(selector)).await?).context("a parent names a space")?;
+        let id = self.space_id_anywhere(selector).await?;
         match self.find_space(&id).await? {
             Some(space) => Ok(match space.repository_id {
                 Some(repository) => SpaceRepository::Registered(repository),

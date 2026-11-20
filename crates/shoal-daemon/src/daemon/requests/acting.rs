@@ -2,7 +2,6 @@
 //! as its own space, and the user as the space a request names as `from`,
 //! as a session in it that Shoal did not start does, or else as the user.
 use anyhow::Result;
-use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 use super::super::{manager::Manager, scope::Caller};
@@ -21,19 +20,8 @@ pub(super) async fn acting(
     let Some(from) = from else {
         return Ok(None);
     };
-    Ok(Some(Caller::of_space(acting_space(manager, &from).await?)))
-}
-
-/// The ID of the space `from` names: one of this machine's, or else one the
-/// hub lists on another machine, as the chat of a request that machine
-/// forwarded here, which only it has.
-async fn acting_space(manager: &Manager, from: &SpaceSelector) -> Result<SpaceId> {
-    let missing = match manager.space(from).await {
-        Ok(space) => return Ok(space.id),
-        Err(missing) => missing,
-    };
-    match manager.hub.machine_of(manager, from).await {
-        Ok(Some((_, listed))) => Ok(listed.space.id),
-        _ => Err(missing),
-    }
+    // One the hub lists on another machine, as the chat of a request that
+    // machine forwarded here, which only it has.
+    let id = manager.space_id_anywhere(&from).await?;
+    Ok(Some(Caller::of_space(id)))
 }

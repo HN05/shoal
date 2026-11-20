@@ -76,6 +76,20 @@ impl Manager {
         })
     }
 
+    /// The ID of the space `selector` names: one here, else one another
+    /// joined machine runs, as the hub lists it. One neither has is refused
+    /// as this machine refuses it, naming it as absent.
+    pub(crate) async fn space_id_anywhere(&self, selector: &SpaceSelector) -> Result<SpaceId> {
+        let missing = match self.space(selector).await {
+            Ok(space) => return Ok(space.id),
+            Err(missing) => missing,
+        };
+        match self.hub.machine_of(self, selector).await {
+            Ok(Some((_, listed))) => Ok(listed.space.id),
+            _ => Err(missing),
+        }
+    }
+
     /// The workspace or chat, running or stopped, with the ID `id`.
     pub(crate) async fn space_by_id(&self, id: &SpaceId) -> Result<Space> {
         match self.find_space(id).await? {

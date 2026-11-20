@@ -30,21 +30,24 @@ impl Manager {
         parent: &mut Option<SpaceSelector>,
     ) -> Result<()> {
         let id = match parent.as_ref() {
-            Some(named) => self.reached_parent(caller, named).await?,
+            Some(named) => self.reached_space(caller, named).await?,
             None => caller.space_id.clone(),
         };
         *parent = Some(SpaceSelector::id(&id));
         Ok(())
     }
 
-    /// The ID of the space `named`, which `caller`'s scope must reach, as
-    /// the parent of a space it starts: one here, or one another joined
-    /// machine runs, as the hub lists the tree.
-    async fn reached_parent(&self, caller: &Caller, named: &SpaceSelector) -> Result<SpaceId> {
+    /// The ID of the space `named`, which `caller`'s scope must reach: one
+    /// here, or one another joined machine runs, as the hub lists the tree.
+    pub(in crate::daemon) async fn reached_space(
+        &self,
+        caller: &Caller,
+        named: &SpaceSelector,
+    ) -> Result<SpaceId> {
         if self.hub.names_vouched_own(caller, named) {
             return Ok(caller.space_id.clone());
         }
-        let id = (self.parent_space_id(Some(named)).await?).context("a parent names a space")?;
+        let id = self.space_id_anywhere(named).await?;
         match self.find_space(&id).await? {
             Some(space) => self.ensure_reaches(caller, &space).await?,
             None => ensure!(
