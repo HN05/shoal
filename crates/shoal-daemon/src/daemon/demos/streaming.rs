@@ -49,7 +49,8 @@ enum Shown {
 impl Manager {
     /// Connect to the running demo `name` of the workspace `selector`
     /// names, a terminal demo on a terminal made like `terminal`; refused
-    /// for a demo of a kind Shoal does not stream.
+    /// for a demo that takes no connection, such as a simulator demo whose
+    /// viewer is off.
     pub(crate) async fn open_demo(
         &self,
         selector: &SpaceSelector,
@@ -77,7 +78,7 @@ impl Manager {
 
     /// Connect to the port `demo` serves on, a simulator demo's viewer's,
     /// which this starts and records in `demo`; refused for a demo that
-    /// serves on none.
+    /// serves on none, such as a terminal demo or one whose `PORT` is gone.
     async fn connect_demo(&self, demo: &mut Running, caller: Option<&Caller>) -> Result<TcpStream> {
         let name = &demo.launch.name;
         let port = match demo.kind {
@@ -90,10 +91,7 @@ impl Manager {
             Kind::Terminal => None,
         };
         let Some(port) = port else {
-            let message = format!(
-                "demo {name} is a {} demo, which Shoal does not stream; open it on its own machine",
-                demo.kind
-            );
+            let message = format!("demo {name} serves on no port");
             return Err(Refusal::new(Reason::NotReady, message).into());
         };
         connect(port)

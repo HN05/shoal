@@ -49,8 +49,9 @@ pub struct DemoStream {
 
 /// Open a stream to `workspace`'s running demo `name`, on whichever
 /// machine it runs. Fails at once when the daemon refuses, as for a demo
-/// outside the caller's scope, one Shoal does not stream, or one on a
-/// machine that is offline.
+/// outside the caller's scope, one that takes no connection, such as a
+/// simulator demo whose viewer is off, or one on a machine that is
+/// offline.
 pub async fn open_stream(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
