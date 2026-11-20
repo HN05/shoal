@@ -481,12 +481,10 @@ workspace when its agent can resume, otherwise a picker of the spaces whose
 agent can resume, the workspaces, saying what each would resume, then the chats,
 unfinished work first; without a terminal, or with `--json`, it lists them
 instead, each led by the number that selects it.
-A named workspace whose setup failed, or never started, retries its setup as
-`shoal setup` does, creating its worktree first when that failed too, after which the agent waiting for it in the queue starts
-as a restored agent would: as the queue admits it, at once with `--now`, or in
-this terminal with `--focus`, under the permissions `--permission` changes.
-Such workspaces restore together with the other spaces named, every one of
-which is checked before any setup runs.
+A named workspace whose setup failed, or never started, is refused before
+anything resumes, naming `shoal setup <space>`, which retries the setup,
+creating the worktree first when that failed too, after which the agent
+waiting for it in the queue starts as the queue admits it.
 A named space whose agent's launch [failed to start](#agent-queue), a
 workspace or a chat, queues that launch again exactly as it was, with its
 task, prompt and permissions, as the queue admits it, or at once with `--now`.
@@ -2563,7 +2561,7 @@ waits. Until its worktree exists, commands that read it refuse
 the workspace, and `shoal rm` removes only its record and leases. A
 workspace created at once, by `shoal create`, `convert`, a restore, a copy or
 `adopt --copy`, whose worktree fails stays `failed` the same way, and
-`shoal resume <space>` creates it again from what it was made from: a
+`shoal setup <space>` creates it again from what it was made from: a
 restore's checkpoint, or the outside worktree `adopt --copy` copies, which
 the retry names when it is gone, keeping what an earlier try left there in a
 checkpoint before it writes files over it, and refusing, with the directory's
@@ -2572,10 +2570,9 @@ still opens the space with its links and agents and ends naming that retry. A
 preparation that fails, creating the worktree or in setup or the post-setup
 hook, leaves the workspace failed and its agent waiting, and records a
 `preparation_failed` alert, which reaches the agent of the nearest
-space above with one as a message, or else the user, naming what retries
-it, `shoal resume <space>`, which creates the worktree first when it has
-none, or `shoal setup <space>` for a failed post-setup hook, and
-`shoal rm <space>`. `--wait` returns
+space above with one as a message, or else the user, naming
+`shoal setup <space>`, which retries it, creating the worktree first when it
+has none, and `shoal rm <space>`. `--wait` returns
 once the preparation ends, reporting its failure as a start from a terminal
 does. `--now` starts that agent
 regardless of the limits, as does `--focus` for a scoped caller, as its
@@ -2589,8 +2586,8 @@ it creates the worktree while free disk space is below
 `[machine.overload.warning] disk_free_gib`, or unread, with disk protection on,
 and starts once disk space allows. `--wait` returns at once for a preparation
 that waits. `shoal stop` of such a workspace cancels its agent's entry and keeps
-the workspace, whose preparation then waits until `shoal resume` runs it; while
-it waits for work or disk space, `shoal resume` refuses it, and `shoal rm`
+the workspace, whose preparation then waits until `shoal setup` runs it; while
+it waits for work or disk space, `shoal setup` refuses it, and `shoal rm`
 removes it. When the queue admits the agent of an existing workspace whose
 branch holds nothing of its own, the daemon fast-forwards the branch to what it
 builds on, as `shoal refresh` does with what the checkout has of the default
@@ -3461,7 +3458,7 @@ holds creates its copy when it leaves the queue, so it copies the files of that
 moment; `--now` copies them at once, and a checkpoint taken first with `shoal
 checkpoint` keeps the moment for `--checkpoint`. `shoal start` returns before
 the copy is made, by the new workspace's preparation, which checks the
-source's files as it copies them; `shoal resume` retries
+source's files as it copies them; `shoal setup` retries
 one that failed, copying the source's files as they are then.
 
 A copy of current files has its source's ignored files instead of the

@@ -292,7 +292,7 @@ async fn a_failed_preparation_reaches_the_user_with_what_retries_it() {
     let message = &notification.message;
     assert!(message.contains("fatal: no space left"), "{message}");
     assert!(
-        message.contains(&format!("`shoal restore {number}`")),
+        message.contains(&format!("`shoal setup {number}`")),
         "{message}"
     );
 }
@@ -326,7 +326,7 @@ async fn a_split_reports_its_failed_preparation_too() {
         reported_for(&manager, started, Failure::SetupFailed { message }).await;
     let message = &notification.message;
     assert!(
-        message.contains(&format!("`shoal restore {number}`")),
+        message.contains(&format!("`shoal setup {number}`")),
         "{message}"
     );
 }

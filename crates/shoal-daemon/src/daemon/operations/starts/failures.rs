@@ -1,8 +1,7 @@
 //! Telling a start's caller of its failed preparation: the agent of the
 //! nearest space above the new workspace with one, or else the user,
-//! naming what retries the preparation, `shoal setup` for a failed
-//! post-setup hook and `shoal restore` otherwise, and what removes the
-//! workspace.
+//! naming `shoal setup`, which retries the preparation, and what removes
+//! the workspace.
 use std::sync::Arc;
 
 use shoal_ids::space_ids::SpaceId;
@@ -44,13 +43,8 @@ impl Manager {
         let reason = (failure.message().map(str::to_owned))
             .or_else(|| workspace.error.clone())
             .unwrap_or_else(|| format!("{:?}", failure.code()));
-        // A failed hook leaves the workspace ready, which only setup redoes.
-        let retry = match failure {
-            Failure::HookFailed { .. } => "setup",
-            _ => "restore",
-        };
         let message = format!(
-            "The preparation of {name} failed: {reason}; `shoal {retry} {number}` retries it, and `shoal rm {number}` removes the workspace"
+            "The preparation of {name} failed: {reason}; `shoal setup {number}` retries it, and `shoal rm {number}` removes the workspace"
         );
         let about = About::space(name, id);
         let kind = AlertKind::PreparationFailed;

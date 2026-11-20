@@ -7,7 +7,7 @@ use std::fmt::Display;
 use crate::cli::commands::restore::reopen::ReopenedExt;
 use crate::client::output::{
     restore::Reopened,
-    resume::{Queued, SetUp, StartedRestores, StoppedCommands},
+    resume::{Queued, StartedRestores, StoppedCommands},
 };
 use crate::{
     cli::context::Context, execution::recovery::SavedCommand, model::Space, state::QueueState,
@@ -41,11 +41,10 @@ pub(super) fn first(ctx: &Context, first: Queued) -> Result<i32> {
     Ok(if first.failed.is_empty() { 0 } else { 1 })
 }
 
-/// Report the `queued` restores and the workspaces reopened and set up.
+/// Report the `queued` restores and the spaces reopened.
 pub(in crate::cli::commands) fn queued(ctx: &Context, queued: &Queued) -> Result<()> {
     ctx.show(queued, |queued| {
         reopened_lines(ctx, &queued.reopened);
-        set_up(&queued.set_up);
         if let Some(summary) = queued.summary() {
             outln!("{summary}");
         }
@@ -56,22 +55,6 @@ pub(in crate::cli::commands) fn queued(ctx: &Context, queued: &Queued) -> Result
 fn reopened_lines(ctx: &Context, reopened: &[Reopened]) {
     for reopened in reopened {
         outln!("{}", reopened.message(ctx, "Restored"));
-    }
-}
-
-/// List each workspace a restore set up again, with where its waiting agent
-/// is.
-fn set_up(set_up: &[SetUp]) {
-    for done in set_up {
-        let name = &done.workspace.name;
-        match done.launch.as_ref().map(|launch| launch.state) {
-            None => outln!("Set up {name}"),
-            Some(QueueState::Queued) => {
-                outln!("Set up {name}; its agent starts from the agent queue")
-            }
-            Some(QueueState::Starting) => outln!("Set up {name}; starting its agent"),
-            Some(QueueState::Failed) => outln!("Set up {name}; its agent did not start"),
-        }
     }
 }
 
@@ -89,14 +72,12 @@ impl QueuedExt for Queued {
         let Self {
             queued,
             commands,
-            set_up,
             reopened,
             continued,
             failed,
         } = self;
         !(queued.is_empty()
             && commands.is_empty()
-            && set_up.is_empty()
             && reopened.is_empty()
             && continued.is_empty()
             && failed.is_empty())
@@ -127,7 +108,6 @@ pub(super) fn started(
 ) -> Result<()> {
     ctx.show(output, |output| {
         reopened_lines(ctx, &output.reopened);
-        set_up(&output.set_up);
         if !output.queued.is_empty() {
             let starting = (output.queued.iter()).all(|entry| entry.state == QueueState::Starting);
             outln!("{}", summary(output.queued.len(), starting));

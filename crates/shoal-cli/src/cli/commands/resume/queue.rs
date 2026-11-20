@@ -20,11 +20,10 @@ use shoal_protocol::space_names::SpaceSelector;
 
 /// Queue the restores of the stopped agents and last sessions of the
 /// `selected` spaces this process's scope reaches, or of every such space
-/// with any, only `execution`'s when given, restore the `selected` chats in
-/// a background place and retry the selected failed setups, under `change`
-/// when given, with what the restore does `alongside`; the daemon refuses
-/// a space outside the scope before any setup or restore, and starts the
-/// workspaces' agents detached.
+/// with any, only `execution`'s when given, and the selected failed
+/// launches, under `change` when given, with what the resume does
+/// `alongside`; the daemon refuses a space outside the scope before any
+/// restore, and starts the agents detached.
 pub(super) async fn queue_below(
     ctx: &Context,
     selected: Selected,
@@ -43,13 +42,8 @@ pub(super) async fn queue_below(
         }
         None => stopped_in_reach(ctx).await?,
     };
-    let launches = (
-        selected.setups.as_slice(),
-        selected.failed_starts.as_slice(),
-    );
-    permission_change::apply(ctx, &stopped, launches, change).await?;
-    let mut resumed =
-        super::set_up(ctx, &selected, alongside.continue_turns(ctx).await, false).await;
+    permission_change::apply(ctx, &stopped, &selected.failed_starts, change).await?;
+    let mut resumed = alongside.continue_turns(ctx).await;
     super::retry_failed_starts(ctx, &selected, &mut resumed, now).await;
     queue_all(ctx, stopped, resumed, now).await
 }
@@ -186,7 +180,7 @@ pub(super) async fn queue_space(
     if matches!(queuing, Queuing::Daemon { .. }) {
         ensure_daemon_starts(ctx, &stopped).await?;
     }
-    permission_change::apply(ctx, &stopped, (&[], &[]), change).await?;
+    permission_change::apply(ctx, &stopped, &[], change).await?;
     queue_all(ctx, stopped, Queued::default(), now).await
 }
 
@@ -229,7 +223,7 @@ pub(super) async fn ensure_daemon_starts_in(
 /// Queue the restore of every agent and last session `stopped` saves,
 /// starting each at once regardless of the limits when `now`, and report
 /// the commands of workspaces without one, going on after one fails, with
-/// the setups, reopened workspaces, continued turns and failures `resumed`
+/// the reopened spaces, continued turns and failures `resumed`
 /// reports already.
 pub(super) async fn queue_all(
     ctx: &Context,
@@ -242,7 +236,6 @@ pub(super) async fn queue_all(
     failed.append(&mut queued.failed);
     queued.failed = failed;
     queued.queued.splice(0..0, resumed.queued);
-    queued.set_up = resumed.set_up;
     queued.reopened = resumed.reopened;
     queued.continued = resumed.continued;
     reports::queued(ctx, &queued)?;

@@ -3,8 +3,8 @@
 //! agent's restore queues unless asked to start now, an asleep one's starts
 //! as the queue admits it, a turn an interrupt ended continues, a last
 //! session continues and a failed launch queues again; resumes use saved
-//! agent identity and today's restore configuration, and a workspace whose
-//! setup failed retries it before the agent waiting for it starts.
+//! agent identity and today's restore configuration. A workspace whose
+//! setup failed is `shoal setup`'s.
 use crate::client::output::{
     batch::Failure,
     restore::Reopened,
@@ -74,13 +74,13 @@ pub(in crate::cli::commands) async fn reopened(
 /// agent for `--all`, with what the run does `alongside`, continuing the
 /// turns an interrupt ended in the named ones as the rest resumes; `named`
 /// says the command line named them. Restores queue unless `now`, or
-/// `focus`, which resumes one agent in this terminal, and so do the agents
-/// waiting for the failed setups of named workspaces, which retry them
-/// first; a chat's start at once from the queue, which admits them without
-/// a slot. Without a terminal every restore queues, which `now` starts at
-/// once, since this process can start none of them. Every target, and a
-/// change to the permissions given for every selected agent, is checked
-/// before any setup, continued turn or restore.
+/// `focus`, which resumes one agent in this terminal, and so do failed
+/// launches; a chat's start at once from the queue, which admits them
+/// without a slot. Without a terminal every restore queues, which `now`
+/// starts at once, since this process can start none of them. A named
+/// workspace whose setup failed is refused, naming `shoal setup`. Every
+/// target, and a change to the permissions given for every selected agent,
+/// is checked before any continued turn or restore.
 async fn resume(
     ctx: &Context,
     mut selected: Selected,
@@ -89,10 +89,10 @@ async fn resume(
     mut alongside: Alongside,
 ) -> Result<i32> {
     let change = options.change.as_ref();
-    let whole = named && options.execution.is_none();
-    if whole {
-        setups::take_failed(ctx, &mut selected).await?;
+    if named {
+        selected.refuse_failed_setups(ctx).await?;
     }
+    let whole = named && options.execution.is_none();
     // A failed launch resumes whether the command line named its space or a
     // picker chose it.
     if options.execution.is_none() {
@@ -147,7 +147,7 @@ impl Alongside {
 
 /// Refuse `--execution`, which selects an agent of one space, and
 /// `--focus`, which resumes one agent here, unless the `selected` spaces
-/// come to one, or for `--focus` to one failed setup or launch.
+/// come to one, or for `--focus` to one failed launch.
 fn ensure_one_agent(selected: &Selected, options: &Options) -> Result<()> {
     let Some(spaces) = &selected.spaces else {
         return Ok(());
@@ -156,18 +156,16 @@ fn ensure_one_agent(selected: &Selected, options: &Options) -> Result<()> {
         options.execution.is_none() || spaces.len() == 1,
         "--execution selects a stopped execution of one space"
     );
-    let launches = selected.setups.len() + selected.failed_starts.len();
     ensure!(
-        !options.focus || spaces.len() + launches == 1,
+        !options.focus || spaces.len() + selected.failed_starts.len() == 1,
         "--focus resumes the agent of one space"
     );
     Ok(())
 }
 
 /// Resume the agents of the `selected` spaces as `options` says, with what
-/// the run does `alongside`: one space's alone or in this terminal, the
-/// agent waiting for one failed setup or launch in this terminal, or every
-/// one together.
+/// the run does `alongside`: one space's alone or in this terminal, one
+/// failed launch in this terminal, or every one together.
 async fn resume_selected(
     ctx: &Context,
     selected: Selected,
@@ -182,28 +180,22 @@ async fn resume_selected(
     } = options;
     let change = change.as_ref();
     let queuing = Queuing::of(ctx.on_terminal(), now);
-    let setups = selected.setups.as_slice();
     // A space resumes alone only when nothing else, such as a failed
     // launch, resumes with it.
     let alone = alongside.is_empty() && selected.failed_starts.is_empty();
-    match (selected.spaces.as_deref(), setups) {
-        (Some([space]), []) if focus => {
+    match selected.spaces.as_deref() {
+        Some([space]) if focus => {
             let first = reports::first(ctx, alongside.continue_turns(ctx).await)?;
             let code = space::run(ctx, space.clone(), execution, true, change).await?;
             Ok(first.max(code))
         }
-        (Some([space]), []) if alone && queuing == Queuing::Here { now: true } => {
+        Some([space]) if alone && queuing == Queuing::Here { now: true } => {
             space::run(ctx, space.clone(), execution, false, change).await
         }
-        (Some([space]), []) if alone => {
+        Some([space]) if alone => {
             queue::queue_space(ctx, space.clone(), execution, queuing, change).await
         }
-        (Some([]), [setup]) if focus => {
-            let first = reports::first(ctx, alongside.continue_turns(ctx).await)?;
-            let code = setups::retry_here(ctx, setup, change).await?;
-            Ok(first.max(code))
-        }
-        (Some([]), []) if focus && selected.failed_starts.len() == 1 => {
+        Some([]) if focus && selected.failed_starts.len() == 1 => {
             let first = reports::first(ctx, alongside.continue_turns(ctx).await)?;
             let failed = &selected.failed_starts[0];
             let code = failed_starts::retry_here(ctx, failed, change).await?;
@@ -285,9 +277,9 @@ struct Resume<'a> {
 }
 
 /// Resume the `selected` spaces together, reporting them at once with what
-/// the run does `alongside`: retry the failed setups, and queue the
-/// restores of the stopped agents and the agents waiting for those setups,
-/// making `change` when given, and start them as `queuing` says.
+/// the run does `alongside`: queue the restores of the stopped agents and
+/// the failed launches again, making `change` when given, and start them
+/// as `queuing` says.
 async fn resume_each(
     ctx: &Context,
     selected: Selected,
@@ -305,7 +297,7 @@ async fn resume_each(
             saved.retain_execution(execution, true);
         }
     }
-    if stopped.is_empty() && selected.setups.is_empty() && selected.failed_starts.is_empty() {
+    if stopped.is_empty() && selected.failed_starts.is_empty() {
         let started = queuing == Queuing::Here { now: true };
         return reports::nothing(ctx, alongside.continue_turns(ctx).await, started);
     }
@@ -313,20 +305,15 @@ async fn resume_each(
     if let Queuing::Daemon { .. } = queuing {
         stopped = daemon_startable(ctx, stopped, &mut alongside.reopened, &mut refused).await?;
     }
-    let launches = (
-        selected.setups.as_slice(),
-        selected.failed_starts.as_slice(),
-    );
-    permission_change::apply(ctx, &stopped, launches, change).await?;
+    permission_change::apply(ctx, &stopped, &selected.failed_starts, change).await?;
     let now = matches!(queuing, Queuing::Here { now } | Queuing::Daemon { now } if now);
-    let mut resumed = set_up(ctx, &selected, alongside.continue_turns(ctx).await, now).await;
+    let mut resumed = alongside.continue_turns(ctx).await;
     retry_failed_starts(ctx, &selected, &mut resumed, now).await;
     resumed.failed.append(&mut refused);
     match queuing {
         Queuing::Here { now: true } => {
             let resumed = StartedRestores {
                 queued: resumed.queued,
-                set_up: resumed.set_up,
                 reopened: resumed.reopened,
                 continued: resumed.continued,
                 failed: resumed.failed,
@@ -368,16 +355,6 @@ async fn daemon_startable(
     Ok(startable)
 }
 
-/// Retry the `selected` failed setups, starting the agents waiting for them
-/// at once when `now`, going on after one fails, and report them with what
-/// the resume did already, `resumed`.
-async fn set_up(ctx: &Context, selected: &Selected, mut resumed: Queued, now: bool) -> Queued {
-    let (set_up, mut failed) = setups::retry_each(ctx, &selected.setups, now).await;
-    resumed.set_up = set_up;
-    resumed.failed.append(&mut failed);
-    resumed
-}
-
 /// Queue the `selected` failed launches again, starting them at once when
 /// `now`, going on after one fails, and report them in `resumed`.
 async fn retry_failed_starts(ctx: &Context, selected: &Selected, resumed: &mut Queued, now: bool) {
@@ -404,7 +381,6 @@ pub(in crate::cli::commands) mod queued;
 pub(in crate::cli::commands) mod reports;
 pub(in crate::cli::commands) mod saved;
 mod sessions;
-pub(in crate::cli::commands) mod setups;
 mod space;
 mod stale;
 pub(in crate::cli::commands) mod targets;

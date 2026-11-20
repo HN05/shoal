@@ -1463,7 +1463,9 @@ failures retain the workspace and report the command's exit status and the
 blocking evidence. Other failures let interactive callers choose retry, delete,
 ignore (which repairs verified state first), or keep; a setup that never
 started offers only retry or keep. JSON callers get a nonzero exit.
-`setup` and `resume` rerun setup explicitly; nothing retries automatically.
+`setup` reruns setup explicitly, and `resume` refuses a workspace whose setup
+failed, naming it, since a setup is not an agent; nothing retries
+automatically.
 The agent a start launches in a workspace whose setup fails waits in the
 queue for that setup instead of holding its slot, queued with the workspace's
 record for a start the daemon carries out, or by the preparation, which
@@ -1473,10 +1475,7 @@ as when its worker died, goes back to the queue as a new entry, which no hold
 on the old one keeps back, with its plan opening the workspace. A persisted
 dependency that only a preparation getting past its post-setup hook releases
 holds it, so a retried setup starts it without the user restating its mode,
-task or permissions, and a failed hook keeps it waiting. `resume` changes its
-permissions before the setup, and to start it at once or in its own terminal
-holds its entry, which admission then passes over, until the setup releases
-it.
+task or permissions, and a failed hook keeps it waiting.
 While the daemon registers an execution it sends the wrapper keepalives, and
 the wrapper's limit bounds the daemon's silence rather than the whole wait, so
 setups queued behind each other's Git gate never fail for being slow; a

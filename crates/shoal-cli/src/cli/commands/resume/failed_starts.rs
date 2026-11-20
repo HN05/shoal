@@ -84,7 +84,7 @@ pub(super) async fn retry_here(
     failed: &QueueEntry,
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
-    let launches = (&[][..], std::slice::from_ref(failed));
+    let launches = std::slice::from_ref(failed);
     permission_change::apply(ctx, &[], launches, change).await?;
     let retried =
         (crate::client::queue::retry(&ctx.paths, failed.id.clone(), RetryStart::Here)).await?;

@@ -6,7 +6,7 @@ use shoal_protocol::space_names::SpaceName;
 use super::restore::Reopened;
 use crate::output::{agents::Agent, batch::Failure, outputs};
 use shoal_protocol::{
-    model::{QueueEntry, Space, Workspace},
+    model::{QueueEntry, Space},
     saved::SavedSummary,
 };
 
@@ -29,17 +29,7 @@ pub struct RestoredAgent {
     pub reused: bool,
 }
 
-/// A workspace whose failed setup a restore retried and finished.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SetUp {
-    pub workspace: Workspace,
-    /// The launch of the agent that waited for the setup, waiting in the
-    /// agent queue or starting.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub launch: Option<QueueEntry>,
-}
-
-/// What a restore that started agents at once did.
+/// What a resume that started agents at once did.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StartedRestores {
     /// The failed launches it queued again.
@@ -47,8 +37,6 @@ pub struct StartedRestores {
     pub queued: Vec<QueueEntry>,
     pub commands: Vec<StoppedCommands>,
     pub agents: Vec<RestoredAgent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub set_up: Vec<SetUp>,
     /// The removed spaces it opened again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reopened: Vec<Reopened>,
@@ -58,15 +46,13 @@ pub struct StartedRestores {
     pub failed: Vec<Failure>,
 }
 
-/// The restores a restore queued, the commands it reported, the saved chats
-/// it restored at once, the workspaces it set up, the interrupted turns it
-/// continued and the spaces it failed for.
+/// The restores a resume queued, the commands it reported, the spaces
+/// reopened for it, the interrupted turns it continued and the spaces it
+/// failed for.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Queued {
     pub queued: Vec<QueueEntry>,
     pub commands: Vec<StoppedCommands>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub set_up: Vec<SetUp>,
     /// The removed spaces it opened again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reopened: Vec<Reopened>,
@@ -103,4 +89,4 @@ pub struct Resumable {
     pub spaces: Vec<ResumableSpace>,
 }
 
-outputs!(StoppedCommands, SetUp, StartedRestores, Queued, Resumable);
+outputs!(StoppedCommands, StartedRestores, Queued, Resumable);

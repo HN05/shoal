@@ -34,6 +34,9 @@ pub enum WorkspaceCommand {
         copy: bool,
     },
     /// Run or retry workspace setup and the post-setup hook.
+    ///
+    /// Creates the worktree first when creating it failed. The agent waiting for a failed setup
+    /// starts as the agent queue admits it once setup succeeds.
     Setup {
         /// Workspace to use; defaults to the current workspace or picker.
         workspace: Option<SpaceSelector>,

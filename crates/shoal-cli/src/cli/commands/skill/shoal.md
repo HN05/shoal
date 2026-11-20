@@ -88,9 +88,8 @@ a `--base` with commits only this machine has there in a Git bundle.
 and the agent's queue entry, which waits while the daemon creates the
 worktree and runs setup and the post-setup hook; until the worktree exists,
 commands that read it refuse the workspace. A failed preparation reaches the
-agent of the nearest space above with one, or else the user, naming what
-retries it, `shoal resume <space>`, or `shoal setup <space>` for a failed
-post-setup hook, and `shoal rm <space>`. `--wait`
+agent of the nearest space above with one, or else the user, naming
+`shoal setup <space>`, which retries it, and `shoal rm <space>`. `--wait`
 returns once that preparation ends. An agent whose start fails, in a
 workspace or a chat, stays on its space as a `failed` entry `shoal queue` and
 `shoal inbox` list with its error, and its failure reaches the same way,
@@ -194,8 +193,8 @@ starts its session again at once, or with `--wait` once its turn ends, which
 turn of the child's agent, a workspace's or a chat's, which stays running;
 `resume` continues a turn an interrupt ended and queues the stopped agents,
 a workspace's or a chat's, whoever stopped them, and a launch that failed to
-start; for a workspace whose setup failed, it retries the setup, and the agent
-waiting for it starts. `restore --discard-agent` discards a stopped agent,
+start; a workspace whose setup failed is refused, naming `shoal setup`, which
+retries it before the agent waiting for it starts. `restore --discard-agent` discards a stopped agent,
 its last sessions, stopped commands and failed launch, leaving the files. `--all`
 acts on every space below the caller's on this machine, `restart --machine
 <name>` on those of another joined machine, and `stop --yes` confirms that an

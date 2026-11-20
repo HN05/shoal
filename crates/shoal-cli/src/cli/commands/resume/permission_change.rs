@@ -1,12 +1,10 @@
 //! `--permission` on `shoal resume`: a change to the permissions the resumed
-//! agents and chats, the agents waiting for failed setups and the failed
-//! launches restored were given. A
+//! agents and chats and the failed launches queued again were given. A
 //! scoped process gives only what it holds, which is checked for every
-//! selected space before anything is set up or restores, and a restore makes
-//! the change in the records it restores or starts once nothing refuses it.
+//! selected space before anything resumes, and a resume makes the change in
+//! the records it restores or starts once nothing refuses it.
 use anyhow::{Context as _, Result};
 
-use super::setups::FailedSetup;
 use super::targets::Selected;
 use crate::{
     cli::context::Context,
@@ -19,27 +17,20 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Refuse `change` for the stopped agents and last sessions of the
-/// `selected` workspaces, the selected chats and the agents waiting for the
-/// selected failed setups, where this process does not hold what it gives. It writes nothing: a resume makes
-/// the change with [`apply`] once nothing refuses it.
+/// `selected` workspaces, the selected chats and the selected failed
+/// launches, where this process does not hold what it gives. It writes
+/// nothing: a resume makes the change with [`apply`] once nothing refuses
+/// it.
 pub(super) async fn check(
     ctx: &Context,
     selected: &Selected,
     change: &PermissionChange,
 ) -> Result<()> {
     let selectors = (selected.spaces.as_deref())
-        .context("--permission changes the permissions of the spaces a restore names")?;
+        .context("--permission changes the permissions of the spaces a resume names")?;
     for selector in selectors {
         let space = super::present_space(ctx, selector).await?;
         let repository = space.repository_id.as_ref().map(|id| id.as_str().into());
-        crate::cli::commands::permissions::ensure_held(ctx, repository, &change.set).await?;
-    }
-    for setup in selected
-        .setups
-        .iter()
-        .filter(|setup| setup.launch.is_some())
-    {
-        let repository = Some(setup.workspace.repository().as_str().into());
         crate::cli::commands::permissions::ensure_held(ctx, repository, &change.set).await?;
     }
     for failed in &selected.failed_starts {
@@ -50,14 +41,13 @@ pub(super) async fn check(
 }
 
 /// Have the daemon make `change`, when given, to the permissions each agent
-/// and last session the `stopped` spaces keep, the agent waiting for each
-/// of the failed `setups` and each of the `failed` launches was given,
-/// as their restores and setups begin, so one that fails keeps it too; it
-/// changes none when it refuses one.
+/// and last session the `stopped` spaces keep and each of the `failed`
+/// launches was given, as their restores begin, so one that fails keeps it
+/// too; it changes none when it refuses one.
 pub(super) async fn apply(
     ctx: &Context,
     stopped: &[(Space, Saved)],
-    (setups, failed): (&[FailedSetup], &[QueueEntry]),
+    failed: &[QueueEntry],
     change: Option<&PermissionChange>,
 ) -> Result<()> {
     let agents = stopped.iter().flat_map(|(space, saved)| {
@@ -66,10 +56,7 @@ pub(super) async fn apply(
             execution: saved.id.clone(),
         })
     });
-    let launches = (setups.iter())
-        .filter(|setup| setup.launch.is_some())
-        .map(|setup| SpaceSelector::id(&setup.workspace.id))
-        .chain((failed.iter()).filter_map(|launch| Some(SpaceSelector::id(launch.space()?))));
+    let launches = (failed.iter()).filter_map(|launch| Some(SpaceSelector::id(launch.space()?)));
     let targets = PermissionTargets {
         agents: agents.collect(),
         launches: launches.collect(),
@@ -100,8 +87,7 @@ pub(super) async fn apply_one(
 #[derive(Default)]
 struct PermissionTargets {
     agents: Vec<SavedAgent>,
-    /// The workspaces whose failed setup an agent waits for, and the
-    /// spaces of failed launches.
+    /// The spaces of failed launches.
     launches: Vec<SpaceSelector>,
 }
 

@@ -293,7 +293,7 @@ impl Manager {
                 .await?;
                 let (name, number) = (&workspace.name, workspace.number);
                 bail!(
-                    "creating the worktree of {name} failed: {error:#}; `shoal restore {number}` retries it, and `shoal rm {number}` removes the workspace"
+                    "creating the worktree of {name} failed: {error:#}; `shoal setup {number}` retries it, and `shoal rm {number}` removes the workspace"
                 );
             }
         }

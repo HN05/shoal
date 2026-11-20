@@ -102,7 +102,7 @@ impl Manager {
     }
 
     /// Refuse an explicit preparation of the workspace `spec` prepares, as
-    /// `shoal restore` starts one, while that workspace's own preparation
+    /// `shoal setup` starts one, while that workspace's own preparation
     /// waits for work or disk space, which starts it once that clears; one
     /// that waits for its stopped agent waits no longer.
     pub(crate) async fn admit_explicit_preparation(&self, spec: &OperationSpec) -> Result<()> {

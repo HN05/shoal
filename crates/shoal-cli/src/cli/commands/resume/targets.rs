@@ -2,12 +2,17 @@
 //! alike, or every space with a stopped agent for `--all`; without a space,
 //! the current workspace when its agent can resume, else those picked among
 //! the spaces whose agent can resume, or else a list of them.
-use anyhow::Result;
+use anyhow::{Result, bail};
+use shoal_protocol::model::ByKind;
 
-use super::setups::FailedSetup;
 use crate::client::output::resume::{Resumable, ResumableSpace};
 use crate::{
-    cli::{args::SpaceTargets, commands::queued_agents, context::Context, ui},
+    cli::{
+        args::SpaceTargets,
+        commands::{queued_agents, workspaces},
+        context::Context,
+        ui,
+    },
     model::{QueueEntry, Spaces},
     state::QueueState,
 };
@@ -19,9 +24,6 @@ pub(in crate::cli::commands) struct Selected {
     /// By ID, or by a selector the daemon refuses; every space with a
     /// stopped agent for `None`.
     pub spaces: Option<Vec<SpaceSelector>>,
-    /// The workspaces named whose setup failed, which resume by retrying
-    /// it, once [`super::setups::take_failed`] takes them from the others.
-    pub setups: Vec<FailedSetup>,
     /// The failed launches of the spaces selected, which resume by queuing
     /// them again, once [`super::failed_starts::take`] takes them from the
     /// others.
@@ -78,10 +80,27 @@ impl Selected {
     pub fn is_empty(&self) -> bool {
         let Self {
             spaces,
-            setups,
             failed_starts,
         } = self;
-        spaces.as_ref().is_some_and(Vec::is_empty) && setups.is_empty() && failed_starts.is_empty()
+        spaces.as_ref().is_some_and(Vec::is_empty) && failed_starts.is_empty()
+    }
+
+    /// Refuse a selected workspace whose setup failed or never started,
+    /// naming `shoal setup`, which retries it before the agent waiting for
+    /// it starts; a chat has no setup.
+    pub async fn refuse_failed_setups(&self, ctx: &Context) -> Result<()> {
+        for selector in self.spaces.iter().flatten() {
+            let space = super::present_space(ctx, selector).await?;
+            let (name, number) = (space.name.clone(), space.number);
+            if let ByKind::Workspace(_) = space.by_kind() {
+                let inspection =
+                    crate::client::workspaces::inspect(&ctx.paths, selector.clone()).await?;
+                if workspaces::awaits_setup(&inspection) {
+                    bail!("the setup of {name} failed; retry it with `shoal setup {number}`");
+                }
+            }
+        }
+        Ok(())
     }
 }
 

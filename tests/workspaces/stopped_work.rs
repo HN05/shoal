@@ -280,25 +280,17 @@ fn resume_without_an_agent_reports_stopped_commands_once() {
 }
 
 #[test]
-fn resume_retries_a_failed_setup_beside_the_stopped_work_it_resumes() {
+fn resume_refuses_a_failed_setup_before_it_resumes_anything() {
     let fixture = Fixture::with_config(Some(&format!("{WAITER}{AGENT}")));
     let workspace = Stopped::new(&fixture, "stopped");
     let command = workspace.start_command(&fixture);
     workspace.stop(&fixture, vec![command]);
     require_fix(&fixture);
-    let failing = fail_setup(&fixture, "failing");
+    fail_setup(&fixture, "failing");
 
-    let resumed = fixture.ok(&["resume", &fixture.id("stopped"), &fixture.id("failing")]);
-    assert_eq!(resumed["set_up"].as_array().unwrap().len(), 1, "{resumed}");
-    assert_eq!(
-        resumed["commands"].as_array().unwrap().len(),
-        1,
-        "{resumed}"
-    );
-    assert!(!workspace.pending());
-    wait_until("the waiting agent start", || {
-        failing.join("agent-started").exists()
-    });
+    let refused = fixture.run(&["resume", &fixture.id("stopped"), &fixture.id("failing")]);
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    assert!(workspace.pending());
 }
 
 #[test]
