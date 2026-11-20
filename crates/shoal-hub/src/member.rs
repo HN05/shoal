@@ -62,6 +62,9 @@ pub(super) struct Link {
     availability: Mutex<Option<Classified>>,
     /// The hub's version this machine last followed.
     followed: follow::Followed,
+    /// Whether the daemon restarts on a replaced binary, as a managed one
+    /// does.
+    restarts_on_update: std::sync::atomic::AtomicBool,
 }
 
 /// How often the user hears of a refusal that came unsealed, which anyone
@@ -95,6 +98,10 @@ struct State {
 }
 
 impl Link {
+    pub(super) fn restarts_on_update(&self, restarts: bool) {
+        (self.restarts_on_update).store(restarts, std::sync::atomic::Ordering::Relaxed);
+    }
+
     pub(super) fn calls(&self) -> Option<Arc<Calls>> {
         self.state.lock().unwrap().calls.clone()
     }

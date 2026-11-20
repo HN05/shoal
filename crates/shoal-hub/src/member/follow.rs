@@ -5,7 +5,10 @@
 //! included; the daemon then restarts on it once idle, keeping its agents
 //! running, and connects again. Otherwise the user hears what to run, and
 //! the machine works on its own until its version matches.
-use std::{sync::Mutex, time::Duration};
+use std::{
+    sync::{Mutex, atomic::Ordering},
+    time::Duration,
+};
 
 use anyhow::Result;
 use shoal_core::update::{self, HOMEBREW_UPGRADE, Installation, Installed, RELEASES, Target};
@@ -142,7 +145,10 @@ impl Hub {
             ),
             Ok(Way::Install(installation)) => {
                 match self.install_hub_version(&installation, version).await {
-                    Ok(()) => return,
+                    Ok(()) if self.member.restarts_on_update.load(Ordering::Relaxed) => return,
+                    Ok(()) => format!(
+                        "Shoal installed {version}, the hub's version, but this daemon runs in the foreground, {stays}: restart it"
+                    ),
                     Err(error) => format!(
                         "Shoal could not install {version}, the hub's version, {stays}: {error:#}; run shoal update --version {version} here"
                     ),

@@ -292,8 +292,10 @@ pub async fn run(
     spawn_supervised(&mut background, &manager, "seed builds", seed::run);
     spawn_supervised(&mut background, &manager, "seed spares", seed::run_spares);
     spawn_supervised(&mut background, &manager, "runner", runner::run);
-    spawn_supervised(&mut background, &manager, "hub", |manager| {
-        shoal_hub::run(manager.hub.clone(), manager)
+    // A foreground daemon never restarts on a replaced binary.
+    let restarts_on_update = update.is_some();
+    spawn_supervised(&mut background, &manager, "hub", move |manager| {
+        shoal_hub::run(manager.hub.clone(), manager, restarts_on_update)
     });
     spawn_supervised(
         &mut background,

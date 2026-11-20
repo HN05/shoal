@@ -162,8 +162,11 @@ impl Hub {
 
 /// Serve the hub's listener and keep its own machine's spaces in its
 /// directory while this daemon is the hub, and keep a link to the hub while
-/// it is a member of one, until the daemon stops.
-pub async fn run(hub: Arc<Hub>, daemon: Arc<dyn Daemon>) {
+/// it is a member of one, until the daemon stops; whether the daemon
+/// `restarts_on_update` decides what following the hub's version tells the
+/// user.
+pub async fn run(hub: Arc<Hub>, daemon: Arc<dyn Daemon>, restarts_on_update: bool) {
+    hub.member.restarts_on_update(restarts_on_update);
     tokio::join!(
         listener::run(hub.clone(), daemon.clone()),
         hub.report_own_spaces(&*daemon),
