@@ -84,9 +84,9 @@ pub(in crate::cli::commands) async fn pick_start_source(
 }
 
 /// Whether `launch` names nothing a new workspace starts from: no branch,
-/// issue, link, base or copy.
+/// issue, link, base or copy; a repository alone names none.
 fn names_nothing(launch: &Launch) -> bool {
-    names_no_branch(launch) && launch.base.is_none() && launch.target.is_none()
+    names_no_branch(launch) && launch.base.is_none()
 }
 
 /// Whether `launch` names nothing its workspace's branch comes from: no

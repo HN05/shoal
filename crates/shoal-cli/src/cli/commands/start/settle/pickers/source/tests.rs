@@ -1,4 +1,4 @@
-use super::{ensure_branch_takes, switched_branch};
+use super::{ensure_branch_takes, names_nothing, switched_branch};
 use shoal_protocol::launches::Launch;
 
 #[test]
@@ -26,4 +26,25 @@ fn a_base_without_a_branch_is_refused_before_the_agent_picker() {
         ..based
     };
     ensure_branch_takes(&branched).unwrap();
+}
+
+/// A start that names only its repository, positionally or with `--repo`,
+/// leaves its source to the picker.
+#[test]
+fn a_repository_alone_leaves_the_source_to_the_picker() {
+    let positional = Launch {
+        target: Some("my-project".parse().unwrap()),
+        ..Launch::default()
+    };
+    let flagged = Launch {
+        repository: Some("my-project".into()),
+        ..Launch::default()
+    };
+    assert!(names_nothing(&positional));
+    assert!(names_nothing(&flagged));
+    let linked = Launch {
+        target: Some("https://forge.example/team/app/pulls/7".parse().unwrap()),
+        ..Launch::default()
+    };
+    assert!(!names_nothing(&linked));
 }
