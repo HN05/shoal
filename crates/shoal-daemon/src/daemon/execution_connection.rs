@@ -394,6 +394,7 @@ async fn relay(
                 group_id,
                 restored,
                 restored_from,
+                ..
             } => {
                 awaiting_started = false;
                 *started = true;

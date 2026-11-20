@@ -623,6 +623,7 @@ fn allow_reattach(
             running_ms: 0,
             awaiting_restore: None,
             between_runs: false,
+            reports_status: false,
         },
     );
 }

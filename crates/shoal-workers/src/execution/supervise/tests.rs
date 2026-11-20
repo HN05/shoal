@@ -42,8 +42,19 @@ async fn adjacent_controls_child() {
     let plan = plan(&root);
     let (client, mut server) = UnixStream::pair().unwrap();
     let mut bytes = Vec::new();
+    // A status report between them reaches the terminal, not the waits.
+    let report = || Control::ProgramStatus {
+        status: shoal_protocol::program_status::ProgramStatus {
+            state: shoal_protocol::program_status::ProgramState::Idle,
+            title: "workspace".into(),
+            message: None,
+            turn: true,
+        },
+    };
     for control in [
+        report(),
         Control::Started,
+        report(),
         Control::OverloadStop {
             recover: true,
             reason: "critical memory pressure".into(),
@@ -161,6 +172,7 @@ fn connected(paths: &Paths, plan: &ExecutionPlan) -> (Link, BufReader<UnixStream
             running_ms: 0,
             awaiting_restore: None,
             between_runs: false,
+            reports_status: false,
         },
     );
     (link, BufReader::new(server))

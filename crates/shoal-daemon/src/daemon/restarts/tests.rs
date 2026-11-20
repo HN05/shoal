@@ -664,6 +664,7 @@ async fn wrapped_agent(
         running_ms: 0,
         awaiting_restore: Some(crate::model::Protection::restart()),
         between_runs: false,
+        reports_status: false,
     };
     (workspace, request, started.stop)
 }

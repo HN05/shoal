@@ -208,11 +208,49 @@ fn reattachment_keeps_its_wire_spelling() {
     else {
         panic!("reattachment must keep its method name");
     };
-    assert!(request.agent.is_none() && !request.recover);
+    assert!(request.agent.is_none() && !request.recover && !request.reports_status);
     assert_eq!(
         serde_json::to_value(Control::Detach).unwrap(),
         json!({"type": "detach"})
     );
+}
+
+#[test]
+fn program_status_reports_keep_their_wire_spelling() {
+    use crate::program_status::{ProgramState, ProgramStatus, Waits};
+    let report = |state, message: Option<&str>| Control::ProgramStatus {
+        status: ProgramStatus {
+            state,
+            title: "Fix login".into(),
+            message: message.map(Into::into),
+            turn: false,
+        },
+    };
+    let blocked = report(
+        ProgramState::Blocked {
+            kind: Waits::Question,
+        },
+        Some("3.1: Which database?"),
+    );
+    assert_eq!(
+        serde_json::to_value(&blocked).unwrap(),
+        json!({"type": "program_status", "status": {
+            "state": "blocked", "kind": "question",
+            "title": "Fix login", "message": "3.1: Which database?"
+        }})
+    );
+    let working = report(ProgramState::Working { progress: Some(40) }, None);
+    let wire = serde_json::to_value(&working).unwrap();
+    assert_eq!(
+        wire,
+        json!({"type": "program_status", "status": {
+            "state": "working", "progress": 40, "title": "Fix login"
+        }})
+    );
+    let Control::ProgramStatus { status } = serde_json::from_value(wire).unwrap() else {
+        panic!("a program status report must read back as one");
+    };
+    assert_eq!(status.state, ProgramState::Working { progress: Some(40) });
 }
 
 #[test]

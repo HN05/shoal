@@ -2,7 +2,8 @@
 //! waiting for a control is cancel-safe and adjacent frames are never lost.
 //! Once its command runs, a reattachable execution survives the daemon going
 //! away: the link reconnects in the background and presents the execution's
-//! identity to the next daemon.
+//! identity to the next daemon. The space's status reports the daemon sends
+//! go to the terminal as they arrive, whatever the wrapper waits for.
 use anyhow::{Result, anyhow, bail};
 use tokio::{
     io::BufReader,
@@ -15,6 +16,7 @@ use tokio::{
     time::{Duration, Instant, sleep, timeout},
 };
 
+use super::program_status::Reporter;
 use crate::{
     client::connection,
     client::connection::CommandPaths,
@@ -30,6 +32,7 @@ use crate::{
 pub(super) struct Link {
     connection: Connection,
     reattach: Option<Reattachment>,
+    status: Reporter,
 }
 
 /// What the link received from the daemon.
@@ -89,10 +92,17 @@ impl Link {
 
     /// Read controls from `reader`, including any already buffered.
     pub(super) fn new(reader: BufReader<OwnedReadHalf>, writer: OwnedWriteHalf) -> Self {
+        let status = Reporter::default();
         Self {
-            connection: Connection::Attached(Attached::new(reader, writer)),
+            connection: Connection::Attached(Attached::new(reader, writer, status.clone())),
             reattach: None,
+            status,
         }
+    }
+
+    /// What writes the space's status to the terminal.
+    pub(super) fn status(&self) -> &Reporter {
+        &self.status
     }
 
     /// Let the execution reattach once its command is registered; the
@@ -112,6 +122,7 @@ impl Link {
             reattach.request.group_id = group_id;
             reattach.request.awaiting_restore = None;
             reattach.request.between_runs = false;
+            reattach.request.reports_status = self.status.reports();
             reattach.armed = Some(Instant::now());
         }
     }
@@ -251,6 +262,7 @@ impl Link {
             reattach
                 .armed
                 .expect("an armed link has started its command"),
+            self.status.clone(),
         ));
         self.connection = Connection::Reattaching(task);
     }
@@ -265,12 +277,12 @@ impl Drop for Link {
 }
 
 impl Attached {
-    fn new(reader: BufReader<OwnedReadHalf>, writer: OwnedWriteHalf) -> Self {
+    fn new(reader: BufReader<OwnedReadHalf>, writer: OwnedWriteHalf, status: Reporter) -> Self {
         let (sender, controls) = mpsc::channel(4);
         Self {
             writer,
             controls,
-            reader: tokio::spawn(read_controls(reader, sender)),
+            reader: tokio::spawn(read_controls(reader, sender, status)),
         }
     }
 }
@@ -281,12 +293,20 @@ impl Drop for Attached {
     }
 }
 
+/// Pass on each control but a status report, which goes to the terminal.
 async fn read_controls(
     mut reader: BufReader<OwnedReadHalf>,
     controls: mpsc::Sender<Result<Control>>,
+    status: Reporter,
 ) {
     loop {
-        let control = protocol::read_buffered::<Control>(&mut reader).await;
+        let control = match protocol::read_buffered::<Control>(&mut reader).await {
+            Ok(Control::ProgramStatus { status: report }) => {
+                status.report(report);
+                continue;
+            }
+            control => control,
+        };
         let failed = control.is_err();
         if controls.send(control).await.is_err() || failed {
             break;
@@ -299,11 +319,12 @@ async fn reattach_with_backoff(
     paths: Paths,
     mut request: Reattach,
     started: Instant,
+    status: Reporter,
 ) -> Result<Attached, Refused> {
     let mut delay = timing::REATTACH_RETRY_INITIAL;
     loop {
         request.running_ms = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
-        if let Some(attached) = attempt(&paths, &request).await? {
+        if let Some(attached) = attempt(&paths, &request, &status).await? {
             return Ok(attached);
         }
         sleep(delay).await;
@@ -312,7 +333,11 @@ async fn reattach_with_backoff(
 }
 
 /// `None` while no daemon is accepting the request.
-async fn attempt(paths: &Paths, request: &Reattach) -> Result<Option<Attached>, Refused> {
+async fn attempt(
+    paths: &Paths,
+    request: &Reattach,
+    status: &Reporter,
+) -> Result<Option<Attached>, Refused> {
     let Ok(stream) = UnixStream::connect(&paths.socket).await else {
         return Ok(None);
     };
@@ -345,5 +370,5 @@ async fn attempt(paths: &Paths, request: &Reattach) -> Result<Option<Attached>, 
         Ok(Err(_)) | Err(_) => return Ok(None),
     };
     <()>::try_from(body).map_err(|error| Refused(format!("{error:#}")))?;
-    Ok(Some(Attached::new(reader, writer)))
+    Ok(Some(Attached::new(reader, writer, status.clone())))
 }

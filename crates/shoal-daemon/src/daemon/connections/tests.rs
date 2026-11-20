@@ -127,6 +127,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         running_ms: 0,
         awaiting_restore: None,
         between_runs: false,
+        reports_status: false,
     }));
     // Clients that retry a connection closed unanswered keep waiting.
     for retried in [Method::from(await_answer()), reattach] {

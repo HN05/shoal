@@ -69,6 +69,7 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
         group_id: wrapper.pid,
         restored: false,
         restored_from: Vec::new(),
+        reports_status: false,
     };
     protocol::write(connection.get_mut(), &started)
         .await

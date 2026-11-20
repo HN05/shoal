@@ -660,6 +660,7 @@ async fn a_demo_that_ends_while_its_viewer_cannot_be_proven_stopped_keeps_its_re
         group_id: wrapper.pid,
         restored: false,
         restored_from: Vec::new(),
+        reports_status: false,
     };
     crate::protocol::write(wrapper_side.get_mut(), &started)
         .await

@@ -119,6 +119,7 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
             running_ms: 0,
             awaiting_restore: None,
             between_runs: false,
+            reports_status: false,
         },
         manager.gates.owned_operation().await,
     ));
@@ -159,6 +160,7 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
             group_id: wrapper.pid,
             restored: false,
             restored_from: Vec::new(),
+            reports_status: false,
         },
     )
     .await
@@ -253,6 +255,7 @@ async fn running_executions_leave_daemon_operations_idle() {
             group_id: wrapper.pid,
             restored: false,
             restored_from: Vec::new(),
+            reports_status: false,
         },
     )
     .await
@@ -589,6 +592,7 @@ async fn kills_after_a_pause() -> (Vec<(String, Option<i64>)>, String) {
         group_id: wrapper.pid,
         restored: false,
         restored_from: Vec::new(),
+        reports_status: false,
     };
     let paused = ExecutionEvent::Paused {
         memory: Some(ScopeMemory {

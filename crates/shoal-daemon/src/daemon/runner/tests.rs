@@ -1194,6 +1194,7 @@ async fn connect_runner(
         group_id: wrapper.pid,
         restored: false,
         restored_from: Vec::new(),
+        reports_status: false,
     };
     protocol::write(connection.get_mut(), &event).await.unwrap();
     let control: Control = read(&mut connection).await;

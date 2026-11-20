@@ -13,6 +13,7 @@ mod link;
 mod mode;
 mod own_group;
 mod pause;
+mod program_status;
 mod restore;
 mod scope_memory;
 mod signal_report;

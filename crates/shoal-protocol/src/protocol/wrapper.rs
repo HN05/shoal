@@ -53,6 +53,9 @@ pub struct Reattach {
     /// daemon may already have forgotten.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub between_runs: bool,
+    /// The wrapper's terminal reads [`Control::ProgramStatus`] reports.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reports_status: bool,
 }
 
 /// Wrapper → daemon messages after an [`ExecutionMethod::Execute`] response.
@@ -70,6 +73,11 @@ pub enum ExecutionEvent {
         /// consumes once the start is acknowledged.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         restored_from: Vec<std::path::PathBuf>,
+        /// The terminal the child runs in reads the Program Status
+        /// Protocol, so the wrapper writes the [`Control::ProgramStatus`]
+        /// reports it receives there.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        reports_status: bool,
     },
     Finished {
         exit_code: i32,
@@ -190,6 +198,12 @@ pub enum Control {
     /// [`RESTORE_WAITS`] and later read it.
     RestoreWaits {
         issue: String,
+    },
+    /// The space's status changed, for a wrapper whose terminal reads the
+    /// Program Status Protocol. Only wrappers that say they report it
+    /// receive it.
+    ProgramStatus {
+        status: crate::program_status::ProgramStatus,
     },
 }
 

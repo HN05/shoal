@@ -33,6 +33,7 @@ pub mod paths;
 pub mod priority;
 pub mod processes;
 pub mod profile;
+pub mod program_status;
 pub mod progress;
 pub mod protocol;
 pub mod queue;

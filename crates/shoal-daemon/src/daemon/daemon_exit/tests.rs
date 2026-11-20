@@ -84,6 +84,7 @@ impl Running {
             group_id: wrapper.pid,
             restored: false,
             restored_from: Vec::new(),
+            reports_status: false,
         };
         protocol::write(connection.get_mut(), &started)
             .await

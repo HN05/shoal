@@ -489,6 +489,7 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
         running_ms: 0,
         awaiting_restore: None,
         between_runs: false,
+        reports_status: false,
     };
     let stranger = Identity {
         pid: wrapper.pid,
@@ -565,6 +566,7 @@ async fn a_wrapper_awaiting_a_restore_reattaches_after_its_child_was_forgotten()
         running_ms: 0,
         awaiting_restore: None,
         between_runs: false,
+        reports_status: false,
     };
     drop(started);
     // The record names no child, as after a proven pause, and a restart
@@ -616,6 +618,7 @@ async fn a_wrapper_between_runs_reattaches_after_its_child_was_forgotten() {
         running_ms: 0,
         awaiting_restore: None,
         between_runs: false,
+        reports_status: false,
     };
     drop(started);
     manager.detach_execution(&id).await;
@@ -672,6 +675,7 @@ async fn setup_executions_cannot_reattach() {
             running_ms: 0,
             awaiting_restore: None,
             between_runs: false,
+            reports_status: false,
         })
         .await
         .unwrap_err();

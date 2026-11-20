@@ -19,6 +19,7 @@ use super::{
     Mode,
     link::{Link, Received, Refused},
     pause::Halt,
+    program_status::Reporter,
     recovery, scope_memory,
     signal_report::SignalReport,
     spawn::{AgentLaunch, spawn},
@@ -145,11 +146,14 @@ pub(super) async fn supervise(
     // Before the launch, so a kill before its scope is found still shows.
     let baseline = (!launcher.is_empty()).then(scope_memory::Baseline::read);
     let (mut child, group, _terminal, _scope) =
-        spawn_registered_child(paths, plan, command, mode, auth, launcher)?;
+        spawn_registered_child(paths, plan, command, mode, auth, launcher, link.status())?;
     let watch = baseline.map(|baseline| baseline.watch(group.pid()));
     register_child(link, plan, mode, &group, saving.restored_from).await?;
     let report = SignalReport { paths, plan };
     let outcome = wait_for_child(link, &mut child, &group, signals, saving.ending, report).await?;
+    if let Outcome::Exited(code) = outcome {
+        link.status().agent_exited(code);
+    }
     // A command owns its process group; descendants do not outlive its lease.
     drop(group);
     let memory = watch.and_then(|watch| watch.finish(outcome.code()));
@@ -188,6 +192,7 @@ fn spawn_registered_child(
     mode: &Mode,
     auth: Option<&AgentLaunch>,
     launcher: &[OsString],
+    status: &Reporter,
 ) -> Result<(
     Child,
     ProcessGroup,
@@ -197,6 +202,11 @@ fn spawn_registered_child(
     // Capture before spawning, and restore after child/process-group cleanup,
     // including failures before the terminal handoff.
     let mut terminal = Terminal::capture(true)?;
+    // An agent's terminal is asked again for each child; a launch without
+    // one reports nothing.
+    if terminal.is_some() && auth.is_some_and(|auth| auth.reads_terminal) {
+        status.query();
+    }
     // Descendants that clear their scope token find the wrapper's record from
     // their first instruction, and the child's once the wrapper is gone.
     let mut scope = process::scoped::Records::wrapper(&paths.state)?;
@@ -227,6 +237,7 @@ async fn register_process(
         group_id: group.pid(),
         restored,
         restored_from: records.iter().map(|record| record.to_path_buf()).collect(),
+        reports_status: link.status().reports(),
     })
     .await?;
     let acknowledged = timeout(timing::START_ACK_TIMEOUT, link.control()).await??;
