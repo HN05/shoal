@@ -137,7 +137,7 @@ impl Hub {
         let stays = "so this machine stays off the hub until it runs that version";
         let message = match self.way(daemon) {
             _ if !reads_state(schema) => format!(
-                "The hub runs Shoal {version}, older than this machine's {}, which cannot read the state this machine keeps, {stays}: run shoal hub update",
+                "The hub runs Shoal {version}, older than this machine's {}, which cannot read the state this machine keeps, {stays}: run shoal update on the hub, or shoal hub update from a machine connected to it",
                 env!("CARGO_PKG_VERSION")
             ),
             Ok(Way::Install(installation)) => {
