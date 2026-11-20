@@ -195,7 +195,14 @@ impl Manager {
             "agent {agent} has no Shoal hook that ends its turns; post with shoal send <thread> \"<text>\""
         );
         let thread = self.readable_thread(caller, number).await?;
-        self.side(caller, &thread).await?;
+        // The turn's post goes in from the side the space itself takes,
+        // which a space above the holder, posting with `send`, does not.
+        ensure!(
+            side_of(&thread, &space.id).is_some(),
+            "{} posts in its chat only in a thread it opened or holds; post in thread {} with shoal send",
+            space.name,
+            thread.number
+        );
         ensure_open(&thread)?;
         let id = thread.id;
         self.store
