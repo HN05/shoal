@@ -21,19 +21,28 @@ use crate::{
 /// Pick on a terminal what the new workspace of `launch` in `repository`
 /// starts from when it names nothing: an existing branch or PR, or an
 /// issue. A new branch it leaves unnamed, which the daemon begins as a
-/// chat whose agent makes it a workspace once it knows the work.
+/// chat whose agent makes it a workspace once it knows the work, so what
+/// only a branch takes is refused before another picker asks.
 pub(in crate::cli::commands::start::settle) async fn pick_source(
     ctx: &Context,
     launch: &mut Launch,
     repository: Option<&Repository>,
 ) -> Result<()> {
-    let Some(repo) = repository.filter(|_| names_nothing(launch) && ctx.interactive()) else {
-        return Ok(());
-    };
-    let mut creation = Creation::default();
-    let picked = pick_add_source(ctx, repo, &mut creation).await?;
-    picked_source(launch, creation, picked);
-    Ok(())
+    if let Some(repo) = repository.filter(|_| names_nothing(launch) && ctx.interactive()) {
+        let mut creation = Creation::default();
+        let picked = pick_add_source(ctx, repo, &mut creation).await?;
+        picked_source(launch, creation, picked);
+    }
+    ensure_branch_takes(launch)
+}
+
+/// Refuse what only a new workspace's branch takes in `launch` when it
+/// names none, so it begins as a chat.
+fn ensure_branch_takes(launch: &Launch) -> Result<()> {
+    match names_no_branch(launch) {
+        true => crate::launches::ensure_begins_as_chat(launch),
+        false => Ok(()),
+    }
 }
 
 /// Settle on a terminal what the new workspace a creation `launch` makes

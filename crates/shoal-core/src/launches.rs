@@ -116,6 +116,17 @@ pub fn workspace_flags(launch: &Launch) -> Vec<&'static str> {
     .collect()
 }
 
+/// Refuse what only a new workspace's branch takes in `launch`, which
+/// names no branch, so it begins as a chat.
+pub fn ensure_begins_as_chat(launch: &Launch) -> Result<()> {
+    if let Some(flag) = workspace_flags(launch).first() {
+        anyhow::bail!(
+            "{flag} applies to a new workspace's branch; name the branch with --branch, since a start without one begins as a chat"
+        );
+    }
+    Ok(())
+}
+
 /// The kind of space the arguments other than the mode fit: a workspace
 /// for a flag only a workspace takes or a PR or branch link.
 pub fn fitting_kind(launch: &Launch) -> Option<SpaceKind> {

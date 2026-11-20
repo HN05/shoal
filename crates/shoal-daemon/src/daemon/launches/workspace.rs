@@ -249,11 +249,7 @@ fn on_branch(launch: &Launch, workspace: &Workspace) -> Launch {
 /// in `repo`, in its mode of `shape`, whose agent makes it a workspace once
 /// it knows the work, refusing what only a new workspace takes.
 fn as_chat(launch: &Launch, shape: &Shape, repo: &Repository) -> Result<Placed> {
-    if let Some(flag) = fits::workspace_flags(launch).first() {
-        anyhow::bail!(
-            "{flag} applies to a new workspace's branch; name the branch with --branch, since a start without one begins as a chat"
-        );
-    }
+    fits::ensure_begins_as_chat(launch)?;
     let chat = Launch {
         target: None,
         repository: Some(repo.id.to_string()),

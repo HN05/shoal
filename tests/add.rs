@@ -54,7 +54,13 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
         // then leaves the rest of it to the daemon.
         (
             vec!["start", "--wait", "test", "--branch", "new"],
-            vec!["list_repositories", "layered_config id:test", "launch"],
+            vec![
+                "list_repositories",
+                "list_repositories",
+                "list_spaces",
+                "layered_config id:test",
+                "launch",
+            ],
             "creation reached",
         ),
         (
@@ -63,10 +69,10 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             ],
             vec![
                 "list_repositories",
-                "layered_config id:test",
                 "list_repositories",
+                "list_spaces",
+                "layered_config id:test",
                 "check_launch test new",
-                "layered_config test",
                 "launch here now=false",
             ],
             "creation reached",
@@ -76,7 +82,7 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             vec![
                 "start", "--wait", "test", "--repo", "test", "--branch", "new", "--here",
             ],
-            vec!["list_repositories", "layered_config id:test"],
+            vec![],
             "cannot be combined with --repo",
         ),
         // Nor does a link go with --branch.
@@ -89,7 +95,7 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
                 "topic",
                 "--here",
             ],
-            vec!["list_repositories", "layered_config id:test"],
+            vec![],
             "cannot be combined with --branch",
         ),
         // A contribution without a terminal registers its repository, then
@@ -106,6 +112,8 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             vec![
                 "register_contribution https://other.example/team/repo",
                 "list_repositories",
+                "list_repositories",
+                "list_spaces",
                 "layered_config id:registered",
                 "launch",
             ],
@@ -174,10 +182,10 @@ fn a_scoped_start_here_takes_its_own_slot_without_skipping_the_limits() {
         daemon.methods(),
         [
             "list_repositories",
-            "layered_config id:test",
             "list_repositories",
+            "list_spaces",
+            "layered_config id:test",
             "check_launch test new",
-            "layered_config test",
             "launch here now=false",
         ],
         "{}",
@@ -190,9 +198,11 @@ fn unregistered_repositories_are_registered_on_confirmation() {
     let registered = vec![
         "list_repositories",
         "register_repository https://other.example/team/repo",
-        "check_creation id:registered",
+        "list_repositories",
         "layered_config id:registered",
     ];
+    // A repository named by URL is looked up again as registering offers it.
+    let named = [&["list_repositories"][..], &registered].concat();
     let url_args: &[&str] = &[
         "start",
         "--wait",
@@ -208,8 +218,8 @@ fn unregistered_repositories_are_registered_on_confirmation() {
     for (args, answer, expected) in [
         (url_args, "y\n", registered.clone()),
         (url_args, "n\n", vec!["list_repositories"]),
-        (explicit_args, "y\n", registered),
-        (explicit_args, "n\n", vec!["list_repositories"]),
+        (explicit_args, "y\n", named),
+        (explicit_args, "n\n", vec!["list_repositories", "list_repositories"]),
     ] {
         let daemon = FakeDaemon::start();
         let (output, transcript) = prompt::answer(
@@ -228,7 +238,7 @@ fn interactive_commands_refuse_their_arguments_before_prompting() {
         (
             &["start", "--wait", "missing"][..],
             "",
-            &["check_creation missing"][..],
+            &["list_repositories"][..],
             "repository is not registered",
         ),
         // Without a branch it begins as a chat, which takes no base.
@@ -237,10 +247,9 @@ fn interactive_commands_refuse_their_arguments_before_prompting() {
             "",
             &[
                 "list_repositories",
-                "layered_config id:test",
                 "list_repositories",
+                "layered_config id:test",
                 "check_launch test",
-                "layered_config test",
             ],
             "--base applies to a new workspace's branch",
         ),
@@ -252,10 +261,9 @@ fn interactive_commands_refuse_their_arguments_before_prompting() {
             "",
             &[
                 "list_repositories",
-                "layered_config id:test",
                 "list_repositories",
-                "check_launch test topic",
-                "layered_config test",
+                "list_spaces",
+                "layered_config id:test",
             ],
             "unknown agent",
         ),
@@ -274,8 +282,9 @@ fn interactive_commands_refuse_their_arguments_before_prompting() {
             "",
             &[
                 "list_repositories",
-                "layered_config id:test",
                 "list_repositories",
+                "list_spaces",
+                "layered_config id:test",
                 "check_launch test topic",
             ],
             "missing is neither a workspace nor a queued agent",
@@ -311,9 +320,13 @@ struct FakeDaemon {
 impl FakeDaemon {
     fn start() -> Self {
         let root = tempfile::tempdir_in("/tmp").unwrap();
+        // The registered repository's checkout, whose branches a start on
+        // one of them reads.
+        std::fs::create_dir(root.path().join("registered")).unwrap();
         for args in [
             vec!["init", "-b", "main"],
             vec!["remote", "add", "origin", "https://forge.example/team/repo"],
+            vec!["-C", "registered", "init", "-b", "main"],
         ] {
             assert!(
                 support::isolated(root.path(), "git")
@@ -375,29 +388,6 @@ impl FakeDaemon {
                                 "agent": {"default": "custom"}, "agents": {"custom": {"command": ["false"]}}
                             }
                         }})
-                    }
-                    "check_creation" => {
-                        let check = &request["method"]["check_creation"];
-                        let repository = selector(&check["repository"]);
-                        let branch = check["branch"].as_str();
-                        method = format!("check_creation {repository}");
-                        if let Some(branch) = branch {
-                            method = format!("{method} {branch}");
-                        }
-                        let id = repository.strip_prefix("id:").unwrap_or(&repository);
-                        let refusal = if !["test", "registered"].contains(&id) {
-                            Some("repository is not registered")
-                        } else if branch == Some("taken") {
-                            Some("workspace name already exists: taken")
-                        } else {
-                            None
-                        };
-                        match refusal {
-                            None => json!({"type": "ok"}),
-                            Some(message) => json!({"type": "error", "data": {
-                                "code": "operation_failed", "message": message
-                            }}),
-                        }
                     }
                     "check_launch" => {
                         let launch = &request["method"]["check_launch"]["launch"];
