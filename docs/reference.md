@@ -2296,8 +2296,14 @@ demo's own port number, or its viewer's, when it is free and otherwise on any, p
 through the hub, both ways and unread, so WebSockets work, until Ctrl-C. An
 agent runs it in the foreground for a demo in its scope; with `--json` it
 prints the demo's `name`, its `machine`, the local `location` and `port`
-first. Other demos of another machine open only there, and one whose machine
-is offline fails at once, naming the machine and when the hub last saw it.
+first. A terminal demo another machine runs opens in your terminal as
+`shoal attach` opens a session there (see [Agents](#agents)): that machine
+shows the demo's place on a terminal of your terminal's size and `TERM`
+through its host, a client of a zmx, tmux, Zellij or Herdr session or your
+own Rex app, every key goes there, so the host's detach key detaches, and a
+dropped link attaches again until Ctrl-C; it needs a terminal. A demo whose
+machine is offline fails at once, naming the machine and when the hub last
+saw it.
 `shoal demo ls` lists the configured and
 running demos, with each running demo's `kind` (`terminal`, `server`, `web`
 or `simulator`), a web demo's `url` and a simulator demo's `viewer` in its JSON, `shoal demo screen NAME [--lines N]` prints the end of what it

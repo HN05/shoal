@@ -3,7 +3,6 @@
 //! hand this terminal to one of a workspace's or a chat's sessions. A user
 //! on another machine attaches through a terminal the space's machine
 //! makes for them.
-mod viewer;
 
 use anyhow::{Result, ensure};
 use shoal_ids::space_ids::SpaceId;
@@ -12,6 +11,7 @@ use shoal_workers::attach::{Attaching, Target};
 use shoal_workers::resume::{Resuming, Starter};
 
 use super::resume::reports::Reporting;
+use super::viewer::{self, Viewed};
 use crate::client::output::batch::Failure;
 use crate::{
     cli::{
@@ -67,7 +67,8 @@ async fn attach_elsewhere(
     session: Option<String>,
 ) -> Result<i32> {
     let machine = view.machine_name(remote);
-    let ended = viewer::attach(ctx, remote.space.id.clone(), machine, session).await?;
+    let viewed = Viewed::session(remote.space.id.clone(), session).await;
+    let ended = viewer::view(ctx, viewed, machine).await?;
     if ended.open {
         recent::record_attach_elsewhere(ctx, &remote.space.id);
     }

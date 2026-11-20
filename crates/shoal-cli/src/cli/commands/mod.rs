@@ -79,6 +79,7 @@ mod triggers;
 mod turns;
 mod update;
 mod view;
+mod viewer;
 pub(in crate::cli) mod workspaces;
 
 mod worktree_hooks;

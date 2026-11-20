@@ -899,7 +899,8 @@ simulator and passes its UDID as `SHOAL_SIM_UDID`. `shoal demo NAME
 --workspace W` on a `server`, `web` or `simulator` demo another machine of the
 hub runs forwards it to a port of this machine, printing where, until stopped;
 a simulator demo's is its viewer's, a page that shows the device and takes
-touches. Chats have no demos.
+touches. A terminal demo there opens in the calling terminal as `shoal attach`
+does, so it needs one. Chats have no demos.
 
 ## Triggers
 

@@ -1,5 +1,6 @@
 //! `shoal demo [name]`: opening a running demo, named or picked, in this
-//! terminal, or forwarding one another joined machine runs.
+//! terminal, or one another joined machine runs: a terminal demo shown in
+//! this terminal, any other forwarded from a port here.
 use anyhow::{Context as _, Result, ensure};
 
 use super::{
@@ -7,8 +8,17 @@ use super::{
     lookup::{find, running, scope},
     presets,
 };
-use crate::cli::{commands::machines, context::Context, output::Palette, terminal, ui};
-use shoal_protocol::demos::Running;
+use crate::cli::{
+    commands::{
+        machines,
+        viewer::{self, Viewed},
+    },
+    context::Context,
+    output::Palette,
+    terminal, ui,
+};
+use shoal_protocol::demos::{Kind, Running};
+use shoal_protocol::hub::directory::{HubView, Listed};
 use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn open(
@@ -19,7 +29,7 @@ pub(super) async fn open(
     if let Some(selector) = &workspace
         && let Some(elsewhere) = machines::space_elsewhere(ctx, selector).await?
     {
-        return forward(ctx, name, elsewhere).await;
+        return open_elsewhere(ctx, name, elsewhere).await;
     }
     ensure!(ctx.on_terminal(), "opening a demo requires a terminal");
     let workspace = scope(ctx, workspace).await?;
@@ -30,6 +40,37 @@ pub(super) async fn open(
     };
     open_running(ctx, &demo).await?;
     Ok(0)
+}
+
+/// Open the demo `name`, or a picked one, of `space`, which another
+/// machine `view` lists runs.
+async fn open_elsewhere(
+    ctx: &Context,
+    name: Option<String>,
+    (space, view): (Listed, HubView),
+) -> Result<i32> {
+    let machine = view.machine_name(&space);
+    let selector = SpaceSelector::id(&space.space.id);
+    let demos = crate::demos::running(&ctx.paths, Some(selector)).await?;
+    let demo = match name {
+        Some(name) => find(demos, &name, None)?,
+        None => pick(ctx, demos)?,
+    };
+    match demo.kind {
+        Kind::Terminal => show_elsewhere(ctx, demo, machine).await,
+        Kind::Server | Kind::Web | Kind::Simulator => forward(ctx, demo, machine).await,
+    }
+}
+
+/// Show the terminal demo `demo`, which `machine` runs, in this terminal,
+/// exiting as the demo's host's client there does.
+async fn show_elsewhere(ctx: &Context, demo: Running, machine: &str) -> Result<i32> {
+    ensure!(
+        ctx.on_terminal(),
+        "opening a terminal demo requires a terminal"
+    );
+    let viewed = Viewed::demo(demo.workspace_id, demo.launch.name).await;
+    Ok(viewer::view(ctx, viewed, machine).await?.code)
 }
 
 pub(super) fn pick(ctx: &Context, demos: Vec<Running>) -> Result<Running> {

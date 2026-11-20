@@ -5,37 +5,25 @@
 use anyhow::{Context as _, Result, bail};
 use shoal_protocol::{
     demos::{Kind, PORT, Running},
-    hub::directory::{HubView, Listed},
     space_names::SpaceSelector,
 };
 use tokio::net::{TcpListener, TcpStream};
 
-use super::{lookup::find, open::pick, presets};
+use super::presets;
 use crate::{
     cli::context::Context,
     client::{connection::CommandPaths, output::demo::Forwarding},
     demos,
 };
 
-pub(super) async fn forward(
-    ctx: &Context,
-    name: Option<String>,
-    (space, view): (Listed, HubView),
-) -> Result<i32> {
-    let machine = view.directory.machine(&space.machine);
-    let machine = machine.map_or_else(|| space.machine.to_string(), |machine| machine.name.clone());
-    let selector = SpaceSelector::id(&space.space.id);
-    let running = demos::running(&ctx.paths, Some(selector.clone())).await?;
-    let demo = match name {
-        Some(name) => find(running, &name, None)?,
-        None => pick(ctx, running)?,
-    };
-    let (demo, port) = forwarded(&ctx.paths, demo, &machine).await?;
+pub(super) async fn forward(ctx: &Context, demo: Running, machine: &str) -> Result<i32> {
+    let selector = SpaceSelector::id(&demo.workspace_id);
+    let (demo, port) = forwarded(&ctx.paths, demo, machine).await?;
     let listener = listen(port).await?;
     let local = listener.local_addr()?.port();
     let forwarding = Forwarding {
         name: demo.launch.name.clone(),
-        machine,
+        machine: machine.to_owned(),
         location: local_location(&demo, local)?,
         port: local,
     };
@@ -55,15 +43,13 @@ pub(super) async fn forward(
 
 /// The port `demo`, which `machine` runs, serves on there, with the demo
 /// as it is then: a simulator demo's viewer's, which opening a stream to it
-/// starts. Refused for a demo of a kind that opens only there.
+/// starts. Refused for a terminal demo, which serves on none.
 async fn forwarded(paths: &CommandPaths, demo: Running, machine: &str) -> Result<(Running, u16)> {
     let name = demo.launch.name.clone();
     let port = match demo.kind {
         Kind::Server | Kind::Web => demo.launch.port(),
         Kind::Simulator => return presets::start_viewer(paths, &demo).await,
-        Kind::Terminal => {
-            bail!("demo {name} is a terminal demo on machine {machine}; open it there")
-        }
+        Kind::Terminal => bail!("demo {name} on machine {machine} is a terminal demo"),
     };
     Ok((
         demo,

@@ -1,9 +1,9 @@
-//! `shoal attach` of a space on another joined machine: that machine runs
-//! the attach on a terminal of its own, which this one shows in raw mode,
-//! sending it every key and each new size, so the host's own detach key
-//! detaches. A dropped link leaves the session running there; this
-//! terminal says so and attaches again to the same session once the
-//! machine answers, until Ctrl-C.
+//! `shoal attach` of a space on another joined machine, and `shoal demo` of
+//! a terminal demo there: that machine shows the session or the demo on a
+//! terminal of its own, which this one shows in raw mode, sending it every
+//! key and each new size, so the host's own detach key detaches. A dropped
+//! link leaves the session or demo running there; this terminal says so and
+//! attaches again to it once the machine answers, until Ctrl-C.
 use std::{
     io::{Read as _, Write as _},
     time::Duration,
@@ -26,7 +26,7 @@ use crate::{
     cli::context::Context,
     client::{
         attaching::{Keys, Screen},
-        connection,
+        connection::{self, CommandPaths},
     },
 };
 
@@ -38,67 +38,121 @@ const LONGEST_WAIT: Duration = Duration::from_secs(30);
 /// The key that stops attaching again.
 const CTRL_C: u8 = 0x03;
 
+/// What this terminal views on another machine.
+pub(in crate::cli::commands) enum Viewed {
+    /// A session of a space, as an attach there chooses it.
+    Session { space: SpaceId, viewer: Viewer },
+    /// A space's terminal demo.
+    Demo {
+        space: SpaceId,
+        name: String,
+        terminal: Terminal,
+    },
+}
+
+impl Viewed {
+    /// A session of `space`, the one `session` names when given, viewed
+    /// from this terminal.
+    pub(in crate::cli::commands) async fn session(space: SpaceId, session: Option<String>) -> Self {
+        let viewer = Viewer {
+            session,
+            again: None,
+            terminal: this_terminal().await,
+        };
+        Self::Session { space, viewer }
+    }
+
+    /// `space`'s terminal demo `name`, viewed from this terminal.
+    pub(in crate::cli::commands) async fn demo(space: SpaceId, name: String) -> Self {
+        let terminal = this_terminal().await;
+        Self::Demo {
+            space,
+            name,
+            terminal,
+        }
+    }
+
+    /// Open what this views.
+    async fn open(&self, paths: &CommandPaths) -> Result<(Screen, Keys)> {
+        match self {
+            Self::Session { space, viewer } => {
+                let space = SpaceSelector::id(space);
+                crate::client::attaching::attach(paths, space, viewer.clone()).await
+            }
+            Self::Demo {
+                space,
+                name,
+                terminal,
+            } => {
+                let space = SpaceSelector::id(space);
+                let (name, terminal) = (name.clone(), terminal.clone());
+                let stream = crate::demos::open_terminal(paths, space, name, terminal).await?;
+                Ok((stream.screen, stream.keys))
+            }
+        }
+    }
+
+    /// View again what the link to `machine` dropped, as `reported` says
+    /// it, without waking or restoring an agent a second time; names what
+    /// keeps running there.
+    fn again(&mut self, reported: &Reported, machine: &str) -> Result<String> {
+        match self {
+            Self::Session { viewer, .. } => {
+                let Some(session) = &reported.chosen else {
+                    bail!("lost the connection to machine {machine} before it chose a session");
+                };
+                viewer.again = Some(session.place.clone());
+                Ok(session.name.clone())
+            }
+            Self::Demo { name, .. } => Ok(format!("demo {name}")),
+        }
+    }
+}
+
 /// How an attach on another machine ended.
-pub(super) struct Ended {
+pub(in crate::cli::commands) struct Ended {
     /// The attach's exit code, which this one exits with.
     pub code: i32,
     /// Whether it left its session running there.
     pub open: bool,
 }
 
-/// Attach this terminal to a session of `space`, which runs on `machine`,
-/// the one `session` names when given, and end as the attach there does.
-/// A signal that ends this process, such as SIGTERM, ends the attach,
-/// leaving the terminal as it found it.
-pub(super) async fn attach(
+/// Show `viewed`, which runs on `machine`, in this terminal, and end as the
+/// attach or demo there does. A signal that ends this process, such as
+/// SIGTERM, ends the attach, leaving the terminal as it found it.
+pub(in crate::cli::commands) async fn view(
     ctx: &Context,
-    space: SpaceId,
+    viewed: Viewed,
     machine: &str,
-    session: Option<String>,
 ) -> Result<Ended> {
-    let viewer = Viewer {
-        session,
-        again: None,
-        terminal: Terminal {
-            size: terminal_size(),
-            term: std::env::var("TERM").ok(),
-            apps: viewer_apps().await,
-        },
-    };
     let mut ended = Termination::watch()?;
     let mut raw = RawTerminal::enter()?;
     let attached = tokio::select! {
-        attached = keep_attached(ctx, &space, machine, viewer) => attached?,
+        attached = keep_attached(ctx, viewed, machine) => attached?,
         signal = ended.signalled() => bail!("stopped by {signal}"),
     };
     raw.left_by_its_client();
     Ok(attached)
 }
 
-/// Attach to `space` on `machine` as `viewer` asks, again after each
-/// dropped link, until the attach there exits.
-async fn keep_attached(
-    ctx: &Context,
-    space: &SpaceId,
-    machine: &str,
-    mut viewer: Viewer,
-) -> Result<Ended> {
+/// Attach to `viewed` on `machine`, again after each dropped link, until
+/// the attach there exits.
+async fn keep_attached(ctx: &Context, mut viewed: Viewed, machine: &str) -> Result<Ended> {
     let mut keys = typed_keys();
     let mut resizes = signal(SignalKind::window_change()).context("watch the terminal's size")?;
     let mut reported = Reported::default();
     let mut wait = FIRST_WAIT;
+    let mut again = false;
     loop {
-        let space = SpaceSelector::id(space);
         // The terminal is raw, so Ctrl-C is a key, which stops a request
         // whose answer does not come.
-        let asked = crate::client::attaching::attach(&ctx.paths, space, viewer.clone());
         let attached = tokio::select! {
-            attached = asked => attached,
+            attached = viewed.open(&ctx.paths) => attached,
             () = ctrl_c(&mut keys) => bail!("stopped attaching to machine {machine}"),
         };
         let (screen, input) = match attached {
             Ok(attached) => attached,
-            Err(error) if viewer.again.is_some() && lost(&error) => {
+            Err(error) if again && lost(&error) => {
                 stop_on_ctrl_c(&mut keys, wait, machine).await?;
                 wait = (wait * 2).min(LONGEST_WAIT);
                 continue;
@@ -115,11 +169,8 @@ async fn keep_attached(
             let open = reported.left_open;
             return Ok(Ended { code, open });
         }
-        let Some(session) = &reported.chosen else {
-            bail!("lost the connection to machine {machine} before it chose a session");
-        };
-        lost_notice(machine, &session.name);
-        viewer.again = Some(session.place.clone());
+        lost_notice(machine, &viewed.again(&reported, machine)?);
+        again = true;
         stop_on_ctrl_c(&mut keys, wait, machine).await?;
     }
 }
@@ -279,14 +330,14 @@ fn lost(error: &anyhow::Error) -> bool {
         || connection::stream_closed(error)
 }
 
-/// Say on its own line that the link to `machine` dropped while `session`
+/// Say on its own line that the link to `machine` dropped while `running`
 /// keeps running there.
 /// The host's client there can no longer switch off the input modes it
 /// turned on here, such as mouse tracking, so this terminal does.
-fn lost_notice(machine: &str, session: &str) {
+fn lost_notice(machine: &str, running: &str) {
     show_bytes(
         format!(
-            "{INPUT_MODES_RESET}\r\nshoal: lost the connection to machine {machine}; {session} keeps running there. Reconnecting, Ctrl-C to stop\r\n"
+            "{INPUT_MODES_RESET}\r\nshoal: lost the connection to machine {machine}; {running} keeps running there. Reconnecting, Ctrl-C to stop\r\n"
         )
         .as_bytes(),
     )
@@ -297,6 +348,15 @@ fn show_bytes(bytes: &[u8]) -> Result<()> {
     let mut stdout = std::io::stdout().lock();
     stdout.write_all(bytes)?;
     Ok(stdout.flush()?)
+}
+
+/// This terminal as another machine makes the one it shows a place on.
+async fn this_terminal() -> Terminal {
+    Terminal {
+        size: terminal_size(),
+        term: std::env::var("TERM").ok(),
+        apps: viewer_apps().await,
+    }
 }
 
 /// This terminal's size; none off a terminal.

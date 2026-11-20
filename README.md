@@ -196,6 +196,7 @@ shoal attach 3                 # Reattach to the workspace's agent session; Ctrl
 shoal demo                     # Pick a running demo an agent started and open it
 shoal demo start web           # Start the configured demo `web` for the user to try
 shoal demo web -w 7            # Forward a web demo another machine of the hub runs here
+shoal demo tui -w 7            # Show a terminal demo another machine runs in this terminal
 shoal start --in 3 -a happy-claude  # Detached Happy session, visible in the Happy app
 shoal start my-project --mode chat  # Discuss the repository with an agent in its checkout
 shoal start --in 3 -m chat     # Review a workspace's live work in a chat in its worktree, beside its agent

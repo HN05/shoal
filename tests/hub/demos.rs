@@ -1,7 +1,12 @@
 //! Opening a demo on another machine: the demo's machine relays a stream's
 //! bytes to and from the demo's port through the hub, unread, or shows a
 //! terminal demo's place on a terminal it makes for the viewer.
-use std::{fs, io::BufRead as _, path::PathBuf, process::Stdio};
+use std::{
+    fs,
+    io::{BufRead as _, Read as _, Write as _},
+    path::PathBuf,
+    process::Stdio,
+};
 
 use shoal_client::{
     connection::Daemon,
@@ -23,7 +28,7 @@ use super::{
     numbers::reroute,
     support::{
         fixture::{Base, home},
-        install_test_script, ports,
+        install_test_script, ports, pty,
         wait::wait_for,
         zmx::PASSTHROUGH_ZMX,
     },
@@ -260,4 +265,45 @@ fn a_device_s_stream_shows_a_terminal_demo_on_another_machine_and_types_into_it(
     assert!(screen.contains("shown demoed-tui"), "{screen}");
     let typed = fs::read_to_string(laptop.root.path().join("typed")).unwrap();
     assert_eq!(typed.trim(), "hello 30 100");
+}
+
+#[test]
+fn shoal_demo_shows_another_machine_s_terminal_demo_in_this_terminal() {
+    let hub = machine(true, "app");
+    let (laptop, space, laptop_id) = laptop_terminal_demo(&hub);
+    let desk = machine(false, "app");
+    join(&desk, &hub, "desk");
+    listed(&desk, &space, &laptop_id);
+    let (mut master, terminal) = pty::open();
+    let mut opening = (desk.command())
+        .args(["demo", "tui", "--workspace", &space])
+        .stdin(terminal.try_clone().unwrap())
+        .stdout(terminal.try_clone().unwrap())
+        .stderr(terminal.try_clone().unwrap())
+        .spawn()
+        .unwrap();
+    let mut shown = Vec::new();
+    wait_for("the demo shown", || {
+        read_shown(&mut master, &mut shown);
+        String::from_utf8_lossy(&shown)
+            .contains("shown demoed-tui")
+            .then_some(())
+    });
+    master.write_all(b"hello\r").unwrap();
+    let status = wait_for("the demo's client to exit", || {
+        read_shown(&mut master, &mut shown);
+        opening.try_wait().unwrap()
+    });
+    let shown = String::from_utf8_lossy(&shown);
+    assert!(status.success(), "{status}: {shown}");
+    let typed = fs::read_to_string(laptop.root.path().join("typed")).unwrap();
+    assert!(typed.starts_with("hello "), "{typed}");
+}
+
+/// Add what `master`'s terminal shows by now to `shown`.
+fn read_shown(master: &mut fs::File, shown: &mut Vec<u8>) {
+    let mut bytes = [0; 4096];
+    while let Ok(read @ 1..) = master.read(&mut bytes) {
+        shown.extend_from_slice(&bytes[..read]);
+    }
 }
