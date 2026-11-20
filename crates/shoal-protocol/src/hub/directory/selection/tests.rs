@@ -2,13 +2,14 @@ use serde_json::json;
 
 use super::*;
 
-/// A view of a laptop's workspace, running chat and stopped chat, and of a
-/// server's workspace that shares the workspace's number.
+/// A view of a laptop's workspace, running, sleeping and stopped chats, and
+/// of a server's workspace that shares the workspace's number.
 fn view() -> HubView {
     let space = |machine: &str, id: &str, number: u32, kind: &str, running: Option<&str>| {
+        let status = if id == "nap" { "asleep" } else { "working" };
         json!({
             "machine": machine, "id": id, "number": number, "name": id, "kind": kind,
-            "status": "working", "running": running, "reported_at": 0,
+            "status": status, "running": running, "reported_at": 0,
         })
     };
     serde_json::from_value(json!({
@@ -21,6 +22,7 @@ fn view() -> HubView {
             space("m-laptop", "work", 1, "workspace", None),
             space("m-laptop", "talk", 2, "chat", Some("claude")),
             space("m-laptop", "quiet", 3, "chat", None),
+            space("m-laptop", "nap", 4, "chat", None),
             space("m-server", "build", 1, "workspace", None),
         ],
     }))
@@ -38,15 +40,21 @@ fn pickers_offer_the_other_machines_spaces_of_the_kinds_they_pick() {
         ids((view.directory.spaces.iter()).filter(|listed| offered.offers(&listed.space)))
     };
     assert_eq!(offered(Offered::Workspaces), ["work", "build"]);
-    assert_eq!(offered(Offered::RunningChats), ["work", "talk", "build"]);
-    assert_eq!(offered(Offered::Spaces), ["work", "talk", "quiet", "build"]);
+    assert_eq!(
+        offered(Offered::RunningChats),
+        ["work", "talk", "nap", "build"]
+    );
+    assert_eq!(
+        offered(Offered::Spaces),
+        ["work", "talk", "quiet", "nap", "build"]
+    );
 }
 
 #[test]
-fn attach_returns_to_workspaces_and_chats_whose_agent_runs() {
+fn attach_returns_to_workspaces_and_chats_whose_agent_runs_or_sleeps() {
     let attachable = view().attachable();
     let attachable: Vec<&str> = attachable.iter().map(SpaceId::as_str).collect();
-    assert_eq!(attachable, ["work", "talk", "build"]);
+    assert_eq!(attachable, ["work", "talk", "nap", "build"]);
 }
 
 #[test]

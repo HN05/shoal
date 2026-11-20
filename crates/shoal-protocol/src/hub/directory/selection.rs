@@ -4,14 +4,14 @@
 use shoal_ids::space_ids::SpaceId;
 
 use super::{HubView, Listed, SpaceSummary};
-use crate::{model::SpaceKind, space_names::SpaceSelector};
+use crate::{list_status::ListStatus, model::SpaceKind, space_names::SpaceSelector};
 
 /// Which of the other machines' spaces a picker offers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Offered {
     /// Their workspaces.
     Workspaces,
-    /// Their workspaces and the chats whose agent runs.
+    /// Their workspaces and the chats whose agent runs or sleeps.
     RunningChats,
     /// Their workspaces and chats.
     Spaces,
@@ -22,9 +22,17 @@ impl Offered {
     pub fn offers(self, space: &SpaceSummary) -> bool {
         match (self, space.kind) {
             (_, SpaceKind::Workspace) | (Self::Spaces, SpaceKind::Chat) => true,
-            (Self::RunningChats, SpaceKind::Chat) => space.running.is_some(),
+            (Self::RunningChats, SpaceKind::Chat) => space.agent_runs_or_sleeps(),
             (Self::Workspaces, SpaceKind::Chat) => false,
         }
+    }
+}
+
+impl SpaceSummary {
+    /// Whether its agent runs, or sleeps in a wrapper that keeps running
+    /// while Shoal stopped the agent until something wakes it.
+    fn agent_runs_or_sleeps(&self) -> bool {
+        self.running.is_some() || self.status == ListStatus::Asleep
     }
 }
 
@@ -44,11 +52,13 @@ impl HubView {
     }
 
     /// The IDs of the spaces `attach -` returns to: the workspaces, and the
-    /// chats whose agent runs, since a chat whose agent exited has no
-    /// session left.
+    /// chats whose agent runs or sleeps, since a chat whose agent exited has
+    /// no session left.
     pub fn attachable(&self) -> Vec<SpaceId> {
         (self.directory.spaces.iter())
-            .filter(|listed| listed.space.kind.has_worktree() || listed.space.running.is_some())
+            .filter(|listed| {
+                listed.space.kind.has_worktree() || listed.space.agent_runs_or_sleeps()
+            })
             .map(|listed| listed.space.id.clone())
             .collect()
     }
