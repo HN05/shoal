@@ -237,7 +237,7 @@ async fn sessions(manager: &Manager, spaces: &[Space]) -> Result<Vec<Record>> {
 /// The open threads with a post of the visible spaces.
 async fn threads(manager: &Manager, visible: &Visible) -> Result<Vec<Record>> {
     Ok(manager
-        .open_threads()
+        .followed_open_threads()
         .await?
         .into_iter()
         .filter(|thread| visible.contains(&thread.space_id))

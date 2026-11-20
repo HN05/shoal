@@ -76,10 +76,16 @@ impl Manager {
         Ok(thread)
     }
 
-    /// Every open thread with a post, oldest first, with its code followed
-    /// to where it is now, which subscription snapshots page.
+    /// Every open thread with a post, oldest first, which the hub lists on
+    /// its own passes, without following code.
     pub(crate) async fn open_threads(&self) -> Result<Vec<Thread>> {
-        let mut threads = self.store.run(records::open_with_posts).await?;
+        self.store.run(records::open_with_posts).await
+    }
+
+    /// [`Manager::open_threads`] with their code followed to where it is
+    /// now, which subscription snapshots page for apps and editors.
+    pub(crate) async fn followed_open_threads(&self) -> Result<Vec<Thread>> {
+        let mut threads = self.open_threads().await?;
         self.follow_code(&mut threads).await;
         Ok(threads)
     }
