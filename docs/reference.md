@@ -6903,8 +6903,9 @@ reach a chat's files.
 ### Threads
 
 ```sh
-shoal thread open "<name>" [--kind question] [--space S]  # An empty thread; prints its number
-shoal send <thread> "<text>" [--choice C]... [--recommend R --reason R] [--attach FILE]... [--wait]
+shoal thread open "<name>" [--kind question|request] [--space S] [--code PATH[:FIRST-LAST]]...
+shoal send <thread> "<text>" [--choice C]... [--recommend R --reason R] [--attach FILE]...
+  [--code PATH[:FIRST-LAST]]... [--wait]
 shoal send <thread> --body-file F    # The text from a file
 shoal send <thread> --choose N       # Pick a choice the other side offered
 shoal send <thread> --in-chat        # The turn's final message in the chat is the post
@@ -6920,7 +6921,11 @@ shoal unlink thread <S.N>
 A thread is a conversation between its opener, the user, a space or Shoal, and
 its holder, the user or a space, whoever is asked now, with posts from both
 sides. `shoal thread open` records an empty thread with a free-text name of one
-line and a kind, `question` by default, and prints its number. From a space it
+line and a kind, `question` by default or `request`, and prints its number;
+with `--code` it also makes its opening post, whose text is the name, pointing
+at that code. A question asks for an answer, and a request asks its holder to
+do something, such as implement the code it points at: the holder posts once
+it is done, or why it cannot be. From a space it
 goes to the space's [coordinator](#child-workspaces), else to you, or with
 `--space` to a space the caller's scope reaches; from your terminal it goes to
 the space `--space` names, else the current or a picked one. An empty thread
@@ -6942,6 +6947,33 @@ daemon that went away to return and know the caller's scope again, or 10
 seconds for one that was not running. A post that would make the thread longer
 than one response carries, about 56 KiB, is refused: open a new thread to go on.
 
+`--code`, repeatable, points a post at a file or directory, or with
+`:FIRST-LAST`, or `:LINE`, at lines of a file, in the worktree of a space the
+caller's scope reaches, which the reference names; a relative path is read
+from the current directory. The worktree's file is referenced, not copied:
+`--attach` sends a copy. A reference keeps the space, HEAD then, the path and
+lines, the file's version as a Git blob, and a snippet of its lines of up to
+2 KiB; one to a directory, a binary file or a file over 1 MiB keeps its path
+and lines only. Through `shoal-client`, an editor sends a reference with its
+buffer's contents, which it keeps instead of the file on disk. The other side
+receives each as `Code: path:first-last` with the snippet, naming the space
+whose worktree it is in when that is not its own.
+
+Shoal follows each reference as its code changes. Reading a thread, with
+`view thread`, `thread list` or `shoal-client`, compares the file of each
+reference in a ready worktree with the version the reference was last followed
+to, and on a change maps its lines through a diff of that version against the
+file now: lines added or removed above them move them, edits inside them grow
+or shrink them to cover what replaced them, which leaves the reference
+`changed`, and once all of them are deleted it keeps the point where they
+were, `outdated`, still showing its snippet. A file renamed whole is found
+where Git's rename detection puts it; code moved into another file is not
+looked for, so the reference is `outdated`. `--json` gives each reference's
+`original` place and `latest`, each a `path`, `lines` counted from 0 with
+`end` excluded, and `blob`, its `snippet`, `commit` and `state`. The
+repository keeps the versions under `refs/shoal/threads/<space-id>`, one ref
+per space, until the references go with their thread.
+
 `--in-chat` lets an agent with Shoal's hooks, Claude Code or Codex, that Shoal
 tracks in a workspace or runs as a chat's, post in its conversation, where the
 post reads as the agent wrote it; other agents are refused. It marks the
@@ -6961,6 +6993,7 @@ its posts from then on.
 
 `shoal thread resolve` settles a thread with an outcome its kind takes:
 `answered`, for a question, with `--choose` naming the choice it settled on;
+`done`, for a request whose work its opener accepted;
 `duplicate --of <thread>`; or `withdrawn`, with an optional `--reason`. Shoal
 sets `closed`, with its cause, `completion` or `removal`. The opener resolves
 its thread, the holder one Shoal opened, and you any thread; `--undo` reopens
@@ -7001,7 +7034,7 @@ Shoal's post that the holder finished; removing the space does the same. `done
 for that cause that nothing resolved otherwise since, without Shoal's posts.
 `--json` gives a thread's `kind`, `name`, `opener`, `holder`, its `posts`, each
 with its `side`, `sender`, `space`, `text`, `choices`, `recommendation`,
-`reason`, `choice`, `files`, `in_chat` and the holder it `forwarded_to`, and
+`reason`, `choice`, `files`, `code`, `in_chat` and the holder it `forwarded_to`, and
 its `resolution` with its `outcome`, its data, `by`, `by_space` and
 `resolved_at`.
 

@@ -2999,9 +2999,13 @@ the user or a space, whoever is asked now, with posts from both sides, so a
 question can be discussed before it is settled, asked downward by the user or
 a parent of a child, and passed on to another agent. A thread has a typed
 kind, which decides the outcomes it takes: a `question` ends `answered`,
-optionally on a choice, and every kind `duplicate` of another thread,
-`withdrawn` or `closed`, which only Shoal sets. Unknown kinds and outcomes
-are refused rather than kept as text.
+optionally on a choice, a `request`, which asks its holder to do something,
+`done` once its opener accepts the work, and every kind `duplicate` of
+another thread, `withdrawn` or `closed`, which only Shoal sets. Unknown kinds
+and outcomes are refused rather than kept as text. Editors draw a thread with
+a state that comes from what Shoal records rather than a field of its own:
+`queued` while its last post is its opener's, `waiting` while it is the
+holder's, else its outcome.
 
 A space opens a thread with its coordinator, else the user, or with a space
 below it; the user opens one with a space. An empty thread notifies no one
@@ -3037,6 +3041,27 @@ work waits on no answer, and tells an opener other than the space that the
 holder finished; removing a space does the same. `done --undo` and a restore
 reopen the threads closed for that cause, without Shoal's closing posts,
 unless something resolved them since.
+
+A post may point at code: a file or its lines in the worktree of a space the
+poster's scope reaches. References belong to posts rather than threads,
+since a request about several places, a reply that points elsewhere and an
+answer that says where something should go all attach code mid-conversation;
+the opening post's references are the thread's place in code. A worktree's
+file is referenced, not copied, so a reference keeps the version of its file
+as a Git blob, HEAD then and a snippet of its lines, which shows once the
+code is gone. Shoal follows a reference as its code changes, when a read finds
+its file differs from the version it last reached, through a diff of that
+version against the file now, and records where its lines went, never mapping
+from the original: many small diffs keep a range exact, where one diff after
+heavy editing can misalign it. There is no background pass. The mapping is a
+pure function over two texts in `shoal-protocol`, so an editor's language
+server maps a range onto an unsaved buffer as the daemon does once it is
+saved. A file renamed whole is found through Git's rename detection; code
+moved into another file is not searched for. The repository keeps the
+versions under one ref per space, whose commit's tree holds each blob the
+space's references keep, since a ref per blob would slow every Git command
+that lists refs; the expiry pass rewrites it as references go with their
+threads and prunes as checkpoint expiry does.
 
 An agent posts in its chat with `send <thread> --in-chat`, and its turn's
 final message, which the `Stop` hook passes, becomes the post. A user talking

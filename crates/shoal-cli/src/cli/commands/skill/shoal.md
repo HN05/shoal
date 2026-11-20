@@ -586,13 +586,13 @@ read; `--space` names the space it went to, as for one on another machine.
 ## Threads
 
 ```sh
-shoal thread open "<name>" [--space <space>]   # Prints its number, such as 3.2
+shoal thread open "<name>" [--space <space>] [--kind question|request] [--code PATH[:FIRST-LAST]]
 shoal send <thread> "<text>" [--choice A --choice B --recommend A --reason R] \
-  [--attach FILE] [--body-file F] [--wait]
+  [--attach FILE] [--code PATH[:FIRST-LAST]] [--body-file F] [--wait]
 shoal send <thread> --choose <N>     # Pick a choice the other side offered
 shoal send <thread> --in-chat        # Your turn's final message is the post
 shoal thread forward <thread> [--space <space>] [--note "<text>"]
-shoal thread resolve <thread> answered [--choose N]   # Or duplicate --of, withdrawn --reason
+shoal thread resolve <thread> answered [--choose N]   # A request: done; any: duplicate --of, withdrawn --reason
 shoal thread resolve <thread> --undo
 shoal thread list [--space <space>] [--state open|resolved|all]
 shoal view thread <thread>
@@ -613,9 +613,23 @@ number. `--wait` waits without a time limit for the other side's next post
 and prints it. `--in-chat` makes your turn's final message the post, for an
 agent with Shoal's hooks; a prompt the user submits in your chat answers it.
 
+`--code`, repeatable, points a post at a file, or its lines, in the worktree
+of a space your scope reaches; `--attach` sends a copy instead. The other
+side receives each as `Code: path:first-last` with the lines' snippet, and
+the space whose worktree it is in when that is not its own. Shoal follows
+the code as it changes: `view thread` shows each reference where its lines
+are now, `changed` once lines inside it were edited and `outdated` once they
+are gone, with the snippet as it was. `thread open --code` posts the
+references at once, in an opening post named as the thread.
+
+A `question` asks for an answer; a `request` asks the holder to do
+something, such as implement the code it points at. The holder posts once
+it is done, or why it cannot be.
+
 The holder forwards a thread down, to a space it reaches, or up, to its
 coordinator or the user; the new holder reads what came before and receives
-the posts from then on. The opener resolves its thread: `answered`,
+the posts from then on. The opener resolves its thread: `answered` a
+question, `done` a request once it accepts the work,
 `duplicate --of <thread>`, or `withdrawn`, which takes back the holder's
 unread alerts of it. A space reads the threads it or a space below it took
 part in, and `link thread` delivers a thread's new posts to it. A thread
