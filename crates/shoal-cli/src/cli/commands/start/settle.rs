@@ -47,7 +47,10 @@ pub(in crate::cli::commands) async fn settle(
     let settings = crate::launches::shape::launch_settings(&DaemonReads(ctx), &launch).await?;
     let choice = mode::decided(ctx, &launch, found.as_ref(), &settings).await?;
     let (mut found, mut settings) = match choice.clone().named() {
-        Some(mode) => repository::settled(ctx, &mut launch, &mode, (found, settings)).await?,
+        Some(mode) => {
+            mode::ensure_fits(&launch, &mode, &settings)?;
+            repository::settled(ctx, &mut launch, &mode, (found, settings)).await?
+        }
         None => (found, settings),
     };
     pickers::check_agent(&launch, &settings)?;
@@ -57,6 +60,7 @@ pub(in crate::cli::commands) async fn settle(
     }
     let mode = mode::chosen(ctx, choice, &launch, &settings)?;
     launch.mode = Some(mode.clone());
+    mode::ensure_fits(&launch, &mode, &settings)?;
     (found, settings) = repository::settled(ctx, &mut launch, &mode, (found, settings)).await?;
     let worker = mode::starts_workspace(&launch, &mode, &settings)?;
     if worker && checked.is_none() {

@@ -106,6 +106,20 @@ pub(super) fn configured<'a>(
     }
 }
 
+/// Refuse what `launch` names that the kind of space `mode` starts under
+/// `settings` cannot take, before a picker asks for the rest; a setup's
+/// mode starts where its setup says.
+pub(super) fn ensure_fits(
+    launch: &Launch,
+    mode: &modes::ModeName,
+    settings: &Effective,
+) -> Result<()> {
+    match configured(launch, mode, settings)? {
+        Some(configured) => launches::ensure_fits(launch, &[], configured.kind, Some(mode)),
+        None => Ok(()),
+    }
+}
+
 /// Whether `mode` starts the agent of `launch` in a workspace under
 /// `settings`, where a terminal picks what the workspace starts from.
 pub(super) fn starts_workspace(

@@ -1,4 +1,4 @@
-use super::fit;
+use super::{ensure_fits, fit};
 use shoal_protocol::launches::{IssueChoice, Launch};
 
 /// A start on an issue, by number positionally or with `--issue`, picks
@@ -18,4 +18,20 @@ fn a_start_on_an_issue_number_picks_only_modes_in_a_repository() {
         assert_eq!(fit(&launch).unwrap().repository, Some(true), "{launch:?}");
     }
     assert_eq!(fit(&Launch::default()).unwrap().repository, None);
+}
+
+/// A named mode refuses what its kind of space cannot take, such as a
+/// branch for a chat, before a picker asks for a repository.
+#[test]
+fn a_chat_mode_refuses_a_branch_before_any_picker() {
+    let settings = crate::config::Config::default()
+        .resolve(&Default::default())
+        .unwrap();
+    let launch = Launch {
+        branch: Some("fix".into()),
+        ..Launch::default()
+    };
+    let error = ensure_fits(&launch, &"chat".into(), &settings).unwrap_err();
+    assert!(error.to_string().starts_with("--branch "), "{error}");
+    ensure_fits(&launch, &"worker".into(), &settings).unwrap();
 }
