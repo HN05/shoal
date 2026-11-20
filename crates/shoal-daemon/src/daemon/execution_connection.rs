@@ -250,33 +250,20 @@ async fn serve(
         None => Ok(()),
     };
     let controls = Controls::new(writer);
-    let (wants_reports, wanted) = watch::channel(execution.reports_status);
-    let (ending, ended) = watch::channel(false);
-    let reports = Reports {
-        space: execution.space.clone(),
-        execution: execution.id.clone(),
-        agent: execution.agent.as_ref().map(|agent| agent.name.clone()),
-    };
-    let relayed = async {
-        let result = async {
-            responded?;
-            relay(
+    let result = match responded {
+        Ok(()) => {
+            relay_reporting(
                 manager,
                 &mut execution,
                 &controls,
-                &wants_reports,
                 &mut incoming,
                 &mut handoff_claimed,
                 &mut unattachable,
             )
             .await
         }
-        .await;
-        // A report being sent goes out whole before the connection's end.
-        ending.send_replace(true);
-        result
+        Err(error) => Err(error),
     };
-    let (result, ()) = tokio::join!(relayed, reports.run(manager, &controls, wanted, ended));
     readers.abort_all();
     // The Git gate the registration holds keeps the default branch as the
     // execution left it until the records and the lookup of a pushed merge's
@@ -328,6 +315,43 @@ async fn serve(
         operation,
     )
     .await
+}
+
+/// Relay as [`relay`] does, with the space's status reports going out
+/// beside it once the wrapper says its terminal reads them, until the relay
+/// ends.
+async fn relay_reporting(
+    manager: &Manager,
+    execution: &mut Connected,
+    controls: &Controls,
+    incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
+    handoff_claimed: &mut bool,
+    unattachable: &mut Option<OwnedRwLockReadGuard<()>>,
+) -> Result<Ended> {
+    let (wants_reports, wanted) = watch::channel(execution.reports_status);
+    let (ending, ended) = watch::channel(false);
+    let reports = Reports {
+        space: execution.space.clone(),
+        execution: execution.id.clone(),
+        agent: execution.agent.as_ref().map(|agent| agent.name.clone()),
+    };
+    let relayed = async {
+        let result = relay(
+            manager,
+            execution,
+            controls,
+            &wants_reports,
+            incoming,
+            handoff_claimed,
+            unattachable,
+        )
+        .await;
+        // A report being sent goes out whole before the connection's end.
+        ending.send_replace(true);
+        result
+    };
+    let (result, ()) = tokio::join!(relayed, reports.run(manager, controls, wanted, ended));
+    result
 }
 
 /// Exchange controls and events until the wrapper reports its exit code or
