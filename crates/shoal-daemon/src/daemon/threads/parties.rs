@@ -33,7 +33,7 @@ impl Manager {
 
     /// The thread `number` names for `caller`, which it must be able to
     /// read.
-    pub(super) async fn readable_thread(
+    pub(in crate::daemon) async fn readable_thread(
         &self,
         caller: Option<&Caller>,
         number: ThreadNumber,

@@ -2,9 +2,9 @@
 //! hangs up. Cancelling one that changes state could leave it half done, so
 //! those finish instead, including reads that first finish or record work.
 use super::{
-    AgentMethod, AlertMethod, AppMethod, ApprovalMethod, BranchMethod, CiMethod, ContainerMethod,
-    DaemonMethod, DemoMethod, ExecutionMethod, FileMethod, HoldMethod, HubMethod, ItemMethod,
-    LaunchMethod, Operation, PortMethod, QueueMethod, RecoveryMethod, RemovalMethod,
+    AgentMethod, AlertMethod, AppMethod, ApprovalMethod, BranchMethod, ChangeMethod, CiMethod,
+    ContainerMethod, DaemonMethod, DemoMethod, ExecutionMethod, FileMethod, HoldMethod, HubMethod,
+    ItemMethod, LaunchMethod, Operation, PortMethod, QueueMethod, RecoveryMethod, RemovalMethod,
     RepositoryMethod, ResourceMethod, SecretMethod, SimulatorMethod, ThreadMethod, TriggerMethod,
     WorkspaceMethod,
 };
@@ -63,7 +63,12 @@ impl Operation {
                 )
                 | Self::Alert(AlertMethod::ListAlerts { .. })
                 | Self::Port(PortMethod::PortOverview { .. } | PortMethod::PortCatalog { .. })
-                | Self::Thread(ThreadMethod::ListThreads { .. } | ThreadMethod::ShowThread { .. })
+                | Self::Thread(
+                    ThreadMethod::ListThreads { .. }
+                        | ThreadMethod::ShowThread { .. }
+                        | ThreadMethod::CurrentThread { .. }
+                )
+                | Self::Change(ChangeMethod::ListChanges { .. } | ChangeMethod::ChangeDiffs { .. })
                 | Self::Queue(QueueMethod::ListQueue | QueueMethod::QueuedPlan { .. })
                 | Self::Recovery(
                     RecoveryMethod::Checkpoints { .. }

@@ -49,7 +49,7 @@ pub use approvals::ApprovalMethod;
 pub use apps::AppMethod;
 pub use assignments::{AssignmentMethod, SavedAgent};
 pub use branches::BranchMethod;
-pub use changes::ChangeMethod;
+pub use changes::{ChangeFilter, ChangeMethod};
 pub use chats::{ChatMethod, ChatRoot};
 pub use ci::CiMethod;
 pub use config::{ConfigTarget, RepositoryLayers};

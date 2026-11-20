@@ -107,6 +107,31 @@ pub enum ThreadMethod {
         space: SpaceSelector,
         thread: ItemNumber,
     },
+    /// From now on the changes of the space's agent are for the thread
+    /// `thread`, or for none without one.
+    SwitchThread {
+        space: SpaceSelector,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        thread: Option<ThreadNumber>,
+    },
+    /// The thread the changes of the space's agent are for now.
+    CurrentThread { space: SpaceSelector },
+    /// Put the changes `changes` names into the thread, out of any other.
+    AddChanges {
+        thread: ThreadNumber,
+        /// The space whose numbers bare ones name, the caller's own by
+        /// default.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        space: Option<SpaceSelector>,
+        changes: Vec<crate::changes::ChangeNumber>,
+    },
+    /// Take the changes `changes` names out of the thread.
+    RemoveChanges {
+        thread: ThreadNumber,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        space: Option<SpaceSelector>,
+        changes: Vec<crate::changes::ChangeNumber>,
+    },
     /// Long-lived: the thread `item` of `space` once the other side of the
     /// post `after` posts, or it is resolved.
     AwaitPost {
@@ -139,7 +164,11 @@ impl ThreadMethod {
             | Self::ListThreads { .. }
             | Self::ShowThread { .. }
             | Self::LinkThread { .. }
-            | Self::UnlinkThread { .. } => Forwarding::Online,
+            | Self::UnlinkThread { .. }
+            | Self::SwitchThread { .. }
+            | Self::CurrentThread { .. }
+            | Self::AddChanges { .. }
+            | Self::RemoveChanges { .. } => Forwarding::Online,
             Self::AwaitPost { .. } => Forwarding::Streamed,
             Self::PostInChat { .. } | Self::RepliedInChat { .. } => Forwarding::Never,
         }
@@ -159,8 +188,14 @@ impl ThreadMethod {
             | Self::RepliedInChat { space, .. }
             | Self::LinkThread { space, .. }
             | Self::UnlinkThread { space, .. }
-            | Self::AwaitPost { space, .. } => Some(Target::Space(space)),
+            | Self::AwaitPost { space, .. }
+            | Self::SwitchThread { space, .. }
+            | Self::CurrentThread { space } => Some(Target::Space(space)),
             Self::ListThreads { space, .. } => space.as_ref().map(Target::Space),
+            // Changes are recorded on the machine of their space's worktree.
+            Self::AddChanges { space, .. } | Self::RemoveChanges { space, .. } => {
+                space.as_ref().map(Target::Space)
+            }
         }
     }
 }

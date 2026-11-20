@@ -1,8 +1,9 @@
 use std::{fs, sync::Arc};
 
 use shoal_protocol::{
-    changes::{Change, ChangeAuthor, ChangeKind, Hunk, ToolChange},
+    changes::{Change, ChangeAuthor, ChangeKind, ChangeNumber, Hunk, ToolChange},
     space_names::SpaceSelector,
+    threads::{OutcomeKind, Thread, ThreadKind, ThreadNumber},
 };
 
 use super::records;
@@ -13,6 +14,7 @@ use crate::{
         test_support::{caller_in, manager, repository},
     },
     model::Workspace,
+    protocol::ChangeFilter,
 };
 
 /// A workspace whose agent's changes Shoal records.
@@ -251,4 +253,126 @@ async fn a_file_without_hunks_is_recorded_with_its_kind_and_size() {
             ("logo.png", ChangeKind::Binary, Some(5), ChangeAuthor::Agent),
         ]
     );
+}
+
+impl Fixture {
+    /// A thread the workspace's agent opens with the user.
+    pub(crate) async fn thread(&self, name: &str) -> Thread {
+        let opened = (self.manager).open_thread(
+            Some(&self.agent),
+            name.into(),
+            ThreadKind::Request,
+            None,
+            Vec::new(),
+        );
+        opened.await.unwrap()
+    }
+
+    pub(crate) async fn switch(&self, thread: Option<&Thread>) {
+        let number = thread.map(|thread| ThreadNumber::Full(thread.number));
+        let own = SpaceSelector::id(&self.workspace.id);
+        let switched = self.manager.switch_thread(Some(&self.agent), &own, number);
+        switched.await.unwrap();
+    }
+
+    /// The numbers of the changes of `thread`.
+    pub(crate) async fn of_thread(&self, thread: &Thread) -> Vec<u32> {
+        let filter = ChangeFilter {
+            thread: Some(ThreadNumber::Full(thread.number)),
+            ..ChangeFilter::default()
+        };
+        let changes = self
+            .manager
+            .changes(Some(&self.agent), filter)
+            .await
+            .unwrap();
+        changes.iter().map(|change| change.number).collect()
+    }
+}
+
+fn own(numbers: &[u32]) -> Vec<ChangeNumber> {
+    numbers.iter().copied().map(ChangeNumber::Own).collect()
+}
+
+#[tokio::test]
+async fn changes_go_to_the_thread_switched_to_and_move_as_the_agent_says() {
+    let fixture = fixture().await;
+    let (agent, manager) = (Some(&fixture.agent), &fixture.manager);
+    let first = fixture.thread("Parse it").await;
+    let second = fixture.thread("Lex it").await;
+    fixture.switch(Some(&first)).await;
+    fixture.write("lib.rs", "a\n");
+    fixture.command("1", "lib.rs", "a\nb\n").await;
+    // Someone else's change between tool calls goes to no thread.
+    fixture.write("notes.md", "notes\n");
+    fixture.command("2", "lib.rs", "a\nb\nc\n").await;
+    assert_eq!(fixture.of_thread(&first).await, [1, 3]);
+
+    let (first_number, second_number) = (
+        ThreadNumber::Full(first.number),
+        ThreadNumber::Full(second.number),
+    );
+    let (two, three) = (own(&[2]), own(&[3]));
+    let claimed = manager.claim_changes(agent, None, &two, Some(second_number));
+    assert_eq!(claimed.await.unwrap()[0].author, ChangeAuthor::Agent);
+    let added = manager.add_changes(agent, second_number, None, &three);
+    added.await.unwrap();
+    assert_eq!(fixture.of_thread(&first).await, [1]);
+    assert_eq!(fixture.of_thread(&second).await, [2, 3]);
+    let removed = manager.remove_changes(agent, first_number, None, &three);
+    assert!(
+        removed.await.is_err(),
+        "change 3 is not in the first thread"
+    );
+    let unclaimed = manager.unclaim_changes(agent, None, &three).await.unwrap();
+    assert_eq!(
+        (unclaimed[0].author, unclaimed[0].thread),
+        (ChangeAuthor::Others, None)
+    );
+
+    // Resolving the thread switched to leaves the agent in none.
+    let resolved = manager.resolve_thread(
+        agent,
+        first_number,
+        Some(OutcomeKind::Withdrawn),
+        None,
+        None,
+        None,
+    );
+    resolved.await.unwrap();
+    let own_space = SpaceSelector::id(&fixture.workspace.id);
+    assert_eq!(manager.current_thread(&own_space).await.unwrap(), None);
+    let switched = manager.switch_thread(agent, &own_space, Some(first_number));
+    assert!(
+        switched.await.is_err(),
+        "a resolved thread takes no changes"
+    );
+}
+#[tokio::test]
+async fn a_space_that_forwards_a_thread_works_for_it_no_longer() {
+    let fixture = fixture().await;
+    let manager = &fixture.manager;
+    let parent = SpaceSelector::id(&fixture.workspace.id);
+    let child = (manager.create_child(&parent, "child".into(), None, Default::default()))
+        .await
+        .unwrap();
+    let (to, child_agent) = (
+        SpaceSelector::id(&child.id),
+        caller_in(&SpaceSelector::id(&child.id)),
+    );
+    let opened = manager.open_thread(
+        Some(&fixture.agent),
+        "Lex it".into(),
+        ThreadKind::Request,
+        Some(&to),
+        Vec::new(),
+    );
+    let number = ThreadNumber::Full(opened.await.unwrap().number);
+    (manager.switch_thread(Some(&child_agent), &to, Some(number)))
+        .await
+        .unwrap();
+    (manager.forward_thread(Some(&child_agent), number, None, None))
+        .await
+        .unwrap();
+    assert_eq!(manager.current_thread(&to).await.unwrap(), None);
 }

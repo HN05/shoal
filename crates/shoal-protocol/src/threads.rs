@@ -379,6 +379,16 @@ impl Thread {
         }
     }
 
+    /// Whether the space `space` takes part in it now: as the space it is
+    /// numbered in, or as its holder.
+    pub fn has_party(&self, space: &SpaceId) -> bool {
+        self.space_id == *space
+            || self
+                .holder
+                .space()
+                .is_some_and(|holder| holder.id == *space)
+    }
+
     /// Whether it waits for its holder: open, with a post, the last from
     /// its opener's side.
     pub fn is_waiting(&self) -> bool {

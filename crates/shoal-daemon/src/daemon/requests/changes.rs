@@ -21,18 +21,47 @@ pub(super) async fn handle(
             let caller = caller.context("only an agent's hooks record its changes")?;
             Body::Changes(manager.record_tool_change(caller, change).await?)
         }
+        ChangeMethod::ListChanges { filter } => {
+            Body::Changes(manager.changes(caller, filter).await?)
+        }
+        ChangeMethod::ChangeDiffs { filter } => {
+            Body::ChangeDiffs(manager.change_diffs(caller, filter).await?)
+        }
+        ChangeMethod::ClaimChanges {
+            space,
+            changes,
+            thread,
+        } => {
+            let claimed = manager.claim_changes(caller, space.as_ref(), &changes, thread);
+            Body::Changes(claimed.await?)
+        }
+        ChangeMethod::UnclaimChanges { space, changes } => {
+            let unclaimed = manager.unclaim_changes(caller, space.as_ref(), &changes);
+            Body::Changes(unclaimed.await?)
+        }
     }))
 }
 
 impl Scoped for ChangeMethod {
-    /// A hook records the changes of its own space's agent.
+    /// A hook records the changes of its own space's agent. A reading of
+    /// a space, and a bare number, name the caller's own space by default;
+    /// a thread's reading checks the caller reads the thread, and a full
+    /// change number its space, as they are answered.
     async fn scope(
         &mut self,
         _manager: &Manager,
-        _caller: &Caller,
+        caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             ChangeMethod::RecordChange { .. } => None,
+            ChangeMethod::ListChanges { filter } | ChangeMethod::ChangeDiffs { filter } => {
+                match filter.thread {
+                    Some(_) => None,
+                    None => Some(caller.own_by_default(&mut filter.space)),
+                }
+            }
+            ChangeMethod::ClaimChanges { space, .. }
+            | ChangeMethod::UnclaimChanges { space, .. } => Some(caller.own_by_default(space)),
         })
     }
 }

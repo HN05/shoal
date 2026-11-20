@@ -89,6 +89,33 @@ pub(super) async fn handle(
         ThreadMethod::ShowThread { thread: number } => {
             thread(manager.thread(caller, number).await?)
         }
+        ThreadMethod::SwitchThread {
+            space,
+            thread: number,
+        } => {
+            let switched = manager.switch_thread(caller, &space, number).await?;
+            Body::CurrentThread(switched.map(Box::new))
+        }
+        ThreadMethod::CurrentThread { space } => {
+            Body::CurrentThread(manager.current_thread(&space).await?.map(Box::new))
+        }
+        ThreadMethod::AddChanges {
+            thread: number,
+            space,
+            changes,
+        } => Body::Changes(
+            manager
+                .add_changes(caller, number, space.as_ref(), &changes)
+                .await?,
+        ),
+        ThreadMethod::RemoveChanges {
+            thread: number,
+            space,
+            changes,
+        } => {
+            let removed = manager.remove_changes(caller, number, space.as_ref(), &changes);
+            Body::Changes(removed.await?)
+        }
         ThreadMethod::LinkThread {
             space,
             thread: number,
@@ -131,7 +158,12 @@ impl Scoped for ThreadMethod {
             ThreadMethod::PostInChat { space, .. }
             | ThreadMethod::RepliedInChat { space, .. }
             | ThreadMethod::LinkThread { space, .. }
-            | ThreadMethod::UnlinkThread { space, .. } => Some(space),
+            | ThreadMethod::UnlinkThread { space, .. }
+            | ThreadMethod::SwitchThread { space, .. }
+            | ThreadMethod::CurrentThread { space } => Some(space),
+            ThreadMethod::AddChanges { space, .. } | ThreadMethod::RemoveChanges { space, .. } => {
+                Some(caller.own_by_default(space))
+            }
             ThreadMethod::ListThreads { space, .. } => Some(caller.own_by_default(space)),
             ThreadMethod::Post { .. }
             | ThreadMethod::AwaitPost { .. }

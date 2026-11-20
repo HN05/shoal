@@ -5,7 +5,7 @@ use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension as _, Transaction, params};
 use shoal_ids::{execution_ids::ExecutionId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    changes::{Change, ChangeAuthor, ChangeKind, Hunk},
+    changes::{Change, ChangeAuthor, ChangeDiff, ChangeKind, Hunk},
     code::{CodeAt, CodeState, Lines},
     item_numbers::ItemNumber,
     space_names::SpaceName,
@@ -86,6 +86,15 @@ pub(super) fn change(row: &rusqlite::Row<'_>) -> rusqlite::Result<Change> {
         added: row.get("added_count")?,
         removed: row.get("removed_count")?,
         size: (row.get::<_, Option<i64>>("size")?).and_then(|size| u64::try_from(size).ok()),
+    })
+}
+
+pub(super) fn diff(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChangeDiff> {
+    Ok(ChangeDiff {
+        change: change(row)?,
+        before: row.get("before_start")?,
+        removed_lines: (crate::daemon::store::json_column(row, "removed")?).unwrap_or_default(),
+        added_lines: (crate::daemon::store::json_column(row, "added")?).unwrap_or_default(),
     })
 }
 
@@ -264,4 +273,99 @@ pub(super) fn edited_since(
         .prepare("SELECT path FROM space_edit_reports WHERE space_id=?1 AND at>=?2")?
         .query_map(params![space, since], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
+}
+
+/// How many of a space's latest changes a listing of it returns.
+const LATEST: u32 = 200;
+
+/// The latest changes of the space `space`, oldest first.
+pub(super) fn latest<T>(
+    db: &Connection,
+    space: &SpaceId,
+    map: fn(&rusqlite::Row<'_>) -> rusqlite::Result<T>,
+) -> Result<Vec<T>> {
+    query(
+        db,
+        "WHERE c.id IN (SELECT id FROM space_changes WHERE space_id=?1 ORDER BY id DESC LIMIT ?2)",
+        params![space, LATEST],
+        map,
+    )
+}
+
+/// The changes of the thread `thread`, made at `since` or later.
+pub(super) fn of_thread<T>(
+    db: &Connection,
+    thread: i64,
+    since: Option<UnixTime>,
+    map: fn(&rusqlite::Row<'_>) -> rusqlite::Result<T>,
+) -> Result<Vec<T>> {
+    let since = since.unwrap_or(UnixTime::from_seconds(0));
+    query(
+        db,
+        "WHERE c.thread_id=?1 AND c.made_at>=?2",
+        params![thread, since],
+        map,
+    )
+}
+
+/// The changes whose IDs are `ids`.
+pub(super) fn of_ids(db: &Connection, ids: &[i64]) -> Result<Vec<Change>> {
+    query(
+        db,
+        "WHERE c.id IN (SELECT value FROM json_each(?1))",
+        [serde_json::to_string(ids)?],
+        change,
+    )
+}
+
+/// The ID of each change `named` names by its space and number, and the
+/// thread it is for, refusing one that does not exist.
+pub(super) fn named(db: &Connection, named: &[(SpaceId, u32)]) -> Result<Vec<(i64, Option<i64>)>> {
+    let mut found = Vec::new();
+    for (space, number) in named {
+        let row = db
+            .query_row(
+                "SELECT id,thread_id FROM space_changes WHERE space_id=?1 AND number=?2",
+                params![space, number],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        found.push(row.ok_or_else(|| anyhow::anyhow!("no change {number} in that space"))?);
+    }
+    Ok(found)
+}
+
+/// Record that the changes `ids` were made by `author`.
+pub(super) fn set_author(tx: &Transaction<'_>, ids: &[i64], author: ChangeAuthor) -> Result<()> {
+    tx.execute(
+        "UPDATE space_changes SET author=?2 WHERE id IN (SELECT value FROM json_each(?1))",
+        params![serde_json::to_string(ids)?, author],
+    )?;
+    Ok(())
+}
+
+/// Record that the changes `ids` are for the thread `thread`, or none.
+pub(super) fn set_thread(tx: &Transaction<'_>, ids: &[i64], thread: Option<i64>) -> Result<()> {
+    tx.execute(
+        "UPDATE space_changes SET thread_id=?2 WHERE id IN (SELECT value FROM json_each(?1))",
+        params![serde_json::to_string(ids)?, thread],
+    )?;
+    Ok(())
+}
+
+/// Record that the space `space`'s agent works for the thread `thread`,
+/// or none.
+pub(super) fn switch(tx: &Transaction<'_>, space: &SpaceId, thread: Option<i64>) -> Result<()> {
+    match thread {
+        Some(thread) => tx.execute(
+            "INSERT INTO space_current_thread(space_id,thread_id) VALUES (?1,?2)
+                ON CONFLICT(space_id) DO UPDATE SET thread_id=excluded.thread_id",
+            params![space, thread],
+        )?,
+        None => tx.execute(
+            "DELETE FROM space_current_thread WHERE space_id=?1",
+            [space],
+        )?,
+    };
+    Ok(())
 }

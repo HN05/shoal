@@ -18,8 +18,10 @@ use crate::{
 };
 use records::{Made, NewChange};
 
+mod attribution;
 mod commands;
 mod edits;
+mod listing;
 pub(crate) mod records;
 
 impl Manager {

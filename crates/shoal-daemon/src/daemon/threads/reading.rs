@@ -82,6 +82,11 @@ impl Manager {
         Ok(thread)
     }
 
+    /// The thread whose record's ID is `id`, while it exists.
+    pub(in crate::daemon) async fn thread_by_id(&self, id: i64) -> Result<Option<Thread>> {
+        self.store.read(move |tx| records::by_id(tx, id)).await
+    }
+
     /// Every open thread with a post, oldest first, which subscription
     /// snapshots page and the hub lists. Neither follows code: both run
     /// on their own, a snapshot after each store change, where following

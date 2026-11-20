@@ -339,6 +339,8 @@ response_bodies! {
     ChatMarked(crate::chat_marks::ChatMarked),
     SpaceThreads(crate::threads::Listing),
     Changes(Vec<crate::changes::Change>),
+    ChangeDiffs(Vec<crate::changes::ChangeDiff>),
+    CurrentThread(Option<Box<crate::threads::Thread>>),
     ReviewPieces(Vec<ReviewPiece>),
     ReviewId(crate::reviews::ReviewId),
     Alert(Alert),
