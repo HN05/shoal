@@ -55,6 +55,19 @@ impl Manager {
         Ok(made)
     }
 
+    /// Whether `caller` points at code in the worktree of the workspace
+    /// `id`: one its scope reaches, or the one its chat runs in, which a
+    /// reference reads and changes nothing of.
+    async fn references_into(&self, caller: Option<&Caller>, id: &SpaceId) -> Result<bool> {
+        let Some(caller) = caller else {
+            return Ok(true);
+        };
+        if self.reaches(caller, id).await? {
+            return Ok(true);
+        }
+        Ok(self.chat_home(&caller.space_id).await?.as_ref() == Some(id))
+    }
+
     /// The reference `new` names among `workspaces` for `caller`.
     async fn code_ref(
         &self,
@@ -65,14 +78,12 @@ impl Manager {
         let path = canonical(&new.path);
         let workspace = Workspace::innermost(workspaces, &path)
             .with_context(|| format!("{} is in no Shoal workspace", new.path.display()))?;
-        if let Some(caller) = caller {
-            ensure!(
-                self.reaches(caller, &workspace.id).await?,
-                "{} is in workspace {}, which your scope does not reach",
-                new.path.display(),
-                workspace.name
-            );
-        }
+        ensure!(
+            self.references_into(caller, &workspace.id).await?,
+            "{} is in workspace {}, which your scope does not reach",
+            new.path.display(),
+            workspace.name
+        );
         let root = canonical(&workspace.path);
         let relative = relative(&root, &path)?;
         let version = version(&root, &path, new.lines, new.contents).await?;

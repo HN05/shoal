@@ -614,7 +614,8 @@ and prints it. `--in-chat` makes your turn's final message the post, for an
 agent with Shoal's hooks; a prompt the user submits in your chat answers it.
 
 `--code`, repeatable, points a post at a file, or its lines, in the worktree
-of a space your scope reaches; `--attach` sends a copy instead. The other
+of a space your scope reaches, or of the workspace your chat runs in;
+`--attach` sends a copy instead. The other
 side receives each as `Code: path:first-last` with the lines' snippet, and
 the space whose worktree it is in when that is not its own. Shoal follows
 the code as it changes: `view thread` shows each reference where its lines

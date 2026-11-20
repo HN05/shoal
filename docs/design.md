@@ -3043,7 +3043,8 @@ reopen the threads closed for that cause, without Shoal's closing posts,
 unless something resolved them since.
 
 A post may point at code: a file or its lines in the worktree of a space the
-poster's scope reaches. References belong to posts rather than threads,
+poster's scope reaches, or of the workspace its chat runs in, since a
+reference only reads the worktree. References belong to posts rather than threads,
 since a request about several places, a reply that points elsewhere and an
 answer that says where something should go all attach code mid-conversation;
 the opening post's references are the thread's place in code. A worktree's

@@ -260,3 +260,39 @@ async fn a_reference_that_cannot_be_followed_leaves_the_others_to_follow() {
     assert_eq!(lexed.latest.to_string(), "lexer.rs:1");
     assert_eq!(parsed.latest.to_string(), "parse.rs:6");
 }
+
+#[tokio::test]
+async fn a_chat_points_at_code_in_the_worktree_it_runs_in() {
+    let tree = tree().await;
+    let manager = &tree.manager;
+    let new = crate::daemon::chats::NewChat {
+        priority: None,
+        name: "reader".into(),
+        agent: "claude".into(),
+        mode: "chat".into(),
+        narrowing: Default::default(),
+        origin: None,
+        parent: None,
+    };
+    let beside = shoal_protocol::space_names::SpaceSelector::id(&tree.beside.id);
+    let chat = manager
+        .start_new_chat(None, Some(&beside), new)
+        .await
+        .unwrap();
+    let reader = crate::daemon::test_support::caller_in(
+        &shoal_protocol::space_names::SpaceSelector::id(&chat.id),
+    );
+    let thread = open(manager, Some(&reader), None).await;
+    let code = vec![at(parser(&tree.beside), "1-3")];
+    let posted = manager
+        .post_to_thread(
+            Some(&reader),
+            full(&thread),
+            post("This?"),
+            Vec::new(),
+            code,
+        )
+        .await
+        .unwrap();
+    assert_eq!(posted.posts[0].code[0].space.id, tree.beside.id);
+}

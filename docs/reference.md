@@ -6949,7 +6949,8 @@ than one response carries, about 56 KiB, is refused: open a new thread to go on.
 
 `--code`, repeatable, points a post at a file or directory, or with
 `:FIRST-LAST`, or `:LINE`, at lines of a file, in the worktree of a space the
-caller's scope reaches, which the reference names; a relative path is read
+caller's scope reaches, or of the workspace the caller's chat runs in,
+which the reference names; a relative path is read
 from the current directory. The worktree's file is referenced, not copied:
 `--attach` sends a copy. A reference keeps the space, HEAD then, the path and
 lines, the file's version as a Git blob, and a snippet of its lines of up to
