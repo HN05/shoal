@@ -15,7 +15,6 @@ pub struct Manager {
     /// closed, or its ownership moves to another workspace.
     pub(crate) place_ownership: tokio::sync::Mutex<()>,
     pub gates: Arc<super::gates::Gates>,
-    pub(crate) waits: crate::daemon::links::wait::ActiveWaits,
     /// The reads of items for watches, and those watches started from.
     pub(crate) watch_starts: crate::daemon::links::wait::WatchStarts,
     pub(super) cleanup_health: super::cleanup::CleanupHealth,
@@ -142,7 +141,6 @@ impl Manager {
             config_state,
             notifications,
             leases,
-            waits: Default::default(),
             watch_starts: Default::default(),
             cleanup_health: Default::default(),
             idle_sleep_health: super::cleanup::CleanupHealth::of("Idle sleep"),

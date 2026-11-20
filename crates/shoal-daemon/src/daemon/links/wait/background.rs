@@ -320,7 +320,7 @@ fn save_observation(
         params![id, url, serde_json::to_string(snapshot)?],
     )?;
     if let Some(title) = snapshot.title() {
-        crate::daemon::links::refresh_titles(db, id, url, title)?;
+        shoal_links::linked::refresh_titles(db, id, url, title)?;
     }
     Ok(())
 }

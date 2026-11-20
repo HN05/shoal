@@ -6,12 +6,12 @@ use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
 use shoal_ids::space_ids::SpaceId;
 
-use crate::forge::updates::Update;
 use shoal_forge::updates::WatchRecord;
+use shoal_forge_types::updates::Update;
 
 /// The item's record on the workspace's watch cursor, if it has one: what
 /// its watch saw of the item, or updates queued from it before any watch did.
-pub(super) fn cursor_record(
+pub fn cursor_record(
     db: &rusqlite::Connection,
     id: &SpaceId,
     url: &str,
@@ -36,7 +36,7 @@ pub(super) fn cursor_record(
 }
 
 /// The spaces whose watch cursors have a record of the item at `url`.
-pub(super) fn cursor_spaces(db: &rusqlite::Connection, url: &str) -> Result<Vec<SpaceId>> {
+pub fn cursor_spaces(db: &rusqlite::Connection, url: &str) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare("SELECT space_id FROM pr_activity WHERE url=?1")?
         .query_map([url], |row| row.get(0))?
@@ -44,7 +44,7 @@ pub(super) fn cursor_spaces(db: &rusqlite::Connection, url: &str) -> Result<Vec<
 }
 
 /// Store `record` as the item's record on the workspace's watch cursor.
-pub(super) fn save_cursor_record(
+pub fn save_cursor_record(
     db: &rusqlite::Connection,
     id: &SpaceId,
     url: &str,
@@ -56,18 +56,14 @@ pub(super) fn save_cursor_record(
         params![id, url, serde_json::to_string(record)?],
     )?;
     if let Some(title) = record.snapshot.title() {
-        crate::daemon::links::refresh_titles(db, id, url, title)?;
+        crate::linked::refresh_titles(db, id, url, title)?;
     }
     save_pending(db, id, url, &record.pending)
 }
 
 /// The updates delivered from the item on the workspace's watch cursor that
 /// are not acknowledged yet.
-pub(super) fn pending_updates(
-    db: &rusqlite::Connection,
-    id: &SpaceId,
-    url: &str,
-) -> Result<Vec<Update>> {
+pub fn pending_updates(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<Vec<Update>> {
     let updates: Option<String> = db
         .query_row(
             "SELECT updates FROM pending_updates WHERE space_id=?1 AND url=?2",
@@ -83,7 +79,7 @@ pub(super) fn pending_updates(
 
 /// Store `updates` as the pending updates of the item on the workspace's
 /// watch cursor.
-pub(super) fn save_pending(
+pub fn save_pending(
     db: &rusqlite::Connection,
     id: &SpaceId,
     url: &str,
@@ -106,7 +102,7 @@ pub(super) fn save_pending(
 
 /// The pending updates of every item on the cursors of the spaces `ids`,
 /// with their space and URL.
-pub(super) fn all_pending(
+pub fn all_pending(
     db: &rusqlite::Connection,
     ids: &[SpaceId],
 ) -> Result<Vec<(SpaceId, String, Vec<Update>)>> {

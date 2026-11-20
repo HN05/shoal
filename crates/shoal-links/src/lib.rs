@@ -4,6 +4,7 @@ pub mod issue;
 pub mod linked;
 mod memories;
 pub mod pr;
+pub mod wait;
 
 use shoal_forge::transport::memory::Memory;
 
@@ -11,9 +12,15 @@ use shoal_forge::transport::memory::Memory;
 #[derive(Default)]
 pub struct Links {
     memories: memories::ForgeMemories,
+    waits: wait::ActiveWaits,
 }
 
 impl Links {
+    /// The running wait of each space.
+    pub fn waits(&self) -> &wait::ActiveWaits {
+        &self.waits
+    }
+
     /// The memory of forge responses to the account `identity` names.
     pub fn forge_memory(&self, identity: &str) -> Memory {
         self.memories.of(identity)

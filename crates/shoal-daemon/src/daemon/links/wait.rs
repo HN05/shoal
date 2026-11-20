@@ -8,16 +8,14 @@ pub(crate) use self::{
     items::{followed_items, linked_items, watches_open_pr},
     merge_runs::PushedMerge,
     start::WatchStarts,
-    waits::ActiveWaits,
 };
 use crate::daemon::alerts::Alert;
+use shoal_links::wait::{branch_report, cursor};
 
 pub(crate) use shoal_protocol::links::Updates;
 
 mod activity;
 mod background;
-mod branch_report;
-mod cursor;
 mod delivery;
 mod elsewhere;
 mod framing;
@@ -25,7 +23,6 @@ mod items;
 mod merge_runs;
 mod poll;
 mod start;
-mod waits;
 mod wake;
 mod wake_log;
 

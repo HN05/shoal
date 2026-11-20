@@ -79,3 +79,18 @@ fn linked_url(row: &Row<'_>) -> rusqlite::Result<ItemRef> {
         rusqlite::Error::FromSqlConversionFailure(1, rusqlite::types::Type::Text, error.into())
     })
 }
+
+/// Take `title`, which the forge reports for the item at `url`, as each
+/// title the space records for it, so its links show the item's current
+/// title.
+pub fn refresh_titles(db: &Connection, id: &SpaceId, url: &str, title: &str) -> anyhow::Result<()> {
+    for table in ["space_issue", "space_items"] {
+        db.execute(
+            &format!(
+                "UPDATE {table} SET title=?3 WHERE space_id=?1 AND url=?2 AND title IS NOT ?3"
+            ),
+            rusqlite::params![id, url, title],
+        )?;
+    }
+    crate::pr::titles::refresh(db, id, url, title)
+}

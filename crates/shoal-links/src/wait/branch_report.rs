@@ -1,13 +1,12 @@
 //! What a workspace branch's local merge check reports to its watch, and
 //! how it reads as an observation.
-use crate::forge::items::reference::ItemRef;
 use anyhow::Result;
-
-use crate::{
-    forge::items::link::{LinkKind, Selection},
-    model::ConflictCheck,
-};
 use shoal_forge::updates::{MergeCheck, Snapshot};
+use shoal_forge_types::items::{
+    link::{LinkKind, Selection},
+    reference::ItemRef,
+};
+use shoal_protocol::model::ConflictCheck;
 
 /// Conflicted paths named in a branch conflict message; `shoal conflicts` lists all.
 const MAX_LISTED_FILES: usize = 10;
@@ -16,13 +15,13 @@ const MAX_LISTED_FILES: usize = 10;
 /// sensitive files changed on both sides while a linked PR's forge reports
 /// its conflicts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum BranchReport {
+pub enum BranchReport {
     Conflicts,
     ChangedOnBothSides,
 }
 
 /// What the branch of a space following `items` reports.
-pub(super) fn branch_report(items: &[ItemRef]) -> BranchReport {
+pub fn branch_report(items: &[ItemRef]) -> BranchReport {
     if items.iter().any(|item| item.kind() == LinkKind::Pr) {
         BranchReport::ChangedOnBothSides
     } else {
@@ -32,7 +31,7 @@ pub(super) fn branch_report(items: &[ItemRef]) -> BranchReport {
 
 /// A workspace branch's local merge check as `report` keeps it, observed
 /// like PR mergeability.
-pub(super) fn branch_conflicts(check: Result<ConflictCheck>, report: BranchReport) -> Snapshot {
+pub fn branch_conflicts(check: Result<ConflictCheck>, report: BranchReport) -> Snapshot {
     Snapshot::merge_check(check.map(|check| MergeCheck {
         conflict: conflict_message(&check, report),
         head: check.head,
@@ -65,6 +64,6 @@ fn listed(files: &[String]) -> String {
 
 /// Whether a wait also reports the workspace branch's local conflicts with
 /// its base, as [`branch_report`] decides: only an unfiltered wait.
-pub(super) fn watches_branch(selection: &Selection) -> bool {
+pub fn watches_branch(selection: &Selection) -> bool {
     selection.input.is_none() && selection.kind.is_none()
 }

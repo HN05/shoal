@@ -48,7 +48,7 @@ impl Manager {
             .await?;
         // The space's hooks deliver what a watch would, so the newest of them
         // takes it.
-        let wait = self.waits.start(&space.id);
+        let wait = self.links.waits().start(&space.id);
         // Subscribe before reading, so a message queued in between still wakes.
         let mut queued = self.signals.watch_messages();
         let mut background = self.signals.watch_item_updates();
@@ -112,7 +112,7 @@ impl Manager {
     pub async fn agent_updates(&self, selector: &SpaceSelector) -> Result<Updates> {
         let space = self.space(selector).await?;
         let id = space.id.clone();
-        let delivery = self.waits.start(&id);
+        let delivery = self.links.waits().start(&id);
         let messages = self.deliverable_messages(&space).await?;
         // The messages, then the leftovers, share the response with the
         // updates.

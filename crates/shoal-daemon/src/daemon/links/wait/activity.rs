@@ -91,7 +91,7 @@ impl Manager {
         // One transaction removes exactly the acknowledged deliveries, so
         // whatever a poll or a split queues meanwhile stays pending. A chat's
         // watch shares its delivery with the chat's hooks.
-        let waits = self.waits.clone();
+        let waits = self.links.waits().clone();
         let agents = self.tracked_agents().await;
         self.store
             // Not `write`: the commit happens inside `with_unwatched`, so no

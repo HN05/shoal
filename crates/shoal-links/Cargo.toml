@@ -7,6 +7,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+# What the daemon's tests of links read: whether a space's wait runs.
+test-support = []
+
 [dependencies]
 anyhow.workspace = true
 rusqlite = { workspace = true, features = ["bundled"] }
@@ -15,3 +19,7 @@ shoal-forge.workspace = true
 shoal-forge-types = { workspace = true, features = ["rusqlite"] }
 shoal-ids = { workspace = true, features = ["rusqlite"] }
 shoal-protocol = { workspace = true, features = ["rusqlite"] }
+tokio = { workspace = true, features = ["sync", "time"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "test-util"] }

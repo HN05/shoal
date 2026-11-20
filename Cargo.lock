@@ -2681,6 +2681,7 @@ dependencies = [
  "shoal-forge-types",
  "shoal-ids",
  "shoal-protocol",
+ "tokio",
 ]
 
 [[package]]
