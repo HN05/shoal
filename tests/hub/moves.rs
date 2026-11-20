@@ -5,6 +5,7 @@ use std::fs;
 use serde_json::{Value, json};
 
 use super::directory::{give_origin, join, listed, machine, workspace};
+use super::routing::scope_of;
 use super::support::{
     fixture::{Base, home},
     git, git_with_identity, install_test_script, printed,
@@ -160,4 +161,39 @@ fn a_move_on_a_terminal_offers_a_joined_machine_first_then_picks_it() {
     let machines = fs::read_to_string(&rows).unwrap();
     assert!(machines.contains("\tdesk"), "{machines}");
     assert!(!machines.contains("\tlaptop"), "{machines}");
+}
+
+#[test]
+fn a_space_s_agent_moves_the_spaces_below_it_with_no_permission() {
+    let (hub, laptop, _desk, _laptop_id, desk_id) = machines("");
+    give_origin(&laptop);
+    let coordinator = workspace(&laptop, "coordinator");
+    let repo = laptop.repo.to_str().unwrap().to_owned();
+    laptop.ok(&[
+        "create",
+        &repo,
+        "--branch",
+        "child",
+        "--parent",
+        &coordinator,
+    ]);
+    let child = laptop.id("child");
+    let outside = workspace(&laptop, "outside");
+    let scoped = |space: &str| {
+        let mut command = laptop.command();
+        command.env("SHOAL_SCOPE_TOKEN", scope_of(&laptop, &coordinator));
+        laptop.output(command.args(["move", space, "--machine", "desk", "--json"]))
+    };
+
+    let moved = scoped(&child);
+    let refused = scoped(&outside);
+
+    assert!(moved.status.success(), "{}", printed(&moved));
+    listed(&hub, &child, &desk_id);
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    assert!(
+        own_spaces(&laptop)
+            .iter()
+            .any(|space| space["id"] == outside)
+    );
 }

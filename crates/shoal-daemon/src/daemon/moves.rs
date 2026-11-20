@@ -115,10 +115,15 @@ impl Manager {
         }
     }
 
-    /// Let a scoped `caller` move the spaces `order` takes, as its `admin`
-    /// permission allows, refusing one its scope does not reach, or a move
-    /// another machine sent, since a move reaches outside the hub's trust.
+    /// Let a scoped `caller` move the spaces `order` takes, refusing one its
+    /// scope does not reach: to a joined machine as
+    /// [`Self::authorize_joined_move`] says, else as its `admin` permission
+    /// allows, and never for a move another machine sent, since such a move
+    /// reaches outside the hub's trust.
     pub(crate) async fn authorize_move(&self, caller: &Caller, order: &MoveOrder) -> Result<()> {
+        if let MoveDestination::Machine(_) = order.destination {
+            return self.authorize_joined_move(caller, &order.spaces).await;
+        }
         ensure!(
             caller.vouched.is_none(),
             "only the user moves spaces from another machine"

@@ -350,7 +350,7 @@ impl Command {
                     ),
             })
             | Command::Workspace(WorkspaceCommand::Setup { skip: true, .. })
-            | Command::Lifecycle(LifecycleCommand::Cleanup { .. } | LifecycleCommand::Move(_))
+            | Command::Lifecycle(LifecycleCommand::Cleanup { .. })
             | Command::Service(ServiceCommand::Config {
                 command:
                     ConfigCommand::Install { .. } | ConfigCommand::Reset | ConfigCommand::Setup(_),
@@ -358,6 +358,11 @@ impl Command {
             Command::Sessions(SessionsCommand::Restore { import, .. })
                 if !import.from.is_empty() =>
             {
+                Some(PermissionKey::Admin)
+            }
+            // A move to a joined machine stays within the hub, so it takes
+            // no permission, as a rename does.
+            Command::Lifecycle(LifecycleCommand::Move(args)) if args.machine.is_none() => {
                 Some(PermissionKey::Admin)
             }
             Command::Create(CreateCommand::Start(args)) if args.now => Some(PermissionKey::Limits),

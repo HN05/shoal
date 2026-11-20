@@ -4340,9 +4340,12 @@ of guessing, so the agents never run on both machines. The worker checks the spa
 and where ending them needs the user it ends nothing and asks, so the command,
 or an app, starts the move again with consent to what the question listed. A
 move request for another joined machine's space goes through the hub to that
-machine, which runs it as it runs its own; only the user moves a space from
-another machine, since `ssh` reaches outside the hub's trust, and a file
-stays where its machine writes it, so `-o` takes only this machine's spaces.
+machine, which runs it as it runs its own; only the user moves a space over
+SSH or to a file from another machine, since `ssh` reaches outside the hub's
+trust, and a file stays where its machine writes it, so `-o` takes only this
+machine's spaces. A move to a joined machine stays within the hub, so it
+takes no permission key: a space's agent moves every space its scope
+reaches there, from any machine, as it renames or converts them.
 The daemon records each space's move, with its destination and the stopped
 work its spaces saved, before any agent stops, and the package's checkpoints
 and phase once written, and the worker holds a lock on the space while it

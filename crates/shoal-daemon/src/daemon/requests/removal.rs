@@ -19,7 +19,7 @@ use crate::{
     process::identity,
     protocol::{self, Body, QueuedLaunches, RemovalMethod, Response, UntrackedProcesses},
     removal::InspectionPolicy,
-    transfer::{PackageImport, PackageSource},
+    transfer::{MoveDestination, PackageImport, PackageSource},
 };
 use shoal_protocol::processes::Selection;
 use shoal_protocol::space_names::SpaceSelector;
@@ -304,6 +304,9 @@ impl Scoped for RemovalMethod {
         caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
         const REFUSAL: &str = "scoped processes remove only the spaces below their own; finish their own with shoal done";
+        if moves_to_joined_machine(manager, caller, self).await? {
+            return Ok(administered(self));
+        }
         match self {
             // The check asks for the user's holds too, so a batch refuses
             // before removing any.
@@ -363,6 +366,34 @@ impl Scoped for RemovalMethod {
             | RemovalMethod::ImportPackage(_)
             | RemovalMethod::ReceiveMove { .. } => administer(manager, caller, self).await,
         }
+    }
+}
+
+/// Whether `method` packs, delivers, settles or ends a move to a joined
+/// machine, which takes no permission key, only the reach of `caller`'s
+/// scope, which the space it acts on must have; ending a space takes the
+/// user's holds of it as the caller's `user_holds` permission allows.
+async fn moves_to_joined_machine(
+    manager: &Manager,
+    caller: &Caller,
+    method: &mut RemovalMethod,
+) -> Result<bool> {
+    match method {
+        RemovalMethod::ExportMovingSpace { destination, .. } => {
+            Ok(matches!(destination, MoveDestination::Machine(_)))
+        }
+        RemovalMethod::DeliverCopy { .. } => Ok(true),
+        RemovalMethod::EndMovedSpace { space } => {
+            let joined = manager.moves_to_joined_machine(space).await?;
+            if joined {
+                manager.authorize_held_removal(caller, space, true).await?;
+            }
+            Ok(joined)
+        }
+        RemovalMethod::AbandonMove { space }
+        | RemovalMethod::DeliverMove { space }
+        | RemovalMethod::SettleMove { space } => manager.moves_to_joined_machine(space).await,
+        _ => Ok(false),
     }
 }
 

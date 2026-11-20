@@ -185,6 +185,19 @@ fn the_daemon_permission_governs_the_service_commands() {
 }
 
 #[test]
+fn only_a_move_outside_the_hub_is_the_admin_permission_s() {
+    let joined = Cli::try_parse_from(["shoal", "move", "3", "--machine", "desk"]).unwrap();
+    assert_eq!(joined.command.unwrap().permission(), None);
+    for args in [
+        vec!["shoal", "move", "3", "--ssh", "desk"],
+        vec!["shoal", "move", "3", "-o", "work.shoal"],
+    ] {
+        let command = Cli::try_parse_from(&args).unwrap().command.unwrap();
+        assert_eq!(command.permission(), Some(PermissionKey::Admin), "{args:?}");
+    }
+}
+
+#[test]
 fn setting_up_config_is_the_admin_permission_s() {
     let setup = Cli::try_parse_from(["shoal", "repo", "setup", "app"]).unwrap();
     assert_eq!(

@@ -349,6 +349,13 @@ impl Scoped for WorkspaceMethod {
         {
             manager.copy_within(caller, source).await?;
         }
+        // A copy for a joined machine, which goes among the packages
+        // delivered from here, as a move there, needs no permission key.
+        if let WorkspaceMethod::CopySpace { space, file, .. } = &*self
+            && manager.packs_for_delivery(space, file).await?
+        {
+            return Ok(administered(self));
+        }
         Ok(match self {
             // The settings of its own repository choose what it opens there.
             WorkspaceMethod::LayeredConfig {

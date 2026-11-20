@@ -3243,8 +3243,9 @@ it; `limits`
 starting agents regardless of `max_heavy_agents` and memory, with `--now`,
 `--focus`, `queue start` or the queue picker's start; `admin`
 governs the rest of administering Shoal, its config, repositories and
-cleanup, and repairing, adopting and moving workspaces, in the
-caller's own repository where the action names one. A scoped process changes
+cleanup, and repairing, adopting and moving workspaces, except moving them
+to a joined machine, in the caller's own repository where the action names
+one. A scoped process changes
 Shoal's config only key by key, setting a permission only to a value its
 space holds and removing none, since that could hand it more; it never
 replaces the config, and runs `config setup` and `repo setup` as `admin`
@@ -4921,7 +4922,10 @@ import went, as when the link drops, the move asks the hub whether it claimed
 the space; while the hub cannot be asked, the agents stay stopped here and the
 move asks again every 30 seconds, and once the hub answers, a machine that did
 not claim the space no longer can. `--keep` copies the spaces there as new
-spaces, without a claim. A removed space's record moves only to a file.
+spaces, without a claim. A removed space's record moves only to a file. A
+space's agent moves every space its scope reaches there, chats included,
+with no permission key, also from another joined machine, and ends one the
+user holds as its `user_holds` permission allows.
 
 `shoal restore --from <file>` hands an export, or standard input for `-`,
 refusing a terminal, to the daemon, which reads it whole, refusing an export
