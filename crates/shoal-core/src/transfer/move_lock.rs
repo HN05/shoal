@@ -18,9 +18,13 @@ impl MoveLock {
     pub async fn take(paths: &Paths, id: &SpaceId) -> Result<Self> {
         let path = lock_path(paths, id)?;
         tokio::task::spawn_blocking(move || {
-            let file = open(&path)?;
-            fs2::FileExt::lock_exclusive(&file).context("lock the move")?;
-            Ok(Self { path, _file: file })
+            loop {
+                let file = open(&path)?;
+                fs2::FileExt::lock_exclusive(&file).context("lock the move")?;
+                if still_named(&path, &file) {
+                    return Ok(Self { path, _file: file });
+                }
+            }
         })
         .await?
     }
@@ -29,14 +33,20 @@ impl MoveLock {
     /// process holds it.
     pub fn try_take(paths: &Paths, id: &SpaceId) -> Result<Option<Self>> {
         let path = lock_path(paths, id)?;
-        let file = open(&path)?;
-        Ok(match fs2::FileExt::try_lock_exclusive(&file) {
-            Ok(()) => Some(Self { path, _file: file }),
-            Err(_) => None,
-        })
+        loop {
+            let file = open(&path)?;
+            if fs2::FileExt::try_lock_exclusive(&file).is_err() {
+                return Ok(None);
+            }
+            if still_named(&path, &file) {
+                return Ok(Some(Self { path, _file: file }));
+            }
+        }
     }
 
-    /// Release the lock of a move that ended, deleting its file.
+    /// Release the lock of a move that ended, deleting its file; a process
+    /// that locked the deleted file finds its path names another and locks
+    /// that one instead.
     pub fn release(self) {
         let _ = std::fs::remove_file(&self.path);
     }
@@ -48,6 +58,16 @@ fn lock_path(paths: &Paths, id: &SpaceId) -> Result<PathBuf> {
     std::fs::create_dir_all(&directory)
         .with_context(|| format!("create {}", directory.display()))?;
     Ok(directory.join(format!("{id}.lock")))
+}
+
+/// Whether `path` still names `file`, which its holder may have deleted on
+/// release while this process waited for it.
+fn still_named(path: &std::path::Path, file: &File) -> bool {
+    use std::os::unix::fs::MetadataExt as _;
+    match (std::fs::metadata(path), file.metadata()) {
+        (Ok(named), Ok(locked)) => (named.dev(), named.ino()) == (locked.dev(), locked.ino()),
+        _ => false,
+    }
 }
 
 fn open(path: &std::path::Path) -> Result<File> {
