@@ -10,6 +10,7 @@ mod refresh;
 mod replacement;
 mod scope;
 mod shutdown;
+pub mod work;
 use control::{command, domain};
 use definition::{check_state_dir, text, write_definition};
 pub use definition::{definition, executable, file};

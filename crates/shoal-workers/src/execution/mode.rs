@@ -52,6 +52,15 @@ impl Mode {
         }
     }
 
+    /// Whether its command is Shoal's work, which runs in the work slice:
+    /// everything but Shoal's own Git operations.
+    pub(super) fn is_work(&self) -> bool {
+        !matches!(
+            self,
+            Self::Merge { .. } | Self::Unmerge { .. } | Self::Publish
+        )
+    }
+
     pub(super) fn is_setup(&self) -> bool {
         matches!(self, Mode::Setup)
     }

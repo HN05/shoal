@@ -157,7 +157,12 @@ async fn register_child(
     Option<Terminal>,
     process::scoped::Records,
 )> {
-    let (child, group, terminal, scope) = spawn_registered_child(paths, plan, command, mode, auth)?;
+    let launcher = match mode.is_work() {
+        true => shoal_core::service::work::launcher().await,
+        false => &[],
+    };
+    let (child, group, terminal, scope) =
+        spawn_registered_child(paths, plan, command, mode, auth, launcher)?;
     let restored = matches!(mode, Mode::Recovery { .. }) || recovery_record.is_some();
     let records = restored_records(mode, recovery_record);
     register_process(link, &group, restored, &records).await?;
@@ -172,6 +177,7 @@ fn spawn_registered_child(
     command: &[OsString],
     mode: &Mode,
     auth: Option<&AgentLaunch>,
+    launcher: &[OsString],
 ) -> Result<(
     Child,
     ProcessGroup,
@@ -184,7 +190,15 @@ fn spawn_registered_child(
     // Descendants that clear their scope token find the wrapper's record from
     // their first instruction, and the child's once the wrapper is gone.
     let mut scope = process::scoped::Records::wrapper(&paths.state)?;
-    let child = spawn(paths, plan, command, mode, auth, terminal.as_ref())?;
+    let child = spawn(
+        paths,
+        plan,
+        command,
+        mode,
+        auth,
+        terminal.as_ref(),
+        launcher,
+    )?;
     let group = ProcessGroup(child.id().context("child PID unavailable")? as i32);
     scope.command(group.pid())?;
     handoff_terminal(&mut terminal, &group)?;

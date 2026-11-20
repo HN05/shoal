@@ -308,3 +308,38 @@ fn a_chats_agent_runs_with_its_chats_identity_and_scope() {
         assert_eq!(environment.get(workspace), Some(&None), "{workspace}");
     }
 }
+
+#[tokio::test]
+async fn a_command_runs_through_the_launcher_it_is_given() {
+    let directory = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(directory.path().join("state"));
+    let plan = ExecutionPlan {
+        id: "execution".into(),
+        space: crate::model::ExecutionSpace {
+            id: "workspace".into(),
+            number: Default::default(),
+            kind: crate::model::SpaceKind::Workspace,
+            path: directory.path().to_owned(),
+        },
+        scope_token: shoal_protocol::scope_tokens::ScopeToken::from("token"),
+        setup_cmd: None,
+        copy_ignored: None,
+        ports: Vec::new(),
+        environment: BTreeMap::new(),
+        merge: None,
+        unmerge: None,
+        reports_signals: false,
+    };
+    // A launcher that marks what it starts, then runs it in its place.
+    let launcher = ["env".into(), "LAUNCHED_THROUGH=launcher".into()];
+    let command = [
+        "sh".into(),
+        "-c".into(),
+        r#"printf %s "$LAUNCHED_THROUGH" > launched"#.into(),
+    ];
+    let mode = Mode::Command { record: false };
+    let mut child = spawn(&paths, &plan, &command, &mode, None, None, &launcher).unwrap();
+    assert!(child.wait().await.unwrap().success());
+    let launched = std::fs::read_to_string(directory.path().join("launched")).unwrap();
+    assert_eq!(launched, "launcher");
+}

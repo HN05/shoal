@@ -293,7 +293,8 @@ impl AgentLaunch {
 }
 
 /// Spawn `command` in a process group of its own, which takes `terminal`
-/// as it starts.
+/// as it starts, through `launcher`, which runs it in a scope of its own
+/// where it names one.
 pub(super) fn spawn(
     paths: &Paths,
     plan: &ExecutionPlan,
@@ -301,14 +302,16 @@ pub(super) fn spawn(
     mode: &Mode,
     auth: Option<&AgentLaunch>,
     terminal: Option<&Terminal>,
+    launcher: &[OsString],
 ) -> Result<Child> {
     let command = match auth {
         Some(auth) => auth.route(command, &plan.environment, &plan.space.path)?,
         None => command.to_vec(),
     };
-    let (program, args) = command.split_first().context("no command to run")?;
-    let mut process = Command::new(program);
-    process.args(args).current_dir(&plan.space.path);
+    anyhow::ensure!(!command.is_empty(), "no command to run");
+    let mut argv = launcher.iter().chain(&command);
+    let mut process = Command::new(argv.next().expect("the command is not empty"));
+    process.args(argv).current_dir(&plan.space.path);
     configure_environment(&mut process, paths, plan);
     if let Some(auth) = auth {
         auth.apply(&mut process, &plan.environment);

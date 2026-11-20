@@ -171,12 +171,12 @@ How the daemon exits decides what becomes of tracked agents and commands:
   running, and so does the service manager's stop of the service once the
   daemon exited. launchd ends only the daemon's own process group, which every
   worker the daemon starts in a session of its own has left. On Linux each
-  such worker, such as the wrapper of an agent or a CI job, runs with what it
-  starts in a transient systemd scope of its own in the service's slice, with
-  `OOMPolicy=continue`, though a CI job's ends whole with any process the
-  kernel's OOM killer takes, where systemd 254 or later and a user bus start one
+  such worker, such as the wrapper of an agent or a CI job, runs in a
+  transient systemd scope of its own in the service's slice, with
+  `OOMPolicy=continue`, where systemd 254 or later and a user bus start one
   when the daemon starts; otherwise it runs in the service's control group,
-  which systemd's stop ends. Wrappers of releases before reattachment stop
+  which systemd's stop ends. What a wrapper starts runs in the
+  [work slice](#work-slice). Wrappers of releases before reattachment stop
   instead, and `shoal daemon restart` names the `shoal resume` of the spaces
   they ran in.
 - `shoal daemon stop` stops them, [chats'](#chats) agents included, as
@@ -287,6 +287,20 @@ resampling and stopping another entry if pressure persists. It retains workspace
 leases and records an `agent_stopped` alert.
 Ordinary commands, desktop handoffs and disconnected executions are not selected.
 Monitoring does not guarantee that the OS will never reach its OOM limit.
+
+### Work slice
+
+On Linux every command an execution wrapper starts for work, an agent, a CI
+job's runner, a demo, a setup or a `shoal run` command, runs in a transient
+systemd scope of its own in `shoal-work.slice`, with `OOMPolicy=continue`,
+wherever the wrapper runs, such as in a terminal host's place: the command
+keeps the wrapper's terminal and environment. The daemon, places, workers and
+wrappers, and the pushes and merges Shoal runs, stay out of it. A CI job's
+scope ends whole with any process of it the kernel's OOM killer takes. Where
+no scope can start, as without a user bus, from a login whose processes the
+user's service manager cannot move, or before systemd 254, and in a
+development build, the command starts directly in the wrapper's control
+group.
 
 When space available to unprivileged processes on a filesystem holding
 workspaces or daemon state falls below `disk.cleanup_free_gib`, the daemon

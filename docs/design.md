@@ -920,11 +920,20 @@ need root and a distribution package. The unit and every scope Shoal starts set
 daemon's own death alone fails the service, except that a CI job's scope has
 the kernel kill all of it with any one of its processes, as overload
 protection describes.
-Every process the daemon starts in a session of its own runs, with what it
-starts, in a transient systemd scope of its own in the service's slice, which
+Every process the daemon starts in a session of its own runs in a transient
+systemd scope of its own in the service's slice, which
 `workers::detached_command` adds through the launcher the managed daemon finds
 at startup, so that systemd's stop of the service after the daemon exited or
 failed to start leaves agents, places and CI jobs running for the next daemon.
+The command a wrapper starts for work runs in a scope of its own in
+`shoal-work.slice` instead, which the wrapper starts through `systemd-run
+--scope` wherever it runs, so an agent in a terminal host's place keeps that
+terminal yet leaves the host's control group for one Shoal controls: the
+slice holds Shoal's work, and only it, for the memory limit and the kernel's
+accounting. `systemd-run --scope` runs the command in its own place, so its
+PID, process group, terminal and environment stay as a direct start leaves
+them. The wrapper finds the launcher once, trying a scope; where none starts,
+it starts commands directly.
 `KillMode=process` is rejected: it would leave them in the stopped service's
 control group, which the next start reports as left over, sharing its memory
 accounting and OOM kills. A live daemon's SIGTERM still stops agents. Where

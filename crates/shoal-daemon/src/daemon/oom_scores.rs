@@ -191,10 +191,10 @@ fn wanted_scores(
             let score = if worker(process) { floor } else { score };
             wanted.insert(process.pid, (found, score));
         }
-        let Some(wrapper) = execution.wrapper.as_ref().filter(|_| entry.job) else {
+        let Some(runner) = execution.child.as_ref().filter(|_| entry.job) else {
             continue;
         };
-        match job_scope(wrapper) {
+        match job_scope(runner) {
             Ok(scoped) => wanted.extend(
                 scoped
                     .into_iter()
@@ -206,15 +206,16 @@ fn wanted_scores(
     (wanted.into_values().collect(), failed)
 }
 
-/// The processes of the scope the job's runner `wrapper` runs in, which it
-/// has the kernel kill together; none where it runs in no scope of its own,
-/// or where its PID no longer names the wrapper, whose scope a process that
-/// reused it would name instead.
-fn job_scope(wrapper: &identity::Identity) -> Result<Vec<Found>> {
-    if !identity::alive(wrapper)? {
+/// The processes of the scope the job's `runner` runs in, which it has the
+/// kernel kill together: its own in the work slice, or its wrapper's where
+/// it could start in none; none where it runs in no scope apart from the
+/// daemon, or where its PID no longer names the runner, whose scope a
+/// process that reused it would name instead.
+fn job_scope(runner: &identity::Identity) -> Result<Vec<Found>> {
+    if !identity::alive(runner)? {
         return Ok(Vec::new());
     }
-    let Some(scope) = oom::scope_of(wrapper.pid)? else {
+    let Some(scope) = oom::scope_of(runner.pid)? else {
         return Ok(Vec::new());
     };
     oom::kill_as_group(&scope)?;
