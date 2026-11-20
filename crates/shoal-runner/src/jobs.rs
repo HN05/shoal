@@ -19,6 +19,7 @@ mod linked;
 mod listing;
 mod queue;
 mod registration;
+mod single_use;
 mod superseded;
 mod waiting;
 

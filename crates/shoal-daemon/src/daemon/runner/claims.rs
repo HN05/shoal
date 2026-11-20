@@ -250,14 +250,16 @@ impl Manager {
     /// keeping the runner it registered for the job alone with the claim.
     async fn launch_claimed(&self, claim: &Claimed<'_>, command: JobCommand) -> Result<()> {
         if let Some(runner) = command.runner {
-            self.record_job_runner(&claim.entry.id, runner).await?;
+            self.runner
+                .record_job_runner(&claim.entry.id, runner)
+                .await?;
         }
         {
             // The sweep of unclaimed directories waits while one is filled.
             let _files = self.runner.jobs().job_files().await;
             prepare_job_files(claim.workspace, &command).await?;
         }
-        let log = self.job_directory(&claim.entry.id).join("job.log");
+        let log = self.runner.job_directory(&claim.entry.id).join("job.log");
         let execution = self
             .launch_job_command(claim.workspace, log, at_low_priority(command))
             .await?;
@@ -379,7 +381,7 @@ impl Manager {
             runner: claim.registration.runner.as_ref(),
             program: &program,
             name: &name,
-            work_dir: &self.job_directory(&claim.entry.id),
+            work_dir: &self.runner.job_directory(&claim.entry.id),
             workspace: &claim.workspace.path,
             labels: &labels,
             job: &job.job,
@@ -402,11 +404,6 @@ impl Manager {
             presets,
             &settings.env,
         ))
-    }
-
-    /// The directory a claimed job's runner keeps its files in.
-    pub(super) fn job_directory(&self, id: &QueueEntryId) -> PathBuf {
-        self.paths.state.join("runner").join(id)
     }
 
     /// Run `command` in `workspace` as a tracked execution that outlives the

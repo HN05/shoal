@@ -128,6 +128,7 @@ impl Manager {
             config_state.clone(),
             notifications.clone(),
             Arc::new(super::runner::RunnerRecords),
+            paths.clone(),
         ));
         let reviews = Arc::new(shoal_reviews::Reviews::new(
             store.clone(),

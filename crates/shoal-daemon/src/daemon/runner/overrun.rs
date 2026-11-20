@@ -50,7 +50,7 @@ impl Manager {
     /// for one job that has taken none may still take one of another run,
     /// so it outlives nothing.
     async fn outlived_run(&self, job: &ClaimedJob) -> Result<Option<String>> {
-        if job.runner_id.is_some() && !took_job(&self.job_directory(&job.id)) {
+        if job.runner_id.is_some() && !took_job(&self.runner.job_directory(&job.id)) {
             return Ok(None);
         }
         let forge = self.item_forge(&job.job.run.url).await?;

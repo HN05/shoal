@@ -427,7 +427,7 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
         .iter()
         .map(|arg| arg.to_str().unwrap())
         .collect();
-    let directory = manager.job_directory(&claimed[0].id);
+    let directory = manager.runner.job_directory(&claimed[0].id);
     let token = directory.join("token");
     // The runner and every process it starts run at low priority.
     assert_eq!(argv[..3], ["nice", "-n", "10"]);
@@ -707,7 +707,7 @@ async fn a_jobs_directory_goes_however_its_workspace_went() {
     admit_and_claim(manager).await;
     let claimed = manager.runner.claimed_jobs().await.unwrap();
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
-    let directory = manager.job_directory(&claimed[0].id);
+    let directory = manager.runner.job_directory(&claimed[0].id);
     assert!(directory.join("token").exists());
     manager
         .remove_job_workspace(&claimed[0].workspace_id)
@@ -1736,10 +1736,16 @@ async fn the_sweep_keeps_the_directory_of_a_recorded_claim() {
     admit_and_claim(manager).await;
     let claimed = manager.runner.claimed_jobs().await.unwrap();
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
-    let stray = manager.job_directory(&"stray".into());
+    let stray = manager.runner.job_directory(&"stray".into());
     std::fs::create_dir_all(&stray).unwrap();
     manager.finish_ended_jobs().await.unwrap();
-    assert!(manager.job_directory(&claimed[0].id).join("token").exists());
+    assert!(
+        manager
+            .runner
+            .job_directory(&claimed[0].id)
+            .join("token")
+            .exists()
+    );
     assert!(!stray.exists());
 }
 
@@ -1867,5 +1873,6 @@ pub(super) async fn poll_waiting_jobs(manager: &Manager) {
     manager.runner.poll_waiting_jobs(manager).await.unwrap();
 }
 
+mod single_use;
 mod superseded;
 mod waiting;

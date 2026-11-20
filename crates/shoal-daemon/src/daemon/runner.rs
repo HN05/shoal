@@ -13,7 +13,6 @@
 mod claims;
 mod ends;
 mod overrun;
-mod single_use;
 mod taken;
 
 pub(crate) use shoal_runner::jobs::JobStop;
@@ -86,7 +85,7 @@ async fn pass(manager: &Arc<Manager>) -> anyhow::Result<()> {
     manager.runner.sample_job_usage(&**manager).await?;
     manager.finish_ended_jobs().await?;
     manager.follow_taken_jobs().await?;
-    manager.release_idle_runners().await?;
+    manager.runner.release_idle_runners(&**manager).await?;
     claim_admitted_jobs(manager).await?;
     manager.runner.poll_waiting_jobs(&**manager).await
 }

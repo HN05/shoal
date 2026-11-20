@@ -35,6 +35,7 @@ use shoal_protocol::{
     config::permissions::PermissionKey,
     launches::{Launch, LaunchSource},
     model::{QueueEntry, QueuedJob, Repository, Space, Workspace, WorkspaceUsage},
+    paths::Paths,
     protocol::ItemContext,
 };
 
@@ -162,6 +163,7 @@ async fn runner(root: &tempfile::TempDir, daemon: &Arc<StandIn>) -> Arc<Runner> 
         daemon.config.clone(),
         Arc::new(Notifications::new(store)),
         daemon.clone(),
+        Paths::for_test(root.path()),
     ))
 }
 

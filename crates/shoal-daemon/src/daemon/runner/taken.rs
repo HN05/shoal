@@ -29,7 +29,7 @@ impl Manager {
             let Some(runner) = job.runner_id else {
                 continue;
             };
-            let directory = self.job_directory(&job.id);
+            let directory = self.runner.job_directory(&job.id);
             let took = match took_run(&directory) {
                 Ok(Some(took)) => took,
                 Ok(None) => continue,
@@ -124,7 +124,7 @@ impl Manager {
     /// reported, which a claim read before the daemon followed the report
     /// does not name yet, else the claim's.
     pub(super) fn reported_run_url(&self, forge: &ForgeRepo, job: &ClaimedJob) -> ItemRef {
-        match reported_run(&self.job_directory(&job.id)) {
+        match reported_run(&self.runner.job_directory(&job.id)) {
             Ok(Some(took)) if took.run != job.job.job.run => forge
                 .run_page(took.run)
                 .unwrap_or_else(|_| job.job.run.url.clone()),

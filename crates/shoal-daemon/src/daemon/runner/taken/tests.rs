@@ -17,7 +17,7 @@ async fn report(manager: &Manager, run: u64) -> (ClaimedJob, std::path::PathBuf)
     admit_and_claim(manager).await;
     let job = manager.runner.claimed_jobs().await.unwrap().remove(0);
     launched(job.workspace_id.as_str());
-    let directory = manager.job_directory(&job.id);
+    let directory = manager.runner.job_directory(&job.id);
     // The hook holds a job of another run than the claimed one back.
     if run != 1 {
         std::fs::write(directory.join("awaits"), "").unwrap();

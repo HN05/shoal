@@ -1,7 +1,11 @@
-use super::*;
-use crate::daemon::{
-    executions::ExecutionKind,
-    runner::tests::{GitHubState, admit_and_claim, github_fixture, github_job, launched},
+//! Runners a forge registers for one job each, as the daemon's claims start
+//! them.
+use rusqlite::params;
+
+use super::{GitHubState, admit_and_claim, github_fixture, github_job, launched};
+use crate::{
+    daemon::{executions::ExecutionKind, manager::Manager},
+    forge::numbers::RunnerId,
 };
 
 /// Make the claimed job `id` look launched `seconds` ago.
@@ -39,7 +43,7 @@ async fn a_jobs_runner_runs_from_its_copy_and_goes_once_no_job_is_left_for_it() 
     let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     assert_eq!(workspace.at().unwrap().commit, fixture.head);
     let (command, started) = launched(workspace.id.as_str());
-    let copy = manager.job_directory(&job.id).join("runner");
+    let copy = manager.runner.job_directory(&job.id).join("runner");
     assert_eq!(
         command.argv,
         ["nice", "-n", "10"]
@@ -55,18 +59,34 @@ async fn a_jobs_runner_runs_from_its_copy_and_goes_once_no_job_is_left_for_it() 
     );
 
     // A runner just started waits for the forge to give it its job.
-    manager.release_idle_runners().await.unwrap();
+    manager
+        .runner
+        .release_idle_runners(&**manager)
+        .await
+        .unwrap();
     launched_ago(manager, job.id.as_str(), 120).await;
     // One that runs a job, or has one left to take, stays.
     fixture.state.lock().unwrap().busy = Some(true);
-    manager.release_idle_runners().await.unwrap();
+    manager
+        .runner
+        .release_idle_runners(&**manager)
+        .await
+        .unwrap();
     fixture.state.lock().unwrap().busy = Some(false);
-    manager.release_idle_runners().await.unwrap();
+    manager
+        .runner
+        .release_idle_runners(&**manager)
+        .await
+        .unwrap();
     assert!(deleted(&fixture.state).is_empty());
     // The job waits for labels the runner was not registered with, as after
     // a change of the configured ones, so this runner goes.
     fixture.state.lock().unwrap().labels = vec!["shoal-old"];
-    manager.release_idle_runners().await.unwrap();
+    manager
+        .runner
+        .release_idle_runners(&**manager)
+        .await
+        .unwrap();
     assert_eq!(deleted(&fixture.state), ["77"]);
 
     manager
@@ -89,10 +109,14 @@ async fn a_runner_that_took_a_job_stays_until_the_job_ends() {
     let (_, started) = launched(job.workspace_id.as_str());
     launched_ago(manager, job.id.as_str(), 120).await;
     // Its hook reported the job it took, which the forge no longer lists.
-    let directory = manager.job_directory(&job.id);
+    let directory = manager.runner.job_directory(&job.id);
     std::fs::write(directory.join("took-run"), "1\n").unwrap();
     fixture.state.lock().unwrap().queued.clear();
-    manager.release_idle_runners().await.unwrap();
+    manager
+        .runner
+        .release_idle_runners(&**manager)
+        .await
+        .unwrap();
     assert!(deleted(&fixture.state).is_empty());
 
     manager

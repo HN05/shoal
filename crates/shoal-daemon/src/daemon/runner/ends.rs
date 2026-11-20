@@ -64,7 +64,7 @@ impl Manager {
                 continue;
             }
             self.runner.record_job_usage(&job).await?;
-            if let Err(error) = self.delete_job_runner(&job).await {
+            if let Err(error) = self.runner.delete_job_runner(self, &job).await {
                 crate::daemon::log!("runner: {error:#}");
             }
             if let Err(error) = self.remove_job_workspace(&job.workspace_id).await {

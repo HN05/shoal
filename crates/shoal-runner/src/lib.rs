@@ -8,7 +8,7 @@ use shoal_core::config;
 use shoal_daemon_base::{
     config_state::ConfigState, gates::Gates, log, notifications::Notifications,
 };
-use shoal_protocol::time;
+use shoal_protocol::{paths::Paths, time};
 use shoal_store::Store;
 
 pub mod daemon;
@@ -25,6 +25,7 @@ pub struct Runner {
     config: Arc<ConfigState>,
     notifications: Arc<Notifications>,
     records: Arc<dyn daemon::Records>,
+    paths: Paths,
     triggers: triggers::Triggers,
     jobs: jobs::Runners,
 }
@@ -36,6 +37,7 @@ impl Runner {
         config: Arc<ConfigState>,
         notifications: Arc<Notifications>,
         records: Arc<dyn daemon::Records>,
+        paths: Paths,
     ) -> Self {
         Self {
             store,
@@ -43,6 +45,7 @@ impl Runner {
             config,
             notifications,
             records,
+            paths,
             triggers: Default::default(),
             jobs: Default::default(),
         }
