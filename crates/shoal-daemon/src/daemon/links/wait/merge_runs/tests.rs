@@ -598,7 +598,7 @@ async fn opening(watch: bool, runs: Value) -> Following {
     (following.manager.store)
         .run(move |db| {
             db.execute("DELETE FROM pr_cleanup WHERE space_id=?1", [&id])?;
-            let link = crate::daemon::links::record;
+            let link = shoal_links::records::record;
             link(db, &id, Relation::Opened, LinkKind::Pr, &pr, Some("Fix"))
         })
         .await

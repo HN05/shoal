@@ -18,7 +18,7 @@ use tokio::{sync::Notify, time::Instant};
 
 use super::{mark_published, section, stored};
 use crate::{
-    daemon::{links::wait::linked_items, log, manager::Manager},
+    daemon::{log, manager::Manager},
     forge::items::link::ItemKind,
     model::Relation,
 };
@@ -121,7 +121,7 @@ pub async fn run(manager: Arc<Manager>) {
 /// The PRs the space `id` opened or was assigned, which show its progress
 /// while they are open drafts.
 fn publishing_pulls(db: &Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
-    let assigned = linked_items(db, id, Some(ItemKind::Pr))?.into_iter();
+    let assigned = shoal_links::linked::assigned_items(db, id, Some(ItemKind::Pr))?.into_iter();
     let opened = (shoal_links::linked::recorded_items(db, id, Relation::Opened)?.into_iter())
         .filter(|item| item.kind() == ItemKind::Pr.into())
         .map(|item| item.url);

@@ -508,7 +508,7 @@ impl RegistrationChange {
         titles::forget(db, id, &self.removed)?;
         store_registration(db, id, self.registration.as_ref())?;
         for url in &self.added {
-            super::drop_recorded(db, id, url.url(), None)?;
+            shoal_links::records::drop_recorded(db, id, url.url(), None)?;
             events::record_link(
                 db,
                 id,

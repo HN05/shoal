@@ -197,7 +197,7 @@ fn merge_terms(action: &Action) -> String {
 
 /// Whether the workspace `id` links the PR `url`.
 fn links_pull(db: &rusqlite::Connection, id: &SpaceId, url: &ItemRef) -> Result<bool> {
-    let links = super::wait::linked_items(db, id, Some(ItemKind::Pr))?;
+    let links = shoal_links::linked::assigned_items(db, id, Some(ItemKind::Pr))?;
     Ok(links.contains(url))
 }
 

@@ -88,10 +88,12 @@ impl Manager {
         let urls = self
             .store
             .run(move |db| {
-                Ok(linked_items(db, &id_owned, Some(ItemKind::Pr))?
-                    .into_iter()
-                    .map(|url| url.to_string())
-                    .collect::<Vec<_>>())
+                Ok(
+                    shoal_links::linked::assigned_items(db, &id_owned, Some(ItemKind::Pr))?
+                        .into_iter()
+                        .map(|url| url.to_string())
+                        .collect::<Vec<_>>(),
+                )
             })
             .await?;
         self.pending_activity(id, &urls).await

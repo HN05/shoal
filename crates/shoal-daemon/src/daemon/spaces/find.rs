@@ -3,7 +3,7 @@ use anyhow::{Result, ensure};
 use shoal_ids::space_ids::SpaceId;
 
 use crate::{
-    daemon::{links::wait::linked_items, manager::Manager},
+    daemon::manager::Manager,
     forge::{
         ForgeRepo,
         items::{link::LinkKind, reference::ItemInput},
@@ -47,7 +47,7 @@ impl Manager {
                 for id in within {
                     // Only an issue or PR can be assigned.
                     if let Some(kind) = kind.item() {
-                        for url in linked_items(db, &id, Some(kind))? {
+                        for url in shoal_links::linked::assigned_items(db, &id, Some(kind))? {
                             links.push((id.clone(), url));
                         }
                     }

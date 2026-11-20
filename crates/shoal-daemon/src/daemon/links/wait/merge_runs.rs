@@ -15,7 +15,7 @@ use shoal_refs::{BranchName, CommitId};
 
 use super::{
     cursor::cursor_record,
-    items::{linked_items, observed_item, opened_open_prs},
+    items::{observed_item, opened_open_prs},
 };
 use crate::{
     daemon::{events, log, manager::Manager},
@@ -364,7 +364,7 @@ pub(super) fn follow_merge(
 
 /// The PR at `url`, when the space `id` watches it or links it as opened.
 fn followed_pr(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<Option<ItemRef>> {
-    let watched = linked_items(db, id, Some(ItemKind::Pr))?;
+    let watched = shoal_links::linked::assigned_items(db, id, Some(ItemKind::Pr))?;
     let opened = shoal_links::linked::recorded_items(db, id, Relation::Opened)?;
     let opened = opened.into_iter().map(|item| item.url);
     Ok(watched
@@ -407,7 +407,7 @@ fn awaits_merge_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<bool> {
 /// baseline nor its watch cursor shows merged or closed.
 fn unseen_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     let mut unseen = Vec::new();
-    for pull in linked_items(db, id, Some(ItemKind::Pr))? {
+    for pull in shoal_links::linked::assigned_items(db, id, Some(ItemKind::Pr))? {
         let polled = observed_item(db, id, pull.url())?;
         let watched = cursor_record(db, id, pull.url())?;
         if !polled.is_some_and(|read| read.concluded())
@@ -429,7 +429,7 @@ fn record_merge_runs(
     now: UnixTime,
 ) -> Result<()> {
     // A space being removed takes no links; its lookup goes with it.
-    if !crate::daemon::links::accepts_links(tx, id)? {
+    if !shoal_links::records::accepts_links(tx, id)? {
         return Ok(());
     }
     link_new_runs(tx, id, &mut lookup, runs)?;
@@ -494,7 +494,7 @@ fn link_merge_run(
     workflow: Option<&str>,
 ) -> Result<()> {
     if !links(db, id, url)? {
-        let link = crate::daemon::links::record;
+        let link = shoal_links::records::record;
         link(db, id, Relation::Related, LinkKind::Ci, url.url(), workflow)?;
     }
     Ok(())

@@ -147,7 +147,7 @@ impl Manager {
         let id = workspace.id.clone();
         let items = self
             .store
-            .run(move |db| wait::linked_items(db, &id, None))
+            .run(move |db| shoal_links::linked::assigned_items(db, &id, None))
             .await?;
         let mut updates = Vec::new();
         let mut retargeted = Vec::new();

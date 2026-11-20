@@ -1,7 +1,9 @@
 //! The items recorded as linked to a space, as lists and its status show
 //! them.
-use rusqlite::{Connection, Row};
+use rusqlite::{Connection, OptionalExtension, Row};
+use shoal_forge_types::items::link::ItemKind;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::links::pr::{Registration, RegistrationKind};
 
 use shoal_forge_types::items::reference::ItemRef;
 use shoal_protocol::model::{LinkedItem, Relation, SpaceLinks};
@@ -93,4 +95,41 @@ pub fn refresh_titles(db: &Connection, id: &SpaceId, url: &str, title: &str) -> 
         )?;
     }
     crate::pr::titles::refresh(db, id, url, title)
+}
+
+/// The URLs of the space's assigned issues in the order they were assigned.
+pub fn assigned_urls(db: &Connection, id: &SpaceId) -> rusqlite::Result<Vec<ItemRef>> {
+    let issues = assigned_issues(db, id)?.into_iter();
+    Ok(issues.map(|issue| issue.url).collect())
+}
+
+/// The workspace's assigned issues and PRs, of `kind` or every kind.
+pub fn assigned_items(
+    db: &Connection,
+    id: &SpaceId,
+    kind: Option<ItemKind>,
+) -> anyhow::Result<Vec<ItemRef>> {
+    let mut items = Vec::new();
+    if kind != Some(ItemKind::Issue) {
+        let registration: Option<String> = db
+            .query_row(
+                "SELECT record FROM pr_cleanup WHERE space_id=?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(Registration {
+            kind: RegistrationKind::Watch { urls, .. },
+            ..
+        }) = registration
+            .map(|text| serde_json::from_str(&text))
+            .transpose()?
+        {
+            items.extend(urls);
+        }
+    }
+    if kind != Some(ItemKind::Pr) {
+        items.extend(assigned_urls(db, id)?);
+    }
+    Ok(items)
 }

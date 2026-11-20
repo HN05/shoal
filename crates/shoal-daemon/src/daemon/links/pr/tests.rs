@@ -202,7 +202,7 @@ async fn watching_a_related_pr_replaces_its_link_and_keeps_its_cursor() {
     let counts = manager
         .store
         .write(move |tx| {
-            super::super::record(
+            shoal_links::records::record(
                 tx,
                 &id,
                 crate::model::Relation::Related,

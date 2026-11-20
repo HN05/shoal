@@ -60,7 +60,7 @@ impl Manager {
 
 /// The PRs the space `id` links as assigned or opened, each once.
 fn own_pulls(db: &Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
-    let mut pulls = super::wait::linked_items(db, id, Some(ItemKind::Pr))?;
+    let mut pulls = shoal_links::linked::assigned_items(db, id, Some(ItemKind::Pr))?;
     let opened = (shoal_links::linked::recorded_items(db, id, Relation::Opened)?.into_iter())
         .filter(|item| item.kind() == ItemKind::Pr.into())
         .map(|item| item.url);

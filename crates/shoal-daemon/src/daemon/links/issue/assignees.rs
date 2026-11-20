@@ -241,7 +241,7 @@ fn hand_over(db: &Connection, id: &SpaceId) -> Result<()> {
         "UPDATE space_issue SET linked_by=NULL WHERE space_id=?1",
         [id],
     )?;
-    let issues = super::assigned_urls(db, id)?;
+    let issues = shoal_links::linked::assigned_urls(db, id)?;
     super::agents::hand_over_agent(db, &issues)?;
     for Dropped { url, login } in dropped(db, id, &issues)? {
         db.execute(

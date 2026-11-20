@@ -41,7 +41,7 @@ impl Spaces for Manager {
         let id = id.to_owned();
         Box::pin(
             self.store
-                .run(move |db| super::wait::linked_items(db, &id, Some(kind))),
+                .run(move |db| shoal_links::linked::assigned_items(db, &id, Some(kind))),
         )
     }
 

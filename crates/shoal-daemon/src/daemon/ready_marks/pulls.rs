@@ -8,7 +8,6 @@ use shoal_refs::CommitId;
 
 use super::super::manager::Manager;
 use crate::{
-    daemon::links::wait::linked_items,
     forge::items::{item::unmarkable_reason, link::ItemKind},
     model::SkippedPr,
 };
@@ -74,7 +73,7 @@ impl Manager {
         let id = space.id.to_owned();
         let linked = self
             .store
-            .run(move |db| linked_items(db, &id, Some(ItemKind::Pr)));
+            .run(move |db| shoal_links::linked::assigned_items(db, &id, Some(ItemKind::Pr)));
         let mut urls = linked.await?;
         if let Some(url) = explicit {
             urls.retain(|linked| linked == url);

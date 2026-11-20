@@ -6,10 +6,7 @@ use shoal_links::space::LinkSpace;
 
 use super::cursor::cursor_record;
 use crate::{
-    daemon::{
-        links::pr::{Registration, RegistrationKind},
-        manager::Manager,
-    },
+    daemon::manager::Manager,
     forge::items::{
         link::{ItemKind, LinkKind, Selection},
         reference::{ItemInput, ItemRef},
@@ -229,9 +226,9 @@ fn with_runs(
     runs: fn(&rusqlite::Connection, &SpaceId) -> Result<Vec<ItemRef>>,
 ) -> Result<Vec<ItemRef>> {
     let mut items = match kind {
-        None => linked_items(db, id, None)?,
+        None => shoal_links::linked::assigned_items(db, id, None)?,
         Some(kind) => match kind.item() {
-            Some(kind) => linked_items(db, id, Some(kind))?,
+            Some(kind) => shoal_links::linked::assigned_items(db, id, Some(kind))?,
             None => Vec::new(),
         },
     };
@@ -287,37 +284,6 @@ fn unpolled_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>
     Ok(runs)
 }
 
-/// The workspace's assigned issues and PRs, of `kind` or every kind.
-pub(crate) fn linked_items(
-    db: &rusqlite::Connection,
-    id: &SpaceId,
-    kind: Option<ItemKind>,
-) -> Result<Vec<ItemRef>> {
-    let mut items = Vec::new();
-    if kind != Some(ItemKind::Issue) {
-        let registration: Option<String> = db
-            .query_row(
-                "SELECT record FROM pr_cleanup WHERE space_id=?1",
-                [id],
-                |row| row.get(0),
-            )
-            .optional()?;
-        if let Some(Registration {
-            kind: RegistrationKind::Watch { urls, .. },
-            ..
-        }) = registration
-            .map(|text| serde_json::from_str(&text))
-            .transpose()?
-        {
-            items.extend(urls);
-        }
-    }
-    if kind != Some(ItemKind::Pr) {
-        items.extend(crate::daemon::links::issue::assigned_urls(db, id)?);
-    }
-    Ok(items)
-}
-
 /// Whether the workspace watches a PR that no poll has seen merged or
 /// closed, so its activity is still to come.
 pub(crate) fn watches_open_pr(db: &rusqlite::Connection, id: &SpaceId) -> Result<bool> {
@@ -327,7 +293,7 @@ pub(crate) fn watches_open_pr(db: &rusqlite::Connection, id: &SpaceId) -> Result
 /// The PRs the workspace watches that no poll has seen merged or closed.
 fn open_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     let mut open = Vec::new();
-    for url in linked_items(db, id, Some(ItemKind::Pr))? {
+    for url in shoal_links::linked::assigned_items(db, id, Some(ItemKind::Pr))? {
         if observed_item(db, id, url.url())?.is_none_or(|snapshot| !snapshot.concluded()) {
             open.push(url);
         }
@@ -339,7 +305,7 @@ fn open_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
 /// background poll has seen merged or closed. Where `[pr] watch_merge_runs`
 /// is on, the poll reads them only to follow their merges.
 pub(super) fn opened_open_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
-    let watched = linked_items(db, id, Some(ItemKind::Pr))?;
+    let watched = shoal_links::linked::assigned_items(db, id, Some(ItemKind::Pr))?;
     let mut open = Vec::new();
     for item in shoal_links::linked::recorded_items(db, id, Relation::Opened)? {
         let url = item.url;

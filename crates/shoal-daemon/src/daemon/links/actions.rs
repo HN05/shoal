@@ -691,9 +691,9 @@ fn record_opened(
     url: &str,
     title: &str,
 ) -> Result<bool> {
-    let recorded = super::accepts_links(tx, id)?;
+    let recorded = shoal_links::records::accepts_links(tx, id)?;
     if recorded {
-        super::record(tx, id, Relation::Opened, kind, url, Some(title))?;
+        shoal_links::records::record(tx, id, Relation::Opened, kind, url, Some(title))?;
     }
     Ok(recorded)
 }

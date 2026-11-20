@@ -80,7 +80,7 @@ impl Manager {
     async fn ensure_links_accepted(&self, id: &SpaceId) -> Result<()> {
         let id = id.to_owned();
         self.store
-            .run(move |db| super::ensure_accepts_links(db, &id))
+            .run(move |db| shoal_links::records::ensure_accepts_links(db, &id))
             .await
     }
 
@@ -226,7 +226,7 @@ impl Manager {
     async fn linked_pr(&self, id: &SpaceId) -> Result<Option<ItemRef>> {
         let id = id.to_owned();
         let prs = (self.store)
-            .run(move |db| super::wait::linked_items(db, &id, Some(ItemKind::Pr)))
+            .run(move |db| shoal_links::linked::assigned_items(db, &id, Some(ItemKind::Pr)))
             .await?;
         match prs.as_slice() {
             [] => Ok(None),

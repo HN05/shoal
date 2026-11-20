@@ -14,7 +14,7 @@ use super::{gates::GuardMode, manager::Manager};
 use crate::{
     config::Effective,
     daemon::{
-        links::{pr::current_head, space::require_ready_space, wait::linked_items},
+        links::{pr::current_head, space::require_ready_space},
         notifications::AlertKind,
         scope::Caller,
     },
@@ -184,7 +184,7 @@ impl Manager {
         self.store
             .write(move |tx| {
                 require_ready_space(tx, &id)?;
-                let linked = linked_items(tx, &id, kind)?;
+                let linked = shoal_links::linked::assigned_items(tx, &id, kind)?;
                 let items = marked_items(linked, explicit, kind, &pulls)?;
                 // Linked-item marks replace a mark made while nothing was linked.
                 if items.iter().any(Option::is_some) {

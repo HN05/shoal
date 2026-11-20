@@ -233,7 +233,7 @@ fn start_followed(
     starting: &Starting,
 ) -> Result<Vec<(String, bool)>> {
     // A workspace links its issue while it is set up.
-    crate::daemon::links::ensure_accepts_links(tx, id)?;
+    shoal_links::records::ensure_accepts_links(tx, id)?;
     let mut started = Vec::new();
     for (url, snapshot) in reads {
         if !follows(tx, id, &url)? {

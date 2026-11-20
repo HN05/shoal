@@ -227,8 +227,8 @@ fn assign(
     title: Option<&str>,
     assigner: Assigner,
 ) -> Result<bool> {
-    super::ensure_accepts_links(db, id)?;
-    let assigned = assigned_urls(db, id)?
+    shoal_links::records::ensure_accepts_links(db, id)?;
+    let assigned = shoal_links::linked::assigned_urls(db, id)?
         .iter()
         .any(|issue| issue.url() == url);
     let assignee: Option<String> = db.query_row(
@@ -240,7 +240,7 @@ fn assign(
         |row| row.get(0),
     )?;
     if !assigned {
-        super::drop_recorded(db, id, url, None)?;
+        shoal_links::records::drop_recorded(db, id, url, None)?;
         events::record_link(
             db,
             id,
@@ -261,8 +261,8 @@ fn unlink(
     id: &SpaceId,
     selected: Option<&str>,
 ) -> Result<(Vec<ItemRef>, Vec<Dropped>)> {
-    super::ensure_accepts_links(db, id)?;
-    let mut removed = assigned_urls(db, id)?;
+    shoal_links::records::ensure_accepts_links(db, id)?;
+    let mut removed = shoal_links::linked::assigned_urls(db, id)?;
     if let Some(url) = selected {
         removed.retain(|issue| issue.url() == url);
         ensure!(
@@ -284,7 +284,7 @@ fn unlink(
 /// The user's assignees the space `id` stands for on every issue it links
 /// as assigned, which its removal drops.
 pub(crate) fn removed_assignees(db: &Connection, id: &SpaceId) -> Result<Vec<Dropped>> {
-    assignees::dropped(db, id, &assigned_urls(db, id)?)
+    assignees::dropped(db, id, &shoal_links::linked::assigned_urls(db, id)?)
 }
 
 /// The issues the space `id` links as assigned whose agent account its
@@ -305,12 +305,6 @@ pub(crate) fn agent_ended(db: &Connection, id: &SpaceId) -> Result<()> {
 fn also_assigned(url: &ItemRef, others: &[String]) -> String {
     let others = others.join(", ");
     format!("{url} is also assigned to {others}")
-}
-
-/// The URLs of the space's assigned issues in the order they were assigned.
-pub(crate) fn assigned_urls(db: &Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
-    let issues = shoal_links::linked::assigned_issues(db, id)?.into_iter();
-    Ok(issues.map(|issue| issue.url).collect())
 }
 
 #[cfg(test)]
