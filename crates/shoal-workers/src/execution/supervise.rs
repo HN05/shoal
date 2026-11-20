@@ -142,10 +142,12 @@ pub(super) async fn supervise(
 ) -> Result<(Outcome, Option<ScopeMemory>)> {
     let signals = ExecutionSignals::new()?;
     let launcher = launcher(mode).await;
+    // Before the launch, so a kill before its scope is found still shows.
+    let baseline = (!launcher.is_empty()).then(scope_memory::Baseline::read);
     let (mut child, group, _terminal, _scope) =
         spawn_registered_child(paths, plan, command, mode, auth, launcher)?;
+    let watch = baseline.map(|baseline| baseline.watch(group.pid()));
     register_child(link, plan, mode, &group, saving.restored_from).await?;
-    let watch = (!launcher.is_empty()).then(|| scope_memory::Watch::start(group.pid()));
     let report = SignalReport { paths, plan };
     let outcome = wait_for_child(link, &mut child, &group, signals, saving.ending, report).await?;
     // A command owns its process group; descendants do not outlive its lease.

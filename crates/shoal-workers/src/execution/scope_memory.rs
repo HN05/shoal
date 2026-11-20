@@ -21,6 +21,31 @@ const INTERVAL: Duration = Duration::from_secs(1);
 /// The exit code of a command the kernel killed, as SIGKILL ends it.
 const KILLED: i32 = 128 + libc::SIGKILL;
 
+/// The slice's count of kills before a command starts, which a kill of the
+/// command before its scope is found shows against.
+pub(super) struct Baseline {
+    slice_kills: Option<u64>,
+}
+
+impl Baseline {
+    /// The slice's count of kills now, before the command starts.
+    pub(super) fn read() -> Self {
+        Self {
+            slice_kills: slice_count(),
+        }
+    }
+
+    /// Read the scope of the command `pid`, this process's child, which it
+    /// moves into once its launcher has started it.
+    pub(super) fn watch(self, pid: u32) -> Watch {
+        let read = Read {
+            slice_kills: self.slice_kills,
+            ..Read::default()
+        };
+        Watch::start(pid, read)
+    }
+}
+
 /// A running command's scope, read in the background.
 pub(super) struct Watch {
     read: Arc<Mutex<Read>>,
@@ -38,10 +63,9 @@ struct Read {
 }
 
 impl Watch {
-    /// Read the scope of the command `pid`, this process's child, which it
-    /// moves into once its launcher has started it.
-    pub(super) fn start(pid: u32) -> Self {
-        let read = Arc::new(Mutex::new(Read::default()));
+    /// Read the scope of the command `pid` from `read`, the reads so far.
+    fn start(pid: u32, read: Read) -> Self {
+        let read = Arc::new(Mutex::new(read));
         let reading = read.clone();
         let task = tokio::spawn(async move {
             let mut interval = tokio::time::interval(INTERVAL);
@@ -56,13 +80,12 @@ impl Watch {
     }
 
     /// What the scope recorded once the command ended with `code`; `None`
-    /// where it never ran in a scope of its own.
+    /// where it never ran in a scope of its own and no kill shows.
     pub(super) fn finish(self, code: i32) -> Option<ScopeMemory> {
         self.task.abort();
         let mut read = self.read.lock().expect("scope reads do not panic");
-        read.scope.as_ref()?;
         read.last(code, slice_count);
-        Some(read.memory)
+        read.recorded()
     }
 }
 
@@ -83,13 +106,19 @@ impl Read {
     }
 
     /// Read the scope once more as its command ended with `code`: one gone
-    /// by then counts a kill when `slice_count`, the slice's count of kills
-    /// now, shows one since the previous read.
+    /// by then, or never found, counts a kill when `slice_count`, the
+    /// slice's count of kills now, shows one since the previous read.
     fn last(&mut self, code: i32, slice_count: impl FnOnce() -> Option<u64>) {
         let before = self.slice_kills;
         if !self.update() && killed_with_the_slice(code, before, slice_count()) {
             self.memory.oom_kills = self.memory.oom_kills.saturating_add(1);
         }
+    }
+
+    /// What the reads recorded: nothing for a command found in no scope of
+    /// its own, unless it was killed before it was found.
+    fn recorded(&self) -> Option<ScopeMemory> {
+        (self.scope.is_some() || self.memory.oom_kills > 0).then_some(self.memory)
     }
 
     /// Read the scope and the slice, returning whether the scope was there.

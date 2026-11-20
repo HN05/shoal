@@ -62,3 +62,21 @@ fn a_scope_gone_with_its_kill_adds_it_to_the_kills_read_before() {
     read.last(KILLED, || Some(6));
     assert_eq!(read.memory.oom_kills, 3);
 }
+
+#[test]
+fn a_command_killed_before_its_scope_is_found_records_the_kill() {
+    let mut read = Read {
+        slice_kills: Some(5),
+        ..Read::default()
+    };
+    read.last(KILLED, || Some(5));
+    assert_eq!(read.recorded(), None);
+    read.last(KILLED, || Some(6));
+    assert_eq!(
+        read.recorded(),
+        Some(ScopeMemory {
+            oom_kills: 1,
+            peak: 0
+        })
+    );
+}
