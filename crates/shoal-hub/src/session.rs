@@ -154,7 +154,7 @@ pub struct Unsent(String);
 /// A call the other side received but never answered, which it may have
 /// run.
 #[derive(Debug)]
-pub struct Unanswered(String);
+pub struct Unanswered(pub(crate) String);
 
 impl std::fmt::Display for Unsent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

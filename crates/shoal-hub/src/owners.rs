@@ -70,12 +70,16 @@ impl Hub {
     }
 
     /// Claim the space `id` at the hub as [`Self::claim_space`] does, on
-    /// the hub or a machine that joined one.
+    /// the hub or a machine that joined one, and keep the number the hub
+    /// keeps for it, if any.
     async fn claim_if_joined(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<()> {
         if !self.is_hub(daemon) && self.store.read(membership::load).await?.is_none() {
             return Ok(());
         }
-        self.claim_with(daemon, id, None).await
+        if let Some(number) = self.claim_at_hub(daemon, id, None).await? {
+            self.keep_imported_number(id, number).await?;
+        }
+        Ok(())
     }
 
     /// Claim the space `id` at the hub for the move `ticket` through it,
@@ -95,20 +99,6 @@ impl Hub {
             && let Err(error) = self.keep_imported_number(id, number).await
         {
             log!("hub: could not keep the number of space {id}: {error:#}");
-        }
-        Ok(())
-    }
-
-    /// Claim the space `id` at the hub, with the `ticket` of the move that
-    /// brings it, and keep the number the hub keeps for it, if any.
-    async fn claim_with(
-        &self,
-        daemon: &dyn Daemon,
-        id: &SpaceId,
-        ticket: Option<&MoveTicket>,
-    ) -> Result<()> {
-        if let Some(number) = self.claim_at_hub(daemon, id, ticket).await? {
-            self.keep_imported_number(id, number).await?;
         }
         Ok(())
     }
@@ -182,3 +172,6 @@ impl Hub {
         Ok(owner.filter(|owner| owner.id != this))
     }
 }
+
+#[cfg(test)]
+mod tests;
