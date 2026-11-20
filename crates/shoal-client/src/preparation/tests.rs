@@ -25,7 +25,7 @@ async fn an_app_creates_a_workspace_and_follows_its_setup_to_a_typed_failure() {
     let preparing = preparation::create(&app, new, Default::default())
         .await
         .unwrap();
-    let mut worker = fake::take(preparing.operation());
+    let mut worker = fake::take(&preparing.operation().id);
     worker.stdout("installing").await;
     // A failed setup command leaves the workspace failed.
     (daemon.manager)
@@ -33,7 +33,7 @@ async fn an_app_creates_a_workspace_and_follows_its_setup_to_a_typed_failure() {
         .await
         .unwrap();
     let message = "setup command exited with status 2".to_owned();
-    fail(preparing.operation(), Failure::SetupFailed { message }).await;
+    fail(&preparing.operation().id, Failure::SetupFailed { message }).await;
     worker.exit(0);
     let mut lines = Vec::new();
     let progress = |progress| match progress {
@@ -55,14 +55,14 @@ async fn an_app_creates_a_workspace_and_follows_its_setup_to_a_typed_failure() {
     let preparing = preparation::create(&app, split, Default::default())
         .await
         .unwrap();
-    let worker = fake::take(preparing.operation());
+    let worker = fake::take(&preparing.operation().id);
     let child = preparing.workspace().id.clone();
     (daemon.manager)
         .set_state(&child, WorkspaceState::Ready, None)
         .await
         .unwrap();
     let message = "post_setup exited with 1".to_owned();
-    fail(preparing.operation(), Failure::HookFailed { message }).await;
+    fail(&preparing.operation().id, Failure::HookFailed { message }).await;
     worker.exit(0);
     let finished = tokio::time::timeout(HANG, preparing.finish(|_| {}));
     let unprepared = finished.await.unwrap().unwrap().unwrap_err();

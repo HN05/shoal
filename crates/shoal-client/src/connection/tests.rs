@@ -1,5 +1,5 @@
 use super::*;
-use shoal_protocol::protocol::{ErrorCode, RemoteError, WorkPlace};
+use shoal_protocol::protocol::{ErrorCode, RemoteError, WorkPlace, operations::OperationRef};
 use tokio::net::UnixListener;
 
 /// Supervision that takes the daemon recorded in the state directory's
@@ -358,7 +358,9 @@ async fn a_request_an_exiting_daemon_held_back_goes_to_the_next_daemon() -> Resu
     paths.prepare()?;
     own(&paths, "exiting")?;
     let listener = UnixListener::bind(&paths.socket)?;
-    let cancel = || shoal_protocol::protocol::OperationMethod::CancelOperation { id: "op".into() };
+    let cancel = || shoal_protocol::protocol::OperationMethod::CancelOperation {
+        operation: OperationRef::here("op".into()),
+    };
     let asking = tokio::spawn({
         let paths = paths.clone();
         async move { request::<()>(&paths, cancel()).await }
@@ -541,7 +543,9 @@ async fn a_held_back_request_another_daemon_took_is_not_sent_again() -> Result<(
     paths.prepare()?;
     own(&paths, "exiting")?;
     let listener = UnixListener::bind(&paths.socket)?;
-    let cancel = || shoal_protocol::protocol::OperationMethod::CancelOperation { id: "op".into() };
+    let cancel = || shoal_protocol::protocol::OperationMethod::CancelOperation {
+        operation: OperationRef::here("op".into()),
+    };
     let asking = tokio::spawn({
         let paths = paths.clone();
         async move { request::<()>(&paths, cancel()).await }

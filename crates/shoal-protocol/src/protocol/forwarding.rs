@@ -99,7 +99,9 @@ impl Operation {
         } else if matches!(
             self,
             Self::Workspace(WorkspaceMethod::FollowSession { .. } | WorkspaceMethod::Diff { .. })
-                | Self::Operations(OperationMethod::StartMove { .. })
+                | Self::Operations(
+                    OperationMethod::StartMove { .. } | OperationMethod::FollowOperation { .. }
+                )
         ) {
             Forwarding::Streamed
         } else if matches!(
@@ -140,6 +142,7 @@ impl Operation {
                     | WorkspaceMethod::SpaceLog { .. }
                     | WorkspaceMethod::RenameSpace { .. }
                     | WorkspaceMethod::Conflicts { .. }
+                    | WorkspaceMethod::InspectWorkspace { .. }
             ) | Self::Agent(
                 AgentMethod::SetProgress { .. }
                     | AgentMethod::Progress { .. }
@@ -170,6 +173,7 @@ impl Operation {
                     | RemovalMethod::RemoveSpace { .. }
                     | RemovalMethod::StartRemoval { .. }
             ) | Self::Queue(QueueMethod::SetPriority { .. } | QueueMethod::QueueRestore { .. })
+                | Self::Operations(OperationMethod::CancelOperation { .. })
                 | Self::Launch(LaunchMethod::Launch { .. } | LaunchMethod::LaunchModes { .. })
                 | Self::Demo(DemoMethod::ListDemos { .. })
                 | Self::Alert(AlertMethod::WithdrawAlert { space: Some(_), .. })

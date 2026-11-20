@@ -4,13 +4,17 @@ use crate::test_daemon::{Connect as _, start_workspace};
 use shoal_daemon::test_daemon::{HANG, TestDaemon, fake};
 use shoal_protocol::protocol::{
     ErrorCode, OperationMethod, RemoteError,
-    operations::{Ended, Failure, OperationSpec, Report, StartedWorkspace, WorkspaceStart},
+    operations::{
+        Ended, Failure, OperationRef, OperationSpec, Report, StartedWorkspace, WorkspaceStart,
+    },
 };
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Follow operation `id` from its start to its end.
 async fn follow(app: &Connector, id: &str) -> Ended {
-    let mut following = Following::open(app, id.into(), 0).await.unwrap();
+    let mut following = Following::open(app, OperationRef::here(id.into()), 0)
+        .await
+        .unwrap();
     tokio::time::timeout(HANG, async {
         loop {
             if let Followed::Ended(ended) = following.next().await.unwrap() {
@@ -70,7 +74,7 @@ async fn following_ends_once_the_followers_scope_token_is_revoked() {
     let mut worker = fake::take(&started.id);
     let token = daemon.scope_token(&own).await;
     let agent = daemon.connector().scope(token.clone());
-    let mut following = Following::open(&agent, started.id.clone(), 0)
+    let mut following = Following::open(&agent, OperationRef::here(started.id.clone()), 0)
         .await
         .unwrap();
     worker.stdout("one").await;

@@ -9,7 +9,7 @@ use tokio::{io::BufReader, net::UnixStream};
 use crate::connection::{self, Daemon};
 use shoal_protocol::protocol::{
     Body, OperationMethod, Responses,
-    operations::{Ended, OperationEvent, OperationSpec, Report, Started},
+    operations::{Ended, OperationEvent, OperationRef, OperationSpec, Report, Started},
 };
 use shoal_protocol::transfer::{DeferredMove, MoveOrder};
 
@@ -28,10 +28,10 @@ pub struct Following {
 }
 
 impl Following {
-    /// Follow operation `id` from its `after`th event, failing at once when
+    /// Follow `operation` from its `after`th event, failing at once when
     /// the daemon refuses.
-    pub async fn open(daemon: &impl Daemon, id: String, after: u64) -> Result<Self> {
-        let method = OperationMethod::FollowOperation { id, after };
+    pub async fn open(daemon: &impl Daemon, operation: OperationRef, after: u64) -> Result<Self> {
+        let method = OperationMethod::FollowOperation { operation, after };
         let (stream, body) = connection::open_buffered(daemon, method).await?;
         <()>::try_from(body)?;
         Ok(Self {
@@ -102,9 +102,9 @@ pub async fn start(
     Ok(id)
 }
 
-/// Cancel operation `id`.
-pub async fn cancel(daemon: &impl Daemon, id: String) -> Result<()> {
-    connection::request(daemon, OperationMethod::CancelOperation { id }).await
+/// Cancel `operation`.
+pub async fn cancel(daemon: &impl Daemon, operation: OperationRef) -> Result<()> {
+    connection::request(daemon, OperationMethod::CancelOperation { operation }).await
 }
 
 /// Report a step of operation `id`, or its end, from its worker.

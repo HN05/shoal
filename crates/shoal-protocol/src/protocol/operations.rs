@@ -26,13 +26,13 @@ pub enum OperationMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         env: Option<BTreeMap<String, String>>,
     },
-    /// Long-lived: the progress of operation `id` after its first `after`
+    /// Long-lived: the progress of `operation` after its first `after`
     /// events, each as [`super::Body::OperationEvent`], then its end as
     /// [`super::Body::OperationEnded`].
-    FollowOperation { id: String, after: u64 },
-    /// Interrupt operation `id`'s worker, as an interrupt of the command
+    FollowOperation { operation: OperationRef, after: u64 },
+    /// Interrupt the worker of `operation`, as an interrupt of the command
     /// that ran its work did.
-    CancelOperation { id: String },
+    CancelOperation { operation: OperationRef },
     /// Open a workspace in `repository` where `start` says and start
     /// preparing it, as `shoal start` does: refuse an agent that cannot run
     /// there or an issue that is not open before anything is created, assign
@@ -167,6 +167,32 @@ impl OperationMethod {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Started {
     pub id: String,
+}
+
+/// An operation a request names: its ID, and the space it works in where
+/// the caller knows it, which takes the request to that space's machine
+/// when another joined machine runs it, as a start there prepares a
+/// workspace.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OperationRef {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space: Option<SpaceSelector>,
+}
+
+impl OperationRef {
+    /// Operation `id`, on this machine.
+    pub fn here(id: String) -> Self {
+        Self { id, space: None }
+    }
+
+    /// Operation `id`, which works in `space`, wherever that space runs.
+    pub fn in_space(id: String, space: SpaceSelector) -> Self {
+        Self {
+            id,
+            space: Some(space),
+        }
+    }
 }
 
 /// Where a workspace [`OperationMethod::StartWorkspace`] opens starts.

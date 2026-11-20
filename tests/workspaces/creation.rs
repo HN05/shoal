@@ -2165,7 +2165,8 @@ fn an_apps_agent_keeps_waiting_for_a_failed_setup_until_a_hook_passes_there() {
         protocol::{
             OperationMethod,
             operations::{
-                OperationSpec, Preparation, QueuedLaunch, Started, StartedWorkspace, WorkspaceStart,
+                OperationRef, OperationSpec, Preparation, QueuedLaunch, Started, StartedWorkspace,
+                WorkspaceStart,
             },
         },
         space_names::SpaceSelector,
@@ -2187,7 +2188,9 @@ fn an_apps_agent_keeps_waiting_for_a_failed_setup_until_a_hook_passes_there() {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let follow = |operation: String| {
         runtime.block_on(async {
-            let mut following = Following::open(&app, operation, 0).await.unwrap();
+            let mut following = Following::open(&app, OperationRef::here(operation), 0)
+                .await
+                .unwrap();
             while let Followed::Event(_) = following.next().await.unwrap() {}
         })
     };
@@ -2257,7 +2260,9 @@ fn an_app_follows_the_setup_of_a_workspace_it_creates() {
     use shoal_protocol::{
         protocol::{
             ErrorCode, OperationMethod,
-            operations::{Ended, Outcome, Progress, StartedWorkspace, Step, WorkspaceStart},
+            operations::{
+                Ended, OperationRef, Outcome, Progress, StartedWorkspace, Step, WorkspaceStart,
+            },
         },
         state::WorkspaceState,
     };
@@ -2304,7 +2309,7 @@ fn an_app_follows_the_setup_of_a_workspace_it_creates() {
     let follow = |started: &StartedWorkspace| {
         let go = started.workspace.path.join("go");
         runtime.block_on(async {
-            let mut following = Following::open(&app, started.operation.clone().unwrap(), 0)
+            let mut following = Following::open(&app, OperationRef::here(started.operation.clone().unwrap()), 0)
                 .await
                 .unwrap();
             let mut events = Vec::new();

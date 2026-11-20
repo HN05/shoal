@@ -13,8 +13,9 @@ use anyhow::{Result, ensure};
 use super::operations::Lines;
 use crate::cli::{args::transfer::MoveArgs, context::Context, ui};
 use crate::client::operations::{Following, MoveStarted};
-use crate::protocol::operations::{Ended, Failure};
+use crate::protocol::operations::{Ended, Failure, OperationRef};
 use crate::transfer::{Consent, DeferredMove, MoveDestination, MoveOrder, MoveReport};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The file name that reads or writes the standard streams.
 pub(super) const STANDARD_STREAM: &str = "-";
@@ -71,11 +72,15 @@ async fn follow(ctx: &Context, order: MoveOrder) -> Result<Moved> {
         _ => Lines::Command,
     };
     let env = crate::env::without_secrets();
+    // The move runs on the machine of its spaces, where cancelling it goes.
+    let first = (order.spaces.first()).map(SpaceSelector::id);
     let (id, mut following) = match Following::start_move(&ctx.paths, order, env).await? {
         MoveStarted::Following(id, following) => (id, following),
         MoveStarted::AfterTurn(deferred) => return Ok(Moved::AfterTurn(deferred)),
     };
-    let ended = super::operations::show(ctx, (&id, lines), async || following.next().await).await?;
+    let operation = OperationRef { id, space: first };
+    let shown = (&operation, lines);
+    let ended = super::operations::show(ctx, shown, async || following.next().await).await?;
     match ended {
         Ended::Succeeded(outcome) => Ok(Moved::Done(MoveReport::try_from(*outcome)?)),
         Ended::Failed(Failure::Unconfirmed { question }) => Ok(Moved::Asks(question)),

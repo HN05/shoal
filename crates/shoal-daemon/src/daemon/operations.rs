@@ -20,8 +20,8 @@ use uuid::Uuid;
 
 use super::{manager::Manager, scope::Caller};
 use crate::protocol::operations::{
-    Ended, Failure, OperationEvent, OperationKind, OperationSpec, Order, Progress, Report, Step,
-    Stream,
+    Ended, Failure, OperationEvent, OperationKind, OperationRef, OperationSpec, Order, Progress,
+    Report, Step, Stream,
 };
 use crate::refusal::{Reason, Refusal};
 use shoal_protocol::space_names::SpaceSelector;
@@ -310,6 +310,31 @@ impl Manager {
                 "workspace processes can only follow operations of their own space and those below it"
             );
         }
+        Ok(entry)
+    }
+
+    /// The operation `named` names, refusing a scoped caller one outside
+    /// its tree, and one that works in another space than the one it names,
+    /// which a space this machine has none of refuses for its own machine
+    /// to answer.
+    pub(crate) async fn named_operation(
+        &self,
+        named: &OperationRef,
+        caller: Option<&Caller>,
+    ) -> Result<Arc<Entry>> {
+        let entry = self.operation(&named.id, caller).await;
+        let Some(space) = &named.space else {
+            return entry;
+        };
+        let space = self.space(space).await?;
+        let entry = entry?;
+        ensure!(
+            entry.workspace == space.id,
+            Refusal::new(
+                Reason::NotFound,
+                format!("operation {} does not work in {}", named.id, space.name)
+            )
+        );
         Ok(entry)
     }
 

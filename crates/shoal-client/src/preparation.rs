@@ -18,8 +18,8 @@ use shoal_protocol::{
     protocol::{
         CopySource, CreationOptions, OperationMethod,
         operations::{
-            Ended, Failure, LaunchRequest, OperationSpec, Preparation, Prepared, Progress,
-            QueuedLaunch, StartedWorkspace, WorkspaceStart,
+            Ended, Failure, LaunchRequest, OperationRef, OperationSpec, Preparation, Prepared,
+            Progress, QueuedLaunch, StartedWorkspace, WorkspaceStart,
         },
     },
     repository::Selector,
@@ -268,7 +268,7 @@ pub struct Preparing<'d, D> {
     entry: Option<Box<QueueEntry>>,
     /// What assigning its issue on the forge warned of.
     warnings: Vec<String>,
-    operation: String,
+    operation: OperationRef,
     following: Following,
     /// The failure it ended with, kept until the workspace it left is read.
     failed: Option<Failure>,
@@ -291,6 +291,9 @@ impl<'d, D: Daemon> Preparing<'d, D> {
             let waits = waits.map_or_else(|| "its turn".to_owned(), ToString::to_string);
             format!("the preparation of {} waits for {waits}", workspace.name)
         })?;
+        // Named with its workspace, it is followed on whichever machine
+        // runs that workspace.
+        let operation = OperationRef::in_space(operation, SpaceSelector::id(&workspace.id));
         let following = Following::open(daemon, operation.clone(), 0).await?;
         Ok(Self {
             daemon,
@@ -327,7 +330,7 @@ impl<'d, D: Daemon> Preparing<'d, D> {
     }
 
     /// The preparation's operation, to cancel it.
-    pub fn operation(&self) -> &str {
+    pub fn operation(&self) -> &OperationRef {
         &self.operation
     }
 

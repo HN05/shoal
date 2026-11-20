@@ -14,7 +14,9 @@ use crate::{
         operations::{Followed, Following},
         preparation::{Preparing, Unprepared},
     },
-    protocol::operations::{Ended, OperationSpec, Outcome, Prepared, Progress, Step, Stream},
+    protocol::operations::{
+        Ended, OperationRef, OperationSpec, Outcome, Prepared, Progress, Step, Stream,
+    },
 };
 
 /// Start `spec` in this process's environment, without its secrets, and
@@ -40,8 +42,10 @@ where
 /// Follow operation `id` to its end, as [`show`] shows it, returning how it
 /// did.
 async fn follow(ctx: &Context, id: String) -> Result<Outcome> {
-    let mut following = Following::open(&ctx.paths, id.clone(), 0).await?;
-    match show(ctx, (&id, Lines::Command), async || following.next().await).await? {
+    let operation = OperationRef::here(id);
+    let mut following = Following::open(&ctx.paths, operation.clone(), 0).await?;
+    let shown = (&operation, Lines::Command);
+    match show(ctx, shown, async || following.next().await).await? {
         Ended::Succeeded(outcome) => Ok(*outcome),
         Ended::Failed(failure) => Err(crate::operations::error(failure)),
     }
@@ -55,8 +59,9 @@ pub(super) async fn follow_preparation(
     mut preparing: Preparing<'_, CommandPaths>,
 ) -> Result<Result<Prepared, Unprepared>> {
     super::links::print_warnings(preparing.warnings());
-    let id = preparing.operation().to_owned();
-    show(ctx, (&id, Lines::Command), async || preparing.next().await).await
+    let operation = preparing.operation().clone();
+    let shown = (&operation, Lines::Command);
+    show(ctx, shown, async || preparing.next().await).await
 }
 
 /// Where an operation's output lines go.
@@ -70,7 +75,7 @@ pub(super) enum Lines {
     Aside,
 }
 
-/// Show the output of operation `id` that `next` reports, its lines where
+/// Show the output of `operation` that `next` reports, its lines where
 /// `lines` says, below a spinner naming its step, until it ends, returning
 /// how it did. Each report runs
 /// to its end while the spinner ticks, so a slow one is never restarted. An
@@ -79,7 +84,7 @@ pub(super) enum Lines {
 /// running.
 pub(super) async fn show<E>(
     ctx: &Context,
-    (id, lines): (&str, Lines),
+    (operation, lines): (&OperationRef, Lines),
     mut next: impl AsyncFnMut() -> Result<Followed<E>>,
 ) -> Result<E> {
     let mut interrupt = signal(SignalKind::interrupt())?;
@@ -93,11 +98,11 @@ pub(super) async fn show<E>(
                 followed = &mut reported => break followed?,
                 _ = interrupt.recv() => {
                     spinner.clear();
-                    cancelled = cancel(ctx, id, cancelled).await?;
+                    cancelled = cancel(ctx, operation, cancelled).await?;
                 }
                 _ = terminate.recv() => {
                     spinner.clear();
-                    cancelled = cancel(ctx, id, cancelled).await?;
+                    cancelled = cancel(ctx, operation, cancelled).await?;
                 }
                 () = spinner.tick() => {}
             }
@@ -109,14 +114,14 @@ pub(super) async fn show<E>(
     }
 }
 
-/// Cancel operation `id`, or, once `cancelled`, stop following it.
-async fn cancel(ctx: &Context, id: &str, cancelled: bool) -> Result<bool> {
+/// Cancel `operation`, or, once `cancelled`, stop following it.
+async fn cancel(ctx: &Context, operation: &OperationRef, cancelled: bool) -> Result<bool> {
     anyhow::ensure!(
         !cancelled,
-        "stopped following operation {id}, which continues"
+        "stopped following operation {}, which continues",
+        operation.id
     );
-    let id = id.to_owned();
-    crate::client::operations::cancel(&ctx.paths, id).await?;
+    crate::client::operations::cancel(&ctx.paths, operation.clone()).await?;
     eprintln!("Cancelling; interrupt again to stop following and leave it running");
     Ok(true)
 }

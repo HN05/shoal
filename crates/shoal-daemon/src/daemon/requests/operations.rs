@@ -53,8 +53,11 @@ pub(super) async fn handle(
                 id: manager.start_operation(spec, env, caller).await?,
             })
         }
-        OperationMethod::FollowOperation { id, after } => {
-            let entry = manager.operation(&id, caller).await?;
+        OperationMethod::FollowOperation { operation, after } => {
+            let entry = manager.named_operation(&operation, caller).await?;
+            // Another machine's follow is checked there as it goes, its
+            // token here standing for its caller only while it starts.
+            let scope = scope.filter(|token| manager.hub.vouched_caller(token).is_none());
             let follower = Follower {
                 manager: manager.clone(),
                 scope: scope.cloned(),
@@ -185,8 +188,8 @@ pub(super) async fn handle(
                     .await?,
             )
         }
-        OperationMethod::CancelOperation { id } => {
-            manager.operation(&id, caller).await?.interrupt();
+        OperationMethod::CancelOperation { operation } => {
+            (manager.named_operation(&operation, caller).await?).interrupt();
             Body::Ok
         }
         OperationMethod::ReportProgress { id, report } => {
@@ -237,9 +240,16 @@ impl Scoped for OperationMethod {
                 None
             }
             OperationMethod::ConvertToWorkspace { chat, .. } => Some(chat),
-            OperationMethod::FollowOperation { id, .. }
-            | OperationMethod::CancelOperation { id }
-            | OperationMethod::ReportProgress { id, .. } => {
+            // One named with its space is that space's, wherever it runs.
+            OperationMethod::FollowOperation { operation, .. }
+            | OperationMethod::CancelOperation { operation } => match &mut operation.space {
+                Some(space) => Some(space),
+                None => {
+                    manager.operation(&operation.id, Some(caller)).await?;
+                    None
+                }
+            },
+            OperationMethod::ReportProgress { id, .. } => {
                 manager.operation(id, Some(caller)).await?;
                 None
             }
