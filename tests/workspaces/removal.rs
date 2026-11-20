@@ -1322,7 +1322,6 @@ fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
     let directory = fixture.root.path().join("exports");
     let refused = fixture.run(&[
         "move",
-        "export",
         "--repo",
         repo,
         "--all",

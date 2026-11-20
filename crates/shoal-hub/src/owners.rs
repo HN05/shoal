@@ -28,7 +28,7 @@ impl Hub {
         };
         let name = &owner.name;
         bail!(
-            "space {id} runs on machine {name}; to have it here, run shoal move ssh with this machine's host and {id} on {name}, or keep it there and copy it as a new space with shoal start --copy {id}"
+            "space {id} runs on machine {name}; to have it here, run shoal move {id} --ssh with this machine's host on {name}, or keep it there and copy it as a new space with shoal start --copy {id}"
         )
     }
 

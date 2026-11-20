@@ -63,7 +63,7 @@ impl Need {
             | ["ci", ..]
             | ["branch", "ls" | "delete"] => Self::Any,
             ["setup"] => Self::Setup,
-            ["status" | "restore" | "rename"] | ["move", "export" | "ssh"] => Self::Any,
+            ["status" | "restore" | "rename" | "move"] => Self::Any,
             ["convert", ..] => Self::Any,
             ["checkpoint"] => Self::Checkpoint,
             ["branch", "rename"] => Self::Settled,

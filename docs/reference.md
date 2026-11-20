@@ -913,8 +913,8 @@ first, as after that or when a machine joins with spaces of its own, takes
 the smallest number free on the hub, its questions and approval requests
 follow it as `S.N`, and its machine tells you and the space's agent the old
 and new numbers in a `space_renumbered` alert; the space that held the
-number first keeps it. A space `shoal move ssh` moves between the hub's
-machines keeps its number; one `shoal move export` wrote, imported after its
+number first keeps it. A space `shoal move --ssh` moves between the hub's
+machines keeps its number; one `shoal move -o` wrote, imported after its
 source is gone, takes a new one.
 
 The hub lists a space ID under one machine, the first that reported it. A
@@ -3314,8 +3314,8 @@ files, and its branch unless a remote or the default branch has its commits, so
 `shoal restore` brings it back, and each chat stops its agent. A child that cannot go retains the parent. `shoal rm` names the children
 before asking, and its result names them in `children`; each child's journal
 records a `removed` event with the cause `parent`, and the user is notified of
-those an unattended removal took. `shoal move export` takes the spaces below a
-space with it, in its file.
+those an unattended removal took. `shoal move` takes the spaces below a
+space with it.
 
 While a parent's `done` with cleanup stands at its HEAD, each workspace and
 chat below it has `cleanup_reason` `ancestor_completed` and goes after the
@@ -4611,21 +4611,27 @@ everything that moved.
 ### Move a space to another machine
 
 ```sh
-shoal move export 7 -o topic.shoal             # remove workspace 7 and write it to a file
-shoal move export 5 -o plan.shoal              # end the chat 5 and write it to a file
+shoal move 7 -o topic.shoal                    # remove workspace 7 and write it to a file
+shoal move 5 -o plan.shoal                     # end the chat 5 and write it to a file
 shoal restore --from topic.shoal               # continue it in the repository with the same origin
-shoal move export 7 | ssh other shoal restore --from -      # agents continue there
-shoal move ssh other 5                         # the same, once ssh reaches Shoal there
-shoal move export --repo app --all -o moving   # end every space of app, a file per tree
-shoal move export 7 8 -o moving                # remove both, a file each unless 8 is below 7
-shoal move export 7 --no-children -o topic.shoal  # leave the spaces below 7 here, one level up
-shoal move export 7 --keep -o copy.shoal       # keep workspace 7 running and write a copy of it
-shoal move ssh other 7 --keep                  # keep workspace 7 running and copy it there
-shoal restore --from moving                    # continue every space exported to moving
+shoal move 7 -o - | ssh other shoal restore --from -   # agents continue there
+shoal move 5 --ssh other                       # the same, once ssh reaches Shoal there
+shoal move --repo app --all -o moving          # end every space of app, a file per tree
+shoal move 7 8 -o moving                       # remove both, a file each unless 8 is below 7
+shoal move 7 --no-recursive -o topic.shoal     # leave the spaces below 7 here, one level up
+shoal move 7 --keep -o copy.shoal              # keep workspace 7 running and write a copy of it
+shoal move 7 --ssh other --keep                # keep workspace 7 running and copy it there
+shoal move 7                                   # ask for the destination
+shoal restore --from moving                    # continue every space written to moving
 ```
 
-`shoal move export [space] -o <file>` ends a workspace or chat here and writes
-it to a new file, or to standard output without `-o` or for `-`, refusing a
+`shoal move [space]...` takes one destination: `--ssh <host>` or
+`-o <file>`. Without one, on a terminal, it picks the spaces when none are
+named, then asks for the destination's kind, `SSH host` or `File`, and for the
+host or path; without a terminal it is refused, naming both flags.
+
+`shoal move [space] -o <file>` ends a workspace or chat here and writes
+it to a new file, or to standard output for `-`, refusing a
 terminal. Its argument names a workspace or chat, else the current workspace,
 else a picker offers both. The daemon writes the file, so
 it is complete even when the terminal closes with the space. It refuses before
@@ -4652,7 +4658,8 @@ already removed, as by cleanup, is exported from its removal record, which
 stays, with the records of the spaces its removal took, under the refusals that
 still apply, without another removal. The file's manifest names each record's `kind`, `workspace` or `chat`.
 
-`--no-children` leaves the spaces below here, except those named too, which go
+`--no-recursive`, with either destination, leaves the spaces below here, where
+`--recursive`, the default, takes them, except those named too, which go
 in the file where it carries the space above them; the chats in the worktree of
 a workspace it carries still go with it. Each space that stays keeps running and
 moves up one level, below the exported space's parent, or to the top level when
@@ -4663,8 +4670,8 @@ pass to the nearest space above them with an agent, or to the user. A removed
 space exports with its own record only; the records of the spaces its removal
 took stay here, and restoring one opens it at the top level.
 
-`shoal move export <space>... -o <directory>`, for several spaces or those the
-picker selects when `-o` names an existing directory, and `shoal move export
+`shoal move <space>... -o <directory>`, for several spaces or those the
+picker selects when `-o` names an existing directory, and `shoal move
 --repo <repository> --all -o <directory>`, for every workspace and running chat
 of the repository, export each to `<id>.shoal` in the directory, named after
 the space's ID since names repeat, creating it when missing. A space below
@@ -4677,7 +4684,7 @@ ending them, then exports each space and lists the files it wrote; a
 failure there leaves the remaining ones to export, and the command exits 1
 naming each failed space.
 
-`shoal move export [space] --keep -o <file>` leaves the space and the spaces
+`shoal move [space] --keep -o <file>` leaves the space and the spaces
 below it running and writes copies of them instead: a workspace at a new
 checkpoint, as `shoal checkpoint` takes one, or for the named workspace with
 `--checkpoint N` at an earlier one `shoal restore <workspace> --checkpoint`
@@ -4738,22 +4745,22 @@ the repository's checkout with a warning, or in `root_dir` without a
 repository. The spaces a file carries open again after its space the same way,
 parents first, each below its parent and each workspace set up before the
 spaces below it; one that cannot open fails the import, which goes on with the
-rest and names each failure, so `shoal move ssh` keeps the spaces here, and its
+rest and names each failure, so `shoal move --ssh` keeps the spaces here, and its
 record, where the import made one, stays for `shoal restore <id>`. With `--no-resume`, the agents of every imported space
 stay stopped and the report names the `shoal restore` that restores them.
 An import is refused, before it records anything, when a space with the ID of
 the package's space, or of a space it carries, is already here, or a carried
 space's repository is not registered: `shoal rm` removes that space here, or
-`shoal move export --keep` where the package was exported writes a copy, which
+`shoal move --keep` where the package was written writes a copy, which
 opens under an ID of its own. An import that fails before it records
 anything of the space reports the error code `not_imported`. Workspace
 processes can neither export nor import.
 
-`shoal move ssh <host> [space]...`, or `--repo <repository> --all`, moves each
+`shoal move [space]... --ssh <host>`, or `--repo <repository> --all`, moves each
 space with `ssh <host> shoal --json restore --from -`, after
 `ssh <host> shoal repo ls` shows Shoal answers there; when it does not, nothing
 ends. `--shoal <path>` names the program there when the remote shell's `PATH`
-lacks it, and `--no-restore` leaves the agents stopped there, a chat's as a
+lacks it, and `--no-resume` leaves the agents stopped there, a chat's as a
 workspace's. It checks the spaces as a batch export does and
 asks once before ending them. Each space then moves on its own, after the
 spaces below it: Shoal stops its agents and those of the chats that go with it,
@@ -4772,7 +4779,7 @@ since its export, its own `hooks.pre_remove` changing them included, or whose
 report says it now exists on both machines and names the `shoal rm` that
 removes it here.
 `--keep`, with `--checkpoint N` for one workspace, copies the spaces instead, as
-`shoal move export --keep` does, and imports each copy there as a new space,
+`shoal move --keep -o` does, and imports each copy there as a new space,
 leaving the space running here; it asks nothing, and a space it cannot copy or
 import there is reported while the rest are copied.
 

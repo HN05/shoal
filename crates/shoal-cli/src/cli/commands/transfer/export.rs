@@ -1,4 +1,4 @@
-//! `shoal move export`: end spaces here with the spaces below them through
+//! `shoal move -o`: end spaces here with the spaces below them through
 //! the removal path, and write each with those below to a file, or to
 //! standard output.
 use crate::transfer::{Carrying, ManifestExt};
@@ -32,9 +32,9 @@ use checks::{check_export, confirm_ending, exported_alone};
 use directory::DirectoryReport;
 pub(super) use directory::ExportDirectory;
 
-/// `shoal move export`: end the space here, or take an already removed
-/// one, and write it with the spaces below it to `file`, or only with the
-/// named ones among them when `no_children`. Several spaces, or any written
+/// `shoal move -o`: end the space here, or take an already removed one,
+/// and write it with the spaces below it to `file`, or only with the named
+/// ones among them unless `recursive`. Several spaces, or any written
 /// to a directory, go to a file each in it. The destination is checked
 /// before a picker opens.
 pub(super) async fn export(
@@ -42,9 +42,9 @@ pub(super) async fn export(
     names: Vec<SpaceSelector>,
     file: PathBuf,
     yes: bool,
-    no_children: bool,
+    recursive: bool,
 ) -> Result<i32> {
-    let carrying = carrying(no_children, &[]);
+    let carrying = carrying(recursive, &[]);
     if let [selector] = names.as_slice()
         && crate::client::workspaces::present_space(&ctx.paths, selector)
             .await?
@@ -60,7 +60,7 @@ pub(super) async fn export(
             "several spaces export to a file each; name a directory with -o"
         );
         let spaces = selected_spaces(ctx, names).await?;
-        let carrying = self::carrying(no_children, &spaces);
+        let carrying = self::carrying(recursive, &spaces);
         return export_into(ctx, &spaces, file, yes, &carrying).await;
     }
     let output = Output::reserve(&file)?;
@@ -74,12 +74,12 @@ pub(super) async fn export(
     output.report(ctx, &exported)
 }
 
-/// Which spaces below each of the `spaces` an export carries: every one,
-/// or with `no_children` only those among the `spaces`.
-pub(super) fn carrying(no_children: bool, spaces: &[Space]) -> Carrying {
-    match no_children {
-        false => Carrying::Subtree,
-        true => Carrying::Selected(spaces.iter().map(|space| space.id.clone()).collect()),
+/// Which spaces below each of the `spaces` an export carries: every one
+/// when `recursive`, else only those among the `spaces`.
+pub(super) fn carrying(recursive: bool, spaces: &[Space]) -> Carrying {
+    match recursive {
+        true => Carrying::Subtree,
+        false => Carrying::Selected(spaces.iter().map(|space| space.id.clone()).collect()),
     }
 }
 

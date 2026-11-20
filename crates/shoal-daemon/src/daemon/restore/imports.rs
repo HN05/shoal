@@ -107,7 +107,7 @@ impl Manager {
             let (name, number) = (&here.name, here.number);
             bail!(
                 "{name} is already here as space {number}; shoal rm {number} removes it here, \
-                 or shoal move export --keep where it was exported writes a copy that opens beside it"
+                 or shoal move --keep -o where it was exported writes a copy that opens beside it"
             );
         }
         Ok(())

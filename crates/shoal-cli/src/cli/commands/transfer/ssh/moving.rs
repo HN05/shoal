@@ -1,4 +1,4 @@
-//! `shoal move ssh`: hand spaces to another machine's Shoal, ending each
+//! `shoal move --ssh`: hand spaces to another machine's Shoal, ending each
 //! here only once its import there succeeded, so a failed move leaves it
 //! here.
 use anyhow::{Context as _, Result};

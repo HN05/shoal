@@ -1,4 +1,4 @@
-//! `shoal move ssh --keep`: copy spaces to another machine's Shoal, with
+//! `shoal move --ssh --keep`: copy spaces to another machine's Shoal, with
 //! copies of the spaces below them, which opens each as a new space,
 //! leaving them running here.
 use anyhow::Result;

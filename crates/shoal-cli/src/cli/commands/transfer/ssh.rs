@@ -1,4 +1,4 @@
-//! `shoal move ssh`: hand spaces to another machine's Shoal, ending them
+//! `shoal move --ssh`: hand spaces to another machine's Shoal, ending them
 //! here once imported there, or copies of them with `--keep`, once `ssh`
 //! reaches Shoal there.
 use std::path::Path;
@@ -8,45 +8,39 @@ use anyhow::{Context as _, Result, ensure};
 mod copy;
 mod moving;
 
-use super::export;
+use super::{Moving, export};
 use crate::client::output::{
     error::{CommandError, ErrorDetail},
     restore::Reopened,
 };
 use crate::protocol::ErrorCode;
 use crate::{
-    cli::{args::transfer::SshArgs, context::Context},
+    cli::context::Context,
     subprocess::{Run, diagnostic},
 };
 
 /// The exit status of a remote shell that cannot find the command.
 const NOT_FOUND: i32 = 127;
 
-pub(super) async fn run(ctx: &Context, args: SshArgs) -> Result<i32> {
-    let remote = Remote {
-        host: args.host,
-        shoal: args.shoal,
-        restore: !args.no_restore,
-    };
-    let spaces = match args.repository {
+/// Move the spaces `moving` takes to `remote`, or copies of them, once
+/// Shoal answers there.
+pub(super) async fn run(ctx: &Context, remote: Remote, moving: Moving) -> Result<i32> {
+    let spaces = match moving.repository {
         Some(repository) => export::repository_spaces(ctx, repository).await?,
-        None => export::selected_spaces(ctx, args.space).await?,
+        None => export::selected_spaces(ctx, moving.names).await?,
     };
-    if args.keep {
-        export::copy::ensure_one_at_checkpoint(spaces.len(), args.checkpoint)?;
+    if moving.keep {
+        export::copy::ensure_one_at_checkpoint(spaces.len(), moving.checkpoint)?;
     }
     ctx.progress(
         &format!("Reaching Shoal on {}", remote.host),
         remote.check(),
     )
     .await?;
-    let carrying = export::carrying(args.no_children, &spaces);
-    match args.keep {
-        true => copy::copy_spaces(ctx, &remote, &spaces, args.checkpoint, &carrying).await,
-        false => {
-            let yes = args.confirmation.yes;
-            moving::move_spaces(ctx, &remote, &spaces, yes, &carrying).await
-        }
+    let carrying = export::carrying(moving.recursive, &spaces);
+    match moving.keep {
+        true => copy::copy_spaces(ctx, &remote, &spaces, moving.checkpoint, &carrying).await,
+        false => moving::move_spaces(ctx, &remote, &spaces, moving.yes, &carrying).await,
     }
 }
 
@@ -81,15 +75,25 @@ fn arrived(host: &str, imported: &Reopened) -> String {
 }
 
 /// The Shoal on another machine, which `ssh` reaches.
-struct Remote {
+pub(super) struct Remote {
     host: String,
     /// The shoal program there.
     shoal: String,
-    /// Whether imports there queue the agents' restores.
-    restore: bool,
+    /// Whether imports there resume the agents.
+    resume: bool,
 }
 
 impl Remote {
+    /// The Shoal `shoal`, `shoal` on SSH's PATH by default, that `ssh`
+    /// reaches at `host`, whose imports resume the agents when `resume`.
+    pub(super) fn new(host: String, shoal: Option<String>, resume: bool) -> Self {
+        Self {
+            host,
+            shoal: shoal.unwrap_or_else(|| "shoal".to_owned()),
+            resume,
+        }
+    }
+
     /// Refuse a machine `ssh` cannot reach, or whose Shoal does not answer.
     async fn check(&self) -> Result<()> {
         let output = Run::new(self.command(&["repo", "ls"]))
@@ -113,7 +117,7 @@ impl Remote {
     /// unless it leaves them stopped, and return what the import reported.
     async fn import(&self, file: &Path) -> Result<Reopened, ImportFailure> {
         let mut args = vec!["restore", "--from", "-"];
-        if !self.restore {
+        if !self.resume {
             args.push("--no-resume");
         }
         let input =

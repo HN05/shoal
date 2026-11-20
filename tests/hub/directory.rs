@@ -203,7 +203,7 @@ fn a_move_between_joined_machines_hands_the_space_over_with_its_number() {
     reach(&laptop, &desk);
     let work = workspace(&laptop, "work");
     let number = listed(&hub, &work, &laptop_id)["number"].clone();
-    let moved = laptop.ok(&["move", "ssh", "desk", &work, "--shoal", shoal_binary()]);
+    let moved = laptop.ok(&["move", "--ssh", "desk", &work, "--shoal", shoal_binary()]);
     assert_eq!(moved["failed"], serde_json::json!([]), "{moved}");
     // It keeps its number.
     assert_eq!(listed(&hub, &work, &desk_id)["number"], number);

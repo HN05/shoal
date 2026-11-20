@@ -66,7 +66,7 @@ fn tree_below_hub_config(extra: &str) -> Tree {
         &coordinator,
     ]);
     let child = hub.id("child");
-    let moved = hub.ok(&["move", "ssh", "laptop", &child, "--shoal", shoal_binary()]);
+    let moved = hub.ok(&["move", "--ssh", "laptop", &child, "--shoal", shoal_binary()]);
     assert_eq!(moved["failed"], json!([]), "{moved}");
     // The laptop reports the child below the hub's coordinator.
     let below = try_wait_for(|| {
@@ -361,7 +361,7 @@ fn a_question_for_an_offline_coordinator_goes_on_to_the_user() {
         &coordinator,
     ]);
     let child = desk.id("child");
-    let moved = desk.ok(&["move", "ssh", "laptop", &child, "--shoal", shoal_binary()]);
+    let moved = desk.ok(&["move", "--ssh", "laptop", &child, "--shoal", shoal_binary()]);
     assert_eq!(moved["failed"], json!([]), "{moved}");
     working(&desk, &coordinator);
     wait_for("the coordinator's agent at the hub", || {

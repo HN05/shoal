@@ -1,4 +1,4 @@
-//! `shoal move export --keep`: write copies of spaces that keep running
+//! `shoal move -o --keep`: write copies of spaces that keep running
 //! here, with copies of the spaces below them, which `shoal restore --from`
 //! opens as new spaces.
 use std::path::{Path, PathBuf};
@@ -19,7 +19,7 @@ use crate::{
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// `shoal move export --keep`: write a copy of the space `names` names, or
+/// `shoal move -o --keep`: write a copy of the space `names` names, or
 /// the current one or one a picker selects, to `file`, leaving it running: a
 /// workspace at its checkpoint `checkpoint`, or at a new one. Several spaces,
 /// or any written to a directory, go to a file each in it.
@@ -28,7 +28,7 @@ pub(in super::super) async fn export_copy(
     names: Vec<SpaceSelector>,
     file: PathBuf,
     checkpoint: Option<CheckpointNumber>,
-    no_children: bool,
+    recursive: bool,
 ) -> Result<i32> {
     if names.len() > 1 || file.is_dir() {
         ensure!(
@@ -36,12 +36,12 @@ pub(in super::super) async fn export_copy(
             "several copies export to a file each; name a directory with -o"
         );
         let spaces = selected_spaces(ctx, names).await?;
-        let carrying = super::carrying(no_children, &spaces);
+        let carrying = super::carrying(recursive, &spaces);
         return copy_into(ctx, &spaces, file, checkpoint, &carrying).await;
     }
     let output = Output::reserve(&file)?;
     let space = ui::select_space(ctx, names.into_iter().next(), Fallback::CurrentDirectory).await?;
-    let carrying = super::carrying(no_children, &[]);
+    let carrying = super::carrying(recursive, &[]);
     let exported = copy(ctx, space, checkpoint, output.file(), carrying).await?;
     output.report(ctx, &exported)
 }

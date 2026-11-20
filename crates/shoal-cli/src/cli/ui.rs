@@ -33,7 +33,8 @@
 //! Every prompt requires a terminal and is canceled with Ctrl-C or Esc;
 //! non-interactive callers pass explicit arguments and flags such as `--yes`
 //! instead, and are refused naming what the prompt asks for, or the option a
-//! caller names with [`require_argument`]. A new kind of input or choice
+//! caller names with [`require_argument`], or one of several with
+//! [`require_one_of`]. A new kind of input or choice
 //! belongs here, built on these operations, so the next command can use it too.
 mod fzf;
 mod keys;

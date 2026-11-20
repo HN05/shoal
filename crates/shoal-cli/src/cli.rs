@@ -341,9 +341,7 @@ impl Command {
                     ),
             })
             | Command::Workspace(WorkspaceCommand::Setup { skip: true, .. })
-            | Command::Lifecycle(
-                LifecycleCommand::Cleanup { .. } | LifecycleCommand::Move { .. },
-            )
+            | Command::Lifecycle(LifecycleCommand::Cleanup { .. } | LifecycleCommand::Move(_))
             | Command::Service(ServiceCommand::Config {
                 command:
                     ConfigCommand::Install { .. } | ConfigCommand::Reset | ConfigCommand::Setup(_),

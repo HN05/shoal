@@ -28,6 +28,6 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: LifecycleComman
         LifecycleCommand::Rm(args) => spaces::remove(&ctx, args).await,
         LifecycleCommand::Absorb(args) => absorb::run(&ctx, args).await,
         LifecycleCommand::Cleanup { kind, args } => cleanup::run(&ctx, kind, args).await,
-        LifecycleCommand::Move { command } => transfer::run(&ctx, command).await,
+        LifecycleCommand::Move(args) => transfer::run(&ctx, args).await,
     }
 }

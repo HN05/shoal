@@ -124,7 +124,7 @@ pub enum RemovalMethod {
     /// Stop the agents of the workspace or chat `space` and of the spaces
     /// below it that `carrying` carries, saving their sessions, and write
     /// them for another Shoal to the new file `file` without ending them
-    /// here, as `shoal move ssh` does before its import there.
+    /// here, as `shoal move --ssh` does before its import there.
     ExportMovingSpace {
         space: SpaceSelector,
         file: std::path::PathBuf,

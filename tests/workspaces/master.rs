@@ -176,7 +176,7 @@ fn a_master_session_moves_and_continues_its_session_in_root_dir() {
     let file = file.to_str().unwrap();
 
     let id = fixture.id("master");
-    let exported = fixture.ok(&["move", "export", &id, "-o", file, "--yes"]);
+    let exported = fixture.ok(&["move", &id, "-o", file, "--yes"]);
     assert_eq!(
         exported["manifest"]["record"]["repository_id"],
         Value::Null,

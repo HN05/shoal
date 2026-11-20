@@ -2,7 +2,7 @@
 use clap::{Args, Subcommand};
 
 use crate::{
-    cli::args::{ConfirmationArgs, SpaceTargets, transfer::MoveCommand},
+    cli::args::{ConfirmationArgs, SpaceTargets, transfer::MoveArgs},
     forge::items::action::MergeMethod,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -51,11 +51,28 @@ pub enum LifecycleCommand {
         #[command(flatten)]
         args: CleanupArgs,
     },
-    /// Move workspaces and chats to another machine.
-    Move {
-        #[command(subcommand)]
-        command: MoveCommand,
-    },
+    /// Move workspaces and chats to another machine, over SSH or through a file.
+    ///
+    /// A moved space ends here, with every space below it and the chats in the worktree of each
+    /// workspace among them, and continues where it goes under its ID, its agents' sessions
+    /// carried with it. --no-recursive leaves the spaces below here instead, moved up one level;
+    /// --keep leaves the spaces running and moves copies of them instead.
+    ///
+    /// --ssh moves each space once ssh reaches Shoal there, which needs a repository with the
+    /// same origin, and resumes its agents there unless --no-resume; nothing ends when it does not reach
+    /// Shoal. A workspace whose import fails stays removed here, and shoal restore opens it
+    /// again.
+    ///
+    /// -o writes the spaces to a file that shoal restore --from opens: a workspace is removed
+    /// and the file holds its checkpoint, as a Git bundle without the commits of the default
+    /// branch, its base, links and stopped agents; a chat's agent is stopped once it has
+    /// reported its session. A removed space is written without another removal, with the
+    /// spaces its removal took. When -o names a directory, several spaces, or with --all every
+    /// space of the repository, go to a file each in it, those below another in its file, once
+    /// each one can be written. -o - writes standard output, which must not be a terminal.
+    ///
+    /// Without a destination, on a terminal, it asks for one after the spaces are picked.
+    Move(MoveArgs),
 }
 
 #[derive(Debug, Subcommand)]

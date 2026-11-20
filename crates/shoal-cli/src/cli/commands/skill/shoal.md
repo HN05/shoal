@@ -658,8 +658,8 @@ shoal restore [workspace] --checkpoint [<number>]
 shoal cleanup spaces
 shoal cleanup --dry-run
 shoal cleanup caches
-shoal move ssh <host> <workspace> --yes
-shoal move export <workspace> --yes | shoal restore --from -
+shoal move <space> --ssh <host> --yes
+shoal move <space> -o - --yes | ssh <host> shoal restore --from -
 ```
 
 Removing a space removes the spaces below it first, held ones included, and
@@ -675,8 +675,8 @@ and with a number returns to one after keeping the current state in a new
 checkpoint, refusing while another command runs in the workspace. `cleanup spaces` removes every
 space automatic cleanup would remove without waiting for its idle delay;
 `--dry-run` lists those, kept branches and shared caches, and why each other
-space stays. `move ssh` moves a workspace, with the spaces below it, to another machine and
-queues its stopped agents there; with `--keep`, it copies them there as new
+space stays. `move --ssh` moves a space, with the spaces below it, to another machine and
+resumes its agents there unless `--no-resume`; with `--keep`, it copies them there as new
 ones and leaves them running here.
 
 ## Branches

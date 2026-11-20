@@ -183,7 +183,7 @@ space's agent; the space that held the number first keeps it. A machine
 reports the numbers it holds without a space, those of a removed space's
 issue proposals, with its spaces, and the hub gives them no other space. An import's
 claim of a space's ID also keeps its number for the claiming machine while
-the hub still lists the space, so `shoal move ssh` keeps it; an exported
+the hub still lists the space, so `shoal move --ssh` keeps it; an exported
 package imported after its source is gone takes a new one. A request for
 a space another machine owns goes from the caller's daemon through the hub
 to that machine, which decides it as its own caller's: no command is
@@ -4085,14 +4085,20 @@ carries; only recording it differs by kind. A package carries every space
 below its space, whatever its kind, since removing the space takes them: one
 walk down `space_parents`, with the chats in each carried worktree, gives them
 parents first, so each opens below its parent again and a copied tree keeps
-its shape, each copy below the copy of its parent. `--no-children` instead
+its shape, each copy below the copy of its parent. `--no-recursive` instead
 leaves the spaces below here, moved up one level through the tree's parent
 link, and keeps the branch a staying workspace builds on, so they keep running
-as they were. An import restores the agents of every space it opens, a
-chat's as a workspace's, unless told to leave them stopped, as a move over SSH
-does, so a move behaves the same whatever carries it. Import is a form of
-`shoal restore`, `--from` a package, since it opens removed spaces as a
-restore does.
+as they were. An import resumes the agents of every space it opens, a
+chat's as a workspace's, unless `--no-resume` leaves them stopped, over SSH
+as from a file, so a move behaves the same whatever carries it. Import is a
+form of `shoal restore`, `--from` a package, since it opens removed spaces as
+a restore does. `shoal move` is one command whose destination is a flag,
+`--ssh` or `-o`, so the space selection, `--keep`, `--checkpoint` and
+`--recursive` mean the same for every destination and a new destination is
+one more flag; each destination sets whether the spaces below go by default,
+and both flags are accepted with every one. Without a destination a terminal
+asks for one, and anything else is refused, so an archive reaches standard
+output only through `-o -`.
 Each package uses the lowest format version that reads it, so an older importer
 refuses as newer what it would misread; a chat package from before chats moved
 as their removal records, and a workspace package from before the record held
@@ -4157,7 +4163,7 @@ workspaces keep their IDs across moves, else in the repository's checkout or,
 for a chat without one, the importing machine's `root_dir`, with the agent's resume arguments, under a free name since its own may be taken there, in the background
 when no terminal attends the import, as queued agents start. Export and import
 move work through any byte stream, where the user runs both halves and chooses
-their order. `move ssh` runs both over SSH after checking Shoal answers there,
+their order. `move --ssh` runs both over SSH after checking Shoal answers there,
 and ends a space here only once its import there succeeded, since a chat keeps
 no record once it ends: it stops the agents of the space and of the spaces that
 go with it, saving their sessions, exports it while they stay, and queues their restores here, keeping no file,

@@ -16,11 +16,22 @@ use crate::cli::{
 /// Refuse to ask for `what` without a terminal, naming how the command line
 /// supplies it: `argument` is the ID or value name of the command's argument.
 pub fn require_argument(ctx: &Context, what: &str, argument: &str) -> Result<()> {
+    require_one_of(ctx, what, &[argument])
+}
+
+/// [`require_argument`] for `what` that any one of the command's
+/// `arguments` supplies.
+pub fn require_one_of(ctx: &Context, what: &str, arguments: &[&str]) -> Result<()> {
     if ctx.interactive() {
         return Ok(());
     }
-    let option = usage::of(&ctx.command, argument);
-    Err(refusal(what, option.as_deref().unwrap_or("it explicitly")))
+    let options: Vec<String> = (arguments.iter())
+        .filter_map(|argument| usage::of(&ctx.command, argument))
+        .collect();
+    match options.is_empty() {
+        true => Err(refusal(what, "it explicitly")),
+        false => Err(refusal(what, &options.join(" or "))),
+    }
 }
 
 /// Refuse to ask what `prompt` asks without a terminal, when its caller
