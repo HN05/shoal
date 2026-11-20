@@ -26,8 +26,12 @@ use crate::{
         },
     },
 };
-pub(crate) use assignees::{AssignerOf, Dropped};
+pub(crate) use assignees::AssignerOf;
 use shoal_forge::{RepoRequests, items::issue::IssueRequests};
+use shoal_links::issue::{
+    agents::{self as agent_records},
+    assignees::{self as assignee_records, Dropped},
+};
 
 pub(crate) use shoal_protocol::links::issue::Registration;
 
@@ -271,7 +275,7 @@ fn unlink(
         );
     }
     super::forget_assigned(db, id, ItemKind::Issue, &removed)?;
-    let dropped = assignees::dropped(db, id, &removed)?;
+    let dropped = assignee_records::dropped(db, id, &removed)?;
     for url in &removed {
         db.execute(
             "DELETE FROM space_issue WHERE space_id=?1 AND url=?2",
@@ -284,20 +288,20 @@ fn unlink(
 /// The user's assignees the space `id` stands for on every issue it links
 /// as assigned, which its removal drops.
 pub(crate) fn removed_assignees(db: &Connection, id: &SpaceId) -> Result<Vec<Dropped>> {
-    assignees::dropped(db, id, &shoal_links::linked::assigned_urls(db, id)?)
+    assignee_records::dropped(db, id, &shoal_links::linked::assigned_urls(db, id)?)
 }
 
 /// The issues the space `id` links as assigned whose agent account its
 /// removal settles: all but those it handed to the machine it moved to.
 pub(crate) fn removed_issues(db: &Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
-    agents::settled_here(db, id)
+    agent_records::settled_here(db, id)
 }
 
 /// Record that an agent of the space `id` ended, within the caller's
 /// transaction, so the issues an agent assigned it no longer count as
 /// worked without one.
 pub(crate) fn agent_ended(db: &Connection, id: &SpaceId) -> Result<()> {
-    agents::agent_ended(db, id)
+    agent_records::agent_ended(db, id)
 }
 
 /// What the caller hears of the issue `url`'s assignees but the accounts

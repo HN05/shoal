@@ -1,4 +1,7 @@
 //! The issues a space assigns, as its records hold them.
+pub mod agents;
+pub mod assignees;
+
 use rusqlite::Connection;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::{Assigner, IssueAssignee};

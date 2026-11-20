@@ -7,6 +7,7 @@ use crate::paths::StateFiles;
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::params;
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
+use shoal_links::issue::assignees::Dropped;
 use std::borrow::Cow;
 
 use super::{
@@ -20,8 +21,7 @@ use crate::{
     daemon::{
         agent_messages,
         approvals::{ApprovalRequest, release_decided_by},
-        events,
-        links::{self, issue::Dropped},
+        events, links,
         notifications::AlertKind,
         spaces, threads, workspace_files,
     },
