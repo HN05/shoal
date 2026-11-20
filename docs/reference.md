@@ -1023,12 +1023,10 @@ space's files or processes, such as `setup`, leases, demos,
 hooks, run only
 on its machine and are refused elsewhere, naming it, as is a command that
 attaches files, which that machine cannot read. Without a target, the
-pickers of `stop`, `restart`, `rm`, `rename`, `done`, `priority`,
-`progress`, `sleep`, `send`, `link`, `unlink`, `view`, `acquire hold`,
-`release hold`, `conflicts`, `diff` and `attach`, which takes those with an
-agent, offer the other machines' spaces after this
-machine's, each naming its machine, and an offline one with when the hub
-last saw it; choosing one acts as naming it does.
+picker of a command this covers, outside `resume` and the issue, PR and CI
+groups, offers the other machines' spaces after this machine's, those
+with an agent for `attach`, each naming its machine, and an offline one
+with when the hub last saw it; choosing one acts as naming it does.
 
 While a space's machine is offline, a message, an answer, an approval
 decision or a stop for it waits at the hub, and the command says so, naming
