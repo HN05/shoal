@@ -76,7 +76,13 @@ impl Manager {
                 order: Box::new(order),
             };
             match self.spawn_operation(first, spec, None, Some(&caller)).await {
-                Ok(id) => self.record_started(&space, &id).await?,
+                Ok(id) => {
+                    // The move runs: a record left waiting would start it again.
+                    if let Err(error) = self.record_started(&space, &id).await {
+                        log!("the move of space {space} after its turn is untracked: {error:#}");
+                        self.forget_move_after_turn(&space).await;
+                    }
+                }
                 Err(error) => {
                     self.forget_move_after_turn(&space).await;
                     let text = format!("The move of your space did not start: {error:#}");
