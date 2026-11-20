@@ -52,17 +52,12 @@ fn slice() -> Result<Option<Slice>> {
     let Some(group) = crate::service::work::control_group() else {
         return Ok(None);
     };
-    let read = |name: &str| std::fs::read_to_string(group.join(name));
-    let current = match read("memory.current") {
-        Ok(current) => current,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error).context("read the work slice's memory"),
+    let used = crate::process::control_group::held(&group).context("the work slice's memory")?;
+    let Some(used) = used else {
+        return Ok(None);
     };
-    let stat = read("memory.stat").context("read the work slice's memory")?;
-    // Without swap accounting the file is missing.
-    let swap = read("memory.swap.current").ok();
     Ok(Some(Slice {
-        used: held(&current, &stat, swap.as_deref())?,
+        used,
         stall: super::read_stall(&group.join("memory.pressure"))?,
     }))
 }
@@ -70,28 +65,6 @@ fn slice() -> Result<Option<Slice>> {
 #[cfg(not(target_os = "linux"))]
 fn slice() -> Result<Option<Slice>> {
     Ok(None)
-}
-
-/// The bytes a control group holds that reclaim cannot free, with what it
-/// swapped out: its `memory.current`, `current`, less the page cache of
-/// files `memory.stat`'s `stat` reports, but for shared memory, which only
-/// swaps, and with its `memory.swap.current`, `swap`.
-#[cfg(any(target_os = "linux", test))]
-fn held(current: &str, stat: &str, swap: Option<&str>) -> Result<u64> {
-    let number = |text: &str| -> Result<u64> {
-        (text.trim().parse()).with_context(|| format!("invalid memory reading {text:?}"))
-    };
-    let field = |name: &str| -> Result<u64> {
-        let value = (stat.lines())
-            .find_map(|line| line.strip_prefix(name)?.strip_prefix(' '))
-            .with_context(|| format!("missing {name} in memory.stat"))?;
-        number(value)
-    };
-    let cache = field("file")?.saturating_sub(field("shmem")?);
-    let swapped = swap.map_or(Ok(0), number)?;
-    Ok(number(current)?
-        .saturating_sub(cache)
-        .saturating_add(swapped))
 }
 
 #[cfg(test)]

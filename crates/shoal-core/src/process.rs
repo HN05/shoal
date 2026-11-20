@@ -1,5 +1,6 @@
 #[cfg(target_os = "macos")]
 pub(crate) mod code_signing;
+pub mod control_group;
 pub mod described;
 pub(crate) mod directories;
 pub mod executable;
