@@ -123,7 +123,12 @@ impl Manager {
             input: selection.input.clone(),
         };
         // Of the linked PRs, only an assigned one is read without a number.
-        let prs = (self.selection_items(space, &selection, super::wait::followed_items)).await?;
+        let prs = (self.selection_items(
+            space,
+            &selection,
+            shoal_links::wait::followed::followed_items,
+        ))
+        .await?;
         match prs.as_slice() {
             [pull] if pull.kind() == LinkKind::Pr => Ok(pull.clone()),
             _ => bail!(ONE_PR),

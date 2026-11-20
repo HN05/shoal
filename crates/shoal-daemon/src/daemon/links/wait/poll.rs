@@ -2,6 +2,7 @@
 //! follows, and the reads of item activity the background poll shares.
 use crate::forge::items::reference::ItemRef;
 use shoal_links::space::LinkSpace;
+use shoal_links::wait::followed::activity_ended;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -12,7 +13,6 @@ use super::{
     branch_report::{BranchReport, branch_conflicts, branch_report, watches_branch},
     delivery::receiving,
     framing::own_batch,
-    items::activity_ended,
     start::PollStart,
 };
 use crate::{

@@ -1,4 +1,5 @@
 use crate::model::Space;
+use shoal_links::wait::followed::{followed_items, polled_items};
 use shoal_refs::BranchName;
 use std::{
     sync::{Arc, LazyLock},
@@ -13,7 +14,6 @@ use shoal_links::wait::changes::{OwnChange, queue_update, record_own_change};
 use super::{
     branch_report::{BranchReport, branch_conflicts},
     framing::{Batch, Cut, frame_cut},
-    items::polled_items,
     poll::{wait_for_updates, watch_deadline},
     test_support::{item_url, register_watch, snapshot},
     wake::{UNWATCHED_WAKE_DELAY, WakePhase},

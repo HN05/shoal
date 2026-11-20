@@ -2,6 +2,7 @@
 //! links them and when an agent begins a new session there, so they report
 //! only what changes after that: what the items held before is their
 //! history, which `shoal view` shows.
+use shoal_links::wait::followed::followed_items;
 use std::{
     collections::HashMap,
     sync::{
@@ -17,7 +18,6 @@ use tokio::sync::watch;
 use super::{
     activity::follows,
     cursor::{cursor_record, save_cursor_record},
-    items::followed_items,
     merge_runs::{MergeTarget, follow_reported_merge},
 };
 use crate::{

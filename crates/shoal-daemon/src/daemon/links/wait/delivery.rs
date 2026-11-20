@@ -1,11 +1,11 @@
 //! Waiting for a space's messages and item activity, and building what a
 //! watch or a hook delivers to its agent.
 use anyhow::{Result, ensure};
+use shoal_links::wait::followed::followed_items;
 
 use super::{
     Updates, UpdatesExt,
     framing::{Batch, RESPONSE_LIMIT, own_batch, with_unread_messages},
-    items::followed_items,
     poll::{until, wait_for_updates, watch_deadline},
     wake_log::WakeWaitLog,
 };

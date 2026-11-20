@@ -3,6 +3,7 @@
 pub mod branch_report;
 pub mod changes;
 pub mod cursor;
+pub mod followed;
 mod waits;
 
 pub use waits::{ActiveWait, ActiveWaits};

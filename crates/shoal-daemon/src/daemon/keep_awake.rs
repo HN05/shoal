@@ -3,6 +3,7 @@
 //! suspend it. The inhibitor lasts only as long as a pipe the daemon holds
 //! open, so it ends with the daemon however that stops.
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::wait::followed::watches_open_pr;
 use std::{process::Stdio, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result, anyhow};
@@ -13,9 +14,7 @@ use tokio::{
 };
 
 use super::{
-    agent_state,
-    links::wait::watches_open_pr,
-    log,
+    agent_state, log,
     manager::Manager,
     notifications::AlertKind,
     tree::{TrackedAgents, delegated},

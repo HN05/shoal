@@ -6,6 +6,7 @@
 //! [`LOOKUP_WINDOW`], linking every run it finds as related, so the space's
 //! watches report how they end.
 use shoal_links::space::LinkSpace;
+use shoal_links::wait::followed::{observed_item, opened_open_prs};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -13,10 +14,7 @@ use rusqlite::{OptionalExtension, params};
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::{BranchName, CommitId};
 
-use super::{
-    cursor::cursor_record,
-    items::{observed_item, opened_open_prs},
-};
+use super::cursor::cursor_record;
 use crate::{
     daemon::{events, log, manager::Manager},
     forge::{

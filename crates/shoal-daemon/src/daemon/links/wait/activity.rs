@@ -2,11 +2,12 @@
 //! and acknowledging the updates delivered from them.
 use anyhow::{Result, ensure};
 use rusqlite::OptionalExtension;
+use shoal_links::wait::followed::followed_items;
 
 use super::{
     branch_report::{BranchReport, branch_report, watches_branch},
     cursor::{cursor_record, save_cursor_record},
-    items::{NO_LINKED_ITEMS, followed_items, links_kind},
+    items::{NO_LINKED_ITEMS, links_kind},
     merge_runs::{MergeTarget, follow_reported_merge},
     start::PollStart,
 };
