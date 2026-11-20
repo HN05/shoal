@@ -44,7 +44,7 @@ impl Manager {
         if urls.is_empty() {
             return Ok(pulls);
         }
-        let forge = self.space_forge(space).await?;
+        let forge = shoal_links::forges::of_space(self, space).await?;
         let account = self.links.agent_account();
         for url in urls {
             url.belongs_to(&forge)?;

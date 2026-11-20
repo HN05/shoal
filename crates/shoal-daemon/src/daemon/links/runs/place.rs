@@ -117,7 +117,7 @@ impl Manager {
         access: Access,
         caller: Option<&Caller>,
     ) -> Result<(RunPlace, ItemRef)> {
-        let named = self.input_forge(input).await?;
+        let named = shoal_links::forges::of_input(self, input).await?;
         let place = self.run_place(target, named, access, caller).await?;
         let run = ItemRef::in_repository(place.forge(), LinkKind::Ci, input)?;
         Ok((place, run))
@@ -153,14 +153,17 @@ impl Manager {
         let (Some(LinkKind::Ci), Some(input)) = (selection.kind, selection.input.as_ref()) else {
             return Ok(());
         };
-        let Some(named) = self.input_forge(input).await? else {
+        let Some(named) = shoal_links::forges::of_input(self, input).await? else {
             return Ok(());
         };
         if self.space(selector).await?.repository_id.as_ref().is_none() {
             return Ok(());
         }
         let space = self.link_space(selector).await?;
-        ensure!(named == self.space_forge(&space).await?, ELSEWHERE);
+        ensure!(
+            named == shoal_links::forges::of_space(self, &space).await?,
+            ELSEWHERE
+        );
         Ok(())
     }
 }

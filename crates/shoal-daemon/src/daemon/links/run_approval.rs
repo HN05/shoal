@@ -37,7 +37,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<RunsApproved> {
         let named = match run.as_ref().or(pr.as_ref()) {
-            Some(input) => self.input_forge(input).await?,
+            Some(input) => shoal_links::forges::of_input(self, input).await?,
             None => None,
         };
         let target = (self.forge_target(target, named, Access::Change, caller)).await?;

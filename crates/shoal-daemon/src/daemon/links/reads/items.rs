@@ -67,7 +67,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<ForgeTarget> {
         let named = match (&selection.input, elsewhere) {
-            (Some(input), true) => self.input_forge(input).await?,
+            (Some(input), true) => shoal_links::forges::of_input(self, input).await?,
             _ => None,
         };
         (self.forge_target(target, named, Access::Read, caller)).await
@@ -140,7 +140,7 @@ impl Manager {
     ) -> Result<LinkKind> {
         match linked_kind(space, number).await? {
             Some(kind) => Ok(kind),
-            None => Ok((self.space_forge(space).await?)
+            None => Ok((shoal_links::forges::of_space(self, space).await?)
                 .item_kind(account, number)
                 .await?
                 .into()),

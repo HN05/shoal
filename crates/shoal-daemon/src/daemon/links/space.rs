@@ -10,7 +10,6 @@ use shoal_links::space::LinkSpace;
 use crate::{
     config::Effective,
     daemon::{manager::Manager, store},
-    forge::ForgeRepo,
     model::{Repository, Space},
     protocol::ItemContext,
 };
@@ -159,11 +158,6 @@ impl Manager {
     pub(crate) async fn acting_settings(&self, space: &LinkSpace) -> Result<Effective> {
         let config = self.config();
         (self.space_settings_from(&config, space, Some(space.repository_id()))).await
-    }
-
-    /// The forge of the space's `origin`.
-    pub(crate) async fn space_forge(&self, space: &LinkSpace) -> Result<ForgeRepo> {
-        self.origin_forge(space.origin_path()).await
     }
 }
 

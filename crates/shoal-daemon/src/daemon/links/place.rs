@@ -101,8 +101,8 @@ impl Manager {
     /// The forge of the place's `origin`.
     pub(in crate::daemon::links) async fn place_forge(&self, place: &Place) -> Result<ForgeRepo> {
         match place {
-            Place::Space(space) => self.space_forge(space).await,
-            Place::Checkout(checkout) => self.checkout_forge(checkout).await,
+            Place::Space(space) => shoal_links::forges::of_space(self, space).await,
+            Place::Checkout(checkout) => shoal_links::forges::of_checkout(self, checkout).await,
         }
     }
 }

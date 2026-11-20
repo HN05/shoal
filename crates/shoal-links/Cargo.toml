@@ -13,6 +13,7 @@ test-support = []
 
 [dependencies]
 anyhow.workspace = true
+futures-util.workspace = true
 rusqlite = { workspace = true, features = ["bundled"] }
 serde_json.workspace = true
 shoal-core.workspace = true

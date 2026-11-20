@@ -42,7 +42,7 @@ impl Manager {
         if linked.is_empty() {
             return Ok(linked);
         }
-        let forge = self.space_forge(&space).await?;
+        let forge = shoal_links::forges::of_space(self, &space).await?;
         let account = self.links.agent_account();
         let mut open = Vec::new();
         for pull in linked {

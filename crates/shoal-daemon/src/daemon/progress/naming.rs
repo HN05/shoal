@@ -103,7 +103,7 @@ impl Manager {
         let repository = self
             .repository(&crate::repository::Selector::from(repository))
             .await?;
-        let forge: ForgeRepo = self.checkout_forge(&repository).await?;
+        let forge: ForgeRepo = shoal_links::forges::of_checkout(self, &repository).await?;
         ItemRef::numbered(&forge, LinkKind::Issue, number)
     }
 }

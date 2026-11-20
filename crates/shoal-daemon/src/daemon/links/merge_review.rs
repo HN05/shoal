@@ -128,7 +128,12 @@ impl Manager {
         }
         let forge = target.forge()?;
         for repository in self.repositories().await? {
-            if self.origin_forge(&repository.path).await.ok().as_ref() == Some(forge) {
+            if shoal_links::forges::origin(self, &repository.path)
+                .await
+                .ok()
+                .as_ref()
+                == Some(forge)
+            {
                 return Ok(Some(repository.id));
             }
         }

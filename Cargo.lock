@@ -2675,6 +2675,7 @@ name = "shoal-links"
 version = "0.20.0"
 dependencies = [
  "anyhow",
+ "futures-util",
  "rusqlite",
  "serde_json",
  "shoal-core",

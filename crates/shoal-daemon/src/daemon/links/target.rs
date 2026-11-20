@@ -76,7 +76,7 @@ impl Manager {
             None => None,
         };
         let own_forge = match &origin {
-            Some(place) => self.origin_forge(place.origin_path()).await,
+            Some(place) => shoal_links::forges::origin(self, place.origin_path()).await,
             None => Err(anyhow::anyhow!(NO_REPOSITORY)),
         };
         // The origin's forge is needed only where something else is named
@@ -114,7 +114,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<(ForgeTarget, ItemRef)> {
         let named = match &input {
-            Some(input) => self.input_forge(input).await?,
+            Some(input) => shoal_links::forges::of_input(self, input).await?,
             None => None,
         };
         let target = self.forge_target(target, named, access, caller).await?;
@@ -122,18 +122,6 @@ impl Manager {
         let item = self.named_or_linked(input, space.as_ref(), target.forge()?, kind);
         let item = item.await?;
         Ok((target, item))
-    }
-
-    /// The repository the issue, PR or CI run URL `input` names, or none
-    /// for a number.
-    pub(in crate::daemon) async fn input_forge(
-        &self,
-        input: &ItemInput,
-    ) -> Result<Option<ForgeRepo>> {
-        Ok(match input {
-            ItemInput::Url(item) => Some(self.item_forge(item).await?),
-            ItemInput::Number(_) => None,
-        })
     }
 
     /// The account a request acts as in `target`: that of the place it
@@ -185,7 +173,7 @@ impl Manager {
     /// on the forge of `own`, the repository the request comes from.
     async fn target_named(&self, own: Option<&ForgeRepo>, named: &str) -> Result<ForgeRepo> {
         match own {
-            Some(own) => self.named_forge(own.clone(), Some(named)).await,
+            Some(own) => shoal_links::forges::named(self, own.clone(), Some(named)).await,
             None if ForgeRepo::named_by_url(named) => {
                 ForgeRepo::resolve(named, &self.forge_hosts()).await
             }

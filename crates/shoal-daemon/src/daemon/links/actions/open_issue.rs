@@ -182,7 +182,7 @@ impl Manager {
         let _gate = self.gates.lock_prs([&space.id]).await;
         let directory = self.issue_directory(&space).await?;
         let settings = self.acting_settings(&space).await?;
-        let own = self.origin_forge(&directory).await?;
+        let own = shoal_links::forges::origin(self, &directory).await?;
         let destination = self.issue_destination(own, repository.as_deref()).await?;
         anyhow::ensure!(
             !link || !destination.elsewhere,
@@ -287,7 +287,7 @@ impl Manager {
     ) -> Result<OpenOutcome> {
         let checkout = self.repository(id).await?;
         let settings = self.repository_settings(&checkout.id).await?;
-        let own = self.checkout_forge(&checkout).await?;
+        let own = shoal_links::forges::of_checkout(self, &checkout).await?;
         let destination = self.issue_destination(own, repository.as_deref()).await?;
         let required = destination.required(&settings);
         let (item, warnings) = destination
@@ -308,7 +308,7 @@ impl Manager {
         own: ForgeRepo,
         named: Option<&str>,
     ) -> Result<IssueDestination> {
-        let forge = self.named_forge(own.clone(), named).await?;
+        let forge = shoal_links::forges::named(self, own.clone(), named).await?;
         let elsewhere = forge != own;
         Ok(IssueDestination { forge, elsewhere })
     }

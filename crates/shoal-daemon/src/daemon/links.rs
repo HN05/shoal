@@ -6,6 +6,7 @@ mod actions;
 pub(in crate::daemon) mod branches;
 mod checks;
 mod ci;
+mod forges;
 pub mod issue;
 mod listing;
 mod merge_path;
@@ -330,9 +331,9 @@ impl Manager {
     ) -> Result<ItemRef> {
         let forge = match kind {
             // A run's URL may name another repository.
-            LinkKind::Ci => match self.input_forge(input).await? {
+            LinkKind::Ci => match shoal_links::forges::of_input(self, input).await? {
                 Some(forge) => forge,
-                None => self.space_forge(space).await?,
+                None => shoal_links::forges::of_space(self, space).await?,
             },
             LinkKind::Issue | LinkKind::Pr => {
                 let missing = "item lookup needs an origin remote";

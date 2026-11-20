@@ -758,7 +758,10 @@ impl Manager {
         if let Some(space) = space {
             // The worktree may have been replaced while the proposal waited.
             self.verify_space(space).await?;
-            return Ok((self.space_forge(space).await?, self.links.agent_account()));
+            return Ok((
+                shoal_links::forges::of_space(self, space).await?,
+                self.links.agent_account(),
+            ));
         }
         let repository = request
             .repository_id

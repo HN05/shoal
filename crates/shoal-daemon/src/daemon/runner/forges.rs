@@ -20,7 +20,7 @@ impl Forges for Manager {
         &'a self,
         repository: &'a Repository,
     ) -> BoxFuture<'a, Result<ForgeRepo>> {
-        Box::pin(Manager::checkout_forge(self, repository))
+        Box::pin(shoal_links::forges::of_checkout(self, repository))
     }
 
     fn resolve_forge<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<ForgeRepo>> {

@@ -192,7 +192,7 @@ impl Manager {
             "list the runs of a branch or of a PR, not both"
         );
         let named = match &pr {
-            Some(pr) => self.input_forge(pr).await?,
+            Some(pr) => shoal_links::forges::of_input(self, pr).await?,
             None => None,
         };
         let place = self.run_place(target, named, Access::Read, caller).await?;

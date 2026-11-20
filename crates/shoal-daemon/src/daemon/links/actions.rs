@@ -202,7 +202,7 @@ impl Manager {
         if urls.is_empty() {
             return Ok(());
         }
-        let forge = self.space_forge(space).await?;
+        let forge = shoal_links::forges::of_space(self, space).await?;
         let account = self.links.agent_account();
         let action = Action::edit(Edit {
             draft: Some(draft),
@@ -238,7 +238,7 @@ impl Manager {
         pull: &ItemRef,
         section: Option<&str>,
     ) -> Result<()> {
-        let forge = self.space_forge(space).await?;
+        let forge = shoal_links::forges::of_space(self, space).await?;
         let account = self.links.agent_account();
         pull.belongs_to(&forge)?;
         let (number, url) = (pull.pull()?, pull.to_string());
@@ -275,7 +275,7 @@ impl Manager {
         settings: &Effective,
         marks: &mut [ReviewMark],
     ) {
-        let Ok(forge) = self.space_forge(space).await else {
+        let Ok(forge) = shoal_links::forges::of_space(self, space).await else {
             return;
         };
         let account = self.links.agent_account();
