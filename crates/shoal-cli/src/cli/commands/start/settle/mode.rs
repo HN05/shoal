@@ -175,14 +175,15 @@ async fn item_labels(
     launch: &Launch,
     repo: &Repository,
 ) -> Result<Option<(String, Vec<String>)>> {
-    let context = issues::read_context(ctx, repo).await?;
     if let Some(pull) = launches::named_pull(launch) {
+        let context = issues::read_context(ctx, repo).await?;
         let pull = client::pull_request(&ctx.paths, context, pull).await?;
         return Ok(Some((format!("PR {}", pull.url), pull.labels)));
     }
     let Some(input) = launches::named_issue(launch)? else {
         return Ok(None);
     };
+    let context = issues::read_context(ctx, repo).await?;
     let issue = issues::load(ctx, context, input.clone()).await?;
     Ok(Some((format!("issue {input}"), issue.labels)))
 }
