@@ -58,9 +58,10 @@ impl Manager {
         Ok(file == staged && space.id != caller.space_id)
     }
 
-    /// Whether the space `selector` names is below `caller`'s own, as a
-    /// copy that needs no permission key is.
-    pub(crate) async fn copies_below_caller(
+    /// Whether the space `selector` names is another than `caller`'s own,
+    /// as a copy that needs no permission key is; the request's scope
+    /// check makes it one below.
+    pub(crate) async fn copies_other_than_own(
         &self,
         caller: &Caller,
         selector: &SpaceSelector,

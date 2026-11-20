@@ -393,7 +393,7 @@ async fn moves_to_joined_machine(
             Ok(matches!(destination, MoveDestination::Machine(_)))
         }
         RemovalMethod::DeliverCopy { space, .. } => {
-            manager.copies_below_caller(caller, space).await
+            manager.copies_other_than_own(caller, space).await
         }
         RemovalMethod::EndMovedSpace { space } => {
             let joined = manager.moves_to_joined_machine(space).await?;

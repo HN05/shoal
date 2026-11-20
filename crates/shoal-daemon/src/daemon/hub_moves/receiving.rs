@@ -36,7 +36,8 @@ pub(crate) struct Receiving {
 impl Manager {
     /// Continue the package of the move `receiving` that another joined
     /// machine writes on `stream` once this daemon answered `request_id`,
-    /// telling the agents of the spaces that arrived where they are now,
+    /// telling the agents of the spaces a move, not a copy, brought where
+    /// they are now,
     /// then answer again with how that went, holding `guard` until then.
     pub(crate) async fn receive_move(
         self: Arc<Self>,
@@ -52,7 +53,10 @@ impl Manager {
             .await
         {
             Ok(imported) => {
-                if let ImportedMove::Arrived { arrived, carried } = &imported {
+                // A copy's agents start as copies, while the originals run on.
+                if let ImportedMove::Arrived { arrived, carried } = &imported
+                    && ticket.is_some()
+                {
                     let arrived = std::iter::once(&arrived.space.id).chain(carried);
                     self.tell_arrived(arrived, &receiving.from).await;
                 }

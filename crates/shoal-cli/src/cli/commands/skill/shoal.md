@@ -423,7 +423,7 @@ above or the user, and a failed gate run denies it without telling the user.
 
 Other keys govern administering Shoal and the actions that reach beyond a
 space, each `deny`, `propose` or `direct`: `admin` administering Shoal, such as `config set`, `repo add`,
-`cleanup`, `setup --skip`, `contribute`, `move` but to a joined machine, `config setup`, `repo setup`,
+`cleanup`, `setup --skip`, `contribute`, `move`, except to a joined machine but a copy of your own space there, `config setup`, `repo setup`,
 and restoring removed workspaces, which reopen below your space (a
 permission you set in config only to a value your space holds, and
 `config reset` and `install` stay the user's), `limits` starting agents regardless of the limits, with
@@ -720,8 +720,8 @@ Shoal also takes one when an agent exits or is stopped. `restore <id>`
 reopens a removed workspace or chat and resumes its agents, below the space it
 was below, and `--no-resume` leaves them for `shoal resume`; a space that is
 not removed is refused. An agent restores one whose parent its scope reaches.
-`restore --from` opens the spaces `shoal move` wrote to a file. `cleanup`, `move` but with
-`--machine`, and `restore --from` are as the space's `admin` permission allows; `restore --checkpoint` lists a workspace's checkpoints,
+`restore --from` opens the spaces `shoal move` wrote to a file. `cleanup`, `move`, except to a
+joined machine but a `--keep` copy of your own space there, and `restore --from` are as the space's `admin` permission allows; `restore --checkpoint` lists a workspace's checkpoints,
 and with a number returns to one after keeping the current state in a new
 checkpoint, refusing while another command runs in the workspace. `cleanup spaces` removes every
 space automatic cleanup would remove without waiting for its idle delay;

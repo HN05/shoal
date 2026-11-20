@@ -216,3 +216,24 @@ fn a_space_s_own_move_waits_for_its_agent_s_turn_then_goes() {
     // No agent runs there, so its turn has ended and the move goes.
     listed(&hub, &work, &desk_id);
 }
+
+#[test]
+fn a_copy_s_agent_is_not_told_that_its_space_moved() {
+    let (_hub, laptop, desk, _laptop_id, _desk_id) = machines("");
+    give_origin(&laptop);
+    let work = workspace(&laptop, "work");
+
+    let copied = laptop.ok(&["move", &work, "--machine", "desk", "--keep"]);
+
+    assert_eq!(copied["failed"], json!([]), "{copied}");
+    let copy = copied["moved"][0]["arrived"]["space"]["id"]
+        .as_str()
+        .unwrap();
+    // The import answered after it told the agents of what moved.
+    let to = json!({"space": {"space": copy}});
+    let alerts = desk.request(json!({"list_alerts": {"to": to, "unread_only": true, "limit": 50}}));
+    let told =
+        (alerts["data"].as_array().unwrap().iter()).any(|alert| alert["kind"] == "space_moved");
+    assert!(!told, "{alerts}");
+    assert!(own_spaces(&laptop).iter().any(|space| space["id"] == work));
+}
