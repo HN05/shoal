@@ -21,5 +21,7 @@ pub fn reaches_elsewhere(path: &[String]) -> bool {
             | "done"
             | "rm"
             | "send"]
+            | ["link" | "unlink" | "view", ..]
+            | ["acquire" | "release", "hold"]
     )
 }

@@ -1024,8 +1024,9 @@ hooks, run only
 on its machine and are refused elsewhere, naming it, as is a command that
 attaches files, which that machine cannot read. Without a target, the
 pickers of `stop`, `restart`, `rm`, `rename`, `done`, `priority`,
-`progress`, `sleep`, `send`, `conflicts`, `diff` and `attach`, which takes
-those with an agent, offer the other machines' spaces after this
+`progress`, `sleep`, `send`, `link`, `unlink`, `view`, `acquire hold`,
+`release hold`, `conflicts`, `diff` and `attach`, which takes those with an
+agent, offer the other machines' spaces after this
 machine's, each naming its machine, and an offline one with when the hub
 last saw it; choosing one acts as naming it does.
 
