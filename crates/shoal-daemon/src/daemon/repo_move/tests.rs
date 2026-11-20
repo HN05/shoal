@@ -891,3 +891,43 @@ async fn a_root_move_takes_the_session_files_kept_for_chats_without_a_repository
     assert_eq!(fs::read_to_string(kept.join("0"))?, "{}\n");
     Ok(())
 }
+
+/// Leave a directory of an import in `imports`, as one reading a package
+/// does.
+fn reading_import(imports: &crate::shoal_dirs::ShoalDir) -> Result<()> {
+    imports.create()?;
+    fs::create_dir(imports.root().join("package-1"))?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_import_reading_a_package_holds_back_the_move() -> Result<()> {
+    let (_temp, manager, repo, _workspace, _root) = cloned().await?;
+    let imports = crate::shoal_dirs::ShoalDir::of(&repo, crate::shoal_dirs::Contents::Imports);
+    reading_import(&imports)?;
+
+    let refused = manager
+        .move_repositories(Layout::Regular)
+        .await
+        .unwrap_err();
+
+    assert!(format!("{refused:#}").contains("an import"), "{refused:#}");
+    assert!(repo.workspaces_dir.exists());
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_root_move_takes_what_imports_left_in_root_dir_unless_one_reads() -> Result<()> {
+    let (_temp, manager, chat, root) = with_master().await?;
+    manager.end_executions(&chat.id).await;
+    let imports = manager.outside_imports(&root);
+    reading_import(&imports)?;
+    assert!(manager.move_repositories(Layout::Excluded).await.is_err());
+    fs::remove_dir(imports.root().join("package-1"))?;
+
+    manager.move_repositories(Layout::Excluded).await?;
+
+    assert_eq!(fs::read_link(&root)?, Path::new(".shoal.noindex"));
+    assert!(!root.join(".imports").exists());
+    Ok(())
+}

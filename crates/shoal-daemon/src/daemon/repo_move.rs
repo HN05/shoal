@@ -150,16 +150,18 @@ impl Manager {
 
     /// The directories in `root` that keep the temporary directories,
     /// attached files and kept session files of the chats without a
-    /// repository, where they are this Shoal's, which move with the chats
-    /// and leave the root.
+    /// repository, which move with the chats, and the packages imported
+    /// for them, where they are this Shoal's; all leave the root.
     fn outside_dirs(&self, root: &Path) -> Vec<PathBuf> {
         let owner = self.root_dir_owner();
         let tmp = crate::tmp_dirs::Layout::outside_repositories(root, &owner);
         let files = self.outside_files_layout(root);
         let sessions = self.outside_sessions_layout(root);
+        let imports = self.outside_imports(root);
         (tmp.own_root().into_iter())
             .chain(files.own_root())
             .chain(sessions.own_root())
+            .chain(imports.is_own().then(|| imports.root()))
             .map(Path::to_owned)
             .collect()
     }
@@ -226,6 +228,8 @@ impl Manager {
             .await?;
         self.reviews.ensure_none_in(self, &repo.id).await?;
         self.reviews.ensure_no_gate_runs_in(self, &repo.id).await?;
+        let imports = crate::shoal_dirs::ShoalDir::of(repo, crate::shoal_dirs::Contents::Imports);
+        self.ensure_no_import_in(imports).await?;
         let stopping = self.stopping_processes(&repo.id, running);
         let processes = process::in_directory_besides(directory, stopping).await?;
         ensure!(

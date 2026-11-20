@@ -10,7 +10,7 @@ use std::{
     path::PathBuf,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 
 use crate::daemon::manager::Manager;
 use crate::{
@@ -64,19 +64,15 @@ impl PackageInput {
 }
 
 impl Reading {
-    /// Read the parts `manifest` lists into a new directory in `imports`.
+    /// Read the parts `manifest` lists into `directory`, which goes with
+    /// them.
     pub(super) async fn read_parts(
         self,
         manifest: &Manifest,
-        imports: ShoalDir,
+        directory: tempfile::TempDir,
     ) -> Result<Unpacked> {
         let manifest = manifest.clone();
         blocking(move || {
-            imports.create()?;
-            let directory = tempfile::Builder::new()
-                .prefix("package-")
-                .tempdir_in(imports.root())
-                .with_context(|| format!("create a directory in {}", imports.root().display()))?;
             let mut input = self.0;
             let parts = Parts::read(&mut input, &manifest, directory.path())?;
             Ok(Unpacked {
@@ -89,22 +85,56 @@ impl Reading {
 }
 
 impl Manager {
-    /// The directory of the packages imports into `repository` unpack, or
-    /// for a chat without one, those into `root_dir`.
+    /// A new directory for the parts of a package imported into
+    /// `repository`, or for a chat without one into `root_dir`, made under
+    /// the gate a move of that directory holds while it checks for one, so
+    /// a move never takes a package being read.
     pub(super) async fn unpacking_directory(
         &self,
         repository: Option<&RepositoryId>,
-    ) -> Result<ShoalDir> {
-        Ok(match repository {
-            Some(id) => ShoalDir::of(&self.repository(id).await?, Contents::Imports),
-            None => self.outside_imports()?,
+    ) -> Result<tempfile::TempDir> {
+        let (imports, _gate) = match repository {
+            Some(id) => {
+                let gate = self.gates.lock_message_files(id).await;
+                (
+                    ShoalDir::of(&self.repository(id).await?, Contents::Imports),
+                    gate,
+                )
+            }
+            None => {
+                let gate = self.gates.lock_outside_message_files().await;
+                (
+                    self.outside_imports(&self.config().root_dir(&self.paths)?),
+                    gate,
+                )
+            }
+        };
+        blocking(move || {
+            imports.create()?;
+            let root = imports.root();
+            (tempfile::Builder::new().prefix(PACKAGE).tempdir_in(root))
+                .with_context(|| format!("create a directory in {}", root.display()))
         })
+        .await
+    }
+
+    /// Refuse a move of `imports` while an import reads a package into it;
+    /// the caller holds the gate [`Self::unpacking_directory`] takes.
+    pub(crate) async fn ensure_no_import_in(&self, imports: ShoalDir) -> Result<()> {
+        let shown = imports.root().display().to_string();
+        let reading = blocking(move || Ok(holds_package(&imports)?));
+        ensure!(
+            !reading.await?,
+            "an import is reading a package into {shown}; wait for it to finish"
+        );
+        Ok(())
     }
 
     /// Delete the packages that imports interrupted by the daemon's stop
     /// left unpacked. Run before requests, while no import runs.
     pub(crate) async fn remove_interrupted_imports(&self) -> Result<()> {
-        let mut directories = vec![self.outside_imports()?];
+        let root_dir = self.config().root_dir(&self.paths)?;
+        let mut directories = vec![self.outside_imports(&root_dir)];
         for repo in self.repositories().await? {
             directories.push(ShoalDir::of(&repo, Contents::Imports));
         }
@@ -112,16 +142,28 @@ impl Manager {
     }
 
     /// The directory of the packages imports of chats without a repository
-    /// unpack, in `root_dir`, marked as this daemon's.
-    fn outside_imports(&self) -> Result<ShoalDir> {
-        let root_dir = self.config().root_dir(&self.paths)?;
+    /// into `root_dir` unpack, marked as this daemon's.
+    pub(crate) fn outside_imports(&self, root_dir: &std::path::Path) -> ShoalDir {
         let owner = self.root_dir_owner();
-        Ok(ShoalDir::outside_repositories(
-            &root_dir,
-            &owner,
-            Contents::Imports,
-        ))
+        ShoalDir::outside_repositories(root_dir, &owner, Contents::Imports)
     }
+}
+
+/// How the name of an import's directory begins.
+const PACKAGE: &str = "package-";
+
+/// Whether `imports`, where it is this Shoal's, holds an import's
+/// directory.
+fn holds_package(imports: &ShoalDir) -> std::io::Result<bool> {
+    if !imports.check_own()? {
+        return Ok(false);
+    }
+    for entry in std::fs::read_dir(imports.root())? {
+        if entry?.file_name().to_string_lossy().starts_with(PACKAGE) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Run `work`, which reads files or a connection, on the blocking pool.

@@ -3777,7 +3777,7 @@ workspace's stopped commands go to its restored agent, or without one stay
 for `shoal resume`.
 
 Every repository is checked before the first moves: none may have a running
-chat, queued agent launches or a starting CI job, a queued or running review, a workspace in another lifecycle
+chat, queued agent launches or a starting CI job, a queued or running review, an import reading a package into it, a workspace in another lifecycle
 operation, a checkout leased as a repository resource, another repository's
 checkout or workspace or Shoal's state inside its directory, or a process
 other than those commands and agents whose working directory is inside it, so
@@ -3786,7 +3786,8 @@ waited for, for up to a minute, before it counts. The temporary directory, attac
 or any other chat without a repository, running, stopped or removed, move with
 the repositories into the new root, where the chat runs from then on; a running
 one stops and restores as their agents do, and the move deletes the `.tmp`,
-`.attachments` and `.sessions` left in the root they left. The move is recorded before anything moves; a failed or
+`.attachments`, `.sessions` and `.imports` left in the root they left,
+refusing while an import reads a package into that root. The move is recorded before anything moves; a failed or
 interrupted move rolls back, or finishes once the directory has arrived, and the
 repository refuses other changes until the next `repo move` or daemon start
 completes it. Agent trust for the old paths is removed, and the new paths are

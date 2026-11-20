@@ -58,6 +58,8 @@ impl Manager {
         destination: &Path,
         running: Running,
     ) -> Result<Vec<OutsideChat>> {
+        self.ensure_no_import_in(self.outside_imports(root_dir))
+            .await?;
         let mut moving = Vec::new();
         for chat in self.outside_chats().await? {
             if !chat.moves(root_dir, destination) {
@@ -127,7 +129,8 @@ impl Manager {
     /// the root `root_dir` names or links to once the move is done, and
     /// record that each runs there from now on, then delete what is left in
     /// the roots they left, `root_dir` itself among them while it is not
-    /// `destination` yet.
+    /// `destination` yet. Refused while an import into `root_dir` reads a
+    /// package; the caller holds the gate of those chats' files.
     pub(super) async fn move_outside_chats(
         &self,
         chats: Vec<OutsideChat>,
@@ -141,12 +144,20 @@ impl Manager {
             .collect();
         left.sort();
         left.dedup();
+        self.ensure_no_import_in(self.outside_imports(root_dir))
+            .await?;
         self.move_chat_files(chats, root_dir, destination).await?;
         for root in left {
             let tmp = tmp_dirs::Layout::outside_repositories(&root, &self.root_dir_owner());
             let files = self.outside_files_layout(&root);
             let sessions = self.outside_sessions_layout(&root);
-            let removed = move || tmp.remove().and(files.remove()).and(sessions.remove());
+            let imports = self.outside_imports(&root);
+            let removed = move || {
+                (tmp.remove())
+                    .and(files.remove())
+                    .and(sessions.remove())
+                    .and(imports.remove())
+            };
             tokio::task::spawn_blocking(removed).await??;
         }
         Ok(())
