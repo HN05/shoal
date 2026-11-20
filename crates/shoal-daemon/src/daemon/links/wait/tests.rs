@@ -2792,7 +2792,7 @@ async fn a_stalled_worktree_fails_the_background_branch_check_at_once() {
 }
 
 #[tokio::test]
-async fn a_done_workspace_checks_its_branch_no_more() {
+async fn a_done_workspace_records_no_branch_check() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
@@ -2809,6 +2809,8 @@ async fn a_done_workspace_checks_its_branch_no_more() {
         .unwrap();
     register_watch(&manager, &workspace.id, PR.as_str()).await;
     let selector = SpaceSelector::id(&workspace.id);
+    // A poll in flight read the space before its completion.
+    let space = manager.link_space(&selector).await.unwrap();
     manager
         .mark_space_done(&selector, Done::default(), &Attacher::User)
         .await
@@ -2826,7 +2828,6 @@ async fn a_done_workspace_checks_its_branch_no_more() {
     tokio::time::resume();
     assert!(stalled.is_err());
 
-    let space = manager.link_space(&selector).await.unwrap();
     let _ = manager.poll_space_item_activity(&space).await;
     let queued = manager
         .queued_updates(&Space::from(workspace.clone()), None)

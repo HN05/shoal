@@ -191,9 +191,10 @@ fn recorded_urls(
         );
     }
     // A PR linked or unlinked since the poll changes what the branch
-    // reports; a chat works on none.
+    // reports, and a completion recorded since ends its check; a chat works
+    // on none.
     let branch = if watches_branch(selection) && branch_report(&items) == poll.report {
-        workspace_branch(db, id)?
+        checked_branch(db, id)?
     } else {
         None
     };
@@ -206,13 +207,16 @@ fn recorded_urls(
     ))
 }
 
-/// The branch of the workspace `id`; a chat or a workspace at a commit has
-/// none.
-fn workspace_branch(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<String>> {
+/// The branch of the workspace `id` while its conflicts are checked: a
+/// chat, a workspace at a commit and one whose assignment is done have none.
+fn checked_branch(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<String>> {
     Ok(db
-        .query_row("SELECT branch FROM workspaces WHERE id=?1", [id], |row| {
-            row.get::<_, Option<String>>(0)
-        })
+        .query_row(
+            "SELECT branch FROM workspaces WHERE id=?1
+             AND NOT EXISTS (SELECT 1 FROM space_completion WHERE space_id=?1)",
+            [id],
+            |row| row.get::<_, Option<String>>(0),
+        )
         .optional()?
         .flatten())
 }
