@@ -6,7 +6,7 @@ use crate::{
     cli::{
         args::internal::InternalCommand,
         commands::{
-            agent_state, alerts, approvals, environment, events, menu, progress, sessions,
+            agent_state, alerts, approvals, demo, environment, events, menu, progress, sessions,
             subagents, worktree_hooks,
         },
         context::Context,
@@ -180,15 +180,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             place,
             machine,
             app,
-        } => {
-            let viewer = crate::terminal::Elsewhere {
-                machine: &machine,
-                app: app.as_deref(),
-            };
-            let name = format!("demo {name}");
-            crate::terminal::show_place_elsewhere(&place, &name, &viewer).await?;
-            Ok(0)
-        }
+        } => demo::show_for_viewer(&name, &place, &machine, app.as_deref()).await,
         InternalCommand::Session {
             space,
             agent,

@@ -6,8 +6,11 @@ mod lookup;
 mod open;
 mod presets;
 mod screen;
+mod shown;
 mod start;
 mod stop;
+
+pub(in crate::cli::commands) use shown::show_for_viewer;
 
 use anyhow::{Result, ensure};
 
