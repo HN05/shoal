@@ -1,5 +1,6 @@
 //! Git invocations shared by workspace creation, removal, branch refreshes, and merging.
 pub mod branch;
+pub mod changes;
 pub use branch::check_branch_name;
 pub mod bundle;
 pub mod clone_base;
