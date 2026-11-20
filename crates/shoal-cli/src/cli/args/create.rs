@@ -197,7 +197,7 @@ impl CreateArgs {
 // Arguments of `shoal start`.
 #[derive(Debug, Default, Clone, Args)]
 pub struct StartArgs {
-    /// The mode the agent starts in; for an issue carrying a mode's
+    /// The mode the agent starts in; for an issue or PR carrying a mode's
     /// [modes.NAME] label, that mode; else on a terminal, a picker; else
     /// worker.
     #[arg(short = 'm', long)]
