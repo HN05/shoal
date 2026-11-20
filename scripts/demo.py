@@ -47,7 +47,7 @@ def fill(sandbox):
                  ["questions", "ask", "Which database should the session cache use?",
                   "--recommend", "SQLite", "--reason", "No server to run",
                   "--choice", "SQLite", "--choice", "Postgres"])
-    in_workspace(sandbox, "fix-login", ["alerts", "send", "Login fix pushed; checks are running"])
+    in_workspace(sandbox, "fix-login", ["send", "Login fix pushed; checks are running"])
     # Pending approval exits 2 by design.
     in_workspace(sandbox, "new-onboarding",
                  ["acquire", "port", "web", "--reason", "Preview the onboarding flow"],
