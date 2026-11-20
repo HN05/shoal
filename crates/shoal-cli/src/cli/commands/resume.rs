@@ -96,7 +96,7 @@ async fn resume(
     // A failed launch resumes whether the command line named its space or a
     // picker chose it.
     if options.execution.is_none() {
-        failed_starts::take(ctx, &mut selected, false).await?;
+        failed_starts::take(ctx, &mut selected).await?;
     }
     if whole {
         alongside.turns = interrupted_turns(ctx, &mut selected, change.is_some()).await?;
@@ -291,7 +291,7 @@ async fn resume_each(
         queuing,
         change,
     } = resume;
-    let mut stopped = saved::stopped(ctx, &selected, false).await?;
+    let mut stopped = saved::stopped(ctx, &selected).await?;
     if let Some(execution) = &execution {
         for (_, saved) in &mut stopped {
             saved.retain_execution(execution, true);

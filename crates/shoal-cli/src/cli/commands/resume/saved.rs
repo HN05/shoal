@@ -2,41 +2,62 @@
 use anyhow::{Result, ensure};
 
 use super::targets::Selected;
-use crate::{cli::context::Context, execution::recovery::Saved, model::Space};
+use crate::{
+    cli::context::Context,
+    execution::recovery::Saved,
+    model::{QueueEntry, Space},
+};
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The stopped work and last sessions of the `selected` spaces, or of every
-/// space with any, as [`saved_work`] keeps them for `discard`.
+/// The stopped work and last sessions of the `selected` spaces, refusing
+/// one with nothing to resume, or of every space with any.
 pub(in crate::cli::commands) async fn stopped(
     ctx: &Context,
     selected: &Selected,
-    discard: bool,
 ) -> Result<Vec<(Space, Saved)>> {
-    match &selected.spaces {
-        None => stopped_work(ctx, discard).await,
-        Some(spaces) => stopped_in(ctx, spaces, discard).await,
-    }
-}
-
-/// The stopped work and last sessions of the spaces `selectors` name, as
-/// [`saved_work`] keeps them for `discard`, refusing one with nothing to
-/// resume.
-async fn stopped_in(
-    ctx: &Context,
-    selectors: &[SpaceSelector],
-    discard: bool,
-) -> Result<Vec<(Space, Saved)>> {
+    let Some(selectors) = &selected.spaces else {
+        return stopped_work(ctx, false).await;
+    };
     let mut stopped = Vec::new();
     for selector in selectors {
         let space = super::present_space(ctx, selector).await?;
-        let saved = saved_work(ctx, &space, discard).await?;
+        let saved = saved_work(ctx, &space, false).await?;
         ensure!(
             !saved.is_empty(),
-            "{} has no stopped agent or commands to {}",
-            space.name,
-            if discard { "discard" } else { "resume" }
+            "{} has no stopped agent or commands to resume",
+            space.name
         );
         stopped.push((space, saved));
+    }
+    Ok(stopped)
+}
+
+/// The stopped work and last sessions of the `selected` spaces that a
+/// discard takes, or of every space with any, refusing a space with neither
+/// those nor one of the failed `launches`.
+pub(in crate::cli::commands) async fn discardable(
+    ctx: &Context,
+    selected: &Selected,
+    launches: &[QueueEntry],
+) -> Result<Vec<(Space, Saved)>> {
+    let Some(selectors) = &selected.spaces else {
+        return stopped_work(ctx, true).await;
+    };
+    let mut stopped = Vec::new();
+    for selector in selectors {
+        let space = super::present_space(ctx, selector).await?;
+        let saved = saved_work(ctx, &space, true).await?;
+        let launched = launches
+            .iter()
+            .any(|entry| entry.space() == Some(&space.id));
+        ensure!(
+            !saved.is_empty() || launched,
+            "{} has no stopped agent, commands or failed launch to discard",
+            space.name
+        );
+        if !saved.is_empty() {
+            stopped.push((space, saved));
+        }
     }
     Ok(stopped)
 }

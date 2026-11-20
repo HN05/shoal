@@ -25,17 +25,16 @@ pub(super) async fn run(
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         resume::ensure_queued()?;
     }
-    let Some(mut selected) = Selected::load(ctx, targets).await? else {
+    let Some(selected) = Selected::load(ctx, targets).await? else {
         return Ok(0);
     };
-    if execution.is_none() {
-        failed_starts::take(ctx, &mut selected, true).await?;
-    }
+    let launches = match execution {
+        None => failed_starts::of(ctx, selected.spaces.as_deref()).await?,
+        Some(_) => Vec::new(),
+    };
     match selected.spaces.as_deref() {
-        Some([space]) if selected.failed_starts.is_empty() => {
-            discard_one(ctx, space.clone(), execution).await
-        }
-        _ => discard_each(ctx, &selected, execution.as_ref()).await,
+        Some([space]) if launches.is_empty() => discard_one(ctx, space.clone(), execution).await,
+        _ => discard_each(ctx, &selected, &launches, execution.as_ref()).await,
     }
 }
 
@@ -56,14 +55,15 @@ async fn discard_one(
 }
 
 /// Discard the stopped agents and commands of the `selected` spaces, only
-/// `execution`'s when given, and their launches that failed to start,
-/// going on after one fails.
+/// `execution`'s when given, and the `launches` that failed to start, going
+/// on after one fails.
 async fn discard_each(
     ctx: &Context,
     selected: &Selected,
+    launches: &[QueueEntry],
     execution: Option<&ExecutionId>,
 ) -> Result<i32> {
-    let mut stopped = saved::stopped(ctx, selected, true).await?;
+    let mut stopped = saved::discardable(ctx, selected, launches).await?;
     if let Some(execution) = execution {
         for (_, saved) in &mut stopped {
             saved.retain_execution(execution, true);
@@ -80,7 +80,7 @@ async fn discard_each(
             Err(error) => (report.failed).push(ui::failure(ctx, "discard", &space.name, &error)),
         }
     }
-    for launch in &selected.failed_starts {
+    for launch in launches {
         match discard_launch(ctx, launch).await {
             Ok(entry) => {
                 report.launches.push(entry);

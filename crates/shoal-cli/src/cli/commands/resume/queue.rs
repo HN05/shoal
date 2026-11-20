@@ -128,7 +128,7 @@ async fn stopped_agents(
 /// scope reaches but its own that wait in no wrapper, as restore `--all`
 /// finds them.
 async fn stopped_in_reach(ctx: &Context) -> Result<Vec<(Space, Saved)>> {
-    let mut stopped = super::saved::stopped(ctx, &Selected::default(), false).await?;
+    let mut stopped = super::saved::stopped(ctx, &Selected::default()).await?;
     for (_, saved) in &mut stopped {
         keep_unattended(saved);
     }

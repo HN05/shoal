@@ -2720,19 +2720,21 @@ fn a_chats_failed_launch_resumes_with_shoal_resume() {
     assert_eq!(queued, [chat.as_str()], "{restored}");
 }
 
-/// `--discard-agent` drops a chat's failed launch from the queue and keeps
-/// the chat.
+/// `--discard-agent` drops a chat's failed launch from the queue, with the
+/// records it saved beside it, and keeps the chat.
 #[test]
 fn discarding_a_chats_agent_drops_its_failed_launch() {
     let fixture = failed_chat_launch();
     let chats = fixture.ok(&["list", "--chats"]);
     let chat = chats[0]["id"].as_str().unwrap().to_owned();
+    fixture.save_stopped_command(&chats[0]);
 
     let discarded = fixture.ok(&["restore", &chat, "--discard-agent"]);
     let launches: Vec<_> = (discarded["launches"].as_array().unwrap().iter())
         .map(|entry| entry["space_id"].as_str().unwrap())
         .collect();
     assert_eq!(launches, [chat.as_str()], "{discarded}");
+    assert_eq!(discarded["discarded"], serde_json::json!(["saved"]));
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
     assert_eq!(fixture.ok(&["list", "--chats"])[0]["id"], chat.as_str());
 }

@@ -13,41 +13,46 @@ use crate::{
     state::QueueState,
 };
 use shoal_protocol::protocol::RetryStart;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Move the selected spaces with a failed launch from `selected`'s spaces
-/// to its failed starts; with every space selected, take every failed
-/// launch when `every`, otherwise none.
-pub(in crate::cli::commands) async fn take(
-    ctx: &Context,
-    selected: &mut Selected,
-    every: bool,
-) -> Result<()> {
+/// to its failed starts; every space selected takes none.
+pub(in crate::cli::commands) async fn take(ctx: &Context, selected: &mut Selected) -> Result<()> {
     let Some(selectors) = selected.spaces.take() else {
-        if every {
-            let entries = queued_agents::entries(ctx).await?.into_iter();
-            let failed = entries.filter(|entry| entry.state == QueueState::Failed);
-            selected.failed_starts = failed.collect();
-        }
         return Ok(());
     };
-    let entries = queued_agents::entries(ctx).await?;
-    let spaces = crate::client::spaces::list(&ctx.paths).await?;
-    let mut rest = Vec::new();
-    for selector in selectors {
-        let space = spaces.find(&selector);
-        let failed = (entries.iter()).find(|entry| {
-            entry.state == QueueState::Failed
-                && space
-                    .as_ref()
-                    .is_some_and(|space| entry.space() == Some(&space.id))
-        });
-        match failed {
-            Some(failed) => selected.failed_starts.push(failed.clone()),
-            None => rest.push(selector),
-        }
-    }
-    selected.spaces = Some(rest);
+    let failed = of(ctx, Some(&selectors)).await?;
+    let launched = |selector: &SpaceSelector| {
+        (failed.iter()).any(|entry| {
+            entry
+                .space()
+                .is_some_and(|id| selector.given_id() == Some(id))
+        })
+    };
+    let rest = selectors.into_iter().filter(|selector| !launched(selector));
+    selected.spaces = Some(rest.collect());
+    selected.failed_starts = failed;
     Ok(())
+}
+
+/// The failed launches of the spaces `selectors` name, each space's once,
+/// or every one this process sees for `None`.
+pub(in crate::cli::commands) async fn of(
+    ctx: &Context,
+    selectors: Option<&[SpaceSelector]>,
+) -> Result<Vec<QueueEntry>> {
+    let failed = queued_agents::entries(ctx).await?.into_iter();
+    let failed = failed.filter(|entry| entry.state == QueueState::Failed);
+    let Some(selectors) = selectors else {
+        return Ok(failed.collect());
+    };
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
+    let ids: Vec<_> = (selectors.iter())
+        .filter_map(|selector| spaces.find(selector).map(|space| space.id))
+        .collect();
+    Ok(failed
+        .filter(|entry| entry.space().is_some_and(|space| ids.contains(space)))
+        .collect())
 }
 
 /// Queue each of the failed launches `failed` again, starting it at once
