@@ -464,7 +464,7 @@ impl Manager {
         number: ItemNumber,
         shown: Option<ApprovalRequest>,
     ) -> Result<ApprovalRequest> {
-        let (decider, name) = self.acting_space(caller, space).await?;
+        let (decider, name) = self.hub.acting_space(self, caller, space).await?;
         let request = self.show_approval(number).await?;
         crate::refusal::ensure_unchanged(
             shown.is_none_or(|shown| request.is_same(&shown)),
@@ -508,7 +508,7 @@ impl Manager {
         above: Option<&SpaceId>,
     ) -> Result<ApprovalRequest> {
         let start = above.unwrap_or(&request.space_id);
-        let elsewhere = self.deciders_elsewhere(start, false).await;
+        let elsewhere = self.hub.deciders_elsewhere(self, start, false).await;
         self.route_among(request, above, elsewhere).await
     }
 
@@ -520,7 +520,7 @@ impl Manager {
             return Ok(());
         };
         let _gate = self.gates.lock_announcements().await;
-        let elsewhere = self.deciders_elsewhere(&decider, true).await;
+        let elsewhere = self.hub.deciders_elsewhere(self, &decider, true).await;
         let routed = self.route_among(request, Some(&decider), elsewhere).await?;
         self.announce_approval(&routed).await;
         Ok(())

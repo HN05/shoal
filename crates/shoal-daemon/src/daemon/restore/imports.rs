@@ -33,7 +33,7 @@ impl Manager {
             .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
         let id = removed.space_id;
         // The machine it moves from keeps it until this import is done.
-        self.claim_space(&id).await;
+        self.hub.claim_space(self, &id).await;
         let mut restored = (self.reopen_space(&SpaceSelector::id(&id), None))
             .await
             .with_context(|| {
@@ -230,7 +230,7 @@ impl Manager {
         // where that space is here too, or runs on another joined machine.
         let parent = match removed.parent {
             Some(parent) if self.find_space(&parent.id).await?.is_some() => Some(parent),
-            Some(parent) if self.runs_elsewhere(&parent.id).await => Some(parent),
+            Some(parent) if self.hub.runs_elsewhere(self, &parent.id).await => Some(parent),
             _ => None,
         };
         let mut removed = RemovedSpace {

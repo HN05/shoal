@@ -119,10 +119,12 @@ impl Manager {
             Some(repository) => Some(self.repository(repository.clone()).await?.id),
             None => None,
         };
-        if self.find_space(&parent).await?.is_none() && self.runs_elsewhere(&parent).await {
+        if self.find_space(&parent).await?.is_none() && self.hub.runs_elsewhere(self, &parent).await
+        {
             let repository = repository.as_ref();
             return self
-                .ensure_parent_elsewhere(None, repository, &parent)
+                .hub
+                .ensure_parent_elsewhere(self, None, repository, &parent)
                 .await;
         }
         self.store
@@ -144,7 +146,7 @@ impl Manager {
         };
         match self.space(selector).await {
             Ok(space) => Ok(Some(space.id)),
-            Err(error) => match self.machine_of(selector).await {
+            Err(error) => match self.hub.machine_of(self, selector).await {
                 Ok(Some((_, listed))) => Ok(Some(listed.space.id)),
                 _ => Err(error),
             },
@@ -162,7 +164,7 @@ impl Manager {
         let id = (self.parent_space_id(Some(selector)).await?).context("a parent names a space")?;
         match self.find_space(&id).await? {
             Some(space) => Ok(space.repository_id),
-            None => self.repository_elsewhere(&id).await,
+            None => self.hub.repository_elsewhere(self, &id).await,
         }
     }
 

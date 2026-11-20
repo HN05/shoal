@@ -1,189 +1,271 @@
-//! The hub role and membership of a hub. A daemon with `[machine.hub]
-//! enabled` is the hub: it listens for its members' links and keeps their
-//! credentials, while it stays the machine of its own spaces. Any other
-//! daemon that joined a hub keeps one link to it, reconnecting with backoff,
-//! over a WebSocket to the URL it paired at or over `[machine.hub] connect`.
-//! The hub never dials a member; what it asks of one goes down that link.
+//! What the hub needs of the rest of the daemon, which [`Manager`] gives
+//! it: the spaces it reports, routes to and tells about, their
+//! permissions, the messages that reach their agents, the approvals and
+//! questions that pass between machines, and the app store a member asks
+//! of the hub.
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use anyhow::Result;
-use shoal_ids::member_ids::MemberId;
-use shoal_protocol::hub::{HubRole, Overview};
-
-use super::manager::Manager;
-use shoal_hub::{
-    identity, links, members, membership, presence, sealing, session, shown, streams, transport,
+use futures_util::future::BoxFuture;
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use shoal_hub::daemon::{
+    About, Approvals, Apps, Messages, Receiver, Records, SpacePermissions, Spaces,
 };
 
-pub(crate) use forwarding::{Elsewhere, Unanswered};
-pub(crate) use machines::Named;
-pub(crate) use streams::{Incoming, Outgoing};
-pub(crate) use telling::Event;
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
+use shoal_protocol::{
+    approvals::ApprovalRequest,
+    config::permissions::Permissions,
+    hub::{Member, routing::ChainedMode},
+    model::{QueueEntry, Repository, RunningAgent, Space},
+    protocol::AppMethod,
+    questions::Question,
+    saved::SavedSummary,
+    space_names::{SpaceName, SpaceSelector},
+};
+use shoal_schedule::priority::Priority;
 
-mod accept;
-pub(crate) mod answers;
-mod app_servers;
-mod apps;
-mod availability;
-mod directory;
-mod escalation;
-mod forwarding;
-mod known_tree;
-mod listener;
-mod machines;
-mod member;
-pub(crate) mod numbering;
-mod owners;
-mod pairing;
-mod queue;
-mod removal;
-mod reports;
-mod routing;
-mod serving;
-mod telling;
-mod tree;
-mod view;
+use super::{agent_messages, approvals, manager::Manager, scope::Caller, tree};
 
-/// What the hub role and membership keep while the daemon runs.
-#[derive(Default)]
-pub(crate) struct Hub {
-    identity: tokio::sync::OnceCell<Arc<identity::Identity>>,
-    /// As the hub: the pairing codes it issued.
-    codes: pairing::Codes,
-    /// As the hub: its members' open links.
-    links: links::Links,
-    /// As the hub: held while a member is admitted and its link registered,
-    /// and while a member is revoked and its link ended.
-    admissions: tokio::sync::Mutex<()>,
-    /// As the hub: when it last alerted the user to each refused member.
-    refusal_alerts: accept::RefusalAlerts,
-    /// As the hub: where its listener is bound, or why it is not.
-    listener: listener::Bound,
-    /// As a member: its link to the hub.
-    member: member::Link,
-    /// The callers other machines vouch for, while this machine answers
-    /// their forwarded requests.
-    vouches: serving::Vouches,
-    /// As a member: wakes the sending of what its outbox keeps.
-    outbox: tokio::sync::Notify,
-    /// As the hub: who delivers what it holds for each machine now.
-    deliveries: queue::Deliveries,
-    /// As a member: the tree across machines it last learned, as its store
-    /// keeps it.
-    known_tree: std::sync::Mutex<Option<known_tree::Known>>,
-    /// The effective permissions the hub last listed of each space on
-    /// another machine above a space here, which stand while it cannot be
-    /// asked.
-    parent_permissions:
-        std::sync::Mutex<std::collections::HashMap<shoal_ids::space_ids::SpaceId, tree::Reported>>,
-}
+pub(crate) use shoal_hub::{Elsewhere, Event, Incoming, Named, Outgoing, Unanswered, numbering};
 
-/// Serve the hub's listener and keep its own machine's spaces in its
-/// directory while this daemon is the hub, and keep a link to the hub while
-/// it is a member of one, until the daemon stops.
-pub(crate) async fn run(manager: Arc<Manager>) {
-    tokio::join!(
-        listener::run(manager.clone()),
-        manager.report_own_spaces(),
-        manager.expire_held(),
-        manager.escalate_waiting(),
-        manager.keep_marking_presence(),
-        member::run(manager.clone()),
-    );
-}
-
-/// Serve the link a member opened on the daemon's socket with `hello`, in a
-/// request of `protocol`, until it ends.
-pub(crate) async fn accept_socket_link(
-    manager: Arc<Manager>,
-    stream: tokio::net::UnixStream,
-    protocol: u32,
-    hello: serde_json::Value,
-) {
-    let (reader, writer) = stream.into_split();
-    let channel = transport::Channel::lines(tokio::io::BufReader::new(reader), writer);
-    (manager.accept_member(channel, protocol, hello, accept::Over::Socket)).await;
-}
-
-impl Manager {
-    /// `[machine.hub]`, none in a daemon that leaves the user's config to
-    /// the installed Shoal, which takes the hub role there.
-    pub(crate) fn hub_settings(&self) -> Option<shoal_core::config::machine::Hub> {
-        (self.acts_on_global_config()).then(|| self.config().machine.hub.clone())
+impl Spaces for Manager {
+    fn space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Space>> {
+        Box::pin(self.space_by_id(id))
     }
 
-    /// Whether this daemon takes the hub role.
-    pub(crate) fn is_hub(&self) -> bool {
-        self.hub_settings().is_some_and(|hub| hub.enabled)
+    fn select_space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>> {
+        Box::pin(Manager::space(self, selector))
     }
 
-    /// The hub role this daemon takes, for `shoal status`.
-    pub(crate) async fn hub_role(&self) -> Result<Option<HubRole>> {
-        if self.is_hub() {
-            return Ok(Some(HubRole::Hub {
-                listener: self.hub_listener(),
-                availability: self.own_availability().await?,
-            }));
-        }
-        self.membership_role().await
+    fn watch_agents(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.signals.watch_agents()
     }
 
-    /// The hub's listener and members, from the hub itself or through this
-    /// machine's link to it.
-    pub(crate) async fn hub_overview(&self) -> Result<Overview> {
-        if self.is_hub() {
-            return self.local_hub_overview().await;
-        }
-        self.through_hub(shoal_protocol::hub::link::Call::Members)
-            .await
-            .and_then(answers::overview)
+    fn find_space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Space>>> {
+        Box::pin(Manager::find_space(self, id))
     }
 
-    /// The hub's own machine, recording it the first time.
-    /// The name this machine goes by in its hub, else its host name.
-    pub(crate) async fn machine_name(&self) -> String {
-        let named = match self.hub_role().await {
-            Ok(Some(HubRole::Hub { .. })) => self.own_machine().await.ok().map(|own| own.name),
-            Ok(Some(HubRole::Member { membership, .. })) => Some(membership.name),
-            _ => None,
-        };
-        named.unwrap_or_else(crate::process::machine::hostname)
+    fn listed_spaces<'a>(
+        &'a self,
+        caller: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<Vec<Space>>> {
+        Box::pin(Manager::listed_spaces(self, caller))
     }
 
-    async fn own_machine(&self) -> Result<shoal_protocol::hub::Member> {
-        let own = self.own_member().await?;
-        let members = self.local_hub_overview().await?.members;
-        (members.into_iter())
-            .find(|member| member.id == own)
-            .ok_or_else(|| anyhow::anyhow!("the hub's own machine is not recorded"))
+    fn spaces_within<'a>(&'a self, root: Option<&'a SpaceId>) -> BoxFuture<'a, Result<Vec<Space>>> {
+        Box::pin(Manager::spaces_within(self, root))
     }
 
-    /// The ID of the hub's own machine, recording it the first time.
-    async fn own_member(&self) -> Result<MemberId> {
-        let own = self.hub_identity().await?.public.clone();
-        let name = crate::process::machine::hostname();
-        self.store
-            .write(move |tx| {
-                members::record_own(tx, &own, &name)?;
-                members::list(tx, &own)?
-                    .into_iter()
-                    .find(|member| member.hub)
-                    .map(|member| member.id)
-                    .ok_or_else(|| anyhow::anyhow!("the hub's own machine is not recorded"))
-            })
-            .await
+    fn priority<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Priority>> {
+        Box::pin(self.space_priority(id))
+    }
+
+    fn reach_root<'a>(
+        &'a self,
+        caller: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<Option<SpaceId>>> {
+        Box::pin(Manager::reach_root(self, caller))
+    }
+
+    fn coordinator<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<SpaceId>>> {
+        Box::pin(async move {
+            let (id, agents) = (id.clone(), self.tracked_agents().await);
+            (self.store)
+                .run(move |db| tree::coordinator_of(db, &id, &agents))
+                .await
+        })
+    }
+
+    fn receiver_from<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Receiver>>> {
+        Box::pin(async move {
+            let (id, agents) = (id.clone(), self.tracked_agents().await);
+            let found = (self.store)
+                .run(move |db| tree::receiver_from(db, &id, &agents))
+                .await?;
+            Ok(found.map(|found| match found {
+                tree::Receiver::Here(id) => Receiver::Here(id),
+                tree::Receiver::Elsewhere(id) => Receiver::Elsewhere(id),
+            }))
+        })
+    }
+
+    fn running_agents(&self) -> BoxFuture<'_, Result<Vec<RunningAgent>>> {
+        Box::pin(Manager::running_agents(self))
+    }
+
+    fn with_agents(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>> {
+        Box::pin(async move {
+            let agents = self.tracked_agents().await;
+            (self.store)
+                .run(move |db| tree::with_agents(db, &agents))
+                .await
+        })
+    }
+
+    fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>> {
+        Box::pin(Manager::repositories(self))
+    }
+
+    fn acts_on_global_config(&self) -> bool {
+        Manager::acts_on_global_config(self)
     }
 }
 
-impl Manager {
-    /// The hub's own key pair, made and kept the first time it is asked
-    /// for.
-    pub(crate) async fn hub_identity(&self) -> Result<Arc<identity::Identity>> {
-        let identity = &self.hub.identity;
-        let identity = identity.get_or_try_init(|| async {
-            let key = self.store.write(identity::stored_or_new_key).await?;
-            identity::Identity::new(&key).map(Arc::new)
+impl SpacePermissions for Manager {
+    fn caller_permissions<'a>(
+        &'a self,
+        caller: &'a Caller,
+        repository: Option<&'a RepositoryId>,
+    ) -> BoxFuture<'a, Result<Permissions>> {
+        Box::pin(Manager::caller_permissions(self, caller, repository))
+    }
+
+    fn chained_permissions<'a>(
+        &'a self,
+        chain: &'a [ChainedMode],
+        repository: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<Permissions>> {
+        Box::pin(Manager::chained_permissions(self, chain, repository))
+    }
+
+    fn chat_modes<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<Vec<ChainedMode>>> {
+        Box::pin(Manager::chat_modes(self, space))
+    }
+
+    fn space_permissions<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        repository: Option<&'a RepositoryId>,
+    ) -> BoxFuture<'a, Result<Permissions>> {
+        Box::pin(Manager::space_permissions(self, id, repository))
+    }
+}
+
+impl Messages for Manager {
+    fn message<'a>(&'a self, id: &'a SpaceId, message: String) -> BoxFuture<'a, Result<()>> {
+        Box::pin(self.queue_agent_message(id, message))
+    }
+
+    fn message_next_turn<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        message: String,
+    ) -> BoxFuture<'a, Result<()>> {
+        let next_turn = agent_messages::Delivery::NextTurn;
+        Box::pin(self.queue_agent_message_delivered(id, message, next_turn))
+    }
+
+    fn message_about<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        about: Option<About>,
+        message: String,
+    ) -> BoxFuture<'a, Result<()>> {
+        let about = about.map(|about| agent_messages::About {
+            name: about.name,
+            id: about.id,
+            kind: about.kind,
         });
-        identity.await.cloned()
+        Box::pin(self.queue_space_message(id, about, message, Vec::new()))
     }
 }
+
+impl Approvals for Manager {
+    fn approval_requests<'a>(
+        &'a self,
+        selector: Option<&'a SpaceSelector>,
+    ) -> BoxFuture<'a, Result<Vec<ApprovalRequest>>> {
+        Box::pin(Manager::approval_requests(self, selector))
+    }
+
+    fn open_questions(&self) -> BoxFuture<'_, Result<Vec<Question>>> {
+        Box::pin(Manager::open_questions(self))
+    }
+
+    fn pass_over_offline<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, Result<()>> {
+        Box::pin(Manager::pass_over_offline(self, request))
+    }
+
+    fn pass_to_user<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, Result<()>> {
+        Box::pin(Manager::pass_to_user(self, request))
+    }
+
+    fn saved_summaries<'a>(
+        &'a self,
+        caller: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<Vec<SavedSummary>>> {
+        Box::pin(Manager::saved_summaries(self, caller))
+    }
+
+    fn visible_queue(&self) -> BoxFuture<'_, Result<Vec<QueueEntry>>> {
+        Box::pin(Manager::visible_queue(self))
+    }
+}
+
+impl Apps for Manager {
+    fn serve_app_request(
+        self: Arc<Self>,
+        member: &Member,
+        method: AppMethod,
+        data: Option<String>,
+        out: Outgoing,
+    ) -> Result<()> {
+        Manager::serve_app_request(&self, member, method, data, out)
+    }
+}
+
+/// The spaces' records, as the hub reads and renumbers them in its own
+/// connections and transactions.
+pub(crate) struct HubRecords;
+
+impl Records for HubRecords {
+    fn parent_id(&self, db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>> {
+        tree::parent_id(db, id)
+    }
+
+    fn parent_ids(&self, db: &Connection) -> Result<HashMap<SpaceId, SpaceId>> {
+        tree::parent_ids(db)
+    }
+
+    fn below_elsewhere(&self, db: &Connection) -> Result<Vec<(SpaceId, SpaceId)>> {
+        tree::below_elsewhere(db)
+    }
+
+    fn first_absent_above(&self, db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>> {
+        tree::first_absent_above(db, id)
+    }
+
+    fn space_number(
+        &self,
+        db: &Connection,
+        id: &SpaceId,
+    ) -> Result<Option<(SpaceName, SpaceNumber)>> {
+        Ok(db
+            .query_row("SELECT name, number FROM spaces WHERE id=?1", [id], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .optional()?)
+    }
+
+    fn renumber_space(
+        &self,
+        tx: &Transaction<'_>,
+        id: &SpaceId,
+        from: SpaceNumber,
+        to: SpaceNumber,
+    ) -> Result<()> {
+        for update in [
+            "UPDATE spaces SET number=?2 WHERE id=?1",
+            "UPDATE questions SET space_number=?2 WHERE space_id=?1",
+        ] {
+            tx.execute(update, params![id, to])?;
+        }
+        approvals::renumber(tx, id, from, to)
+    }
+}
+
+#[cfg(test)]
+mod tests;

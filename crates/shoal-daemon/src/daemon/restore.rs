@@ -26,7 +26,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<RestoredSpace> {
         if let Some(id) = selector.given_id() {
-            self.refuse_live_elsewhere(id).await?;
+            self.hub.refuse_live_elsewhere(self, id).await?;
         }
         self.reopen_space(selector, caller).await
     }
@@ -162,8 +162,8 @@ impl Manager {
             )));
         };
         let here = self.find_space(&parent.id).await?;
-        if here.is_none() && self.runs_elsewhere(&parent.id).await {
-            return match self.reaches_elsewhere(caller, &parent.id).await? {
+        if here.is_none() && self.hub.runs_elsewhere(self, &parent.id).await {
+            return match self.hub.reaches_elsewhere(self, caller, &parent.id).await? {
                 true => self.scoped_chat_refusal(removed, caller).await,
                 false => Ok(Some(format!(
                     "{name} was below {}, outside this space's scope, so restoring it is the user's",
@@ -315,11 +315,17 @@ impl Manager {
             return Ok(None);
         };
         let (repository, space) = (removed.repository_id.clone(), removed.space_id.clone());
-        let elsewhere =
-            self.find_space(&parent.id).await?.is_none() && self.runs_elsewhere(&parent.id).await;
+        let elsewhere = self.find_space(&parent.id).await?.is_none()
+            && self.hub.runs_elsewhere(self, &parent.id).await;
         let taken = match elsewhere {
             true => {
-                (self.ensure_parent_elsewhere(Some(&space), repository.as_ref(), &parent.id)).await
+                (self.hub.ensure_parent_elsewhere(
+                    self,
+                    Some(&space),
+                    repository.as_ref(),
+                    &parent.id,
+                ))
+                .await
             }
             false => {
                 let id = parent.id.clone();

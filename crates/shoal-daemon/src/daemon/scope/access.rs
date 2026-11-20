@@ -43,14 +43,14 @@ impl Manager {
     /// the parent of a space it starts: one here, or one another joined
     /// machine runs, as the hub lists the tree.
     async fn reached_parent(&self, caller: &Caller, named: &SpaceSelector) -> Result<SpaceId> {
-        if self.names_vouched_own(caller, named) {
+        if self.hub.names_vouched_own(caller, named) {
             return Ok(caller.space_id.clone());
         }
         let id = (self.parent_space_id(Some(named)).await?).context("a parent names a space")?;
         match self.find_space(&id).await? {
             Some(space) => self.ensure_reaches(caller, &space).await?,
             None => ensure!(
-                self.reaches_elsewhere(caller, &id).await?,
+                self.hub.reaches_elsewhere(self, caller, &id).await?,
                 "space {named} is outside this space's scope"
             ),
         }
@@ -118,7 +118,7 @@ impl Manager {
         space: &'a mut SpaceSelector,
         refusal: &str,
     ) -> Result<&'a mut SpaceSelector> {
-        if !self.names_vouched_own(caller, space) {
+        if !self.hub.names_vouched_own(caller, space) {
             ensure!(self.space(space).await?.id == caller.space_id, "{refusal}");
         }
         Ok(space)

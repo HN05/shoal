@@ -43,7 +43,7 @@ impl Manager {
     pub(in crate::daemon) async fn reaches(&self, caller: &Caller, id: &SpaceId) -> Result<bool> {
         match self.reach_root(Some(caller)).await? {
             Some(root) if self.within_subtree(&root, id).await? => Ok(true),
-            Some(root) => Ok(self.ancestors_elsewhere(id).await.contains(&root)),
+            Some(root) => Ok(self.hub.ancestors_elsewhere(self, id).await.contains(&root)),
             None => Ok(true),
         }
     }
@@ -89,7 +89,7 @@ impl Manager {
         };
         let mut reached = self.subtree(&root).await?;
         // This machine's spaces below it through spaces elsewhere.
-        for below in self.reached_through_elsewhere(&root).await {
+        for below in self.hub.reached_through_elsewhere(self, &root).await {
             reached.extend(self.subtree(&below).await?);
         }
         Ok(Some(reached))

@@ -38,7 +38,7 @@ impl<'a> Routing<'a> {
         operation: &Operation,
         scope: Option<&'a ScopeToken>,
     ) -> Result<Option<Self>> {
-        if scope.is_some_and(|token| server.manager.vouched_caller(token).is_some()) {
+        if scope.is_some_and(|token| server.manager.hub.vouched_caller(token).is_some()) {
             return Ok(None);
         }
         let forwarding = operation.forwarding();
@@ -96,7 +96,12 @@ pub(super) async fn answer(
         forwarding: routing.forwarding,
         caller: caller.as_ref(),
     };
-    match server.manager.answer_elsewhere(space, unanswered).await {
+    match server
+        .manager
+        .hub
+        .answer_elsewhere(&*server.manager, space, unanswered)
+        .await
+    {
         None => reply(&mut stream, request_id, refused).await,
         Some(Err(error)) => reply(&mut stream, request_id, answer::failure(&error)).await,
         Some(Ok(Elsewhere::Queued(queued))) => {

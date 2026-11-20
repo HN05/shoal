@@ -63,7 +63,7 @@ impl Manager {
             .await?;
         match working {
             Some(runs) => Ok(runs),
-            None => Ok(self.coordinator_elsewhere(id).await),
+            None => Ok(self.hub.coordinator_elsewhere(self, id).await),
         }
     }
 }

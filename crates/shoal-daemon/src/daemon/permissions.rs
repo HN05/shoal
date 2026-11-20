@@ -118,7 +118,7 @@ impl Manager {
             return Ok(Vec::new());
         }
         // Above the top here, the chain goes on on another machine.
-        let mut chain = match self.reported_above(&space.id).await? {
+        let mut chain = match self.hub.reported_above(self, &space.id).await? {
             Some((_, above)) => above,
             None => Vec::new(),
         };
@@ -235,7 +235,7 @@ impl Manager {
         id: &SpaceId,
         repository: Option<&RepositoryId>,
     ) -> Result<Option<Permissions>> {
-        let mut effective = self.permissions_elsewhere(id, repository).await?;
+        let mut effective = self.hub.permissions_elsewhere(self, id, repository).await?;
         for above in self.ancestors(id).await?.into_iter().rev() {
             let space = self.space_by_id(&above.id).await?;
             let agent = recorded_agent(&space);

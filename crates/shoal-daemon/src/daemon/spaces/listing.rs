@@ -20,7 +20,7 @@ impl Manager {
     pub(crate) async fn spaces_within(&self, root: Option<&SpaceId>) -> Result<Vec<Space>> {
         let mut spaces = self.local_spaces_within(root).await?;
         if let Some(root) = root {
-            for below in self.reached_through_elsewhere(root).await {
+            for below in self.hub.reached_through_elsewhere(self, root).await {
                 spaces.extend(self.local_spaces_within(Some(&below)).await?);
             }
         }

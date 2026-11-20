@@ -70,7 +70,7 @@ impl Manager {
         // A parent on another machine stays, so a restore keeps it.
         let parent = match parent {
             Some(parent) => Some(parent),
-            None => self.parent_elsewhere(&workspace.id).await?,
+            None => self.hub.parent_elsewhere(self, &workspace.id).await?,
         };
         let (agents, last_sessions) = self.saved_agents(&workspace.id, carried_on)?;
         // The agents carrying on in the chat keep the session files.
@@ -141,7 +141,7 @@ impl Manager {
         // A parent on another machine stays, so a move or restore keeps it.
         let parent = match space.parent.clone() {
             Some(parent) => Some(parent),
-            None => self.parent_elsewhere(&space.id).await?,
+            None => self.hub.parent_elsewhere(self, &space.id).await?,
         };
         Ok(RemovedSpace {
             space_id: space.id,

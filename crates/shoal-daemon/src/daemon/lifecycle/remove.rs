@@ -175,7 +175,7 @@ impl Manager {
         let mut children = self.spaces_taken_with(&space.id).await?;
         children.reverse();
         // Those on other machines go first, each with the spaces below it.
-        let elsewhere = self.descendants_elsewhere(&space.id).await?;
+        let elsewhere = self.hub.descendants_elsewhere(self, &space.id).await?;
         children.splice(0..0, elsewhere);
         let disposable_children = self.disposable_among(&children).await?;
         Ok(SpaceRemovalCheck {
@@ -429,7 +429,11 @@ impl Manager {
         let below = self.taken_with(id, removal).await?;
         let mut children = self.remove_children(&space.name, below, removal).await?;
         if let Some(elsewhere) = removal.below_elsewhere() {
-            children.extend(self.remove_children_elsewhere(id, elsewhere).await?);
+            children.extend(
+                self.hub
+                    .remove_children_elsewhere(self, id, elsewhere)
+                    .await?,
+            );
         }
         if let Some(worktree) = &worktree {
             self.run_removal_hooks(worktree).await?;

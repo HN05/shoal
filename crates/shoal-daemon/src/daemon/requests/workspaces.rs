@@ -259,7 +259,7 @@ pub(super) async fn handle(
             let following = manager.session_to_follow(&space, session, from).await?;
             // Another machine's follow is checked there as it goes, its
             // token here standing for its caller only while it starts.
-            let scope = scope.filter(|token| manager.vouched_caller(token).is_none());
+            let scope = scope.filter(|token| manager.hub.vouched_caller(token).is_none());
             let scope = scope.cloned();
             // Following an agent is the user's interaction with it, as
             // attaching is.

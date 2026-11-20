@@ -31,7 +31,7 @@ pub(crate) async fn authorize(
     let Some(token) = token else {
         return Ok(None);
     };
-    let caller = match manager.vouched_caller(token) {
+    let caller = match manager.hub.vouched_caller(token) {
         // The user's request, which another machine forwarded.
         Some(None) => return Ok(None),
         Some(Some(caller)) => caller,
@@ -61,7 +61,7 @@ pub(in crate::daemon) async fn confine_target(
     target: &mut SpaceSelector,
     reads: bool,
 ) -> Result<()> {
-    if manager.names_vouched_own(caller, target) {
+    if manager.hub.names_vouched_own(caller, target) {
         return Ok(());
     }
     let space = manager.space(target).await?;

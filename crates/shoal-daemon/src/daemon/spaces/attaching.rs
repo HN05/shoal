@@ -80,7 +80,7 @@ impl Manager {
         viewer: &Viewer,
     ) -> Result<ViewerTerminal> {
         let space = self.space(selector).await?;
-        let machine = self.machine_name().await;
+        let machine = self.hub.machine_name(self).await;
         let (pty, terminal) = pty::open(viewer.size)?;
         let (report, reported) = std::os::unix::net::UnixStream::pair()?;
         let viewer_json = serde_json::to_string(viewer)?;

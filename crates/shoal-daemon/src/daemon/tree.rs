@@ -165,7 +165,7 @@ impl Manager {
         if !self.children(id).await?.is_empty() {
             return Ok(true);
         }
-        Ok(!self.descendants_elsewhere(id).await?.is_empty())
+        Ok(!self.hub.descendants_elsewhere(self, id).await?.is_empty())
     }
 
     /// Queue `message` about the workspace named `name` for its coordinator,
@@ -216,7 +216,7 @@ impl Manager {
                 };
                 // Boxed: on the hub, an event for its own machine's space
                 // comes back here when no space there takes it.
-                Box::pin(self.pass_up(above, event)).await
+                Box::pin(self.hub.pass_up(self, above, event)).await
             }
             Ok(None) => return false,
             Err(error) => Err(error),

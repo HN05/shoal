@@ -17,7 +17,6 @@ mod answer;
 pub mod approvals;
 mod apps;
 mod auto_update;
-mod battery;
 pub(crate) mod blockers;
 pub(crate) mod busy_cpu;
 pub(crate) mod caches;
@@ -294,7 +293,9 @@ pub async fn run(
     spawn_supervised(&mut background, &manager, "seed builds", seed::run);
     spawn_supervised(&mut background, &manager, "seed spares", seed::run_spares);
     spawn_supervised(&mut background, &manager, "runner", runner::run);
-    spawn_supervised(&mut background, &manager, "hub", hub::run);
+    spawn_supervised(&mut background, &manager, "hub", |manager| {
+        shoal_hub::run(manager.hub.clone(), manager)
+    });
     spawn_supervised(
         &mut background,
         &manager,
@@ -596,7 +597,14 @@ async fn serve_request(
             // no operation, which would hold off every update meanwhile.
             drop(operation_guard);
             let manager = server.manager.clone();
-            hub::accept_socket_link(manager, stream, request.protocol, hello).await;
+            shoal_hub::accept_socket_link(
+                manager.hub.clone(),
+                manager,
+                stream,
+                request.protocol,
+                hello,
+            )
+            .await;
             return Ok(());
         }
         // Service commands end a daemon of any release.

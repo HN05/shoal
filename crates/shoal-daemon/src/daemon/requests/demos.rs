@@ -31,7 +31,7 @@ pub(super) async fn handle(
             let open = manager.open_demo(&workspace, &name).await?;
             // Another machine's stream is checked there as it goes, its
             // token here standing for its caller only while it opens.
-            let scope = scope.filter(|token| manager.vouched_caller(token).is_none());
+            let scope = scope.filter(|token| manager.hub.vouched_caller(token).is_none());
             let scope = scope.cloned();
             let manager = manager.clone();
             return Ok(Answer::connection(move |stream, request_id, guard| {

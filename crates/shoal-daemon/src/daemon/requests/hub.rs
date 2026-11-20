@@ -30,15 +30,17 @@ pub(super) async fn handle(
         .into());
     }
     Ok(Answer::Body(match method {
-        HubMethod::PairHub => Body::Pairing(manager.hub_pairing().await?),
-        HubMethod::JoinHub { via, name } => Body::Membership(manager.join_hub(via, name).await?),
-        HubMethod::LeaveHub => Body::LeftHub(manager.leave_hub().await?),
-        HubMethod::HubMembers => Body::HubOverview(manager.hub_overview().await?),
+        HubMethod::PairHub => Body::Pairing(manager.hub.hub_pairing(&**manager).await?),
+        HubMethod::JoinHub { via, name } => {
+            Body::Membership(manager.hub.join_hub(&**manager, via, name).await?)
+        }
+        HubMethod::LeaveHub => Body::LeftHub(manager.hub.leave_hub().await?),
+        HubMethod::HubMembers => Body::HubOverview(manager.hub.hub_overview(&**manager).await?),
         HubMethod::RevokeHubMember { member } => {
-            Body::HubMember(manager.revoke_hub_member(member).await?)
+            Body::HubMember(manager.hub.revoke_hub_member(&**manager, member).await?)
         }
         HubMethod::HubDirectory => {
-            let view = manager.hub_view(caller).await;
+            let view = manager.hub.hub_view(&**manager, caller).await;
             let parts = view.map(|view| view.map(HubView::into_parts).unwrap_or_default());
             return Ok(Answer::pages(parts, Body::HubView));
         }

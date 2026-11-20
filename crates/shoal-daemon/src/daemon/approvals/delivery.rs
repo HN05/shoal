@@ -43,12 +43,12 @@ impl Manager {
     /// joined machine; false when it cannot be, which only logs.
     pub(crate) async fn tell_space(&self, id: &SpaceId, message: String) -> bool {
         let here = self.find_space(id).await.is_ok_and(|space| space.is_some());
-        let queued = match here || !self.runs_elsewhere(id).await {
+        let queued = match here || !self.hub.runs_elsewhere(self, id).await {
             true => {
                 self.queue_space_message(id, None, message, Vec::new())
                     .await
             }
-            false => self.message_elsewhere(id, message).await,
+            false => self.hub.message_elsewhere(self, id, message).await,
         };
         match queued {
             Ok(()) => true,

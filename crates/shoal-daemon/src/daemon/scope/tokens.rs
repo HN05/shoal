@@ -19,7 +19,7 @@ impl Manager {
         let Some(token) = token else {
             return Ok(true);
         };
-        if self.vouched_caller(token).is_some() {
+        if self.hub.vouched_caller(token).is_some() {
             return Ok(true);
         }
         Ok(self.caller(token).await?.is_some())

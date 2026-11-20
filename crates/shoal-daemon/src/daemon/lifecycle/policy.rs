@@ -10,6 +10,7 @@ use crate::{
     removal::{InspectionPolicy, NOTHING, RemovalCheck, UnsavedWork},
 };
 use anyhow::{Result, ensure};
+use shoal_hub::BelowElsewhere;
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_ids::space_ids::SpaceId;
 use std::collections::BTreeMap;
@@ -129,24 +130,6 @@ pub(in crate::daemon) enum Removal<'a> {
     Converted {
         chat: &'a crate::daemon::conversions::record::ConvertedChat,
     },
-}
-
-/// What a removal asks of the spaces directly below its space that other
-/// machines run, each of which its own machine removes as it removes a
-/// child of a space it removes.
-pub(crate) struct BelowElsewhere<'a> {
-    /// Leave the spaces the user holds, as a workspace process's removal
-    /// does.
-    pub refuse_holds: bool,
-    /// The IDs of the only spaces below it the removal takes, when the
-    /// caller confirmed those it saw.
-    pub confirmed: Option<&'a [SpaceId]>,
-    /// The cause of the removal this one is part of, which the removal of
-    /// each child there takes, and which has the hub hold a child's
-    /// removal while its machine is offline for a removal someone asked
-    /// for; an unattended one tries again on its next round instead, so its
-    /// rounds pile up no removals.
-    pub cause: EventCause,
 }
 
 impl<'a> Removal<'a> {

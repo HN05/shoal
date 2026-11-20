@@ -89,7 +89,7 @@ pub struct Manager {
     /// Directories whose file access stalls, shared with startup's status answer.
     pub(crate) file_access: Arc<crate::daemon::file_access::FileAccess>,
     /// The hub role, or this machine's membership of a hub.
-    pub(crate) hub: crate::daemon::hub::Hub,
+    pub hub: Arc<shoal_hub::Hub>,
     /// The app store's watches.
     pub(crate) apps: crate::daemon::apps::Apps,
     /// The commits other machines carried here for launches on their way.
@@ -112,6 +112,14 @@ impl Manager {
             notifications.clone(),
             Arc::new(super::leases::DaemonRecords),
         );
+        let hub = Arc::new(shoal_hub::Hub::new(
+            store.clone(),
+            gates.clone(),
+            config_state.clone(),
+            notifications.clone(),
+            paths.clone(),
+            Arc::new(super::hub::HubRecords),
+        ));
         let reviews = Arc::new(shoal_reviews::Reviews::new(
             store.clone(),
             gates.clone(),
@@ -169,7 +177,7 @@ impl Manager {
             rejected_configs: Default::default(),
             report_times: Default::default(),
             file_access: Default::default(),
-            hub: Default::default(),
+            hub,
             apps: Default::default(),
             carried_holds: Default::default(),
         }))

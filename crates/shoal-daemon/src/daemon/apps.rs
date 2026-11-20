@@ -9,6 +9,7 @@ use shoal_protocol::{apps::AppName, protocol::ConfigTarget};
 use super::manager::Manager;
 
 mod entries;
+mod hub;
 mod kept;
 mod watch;
 mod writes;

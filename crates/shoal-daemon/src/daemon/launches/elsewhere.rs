@@ -34,7 +34,7 @@ impl Manager {
         let Some(named) = launch.machine.take() else {
             return Ok(None);
         };
-        let Named { machine, own } = self.named_machine(&named).await?;
+        let Named { machine, own } = self.hub.named_machine(self, &named).await?;
         if own {
             return Ok(None);
         }
@@ -53,7 +53,7 @@ impl Manager {
     /// Whether `launch` names another joined machine to start on.
     pub(super) async fn launches_elsewhere(&self, launch: &Launch) -> Result<bool> {
         match &launch.machine {
-            Some(named) => Ok(!self.named_machine(named).await?.own),
+            Some(named) => Ok(!self.hub.named_machine(self, named).await?.own),
             None => Ok(false),
         }
     }
@@ -68,7 +68,10 @@ impl Manager {
         let launch = LaunchMethod::Launch {
             launch: Box::new(launch),
         };
-        let body = (self.ask_machine(machine, Operation::Launch(launch), caller)).await?;
+        let body = (self
+            .hub
+            .ask_machine(self, machine, Operation::Launch(launch), caller))
+        .await?;
         Launched::try_from(body)
     }
 
@@ -203,7 +206,7 @@ impl Manager {
         if self.find_space(parent).await?.is_some() {
             return Ok(false);
         }
-        self.unregistered_elsewhere(parent).await
+        self.hub.unregistered_elsewhere(self, parent).await
     }
 }
 

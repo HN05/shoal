@@ -26,7 +26,7 @@ impl Manager {
     /// a coordinator on another machine receives, while one above them
     /// there has an agent.
     pub(crate) async fn pass_up_delegated_activity(&self) -> Result<()> {
-        if !self.reaches_hub() {
+        if !self.hub.reaches_hub(self) {
             return Ok(());
         }
         let agents = self.tracked_agents().await;
@@ -79,9 +79,11 @@ impl Manager {
     async fn coordinated(&self, coordinated: &mut Coordinated<'_>) -> bool {
         match coordinated.known {
             Some(known) => known,
-            None => {
-                *(coordinated.known).insert(self.coordinator_elsewhere(coordinated.below).await)
-            }
+            None => *(coordinated.known).insert(
+                self.hub
+                    .coordinator_elsewhere(self, coordinated.below)
+                    .await,
+            ),
         }
     }
 
@@ -112,7 +114,7 @@ impl Manager {
             message: activity_message(updates),
             attachments: &[],
         };
-        self.pass_up_now(above.clone(), event).await?;
+        self.hub.pass_up_now(self, above.clone(), event).await?;
         let id = space.id.clone();
         (self.store)
             .write(move |tx| acknowledge_deliveries(tx, &[id], &deliveries))

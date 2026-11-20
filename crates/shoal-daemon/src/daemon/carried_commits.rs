@@ -75,7 +75,10 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<()> {
         let operation = Operation::Repository(receive);
-        let (incoming, mut outgoing) = self.open_duplex(machine, operation, caller).await?;
+        let (incoming, mut outgoing) = self
+            .hub
+            .open_duplex(self, machine, operation, caller)
+            .await?;
         let mut answers = Answers::new(incoming);
         answers.next().await?;
         send_file(file, &mut outgoing).await?;
