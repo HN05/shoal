@@ -88,27 +88,38 @@ impl Manager {
     /// once it stopped their agents, which the caller restores here when the
     /// destination has nothing of them; none when nothing recorded it.
     pub async fn abandon_move(&self, selector: &SpaceSelector) -> Result<StoppedExecutions> {
-        let id = match self.space(selector).await {
-            Ok(space) => space.id,
-            Err(error) => selector.given_id().cloned().ok_or(error)?,
-        };
-        let space = id.clone();
-        let Some(record) = self.store.read(move |db| records::read(db, &space)).await? else {
+        let id = self.moving_space_id(selector).await?;
+        let Some(record) = self.move_record(&id).await? else {
             return Ok(StoppedExecutions::new());
         };
+        let stopped = self.stopped_since(&record).await;
+        self.forget_move(&record).await;
+        Ok(stopped)
+    }
+
+    /// The ID of the space `selector` names, which a move may have ended:
+    /// by its ID once it is gone.
+    async fn moving_space_id(&self, selector: &SpaceSelector) -> Result<SpaceId> {
+        match self.space(selector).await {
+            Ok(space) => Ok(space.id),
+            Err(error) => selector.given_id().cloned().ok_or(error),
+        }
+    }
+
+    /// The executions whose stopped work each space `record` moves saved
+    /// once its move stopped their agents, beyond what they saved before; a
+    /// space that is gone saved none here.
+    async fn stopped_since(&self, record: &MoveRecord) -> StoppedExecutions {
         let mut stopped = StoppedExecutions::new();
         for (space, before) in &record.saved_before {
             let Ok(saved) = self.saved_work(&SpaceSelector::id(space)).await else {
                 continue;
             };
             let now = saved.execution_ids().into_iter();
-            stopped.insert(
-                space.clone(),
-                now.filter(|id| !before.contains(id)).collect(),
-            );
+            let since = now.filter(|id| !before.contains(id)).collect();
+            stopped.insert(space.clone(), since);
         }
-        self.forget_move(&record).await;
-        Ok(stopped)
+        stopped
     }
 
     /// The moves in progress.
@@ -161,9 +172,14 @@ impl Manager {
 
     /// The recorded move of the space `id`.
     async fn recorded_move(&self, id: &SpaceId) -> Result<MoveRecord> {
-        let space = id.clone();
-        (self.store.read(move |db| records::read(db, &space)).await?)
+        (self.move_record(id).await?)
             .with_context(|| format!("no move of space {id} is in progress"))
+    }
+
+    /// The recorded move of the space `id`, while one is recorded.
+    async fn move_record(&self, id: &SpaceId) -> Result<Option<MoveRecord>> {
+        let space = id.clone();
+        self.store.read(move |db| records::read(db, &space)).await
     }
 
     /// End `space` with the spaces its delivered move `record` carries.
