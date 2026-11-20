@@ -315,7 +315,7 @@ impl Manager {
 
     /// Record that the agent reporting from `execution` ended a turn and is
     /// idle, its prompt cache expiring the lifetime of its AI tool from now,
-    /// and ask the user the question the turn asked in its chat, for a
+    /// and post the turn's final message in the thread it marked, for a
     /// report made at `made`, as [`Self::record_agent_state`] takes it,
     /// while the caller holds the space's [`Self::report_order`].
     pub(super) async fn end_turn(
@@ -333,7 +333,7 @@ impl Manager {
             ),
             ..TurnEnding::ended()
         };
-        self.ask_marked_chat_question(selector, execution.as_ref(), turn_end.final_message)
+        self.post_marked_chat(selector, execution.as_ref(), turn_end.final_message)
             .await;
         self.record_agent_state(selector, AgentState::Idle, execution, session, ending, made)
             .await

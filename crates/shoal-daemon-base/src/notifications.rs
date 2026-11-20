@@ -37,11 +37,7 @@ impl AlertKindExt for AlertKind {
             | Self::StartWarned
             | Self::StartFailed
             | Self::PreparationFailed => Some(Source::Daemon),
-            Self::Message
-            | Self::QuestionAsked
-            | Self::QuestionWithdrawn
-            | Self::SpaceDone
-            | Self::SpaceBlocked => Some(Source::Agent),
+            Self::Message | Self::SpaceDone | Self::SpaceBlocked => Some(Source::Agent),
             _ => None,
         }
     }

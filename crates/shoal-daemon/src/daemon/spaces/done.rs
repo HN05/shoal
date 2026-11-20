@@ -13,13 +13,13 @@ use crate::{
         links::{pr::current_head, space::require_ready_space},
         manager::Manager,
         notifications::AlertKind,
-        progress, questions, turn_retry, wake_timers,
+        progress, threads, turn_retry, wake_timers,
         workspace_files::Attacher,
     },
     hooks::{Hook, HookKind},
     model::{Completion, HandedBack, Space},
 };
-use shoal_protocol::{assignments::Done, space_names::SpaceSelector};
+use shoal_protocol::{assignments::Done, space_names::SpaceSelector, threads::CloseCause};
 use shoal_refs::CommitId;
 
 impl Manager {
@@ -53,19 +53,24 @@ impl Manager {
         self.record_done(&space, completion).await
     }
 
-    /// Withdraw the completion the space `selector` names recorded; only
-    /// holds and open questions keep the space.
+    /// Withdraw the completion the space `selector` names recorded, and
+    /// reopen the threads it closed; only holds and threads that wait keep
+    /// the space.
     pub async fn undo_space_done(&self, selector: &SpaceSelector) -> Result<Completion> {
         let (space, _guard) = self.lock_space_gate(selector).await?;
         self.verify_space(&space).await?;
         let id = space.id.clone();
-        let completion = self
+        let (completion, delivered) = self
             .store
             .write(move |tx| {
                 require_ready_space(tx, &id)?;
-                take_completion(tx, &id)?.context("the space is not marked done")
+                let completion =
+                    take_completion(tx, &id)?.context("the space is not marked done")?;
+                let (_, delivered) = threads::reopen(tx, &id, CloseCause::Completion)?;
+                Ok((completion, delivered))
             })
             .await?;
+        self.announce_threads(delivered).await;
         self.signals.wake_cleanup();
         self.agent_settles.request(&space.id);
         Ok(completion)
@@ -198,13 +203,13 @@ impl Manager {
     }
 
     /// Record `completion`, with its summary as the status line, and close
-    /// the space's open questions, which its finished work waits on no
-    /// longer, waking waits on them.
+    /// the space's open threads, which its finished work waits on no
+    /// longer, telling their openers.
     async fn persist_completion(&self, id: &SpaceId, completion: &Completion) -> Result<Persisted> {
         let id = id.to_owned();
         let completion = completion.clone();
         let now = crate::time::UnixTime::now();
-        let persisted = self
+        let (persisted, delivered) = self
             .store
             .write(move |tx| {
                 require_ready_space(tx, &id)?;
@@ -213,21 +218,20 @@ impl Manager {
                 let progressed =
                     progress::record_status(tx, &id, completion.summary.as_deref(), now)?
                         | progress::remove_blockers(tx, &id, now)?;
-                let closed = questions::close_open(tx, &id)?;
+                let (closed, delivered) = threads::close(tx, &id, CloseCause::Completion)?;
                 // Finished work leaves its failed turn alone, and has
                 // nothing left for a timer to wake it for.
                 turn_retry::cancel(tx, &id)?;
                 wake_timers::cancel(tx, &id)?;
-                Ok(Persisted {
+                let persisted = Persisted {
                     changed: replaced || !closed.is_empty() || progressed,
                     closed,
                     progressed,
-                })
+                };
+                Ok((persisted, delivered))
             })
             .await?;
-        if !persisted.closed.is_empty() {
-            self.signals.question_changed();
-        }
+        self.announce_threads(delivered).await;
         Ok(persisted)
     }
 
@@ -266,9 +270,9 @@ impl Manager {
 /// What recording a completion changed.
 struct Persisted {
     /// Whether it replaced another completion, released a hold or closed a
-    /// question.
+    /// thread.
     changed: bool,
-    /// The numbers of the questions it closed.
+    /// The numbers of the threads it closed.
     closed: Vec<ItemNumber>,
     /// Whether it changed the status line.
     progressed: bool,
@@ -315,7 +319,7 @@ pub(crate) fn take_completion(
         .transpose()?)
 }
 
-/// What the user is told about a completion, the questions it closed and
+/// What the user is told about a completion, the threads it closed and
 /// the files it handed back, in the space numbered `space`.
 fn done_notice(space: &str, completion: &Completion, closed: &[ItemNumber]) -> String {
     let mut notice = String::from("finished");
@@ -331,7 +335,7 @@ fn done_notice(space: &str, completion: &Completion, closed: &[ItemNumber]) -> S
     notice
 }
 
-/// Add the questions a completion closed, the results it handed back and,
+/// Add the threads a completion closed, the results it handed back and,
 /// last, its summary to the notice of the space `space`, a number, which
 /// selects it.
 fn push_completion_details(
@@ -341,10 +345,10 @@ fn push_completion_details(
     closed: &[ItemNumber],
 ) {
     if let [number] = closed {
-        notice.push_str(&format!("; closed question {number}"));
+        notice.push_str(&format!("; closed thread {number}"));
     } else if !closed.is_empty() {
         let numbers: Vec<_> = closed.iter().map(ToString::to_string).collect();
-        notice.push_str(&format!("; closed questions {}", numbers.join(", ")));
+        notice.push_str(&format!("; closed threads {}", numbers.join(", ")));
     }
     if !completion.results.is_empty() {
         notice.push_str(&format!(

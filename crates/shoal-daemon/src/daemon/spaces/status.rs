@@ -10,7 +10,7 @@ use anyhow::Result;
 use crate::{
     config::permissions::Permissions,
     daemon::{
-        approvals, forge_hosts::ForgeHosts, links::pr, manager::Manager, questions, store,
+        approvals, forge_hosts::ForgeHosts, links::pr, manager::Manager, store, threads,
         turn_retry, workspace_files,
     },
     forge::{ForgeRepo, items::reference::ItemRef, review::status::PrStatus},
@@ -101,7 +101,7 @@ impl Manager {
             .run(move |db| {
                 Ok(Attention {
                     unread_notifications,
-                    open_questions: questions::open_count(db, &id)?,
+                    waiting_threads: threads::waiting_count(db, &id)?,
                     pending_approvals: approvals::pending_count(db, &id)?,
                     attached_files: workspace_files::count(db, &id)?,
                 })

@@ -2,7 +2,7 @@
 //! a workspace or chat.
 use clap::{Args, Subcommand, ValueEnum};
 
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
     forge::items::{
@@ -17,17 +17,18 @@ use shoal_protocol::space_names::SpaceSelector;
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum ItemsCommand {
-    /// Link an issue, PR or CI run with a relation: `link 42 assigned`, `link ci 2765 related`.
+    /// Link an issue, PR, CI run or thread with a relation: `link 42 assigned`, `link ci 2765 related`.
     ///
     /// Assigned items drive completion and cleanup; opened and related items
     /// are recorded only. A CI run is opened or related, and watches follow
-    /// it until it finishes.
+    /// it until it finishes. A thread you read is related, and its new posts
+    /// reach the space: `link thread 3.2 related`.
     Link {
         #[command(flatten)]
         items: RelationArgs,
     },
     /// Unlink a relation's items, one kind, or a selected item:
-    /// `unlink assigned`, `unlink pr 43 related`.
+    /// `unlink assigned`, `unlink pr 43 related`, `unlink thread 3.2`.
     Unlink {
         #[command(flatten)]
         items: RelationArgs,
@@ -54,10 +55,11 @@ pub enum ItemsCommand {
         #[arg(long, hide = true, requires = "watching_space")]
         resume: bool,
     },
-    /// Show linked items, one kind, or a selected issue, PR, CI run or review: `view ci 2765`.
+    /// Show linked items, one kind, or a selected issue, PR, CI run, review or thread: `view ci 2765`.
     ///
     /// Issues and PRs show their status and discussion, CI runs their jobs,
-    /// and `view review` the workspace's latest local review with its findings.
+    /// `view review` the workspace's latest local review with its findings,
+    /// and `view thread 3.2` a thread's posts.
     View(ViewArgs),
     /// Mark linked items, or the space when none are linked, ready for review.
     Ready {
@@ -100,7 +102,8 @@ pub struct ViewArgs {
 // An optional item selection followed by its relation.
 #[derive(Debug, Args)]
 pub struct RelationArgs {
-    /// pr/issue/ci, a number or URL, then assigned, opened or related.
+    /// pr/issue/ci/thread, a number or URL, then assigned, opened or
+    /// related; a thread is linked as related.
     #[arg(required = true, num_args = 1..=3, value_name = "[ITEM] RELATION")]
     pub args: Vec<String>,
     /// Space, a workspace or chat, to use; defaults to the current workspace or
@@ -134,6 +137,8 @@ pub enum ItemWord {
     Kind(LinkKind),
     /// The space's latest local review, or the one the next argument numbers.
     Review,
+    /// The thread the next argument numbers.
+    Thread,
     Item(ItemInput),
 }
 
@@ -141,8 +146,10 @@ impl std::str::FromStr for ItemWord {
     type Err = anyhow::Error;
 
     fn from_str(word: &str) -> Result<Self> {
-        if word == "review" {
-            return Ok(Self::Review);
+        match word {
+            "review" => return Ok(Self::Review),
+            "thread" => return Ok(Self::Thread),
+            _ => {}
         }
         Ok(
             match LinkKind::ALL.iter().find(|kind| kind.as_str() == word) {
@@ -155,11 +162,12 @@ impl std::str::FromStr for ItemWord {
 
 #[derive(Debug, Args)]
 pub struct ItemArgs {
-    /// pr/issue/ci/review to select a kind, an issue or PR number, or an
-    /// issue, PR or CI run URL.
+    /// pr/issue/ci/review/thread to select a kind, an issue or PR number,
+    /// or an issue, PR or CI run URL.
     #[arg(value_parser = item_word)]
     pub kind_or_url: Option<ItemWord>,
-    /// Number or URL when a kind is supplied, or a review's ID.
+    /// Number or URL when a kind is supplied, a review's ID, or a thread's
+    /// number.
     #[arg(requires = "kind_or_url")]
     pub item: Option<String>,
     /// Space, a workspace or chat, to use; defaults to the current workspace or
@@ -183,6 +191,18 @@ impl ItemArgs {
     /// one: `view review 17`.
     pub fn selects_review(&self) -> bool {
         matches!(self.kind_or_url, Some(ItemWord::Review))
+    }
+
+    /// Whether the selection names a thread: `view thread 3.2`.
+    pub fn selects_thread(&self) -> bool {
+        matches!(self.kind_or_url, Some(ItemWord::Thread))
+    }
+
+    /// The thread a thread selection numbers.
+    pub fn thread_number(&self) -> Result<shoal_protocol::threads::ThreadNumber> {
+        (self.item.as_deref())
+            .context("name the thread: view thread <S.N>")?
+            .parse()
     }
 
     /// The review ID a review selection names.
@@ -217,6 +237,7 @@ impl ItemArgs {
                 bail!("use a number or URL, or pr/issue/ci followed by one")
             }
             (Some(ItemWord::Review), _) => bail!("a review is not an issue, PR or CI run"),
+            (Some(ItemWord::Thread), _) => bail!("a thread is not an issue, PR or CI run"),
         })
     }
 }

@@ -27,9 +27,9 @@ use shoal_protocol::{
     model::{QueueEntry, Repository, RunningAgent, Space},
     paths::Paths,
     protocol::{AppMethod, Request},
-    questions::Question,
     saved::SavedSummary,
     space_names::{SpaceName, SpaceSelector},
+    threads::Thread,
 };
 use shoal_schedule::priority::Priority;
 
@@ -183,7 +183,7 @@ impl Approvals for StandIn {
         Box::pin(async { Ok(Vec::new()) })
     }
 
-    fn open_questions(&self) -> BoxFuture<'_, Result<Vec<Question>>> {
+    fn open_threads(&self) -> BoxFuture<'_, Result<Vec<Thread>>> {
         Box::pin(async { Ok(Vec::new()) })
     }
 

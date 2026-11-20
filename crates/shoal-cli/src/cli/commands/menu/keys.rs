@@ -10,7 +10,6 @@ use crate::cli::{
     args::{
         ConfirmationArgs, SpaceTargets,
         changes::ChangesCommand,
-        coordination::{CoordinationCommand, QuestionsArgs},
         create::{CreateCommand, StartArgs},
         items::{ItemArgs, ItemWord, ItemsCommand, ViewArgs},
         lifecycle::{LifecycleCommand, RmArgs, StopArgs},
@@ -165,18 +164,17 @@ fn chat_action(action: Action, chat: SpaceSelector) -> Result<Command> {
     })
 }
 
-/// Answer a question, decide an approval as it was listed, attach to an
+/// Read and answer a thread, decide an approval as it was listed, attach to an
 /// agent that needs input, show a failure, view ready work, open a demo,
 /// show the daemon's status for failing cleanup, or enter a workspace.
 async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
     Ok(Choice::Run(Box::new(match row {
-        Row::Question { number, .. } => Command::Coordination(CoordinationCommand::Questions {
-            command: None,
-            args: QuestionsArgs {
-                number: Some(number),
-                ..Default::default()
-            },
-        }),
+        Row::Thread { number, .. } => {
+            let thread = shoal_protocol::threads::ThreadNumber::Full(number);
+            return Ok(Choice::Done(
+                crate::cli::commands::threads::view(ctx, thread).await?,
+            ));
+        }
         Row::Approval {
             number, created_at, ..
         } => {

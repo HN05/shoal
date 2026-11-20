@@ -81,8 +81,16 @@ pub(crate) fn queue_shoal_message(
     message: &str,
 ) -> Result<Option<i64>> {
     let alert = NewAlert::shoal(kind, About::default(), message.to_owned());
-    let queued = store::insert(tx, id, &alert, Delivery::Wake, false, None)?;
+    let queued = queue_in(tx, id, &alert)?;
     Ok(queued.new.then_some(queued.id))
+}
+
+/// Queue `alert`, whose files another space's files already keep, for the
+/// agent of the space `id` in the caller's transaction, waking an idle
+/// agent, as [`Manager::queue_alert`] queues one. The caller wakes the
+/// waits for alerts after committing.
+pub(crate) fn queue_in(tx: &Transaction<'_>, id: &SpaceId, alert: &NewAlert) -> Result<Queued> {
+    store::insert(tx, id, alert, Delivery::Wake, false, None)
 }
 
 impl Manager {
@@ -216,8 +224,7 @@ impl Manager {
     }
 
     /// Mark exactly these alerts read once the agent of the space
-    /// `selector` names has received them, and delete the questions whose
-    /// answers they carried.
+    /// `selector` names has received them.
     pub async fn mark_agent_messages_delivered(
         &self,
         selector: &SpaceSelector,

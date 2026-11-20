@@ -125,7 +125,7 @@ enum Target {
     Members,
     ResourceNames,
     ApprovalRequests,
-    Questions,
+    Threads,
     Ports,
     ReservedPorts,
     SimNames,
@@ -439,15 +439,16 @@ impl Typed {
                 })
                 .collect());
         }
-        if matches!(target, Target::Questions) {
-            let questions = crate::client::questions::list(&paths, None)
+        if matches!(target, Target::Threads) {
+            let open = shoal_protocol::threads::ThreadState::Open;
+            let threads = crate::client::threads::list(&paths, None, open)
                 .await?
-                .questions;
-            return Ok(questions
+                .threads;
+            return Ok(threads
                 .iter()
-                .map(|q| {
-                    CompletionCandidate::new(q.number.to_string())
-                        .help(Some(super::commands::question_summary(q).into()))
+                .map(|thread| {
+                    CompletionCandidate::new(thread.number.to_string())
+                        .help(Some(super::commands::thread_summary(thread).into()))
                 })
                 .collect());
         }
@@ -549,7 +550,7 @@ impl Typed {
             | Target::ResumeSpaces
             | Target::RemovedSpaces
             | Target::ApprovalRequests
-            | Target::Questions => unreachable!(),
+            | Target::Threads => unreachable!(),
         }
         Ok(names.into_iter().map(CompletionCandidate::new).collect())
     }
@@ -619,7 +620,7 @@ const STOPPED_CHAT: &str = "stopped chat";
 fn target_of(id: &str, parent: &str, name: &str, need: Need) -> Option<Target> {
     match (id, parent, name) {
         ("id", _, "approvals") | ("id", "approvals", "withdraw") => Some(Target::ApprovalRequests),
-        ("id", _, "questions") | ("id", "questions", "withdraw") => Some(Target::Questions),
+        ("thread" | "of", "thread", _) => Some(Target::Threads),
         ("name", _, "run") => Some(Target::Commands),
         ("repository" | "repository_override" | "repo", _, _) => Some(Target::Repositories),
         ("branch", _, "start") => Some(Target::Branches),

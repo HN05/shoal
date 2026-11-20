@@ -412,7 +412,7 @@ fn inherited_label(inherited: Option<&InheritedRank>) -> String {
     let why = match inherited.dependency {
         Dependency::Blocked => "blocked on this",
         Dependency::Parent => "its parent",
-        Dependency::Question => "its child, asking it",
+        Dependency::Thread => "a space whose thread it holds",
         Dependency::Stacked => "stacked on this",
         Dependency::Lease => "waiting for its lease",
         Dependency::Serves => "which it serves",

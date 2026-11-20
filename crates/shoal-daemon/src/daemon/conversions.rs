@@ -1,5 +1,5 @@
 //! Converting a chat into a workspace and a workspace into a chat: the space
-//! keeps its ID, number, name, place in the tree, links, questions, files
+//! keeps its ID, number, name, place in the tree, links, threads, files
 //! and progress, and its agent carries on with its conversation in the new
 //! place once its current turn ends.
 use anyhow::Result;

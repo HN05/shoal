@@ -73,7 +73,7 @@ shoal_states::open_enum! {
         /// Stopping needs the user to confirm that an execution Shoal cannot
         /// prove ended did.
         UnprovenStop => "unproven_stop",
-        /// The workspace, repository, link, question or approval does not exist.
+        /// The workspace, repository, link, thread or approval does not exist.
         NotFound => "not_found",
         /// A workspace, an unfinished rename or a running chat has the name or
         /// branch.
@@ -317,8 +317,8 @@ response_bodies! {
     FailingSyncs(Vec<crate::model::CheckoutSync>),
     Alerts(Vec<Alert>),
     Cleared(crate::alerts::Cleared),
-    Question(crate::questions::Question),
-    Questions(crate::questions::Listing),
+    SpaceThread(Box<crate::threads::Thread>),
+    SpaceThreads(crate::threads::Listing),
     ReviewPieces(Vec<ReviewPiece>),
     ReviewId(crate::reviews::ReviewId),
     Alert(Alert),

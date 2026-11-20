@@ -4,8 +4,8 @@
 use super::{
     AgentMethod, AlertMethod, AppMethod, ApprovalMethod, BranchMethod, CiMethod, ContainerMethod,
     DaemonMethod, DemoMethod, ExecutionMethod, FileMethod, HoldMethod, HubMethod, ItemMethod,
-    LaunchMethod, Operation, PortMethod, QuestionMethod, QueueMethod, RecoveryMethod,
-    RemovalMethod, RepositoryMethod, ResourceMethod, SecretMethod, SimulatorMethod, TriggerMethod,
+    LaunchMethod, Operation, PortMethod, QueueMethod, RecoveryMethod, RemovalMethod,
+    RepositoryMethod, ResourceMethod, SecretMethod, SimulatorMethod, ThreadMethod, TriggerMethod,
     WorkspaceMethod,
 };
 
@@ -57,9 +57,7 @@ impl Operation {
                 )
                 | Self::Alert(AlertMethod::ListAlerts { .. })
                 | Self::Port(PortMethod::PortOverview { .. } | PortMethod::PortCatalog { .. })
-                | Self::Question(
-                    QuestionMethod::ListQuestions { .. } | QuestionMethod::ShowQuestion { .. }
-                )
+                | Self::Thread(ThreadMethod::ListThreads { .. } | ThreadMethod::ShowThread { .. })
                 | Self::Queue(QueueMethod::ListQueue | QueueMethod::QueuedPlan { .. })
                 | Self::Recovery(
                     RecoveryMethod::Checkpoints { .. }

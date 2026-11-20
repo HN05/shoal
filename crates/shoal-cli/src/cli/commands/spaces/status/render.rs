@@ -520,7 +520,7 @@ fn render_permissions(status: &SpaceStatus, palette: Palette) {
     }
 }
 
-/// What awaits the user: the review mark, questions, approval requests,
+/// What awaits the user: the review mark, threads, approval requests,
 /// attached files and unread notifications.
 fn render_attention(status: &SpaceStatus) {
     let review = status.space.review();
@@ -531,7 +531,7 @@ fn render_attention(status: &SpaceStatus) {
         outln!("{}", links::review_lines(review, status.space.kind()));
     }
     let attention = &status.attention;
-    outln!("Questions:     {} open", attention.open_questions);
+    outln!("Threads:       {} waiting", attention.waiting_threads);
     outln!("Approvals:     {} pending", attention.pending_approvals);
     outln!("Files:         {} attached", attention.attached_files);
     outln!("Notifications: {} unread", attention.unread_notifications);

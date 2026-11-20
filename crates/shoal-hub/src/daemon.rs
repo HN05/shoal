@@ -1,6 +1,6 @@
 //! What the hub needs of the rest of the daemon, which implements it: the
 //! spaces it reports, routes to and tells about, their permissions, the
-//! messages that reach their agents, the approvals and questions that pass
+//! messages that reach their agents, the approvals and threads that pass
 //! between machines, and the app store a member asks of the hub.
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -18,9 +18,9 @@ use shoal_protocol::{
     hub::{Member, routing::ChainedMode},
     model::{QueueEntry, Repository, RunningAgent, Space},
     protocol::{AppMethod, Request},
-    questions::Question,
     saved::SavedSummary,
     space_names::{SpaceName, SpaceSelector},
+    threads::Thread,
 };
 use shoal_schedule::priority::Priority;
 
@@ -147,7 +147,7 @@ pub trait Messages: Send + Sync {
     ) -> BoxFuture<'a, Result<()>>;
 }
 
-/// The approval requests and questions that pass between machines, and
+/// The approval requests and threads that pass between machines, and
 /// what a space's machine reports of its work.
 pub trait Approvals: Send + Sync {
     /// The approval requests of the space `selector` names, or every one.
@@ -156,8 +156,8 @@ pub trait Approvals: Send + Sync {
         selector: Option<&'a SpaceSelector>,
     ) -> BoxFuture<'a, Result<Vec<ApprovalRequest>>>;
 
-    /// The questions still open.
-    fn open_questions(&self) -> BoxFuture<'_, Result<Vec<Question>>>;
+    /// The open threads that have a post.
+    fn open_threads(&self) -> BoxFuture<'_, Result<Vec<Thread>>>;
 
     /// Pass `request`, whose decider's machine is offline, to the next
     /// decider above.
@@ -247,7 +247,7 @@ pub trait Records: Send + Sync {
     ) -> Result<Option<(SpaceName, SpaceNumber)>>;
 
     /// Give the space `id` the number `to` instead of `from`, and its
-    /// questions and approval requests with it.
+    /// threads and approval requests with it.
     fn renumber_space(
         &self,
         tx: &Transaction<'_>,

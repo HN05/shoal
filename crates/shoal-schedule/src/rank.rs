@@ -59,8 +59,8 @@ pub enum Dependency {
     Blocked,
     /// It is the parent workspace of the entry's space.
     Parent,
-    /// It is a child of the entry's space and asks it a question.
-    Question,
+    /// It opened a thread the entry's space holds, which waits for it.
+    Thread,
     /// It is a workspace stacked on the entry's.
     Stacked,
     /// It waits for a lease the entry's space holds.

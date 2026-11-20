@@ -19,7 +19,8 @@ const NEEDS_USER: [ListStatus; 5] = [
     ListStatus::Ready,
 ];
 
-/// The open questions, then the approval requests the user decides, then
+/// The threads that wait for the user, then the approval requests the user
+/// decides, then
 /// the statuses that need the user, of the other machines' spaces in `view`
 /// that `keeps` keeps.
 pub(super) fn items(view: Option<&HubView>, keeps: impl Fn(&Listed) -> bool) -> Vec<Item> {
@@ -28,7 +29,7 @@ pub(super) fn items(view: Option<&HubView>, keeps: impl Fn(&Listed) -> bool) -> 
         .filter(|remote| keeps(remote))
         .collect();
     // Each item names its need, so it carries its space without the
-    // space's other questions and requests.
+    // space's other threads and requests.
     let bare: Vec<Listed> = spaces
         .iter()
         .map(|remote| remote.without_requests())
@@ -38,8 +39,10 @@ pub(super) fn items(view: Option<&HubView>, keeps: impl Fn(&Listed) -> bool) -> 
         need,
     };
     let each = || spaces.iter().zip(&bare);
-    let questions = each().flat_map(|(remote, bare)| {
-        (remote.space.questions.iter()).map(|question| item(bare, Need::Question(question.clone())))
+    let threads = each().flat_map(|(remote, bare)| {
+        (remote.space.threads.iter())
+            .filter(|thread| thread.waits_for_user())
+            .map(|thread| item(bare, Need::Thread(Box::new(thread.clone()))))
     });
     let approvals = each().flat_map(|(remote, bare)| {
         (remote.space.approvals.iter())
@@ -49,26 +52,23 @@ pub(super) fn items(view: Option<&HubView>, keeps: impl Fn(&Listed) -> bool) -> 
     let statuses = each()
         .filter(|(remote, _)| NEEDS_USER.contains(&remote.space.status))
         .map(|(remote, bare)| item(bare, Need::Status(remote.space.status)));
-    questions.chain(approvals).chain(statuses).collect()
+    threads.chain(approvals).chain(statuses).collect()
 }
 
-/// What kind of item `need` is, with a question's or request's number.
+/// What kind of item `need` is, with a thread's or request's number.
 pub(super) fn kind(need: &Need) -> Cell {
     match need {
-        Need::Question(question) => (
-            format!("question {}", question.number),
-            Some(Style::Warning),
-        ),
+        Need::Thread(thread) => (format!("thread {}", thread.number), Some(Style::Warning)),
         Need::Approval(request) => (format!("approval {}", request.number), Some(Style::Warning)),
         Need::Status(status) => (status.label().into(), Some(status.style())),
     }
 }
 
-/// What the row of `remote`'s `need` says: the question, the access
+/// What the row of `remote`'s `need` says: the thread, the access
 /// requested and why, or its agent's status line.
 pub(super) fn text(remote: &Listed, need: &Need) -> String {
     match need {
-        Need::Question(question) => question.one_line(),
+        Need::Thread(thread) => thread.one_line(),
         Need::Approval(request) => super::super::approvals::about(request),
         Need::Status(_) => (remote.space.progress.as_ref())
             .and_then(|progress| progress.status.clone())

@@ -36,7 +36,7 @@ pub enum LifecycleCommand {
     ///
     /// Its branch merges into the branch of the workspace that takes it, by `-X` or [merge]
     /// method, and its uncommitted files carry over there as uncommitted changes. Its links,
-    /// attached files and open questions go with the work, and the spaces below it move up one
+    /// attached files and open threads go with the work, and the spaces below it move up one
     /// level. A space whose work is not done at its HEAD, or that a chat in its worktree has not
     /// finished, needs `--force`, which stops their agents first. Its removal keeps a
     /// checkpoint, from which `shoal restore` reopens its files.

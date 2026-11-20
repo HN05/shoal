@@ -17,8 +17,8 @@ states!(FileSource {
     Result => "result",
     /// Sent up with `shoal send`.
     Alert => "alert",
-    /// Sent to the user with `shoal questions ask`.
-    Question => "question",
+    /// Sent with a post in a thread.
+    Thread => "thread",
 });
 
 /// Who attached a file.
@@ -71,16 +71,16 @@ pub fn check_results(results: &[NewFile]) -> Result<()> {
     Ok(())
 }
 
-/// The most files one alert or question sends, which keeps one with the
+/// The most files one alert or post sends, which keeps one with the
 /// paths of Shoal's copies to a small part of a protocol frame, so listings
 /// of several still fit one response.
 pub const MAX_SENT: usize = 20;
 
-/// Refuse more files than one alert or question sends.
+/// Refuse more files than one alert or post sends.
 pub fn check_sent(files: &[NewFile]) -> Result<()> {
     ensure!(
         files.len() <= MAX_SENT,
-        "send at most {MAX_SENT} files with one alert or question"
+        "send at most {MAX_SENT} files with one alert or post"
     );
     Ok(())
 }
@@ -123,7 +123,7 @@ impl NewFile {
     }
 }
 
-/// A file an agent sent the user with an alert or a question: the record of
+/// A file an agent sent with an alert or a post: the record of
 /// Shoal's copy, which `shoal files` lists, and where the copy is.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SentFile {

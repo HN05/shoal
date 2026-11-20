@@ -1,7 +1,7 @@
 //! What the hub needs of the rest of the daemon, which [`Manager`] gives
 //! it: the spaces it reports, routes to and tells about, their
 //! permissions, the messages that reach their agents, the approvals and
-//! questions that pass between machines, and the app store a member asks
+//! threads that pass between machines, and the app store a member asks
 //! of the hub.
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -22,7 +22,6 @@ use shoal_protocol::{
     hub::{Member, routing::ChainedMode},
     model::{QueueEntry, Repository, RunningAgent, Space},
     protocol::{AppMethod, Request},
-    questions::Question,
     saved::SavedSummary,
     space_names::{SpaceName, SpaceSelector},
 };
@@ -183,8 +182,8 @@ impl Approvals for Manager {
         Box::pin(Manager::approval_requests(self, selector))
     }
 
-    fn open_questions(&self) -> BoxFuture<'_, Result<Vec<Question>>> {
-        Box::pin(Manager::open_questions(self))
+    fn open_threads(&self) -> BoxFuture<'_, Result<Vec<shoal_protocol::threads::Thread>>> {
+        Box::pin(Manager::open_threads(self))
     }
 
     fn pass_over_offline<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, Result<()>> {
@@ -291,12 +290,8 @@ impl Records for HubRecords {
         from: SpaceNumber,
         to: SpaceNumber,
     ) -> Result<()> {
-        for update in [
-            "UPDATE spaces SET number=?2 WHERE id=?1",
-            "UPDATE questions SET space_number=?2 WHERE space_id=?1",
-        ] {
-            tx.execute(update, params![id, to])?;
-        }
+        // Its threads follow its number.
+        tx.execute("UPDATE spaces SET number=?2 WHERE id=?1", params![id, to])?;
         approvals::renumber(tx, id, from, to)
     }
 }

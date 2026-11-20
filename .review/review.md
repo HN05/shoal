@@ -219,10 +219,10 @@ instead of the PR delivery guidance below.
   governs each, as below. For the spaces their scope reaches but their own, scoped callers hold them, queue agents,
   which the daemon starts detached unless `start --here` runs one in the caller's terminal, and which hold their own space's scope, never the caller's, cancel and prioritize their queue
   entries, send them alerts,
-  answer questions, stop their executions and agents, confirming a stop Shoal cannot prove, restart their agents, convert and rename them,
+  open threads with them and post in the threads they hold, stop their executions and agents, confirming a stop Shoal cannot prove, restart their agents, convert and rename them,
   queue restores of the agents, a workspace's or a chat's, whoever stopped them,
   which the daemon starts a chat's in the place it ran in, and discard their stopped agents; the nearest space above with an agent, of either kind, receives a child agent's alerts,
-  questions, completion and ready marks and its agent's exits and stops instead of the user,
+  threads, completion and ready marks and its agent's exits and stops instead of the user,
   except what a process causes in a child without an agent of its own. Own-workspace setup, rename, base workspace, PR registration,
   linking and watching CI runs of the own repository,
   merge acknowledgements, alerts up to their coordinator or the user, reading their own space's alerts, ready-for-review marks,
@@ -305,10 +305,11 @@ instead of the PR delivery guidance below.
   manual acknowledgements bind to exactly the recorded HEAD. Completion cleanup
   requires preserved commits without a PR registration, honors existing merge
   checks, and rechecks its recorded HEAD; a completion without cleanup blocks idle
-  and PR cleanup. Holds, open questions, pending PR proposals and push requests, and queued
+  and PR cleanup. Holds, threads a space opened that wait, pending PR proposals and push requests, and queued
   agent launches block every unattended removal of a space of either kind, rechecked after the removal reserves the space; a child needs a ready
-  parent, checked when the child is recorded; `done` closes the workspace's open
-  questions for good. Children keep their parent only from merged cleanup: every removal kind first
+  parent, checked when the child is recorded; `done` and removal close the
+  threads a space is numbered in or holds, telling their openers, and `done --undo` and a
+  restore reopen those closed for that cause unless something resolved them since. Children keep their parent only from merged cleanup: every removal kind first
   removes the subtree, deepest first, through the shared path whatever keeps it,
   and a child that fails retains the parent. A standing completion with cleanup
   removes the workspaces and chats below it that nothing of their own keeps,
@@ -372,8 +373,13 @@ instead of the PR delivery guidance below.
   the worktree exists; failure retains leases. Retrying acquisition reruns its
   hook. Permit/lifecycle changes cannot overlap resource hooks in one workspace;
   user scripts own external resource integrations.
-- Numbered questions and approvals inspect records without mutation in JSON or
+- Numbered threads and approvals inspect records without mutation in JSON or
   nonterminal output; interactive prompts preserve the shown request when deciding.
+  A bare thread number names one of the caller's own space, and an approval
+  number is always `S.N`. A space reads the threads it or a space its scope
+  reaches took part in, posts only from its side, resolves only what it opened
+  (the holder one Shoal opened), and forwards only what it holds; a post's
+  alert goes to the other side and to the spaces that linked the thread.
 - Resource approvals bind effective allocation settings and require an unscoped
   decision, or one by the nearest space above with an agent, of either kind, that
   the request was routed to: a workspace approves only with an approved grant
@@ -503,12 +509,12 @@ instead of the PR delivery guidance below.
   canonical URL persists before tracked setup or agent launch and cannot be replaced.
   Reopening follows the issue association before its derived local branch name.
   Withdrawing completion preserves associations and merge checks but never defers
-  cleanup; only holds, open questions and queued agent launches keep a workspace.
+  cleanup; only holds, threads it opened that wait and queued agent launches keep a workspace.
   Associated issues suppress idle cleanup, not merged cleanup.
   Tracked agent exits wake cleanup after the exit hook, retaining its usual checks.
   Merged cleanup ignores links, watches, completion and saved stopped work,
   dropping queued restores and keeping agents in removal's record for restore,
-  but never holds, open questions, running/unknown commands, leases, directory users, a Git
+  but never holds, waiting threads, running/unknown commands, leases, directory users, a Git
   operation under way or a space below it; its idle period is persisted so restarts cannot shorten
   or reset it, and removal rechecks its snapshot through the shared path.
   Every unattended removal except for disk space waits `[cleanup] grace_minutes`,

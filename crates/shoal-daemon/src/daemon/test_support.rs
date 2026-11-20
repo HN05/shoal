@@ -306,6 +306,45 @@ pub(crate) fn caller_in(
     }
 }
 
+/// Have the space `id` ask `text` in a question thread it opens with its
+/// coordinator, else the user, as its agent does with `shoal thread open`
+/// and `shoal send`.
+pub(crate) async fn ask(
+    manager: &Manager,
+    id: &shoal_ids::space_ids::SpaceId,
+    text: &str,
+) -> shoal_protocol::threads::Thread {
+    use shoal_protocol::threads::{NewPost, ThreadKind, ThreadNumber};
+    let caller = caller_in(&shoal_protocol::space_names::SpaceSelector::id(id));
+    let thread = (manager.open_thread(Some(&caller), text.into(), ThreadKind::Question, None))
+        .await
+        .unwrap();
+    let post = NewPost {
+        text: text.into(),
+        ..NewPost::default()
+    };
+    let number = ThreadNumber::Full(thread.number);
+    (manager.post_to_thread(Some(&caller), number, post, Vec::new()))
+        .await
+        .unwrap()
+}
+
+/// Have the user reply `text` in the thread `number`, as the holder.
+pub(crate) async fn answer(
+    manager: &Manager,
+    number: crate::daemon::item_numbers::ItemNumber,
+    text: &str,
+) -> shoal_protocol::threads::Thread {
+    use shoal_protocol::threads::{NewPost, ThreadNumber};
+    let post = NewPost {
+        text: text.into(),
+        ..NewPost::default()
+    };
+    (manager.post_to_thread(None, ThreadNumber::Full(number), post, Vec::new()))
+        .await
+        .unwrap()
+}
+
 pub fn names(spaces: &[shoal_protocol::alerts::Recipient]) -> Vec<&str> {
     spaces.iter().map(|space| space.name.as_str()).collect()
 }

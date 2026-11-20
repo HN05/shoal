@@ -41,7 +41,7 @@ impl Manager {
             method,
             links: Vec::new(),
             files: Vec::new(),
-            questions: Vec::new(),
+            threads: Vec::new(),
             children: Vec::new(),
             carried: Vec::new(),
         };
@@ -50,7 +50,7 @@ impl Manager {
             method,
             links: link_urls(&absorbed.links),
             files: absorbed.files.clone(),
-            questions: absorbed.questions.clone(),
+            threads: absorbed.threads.clone(),
             children: absorbed.children.clone(),
             carried: absorbed.carried.clone(),
         };
@@ -103,10 +103,8 @@ fn taken_over(absorbed: &Absorbed) -> String {
             absorbed.files.clone(),
         ),
         (
-            "Its open questions are this space's now",
-            (absorbed.questions.iter())
-                .map(ToString::to_string)
-                .collect(),
+            "Its open threads are this space's now",
+            (absorbed.threads.iter()).map(ToString::to_string).collect(),
         ),
         (
             "The spaces below it moved up below its parent",

@@ -144,7 +144,7 @@ pub struct Hub {
     /// Install the hub's exact version once the hub refuses this machine's,
     /// where Shoal was installed from a release download.
     pub auto_update: bool,
-    /// How long a question or approval request waits for a coordinator
+    /// How long a thread or approval request waits for a coordinator
     /// whose machine is offline before it passes to the next space above
     /// that is online, or to the user.
     pub escalate_after_minutes: u64,

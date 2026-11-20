@@ -6,14 +6,11 @@ use super::*;
 use crate::protocol::RepositoryMethod::ListRepositories;
 use crate::{
     daemon::{
-        Server,
-        questions::Ask,
-        serve,
+        Server, serve,
         test_support::{manager, repository},
-        workspace_files::Attacher,
     },
     protocol::{
-        self, AlertMethod, Body, DaemonMethod, ExecutionMethod, QuestionMethod, Request, Response,
+        self, AlertMethod, Body, DaemonMethod, ExecutionMethod, Request, Response, ThreadMethod,
     },
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -54,21 +51,8 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         .create_workspace(&repo.id, "asker".into(), None, None, None)
         .await
         .unwrap();
-    let ask = Ask {
-        question: "Which database?".into(),
-        recommendation: "SQLite".into(),
-        reason: None,
-        choices: Vec::new(),
-    };
-    let question = manager
-        .ask_question(
-            &SpaceSelector::id(&workspace.id),
-            ask.clone(),
-            Vec::new(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
+    let question =
+        crate::daemon::test_support::ask(&manager, &workspace.id, "Which database?").await;
     let socket = &manager.paths.socket.clone();
     let listener = UnixListener::bind(socket).unwrap();
     // One long-lived slot, which the first wait takes.
@@ -88,10 +72,10 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
             tokio::spawn(serve(stream, server, operation));
         }
     });
-    let await_answer = || QuestionMethod::AwaitAnswer {
+    let await_answer = || ThreadMethod::AwaitPost {
         space: SpaceSelector::id(&workspace.id),
         item: question.number.item,
-        ask: ask.clone(),
+        after: question.posts[0].id,
     };
     let mut waiting = send(socket, await_answer()).await;
     bounded(async {
@@ -158,17 +142,21 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
     }
     let status = reply(&mut send(socket, DaemonMethod::Status).await).await;
     assert!(matches!(status, Body::Status(_)), "{status:?}");
-    let answer = QuestionMethod::AnswerQuestion {
-        number: question.number,
-        answer: "SQLite".into(),
-        shown: None,
+    let answer = ThreadMethod::Post {
+        thread: shoal_protocol::threads::ThreadNumber::Full(question.number),
+        post: shoal_protocol::threads::NewPost {
+            text: "SQLite".into(),
+            ..Default::default()
+        },
+        attachments: Vec::new(),
+        from: None,
     };
     let answered = reply(&mut send(socket, answer).await).await;
-    assert!(matches!(answered, Body::Question(_)), "{answered:?}");
-    let Body::Question(delivered) = reply(&mut waiting).await else {
+    assert!(matches!(answered, Body::SpaceThread(_)), "{answered:?}");
+    let Body::SpaceThread(delivered) = reply(&mut waiting).await else {
         panic!("expected the wait to receive the answer");
     };
-    assert_eq!(delivered.status.answer(), Some("SQLite"));
+    assert_eq!(delivered.posts.last().unwrap().post.text, "SQLite");
     serving.abort();
 }
 

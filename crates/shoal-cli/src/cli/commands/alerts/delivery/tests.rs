@@ -95,18 +95,13 @@ fn only_prompts_the_user_submits_reply_in_the_chat() {
             &serde_json::json!({"hook_event_name": "UserPromptSubmit", "prompt": text}).to_string(),
         )
     };
-    assert!(prompt("Use SQLite."));
-    assert!(!prompt(crate::terminal::WAKE_PROMPT));
-    assert!(!prompt(crate::cli::terminal::CONTINUE_PROMPT));
+    assert_eq!(prompt("Use SQLite.").as_deref(), Some("Use SQLite."));
+    assert!(prompt(crate::terminal::WAKE_PROMPT).is_none());
+    assert!(prompt(crate::cli::terminal::CONTINUE_PROMPT).is_none());
     // A wake typed after a draft the user left in the input.
-    assert!(!prompt(&format!(
-        "half a thought{}\n",
-        crate::terminal::WAKE_PROMPT
-    )));
-    assert!(!user_prompt(
-        r#"{"hook_event_name":"PostToolUse","tool_name":"Bash"}"#
-    ));
-    assert!(!user_prompt(""));
+    assert!(prompt(&format!("half a thought{}\n", crate::terminal::WAKE_PROMPT)).is_none());
+    assert!(user_prompt(r#"{"hook_event_name":"PostToolUse","tool_name":"Bash"}"#).is_none());
+    assert!(user_prompt("").is_none());
 }
 
 /// The user's alert of `text` to a space.

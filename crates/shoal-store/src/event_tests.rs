@@ -140,6 +140,7 @@ fn remove_schema_objects(db: &Connection) -> Result<()> {
     // One transaction syncs the whole removal once instead of every statement.
     let tx = db.unchecked_transaction()?;
     let db: &Connection = &tx;
+    db.execute_batch(include_str!("threads_undo.sql"))?;
     db.execute_batch(include_str!("ci_job_reruns_undo.sql"))?;
     db.execute_batch(include_str!("alerts_undo.sql"))?;
     db.execute_batch(include_str!("lifecycle_generations_undo.sql"))?;
@@ -437,7 +438,7 @@ fn journal(db: &Connection) -> Result<Vec<shoal_protocol::events::EventDetails>>
 }
 
 #[test]
-fn renames_questions_and_children_reach_their_spaces_logs() -> Result<()> {
+fn renames_threads_and_children_reach_their_spaces_logs() -> Result<()> {
     use shoal_protocol::events::EventKind;
     let mut db = Connection::open_in_memory()?;
     migrate(&mut db)?;
@@ -459,10 +460,14 @@ fn renames_questions_and_children_reach_their_spaces_logs() -> Result<()> {
              VALUES ('chat','chat','repo','helper','chat');
          UPDATE spaces SET name='Fix login' WHERE id='child';
          UPDATE workspaces SET branch='fix/login' WHERE id='child';
-         INSERT INTO questions(space_number,number,space_id,created_at,question,
-                 recommendation,choices)
-             VALUES (2,1,'child',1,'Which database?','SQLite','[]');
-         UPDATE questions SET answer='SQLite',answered_at=2 WHERE number=1;
+         INSERT INTO threads(id,space_id,space_number,number,kind,name,created_at,opener)
+             VALUES (1,'child',2,1,'question','Which database?',1,'space');
+         INSERT INTO thread_posts(thread_id,created_at,side,sender,sender_name,text)
+             VALUES (1,1,'opener','space','fix','Postgres or SQLite?');
+         INSERT INTO thread_posts(thread_id,created_at,side,sender,text,forwards,forwarded_to)
+             VALUES (1,2,'holder','user','You decide',1,'parent');
+         UPDATE threads SET outcome=json_object('outcome','answered'),resolved_by='space',resolved_at=3
+             WHERE id=1;
          DELETE FROM spaces WHERE id='chat';
          DELETE FROM spaces WHERE id='child';
          COMMIT;",
@@ -485,9 +490,15 @@ fn renames_questions_and_children_reach_their_spaces_logs() -> Result<()> {
                         .map(ToString::to_string)
                         .unwrap_or_default()
                 )),
-                EventKind::QuestionAsked | EventKind::QuestionAnswered => event
-                    .question
-                    .map(|question| format!("{} {:?}", question.number, question.answer)),
+                EventKind::ThreadOpened
+                | EventKind::ThreadPosted
+                | EventKind::ThreadForwarded
+                | EventKind::ThreadResolved => event.thread.map(|thread| {
+                    format!(
+                        "{} {:?} {:?} {:?} {:?}",
+                        thread.number, thread.sender, thread.text, thread.to, thread.outcome
+                    )
+                }),
                 _ => None,
             };
             (space, event.kind, detail)
@@ -505,11 +516,25 @@ fn renames_questions_and_children_reach_their_spaces_logs() -> Result<()> {
                 EventKind::Renamed,
                 some("Fix login fix/login")
             ),
-            ("child".into(), EventKind::QuestionAsked, some("2.1 None")),
             (
                 "child".into(),
-                EventKind::QuestionAnswered,
-                some("2.1 Some(\"SQLite\")")
+                EventKind::ThreadOpened,
+                some("2.1 None None None None")
+            ),
+            (
+                "child".into(),
+                EventKind::ThreadPosted,
+                some("2.1 Some(\"fix\") Some(\"Postgres or SQLite?\") None None")
+            ),
+            (
+                "child".into(),
+                EventKind::ThreadForwarded,
+                some("2.1 Some(\"the user\") Some(\"You decide\") Some(\"plan\") None")
+            ),
+            (
+                "child".into(),
+                EventKind::ThreadResolved,
+                some("2.1 None None None Some(Answered)")
             ),
             ("parent".into(), EventKind::ChildRemoved, some("helper")),
             ("parent".into(), EventKind::ChildRemoved, some("Fix login")),

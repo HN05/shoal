@@ -2,15 +2,24 @@ use anyhow::{Result, ensure};
 
 use crate::cli::{
     args::items::{ItemsCommand, ViewArgs},
-    commands::{links, review, view},
+    commands::{links, review, threads, view},
     context::Context,
 };
 
 pub(in crate::cli::commands) async fn run(ctx: Context, command: ItemsCommand) -> Result<i32> {
     match command {
+        ItemsCommand::Link { items } if threads::selects_thread(&items) => {
+            threads::link(&ctx, items, true).await
+        }
+        ItemsCommand::Unlink { items } if threads::selects_thread(&items) => {
+            threads::link(&ctx, items, false).await
+        }
         ItemsCommand::Link { items } => links::link(&ctx, items).await,
         ItemsCommand::Unlink { items } => links::unlink(&ctx, items).await,
         ItemsCommand::View(args) if args.items.selects_review() => view_review(&ctx, args).await,
+        ItemsCommand::View(args) if args.items.selects_thread() => {
+            threads::view(&ctx, args.items.thread_number()?).await
+        }
         ItemsCommand::View(args) => view::show(&ctx, args).await,
         ItemsCommand::Watch {
             items,

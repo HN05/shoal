@@ -79,11 +79,11 @@ impl Need {
             ]
             | ["review", "run"]
             | ["pr", "open"]
-            | ["questions", "ask"]
+            | ["thread", "open"]
             | ["demo", "start"] => Self::Ready,
             [
                 "diff" | "conflicts" | "rm" | "absorb" | "leases" | "send" | "messages" | "files"
-                | "questions" | "approvals" | "view" | "catalog" | "history" | "config" | "pr"
+                | "thread" | "approvals" | "view" | "catalog" | "history" | "config" | "pr"
                 | "issue" | "alert" | "alerts" | "demo" | "queue" | "review" | "progress" | "sleep"
                 | "priority" | "log",
                 ..,

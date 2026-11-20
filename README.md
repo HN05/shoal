@@ -168,7 +168,7 @@ that starts and steers the work of every repository for you. Without `--mode`,
 ```sh
 shoal                         # Inbox when something needs you, else workspaces; Tab switches
 shoal repo                    # Interactive repository menu
-shoal inbox                   # Questions, approvals, agents needing input, failures, ready work, demos; --print to list
+shoal inbox                   # Threads, approvals, agents needing input, failures, ready work, demos; --print to list
 shoal list                    # Workspaces, chats and queued agents; --print to list
 shoal queue                   # Agents waiting for a heavy slot under the agent limits; start or cancel one
 shoal trigger ls              # Triggers of this repository and the global config: next firing, last run
@@ -218,8 +218,10 @@ shoal log 3              # The space's log: creation, agent, PRs, ready, done; -
 shoal log                # Outside a space: every space's entries, daemon starts and stops, reloads, cleanup
 shoal files 3                 # The files attached to the workspace
 shoal files 5                 # The files a chat's agent attached
-shoal questions               # Pick a question and answer it
-shoal questions 3 --answer 2  # Answer question 3 with its second choice
+shoal thread list             # Pick a thread, read it and reply
+shoal thread open "Which port?" --space 3  # Ask a workspace's agent; prints the thread's number
+shoal send 3.2 "Use 8080"     # Post in thread 3.2; --choose 2 picks its second choice
+shoal thread resolve 3.2 answered  # Settle a thread you opened; --undo reopens it
 shoal stop 3                  # Stop agents and commands here and below; they stay down until shoal resume
 shoal stop 3 5                # Stop several; the picker selects them with Tab or Ctrl-A
 shoal stop --all              # Stop every workspace and chat; a reboot saves agents too
@@ -298,7 +300,7 @@ shoal view pr 44 --check rust   # Show only this failed CI check's log
 shoal ci rerun --check rust   # Rerun a failed check on the linked PR; cancel stops running ones
 shoal ci rerun 2765 --failed  # Rerun one run's failed jobs
 shoal ci approve --pr 44      # Approve a fork PR's runs waiting for approval; agents cannot
-shoal ready                   # Mark that you need the user: work to review, or a question
+shoal ready                   # Mark that you need the user: work to review, or a decision
 shoal unlink pr 43 assigned   # Cancel one assigned PR
 shoal unlink pr assigned      # Cancel assigned PRs
 ```

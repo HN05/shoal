@@ -82,9 +82,9 @@ pub struct SpaceStatus {
 pub struct Attention {
     /// Unread notifications about the space.
     pub unread_notifications: u64,
-    /// Questions its agents asked that wait for an answer.
+    /// Threads it opened that wait for their holder.
     #[serde(default)]
-    pub open_questions: usize,
+    pub waiting_threads: usize,
     /// Approval requests that wait for a decision: those the space made or
     /// proposed, and those it decides.
     #[serde(default)]

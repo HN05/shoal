@@ -283,7 +283,7 @@ impl Fixture {
                 .env("SHOAL_TEST_PICK_ID", choice)
                 .args(args),
             answer,
-            matches!(args.first(), Some(&"approvals" | &"questions")),
+            matches!(args.first(), Some(&"approvals" | &"thread")),
         );
         (output, fs::read_to_string(&rows).unwrap_or_default())
     }
@@ -584,6 +584,19 @@ pub(crate) fn scoped_command(fixture: &Fixture, workspace: &str, args: &[&str]) 
         .args(args)
         .output()
         .unwrap()
+}
+
+/// Have a process of `workspace` open the thread `name` with its
+/// coordinator, else the user, and post `post` there, the text first; the
+/// thread as `shoal send` printed it.
+pub(crate) fn ask(fixture: &Fixture, workspace: &str, name: &str, post: &[&str]) -> Value {
+    let opened = scoped_command(fixture, workspace, &["thread", "open", name]);
+    assert!(opened.status.success(), "{}", printed(&opened));
+    let opened: Value = serde_json::from_slice(&opened.stdout).unwrap();
+    let number = opened["number"].as_str().unwrap().to_owned();
+    let posted = scoped_command(fixture, workspace, &[&["send", &number][..], post].concat());
+    assert!(posted.status.success(), "{}", printed(&posted));
+    serde_json::from_slice(&posted.stdout).unwrap()
 }
 
 pub(crate) fn set_repository_toml(fixture: &Fixture, text: &str) {

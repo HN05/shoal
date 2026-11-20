@@ -727,7 +727,7 @@ stayed [idle](#agent-state) as long as its mode's `idle_wake_minutes` (60 for
 [alert](#alerts): "You have been idle for 60 minutes. Continue
 your work if any remains; otherwise run `shoal sleep`." An agent that stays idle
 is woken again after each further period. A space whose work is
-[done](#assignment-completion) is never woken; open questions and pending
+[done](#assignment-completion) is never woken; waiting threads and pending
 approvals do not pause the timer.
 
 An agent that waits for something runs `shoal sleep`: from the end of its turn
@@ -765,11 +765,11 @@ shoal-protocol = { git = "https://git.henriknordvik.com/HN05/shoal", tag = "<rel
 ```
 
 `shoal_client` holds every request the CLI makes, each a function of the
-module for its subject, such as `questions::ask` or `leases::acquire_port`,
+module for its subject, such as `threads::post` or `leases::acquire_port`,
 returning its reply's types; `connection` sends them to the daemon a
 `Connector` names, and `subscriptions`
 follows repositories, spaces with their agents, linked issues, PRs and CI
-runs, the sessions each space's agents reported, open questions, pending
+runs, the sessions each space's agents reported, open threads with a post, pending
 approval requests and alerts as they change, subscribing again
 after a daemon restart. `operations` follows work
 the daemon runs for a request, such as the setup and post-setup hook of a
@@ -963,7 +963,7 @@ Each machine keeps its spaces and reports a summary of each to the hub as it
 changes, all of them again whenever its link opens: its number and name, its
 kind, its repository by origin, the space above it, which may run on another
 machine, its mode, what lists show it doing, whether it has an agent and
-the name of the one that runs there, its progress, and its open questions and
+the name of the one that runs there, its progress, and its open threads and
 approval requests. `shoal list`, `shoal inbox` and
 `shoal status <space>` on any machine of the hub show the other machines'
 spaces as their machines last reported them, and once they do, every row names
@@ -983,7 +983,7 @@ each machine, so creating a space never waits for the hub; a machine that
 runs out of spares while it cannot reach the hub numbers above its own
 highest. A space whose number another machine's space or spares held
 first, as after that or when a machine joins with spaces of its own, takes
-the smallest number free on the hub, its questions and approval requests
+the smallest number free on the hub, its threads and approval requests
 follow it as `S.N`, and its machine tells you and the space's agent the old
 and new numbers in a `space_renumbered` alert; the space that held the
 number first keeps it. A space `shoal move --ssh` moves between the hub's
@@ -1009,7 +1009,7 @@ commands go as yours; a space's processes' go with that space's scope and
 permissions, which its machine vouches for, so an agent acts on the spaces
 below its own on every machine and is refused the rest, and a device's go as
 yours. An action a space's permission sets to `propose` is refused from another
-machine, since its approval request would belong to that space's machine. This covers `status`, `log`, `questions`, `approvals`, `send`, `alert withdraw`,
+machine, since its approval request would belong to that space's machine. This covers `status`, `log`, `thread`, `approvals`, `send`, `alert withdraw`,
 `stop`, `resume`, `restart`, `rename`, `done`, `rm`, `priority`,
 `progress`, `sleep`, `conflicts`, `diff`, `attach`, holds, the issue, PR and
 CI commands that act on a space, and following an agent's session, whose bytes come back as its machine
@@ -1074,13 +1074,13 @@ machines; one that cannot go, or a removal that confirmed only the spaces it
 saw here, keeps it. A space on an offline machine cannot go: for a removal
 you or an agent asked for, the hub holds that space's removal until its
 machine connects, and the space above stays until it is removed again. What a space passes up the
-tree, its agent's alerts, questions, approval requests, completion, ready
+tree, its agent's alerts, threads, approval requests, completion, ready
 marks and exits, and the issue and PR activity of a space without an agent,
 reaches the nearest space above with an agent wherever it runs, and that
-space decides the space's approval requests, answers its questions and
+space decides the space's approval requests, answers the threads it holds and
 sends it an alert from its own machine. A machine whose link to the hub is down
-keeps what its spaces pass up and sends it once the link opens. A question or
-approval request that waited
+keeps what its spaces pass up and sends it once the link opens. A thread that
+waits for a holder, or an approval request for a coordinator, that waited
 [`[machine.hub] escalate_after_minutes`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
 for a coordinator whose machine is offline passes to the next space above
 with an agent on a connected machine, or to you.
@@ -1281,9 +1281,9 @@ A chat's status is `asleep` while its agent is [asleep](#sleep), else
 `shoal done` or `blocked` while blocked, then, in order of precedence,
 `needs input`, `blocked`, `finished`, `working`, `ready`, its agent's other
 [states](#agent-state), or `process running` before its agent reports one.
-<a id="inbox"></a>The inbox lists what needs you, each with its workspace: open questions
-and pending approval requests that no coordinating agent decides, each with its
-[number](#questions), including issue
+<a id="inbox"></a>The inbox lists what needs you, each with its workspace: threads whose
+turn is yours and pending approval requests that no coordinating agent decides, each with its
+[number](#threads), including issue
 [proposals](#approval-for-agent-issues-and-prs) whose workspace is gone, workspaces and
 running chats whose agent needs input, blocked workspaces and chats with the
 first of what blocks them, failed
@@ -1292,7 +1292,7 @@ what wakes it and the commands that wake it now, [ready marks](#ready-for-review
 spaces whose agent is not working, one row per marked item, running [demos](#demos), Git worktrees under a repository's
 Shoal directory that no workspace owns, automatic cleanup failing other than in
 a workspace, and repositories whose default branch has failed to
-[sync](#repositories) for 30 minutes. There Enter answers a question, approves or denies a request after
+[sync](#repositories) for 30 minutes. There Enter shows a thread and reads your reply, approves or denies a request after
 asking which, refusing one that replaced the request listed, attaches to the agent that needs input or is asleep, opens a blocked space's actions, shows the status of a failed
 workspace, and shows a ready PR or issue with `shoal view` (`shoal status` for a
 mark on the workspace itself), opens a demo, adopts an untracked worktree
@@ -1300,8 +1300,8 @@ with [`shoal adopt`](#adopting-a-worktree), shows Shoal's status, as `shoal stat
 outside a space does, for failing cleanup, and retries a failed sync with `shoal repo sync`; Ctrl-T, Ctrl-O, Ctrl-F and Ctrl-V act on the row's
 workspace and Ctrl-A adds one. `shoal inbox` with `-p`/`--print`, like `--repo <repository>`,
 `--json` or output that is not a terminal, prints it; `--json` gives each item's
-`kind` (`question`, `approval`, `needs_input`, `failed`, `asleep`, `ready`, `demo`,
-`untracked`, `cleanup` or `sync_failed`) with its `question`, `request`, `workspace`, `demo`,
+`kind` (`thread`, `approval`, `needs_input`, `failed`, `asleep`, `ready`, `demo`,
+`untracked`, `cleanup` or `sync_failed`) with its `thread`, `request`, `workspace`, `demo`,
 `worktree` (`repository_id` and `path`), `error` or `sync`, and a ready item's `mark`. A workspace
 process gets only its own items, never untracked worktrees, failing cleanup or failing syncs, printed, and none after clearing its scope
 token.
@@ -1362,8 +1362,8 @@ conflicts, each CI check's result, which is `waiting` while no runner has taken
 its job where the forge tells that apart, the CI runs on an open PR's head that
 [wait for approval](#ci-runs) in `waiting_runs`, and a review state from each
 reviewer's latest approval or change request. A failed lookup reports its error
-on that item without failing the command. Status counts the space's open
-[questions](#questions) in `open_questions`, the approval requests that wait for a
+on that item without failing the command. Status counts the [threads](#threads)
+the space opened that wait for their holder in `waiting_threads`, the approval requests that wait for a
 decision, the space's own and those it decides, in `pending_approvals`, its
 [attached files](#attached-files) in `attached_files` and its unread alerts in
 `unread_notifications`. When a step
@@ -1375,7 +1375,7 @@ last check of HEAD against the default target found
 [changed on both sides](#conflicts), from a watch or `shoal conflicts`, in
 `changed_on_both_sides` (`target`, `target_commit`, `head` and `files`). Status also
 names the first condition that keeps the space from automatic cleanup, holds,
-open questions, a pending PR proposal or push request, a running chat in it, queued agent launches, the CI runs of a merge it follows and assignment state before commands, leases and Git state, or the idle delay
+threads it opened that wait, a pending PR proposal or push request, a running chat in it, queued agent launches, the CI runs of a merge it follows and assignment state before commands, leases and Git state, or the idle delay
 when nothing does, in `cleanup_reason`. It lists the chats in the worktree, in
 `chats`. A chat's status leaves out what needs a worktree: its
 branch, changes, setup, executions, leases and sync; it names the
@@ -1567,8 +1567,8 @@ workspace's latest review state. `review resolve` takes one outcome with its dat
 | `deferred` | The claim holds and other work fixes it | `--issue` |
 | `duplicate` | Another finding makes the same point | `--of <finding>` |
 
-A finding that needs your decision stays unresolved while the agent asks with
-`shoal questions ask`, which keeps the gates below closed until you answer.
+A finding that needs your decision stays unresolved while the agent asks in a
+[thread](#threads), which keeps the gates below closed until you answer.
 
 With [`[review] require_for_pr`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#reviews), a `shoal pr open` that would open a new
 PR is checked before it pushes, and before a [proposal](#approval-for-agent-issues-and-prs); linking an
@@ -2342,7 +2342,7 @@ The chat runs while its agent runs, and stops when it exits or
 one the daemon stopped for a shutdown, a logout or a signal comes back on its
 own once the daemon runs again, where it ran or in a background place. Once a
 chat's agent stops, the approval requests the chat decided come to you. A
-stopped chat keeps its links, files, alerts, questions, workspaces and
+stopped chat keeps its links, files, alerts, threads, workspaces and
 `TMPDIR`, and `shoal list` shows it as `stopped`. A chat ends only when it is
 removed: by `shoal rm <chat>`, which first removes the spaces below it and
 stops its agent, or by [cleanup](#automatic-cleanup), as a workspace is.
@@ -2421,7 +2421,7 @@ shoal convert chat --space 7 --mode plan # The user's terminal converts any spac
 `shoal convert workspace [BRANCH] [--issue N] [--base REF] [--skip-setup] [--mode MODE] [--space S]`
 turns a chat into a workspace, and `shoal convert chat [--mode MODE] [--space S]`
 turns a workspace into a chat. The space stays the same: it keeps its ID,
-number, name, parent, children, links and watched PRs, questions, attached
+number, name, parent, children, links and watched PRs, threads, attached
 files, progress and `TMPDIR`, and the [journal](#space-events) records a
 `converted` event instead of a new space. Unread alerts go to the agent in
 the new place. Converting a space into the kind it already is, is refused.
@@ -2488,12 +2488,12 @@ like any other chat; removing it first removes every space below it, in every
 repository.
 
 `shoal start` run from it starts workspaces and chats below it in any
-registered repository, whose alerts, questions, completion, approval
+registered repository, whose alerts, threads, completion, approval
 requests and activity reach it first, as they reach any parent; spaces you
 start stay top-level and report to you, and several master sessions may run at
 once. A space without a repository is the only parent of a space in another
 repository. Its scope reaches every space on the machine: it lists and reads
-them, sends their agents alerts, answers their questions, holds them, stops and
+them, sends their agents alerts, opens threads with them and answers theirs, holds them, stops and
 queues their agents, resumes the ones it or the spaces below it stopped, and
 removes those you hold nothing in, under the
 [scoped workspace commands](#scoped-workspace-commands) rules. It decides only
@@ -2756,7 +2756,7 @@ percentages, or `upstream_limit` with the `limit`,
 `rate_limited` or `exhausted`, and the Unix-seconds `until`), a waiting entry's `rank` with its
 `priority` and `tier` and, for each it took from other work, `priority_from`
 or `tier_from` with that work's space number or launch name `from` and the
-`dependency` (`blocked`, `parent`, `question`, `stacked`, `lease` or
+`dependency` (`blocked`, `parent`, `thread`, `stacked`, `lease` or
 `serves`), and
 `base` once a launch starts on a blocker's branch, while `list --json` stays
 a list of workspaces. Each line starts with the entry's ID, which `queue
@@ -2815,8 +2815,8 @@ Work that other work waits on takes that work's priority and tier where they
 are higher, each on its own, through any chain of waits: what blocks a queued launch or a space's progress, which
 for an issue is the spaces working on it, for a PR the spaces that opened or
 were assigned it, and for a CI run its queued jobs and those of its workflow
-on the default branch; a workspace's children; the parent of a child with an
-open question; the workspace a stacked one builds on; and the spaces holding a
+on the default branch; a workspace's children; the holder of a thread another
+space opened that waits; the workspace a stacked one builds on; and the spaces holding a
 lease another space queues for. A chat passes its children only a priority
 of its own, set or from its issues' labels, or passed down to it, so they compete with every other worker. A CI job ranks with the
 highest of the spaces its run links, taking its priority even when lower, and
@@ -3390,7 +3390,7 @@ and its subtree's instead.
 A child keeps its parent only from [merged cleanup](#merged-workspaces): the
 parent's idle, completion and PR cleanup follow its own state. Every removal of a parent, `shoal rm`, cleanup or
 the cleanup of its deleted directory, first removes the spaces below it,
-deepest first, whatever their work, holds or questions: each workspace stops its
+deepest first, whatever their work, holds or threads: each workspace stops its
 agents, and unless it is disposable keeps a checkpoint of its HEAD and unsaved
 files, and its branch unless a remote or the default branch has its commits, so
 `shoal restore` brings it back, and each chat stops its agent. A child that cannot go retains the parent. `shoal rm` names the children
@@ -3402,8 +3402,8 @@ space with it.
 While a parent's `done` with cleanup stands at its HEAD, each workspace and
 chat below it has `cleanup_reason` `ancestor_completed` and goes after the
 grace period, whatever its own work, with the cause `parent_completion`, a
-chat with its agent stopped; a hold, open
-question, pending PR proposal or push request, or queued agent launch of its own keeps it, as do
+chat with its agent stopped; a hold, a waiting
+thread it opened, a pending PR proposal or push request, or queued agent launch of its own keeps it, as do
 spaces still below it until they go. `undone`, a commit after `done`, or a
 `done` without cleanup leaves the children. A child's own `done` follows the
 usual rules. `work` lists children indented below their parent;
@@ -3451,15 +3451,14 @@ the agent to finish.
 A space's coordinator is the agent of its nearest ancestor that has one, a
 workspace's or a [chat](#chats)'s. The coordinator receives, as alerts naming
 the space, what would otherwise notify the user. That covers the space agent's
-alerts from `shoal send`, its questions, its completion, and its
+alerts from `shoal send`, the threads it opens with them, its completion, and its
 ready-for-review marks, which never notify the user otherwise. It also covers
 the daemon's reports that the space's agent exited or was stopped. Without a
 coordinator, or when its unread alerts are full, the user receives them as
 before. A space without an agent of its own is its coordinator's own work, so
 what a process does there reaches the user. A
-coordinator answers a question asked below it with
-`shoal questions <S.N> --answer <answer>`, or passes it up: an agent with its own
-`shoal questions ask`, a chat by asking the user in the chat.
+coordinator answers a thread opened below it with `shoal send <S.N> "<answer>"`,
+or passes it up with `shoal thread forward <S.N>`.
 
 ### Copies
 
@@ -3516,7 +3515,7 @@ so `shoal diff` and `shoal conflicts` show the source's work and its own. A copy
 of current files keeps the source's worktree Git config, and so its
 [Git profile](#git-profiles), unless `--git-profile` names another; a copy of a
 checkpoint gets the profile a new workspace gets. It takes no links, leases,
-holds, questions, ready marks or checkpoints, and no agent session: `shoal start
+holds, threads, ready marks or checkpoints, and no agent session: `shoal start
 --copy --fork` starts its agent from a fork of the copied workspace's agent's
 session, which stays unchanged, and `--fork` does not combine with
 `--checkpoint`. Its parent follows the usual rules, not the source. A copy is an
@@ -3590,7 +3589,7 @@ repository's `shoal-setup` workspace, which Shoal opens on that branch when none
 exists, with the worker mode's rules. A setup agent studies how the project or
 machine is used, asks you about each setting it would write, reading the options
 from [`shoal config reference`](../crates/shoal-cli/src/cli/commands/configuration/reference.md), and writes only what you agree to.
-Before it saves the repository's config, it asks you with `shoal questions ask`
+Before it saves the repository's config, it asks you in a [thread](#threads)
 whether to commit it or save it locally, unless you have said already, and
 mentions a committed or local config the repository has.
 
@@ -4507,7 +4506,7 @@ commits only it has while the worktree is still on it. Removal deletes what Git
 could not, and when that or Git's own removal is cut short, or a checkout that
 failed leaves its directory, the next removal deletes the rest and keeps the
 branch. It applies only to a new
-branch, never to an existing one that removal would then delete. Holds, open questions and running commands keep it from
+branch, never to an existing one that removal would then delete. Holds, waiting threads and running commands keep it from
 unattended removal as they keep any workspace. `status` shows `Disposable: yes`
 and `--json` `disposable`.
 
@@ -4682,8 +4681,8 @@ or uncommitted files is then refused, naming `shoal convert workspace`, unless
 `--force` leaves its code behind.
 
 The space that takes the work also takes the absorbed space's links, with their
-relations and watches, its attached files and its open questions, under its own
-numbers. The absorbed space's pending PR proposals and push requests are
+relations and watches, its attached files and its open threads, those it
+opened under its own numbers and those it held held by it. The absorbed space's pending PR proposals and push requests are
 withdrawn; its issue proposals stay with the repository. The spaces directly
 below it move up one level, below its parent, and each logs its parent change;
 a workspace built on its branch then builds on the branch that took the merge,
@@ -4880,7 +4879,7 @@ import there is reported while the rest are copied.
 
 `shoal done [space]` records that the assignment is finished and notifies the
 user. It replaces the whole recorded completion when anything it records differs, and fails when it would change nothing: the same
-completion with no open question to close and no `hooks.post_done` to rerun.
+completion with no open thread to close and no `hooks.post_done` to rerun.
 [`[cleanup.done] enabled`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup) defaults to true; `--cleanup` requests cleanup when it is
 false. It first stops the space's [demos](#demos) unless `--keep-demos` leaves
 them running until cleanup. `--integrated` records that another branch has the
@@ -4904,8 +4903,8 @@ not verify or assert a merge. Completion without cleanup keeps the workspace fro
 idle and PR cleanup, not from [merged cleanup](#merged-workspaces). Removal, except
 a disposable workspace's, is reversible with [`shoal restore`](#checkpoints-and-restore); to review in a workspace,
 [hold](#holds) it. `done` closes the workspace's open
-[questions](#questions), so completion and PR cleanup wait only while a hold, a
-question asked afterwards or a [PR proposal](#approval-for-agent-issues-and-prs)
+[threads](#threads), so completion and PR cleanup wait only while a hold, a
+thread opened afterwards that waits or a [PR proposal](#approval-for-agent-issues-and-prs)
 remains.
 
 Only `done` completes an assignment; issue closure and merged PRs do not. Where
@@ -4976,7 +4975,7 @@ When cleanup removes the worktree, shell integration returns to the repository's
 Holds are caller-named claims of a space's use, a workspace's or a chat's,
 independent of assignment completion; `--space` names the space, and the
 current one by default. They persist across command exits and daemon restarts
-and block every unattended removal, as open questions, pending PR proposals and
+and block every unattended removal, as waiting threads, pending PR proposals and
 push requests, and queued agent launches do; releasing the last hold lets
 cleanup recheck its usual conditions. Idle cleanup restarts its timer after
 release. Removal releases holds, a parent's removal those below it too; a hold
@@ -5520,8 +5519,8 @@ commit, or an issue by its repository and title, the command is
 refused without asking the gate until the action changes. When the gate times
 out, crashes or returns no verdict, and then `fallback_agent` does too, the
 request is denied with the failure, which does not count toward the three; you
-are not notified, and the agent may tell you with `shoal send` or ask with
-`shoal questions ask`. When the gate cannot be set up at all, as without an
+are not notified, and the agent may tell you with `shoal send` or ask in a
+[thread](#threads). When the gate cannot be set up at all, as without an
 agent it can run, the request is denied too and you are notified, since only the
 config fixes that. An allowed request that cannot be carried out, as when its
 push cannot start, takes the normal route instead, with the error, and its agent
@@ -6285,7 +6284,7 @@ it when it expires, and Git state such as unpushed commits is checked when it
 starts and when it expires.
 Running/unknown commands, saved stopped work, a chat running in the worktree or
 saved there, directory users (including shells), dirty/unpushed work,
-simulator leases, permits, holds, open [questions](#questions), pending PR proposals and push requests, the CI runs of a merge the space follows, and failed checks block cleanup.
+simulator leases, permits, holds, open [threads](#threads), pending PR proposals and push requests, the CI runs of a merge the space follows, and failed checks block cleanup.
 So does the running agent of the nearest space above with one, in any turn
 state, while no agent of the space's own works there: none has ever started in
 the workspace, as in a child it created for its subagents, or the chat's agent
@@ -6303,8 +6302,8 @@ timers reset on restart.
 
 [Chats](#chats) follow the same rules, with their repository's settings and
 none of the conditions on a worktree: a chat goes once its agent stopped, with
-the spaces below it, unless a restore waits to run it, a hold, an open
-question, or for idle cleanup a session Shoal saved, as saved agents keep a
+the spaces below it, unless a restore waits to run it, a hold, a waiting
+thread it opened, or for idle cleanup a session Shoal saved, as saved agents keep a
 workspace, a completion, a linked issue or a watched PR keeps it. Merged cleanup removes one whose agent has been stopped for its
 `idle_minutes` and that has no space below it, and cleanup after `shoal done` removes a done chat, stopping its
 agent.
@@ -6331,7 +6330,7 @@ gives it, against the default branch's remote-tracking branch as the
 minutes; until a fetch succeeds, the repository's workspaces are kept. Uncommitted and untracked files go into the
 [removal's checkpoint](#checkpoints-and-restore); they keep the workspace when the checkpoint cannot keep
 them all or the branch has no commits of its own. A merge, rebase or other
-Git operation under way, open [questions](#questions), running/unknown commands,
+Git operation under way, open [threads](#threads), running/unknown commands,
 a running chat in it, directory users, leases, permits, holds,
 workspaces stacked on it and any space below it, here or on another machine,
 keep it too; PR cleanup moves stacked workspaces once the base's PR merges. Shoal records the
@@ -6387,7 +6386,7 @@ details, under a heading for each date:
 - its ready marks and their withdrawal, and `done` and its withdrawal;
 - the issues, PRs and CI runs it links and unlinks, the changes Shoal made to
   them, and their closing, merging and reopening on the forge;
-- the questions it asked and their answers, the approvals it requested and
+- the threads numbered in it, their posts, forwards and resolutions, the approvals it requested and
   their decisions, and the alerts it sent;
 - the spaces created and removed below it, its parent changes, and an absorb,
   into which space and by what merge, or what it took over;
@@ -6439,7 +6438,7 @@ repository), `name`, a workspace's `path` and `branch` (null for a detached
 HEAD), which a chat's events leave out, `kind`, `cause`, and `error`. A
 `converted` event names the kind the space became, with that kind's fields. Kinds are `created`, `ready`, `setup_failed`,
 `completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`,
-`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired`, `simulator_released`, `renamed`, `restored`, `agent_started`, `agent_stopped`, `agent_exited`, `question_asked`, `question_answered`, `approval_requested`, `approval_decided`, `gate_decided`, `alert_sent`, `progress_changed`, `child_created`, `child_removed` and `job_ended`. Review events add a `review` object with the mark's `kind` and
+`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired`, `simulator_released`, `renamed`, `restored`, `agent_started`, `agent_stopped`, `agent_exited`, `thread_opened`, `thread_posted`, `thread_forwarded`, `thread_resolved`, `approval_requested`, `approval_decided`, `gate_decided`, `alert_sent`, `progress_changed`, `child_created`, `child_removed` and `job_ended`. Review events add a `review` object with the mark's `kind` and
 `url`, both null for a workspace mark. Link events add a `link`
 object with the linked issue or PR's `kind` and canonical `url`. Agent state
 events add `agent_state` with the reported `state`, null when its execution ended.
@@ -6460,8 +6459,9 @@ under its own ID. `agent_started`, `agent_stopped` (Shoal or a stop request
 stopped it) and `agent_exited` (it exited on its own) events add `agent`
 with its `name`, `execution_id` and `exit_code`, null for a start or stop
 and when the wrapper reported none; a start that carries out a launch adds
-its `source`, `{"kind": "manual"}` for `shoal start`'s. `question_asked` and `question_answered`
-events add `question` with its `number`, `question` and `answer`.
+its `source`, `{"kind": "manual"}` for `shoal start`'s. Thread events add
+`thread` with its `number` and `name`, a post's `sender` and `text`, a forward's
+`to`, and a resolution's `outcome`, none when the thread was reopened.
 `approval_requested` and `approval_decided` events add `approval` with its
 `number`, `target`, `subject` and `status`. `gate_decided` events add `gate`
 with its `number`, `subject`, `verdict` (`allow`, `deny`, `escalate` or
@@ -6701,8 +6701,8 @@ add row, asks for a file to add. Workspace processes cannot open files.
 terminal, lists them: each one's name, title, size,
 how it came (`message` for a file sent down with `shoal send --attach`,
 `added` for one from `shoal files add`, `result` for one handed back with
-`shoal done --attach`, `alert` and `question` for one sent with
-`shoal send --attach` up and `shoal questions ask --attach`), when, and the path of Shoal's copy in the repository
+`shoal done --attach`, `alert` and `thread` for one sent with
+`shoal send --attach` up and with a post in a thread), when, and the path of Shoal's copy in the repository
 directory's `.attachments`, or for a chat without a repository that of the
 `root_dir` it started in.
 A space's files outlive it: they stay for `cleanup.restore.retention_days`
@@ -6734,71 +6734,109 @@ files of their own workspace and the spaces below it, and the files of a
 removed space that was below one of those, but not use `--all` or
 reach a chat's files.
 
-### Questions
+### Threads
 
 ```sh
-shoal questions ask "Which database?" --recommend SQLite [--reason R] [--choice C]... [--attach FILE]... [--wait]
-shoal questions ask --in-chat        # The turn's final message in the chat is the question
-shoal questions [--space S]          # Pick an open question on a terminal
-shoal questions withdraw <S.N>       # Close a question the agent no longer needs answered
-shoal questions <S.N>                # Inspect and choose an answer
-shoal questions <S.N> --answer <answer> # Answer text or a choice number
+shoal thread open "<name>" [--kind question] [--space S]  # An empty thread; prints its number
+shoal send <thread> "<text>" [--choice C]... [--recommend R --reason R] [--attach FILE]... [--wait]
+shoal send <thread> --body-file F    # The text from a file
+shoal send <thread> --choose N       # Pick a choice the other side offered
+shoal send <thread> --in-chat        # The turn's final message in the chat is the post
+shoal thread forward <thread> [--space S] [--note "<text>"]
+shoal thread resolve <thread> <outcome> [--choose N | --of <thread> | --reason R]
+shoal thread resolve <thread> --undo
+shoal thread list [--space S] [--state open|resolved|all] [-p]
+shoal view thread <thread>
+shoal link thread <S.N> related
+shoal unlink thread <S.N>
 ```
 
-`shoal questions ask` records a question for the user from the agents of a space, a
-workspace or chat: the
-decision, the recommended answer, an optional reason and optional choices, each
-one line with the same limits as `shoal send`, and files sent with `--attach`
-as `shoal send` sends them, such as screenshots of the choices. It raises a `question_asked`
-alert and prints the question number. Listings and the inbox name its
-files, and `--json` lists them as `files` as alerts do. `shoal questions <S.N> --answer <answer>` records the answer,
-resolving a choice number to that choice, and queues it for the space's agents
-as a message naming the question, so the [alerts](#alerts) hooks
-deliver it and wake an idle agent; it confirms with the question text, since a
-stale alert may name a reused number. An answer may span lines, up to 4096 bytes.
-Delivering the answer deletes the question. Questions and [approval
-requests](#resource-approvals) are numbered `S.N`: the [number of the
-space](#workspaces) that asked, then the smallest number no question or request
-of that space holds, so `3.2` names one item of either kind. A number without
-its space, or one that names a request, is refused with the form or command to
-use, and `--json` gives `space_number`, `item` and the `number` text. On a terminal,
-`shoal questions` opens a picker; selecting a question or naming its number shows
-its text, space, recommendation, reason and numbered choices, then an `Answer`
-prompt. Enter accepts the recommendation shown in brackets; type a choice number or
-answer text for another answer, or press Ctrl-C to leave. The answer is refused if another question
-took the number meanwhile. With JSON or redirected input or output, listing and inspection
-print records without prompting.
-`--in-chat` lets an agent with Shoal's hooks, Claude Code or Codex, that Shoal tracks
-in a workspace or runs as a chat's, ask in its conversation, where the question
-reads as the agent wrote it; other agents are refused. It
-marks the agent's current turn, which a daemon restart keeps, and when the turn ends the
-`Stop` hook passes the turn's final message, which becomes an open question of up to
-8 KiB without a recommendation. Answering it in your questions reaches the agent as
-a message like any answer; a prompt you submit in the agent's chat, rather than one
-Shoal submits to wake or continue it, closes the space's open questions asked there as
-withdrawn and takes back their unread alerts. A turn without a final message,
-as from a hook that does not pass one, asks you to read the question in the chat.
-`--wait` blocks without a time limit until the answer arrives and prints it, which
-also delivers its message; it survives daemon restarts, waiting up to two minutes
-for a daemon that went away to return and know the caller's scope again, or 10
-seconds for one that was not running. Asking an identical
-question again returns it while it is open or its answer is undelivered, so an
-interrupted `--wait` can be rerun; the same question with other details or files is refused.
-A listing returns the newest open questions that fit one response and counts the older
-ones it leaves out. Only unscoped callers answer, except that a workspace process
-answers, by number, the questions asked in the [workspaces below its own](#child-workspaces).
-Scoped callers ask, list and withdraw only their own workspace's questions, or a
-child's with `--space`. An open question keeps the workspace from idle
-cleanup; removing the workspace or chat deletes its questions, which a
-stopped chat keeps. `shoal done` closes the
-workspace's open questions, and `withdraw` closes one of them: answers to a closed
-question are refused, waits on it fail, and `shoal done --undo` does not reopen it.
-Withdrawing deletes the question's `question_asked` alert while it is
-unread, and otherwise raises `question_withdrawn`. A closed question keeps its
-number until its space goes. `--json` gives a question's `status`: `open`;
-`answered`, with `answer`, `answered_at` and, while the message carrying the
-answer waits, its `message_id`; `closed`, with `closed_at`; or `withdrawn`,
-with `withdrawn_at`.
+A thread is a conversation between its opener, the user, a space or Shoal, and
+its holder, the user or a space, whoever is asked now, with posts from both
+sides. `shoal thread open` records an empty thread with a free-text name of one
+line and a kind, `question` by default, and prints its number. From a space it
+goes to the space's [coordinator](#child-workspaces), else to you, or with
+`--space` to a space the caller's scope reaches; from your terminal it goes to
+the space `--space` names, else the current or a picked one. An empty thread
+notifies no one, keeps nothing from cleanup and stays out of the inbox.
+
+`shoal send` led by a thread's number posts there: the text, up to 8 KiB and
+spanning lines, or one read with `--body-file`, and optionally numbered
+choices, each one line, with the one it recommends and why, and files sent with
+`--attach` as alerts send them. `--choose N` picks the choice of that number
+the other side offered last, its text the post's unless given; text is never
+read as a choice number. A single argument without `--body-file` or a post's
+option is an [alert](#alerts)'s text. Each post reaches the other side as a
+`thread_posted` alert, an agent's with the choices and how to reply and yours in
+one line, and reaches the spaces that linked the thread; only the opener and
+the current holder receive posts. `--wait` blocks without a time limit until
+the other side posts or the thread is resolved, prints its posts, and marks
+their alerts read; it survives daemon restarts, waiting up to two minutes for a
+daemon that went away to return and know the caller's scope again, or 10
+seconds for one that was not running. A thread takes at most 50 posts.
+
+`--in-chat` lets an agent with Shoal's hooks, Claude Code or Codex, that Shoal
+tracks in a workspace or runs as a chat's, post in its conversation, where the
+post reads as the agent wrote it; other agents are refused. It marks the
+agent's current turn, which a daemon restart keeps, and when the turn ends the
+`Stop` hook passes the turn's final message, which becomes the post. A prompt
+you submit in the agent's chat, rather than one Shoal submits to wake or
+continue it, is your reply to each such post its thread waits on: Shoal
+records it as your post and takes back the post's unread alert, or tells the
+agent that held it of your reply. A turn without a final message, as from a
+hook that does not pass one, posts that the agent posted in its chat.
+
+`shoal thread forward` gives a thread the caller holds to a space its scope
+reaches, or without `--space` up to the holder's coordinator, or you; never to
+its opener. The forward and its `--note` are a post naming the new holder,
+which receives a `thread_forwarded` alert with what the thread says so far and
+its posts from then on.
+
+`shoal thread resolve` settles a thread with an outcome its kind takes:
+`answered`, for a question, with `--choose` naming the choice it settled on;
+`duplicate --of <thread>`; or `withdrawn`, with an optional `--reason`. Shoal
+sets `closed`, with its cause, `completion` or `removal`. The opener resolves
+its thread, the holder one Shoal opened, and you any thread; `--undo` reopens
+a resolved one. Withdrawing takes back the holder's unread alerts of the
+thread, and otherwise, once the other side heard of the thread, it receives a
+`thread_resolved` alert.
+
+Threads and [approval requests](#resource-approvals) are numbered `S.N`: the
+[number of the space](#workspaces) a thread belongs to, its opener's or the
+one you or Shoal opened it with, then the smallest number no thread or request
+of that space holds, so `3.2` names one item of either kind. Inside a space a
+bare number names a thread of that space; elsewhere, and for an approval
+request, a number without its space, or one that names the other kind, is
+refused with the form or command to use. `--json` gives `space_number`, `item`
+and the `number` text. A thread keeps its number, resolved or not, until its
+space goes.
+
+A space reads a thread it opened, holds or held, or that a space its scope
+reaches did, and you read every thread; reading delivers nothing. Any space
+that reads a thread may `link thread <S.N> related` it: its new posts then
+reach that space as alerts, until `unlink thread`. `shoal thread list` lists
+the threads a space opened, holds, held or linked, your own space's by
+default, or every thread from your terminal, in `--state` (`open` by default),
+the newest that fit one response, counting the older ones it leaves out. On a
+terminal it opens a picker, and choosing a thread, or `shoal view thread`,
+shows its posts; when its turn is yours, a `Reply` prompt follows, where Enter
+takes the latest post's recommendation shown in brackets and anything typed is
+the reply as written, and Ctrl-C leaves. With `-p`, JSON or redirected input or
+output, listing and viewing print records without prompting.
+
+A thread is waiting while it is open and its last post came from its opener's
+side. A waiting thread keeps the space that opened it from
+[unattended cleanup](#automatic-cleanup), and the [inbox](#inbox) lists the threads whose
+turn is yours. `shoal done` closes every open thread the space opened or holds,
+or that was opened with it, and its opener, unless that is the space, gets
+Shoal's post that the holder finished; removing the space does the same. `done
+--undo` and [restoring](#checkpoints-and-restore) the space reopen the threads closed
+for that cause that nothing resolved otherwise since, without Shoal's posts.
+`--json` gives a thread's `kind`, `name`, `opener`, `holder`, its `posts`, each
+with its `side`, `sender`, `space`, `text`, `choices`, `recommendation`,
+`reason`, `choice`, `files`, `in_chat` and the holder it `forwarded_to`, and
+its `resolution` with its `outcome`, its data, `by`, `by_space` and
+`resolved_at`.
 
 ### Leases
 
@@ -6972,7 +7010,7 @@ processes still block.
 
 ### Scoped workspace commands
 
-PR watches, merge acknowledgements, `send`, `alert list`, `ask`, `questions`,
+PR watches, merge acknowledgements, `send`, `alert list`, `thread`,
 `ready`, `stop --processes`, `stop --leftovers`, `internal agent-state` and
 `internal turn-failed` are own-workspace scope exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
@@ -7188,7 +7226,7 @@ these requests, merge requests from a scoped `shoal merge`,
 [proposed issues and PRs](#approval-for-agent-issues-and-prs), and retained workspace grants; `shoal approvals --space <space>` lists
 the requests a space made or proposed and those it decides. Scoped callers can inspect requests in their workspace tree. On a terminal,
 `shoal approvals` opens a picker; selecting a pending request or naming its
-[number](#questions), such as `shoal approvals 3.2`, shows its recorded settings and prompts for `y` to approve or `n` to deny,
+[number](#threads), such as `shoal approvals 3.2`, shows its recorded settings and prompts for `y` to approve or `n` to deny,
 case-insensitively; any other input cancels. In the list, Ctrl-A approves
 and Ctrl-D denies the highlighted request without leaving it: the outcome or
 error shows above the key hints and the list updates. JSON and nonterminal output

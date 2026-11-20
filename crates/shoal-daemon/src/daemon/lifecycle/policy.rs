@@ -21,7 +21,8 @@ use std::collections::BTreeMap;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Retention {
     Held,
-    Question,
+    /// A thread the space opened waits for its holder.
+    WaitingThread,
     /// A PR proposal waits for the user's approval.
     PrProposal,
     /// A push waits for the user's approval.
@@ -43,7 +44,7 @@ impl From<Retention> for CleanupReason {
     fn from(retention: Retention) -> Self {
         match retention {
             Retention::Held => Self::Held,
-            Retention::Question => Self::Question,
+            Retention::WaitingThread => Self::WaitingThread,
             Retention::PrProposal => Self::PrProposal,
             Retention::PushRequest => Self::PushRequest,
             Retention::QueuedAgent => Self::QueuedAgent,
@@ -59,7 +60,7 @@ impl std::fmt::Display for Retention {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             Self::Held => "the space is held",
-            Self::Question => "a question waits for the user",
+            Self::WaitingThread => "a thread it opened waits for its holder",
             Self::PrProposal => "a PR proposal waits for approval",
             Self::PushRequest => "a push waits for approval",
             Self::QueuedAgent => "its agent waits to start",
@@ -249,8 +250,8 @@ impl<'a> Removal<'a> {
         }
     }
 
-    /// Unattended removals retain a space that is held or has an open
-    /// question, whenever it was recorded; a user's request and its parent's
+    /// Unattended removals retain a space that is held or has a thread
+    /// that waits, whenever it was recorded; a user's request and its parent's
     /// removal override them.
     pub(super) fn unattended(self) -> bool {
         matches!(

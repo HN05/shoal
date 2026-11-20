@@ -15,6 +15,7 @@ use crate::daemon::scope::Caller;
 use crate::model::{OpenedWorkspace, RemovedSpace, RestoredChat, RestoredSpace, RestoredWorkspace};
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::threads::CloseCause;
 
 impl Manager {
     /// Open the removed space `selector` names again, as
@@ -34,7 +35,8 @@ impl Manager {
     /// Open the removed space `selector` names again in its place, below
     /// its recorded parent while that takes it, with its links, which
     /// `caller` relinks only where it may link, and what its record keeps of
-    /// its agents; the caller links its PRs, puts the session files in place
+    /// its agents, and the threads its removal closed; the caller links
+    /// its PRs, puts the session files in place
     /// and sets a workspace up. The record goes once the space is back.
     pub(crate) async fn reopen_space(
         &self,
@@ -46,6 +48,9 @@ impl Manager {
         let parent = (self.restored_parent(&removed, caller, &mut warnings)).await?;
         let place = (self.reopen_place(&removed, parent, &mut warnings)).await?;
         let id = &removed.space_id;
+        if let Err(error) = self.reopen_threads(id, CloseCause::Removal).await {
+            warnings.push(format!("its threads stay closed: {error:#}"));
+        }
         warnings.extend(self.relink_space(id, &removed.links, caller).await);
         let session_files = self.restore_agents(&removed, id, &mut warnings).await;
         if removed.saved_no_agent() {

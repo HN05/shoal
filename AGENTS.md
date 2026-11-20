@@ -253,10 +253,10 @@ for delivering a PR, under Committing near the end, decide when work is done.
   a background place the agent queue opens, unless `start --here` runs it in the caller's terminal, and the user's terminal creates top-level spaces. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery other than creating a child of their own space, removing a space below it and restoring a removed space below its recorded parent where their scope reaches that parent, and administering Shoal and the other actions a permission key governs only as that key allows. For the spaces their scope reaches but their own, scoped callers may hold them, queue
   agents and the restores of stopped agents, a workspace's or a chat's, whoever stopped them, which the daemon starts detached, a chat's in the place it ran in, unless `start --here` runs an agent in the caller's terminal under its own space's scope, restart and stop their agents, confirming a stop Shoal cannot prove, convert and rename them, cancel and prioritize their queue
-  entries, a CI job's through the spaces its run is for and a new space's launch through its parent, send them alerts, answer questions, stop their executions, and discard their stopped agents; they may also stop the untracked processes and leftovers of their own workspace and those below it; the agent
+  entries, a CI job's through the spaces its run is for and a new space's launch through its parent, send them alerts, open threads with them and post in the threads they hold, stop their executions, and discard their stopped agents; they may also stop the untracked processes and leftovers of their own workspace and those below it; the agent
   of the nearest ancestor with one receives a child's agent-caused and agent-lifecycle events
   instead of the user. Own-workspace setup, rename, base workspace, issue, PR and own-repository CI run links and watches, merge
-  acknowledgements, their demos, alerts up to their coordinator or the user, asking the user questions and waiting for answers, reading their own space's alerts, ready-for-review marks, checkpoints and restoring them, assignment completion and withdrawal, own-repository
+  acknowledgements, their demos, alerts up to their coordinator or the user, opening threads with their coordinator or the user, posting in and waiting on the threads they take part in, resolving the ones they opened, forwarding the ones they hold, reading and linking the threads a space their scope reaches took part in, reading their own space's alerts, ready-for-review marks, checkpoints and restoring them, assignment completion and withdrawal, own-repository
   sync, listing issues and PRs of any repository, opening and changing those of the own repository (for a chat without a repository, every registered one, under its permissions there), opening issues
   in other repositories as their `issue_other_repositories` permission allows, rerunning
   or cancelling their CI jobs, starting, rerunning or cancelling CI runs of the default branch and of the branches of the workspaces their scope reaches in the repository they act in, and reading any repository's issues, PRs and runs, and GET requests to any repository's forge API, or
@@ -282,6 +282,15 @@ for delivering a PR, under Committing near the end, decide when work is done.
   read the user's only as their `notifications` permission allows. Only the
   sender withdraws an alert, while it is unread, and an alert stays separate
   from completion.
+- A thread is one daemon record of a conversation between its opener (the
+  user, a space or Shoal) and its holder (the user or a space), numbered in
+  its opener's space, or the space the user or Shoal opened it with, among
+  that space's approval requests. Its posts reach the other side, and the
+  spaces that linked it, as alerts the transaction that records them
+  queues; the holder forwards it, and the opener resolves it with an
+  outcome its kind takes, or the holder one Shoal opened. `done` and
+  removal close the threads a space is numbered in or holds, and their
+  undo and a restore reopen those closed for that cause.
 - The daemon keeps each registered checkout's default branch in sync with its
   remote in the background, and `shoal repo sync` syncs it at once; commands that
   only read the default branch use what the checkout has. Syncing never pushes or
@@ -301,7 +310,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   10), resolved per workspace on each sweep. `[cleanup.merged]` (default false,
   240 idle minutes, persisted across restarts) removes merged, unused workspaces
   whatever their assignment state, archiving unsaved files left over on a branch
-  with commits; only holds, open questions, pending PR proposals and push
+  with commits; only holds, threads they opened that wait, pending PR proposals and push
   requests and a space below them keep them. Automatic removal is only for idle,
   clean worktrees with all commits pushed, merged into the default branch (including
   squash and rebase merges) or with their changes on the branch the workspace builds
@@ -316,7 +325,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   contain HEAD, or the default branch have its changes, before a completed workspace is removed. Cleanup stops tracked
   agents, verifies clean merged HEAD, and uses that path. Withdrawing completion
   preserves associations and watches but never defers cleanup; only holds,
-  open questions and queued agent launches keep a workspace. Children keep
+  threads it opened that wait and queued agent launches keep a workspace. Children keep
   their parent only from merged cleanup: every removal of a space first removes the spaces below it
   through the same path, whatever keeps them, and a child that cannot go retains
   the parent. A standing completion with cleanup also removes the workspaces and chats below
@@ -324,8 +333,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   Completion cleanup without a PR registration requires every commit kept that way,
   retaining dirty or newer work through the same
   removal path; completion without cleanup suppresses idle and PR cleanup.
-  Associated issues suppress idle cleanup, not merged cleanup; holds, open
-  questions and queued agent launches suppress every unattended removal. Holds
+  Associated issues suppress idle cleanup, not merged cleanup; holds, waiting
+  threads and queued agent launches suppress every unattended removal. Holds
   record who placed them; scoped callers release the user's holds, and remove
   the spaces the user holds, only as their `user_holds` permission allows, and
   holding their own space is an approval request.
@@ -733,5 +742,5 @@ frames in code blocks.
 
 For a change to try rather than watch, offer `python3 scripts/demo.py` as a
 demo (`shoal demo start shoal -- python3 scripts/demo.py`): it runs a
-development build against sample workspaces, questions and approvals in a
+development build against sample workspaces, threads and approvals in a
 temporary state directory.

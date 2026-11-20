@@ -149,7 +149,7 @@ impl Manager {
     }
 
     /// Refuse a named `parent` that is `workspace`, whose worktree the chat
-    /// runs in: the chat is not the workspace's child, whose questions would
+    /// runs in: the chat is not the workspace's child, whose threads would
     /// go to the workspace's agent while the user attends the chat.
     pub(crate) async fn ensure_parent_not_host(
         &self,

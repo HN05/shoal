@@ -1,5 +1,4 @@
 use crate::daemon::notifications::AlertKind;
-use shoal_protocol::files::Attacher;
 use shoal_protocol::status::{SpaceDetail, SpaceStatus};
 
 #[tokio::test]
@@ -70,7 +69,7 @@ async fn status_counts_only_the_spaces_own_unread_notifications() {
 }
 
 #[tokio::test]
-async fn status_counts_the_spaces_own_open_questions() {
+async fn status_counts_the_threads_the_space_opened_that_wait() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
     let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
     let repo = manager
@@ -90,25 +89,15 @@ async fn status_counts_the_spaces_own_open_questions() {
         )
         .await
         .unwrap();
-    let ask = shoal_protocol::questions::Ask {
-        question: "Use SQLite?".into(),
-        recommendation: "yes".into(),
-        reason: None,
-        choices: Vec::new(),
-    };
-    manager
-        .ask_question(
-            &manager.named("planning").await,
-            ask,
-            Vec::new(),
-            &Attacher::User,
-        )
+    let planning = manager
+        .space(&manager.named("planning").await)
         .await
         .unwrap();
+    crate::daemon::test_support::ask(&manager, &planning.id, "Which database?").await;
 
-    let questions = |status: SpaceStatus| status.attention.open_questions;
+    let waiting = |status: SpaceStatus| status.attention.waiting_threads;
     assert_eq!(
-        questions(
+        waiting(
             manager
                 .space_status(&manager.named("planning").await)
                 .await
@@ -117,7 +106,7 @@ async fn status_counts_the_spaces_own_open_questions() {
         1
     );
     assert_eq!(
-        questions(
+        waiting(
             manager
                 .space_status(&manager.named("own").await)
                 .await

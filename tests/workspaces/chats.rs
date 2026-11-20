@@ -68,28 +68,34 @@ pub(crate) fn save_running_chat(fixture: &Fixture, stop: impl FnOnce(&Fixture)) 
 }
 
 #[test]
-fn a_saved_chats_open_question_stays_in_the_inbox() {
+fn a_saved_chats_waiting_thread_stays_in_the_inbox() {
     let mut fixture = chat_session_fixture();
     save_running_chat(&fixture, |fixture| {
         let chat = fixture.ok(&["list", "--chats"])[0]["id"].clone();
-        let output = fixture
-            .command()
-            .current_dir(&fixture.repo)
-            .env("SHOAL_SPACE", chat.as_str().unwrap())
-            .args(["--json", "questions", "ask", "Which database?"])
-            .args(["--recommend", "SQLite"])
-            .output()
-            .unwrap();
-        assert!(output.status.success(), "{}", printed(&output));
+        let in_chat = |args: &[&str]| {
+            let output = fixture
+                .command()
+                .current_dir(&fixture.repo)
+                .env("SHOAL_SPACE", chat.as_str().unwrap())
+                .arg("--json")
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{}", printed(&output));
+            serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap()
+        };
+        let opened = in_chat(&["thread", "open", "Which database?"]);
+        let id = opened["number"].as_str().unwrap().to_owned();
+        in_chat(&["send", &id, "Postgres or SQLite?", "--recommend", "SQLite"]);
         let output = fixture.run(&["daemon", "stop"]);
         assert!(output.status.success(), "{}", printed(&output));
     });
     assert!(fixture.daemon.child.wait().unwrap().success());
     fixture.restart();
     let inbox = fixture.ok(&["inbox"]);
-    assert_eq!(inbox[0]["question"]["space"], "talk", "{inbox}");
-    let listed = fixture.ok(&["questions", "--space", &fixture.id("talk")]);
-    assert_eq!(listed["questions"][0]["space"], "talk", "{listed}");
+    assert_eq!(inbox[0]["thread"]["space"], "talk", "{inbox}");
+    let listed = fixture.ok(&["thread", "list", "--space", &fixture.id("talk")]);
+    assert_eq!(listed["threads"][0]["space"], "talk", "{listed}");
 }
 
 #[test]

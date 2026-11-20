@@ -1025,8 +1025,8 @@ fn inbox_reads_untracked_worktrees_failing_syncs_over_several_frames_and_failing
             };
             let reply = match method.as_str() {
                 "list_spaces" => json!({"type": "spaces", "data": []}),
-                "list_questions" => {
-                    json!({"type": "questions", "data": {"questions": [], "omitted": 0}})
+                "list_threads" => {
+                    json!({"type": "space_threads", "data": {"threads": [], "omitted": 0}})
                 }
                 "list_approvals" => json!({"type": "approval_requests", "data": []}),
                 "list_demos" => json!({"type": "demos", "data": []}),

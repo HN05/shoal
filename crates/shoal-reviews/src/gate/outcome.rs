@@ -295,7 +295,7 @@ fn denial_message(denied: &ApprovalRequest, recorded: &Recorded) -> String {
         GateVerdict::Failed => format!(
             "The gate could not decide approval {number} to {subject}, so it is denied: \
              {reason}. Run the command again to ask again; tell the user with shoal send \
-             or ask with shoal questions ask."
+             or ask in a thread with shoal thread open."
         ),
         _ => format!(
             "The gate denied approval {number} to {subject}: {reason}. Change what it names \

@@ -1,6 +1,6 @@
 //! The records subscriptions carry: repositories, spaces with their agents,
 //! the issues, PRs and CI runs they link with their forge state,
-//! the sessions each space's agents reported, open questions, pending
+//! the sessions each space's agents reported, open threads, pending
 //! approval requests, messages and notifications, each named by a
 //! [`RecordKey`].
 use shoal_ids::space_ids::SpaceId;
@@ -14,7 +14,7 @@ use crate::{
     approvals::ApprovalRequest,
     forge::{ci::check_state::CheckState, items::link::LinkKind, updates::SnapshotState},
     model::{Relation, Repository, Space},
-    questions::Question,
+    threads::Thread,
     transcripts::ReportedSession,
 };
 
@@ -29,8 +29,8 @@ states!(
         Links => "links",
         /// The sessions each workspace's and chat's agents reported.
         Sessions => "sessions",
-        /// Open questions.
-        Questions => "questions",
+        /// Open threads.
+        Threads => "threads",
         /// Pending approval requests.
         Approvals => "approvals",
         /// Unread alerts to the agents of the spaces, and the user's alerts,
@@ -47,7 +47,7 @@ states!(
         Space => "space",
         Link => "link",
         Sessions => "sessions",
-        Question => "question",
+        Thread => "thread",
         Approval => "approval",
         Alert => "alert",
         LogEntry => "log_entry",
@@ -70,7 +70,7 @@ pub enum Record {
     Space(Box<SpaceRecord>),
     Link(Box<Link>),
     Sessions(ReportedSessions),
-    Question(Question),
+    Thread(Box<Thread>),
     Approval(Box<ApprovalRequest>),
     Alert(Alert),
     /// An entry of the space's log the subscription follows.
@@ -84,7 +84,7 @@ impl Record {
             Self::Space(record) => (RecordKind::Space, record.space.id.to_string()),
             Self::Link(record) => (RecordKind::Link, record.id.clone()),
             Self::Sessions(record) => (RecordKind::Sessions, record.space_id.to_string()),
-            Self::Question(record) => (RecordKind::Question, record.number.to_string()),
+            Self::Thread(record) => (RecordKind::Thread, record.number.to_string()),
             Self::Approval(record) => (RecordKind::Approval, record.key.clone()),
             Self::Alert(record) => (RecordKind::Alert, record.id.to_string()),
             // Padded, so keys sort as the log does.

@@ -148,7 +148,7 @@ async fn a_key_on_the_sleep_screen_counts_for_the_agents_space() {
 async fn a_prompt_the_user_submits_counts_as_interaction() {
     let (root, manager) = manager().await;
     let (id, execution) = workspace(&manager, root.path()).await;
-    (manager.reply_in_chat(&SpaceSelector::id(&id), Some(&execution)))
+    (manager.reply_in_chat(&SpaceSelector::id(&id), Some(&execution), None))
         .await
         .unwrap();
     assert!(engagement(&manager, &id).await.interacted_at.is_some());

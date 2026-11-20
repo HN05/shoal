@@ -328,7 +328,7 @@ daemon restarts on it once idle. Off, or for a Homebrew installation, the
 machine stays off the hub, and you hear what to run, until its version
 matches.
 
-`escalate_after_minutes` is how long a question or approval request of a space
+`escalate_after_minutes` is how long a thread or approval request of a space
 on this machine waits for a coordinator whose machine is offline before it
 passes to the next space above with an agent on a connected machine, or to
 you.

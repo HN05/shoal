@@ -87,8 +87,10 @@ fn event_line(event: &EventDetails) -> (String, String) {
         EventKind::Linked | EventKind::Unlinked => link(event),
         EventKind::ItemChanged => item_changed(event),
         EventKind::ItemActivity => item_activity(event),
-        EventKind::QuestionAsked => fixed("Question asked", question(event, false)),
-        EventKind::QuestionAnswered => fixed("Question answered", question(event, true)),
+        EventKind::ThreadOpened => fixed("Thread opened", thread(event)),
+        EventKind::ThreadPosted => fixed("Thread post", thread(event)),
+        EventKind::ThreadForwarded => fixed("Thread forwarded", thread(event)),
+        EventKind::ThreadResolved => fixed("Thread resolved", thread(event)),
         EventKind::ApprovalRequested => fixed("Approval requested", approval(event, false)),
         EventKind::ApprovalDecided => fixed("Approval decided", approval(event, true)),
         EventKind::GateDecided => fixed("Gate decided", gate(event)),
@@ -211,7 +213,7 @@ fn took_over(event: &EventDetails) -> String {
         (absorb.carried.len(), "uncommitted files"),
         (absorb.links.len(), "links"),
         (absorb.files.len(), "files"),
-        (absorb.questions.len(), "questions"),
+        (absorb.threads.len(), "threads"),
         (absorb.children.len(), "children"),
     ];
     for (count, what) in counted {
@@ -365,15 +367,23 @@ fn reference(url: &str) -> String {
     }
 }
 
-fn question(event: &EventDetails, answered: bool) -> String {
-    let Some(question) = &event.question else {
+/// The thread's number and name, then who posted what, whom it went to,
+/// or how it was resolved.
+fn thread(event: &EventDetails) -> String {
+    let Some(thread) = &event.thread else {
         return String::new();
     };
-    let text = match (answered, &question.answer) {
-        (true, Some(answer)) => answer,
-        _ => &question.question,
-    };
-    format!("{} {text}", question.number)
+    let mut line = format!("{} {}", thread.number, thread.name.replace('\n', " "));
+    match (&thread.sender, &thread.to, &thread.text, thread.outcome) {
+        (Some(sender), Some(to), _, _) => line.push_str(&format!(": {sender} to {to}")),
+        (Some(sender), None, Some(text), _) => {
+            line.push_str(&format!(": {sender}: {}", text.replace('\n', " ")))
+        }
+        (_, _, _, Some(outcome)) => line.push_str(&format!(": {outcome}")),
+        _ if event.kind == EventKind::ThreadResolved => line.push_str(": reopened"),
+        _ => {}
+    }
+    line
 }
 
 fn approval(event: &EventDetails, decided: bool) -> String {

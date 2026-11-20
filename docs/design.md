@@ -95,7 +95,7 @@ elsewhere never changes what an old migration does. Over the store,
 `shoal-daemon-base` holds what every part of the daemon uses: its log, who
 sends a request, the approval requests it makes, the global config it runs
 under, the gates that order conflicting changes, the journal of events, the
-alert record and the user's alerts, the numbers of questions and approval requests,
+alert record and the user's alerts, the numbers of threads and approval requests,
 and the checks of file access that can stall. What these read of the rest of
 the daemon, such as a space's coordinator or a repository's retention, is an
 interface the base declares and the daemon implements, and the daemon's
@@ -189,7 +189,7 @@ new space from them without waiting for the hub, and once none is left, as
 while the hub cannot be reached, above its own highest. A space whose
 number another machine's space or spares held first, as after that or after
 joining with spaces of its own, takes the smallest number none holds, with
-its questions and approval requests, and its machine tells the user and the
+its threads and approval requests, and its machine tells the user and the
 space's agent; the space that held the number first keeps it. A machine
 reports the numbers it holds without a space, those of a removed space's
 issue proposals, with its spaces, and the hub gives them no other space. An import's
@@ -294,7 +294,7 @@ events and the removal someone asked for of a space below one they remove,
 which keeps that space until it goes, in order until it connects, for seven days, after which the
 sender hears it expired; anything else fails at once, naming the machine
 and when the hub last saw it, and a machine whose link is down keeps what
-its spaces pass up until it opens. A question or approval request that
+its spaces pass up until it opens. A thread or approval request that
 waits `[machine.hub] escalate_after_minutes` for a coordinator whose
 machine is offline passes to the next space above with an agent on a
 connected machine, or to the user. Each machine is `always_on` or
@@ -1271,7 +1271,7 @@ and an untouched copy is cleaned up like an empty workspace. That decides only
 whether cleanup may remove it; its branch goes only once a remote or the default
 branch has its commits, as any branch does. It takes its
 source's diff base and worktree Git config, and nothing that belongs to the
-source's work: links, leases, holds, questions, ready marks, checkpoints or the
+source's work: links, leases, holds, threads, ready marks, checkpoints or the
 session. Agents copy only within their scope, and a removed workspace's
 checkpoint, like reopening it, stays the user's.
 
@@ -1294,7 +1294,7 @@ A space changes kind with `shoal convert`, since only its agent learns what the
 work is, and a merged workspace's conversation can still be worth keeping. The
 space stays the same: one transaction changes the kind its `spaces` row
 records, with its ID, number and name, and swaps the row of its kind's table,
-so what belongs to the space by ID, its links, tree, questions, files and
+so what belongs to the space by ID, its links, tree, threads, files and
 progress, stays. A chat
 becomes a workspace through the creation path every workspace on a branch
 takes, with the chat's record turned into the workspace's at insertion and
@@ -1394,7 +1394,7 @@ branch merged, and never outlives it:
 the parent is cleaned up by its own rules, and every removal of it, manual or
 unattended, first removes the spaces below it, deepest first, through the
 shared removal path, with a checkpoint and kept branch for each workspace but a
-disposable one, whatever their work, holds or questions; one that cannot go
+disposable one, whatever their work, holds or threads; one that cannot go
 retains the parent, and the journal and
 the removal's output name those taken. While a parent's completion with cleanup
 stands at its HEAD, its children of either kind go too after the grace period,
@@ -1419,12 +1419,12 @@ any start does, and its waiting preparation records the caller's space, in
 whose scope it runs once the work is done. A space's
 coordinator is the agent of the nearest space above it that has one, whatever
 its kind, which one operation queues a message for: the events about
-it that notify the user, the child agent's messages, questions and completion
+it that notify the user, the child agent's messages, threads and completion
 and its agent's exits and stops, plus its ready marks, become that agent's
 messages instead, falling back to the user without a coordinator or when its
 messages are full. Events a process causes in a child without an agent of its
 own are the coordinator's own work and reach the user. The coordinator answers
-questions asked below it or passes them up with its own question, and may
+the threads opened below it or forwards them up, and may
 stop, restart, resume and convert the spaces below it and forget their stopped
 work, since only it knows whether a child agent still has work. It resumes a
 stopped agent whoever stopped it, the user, Shoal or a crash: agents through
@@ -1870,12 +1870,12 @@ machine and repositories to another root under `move`, forge inspection and API 
 shell integration under `shell`. `run` lists configured commands, runs one by
 name, or executes an arbitrary command after `--`; `--workspace` selects the
 workspace in either form. `done --undo` withdraws completion and `ready --undo`
-withdraws review marks. Creating a question uses `questions ask`; alerts use top-level `send`,
-which a later thread number can lead, and `alert list`, `withdraw` and `clear`. Alert rows, in `alert list` and the picker, show
+withdraws review marks. Threads use `thread open`, `forward`, `resolve` and `list`, and
+posts in them top-level `send` led by the thread's number; alerts use `send` alone, and `alert list`, `withdraw` and `clear`. Alert rows, in `alert list` and the picker, show
 the time for today's and otherwise how long ago they came in whole days, weeks,
 months or years, such as `1 day ago` or `2 weeks ago`.
 Approval snapshots carry their stable request key through the CLI so reused
-numbers cannot decide a replacement. Implicit question and approval decisions
+numbers cannot decide a replacement. Implicit thread replies and approval decisions
 require stdin, stdout and stderr on a terminal, so redirected details cannot
 hide the decision being made.
 
@@ -2353,8 +2353,8 @@ worked) and `new`; an hour's wait raises an entry a tier, so nothing starves
 within its priority, but never a priority: lower-priority work waits while
 higher-priority work keeps coming, as the user chose. Priority and tier each flow along one dependency graph from
 waiting work to what it waits on:
-blockers, a workspace parent to its children, a child with an open question to
-its parent, a stacked workspace to its base, and a space queued for a lease to
+blockers, a workspace parent to its children, a space with a waiting thread to
+the space that holds it, a stacked workspace to its base, and a space queued for a lease to
 its holders. A chat parent passes on only a priority of its own, set or from its issues'
 labels, or passed down to it, so an
 orchestrator's children compete with every other worker. CI jobs and reviews have no rank of their
@@ -2484,7 +2484,7 @@ navigation without the shell wrapper reports how to load it without changing
 redirected or JSON output.
 
 Bare `shoal` is the one place to see what needs the user and the work going
-on: a plain fzf picker whose inbox view lists open questions, pending approvals,
+on: a plain fzf picker whose inbox view lists threads waiting for the user, pending approvals,
 agents that need input, failed workspaces and ready marks, and whose
 spaces view lists workspaces, followed by a view of recent alerts. It opens
 on the inbox when that has rows, searching for the current workspace's items
@@ -2746,7 +2746,7 @@ A space's log (`shoal log`, `client::log::log`) is a filtered view of
 this journal, not a second store, and so is Shoal's, every space's events
 with Shoal's own, which belong to no space and stay for the global
 retention: renames, restores, agent starts, stops and
-exits, questions, approvals, alerts, and the spaces created and removed below
+exits, threads, approvals, alerts, and the spaces created and removed below
 a space (in that parent's log) are journal events for it, each recorded where
 the change is made. A scoped caller reads the logs of its own space and the
 spaces below it; a removed space's place in the tree is the one its parent's
@@ -2914,63 +2914,83 @@ among the chat's. Scoped
 processes may read their own space's alerts and send alerts down only to
 the agents of the spaces below their own, which they coordinate.
 
-`shoal questions` opens a question picker on a terminal. A numbered question
-shows its text, workspace, recommendation, reason and numbered choices, then an
-`Answer` prompt reads a choice number or written answer. Enter accepts the
-recommendation shown in brackets literally, even when it is numeric; Ctrl-C or end
-of input leaves the question open. Withdrawal belongs to the requester, outside the
-answer prompt. The inbox uses these same
-actions without changing its listing.
+Threads are how a space or the user asks for something whose answer is text,
+separate from approvals, whose answer is yes or no. A thread is a
+conversation between its opener, the user, a space or Shoal, and its holder,
+the user or a space, whoever is asked now, with posts from both sides, so a
+question can be discussed before it is settled, asked downward by the user or
+a parent of a child, and passed on to another agent. A thread has a typed
+kind, which decides the outcomes it takes: a `question` ends `answered`,
+optionally on a choice, and every kind `duplicate` of another thread,
+`withdrawn` or `closed`, which only Shoal sets. Unknown kinds and outcomes
+are refused rather than kept as text.
 
-Questions are how an agent asks the user for a decision whose answer is text,
-separate from approvals, whose answer is yes or no. A question states the
-decision and the agent's recommendation, so most answers are a word or a choice
-number. Only the user answers, or the agent coordinating the asking workspace
-from an ancestor, and the answer travels as an alert naming
-the question, so the same hooks deliver it and wake an idle agent; an agent that
-cannot continue without it waits on the question instead. The answer and its
-message are recorded together, and a wait that prints the answer delivers the
-message, so the agent sees it once. Re-asking an identical question returns it
-until its answer is delivered, which makes an interrupted wait safe to rerun.
-Delivery deletes the question: the agent's transcript keeps the exchange, and
-nothing in Shoal reads it again. An open question means an agent is waiting on the
-user or its coordinator, so it keeps the workspace from idle cleanup; questions belong to the
-space, a workspace or chat, whose agent asked them and go with it, while a stopped chat
-keeps them. Marking the assignment done closes its open questions,
-since the finished work waits on no answer and a question it made pointless would
-otherwise keep the workspace until the user answers. An agent that no longer needs
-an answer withdraws its question, which closes it the same way and takes back its
-alert while the user has not seen it, so the user is not asked to decide
-what no longer matters. Withdrawing completion does not reopen them, and a closed
-question keeps its number until its space goes, so a late answer is refused
-instead of reaching a later question.
+A space opens a thread with its coordinator, else the user, or with a space
+below it; the user opens one with a space. An empty thread notifies no one
+and keeps nothing, so `thread open` only reserves its number. Each post
+reaches the other side as an alert, through the alert delivery hooks already
+use, waking an idle agent; the alert is queued in the transaction that
+records the post and names the thread as its subject. A post may offer
+numbered choices with a recommendation and a reason, or pick a choice the
+other side offered by number, never by parsing text, so `--choose 2` and a
+post that says "2" cannot be confused. `--wait` waits for the other side's
+next post and prints it, marking its alert read, for agents without Shoal's
+hooks; a wait an upgrade interrupts resumes after the same post.
 
-An agent asks in its chat with `questions ask --in-chat`, and the question
-reaches the user's questions too. A user talking with the agent reads the question
-as the agent wrote it, while a `questions ask` command line in the chat is hard to
-read; a user who is away gets it where they look. Shoal cannot tell from a host
-whether the user is there: zmx counts its own short-lived probes as clients, and
-an attach from a connection left open counts while the user is away, so routing
-questions by attachment left them unanswered for hours. Agents are therefore not
-told about attachment, which only orders overload stops. The question is the
-turn's final message, which the `Stop` hook passes, so the agent writes it once.
-A prompt the user submits in the chat closes it, since the user answered there,
-while one Shoal submits does not.
+The holder forwards a thread down, to a space its scope reaches, or up, to its
+coordinator or the user, and the new holder reads what came before and
+receives the posts from then on. A forward is a post that names the new
+holder, with its note as text, so the thread's history shows who held it, and
+it does not count as an answer. The opener resolves its thread, or the holder
+of one Shoal opened, and the user may resolve any; withdrawing takes back the
+holder's unread alerts of it, so nobody is asked to decide what no longer
+matters, and the other side hears of any other resolution once it has heard
+of the thread. `--undo` reopens a resolved thread. A space reads a thread it
+took part in, as the space it is numbered in, a holder or an earlier holder,
+or one a space its scope reaches took part in, and may link it to receive its
+new posts; reading delivers nothing.
 
-Questions and approval requests are named `S.N`: the number of the space that
-asked, then the smallest number no question or request of that space holds.
-Both kinds share the space's sequence, so a number names one item and says
-which space it belongs to, and counting per space keeps the numbers short
-because the user types them. A bare number or one of the other kind is refused
-with the form or command to use rather than guessed. Their records keep a
-separate internal key that is never shown. A wait follows its question's space,
-number and text, so a later question reusing the number cannot answer it, and a
+A thread waits while it is open and its last post came from the opener's
+side. A waiting thread keeps the space that opened it from unattended
+cleanup, as an agent waits on it, and ranks that space's queued work after
+the holder's. The inbox lists the threads whose turn is the user's. `done`
+closes every open thread the space is numbered in or holds, since finished
+work waits on no answer, and tells an opener other than the space that the
+holder finished; removing a space does the same. `done --undo` and a restore
+reopen the threads closed for that cause, without Shoal's closing posts,
+unless something resolved them since.
+
+An agent posts in its chat with `send <thread> --in-chat`, and its turn's
+final message, which the `Stop` hook passes, becomes the post. A user talking
+with the agent reads it as the agent wrote it, while a long command line in
+the chat is hard to read; a user who is away gets it where they look. Shoal
+cannot tell from a host whether the user is there: zmx counts its own
+short-lived probes as clients, and an attach from a connection left open
+counts while the user is away, so routing posts by attachment left them
+unanswered for hours. Agents are therefore not told about attachment, which
+only orders overload stops. A prompt the user submits in the chat becomes
+the user's reply to the post, carrying its text, since the user answered
+there, while one Shoal submits does not.
+
+Threads and approval requests are named `S.N`: the number of the space they
+belong to, then the smallest number no thread or request of that space holds.
+A thread belongs to its opener's space, or to the space the user or Shoal
+opened it with. Both kinds share the space's sequence, so a number names one
+item and says which space it belongs to, and counting per space keeps the
+numbers short because the user types them. Inside a space a bare thread
+number names one of that space, the common case for an agent; elsewhere, and
+for approval requests, a bare number or one of the other kind is refused with
+the form or command to use rather than guessed. Their records keep a separate
+internal key that is never shown. A thread keeps its number until its space
+goes, resolved or not, so a late post is refused instead of reaching a later
+thread, and a wait follows its thread's space by ID, which a renumbering
+leaves alone. A
 keep or merge request that no longer applies stays as outdated until the
 workspace goes, so its number is never reused and a decision meant for it cannot
 approve a newer commit. A proposed issue outlives its space, so its space's
 number stays reserved until the last such proposal is decided, keeping the
 number the user was told. An agent may
-withdraw a pending request it no longer needs, as it may a question: it stays as
+withdraw a pending request it no longer needs, as it may a thread: it stays as
 withdrawn on the same terms, except a proposed issue, which would outlive the
 workspace and goes as a decided proposal does.
 
@@ -3245,7 +3265,7 @@ often.
 
 Blockers are part of progress, since they say why the work does not move:
 each sits on the space or on one step and names a space, an issue, a PR or a
-CI run with a one-line reason. Questions and approval requests already cover
+CI run with a one-line reason. Threads and approval requests already cover
 waiting for a person, so nothing else blocks. Plan tools set steps through
 hooks that cannot carry blockers, so agents set them with `shoal progress`
 flags, and a step's blocker follows the step by its tool's key, or its name
@@ -3309,7 +3329,7 @@ leaves its stop record for `shoal resume`, or for the agent queue when the
 agent is to come back on its own, which starts the chat's restore in the
 place the chat ran in. Once the chat's agent ends, the requests the chat
 decided go to the user, since no one attends them there. A stopped chat keeps
-its record, and with it its name, links, files, messages, questions,
+its record, and with it its name, links, files, messages, threads,
 workspaces and temporary directory, until a restore runs its agent again. Only
 removal ends a chat: `shoal rm`, or space cleanup, which treats a chat as a
 workspace whose worktree is always clean, pushed and merged, its running agent
@@ -3339,7 +3359,7 @@ agent runs, waits in the queue or is stopped awaiting `shoal resume`, so the
 CLI, coordinators and apps get one answer; a last session gives way, since its
 agent ended on its own. It stays a chat, with its own identity, scope,
 temporary directory and messages, and is not the workspace's child, since a
-child's questions and approvals go to its parent's agent while the user attends
+child's threads and approvals go to its parent's agent while the user attends
 a chat; so Shoal commands it runs never act as the workspace's agent. Its scope
 reads the workspace as well as the chat and the spaces below it, and refuses
 any request that changes the workspace. Its
@@ -3355,7 +3375,7 @@ about another workspace is a new chat.
 A chat's messages, including the user's request to rename it, wait and reach
 its agent as a workspace's do; a removed space, of either kind, gives the user
 the alerts its unread alerts stand for.
-A chat passes a question up by asking the user, who attends it. The approval
+A chat passes a thread up to the user, who attends it. The approval
 requests of the spaces below it come to it when it is the nearest space above
 them with an agent, and it approves them by its own permissions or grants, as
 a parent workspace does, and otherwise denies or passes them up; those it
@@ -3419,7 +3439,7 @@ one; the agent does not offer to. The plan goes
 into the issue body because the body is all an implementing agent's prompt
 carries. The planning task is the plan mode's built-in instructions, which a
 repository extends like any mode's text, and it
-keeps the discussion in the conversation: questions and forge comments serve
+keeps the discussion in the conversation: threads and forge comments serve
 agents blocked during implementation.
 
 One skill, `shoal`, describes what Shoal's commands do, what they refuse and
@@ -3897,7 +3917,7 @@ request, which approval carries out, so a coordinator keeps what its children
 need. Agents release only the holds agents placed; the user's and host apps'
 stay theirs. A hold never keeps a parent or survives its removal. Removal of a
 workspace that is not disposable is reversible through checkpoints, so an agent otherwise has no way to keep a
-workspace: one that needs the user asks, and an open question, like a hold, keeps the
+workspace: one that needs the user asks, and a thread it opened that waits, like a hold, keeps the
 workspace from every unattended removal, completion and PR cleanup included. So
 does an agent launch waiting in the agent queue to start in the workspace.
 
@@ -3930,13 +3950,13 @@ rather than something to merge hands back files with its completion. They are
 the workspace's results among its attached files, which, like every attached
 file, stay for `cleanup.restore.retention_days` after cleanup removes it, so
 the user or the parent's agent can read them after the worktree is gone. Files
-an agent sends the user with an alert or a question stay the same way, since
-the user may read the alert after the workspace is gone, and outlive the alert or question as a message's files outlive the
-message: clearing or withdrawing an alert and answering a question leave them
+an agent sends the user with an alert or a post stay the same way, since
+the user may read the alert after the workspace is gone, and outlive the alert or post as a message's files outlive the
+message: clearing or withdrawing an alert and resolving a thread leave them
 among the space's files, which the user already sees and Quay may show, until
-`shoal files rm` or the retention removes them. The alert or question names them by their records rather than by path,
+`shoal files rm` or the retention removes them. The alert or post names them by their records rather than by path,
 so a file `shoal files rm` deleted drops out and a moved repository directory
-moves them, and a coordinating agent that receives the alert or question
+moves them, and a coordinating agent that receives the alert or post
 instead receives their paths as the message's attached files. A chat's `done` records its completion on the chat as a
 workspace's does, with cleanup by the same setting and override, but no branch
 another could integrate and no parent to tell, so it notifies the user and its
@@ -3977,7 +3997,7 @@ rides on its argument as `PATH#TITLE`, the form forge attachments use for alt
 text, because attach flags repeat and a separate title flag could not say which
 file it names. Own-workspace withdrawal removes a
 recorded completion and preserves associations and merge requirements, but never
-defers cleanup: only holds, open questions, a pending PR proposal or push request and queued
+defers cleanup: only holds, threads it opened that wait, a pending PR proposal or push request and queued
 agent launches keep a workspace.
 The daemon runs `hooks.post_done`
 after persisting completion and before cleanup, using normal
@@ -4284,7 +4304,7 @@ too: resuming would need the pre-restart snapshot to prove nothing changed. User
 (`[cleanup.merged]`, off by default, 240 idle minutes) decides from the workspace's state
 instead of its assignment: a merged branch, unsaved files only as leftovers the
 removal's checkpoint keeps (the branch has commits of its own), no Git operation under
-way, no open question, nothing running, no leases, permits, directory users,
+way, no waiting thread, nothing running, no leases, permits, directory users,
 stacked workspaces, holds or spaces below it, and no recorded activity, file change or per-worktree Git
 change for the idle period. Idle time is persisted, so restarts do not reset it;
 it decides only from a default branch fetched in the last ten minutes, by the

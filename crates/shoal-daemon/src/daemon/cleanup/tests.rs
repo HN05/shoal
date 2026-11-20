@@ -346,12 +346,6 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
         )
         .await
         .unwrap();
-    let ask = crate::daemon::questions::Ask {
-        question: "Anything else?".into(),
-        recommendation: "No".into(),
-        reason: None,
-        choices: vec![],
-    };
     manager
         .mark_space_done(
             &SpaceSelector::id(&workspace.id),
@@ -360,15 +354,8 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
         )
         .await
         .unwrap();
-    let question = manager
-        .ask_question(
-            &SpaceSelector::id(&workspace.id),
-            ask,
-            Vec::new(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
+    let question =
+        crate::daemon::test_support::ask(&manager, &workspace.id, "Which database?").await;
     assert_eq!(reason().await, CleanupReason::Held);
     manager
         .release_hold(
@@ -378,11 +365,8 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
         )
         .await
         .unwrap();
-    assert_eq!(reason().await, CleanupReason::Question);
-    manager
-        .answer_question(question.number, "No".into(), None)
-        .await
-        .unwrap();
+    assert_eq!(reason().await, CleanupReason::WaitingThread);
+    crate::daemon::test_support::answer(&manager, question.number, "No").await;
     assert_eq!(
         reason().await,
         CleanupReason::Completed { integrated: false }
@@ -1542,21 +1526,7 @@ async fn a_done_chat_something_keeps_still_takes_the_workspaces_below_it() {
         .await
         .unwrap();
     // A question asked after the completion keeps the chat.
-    let ask = crate::daemon::questions::Ask {
-        question: "Which database?".into(),
-        recommendation: "SQLite".into(),
-        reason: None,
-        choices: Vec::new(),
-    };
-    manager
-        .ask_question(
-            &SpaceSelector::id(&chat.id),
-            ask,
-            Vec::new(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
+    crate::daemon::test_support::ask(&manager, &chat.id, "Which database?").await;
 
     manager.sweep_completed().await.unwrap();
     assert!(manager.chat_by_id(&chat.id).await.unwrap().is_some());
@@ -1568,21 +1538,7 @@ async fn a_done_chat_something_keeps_still_takes_the_workspaces_below_it() {
 async fn a_chats_open_question_keeps_it_from_every_unattended_removal() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
     let (chat, _) = chat_with_workspace(&temp, &manager).await;
-    let ask = crate::daemon::questions::Ask {
-        question: "Which database?".into(),
-        recommendation: "SQLite".into(),
-        reason: None,
-        choices: Vec::new(),
-    };
-    manager
-        .ask_question(
-            &SpaceSelector::id(&chat.id),
-            ask,
-            Vec::new(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
+    crate::daemon::test_support::ask(&manager, &chat.id, "Which database?").await;
     manager.end_executions(&chat.id).await;
     let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     assert_eq!(
@@ -1590,7 +1546,7 @@ async fn a_chats_open_question_keeps_it_from_every_unattended_removal() {
             .await
             .unwrap()
             .unwrap_err(),
-        CleanupReason::Question
+        CleanupReason::WaitingThread
     );
     assert_eq!(manager.merged_snapshot(&stopped.id).await.unwrap(), None);
 }

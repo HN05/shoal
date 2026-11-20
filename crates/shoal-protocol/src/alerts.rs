@@ -15,10 +15,12 @@ states!(AlertKind {
     ApprovalWithdrawn => "approval_withdrawn",
     /// A push the user approved failed; approving it again retries.
     PushFailed => "push_failed",
-    /// A workspace's agent asked the user a question.
-    QuestionAsked => "question_asked",
-    /// A workspace's agent withdrew a question the user had been shown.
-    QuestionWithdrawn => "question_withdrawn",
+    /// A post in a thread the recipient opened, holds or linked.
+    ThreadPosted => "thread_posted",
+    /// A thread came to the recipient from its earlier holder.
+    ThreadForwarded => "thread_forwarded",
+    /// A thread the recipient opened or holds was resolved or reopened.
+    ThreadResolved => "thread_resolved",
     /// A resource or simulator request found no free capacity.
     ResourceBusy => "resource_busy",
     /// A preferred port was in use.
@@ -53,8 +55,6 @@ states!(AlertKind {
     GateUnavailable => "gate_unavailable",
     /// Text the user or a space sent.
     Message => "message",
-    /// The answer to a question the space's agent asked.
-    QuestionAnswered => "question_answered",
     /// A decision on an approval request the space made.
     ApprovalDecided => "approval_decided",
     /// The findings of a review of the space's work.

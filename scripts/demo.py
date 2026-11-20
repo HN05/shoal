@@ -3,13 +3,14 @@
 
 Builds Shoal, starts its daemon with a fresh sandbox under target/demo, whose
 home and state directory lie in a short directory under /tmp, fills it with a repository,
-workspaces, a question, an approval request, a ready mark and a notification,
+workspaces, a thread, an approval request, a ready mark and a notification,
 then opens a shell where `shoal` is that build. Nothing reaches your own daemon, state or zmx sessions. Leaving the
 shell stops the daemon; the next run starts over.
 
   python3 scripts/demo.py
   shoal demo start shoal -- python3 scripts/demo.py   # Offer it as a demo
 """
+import json
 import os
 import subprocess
 import sys
@@ -43,8 +44,11 @@ def fill(sandbox):
     sandbox.run(["repo", "add", str(repo)])
     for workspace in WORKSPACES:
         sandbox.run(["start", str(repo), "--branch", workspace])
+    opened = in_workspace(sandbox, "fix-login",
+                          ["--json", "thread", "open", "Session cache database"])
+    thread = json.loads(opened.stdout)["number"]
     in_workspace(sandbox, "fix-login",
-                 ["questions", "ask", "Which database should the session cache use?",
+                 ["send", thread, "Which database should the session cache use?",
                   "--recommend", "SQLite", "--reason", "No server to run",
                   "--choice", "SQLite", "--choice", "Postgres"])
     in_workspace(sandbox, "fix-login", ["send", "Login fix pushed; checks are running"])
@@ -57,7 +61,7 @@ def fill(sandbox):
 
 def shell(env):
     print("Shoal development build with sample data. Try `shoal`, `shoal inbox`,\n"
-          "`shoal list` and `shoal questions`. Exit the shell to stop.", flush=True)
+          "`shoal list` and `shoal thread list`. Exit the shell to stop.", flush=True)
     program = os.environ.get("SHELL") or "/bin/sh"
     return subprocess.call([program, "-i"], env=env, cwd=env["HOME"])
 

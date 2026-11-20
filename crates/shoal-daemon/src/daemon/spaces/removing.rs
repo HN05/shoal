@@ -1,6 +1,6 @@
 //! The spaces a removal has reserved: from before it removes the spaces
 //! below a space until it deletes the space or gives up, nothing restores its
-//! agent, opens a space below it or records its agent's new question, so a
+//! agent, opens a space below it or records a new thread it opens, so a
 //! removal that took the spaces below is not left with a space something
 //! keeps.
 use shoal_ids::space_ids::SpaceId;
@@ -49,7 +49,7 @@ impl Removing {
         self.lock().contains(id)
     }
 
-    /// Refuse new work for the space `id`, such as a hold, a question or a
+    /// Refuse new work for the space `id`, such as a hold, a thread or a
     /// launch it queues, while a removal holds it, and for a workspace while
     /// its worktree is not ready. A reservation precedes the removal's next
     /// read on the store's one thread, so that read sees what this lets

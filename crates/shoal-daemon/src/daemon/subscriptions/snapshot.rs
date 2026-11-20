@@ -60,8 +60,8 @@ pub(super) async fn take(
     if topics.has(Topic::Sessions) {
         found.extend(sessions(manager, &visible.spaces).await?);
     }
-    if topics.has(Topic::Questions) {
-        found.extend(questions(manager, &visible).await?);
+    if topics.has(Topic::Threads) {
+        found.extend(threads(manager, &visible).await?);
     }
     if topics.has(Topic::Approvals) {
         found.extend(approvals(manager, caller, &visible).await?);
@@ -100,7 +100,7 @@ impl Visible {
             Topic::Spaces,
             Topic::Links,
             Topic::Sessions,
-            Topic::Questions,
+            Topic::Threads,
             Topic::Approvals,
             Topic::Alerts,
         ];
@@ -234,14 +234,14 @@ async fn sessions(manager: &Manager, spaces: &[Space]) -> Result<Vec<Record>> {
     Ok(records)
 }
 
-/// The open questions of the visible spaces.
-async fn questions(manager: &Manager, visible: &Visible) -> Result<Vec<Record>> {
+/// The open threads with a post of the visible spaces.
+async fn threads(manager: &Manager, visible: &Visible) -> Result<Vec<Record>> {
     Ok(manager
-        .open_questions()
+        .open_threads()
         .await?
         .into_iter()
-        .filter(|question| visible.contains(&question.space_id))
-        .map(Record::Question)
+        .filter(|thread| visible.contains(&thread.space_id))
+        .map(|thread| Record::Thread(Box::new(thread)))
         .collect())
 }
 

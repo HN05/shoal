@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// Fold the space `space` into the space `into`, which takes its work,
-/// links, files, questions and children, then remove it.
+/// links, files, threads and children, then remove it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Absorb {
     pub space: SpaceSelector,
@@ -56,9 +56,9 @@ pub struct Absorbed {
     /// The names of the attached files that moved.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<String>,
-    /// The open questions that moved, by their new numbers.
+    /// The open threads that moved, by their new numbers.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub questions: Vec<ItemNumber>,
+    pub threads: Vec<ItemNumber>,
     /// The spaces directly below it, which moved up one level.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<SpaceRef>,

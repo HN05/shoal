@@ -1,13 +1,14 @@
 //! What waits on what, from the waiting work to the work it waits on:
 //! queued launches and spaces on their blockers, a space on its
-//! children, a child with an open question on its parent, a stacked
+//! children, a space on the holder of a thread it opened that waits, a
+//! stacked
 //! workspace on its base, and a space queued for a lease on the spaces
 //! holding it.
 use anyhow::Result;
 use rusqlite::{Connection, params};
 
 use crate::{
-    daemon::{approvals::Target, progress, questions},
+    daemon::{approvals::Target, progress, threads},
     model::QueuedJob,
     state::{BlockerKind, QueueKind, QueueState},
 };
@@ -23,7 +24,7 @@ pub(super) fn waits(db: &Connection, leases: &[(Target, SpaceId)]) -> Result<Vec
     let mut edges = queue_blockers(db, &blocking)?;
     edges.extend(progress_blockers(db, &blocking)?);
     edges.extend(children(db)?);
-    edges.extend(questions(db)?);
+    edges.extend(threads(db)?);
     edges.extend(bases(db)?);
     edges.extend(lease_holders(db, leases)?);
     Ok(edges)
@@ -203,25 +204,16 @@ fn children(db: &Connection) -> Result<Vec<Edge>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// Each child with an open question on its parent.
-fn questions(db: &Connection) -> Result<Vec<Edge>> {
-    let mut edges = Vec::new();
-    for child in questions::asking_spaces(db)? {
-        let parent: Option<SpaceId> = rusqlite::OptionalExtension::optional(db.query_row(
-            "SELECT parent_id FROM space_parents WHERE space_id=?1",
-            [&child],
-            |row| row.get(0),
-        ))?;
-        if let Some(parent) = parent {
-            edges.push(Edge {
-                waiting: Node::Space(child),
-                on: Node::Space(parent),
-                dependency: Dependency::Question,
-                carries: Carries::Rank,
-            });
-        }
-    }
-    Ok(edges)
+/// Each space with a thread it opened that waits, on that thread's holder.
+fn threads(db: &Connection) -> Result<Vec<Edge>> {
+    Ok((threads::waiting_on_spaces(db)?.into_iter())
+        .map(|(opener, holder)| Edge {
+            waiting: Node::Space(opener),
+            on: Node::Space(holder),
+            dependency: Dependency::Thread,
+            carries: Carries::Rank,
+        })
+        .collect())
 }
 
 /// Each stacked workspace on the workspace it builds on.

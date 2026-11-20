@@ -9,15 +9,14 @@ use shoal_daemon::test_daemon::{ApprovalRequestExt as _, HANG, TestDaemon, store
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::alerts::Sender;
 use shoal_protocol::config::repo::Lifetime;
-use shoal_protocol::files::Attacher;
 use shoal_protocol::model::{HoldPlacer, Relation};
 use shoal_protocol::protocol::{self, ErrorCode, RemoteError, Request, SubscriptionMethod};
-use shoal_protocol::questions::Ask;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::subscriptions::{
     Update,
     records::{Record, RecordKind, Topic},
 };
+use shoal_protocol::threads::{NewPost, OutcomeKind, Thread, ThreadKind, ThreadNumber};
 
 use super::Subscription;
 
@@ -54,13 +53,36 @@ fn changed(kind: RecordKind) -> impl Fn(&Update) -> bool {
     move |update| matches!(update, Update::Changed(record) if record.key().kind == kind)
 }
 
-fn ask() -> Ask {
-    Ask {
-        question: "Which database?".into(),
-        recommendation: "SQLite".into(),
-        reason: None,
-        choices: Vec::new(),
+/// A process of the space `id`.
+fn caller(id: &SpaceId) -> shoal_daemon::test_daemon::Caller {
+    shoal_daemon::test_daemon::Caller {
+        space_id: id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+        vouched: None,
     }
+}
+
+/// Have the space `id` ask its coordinator, else the user, in a thread.
+async fn ask(manager: &shoal_daemon::test_daemon::Manager, id: &SpaceId) -> Thread {
+    let caller = caller(id);
+    let name = "Which database?".to_owned();
+    let thread = (manager.open_thread(Some(&caller), name, ThreadKind::Question, None))
+        .await
+        .unwrap();
+    let post = NewPost {
+        text: "Postgres or SQLite?".into(),
+        ..NewPost::default()
+    };
+    (manager.post_to_thread(
+        Some(&caller),
+        ThreadNumber::Full(thread.number),
+        post,
+        Vec::new(),
+    ))
+    .await
+    .unwrap()
 }
 
 async fn subscribe(connector: Connector, topics: &[Topic]) -> Subscribed {
@@ -130,20 +152,8 @@ async fn a_subscription_sends_its_snapshot_then_each_kind_of_change() {
         .unwrap();
     until(&mut subscription, changed(RecordKind::Link)).await;
 
-    let question = manager
-        .ask_question(
-            &SpaceSelector::id(&workspace.id),
-            ask(),
-            Vec::new(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    until_each(
-        &mut subscription,
-        &[RecordKind::Question, RecordKind::Alert],
-    )
-    .await;
+    let question = ask(manager, &workspace.id).await;
+    until_each(&mut subscription, &[RecordKind::Thread, RecordKind::Alert]).await;
 
     manager
         .send_space_message(
@@ -178,13 +188,21 @@ async fn a_subscription_sends_its_snapshot_then_each_kind_of_change() {
     })
     .await;
 
+    let answered = Some(OutcomeKind::Answered);
     manager
-        .answer_question(question.number, "Postgres".into(), None)
+        .resolve_thread(
+            Some(&caller(&workspace.id)),
+            ThreadNumber::Full(question.number),
+            answered,
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     until(
         &mut subscription,
-        |update| matches!(update, Update::Removed(key) if key.kind == RecordKind::Question),
+        |update| matches!(update, Update::Removed(key) if key.kind == RecordKind::Thread),
     )
     .await;
 
@@ -289,7 +307,7 @@ async fn a_chats_subscription_follows_the_issues_it_proposed() {
 }
 
 #[tokio::test]
-async fn the_user_sees_the_questions_of_a_chat() {
+async fn the_user_sees_the_threads_of_a_chat() {
     let daemon = TestDaemon::start().await;
     let chat = daemon
         .manager
@@ -301,20 +319,11 @@ async fn the_user_sees_the_questions_of_a_chat() {
         )
         .await
         .unwrap();
-    let question = daemon
-        .manager
-        .ask_question(
-            &SpaceSelector::id(&chat.id),
-            ask(),
-            Vec::new(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    let mut subscription = subscribe(daemon.connector(), &[Topic::Questions]).await;
+    let question = ask(&daemon.manager, &chat.id).await;
+    let mut subscription = subscribe(daemon.connector(), &[Topic::Threads]).await;
     let records = snapshot(&mut subscription).await;
-    let [Record::Question(shown)] = records.as_slice() else {
-        panic!("expected the chat's question: {records:?}");
+    let [Record::Thread(shown)] = records.as_slice() else {
+        panic!("expected the chat's thread: {records:?}");
     };
     assert_eq!((shown.number, &*shown.space), (question.number, "planning"));
 }
@@ -451,16 +460,7 @@ async fn a_scoped_subscription_covers_its_tree_without_notifications() {
     let daemon = TestDaemon::start().await;
     let own = daemon.workspace("own").await;
     let other = daemon.workspace("other").await;
-    daemon
-        .manager
-        .ask_question(
-            &SpaceSelector::id(&other.id),
-            ask(),
-            Vec::new(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
+    ask(&daemon.manager, &other.id).await;
     let elsewhere = shoal_core::test_support::repository(&daemon.manager.paths.home, "elsewhere");
     daemon
         .manager
@@ -483,7 +483,7 @@ async fn a_scoped_subscription_covers_its_tree_without_notifications() {
     assert_eq!(ids(RecordKind::Repository), [daemon.repository.id.as_str()]);
     assert!(
         keys.iter()
-            .all(|key| !matches!(key.kind, RecordKind::Alert | RecordKind::Question)),
+            .all(|key| !matches!(key.kind, RecordKind::Alert | RecordKind::Thread)),
         "{keys:?}"
     );
 }
@@ -576,16 +576,7 @@ async fn a_scoped_subscription_without_space_records_names_its_tree() {
     let own = daemon.workspace("own").await;
     let other = daemon.workspace("other").await;
     for workspace in [&own, &other] {
-        daemon
-            .manager
-            .ask_question(
-                &SpaceSelector::id(&workspace.id),
-                ask(),
-                Vec::new(),
-                &Attacher::User,
-            )
-            .await
-            .unwrap();
+        ask(&daemon.manager, &workspace.id).await;
         daemon
             .manager
             .send_space_message(
@@ -597,13 +588,13 @@ async fn a_scoped_subscription_without_space_records_names_its_tree() {
             .await
             .unwrap();
     }
-    let topics = [Topic::Questions, Topic::Alerts];
+    let topics = [Topic::Threads, Topic::Alerts];
     let mut subscription = subscribe(daemon.scoped(&own).await, &topics).await;
     let records = snapshot(&mut subscription).await;
     assert_eq!(records.len(), 2, "{records:?}");
     for record in &records {
         match record {
-            Record::Question(question) => assert_eq!(question.space_id, own.id),
+            Record::Thread(thread) => assert_eq!(thread.space_id, own.id),
             Record::Alert(message) => {
                 let recipient = message.recipient.as_ref();
                 assert_eq!(

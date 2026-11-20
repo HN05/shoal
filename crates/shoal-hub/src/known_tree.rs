@@ -115,7 +115,7 @@ fn listed(space: KnownSpace) -> Listed {
             permissions: None,
             chat_modes: Vec::new(),
             progress: None,
-            questions: Vec::new(),
+            threads: Vec::new(),
             approvals: Vec::new(),
         },
         reported_at: UnixTime::from_seconds(0),

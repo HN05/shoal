@@ -11,8 +11,7 @@ use shoal_ids::{
 use super::Member;
 use crate::{
     approvals::ApprovalRequest, config::modes::ModeName, list_status::ListStatus, model::SpaceKind,
-    progress::Progress, questions::Question, space_names::SpaceName, state::AgentState,
-    time::UnixTime,
+    progress::Progress, space_names::SpaceName, state::AgentState, threads::Thread, time::UnixTime,
 };
 
 mod selection;
@@ -59,9 +58,9 @@ pub struct SpaceSummary {
     pub chat_modes: Vec<crate::hub::routing::ChainedMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub progress: Option<Progress>,
-    /// Its open questions.
+    /// The open threads numbered in it that have a post.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub questions: Vec<Question>,
+    pub threads: Vec<Thread>,
     /// Its pending approval requests.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub approvals: Vec<ApprovalRequest>,
@@ -132,7 +131,7 @@ pub struct Directory {
 }
 
 impl Listed {
-    /// The space without its questions and approval requests, which it
+    /// The space without its threads and approval requests, which it
     /// never copies.
     pub fn without_requests(&self) -> Self {
         let space = &self.space;
@@ -153,7 +152,7 @@ impl Listed {
                 permissions: space.permissions,
                 chat_modes: space.chat_modes.clone(),
                 progress: space.progress.clone(),
-                questions: Vec::new(),
+                threads: Vec::new(),
                 approvals: Vec::new(),
             },
             reported_at: self.reported_at,
@@ -203,7 +202,7 @@ pub struct HubView {
 
 /// A piece of a [`HubView`], which a response carries in pages, since the
 /// spaces of every machine may not fit in one frame, nor one space's
-/// questions and approval requests.
+/// threads and approval requests.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[allow(clippy::large_enum_variant, reason = "a view holds a few spaces")]
@@ -211,10 +210,10 @@ pub enum ViewPart {
     /// This machine's ID at the hub, which comes first.
     Here(MemberId),
     Machine(Member),
-    /// A space without its questions and approval requests, which follow
+    /// A space without its threads and approval requests, which follow
     /// it.
     Space(Listed),
-    Question(Question),
+    Thread(Box<Thread>),
     Approval(ApprovalRequest),
     Conflict(Conflict),
     /// One of this machine's spaces and its parent on another machine.
@@ -254,9 +253,9 @@ impl HubView {
                 ViewPart::Here(_) => anyhow::bail!("a hub view names this machine once"),
                 ViewPart::Machine(member) => directory.machines.push(member),
                 ViewPart::Space(listed) => directory.spaces.push(listed),
-                ViewPart::Question(question) => asking(&mut directory, &question.space_id)?
-                    .questions
-                    .push(question),
+                ViewPart::Thread(thread) => asking(&mut directory, &thread.space_id)?
+                    .threads
+                    .push(*thread),
                 ViewPart::Approval(request) => asking(&mut directory, &request.space_id)?
                     .approvals
                     .push(request),
@@ -272,23 +271,27 @@ impl HubView {
     }
 }
 
-/// `listed` as parts: the space, then each of its questions and approval
+/// `listed` as parts: the space, then each of its threads and approval
 /// requests.
 fn space_parts(mut listed: Listed) -> Vec<ViewPart> {
-    let questions = std::mem::take(&mut listed.space.questions);
+    let threads = std::mem::take(&mut listed.space.threads);
     let approvals = std::mem::take(&mut listed.space.approvals);
     (std::iter::once(ViewPart::Space(listed)))
-        .chain(questions.into_iter().map(ViewPart::Question))
+        .chain(
+            threads
+                .into_iter()
+                .map(|thread| ViewPart::Thread(Box::new(thread))),
+        )
         .chain(approvals.into_iter().map(ViewPart::Approval))
         .collect()
 }
 
-/// The space `id` that a question or request follows: the last one
+/// The space `id` that a thread or request follows: the last one
 /// `directory` took.
 fn asking<'a>(directory: &'a mut Directory, id: &SpaceId) -> anyhow::Result<&'a mut SpaceSummary> {
     match directory.spaces.last_mut() {
         Some(listed) if &listed.space.id == id => Ok(&mut listed.space),
-        _ => anyhow::bail!("a hub view sends a question or request after its space {id}"),
+        _ => anyhow::bail!("a hub view sends a thread or request after its space {id}"),
     }
 }
 

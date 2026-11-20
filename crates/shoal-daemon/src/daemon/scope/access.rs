@@ -9,8 +9,7 @@ use super::Caller;
 use crate::{
     config::permissions::PermissionKey,
     daemon::{
-        approvals::ApprovalRequest, item_numbers::ItemNumber, manager::Manager,
-        permissions::Action, questions::Question,
+        approvals::ApprovalRequest, item_numbers::ItemNumber, manager::Manager, permissions::Action,
     },
     model::{QueueEntry, Repository, RunningAgent, Space, SpaceTarget},
     protocol::operations::WorkspaceStart,
@@ -428,30 +427,6 @@ impl Manager {
         let giver = Some(caller);
         (self.ensure_agent_held(giver, target, &mode, given)).await?;
         Ok(target)
-    }
-
-    /// Question `number` for the caller to answer, which must be one of a
-    /// space its scope reaches other than its own. The answer binds to the
-    /// question returned, `shown` when given, and refuses it once a later
-    /// question reuses its number.
-    pub(in crate::daemon) async fn answerable_question(
-        &self,
-        caller: &Caller,
-        number: ItemNumber,
-        shown: Option<Question>,
-    ) -> Result<Question> {
-        let owner = &caller.space_id;
-        let question = match shown {
-            Some(shown) => shown,
-            None => self.question(number).await?,
-        };
-        ensure!(
-            question.number == number
-                && question.space_id != *owner
-                && self.reaches(caller, &question.space_id).await?,
-            "answering questions is the user's, or a coordinating agent's for the workspaces below it; workspace processes ask with shoal questions ask"
-        );
-        Ok(question)
     }
 
     /// The caller's own repository, which `repository` must select, or

@@ -739,6 +739,9 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
     if version >= 251 {
         db.execute_batch(include_str!("ci_job_reruns.sql"))?;
     }
+    if version >= 252 {
+        db.execute_batch(include_str!("threads.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -788,6 +791,10 @@ const DROPS_CREATING_LAUNCHES: i64 = 227;
 /// The migration that merges notifications and space messages into alerts,
 /// which tests of the migrations that fill either table stop before.
 const MERGES_ALERTS: i64 = 249;
+
+/// The migration that replaces questions with threads, which tests of the
+/// migrations that fill the questions table stop before.
+const REPLACES_QUESTIONS: i64 = 252;
 
 /// Upgrade `db` as v0.17.0 does when its daemon starts: migrate it to that
 /// release's version, then consume the upgrade state the next migration
@@ -1649,7 +1656,8 @@ fn migration_keeps_question_numbers_numbers_approvals_and_drops_delivered_questi
                 ('grant','workspace','port/web','web','{"id":"grant"}',0),
                 ('land','workspace','land','branch','{"id":"land"}',1);"#,
         )?;
-    migrate_through_v0_17_0(&mut db)?;
+    start_v0_17_0(&mut db)?;
+    migrate_to(&mut db, REPLACES_QUESTIONS - 1)?;
     let questions = db
         .prepare("SELECT id,number FROM questions ORDER BY id")?
         .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))?
@@ -2217,7 +2225,7 @@ fn migration_moves_a_chats_turn_mark_to_its_agents_execution() -> Result<()> {
              '{"to":"workspace","execution":"converted-agent","chat":{"asks_in_chat":1}}');"#,
     )?;
 
-    migrate(&mut db)?;
+    migrate_to(&mut db, REPLACES_QUESTIONS - 1)?;
 
     let marked: Vec<String> = db
         .prepare("SELECT id FROM executions WHERE asks_in_chat ORDER BY id")?
@@ -3103,7 +3111,7 @@ fn a_workspaces_questions_keep_their_numbers_as_questions_of_spaces() -> Result<
             VALUES ('workspace',1,'Which?','A','[]',4)",
         [],
     )?;
-    migrate(&mut db)?;
+    migrate_to(&mut db, REPLACES_QUESTIONS - 1)?;
     let kept: (String, i64) = db.query_row("SELECT space_id,number FROM questions", [], |row| {
         Ok((row.get(0)?, row.get(1)?))
     })?;
@@ -3750,7 +3758,7 @@ fn notifications_and_space_messages_become_alerts_with_their_sender() -> Result<
              ('{"tell":{"told":{"above":"x","about":{"space":"s","name":"n"},"message":"m"}}}',1),
              ('{"tell":{"told":{"above":"x","kind":"agent_message","message":"m"}}}',2);"#,
     )?;
-    migrate(&mut db)?;
+    migrate_to(&mut db, REPLACES_QUESTIONS - 1)?;
     type Row = (
         i64,
         String,
@@ -3917,5 +3925,202 @@ fn notifications_and_space_messages_become_alerts_with_their_sender() -> Result<
         .query_map([], |r| r.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     assert_eq!(left, [1, 4, 16]);
+    Ok(())
+}
+
+#[test]
+fn questions_become_threads_with_their_posts_and_resolutions() -> Result<()> {
+    let mut db = historical_database(REPLACES_QUESTIONS - 1)?;
+    db.execute_batch(
+        r#"BEGIN;
+         INSERT INTO chats(id) VALUES ('chat');
+         INSERT INTO spaces(id,kind,repository_id,name,number)
+             VALUES ('chat','chat','repo','helper',2);
+         INSERT INTO space_parents(space_id,parent_id) VALUES ('chat','workspace');
+         COMMIT;
+         INSERT INTO alerts(id,created_at,kind,sender,recipient_id,message)
+             VALUES (5,1,'question_answered','user','chat','Answer to question 2.2: B'),
+                 (6,1,'question_asked','shoal',NULL,'question 2.1');
+         INSERT INTO questions(id,space_id,space_number,number,created_at,question,
+                 recommendation,reason,choices,answer,answered_at,message_id,closed_at,
+                 withdrawn,in_chat,files)
+             VALUES (1,'chat',2,1,1,'Which database?','SQLite','No server','["SQLite","Postgres"]',
+                     NULL,NULL,NULL,NULL,0,0,'[7]'),
+                 (2,'chat',2,2,2,'Which cache?','A',NULL,'[]','B',3,5,NULL,0,0,'[]'),
+                 (3,'chat',2,3,3,'Which queue?','SQS',NULL,'[]',NULL,NULL,NULL,4,0,0,'[]'),
+                 (4,'workspace',1,1,4,'Which port?','80',NULL,'[]',NULL,NULL,NULL,5,1,0,'[]'),
+                 (5,'workspace',1,2,5,'Long
+question','',NULL,'[]',NULL,NULL,NULL,NULL,0,1,'[]');
+         INSERT INTO space_files(id,space_id,space,source,name,path,bytes,created_at)
+             VALUES (7,'chat','helper','question','a.png','/repo/.attachments/a.png',1,1);
+         INSERT INTO executions(id,space_id,state,agent,asks_in_chat)
+             VALUES ('agent','workspace','running','claude',1);
+         INSERT INTO hub_members(id,kind,name,public_key,joined_at)
+             VALUES ('desk','machine','desk','key',1);
+         INSERT INTO hub_queue(member_id,sender_id,call,summary,queued_at,expires_at) VALUES
+             ('desk','laptop','{"serve":{"request":{"method":{"answer_question":
+                 {"number":{"space_number":4,"item":1,"number":"4.1"},"answer":"B"}}}}}','',1,9),
+             ('desk','laptop','{"serve":{"request":{"method":{"accept_question_recommendation":
+                 {"number":{"space_number":4,"item":2,"number":"4.2"},
+                  "shown":{"recommendation":"SQLite"}}}}}}','',2,9),
+             ('desk','laptop','{"serve":{"request":{"method":{"accept_question_recommendation":
+                 {"number":{"space_number":4,"item":3,"number":"4.3"},"shown":null}}}}}','',3,9);"#,
+    )?;
+    migrate(&mut db)?;
+    type Thread = (
+        i64,
+        i64,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    );
+    let threads: Vec<Thread> = db
+        .prepare(
+            "SELECT id,number,name,holder_id,json_extract(outcome,'$.outcome'),resolved_by
+                FROM threads ORDER BY id",
+        )?
+        .query_map([], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let some = |text: &str| Some(text.to_owned());
+    // Each keeps its ID and number; its parent holds the chat's, and the
+    // user the top-level workspace's.
+    assert_eq!(
+        threads,
+        [
+            (
+                1,
+                1,
+                "Which database?".into(),
+                some("workspace"),
+                None,
+                None
+            ),
+            (2, 2, "Which cache?".into(), some("workspace"), None, None),
+            (
+                3,
+                3,
+                "Which queue?".into(),
+                some("workspace"),
+                some("closed"),
+                some("shoal")
+            ),
+            (
+                4,
+                1,
+                "Which port?".into(),
+                None,
+                some("withdrawn"),
+                some("space")
+            ),
+            (5, 2, "Asked in the chat".into(), None, None, None),
+        ]
+    );
+    type Post = (
+        i64,
+        String,
+        String,
+        String,
+        Option<String>,
+        String,
+        Option<i64>,
+    );
+    let posts: Vec<Post> = db
+        .prepare(
+            "SELECT thread_id,side,sender,text,recommendation,files,alert_id
+                FROM thread_posts WHERE thread_id IN (1,2) ORDER BY id",
+        )?
+        .query_map([], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+                r.get(6)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    // An answer the agent has not received follows its question, still
+    // carried by its alert.
+    assert_eq!(
+        posts,
+        [
+            (
+                1,
+                "opener".into(),
+                "space".into(),
+                "Which database?".into(),
+                some("SQLite"),
+                "[7]".into(),
+                None
+            ),
+            (
+                2,
+                "opener".into(),
+                "space".into(),
+                "Which cache?".into(),
+                some("A"),
+                "[]".into(),
+                None
+            ),
+            (
+                2,
+                "holder".into(),
+                "user".into(),
+                "B".into(),
+                None,
+                "[]".into(),
+                Some(5)
+            ),
+        ]
+    );
+    let source: String = db.query_row("SELECT source FROM space_files", [], |r| r.get(0))?;
+    assert_eq!(source, "thread");
+    let kinds: Vec<String> = db
+        .prepare("SELECT kind FROM alerts ORDER BY id")?
+        .query_map([], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(kinds, ["thread_posted", "thread_posted"]);
+    let marked: Option<i64> =
+        db.query_row("SELECT chat_thread FROM executions", [], |r| r.get(0))?;
+    assert_eq!(marked, None);
+    // Queued answers post in their threads; an accepted recommendation the
+    // user was not shown has no text to post.
+    let queued: Vec<String> = db
+        .prepare("SELECT json_extract(call,'$.serve.request.method') FROM hub_queue ORDER BY seq")?
+        .query_map([], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    let queued: Vec<serde_json::Value> = queued
+        .iter()
+        .map(|method| serde_json::from_str(method))
+        .collect::<serde_json::Result<_>>()?;
+    assert_eq!(
+        queued,
+        [
+            serde_json::json!({"post": {
+                "thread": {"space_number": 4, "item": 1, "number": "4.1"},
+                "post": {"text": "B"}}}),
+            serde_json::json!({"post": {
+                "thread": {"space_number": 4, "item": 2, "number": "4.2"},
+                "post": {"text": "SQLite"}}}),
+        ]
+    );
+    db.execute(
+        "INSERT INTO threads(space_id,number,kind,name,created_at,opener)
+            VALUES ('chat',4,'question','Next?',6,'space')",
+        [],
+    )?;
+    assert_eq!(db.last_insert_rowid(), 6);
     Ok(())
 }

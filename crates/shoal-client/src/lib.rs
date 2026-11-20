@@ -31,7 +31,6 @@ pub mod output;
 pub mod preparation;
 pub mod priority;
 pub mod progress;
-pub mod questions;
 pub mod queue;
 pub mod recovery;
 pub mod removal;
@@ -44,6 +43,7 @@ pub mod stopping;
 pub mod subscriptions;
 #[cfg(test)]
 mod test_daemon;
+pub mod threads;
 pub mod transcripts;
 pub mod transfer;
 pub mod triggers;

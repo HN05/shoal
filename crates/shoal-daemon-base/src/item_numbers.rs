@@ -1,4 +1,4 @@
-//! How questions and approval requests are numbered within their space.
+//! How threads and approval requests are numbered within their space.
 //! Both kinds share one sequence per space, so `3.2` names one item: a new
 //! one takes the smallest number no item of its space holds, and a number
 //! names the other kind's item only as a refusal that says so.
@@ -28,12 +28,12 @@ pub fn next(db: &Connection, id: &SpaceId) -> Result<ItemNumber> {
     })
 }
 
-/// The smallest item number no question or approval request of the space
+/// The smallest item number no thread or approval request of the space
 /// numbered `space` holds.
 fn free(db: &Connection, space: SpaceNumber) -> Result<u32> {
     Ok(db.query_row(
         "WITH held(number) AS (
-            SELECT number FROM questions WHERE space_number=?1
+            SELECT number FROM threads WHERE space_number=?1
             UNION ALL SELECT number FROM access_requests WHERE space_number=?1)
         SELECT MIN(n) FROM (SELECT 1 AS n UNION ALL SELECT number+1 FROM held)
             WHERE n NOT IN (SELECT number FROM held)",
@@ -48,8 +48,8 @@ fn free(db: &Connection, space: SpaceNumber) -> Result<u32> {
 /// machine's may.
 pub fn unknown(db: &Connection, kind: ItemKind, number: ItemNumber) -> Result<anyhow::Error> {
     let other = match kind {
-        ItemKind::Question => (ItemKind::Approval, "access_requests"),
-        ItemKind::Approval => (ItemKind::Question, "questions"),
+        ItemKind::Thread => (ItemKind::Approval, "access_requests"),
+        ItemKind::Approval => (ItemKind::Thread, "threads"),
     };
     let held = crate::store::exists(
         db,
@@ -61,7 +61,7 @@ pub fn unknown(db: &Connection, kind: ItemKind, number: ItemNumber) -> Result<an
     )?;
     let message = match (held, kind) {
         (true, _) => other.0.misdirected(number),
-        (false, ItemKind::Question) => format!("unknown question {number}"),
+        (false, ItemKind::Thread) => format!("unknown thread {number}"),
         (false, ItemKind::Approval) => format!("unknown approval request {number}"),
     };
     let numbered =

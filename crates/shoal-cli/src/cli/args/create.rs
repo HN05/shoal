@@ -44,7 +44,7 @@ pub enum CreateCommand {
     /// Turn a chat into a workspace, or a workspace into a chat.
     ///
     /// The space stays the same: it keeps its number, name, parent,
-    /// children, links, questions, files and progress. Its agent restarts
+    /// children, links, threads, files and progress. Its agent restarts
     /// in the new place once its current turn ends, carrying on with its
     /// conversation. A space's agent converts the spaces its scope reaches.
     Convert {

@@ -16,7 +16,7 @@ use shoal_protocol::{
     hub::directory::{RepositoryOrigin, SpaceSummary},
     list_status::ListStatus,
     model::{ByKind, QueueEntry, Repository, RunningAgent, Space},
-    questions::Question,
+    threads::Thread,
 };
 
 use crate::{Hub, daemon::Daemon};
@@ -68,7 +68,7 @@ impl Hub {
             .filter(|saved| saved.unfinished)
             .map(|saved| saved.space)
             .collect();
-        let questions = daemon.open_questions().await?;
+        let threads = daemon.open_threads().await?;
         let mut approvals = daemon.approval_requests(None).await?;
         approvals.retain(|request| request.status == DecisionStatus::Pending);
         let running = running_agents(daemon.running_agents().await?);
@@ -78,7 +78,7 @@ impl Hub {
         let around = Around {
             stopped,
             queued: daemon.visible_queue().await?,
-            questions,
+            threads,
             approvals,
             parents,
             agents: with_agents,
@@ -128,13 +128,13 @@ impl Hub {
 
 /// What a summary reads besides a space's record: the spaces whose agent's
 /// stop saved work to restore, the agents queued to start, the open
-/// questions and pending approval requests of every space, the space above
+/// threads and pending approval requests of every space, the space above
 /// each, which may run on another machine, the spaces with an agent, and
 /// the agent that runs in each.
 struct Around {
     stopped: HashSet<SpaceId>,
     queued: Vec<QueueEntry>,
-    questions: Vec<Question>,
+    threads: Vec<Thread>,
     approvals: Vec<ApprovalRequest>,
     parents: HashMap<SpaceId, SpaceId>,
     agents: HashSet<SpaceId>,
@@ -166,8 +166,8 @@ fn summary(space: Space, repository: Option<RepositoryOrigin>, around: &Around) 
         }
         ByKind::Chat(chat) => ListStatus::of_chat(&chat),
     };
-    let questions = (around.questions.iter())
-        .filter(|question| question.space_id == id)
+    let threads = (around.threads.iter())
+        .filter(|thread| thread.space_id == id)
         .cloned()
         .collect();
     let approvals = (around.approvals.iter())
@@ -189,7 +189,7 @@ fn summary(space: Space, repository: Option<RepositoryOrigin>, around: &Around) 
         permissions: None,
         chat_modes: Vec::new(),
         progress,
-        questions,
+        threads,
         approvals,
     }
 }

@@ -15,7 +15,7 @@ fn a_chat_row_keeps_its_scope_token_typed_and_out_of_its_debug() {
 }
 
 #[tokio::test]
-async fn a_workspace_becoming_a_chat_keeps_its_questions_and_requests_to_take_actions() {
+async fn a_workspace_becoming_a_chat_keeps_its_threads_and_requests_to_take_actions() {
     let (_root, manager) = crate::daemon::test_support::manager().await;
     let chat = super::ConvertedChat {
         agent: "claude".into(),
@@ -30,9 +30,8 @@ async fn a_workspace_becoming_a_chat_keeps_its_questions_and_requests_to_take_ac
                 "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
                  INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','fix');
                  INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES ('w','/work','fix','ready','abc','/admin');
-                 INSERT INTO questions(space_number,number,space_id,created_at,question,
-                         recommendation,choices)
-                     VALUES (1,1,'w',1,'Which?','A','[]');
+                 INSERT INTO threads(space_number,number,space_id,kind,name,created_at,opener)
+                     VALUES (1,1,'w','question','Which?',1,'space');
                  INSERT INTO access_requests(id,space_id,target_key,name,record,space_number,number)
                      VALUES ('action','w','action/merge','merge','{}',1,2),
                          ('port','w','port/web','web','{}',1,3);",
@@ -40,7 +39,7 @@ async fn a_workspace_becoming_a_chat_keeps_its_questions_and_requests_to_take_ac
             super::replace_workspace(tx, &"w".into(), &chat)?;
             let mut kept: Vec<(String, String)> = tx
                 .prepare(
-                    "SELECT 'question',space_id FROM questions
+                    "SELECT 'thread',space_id FROM threads
                      UNION ALL SELECT id,space_id FROM access_requests",
                 )?
                 .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
@@ -52,5 +51,5 @@ async fn a_workspace_becoming_a_chat_keeps_its_questions_and_requests_to_take_ac
         .unwrap();
     let owned = |item: &str| (item.to_owned(), "w".to_owned());
     // A request for the worktree's port goes with it.
-    assert_eq!(kept, [owned("action"), owned("question")]);
+    assert_eq!(kept, [owned("action"), owned("thread")]);
 }

@@ -1,5 +1,5 @@
-//! `shoal inbox`: what needs the user now, each with its space: open
-//! questions, pending approvals, agents that need input, failed workspaces,
+//! `shoal inbox`: what needs the user now, each with its space: threads
+//! that wait for the user, pending approvals, agents that need input, failed workspaces,
 //! agents Shoal put to sleep, work marked ready at its current commit, running demos, Git worktrees
 //! under Shoal's directories that no workspace owns, automatic cleanup
 //! failing other than in a workspace, and repositories whose default branch
@@ -22,14 +22,13 @@ use crate::{
         output::{self, Palette, Style},
         ui::{self, Cell, WidthLimit},
     },
-    client::questions,
     model::{Chat, QueueEntry, ReviewMark, SpaceLinks, Workspace},
     state::{QueueState, WorkspaceState},
 };
 use shoal_protocol::{
     approvals::{ApprovalRequest, DecisionStatus, GateStep},
     hub::directory::HubView,
-    questions::Question,
+    threads::{Thread, ThreadState},
 };
 
 mod elsewhere;
@@ -70,7 +69,7 @@ pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
 }
 
 impl Inbox {
-    /// Questions, then approvals, agents that need input, failed workspaces,
+    /// Threads, then approvals, agents that need input, failed workspaces,
     /// ready marks and running demos, for the workspaces `filter` keeps, then
     /// untracked worktrees and failing automatic cleanup, then what needs the
     /// user of the other machines' spaces it keeps.
@@ -88,10 +87,11 @@ impl Inbox {
             filter.keeps_workspace(w, &[ListStatus::of_workspace(w, stopped.contains(&w.id))])
         });
         // Scoped processes see the chats of their own tree. A stopped chat
-        // keeps its open questions.
+        // keeps its threads.
         let mut chats = spaces.into_chats();
         chats.retain(|chat| filter.keeps_chat(chat));
-        let questions = questions::list(&ctx.paths, None).await?.questions;
+        let open = crate::client::threads::list(&ctx.paths, None, ThreadState::Open).await?;
+        let threads = (open.threads.into_iter()).filter(Thread::waits_for_user);
         let requests = crate::client::approvals::list(&ctx.paths, None).await?;
         let detached = |request: &ApprovalRequest| {
             !existing.contains(&request.space_id)
@@ -101,7 +101,7 @@ impl Inbox {
                     .is_some_and(|repository| filter.keeps_detached(repository))
         };
         let demos = crate::client::demos::running(&ctx.paths, None).await?;
-        let mut items = decision_items(questions, requests, &workspaces, &chats, detached);
+        let mut items = decision_items(threads, requests, &workspaces, &chats, detached);
         items.extend(workspace_items(&workspaces, &stopped));
         items.extend(chat_items(&chats));
         let entries = crate::client::queue::entries(&ctx.paths).await?;
@@ -215,7 +215,8 @@ fn machine_cell(machines: Option<&ui::Machines<'_>>, item: &Item) -> Cell {
     }
 }
 
-/// Open questions, then the pending approval requests the user decides, of
+/// Threads that wait for the user, then the pending approval requests the
+/// user decides, of
 /// `workspaces`; a coordinating agent decides the others.
 /// The repository of the item's workspace or chat, or the one that owns a
 /// proposed issue whose workspace is gone.
@@ -246,11 +247,11 @@ fn note(chats: &[Chat], item: &Item) -> String {
     place.into_iter().chain(note).collect::<Vec<_>>().join("; ")
 }
 
-/// Questions of the listed workspaces and chats, approvals of the listed
+/// Threads of the listed workspaces and chats, approvals of the listed
 /// workspaces, and the requests `detached` keeps: issue proposals that
 /// outlived their workspace.
 fn decision_items(
-    questions: Vec<Question>,
+    threads: impl IntoIterator<Item = Thread>,
     requests: Vec<ApprovalRequest>,
     workspaces: &[Workspace],
     chats: &[Chat],
@@ -258,15 +259,16 @@ fn decision_items(
 ) -> Vec<Item> {
     let kept = |id: &SpaceId| workspaces.iter().any(|w| w.id == *id);
     let asked = |id: &SpaceId| kept(id) || chats.iter().any(|chat| chat.id == *id);
-    let questions = questions
-        .into_iter()
-        .filter(|question| asked(&question.space_id))
-        .map(|question| Item::Question { question });
+    let threads = (threads.into_iter())
+        .filter(|thread| asked(&thread.space_id))
+        .map(|thread| Item::Thread {
+            thread: Box::new(thread),
+        });
     let requests = requests
         .into_iter()
         .filter(|request| user_decides(request) && (kept(&request.space_id) || detached(request)))
         .map(|request| Item::Approval { request });
-    questions.chain(requests).collect()
+    threads.chain(requests).collect()
 }
 
 /// Whether the user decides `request` now: a pending request that no space
@@ -390,13 +392,13 @@ pub(crate) trait ItemExt {
     /// it. Repositories are `(id, name)` pairs.
     fn name(&self, repositories: &[(String, String)]) -> String;
 
-    /// What kind of item it is, with a question's or request's number.
+    /// What kind of item it is, with a thread's or request's number.
     fn kind(&self) -> Cell;
 
     /// The mode of the workspace or chat it reports on.
     fn mode(&self) -> Cell;
 
-    /// What the item asks or reports: the question, the access requested
+    /// What the item asks or reports: the thread, the access requested
     /// and why, the failure, or the marked item with the issue's title.
     fn text(&self) -> String;
 
@@ -406,7 +408,7 @@ pub(crate) trait ItemExt {
 impl ItemExt for Item {
     fn space_id(&self) -> Option<&SpaceId> {
         match self {
-            Self::Question { question } => Some(&question.space_id),
+            Self::Thread { thread } => Some(&thread.space_id),
             Self::Approval { request } => Some(&request.space_id),
             Self::NeedsInput { workspace }
             | Self::Blocked { workspace }
@@ -436,7 +438,7 @@ impl ItemExt for Item {
 
     fn name(&self, repositories: &[(String, String)]) -> String {
         let name: &str = match self {
-            Self::Question { question } => &question.space,
+            Self::Thread { thread } => &thread.space,
             Self::Approval { request } => return super::approvals::space_label(request),
             Self::NeedsInput { workspace }
             | Self::Blocked { workspace }
@@ -468,11 +470,8 @@ impl ItemExt for Item {
 
     fn kind(&self) -> Cell {
         let (label, style) = match self {
-            Self::Question { question } => {
-                return (
-                    format!("question {}", question.number),
-                    Some(Style::Warning),
-                );
+            Self::Thread { thread } => {
+                return (format!("thread {}", thread.number), Some(Style::Warning));
             }
             Self::Approval { request } => {
                 return (format!("approval {}", request.number), Some(Style::Warning));
@@ -498,7 +497,7 @@ impl ItemExt for Item {
     fn text(&self) -> String {
         let title = |w: &Workspace| w.links.issue_title().unwrap_or_default().to_owned();
         match self {
-            Self::Question { question } => question.one_line(),
+            Self::Thread { thread } => thread.one_line(),
             Self::Approval { request } => super::approvals::about(request),
             Self::NeedsInput { workspace } => title(workspace),
             Self::Blocked { workspace } => blocked_by(workspace.progress.as_ref()),
@@ -555,11 +554,11 @@ impl ItemExt for Item {
 
     fn note(&self) -> String {
         match self {
-            Self::Question { question }
+            Self::Thread { thread }
             | Self::Elsewhere {
-                need: Need::Question(question),
+                need: Need::Thread(thread),
                 ..
-            } => question_note(question),
+            } => thread_note(thread),
             Self::Untracked { .. } => "adopt it with shoal adopt".to_owned(),
             Self::SyncFailed { .. } => "retry with shoal repo sync".to_owned(),
             Self::Asleep { workspace } => ui::wake_now(workspace.number),
@@ -574,14 +573,14 @@ impl ItemExt for Item {
     }
 }
 
-/// The question's recommendation and the names of the files sent with it.
-fn question_note(question: &Question) -> String {
-    let recommendation = question
-        .recommendation()
+/// The recommendation of the thread's latest post and the names of the
+/// files sent with it.
+fn thread_note(thread: &Thread) -> String {
+    let last = thread.last_post();
+    let recommendation = (last.and_then(|post| post.post.recommendation.as_ref()))
         .map(|recommendation| format!("recommends {recommendation}"));
-    let names: Vec<&str> = question
-        .files
-        .iter()
+    let names: Vec<&str> = (last.into_iter())
+        .flat_map(|post| &post.files)
         .map(|file| file.name.as_str())
         .collect();
     let files = (!names.is_empty()).then(|| format!("files: {}", names.join(", ")));

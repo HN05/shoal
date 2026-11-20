@@ -3,10 +3,13 @@
 //! terminal to a picked one; with `--all` to every agent the sender's scope
 //! reaches, running, stopped or queued, or with `--repo` to those of one
 //! repository, the current one without a value. It lists where it went.
+//! Led by a thread's number, it posts in that thread instead (see
+//! [`super::threads`]).
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 
+use crate::cli::args::threads::PostArgs;
 use crate::{
     cli::{
         context::Context,
@@ -21,7 +24,38 @@ use shoal_protocol::{
     files::NewFile,
     protocol::AlertTarget,
     space_names::SpaceSelector,
+    threads::ThreadNumber,
 };
+
+/// What `shoal send`'s arguments say: an alert's text, or a post in a
+/// thread.
+pub(super) enum Sending {
+    Alert(Option<String>),
+    Post {
+        thread: ThreadNumber,
+        text: Option<String>,
+    },
+}
+
+/// What `args` say, given whether `--body-file` names the text and the
+/// options only posts take: a thread's number and the text post in that
+/// thread, as does a single argument with `--body-file` or such an
+/// option; any other single argument is an alert's text.
+pub(super) fn sending(args: Vec<String>, body_file: bool, post: &PostArgs) -> Result<Sending> {
+    let mut args = args.into_iter();
+    Ok(match (args.next(), args.next()) {
+        (Some(thread), Some(text)) => Sending::Post {
+            thread: thread.parse()?,
+            text: Some(text),
+        },
+        (Some(thread), None) if body_file || post.given() => Sending::Post {
+            thread: thread.parse()?,
+            text: None,
+        },
+        (text, _) if !post.given() => Sending::Alert(text),
+        _ => bail!("name the thread to post in: shoal send <thread> \"<text>\""),
+    })
+}
 
 /// Whom `shoal send` reaches.
 pub(super) enum Recipients {

@@ -5,12 +5,12 @@
 //! one whose connection carries bytes both ways, as a demo's, on a duplex
 //! stream; one that needs the space's files or processes stays on that
 //! machine.
-use crate::{approvals::ApprovalRequest, item_numbers::ItemNumber, questions::Question};
+use crate::{approvals::ApprovalRequest, item_numbers::ItemNumber};
 
 use super::{
     AgentMethod, AlertMethod, AlertTarget, ApprovalMethod, AssignmentMethod, BranchMethod,
-    CiMethod, DemoMethod, HoldMethod, ItemMethod, LaunchMethod, Operation, QuestionMethod,
-    QueueMethod, RemovalMethod, RepositoryMethod, WorkspaceMethod,
+    CiMethod, DemoMethod, HoldMethod, ItemMethod, LaunchMethod, Operation, QueueMethod,
+    RemovalMethod, RepositoryMethod, ThreadMethod, WorkspaceMethod,
 };
 
 /// What a daemon does with a request for another machine's space.
@@ -61,19 +61,11 @@ impl Operation {
         }
     }
 
-    /// Name the question or approval request a request answers, decides or
-    /// passes on as `questions` and `approvals` hold it, where the caller
-    /// named it by number alone, so that a later item reusing its number,
-    /// as while its machine is offline, is refused instead.
-    /// Whether the request answers, decides or passes on an item it names
-    /// by number alone, which another item may take while it waits.
+    /// Whether the request decides or passes on an approval request it
+    /// names by number alone, which another request may take while it
+    /// waits.
     pub fn names_unpinned_item(&self) -> bool {
         match self {
-            Self::Question(
-                QuestionMethod::AnswerQuestion { shown, .. }
-                | QuestionMethod::AcceptQuestionRecommendation { shown, .. }
-                | QuestionMethod::WithdrawQuestion { shown, .. },
-            ) => shown.is_none(),
             Self::Approval(
                 ApprovalMethod::DecideApproval { shown, .. }
                 | ApprovalMethod::EscalateApproval { shown, .. },
@@ -82,18 +74,15 @@ impl Operation {
         }
     }
 
-    pub fn pin_item(&mut self, questions: &[Question], approvals: &[ApprovalRequest]) {
-        let question =
-            |number: &ItemNumber| questions.iter().find(|q| &q.number == number).cloned();
+    /// Name the approval request a request decides or passes on as
+    /// `approvals` holds it, where the caller named it by number alone, so
+    /// that a later request reusing its number, as while its machine is
+    /// offline, is refused instead.
+    pub fn pin_item(&mut self, approvals: &[ApprovalRequest]) {
         let approval = |number: &ItemNumber| {
             (approvals.iter().find(|a| &a.number == number)).map(|a| Box::new(a.clone()))
         };
         match self {
-            Self::Question(
-                QuestionMethod::AnswerQuestion { number, shown, .. }
-                | QuestionMethod::AcceptQuestionRecommendation { number, shown }
-                | QuestionMethod::WithdrawQuestion { number, shown, .. },
-            ) if shown.is_none() => *shown = question(number),
             Self::Approval(
                 ApprovalMethod::DecideApproval { number, shown, .. }
                 | ApprovalMethod::EscalateApproval { number, shown, .. },
@@ -131,10 +120,8 @@ impl Operation {
             Self::Alert(AlertMethod::SendAlert {
                 to: AlertTarget::Space { .. },
                 ..
-            }) | Self::Question(
-                QuestionMethod::AnswerQuestion { .. }
-                    | QuestionMethod::AcceptQuestionRecommendation { .. }
-            ) | Self::Approval(ApprovalMethod::DecideApproval { .. })
+            }) | Self::Thread(ThreadMethod::Post { .. })
+                | Self::Approval(ApprovalMethod::DecideApproval { .. })
                 | Self::Removal(RemovalMethod::StopSpace { .. })
         )
     }
@@ -155,10 +142,13 @@ impl Operation {
                     | AgentMethod::Sleep { .. }
                     | AgentMethod::RestartAgent { .. }
                     | AgentMethod::CancelRestart { .. }
-            ) | Self::Question(
-                QuestionMethod::ListQuestions { .. }
-                    | QuestionMethod::ShowQuestion { .. }
-                    | QuestionMethod::WithdrawQuestion { .. }
+            ) | Self::Thread(
+                ThreadMethod::ListThreads { .. }
+                    | ThreadMethod::ShowThread { .. }
+                    | ThreadMethod::ResolveThread { .. }
+                    | ThreadMethod::ForwardThread { .. }
+                    | ThreadMethod::LinkThread { .. }
+                    | ThreadMethod::UnlinkThread { .. }
             ) | Self::Approval(
                 ApprovalMethod::ListApprovals { .. }
                     | ApprovalMethod::ShowApproval { .. }

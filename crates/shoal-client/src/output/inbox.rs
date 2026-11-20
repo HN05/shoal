@@ -9,15 +9,16 @@ use shoal_protocol::{
     hub::directory::Listed,
     list_status::ListStatus,
     model::{Chat, CheckoutSync, QueueEntry, ReviewMark, UntrackedWorktree, Workspace},
-    questions::Question,
+    threads::Thread,
 };
 
 /// Something that needs the user.
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Item {
-    Question {
-        question: Question,
+    /// A thread that waits for the user's reply.
+    Thread {
+        thread: Box<Thread>,
     },
     Approval {
         request: ApprovalRequest,
@@ -96,7 +97,7 @@ pub enum Item {
 #[serde(rename_all = "snake_case")]
 #[allow(clippy::large_enum_variant, reason = "an inbox holds a few items")]
 pub enum Need {
-    Question(Question),
+    Thread(Box<Thread>),
     Approval(ApprovalRequest),
     /// What it is doing, such as needing input or having failed.
     Status(ListStatus),

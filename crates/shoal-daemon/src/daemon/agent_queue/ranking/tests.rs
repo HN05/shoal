@@ -88,7 +88,7 @@ async fn a_launch_in_a_child_ranks_with_its_ready_parent_ahead_of_earlier_launch
 }
 
 #[tokio::test]
-async fn waits_come_from_blockers_questions_stacks_and_leases() {
+async fn waits_come_from_blockers_threads_stacks_and_leases() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
@@ -112,9 +112,14 @@ async fn waits_come_from_blockers_questions_stacks_and_leases() {
                 params![asking, stacked],
             )?;
             db.execute(
-                "INSERT INTO questions(space_number,number,space_id,created_at,question,
-                        recommendation,choices)
-                    VALUES (9,1,?1,1,'Which?','This','[]')",
+                "INSERT INTO threads(id,space_id,space_number,number,kind,name,created_at,opener,
+                        holder_id)
+                    VALUES (1,?1,9,1,'question','Which?',1,'space',?2)",
+                params![asking, stacked],
+            )?;
+            db.execute(
+                "INSERT INTO thread_posts(thread_id,created_at,side,sender,sender_id,text)
+                    VALUES (1,1,'opener','space',?1,'Which?')",
                 [asking],
             )?;
             db.execute(
@@ -168,7 +173,7 @@ async fn waits_come_from_blockers_questions_stacks_and_leases() {
     let expected = HashSet::from([
         edge(space(&stacked), space(&base), Dependency::Stacked),
         edge(space(&stacked), space(&asking), Dependency::Parent),
-        edge(space(&asking), space(&stacked), Dependency::Question),
+        edge(space(&asking), space(&stacked), Dependency::Thread),
         edge(
             Node::Space(blocked.opens.unwrap()),
             space(&holder),

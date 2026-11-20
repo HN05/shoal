@@ -42,6 +42,6 @@ fn the_other_kind_names_its_command() {
     };
     let approval = ItemKind::Approval.misdirected(number);
     assert!(approval.contains("shoal approvals 3.2"), "{approval}");
-    let question = ItemKind::Question.misdirected(number);
-    assert!(question.contains("shoal questions 3.2"), "{question}");
+    let thread = ItemKind::Thread.misdirected(number);
+    assert!(thread.contains("shoal view thread 3.2"), "{thread}");
 }

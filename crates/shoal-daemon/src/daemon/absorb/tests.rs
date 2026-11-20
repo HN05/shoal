@@ -16,7 +16,11 @@ use crate::{
     test_support::{commit, git},
 };
 use shoal_protocol::{
-    absorb::Absorb, assignments::Done, files::NewFile, questions::Ask, space_names::SpaceSelector,
+    absorb::Absorb,
+    assignments::Done,
+    files::NewFile,
+    space_names::SpaceSelector,
+    threads::{NewPost, ThreadKind, ThreadNumber, ThreadState},
 };
 
 const ISSUE: &str = "https://github.com/owner/repo/issues/7";
@@ -191,7 +195,7 @@ async fn a_done_workspace_folds_into_its_parent_which_takes_its_work_and_records
 }
 
 #[tokio::test]
-async fn a_forced_squash_takes_the_open_questions_of_work_that_is_not_done() {
+async fn a_forced_squash_takes_the_open_threads_of_work_that_is_not_done() {
     let Tree {
         _temp,
         manager,
@@ -199,23 +203,27 @@ async fn a_forced_squash_takes_the_open_questions_of_work_that_is_not_done() {
         worker,
         ..
     } = tree().await;
-    let ask = Ask {
-        question: "Which database?".into(),
-        recommendation: "SQLite".into(),
-        reason: None,
-        choices: Vec::new(),
-    };
     let screenshot = worker.path.join("choices.png");
     fs::write(&screenshot, "png").unwrap();
+    let caller = crate::daemon::test_support::caller_in(&SpaceSelector::id(&worker.id));
+    let thread = manager
+        .open_thread(
+            Some(&caller),
+            "Which database?".into(),
+            ThreadKind::Question,
+            None,
+        )
+        .await
+        .unwrap();
+    let post = NewPost {
+        text: "Which database?".into(),
+        ..NewPost::default()
+    };
     let attached = vec![NewFile::from(screenshot)];
-    (manager.ask_question(
-        &SpaceSelector::id(&worker.id),
-        ask,
-        attached,
-        &Attacher::User,
-    ))
-    .await
-    .unwrap();
+    let number = ThreadNumber::Full(thread.number);
+    (manager.post_to_thread(Some(&caller), number, post, attached))
+        .await
+        .unwrap();
     let parent_head = head(&parent.path);
 
     let refused = manager.absorb_space(&absorb(&worker), None).await;
@@ -229,25 +237,25 @@ async fn a_forced_squash_takes_the_open_questions_of_work_that_is_not_done() {
     };
     let absorbed = manager.absorb_space(&request, None).await.unwrap();
 
-    assert_eq!(absorbed.questions.len(), 1);
+    assert_eq!(absorbed.threads.len(), 1);
     let listing = manager
-        .questions(Some(&SpaceSelector::id(&parent.id)))
+        .threads(Some(&SpaceSelector::id(&parent.id)), ThreadState::Open)
         .await
         .unwrap();
-    assert_eq!(listing.questions.len(), 1);
+    assert_eq!(listing.threads.len(), 1);
     let files = manager
         .attached_files(&SpaceSelector::id(&parent.id))
         .await
         .unwrap();
-    // Announced again under its new number, its old notification gone.
+    // Its holder hears of its new number.
     let notifications = manager.notifications.list(true, 50).await.unwrap();
-    let asked: Vec<_> = (notifications.iter())
-        .filter(|notification| notification.kind == AlertKind::QuestionAsked)
+    let moved: Vec<_> = (notifications.iter())
+        .filter(|notification| notification.kind == AlertKind::ThreadResolved)
         .collect();
-    assert_eq!(asked.len(), 1, "{asked:?}");
-    let number = listing.questions[0].number.to_string();
-    assert!(asked[0].message.contains(&number), "{}", asked[0].message);
-    let sent: Vec<_> = listing.questions[0]
+    assert_eq!(moved.len(), 1, "{moved:?}");
+    let number = listing.threads[0].number.to_string();
+    assert!(moved[0].message.contains(&number), "{}", moved[0].message);
+    let sent: Vec<_> = listing.threads[0].posts[0]
         .files
         .iter()
         .map(|file| file.id)

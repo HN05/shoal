@@ -8,17 +8,15 @@ use shoal_daemon::test_daemon::ApprovalRequestExt as _;
 use shoal_daemon::test_daemon::{TestDaemon, fake};
 use shoal_protocol::approvals::{ApprovalRequest, PortSpecification, Specification, Target};
 use shoal_protocol::config::repo::Lifetime;
-use shoal_protocol::files::Attacher;
 use shoal_protocol::model::{
     Completion, QueueEntry, Relation, Repository, SyncedRepository, Workspace,
 };
 use shoal_protocol::protocol::operations::LaunchRequest;
 use shoal_protocol::protocol::{
     ApprovalMethod, AssignmentMethod, Body, ErrorCode, HoldMethod, ItemMethod, OperationMethod,
-    QuestionMethod, QueueMethod, RemovalMethod, RepositoryMethod, WorkspaceMethod,
+    QueueMethod, RemovalMethod, RepositoryMethod, WorkspaceMethod,
     operations::{OperationSpec, StartedWorkspace, WorkspaceStart},
 };
-use shoal_protocol::questions::{Ask, Question};
 use shoal_protocol::removal::{RemovalResult, SpaceRemovalCheck, UnsavedWork};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::status::Inspection;
@@ -183,47 +181,10 @@ async fn done_renames_and_links_go_through_the_protocol() {
 }
 
 #[tokio::test]
-async fn answers_and_decisions_bind_to_the_record_the_app_showed() {
+async fn decisions_bind_to_the_record_the_app_showed() {
     let daemon = TestDaemon::start().await;
     let workspace = daemon.workspace("asker").await;
-    let ask = Ask {
-        question: "Which database?".into(),
-        recommendation: "SQLite".into(),
-        reason: None,
-        choices: Vec::new(),
-    };
-    let question = daemon
-        .manager
-        .ask_question(
-            &SpaceSelector::id(&workspace.id),
-            ask,
-            Vec::new(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
     let app = daemon.connector();
-    let answer = |shown| QuestionMethod::AnswerQuestion {
-        number: question.number,
-        answer: "Postgres".into(),
-        shown,
-    };
-    let stale = Question {
-        ask: Ask {
-            question: "Which cache?".into(),
-            ..question.ask.clone()
-        },
-        ..question.clone()
-    };
-    assert_eq!(
-        code(connection::request::<Question>(&app, answer(Some(stale))).await),
-        ErrorCode::NotFound
-    );
-    let answered: Question = connection::request(&app, answer(Some(question.clone())))
-        .await
-        .unwrap();
-    assert_eq!(answered.status.answer(), Some("Postgres"));
-
     let request = ApprovalRequest::new(
         &workspace.id,
         Target::Port("web".into()),

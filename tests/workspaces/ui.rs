@@ -1325,19 +1325,16 @@ esac
     assert!(read("picker-args").contains("--prompt\ninbox> \n"));
     assert_eq!(read("picker-input"), "");
 
-    fixture.ok(&[
-        "questions",
-        "ask",
+    ask(
+        &fixture,
+        "asker",
         "Which database?",
-        "--recommend",
-        "SQLite",
-        "--space",
-        &fixture.id("asker"),
-    ]);
+        &["Postgres or SQLite?", "--recommend", "SQLite"],
+    );
     let id = asker["id"].as_str().unwrap();
     let listed = fixture.run(&["internal", "menu-rows", "inbox"]);
     let listed = String::from_utf8(listed.stdout).unwrap();
-    assert!(listed.starts_with(&format!("question:{id}:")), "{listed}");
+    assert!(listed.starts_with(&format!("thread:{id}:")), "{listed}");
     // Tab names the next view by the prompt fzf shows.
     let next = |prompt: &str| {
         let output = fixture
@@ -1469,8 +1466,8 @@ esac
     fixture.interactive_command(fixture.command().current_dir(path).env("PICK", ""), "");
     assert!(read("picker-args").contains("--query\n'asker\n"));
 
-    // Now bare shoal opens on the inbox, and Enter answers the question.
-    let (output, transcript, args, rows) = open("question:", "Postgres\n");
+    // Now bare shoal opens on the inbox, and Enter answers the thread.
+    let (output, transcript, args, rows) = open("thread:", "Postgres\n");
     assert!(!args.contains("--query"), "{args}");
     assert!(output.status.success(), "{transcript}");
     assert!(args.contains("--prompt\ninbox> \n"), "{args}");
@@ -1480,7 +1477,7 @@ esac
     );
     assert!(args.contains("internal menu-next"), "{args}");
     assert!(rows.contains("Which database?"), "{rows}");
-    // The question offers its recommendation as the default answer.
+    // The thread offers its recommendation as the default reply.
     assert!(transcript.contains("[SQLite]"), "{transcript}");
     assert_eq!(fixture.ok(&["inbox"]), serde_json::json!([]));
     // A row Tab loaded is chosen like the first view's: Enter on a
@@ -1887,15 +1884,12 @@ fn inbox_lists_what_needs_the_user_by_kind() {
         "agent",
         &["acquire", "port", "web", "--reason", "serve preview"],
     ));
-    fixture.ok(&[
-        "questions",
-        "ask",
+    ask(
+        &fixture,
+        "asker",
         "Which database?",
-        "--recommend",
-        "SQLite",
-        "--space",
-        &fixture.id("asker"),
-    ]);
+        &["Postgres or SQLite?", "--recommend", "SQLite"],
+    );
 
     let items = fixture.ok(&["inbox"]);
     let listed: Vec<_> = items
@@ -1904,19 +1898,20 @@ fn inbox_lists_what_needs_the_user_by_kind() {
         .iter()
         .map(|item| item["kind"].as_str().unwrap())
         .collect();
-    assert_eq!(listed, ["question", "approval", "needs_input", "ready"]);
-    assert_eq!(items[0]["question"]["space"], "asker");
+    assert_eq!(listed, ["thread", "approval", "needs_input", "ready"]);
+    assert_eq!(items[0]["thread"]["space"], "asker");
     assert_eq!(items[1]["request"]["space"], "agent");
     assert_eq!(items[2]["workspace"]["name"], "waiter");
     let text = String::from_utf8(fixture.run(&["inbox"]).stdout).unwrap();
     let rows: Vec<_> = text.lines().collect();
     assert_eq!(rows.len(), 4, "{text}");
-    let (question, request) = (
-        &items[0]["question"]["number"],
+    let (thread, request) = (
+        &items[0]["thread"]["number"],
         &items[1]["request"]["number"],
     );
     assert!(
-        rows[0].starts_with(&format!("question {}  asker ", question.as_str().unwrap()))
+        rows[0].starts_with(&format!("thread {} ", thread.as_str().unwrap()))
+            && rows[0].contains(" asker ")
             && rows[0].contains("Which database?")
             && rows[0].ends_with("SQLite"),
         "{text}"

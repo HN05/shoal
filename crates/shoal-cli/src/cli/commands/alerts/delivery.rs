@@ -27,8 +27,8 @@ pub(in crate::cli::commands) async fn deliver(ctx: &Context) -> Result<i32> {
         return Ok(0);
     }
     let deadline = tokio::time::Instant::now() + crate::agents::hooks::MESSAGE_DAEMON_LIMIT;
-    if user_prompt(&input)
-        && let Err(error) = report_reply(ctx, deadline).await
+    if let Some(prompt) = user_prompt(&input)
+        && let Err(error) = report_reply(ctx, prompt, deadline).await
     {
         eprintln!("shoal: the reply in the chat was not reported: {error:#}");
     }
@@ -48,23 +48,23 @@ fn hook_input() -> String {
     input
 }
 
-/// Whether hook `input` is a prompt the user submitted, rather than one
-/// Shoal submitted for them.
-fn user_prompt(input: &str) -> bool {
-    serde_json::from_str::<serde_json::Value>(input).is_ok_and(|input| {
-        input["hook_event_name"] == "UserPromptSubmit"
-            && input["prompt"]
-                .as_str()
-                .is_some_and(|prompt| !terminal::submitted_by_shoal(prompt))
-    })
+/// The prompt the user submitted, when hook `input` is one, rather than
+/// one Shoal submitted for them.
+fn user_prompt(input: &str) -> Option<String> {
+    let input = serde_json::from_str::<serde_json::Value>(input).ok()?;
+    if input["hook_event_name"] != "UserPromptSubmit" {
+        return None;
+    }
+    let prompt = input["prompt"].as_str()?;
+    (!terminal::submitted_by_shoal(prompt)).then(|| prompt.to_owned())
 }
 
-/// Tell the daemon that the user replied in the agent's conversation, which
-/// answers the questions the space's agents asked there.
-async fn report_reply(ctx: &Context, deadline: tokio::time::Instant) -> Result<()> {
+/// Tell the daemon that the user replied `prompt` in the agent's
+/// conversation, which answers the posts the space's agents made there.
+async fn report_reply(ctx: &Context, prompt: String, deadline: tokio::time::Instant) -> Result<()> {
     let reply = async {
         let inbox = Inbox::current(ctx, Fallback::OwnWorkspace).await?;
-        crate::client::questions::replied_in_chat(&ctx.paths, inbox.space).await
+        crate::client::threads::replied_in_chat(&ctx.paths, inbox.space, Some(prompt)).await
     };
     tokio::time::timeout_at(deadline, reply)
         .await
@@ -95,7 +95,7 @@ async fn hook_updates(ctx: &Context) -> Result<(Inbox, Updates)> {
 /// The space of the caller's own agent, whose alerts it reads: its chat's
 /// when it runs under one outside any workspace scope, otherwise its
 /// workspace's.
-pub(super) async fn own_space(ctx: &Context) -> Result<SpaceSelector> {
+pub(in crate::cli::commands) async fn own_space(ctx: &Context) -> Result<SpaceSelector> {
     Ok(Inbox::current(ctx, Fallback::OwnWorkspace).await?.space)
 }
 

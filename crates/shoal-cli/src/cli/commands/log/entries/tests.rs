@@ -72,11 +72,21 @@ fn details_name_what_each_entry_is_about() {
         "run 2765 related"
     );
     assert_eq!(
-        details(
-            serde_json::json!({"kind": "question_answered", "question": {
-            "space_number": 3, "item": 2, "question": "Which database?", "answer": "SQLite"}})
-        ),
-        "3.2 SQLite"
+        details(serde_json::json!({"kind": "thread_posted", "thread": {
+            "space_number": 3, "item": 2, "name": "Which database?", "sender": "fix",
+            "text": "SQLite"}})),
+        "3.2 Which database?: fix: SQLite"
+    );
+    assert_eq!(
+        details(serde_json::json!({"kind": "thread_forwarded", "thread": {
+            "space_number": 3, "item": 2, "name": "Which database?", "sender": "fix",
+            "to": "the user", "text": ""}})),
+        "3.2 Which database?: fix to the user"
+    );
+    assert_eq!(
+        details(serde_json::json!({"kind": "thread_resolved", "thread": {
+            "space_number": 3, "item": 2, "name": "Which database?"}})),
+        "3.2 Which database?: reopened"
     );
     assert_eq!(
         details(

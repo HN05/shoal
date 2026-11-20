@@ -242,7 +242,7 @@ pub(crate) fn record_chat_conversion(
 /// Replace the chat `id`, whose workspace row was just inserted under its
 /// ID, with that workspace, whose agent runs in `mode` with the permissions
 /// `narrowing` gives it, unless a stop saved the chat meanwhile: its
-/// questions, approval requests and unread messages become the workspace's,
+/// threads, approval requests and unread messages become the workspace's,
 /// and its agent's scope token, which it keeps, acts for the workspace until
 /// the agent restarts there.
 /// Returns the row the chat had and the execution its agent runs as.
@@ -286,7 +286,7 @@ pub(crate) fn relocated_chat(
 }
 
 /// Give back the chat `row`, which the workspace `id` replaced, and remove
-/// that workspace's row: its completion, questions, approval requests and
+/// that workspace's row: its completion, threads, approval requests and
 /// unread messages return to the chat, and of its scope tokens only the
 /// chat's own stays.
 pub(crate) fn restore_chat(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) -> Result<()> {
@@ -321,7 +321,7 @@ pub(crate) struct ConvertedChat {
 
 /// Replace the workspace `id` with the stopped chat `chat` under its ID,
 /// number and name, which restores in its repository's checkout: its
-/// questions, unread messages and requests to take actions become the
+/// threads, unread messages and requests to take actions become the
 /// chat's, and what only a workspace has goes with its row. Returns the requests the workspace
 /// decided, given back to the user, since a stopped chat decides none.
 pub(crate) fn replace_workspace(

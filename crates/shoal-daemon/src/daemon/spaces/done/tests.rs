@@ -171,21 +171,8 @@ async fn repeating_an_unchanged_completion_is_refused() {
         )
         .await
         .unwrap_err();
-    // Repeating it closes a question asked since.
-    manager
-        .ask_question(
-            &SpaceSelector::id(&workspace.id),
-            crate::daemon::questions::Ask {
-                question: "Anything more?".into(),
-                recommendation: "No".into(),
-                reason: None,
-                choices: vec![],
-            },
-            Vec::new(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
+    // Repeating it closes a thread opened since.
+    crate::daemon::test_support::ask(&manager, &workspace.id, "Anything more?").await;
     manager
         .mark_space_done(
             &SpaceSelector::id(&workspace.id),
@@ -194,7 +181,7 @@ async fn repeating_an_unchanged_completion_is_refused() {
         )
         .await
         .unwrap();
-    assert!(!manager.has_open_questions(&workspace.id).await.unwrap());
+    assert!(!manager.has_waiting_threads(&workspace.id).await.unwrap());
     // Another cleanup choice or HEAD replaces the recorded completion.
     assert!(
         manager

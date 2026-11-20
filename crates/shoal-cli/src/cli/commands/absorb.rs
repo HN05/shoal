@@ -57,10 +57,8 @@ fn report(absorbed: &Absorbed, palette: &Palette) -> String {
         ("Links moved", links.collect()),
         ("Files moved", absorbed.files.clone()),
         (
-            "Questions moved",
-            (absorbed.questions.iter())
-                .map(ToString::to_string)
-                .collect(),
+            "Threads moved",
+            (absorbed.threads.iter()).map(ToString::to_string).collect(),
         ),
         (
             "Moved up a level",

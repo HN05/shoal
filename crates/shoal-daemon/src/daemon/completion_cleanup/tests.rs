@@ -435,24 +435,10 @@ async fn holds_retain_completion_without_turning_it_into_an_error() {
 }
 
 #[tokio::test]
-async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
+async fn threads_asked_after_done_retain_completion_and_pr_cleanup() {
     let (_root, manager, workspace) = fixture().await;
-    let ask = |question: &str| crate::daemon::questions::Ask {
-        question: question.into(),
-        recommendation: "No".into(),
-        reason: None,
-        choices: vec![],
-    };
-    // Done closes the questions asked before it.
-    manager
-        .ask_question(
-            &SpaceSelector::id(&workspace.id),
-            ask("Anything else?"),
-            Vec::new(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
+    // Done closes the threads opened before it.
+    crate::daemon::test_support::ask(&manager, &workspace.id, "Anything else?").await;
     manager
         .mark_space_done(
             &SpaceSelector::id(&workspace.id),
@@ -461,15 +447,8 @@ async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
         )
         .await
         .unwrap();
-    let question = manager
-        .ask_question(
-            &SpaceSelector::id(&workspace.id),
-            ask("Anything more?"),
-            Vec::new(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
+    let question =
+        crate::daemon::test_support::ask(&manager, &workspace.id, "Anything more?").await;
     manager.sweep_completed().await.unwrap();
     assert!(workspace.path.exists());
     manager
@@ -480,7 +459,7 @@ async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
     assert!(workspace.path.exists());
     let completion = manager.completion(&workspace.id).await.unwrap().unwrap();
     assert!(completion.error.is_none());
-    // A question asked after a sweep checked for one still stops its removal.
+    // A thread opened after a sweep checked for one still stops its removal.
     manager
         .remove_completed(
             &Space::from(workspace.clone()),
@@ -494,11 +473,8 @@ async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
         .await
         .unwrap_err();
     assert!(workspace.path.exists());
-    assert!(manager.has_open_questions(&workspace.id).await.unwrap());
-    manager
-        .answer_question(question.number, "No".into(), None)
-        .await
-        .unwrap();
+    assert!(manager.has_waiting_threads(&workspace.id).await.unwrap());
+    crate::daemon::test_support::answer(&manager, question.number, "No").await;
     manager.sweep_prs().await.unwrap();
     assert!(!workspace.path.exists());
 }

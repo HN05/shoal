@@ -49,7 +49,6 @@ mod permissions;
 mod ports;
 mod priority;
 mod progress;
-mod questions;
 mod queue;
 mod queued_agents;
 mod reactions;
@@ -74,6 +73,7 @@ mod spaces;
 mod start;
 mod stop;
 mod subagents;
+mod threads;
 mod transfer;
 mod triggers;
 mod turns;
@@ -87,8 +87,8 @@ mod worktree_hooks;
 mod tests;
 
 pub(in crate::cli) use approvals::summary as approval_summary;
-pub(in crate::cli) use questions::summary as question_summary;
 pub(in crate::cli) use start::execute_place;
+pub(in crate::cli) use threads::summary as thread_summary;
 
 use anyhow::Result;
 use clap::CommandFactory;

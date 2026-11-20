@@ -65,7 +65,7 @@ impl Parties {
             discarded: matches!(self.code, Code::Discard),
             links: taken.links,
             files: taken.files,
-            questions: taken.questions,
+            threads: taken.threads,
             children,
             withdrawn: taken.withdrawn,
             warnings: taken.warnings,

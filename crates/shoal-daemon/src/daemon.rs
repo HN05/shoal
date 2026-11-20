@@ -73,7 +73,6 @@ mod pr_gate;
 pub(crate) mod progress;
 pub(crate) mod proxy_retries;
 mod quarantine;
-pub mod questions;
 pub(crate) mod queued_starts;
 pub(crate) mod ready_marks;
 pub mod recovery;
@@ -113,6 +112,7 @@ pub(crate) mod test_daemon;
 // Other crates' tests read only some of the daemon's own fixtures.
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod test_support;
+pub mod threads;
 mod tmp_dirs;
 mod tree;
 

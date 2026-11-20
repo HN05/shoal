@@ -26,7 +26,7 @@ pub enum SpaceCommand {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
-    /// List what needs you: questions, approvals, agents needing input, failures and ready work.
+    /// List what needs you: threads, approvals, agents needing input, failures and ready work.
     Inbox {
         /// List only this registered repository's items.
         #[arg(short = 'r', long = "repo")]
@@ -69,7 +69,7 @@ pub enum SpaceCommand {
         item: Option<String>,
     },
     /// Show a space's log: its creation, agent, work, issues and PRs,
-    /// questions, approvals and alerts, and the spaces below it; or Shoal's
+    /// threads, approvals and alerts, and the spaces below it; or Shoal's
     /// log outside a space.
     ///
     /// Without a space, shows the log of the space this runs in, else

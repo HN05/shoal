@@ -1,6 +1,6 @@
 //! Absorbing a space into one above it: `shoal absorb` folds a space's work
 //! into a space of the caller's subtree, which takes over its links, files
-//! and questions, moves the spaces below it up one level, then removes it
+//! and open threads, moves the spaces below it up one level, then removes it
 //! through the shared removal path.
 mod children;
 mod code;

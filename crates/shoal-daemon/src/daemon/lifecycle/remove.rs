@@ -544,7 +544,7 @@ impl Manager {
         cancelled: &[IdleRestore],
     ) -> Result<()> {
         let space = (self.find_space(id).await?).context("the space was removed meanwhile")?;
-        // The reservation refuses new questions and PR proposals, so this
+        // The reservation refuses new threads and PR proposals, so this
         // covers those made after the sweep's own check.
         if removal.unattended()
             && let Some(retention) = self.keep_reason(id).await?

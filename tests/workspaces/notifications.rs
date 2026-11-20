@@ -1,4 +1,4 @@
-//! Notifications, messages, alerts, questions, attached files, and the turn
+//! Notifications, messages, alerts, threads, attached files, and the turn
 //! state and ready marks agents report.
 use super::chats::start_test_chat;
 use super::forge::wait_removed;
@@ -1344,30 +1344,23 @@ fn agents_mark_their_workspace_ready_whatever_it_commits() {
 }
 
 #[test]
-fn agents_withdraw_questions_they_no_longer_need_answered() {
+fn agents_withdraw_threads_they_no_longer_need_answered() {
     let fixture = Fixture::new();
     fixture.add("asker");
-    let output = scoped_command(
+    let asked = ask(
         &fixture,
         "asker",
-        &[
-            "questions",
-            "ask",
-            "Which database?",
-            "--recommend",
-            "SQLite",
-        ],
+        "Which database?",
+        &["Postgres or SQLite?", "--recommend", "SQLite"],
     );
-    assert!(output.status.success(), "{}", printed(&output));
-    let question: Value = serde_json::from_slice(&output.stdout).unwrap();
-    let id = question["number"].as_str().unwrap().to_owned();
-    let output = scoped_command(&fixture, "asker", &["questions", "withdraw", &id]);
+    let id = asked["number"].as_str().unwrap().to_owned();
+    let output = scoped_command(&fixture, "asker", &["thread", "resolve", &id, "withdrawn"]);
     assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(
-        fixture.ok(&["questions"]),
-        serde_json::json!({"questions": [], "omitted": 0})
+        fixture.ok(&["thread", "list"]),
+        serde_json::json!({"threads": [], "omitted": 0})
     );
-    let refused = fixture.run(&["questions", &id, "--answer", "Postgres"]);
+    let refused = fixture.run(&["send", &id, "Postgres"]);
     assert!(!refused.status.success(), "{}", printed(&refused));
 }
 
@@ -1387,25 +1380,17 @@ fn a_chats_agent_asks_the_user_and_reads_the_answer_in_its_inbox() {
         assert!(output.status.success(), "{args:?}: {}", printed(&output));
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
-    let asked = in_chat(&[
-        "questions",
-        "ask",
-        "Which database?",
-        "--recommend",
-        "SQLite",
-    ]);
+    let opened = in_chat(&["thread", "open", "Which database?"]);
+    let id = opened["number"].as_str().unwrap().to_owned();
+    let asked = in_chat(&["send", &id, "Postgres or SQLite?", "--recommend", "SQLite"]);
     assert_eq!(asked["space"], "planning", "{asked}");
-    let id = asked["number"].as_str().unwrap().to_owned();
     // The user sees it under the chat's name, and the answer reaches the chat.
-    let listed = fixture.ok(&["questions", "--space", &fixture.id("planning")]);
-    assert_eq!(
-        listed["questions"][0]["number"], asked["number"],
-        "{listed}"
-    );
+    let listed = fixture.ok(&["thread", "list", "--space", &fixture.id("planning")]);
+    assert_eq!(listed["threads"][0]["number"], asked["number"], "{listed}");
     let inbox = fixture.ok(&["inbox"]);
-    let item = &inbox[0]["question"];
+    let item = &inbox[0]["thread"];
     assert_eq!(item["space"], "planning", "{inbox}");
-    fixture.ok(&["questions", &id, "--answer", "Postgres"]);
+    fixture.ok(&["send", &id, "Postgres"]);
     let messages = in_chat(&["alert", "list", "--unread"]);
     assert!(
         messages[0]["message"]
@@ -1413,117 +1398,84 @@ fn a_chats_agent_asks_the_user_and_reads_the_answer_in_its_inbox() {
             .is_some_and(|message| message.contains("Postgres")),
         "{messages}"
     );
-    // The chat withdraws a question it no longer needs answered.
-    let asked = in_chat(&["questions", "ask", "Which cache?", "--recommend", "None"]);
-    let id = asked["number"].as_str().unwrap().to_owned();
-    in_chat(&["questions", "withdraw", &id]);
+    // The chat settles one thread and withdraws another it no longer needs.
+    in_chat(&["thread", "resolve", &id, "answered"]);
+    let other = in_chat(&["thread", "open", "Which cache?"]);
+    let other = other["number"].as_str().unwrap().to_owned();
+    in_chat(&["thread", "resolve", &other, "withdrawn"]);
     assert_eq!(
-        fixture.ok(&["questions"]),
-        serde_json::json!({"questions": [], "omitted": 0})
+        fixture.ok(&["thread", "list"]),
+        serde_json::json!({"threads": [], "omitted": 0})
     );
     agent.kill().unwrap();
     agent.wait().unwrap();
 }
 
 #[test]
-fn agents_wait_for_the_answer_to_their_question() {
+fn a_wait_prints_the_other_side_s_next_post() {
     let fixture = Fixture::new();
     fixture.add("asker");
+    let opened = fixture.ok(&[
+        "thread",
+        "open",
+        "Which database?",
+        "--space",
+        &fixture.id("asker"),
+    ]);
+    let id = opened["number"].as_str().unwrap().to_owned();
     // Unscoped, so the workspace can be renamed while it waits.
-    let asker = fixture
-        .command()
-        .args([
-            "--json",
-            "questions",
-            "ask",
-            "Which database?",
-            "--recommend",
-            "SQLite",
-        ])
-        .args(["--choice", "SQLite", "--choice", "Postgres"])
-        .args(["--space", &fixture.id("asker"), "--wait"])
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let question = wait_for("the question", || {
-        fixture.ok(&["questions"])["questions"]
-            .as_array()
+    let waiting = |args: &[&str]| {
+        fixture
+            .command()
+            .args(["--json", "send", &id])
+            .args(args)
+            .stdout(Stdio::piped())
+            .spawn()
             .unwrap()
-            .first()
-            .cloned()
+    };
+    let user = waiting(&[
+        "Postgres or SQLite?",
+        "--choice",
+        "SQLite",
+        "--choice",
+        "Postgres",
+        "--recommend",
+        "SQLite",
+        "--wait",
+    ]);
+    let thread = wait_for("the post", || {
+        let thread = fixture.ok(&["view", "thread", &id]);
+        let posted = thread["posts"]
+            .as_array()
+            .is_some_and(|posts| !posts.is_empty());
+        posted.then_some(thread)
     });
-    assert_eq!(question["space"], "asker");
-    assert_eq!(question["recommendation"], "SQLite");
-    let id = question["number"].as_str().unwrap().to_owned();
-
-    let output = scoped_command(&fixture, "asker", &["questions", &id, "--answer", "1"]);
-    assert!(
-        !output.status.success(),
-        "agents cannot answer: {}",
-        printed(&output)
-    );
+    assert_eq!(thread["space"], "asker");
     let renamed = fixture.rename_branch("asker", "renamed");
     assert_eq!(renamed["data"]["branch"], "renamed", "{renamed}");
-    fixture.ok(&["questions", &id, "--answer", "2"]);
-    let output = asker.wait_with_output().unwrap();
+    let output = scoped_command(&fixture, "asker", &["send", &id, "--choose", "2"]);
+    assert!(output.status.success(), "{}", printed(&output));
+    let output = user.wait_with_output().unwrap();
     assert!(output.status.success(), "{}", printed(&output));
     let answered: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(answered["answer"], "Postgres");
-    // The wait printed the answer, so its message is not delivered again.
-    assert_eq!(
-        fixture.ok(&["alert", "list", "--unread", "--space", &fixture.id("asker")]),
-        serde_json::json!([])
-    );
-    assert_eq!(
-        fixture.ok(&["questions"]),
-        serde_json::json!({"questions": [], "omitted": 0})
-    );
+    let posts = answered["posts"].as_array().unwrap();
+    assert_eq!(posts.last().unwrap()["text"], "Postgres", "{answered}");
+    // The wait printed the answer, so its alert is not shown again.
+    let unread = fixture.ok(&["alert", "list", "--unread"]);
+    let posted = (unread.as_array().unwrap().iter()).any(|alert| alert["kind"] == "thread_posted");
+    assert!(!posted, "{unread}");
 
-    let output = scoped_command(
-        &fixture,
-        "asker",
-        &["questions", "ask", "Which cache?", "--recommend", "None"],
-    );
+    // An upgraded release resumes a wait after the post it made, without
+    // posting again.
+    let asked = fixture.ok(&["send", &id, "Which cache?"]);
+    let post = asked["posts"].as_array().unwrap().last().unwrap()["id"].to_string();
+    let resumed = waiting(&["--wait", "--resume", &post]);
+    let output = scoped_command(&fixture, "asker", &["send", &id, "Redis"]);
     assert!(output.status.success(), "{}", printed(&output));
-    let open: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(open["answer"], Value::Null);
-    // The delivered answer freed the first question's number.
-    assert_eq!(open["number"], question["number"]);
-    assert_eq!(
-        fixture.ok(&["questions"])["questions"]
-            .as_array()
-            .unwrap()
-            .len(),
-        1
-    );
-
-    // An upgraded release resumes a wait by the recorded number and the
-    // question's text, without asking again.
-    let space = open["space_id"].as_str().unwrap();
-    let id = open["number"].as_str().unwrap().to_owned();
-    let item = open["item"].to_string();
-    let resumed = fixture
-        .command()
-        .args([
-            "--json",
-            "questions",
-            "ask",
-            "Which cache?",
-            "--recommend",
-            "None",
-            "--wait",
-        ])
-        .args(["--space", &fixture.id(space), "--resume", &item])
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
-    fixture.ok(&["questions", &id, "--answer", "Redis"]);
     let output = resumed.wait_with_output().unwrap();
     assert!(output.status.success(), "{}", printed(&output));
     let answered: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(answered["answer"], "Redis");
-    assert_eq!(
-        fixture.ok(&["questions"]),
-        serde_json::json!({"questions": [], "omitted": 0})
-    );
+    let posts = answered["posts"].as_array().unwrap();
+    assert_eq!(posts.len(), 4, "{answered}");
+    assert_eq!(posts.last().unwrap()["text"], "Redis", "{answered}");
 }

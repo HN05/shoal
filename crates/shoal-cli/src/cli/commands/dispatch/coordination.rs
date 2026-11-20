@@ -1,10 +1,11 @@
 use anyhow::Result;
 
 use crate::cli::{
-    args::coordination::{
-        AlertCommand, CoordinationCommand, FilesCommand, QuestionAskArgs, QuestionsCommand,
+    args::{
+        coordination::{AlertCommand, CoordinationCommand, FilesCommand},
+        threads::ThreadCommand,
     },
-    commands::{alerts, files, priority, progress, questions, send, sleep, spaces},
+    commands::{alerts, files, priority, progress, send, sleep, spaces, threads},
     context::Context,
 };
 
@@ -13,61 +14,35 @@ pub(in crate::cli::commands) async fn run(
     command: CoordinationCommand,
 ) -> Result<i32> {
     match command {
-        CoordinationCommand::Questions {
-            command: Some(QuestionsCommand::Ask(args)),
-            ..
-        } => {
-            let QuestionAskArgs {
-                question,
-                recommend,
-                in_chat,
-                reason,
-                choices,
-                attach,
-                wait,
-                space,
-                handed_over,
-                resume,
-            } = args;
-            if in_chat {
-                return questions::ask_in_chat(&ctx, space).await;
-            }
-            // Clap requires the question and recommendation without --in-chat.
-            let ask = shoal_protocol::questions::Ask {
-                question: question.unwrap_or_default(),
-                recommendation: recommend.unwrap_or_default(),
-                reason,
-                choices,
-            };
-            // Clap requires a space with --resume.
-            match (space.or(handed_over), resume) {
-                (Some(space), Some(item)) => questions::resume(&ctx, space, item, ask).await,
-                (space, _) => questions::ask(&ctx, space, ask, attach, wait).await,
-            }
-        }
-        CoordinationCommand::Questions {
-            command: Some(QuestionsCommand::Withdraw { number }),
-            ..
-        } => questions::withdraw(&ctx, number).await,
-        CoordinationCommand::Questions {
-            command: None,
-            args,
-        } => questions::run(&ctx, args).await,
         CoordinationCommand::Send {
-            message,
+            args,
             body_file,
             attach,
             space,
             all,
             repository,
-        } => {
-            let recipients = match repository {
-                Some(repository) => send::Recipients::Repository(repository),
-                None if all => send::Recipients::All,
-                None => send::Recipients::Space(space),
-            };
-            send::send(&ctx, recipients, message, body_file, attach).await
-        }
+            post,
+        } => match send::sending(args, body_file.is_some(), &post)? {
+            send::Sending::Alert(message) => {
+                let recipients = match repository {
+                    Some(repository) => send::Recipients::Repository(repository),
+                    None if all => send::Recipients::All,
+                    None => send::Recipients::Space(space),
+                };
+                send::send(&ctx, recipients, message, body_file, attach).await
+            }
+            send::Sending::Post { thread, text } => {
+                let posting = threads::Posting {
+                    thread,
+                    text,
+                    body_file,
+                    attach,
+                    options: post,
+                };
+                threads::post(&ctx, posting).await
+            }
+        },
+        CoordinationCommand::Thread { command } => thread(&ctx, command).await,
         CoordinationCommand::Alert {
             command: AlertCommand::List(args),
         } => alerts::list(&ctx, args).await,
@@ -175,5 +150,33 @@ pub(in crate::cli::commands) async fn run(
                 spaces::done(&ctx, space, done).await
             }
         }
+    }
+}
+
+/// Run a `shoal thread` command.
+async fn thread(ctx: &Context, command: ThreadCommand) -> Result<i32> {
+    match command {
+        ThreadCommand::Open { name, kind, space } => threads::open(ctx, name, kind, space).await,
+        ThreadCommand::Forward {
+            thread,
+            space,
+            note,
+        } => threads::forward(ctx, thread, space, note).await,
+        ThreadCommand::Resolve {
+            thread,
+            outcome,
+            choose,
+            of,
+            reason,
+            undo,
+        } => {
+            let resolving = threads::resolving(outcome, choose, of, reason, undo)?;
+            threads::resolve(ctx, thread, resolving).await
+        }
+        ThreadCommand::List {
+            space,
+            state,
+            print,
+        } => threads::list(ctx, space, state, print).await,
     }
 }

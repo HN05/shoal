@@ -16,11 +16,10 @@ fn spaces(db: &Connection) -> Result<()> {
     Ok(())
 }
 
-fn question(db: &Connection, space: &str, number: ItemNumber) -> Result<()> {
+fn thread(db: &Connection, space: &str, number: ItemNumber) -> Result<()> {
     db.execute(
-        "INSERT INTO questions(space_number,number,space_id,created_at,question,
-                recommendation,choices)
-            VALUES (?1,?2,?3,1,'Which?','This','[]')",
+        "INSERT INTO threads(space_number,number,space_id,kind,name,created_at,opener)
+            VALUES (?1,?2,?3,'question','Which?',1,'space')",
         params![number.space, number.item, space],
     )?;
     Ok(())
@@ -36,7 +35,7 @@ fn request(db: &Connection, key: &str, number: ItemNumber) -> Result<()> {
 }
 
 #[tokio::test]
-async fn questions_and_requests_share_one_sequence_per_space() -> Result<()> {
+async fn threads_and_requests_share_one_sequence_per_space() -> Result<()> {
     let temp = tempfile::tempdir().unwrap();
     let store = shoal_store::test_support::unsynced_store(temp.path().join("state.db")).await?;
     store
@@ -50,7 +49,7 @@ async fn questions_and_requests_share_one_sequence_per_space() -> Result<()> {
                     item: 1
                 }
             );
-            question(db, "first", first)?;
+            thread(db, "first", first)?;
             let second = next(db, &SpaceId::from("first"))?;
             assert_eq!(
                 second,
@@ -70,7 +69,7 @@ async fn questions_and_requests_share_one_sequence_per_space() -> Result<()> {
                 }
             );
             // A deleted item frees its number for the next.
-            db.execute("DELETE FROM questions", [])?;
+            db.execute("DELETE FROM threads", [])?;
             assert_eq!(next(db, &SpaceId::from("first"))?.item, 1);
             Ok(())
         })
@@ -92,17 +91,17 @@ async fn a_number_of_the_other_kind_names_the_right_command() -> Result<()> {
                 space: 1.into(),
                 item: 2,
             };
-            question(db, "first", asked)?;
+            thread(db, "first", asked)?;
             request(db, "web", requested)?;
             let refusal =
                 |kind, number| -> Result<String> { Ok(unknown(db, kind, number)?.to_string()) };
-            assert!(refusal(ItemKind::Approval, asked)?.contains("shoal questions"));
-            assert!(refusal(ItemKind::Question, requested)?.contains("shoal approvals"));
+            assert!(refusal(ItemKind::Approval, asked)?.contains("shoal view thread"));
+            assert!(refusal(ItemKind::Thread, requested)?.contains("shoal approvals"));
             let absent = ItemNumber {
                 space: 1.into(),
                 item: 3,
             };
-            assert!(refusal(ItemKind::Question, absent)?.starts_with("unknown"));
+            assert!(refusal(ItemKind::Thread, absent)?.starts_with("unknown"));
             Ok(())
         })
         .await

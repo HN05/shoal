@@ -19,7 +19,6 @@ mod items;
 mod launches;
 mod operations;
 mod ports;
-mod questions;
 mod queue;
 mod recovery;
 mod removal;
@@ -29,6 +28,7 @@ mod reviews;
 mod secrets;
 mod simulators;
 mod subscriptions;
+mod threads;
 mod triggers;
 pub(super) mod workspaces;
 use anyhow::Result;
@@ -83,7 +83,7 @@ pub(super) async fn handle(
         Operation::Operations(method) => {
             operations::handle(&server.manager, method, caller, scope).await
         }
-        Operation::Question(method) => questions::handle(&server.manager, method, caller).await,
+        Operation::Thread(method) => threads::handle(&server.manager, method, caller).await,
         Operation::Review(method) => reviews::handle(&server.manager, method, caller).await,
         Operation::Approval(method) => approvals::handle(&server.manager, method, caller).await,
         Operation::Port(method) => ports::handle(&server.manager, method, caller).await,

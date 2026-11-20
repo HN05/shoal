@@ -197,7 +197,7 @@ const LIFECYCLE_COMMANDS: [&str; 8] = [
     "done",
     "ready",
     "send",
-    "questions ask",
+    "thread",
     "pr",
     "issue",
     "stop --processes",

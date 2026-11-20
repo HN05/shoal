@@ -96,7 +96,7 @@ fn clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state() {
     // for a scope, and acting only with one.
     for (args, refusal) in [
         (config, "without its scope"),
-        ("questions 1.1 --answer yes", "without their scope token"),
+        ("send 1.1 yes", "only with their scope token"),
         ("start . --branch child", "only with their scope token"),
         ("create . --branch child", "only with their scope token"),
     ] {

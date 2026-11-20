@@ -101,12 +101,6 @@ pub struct Registered {
     pub warnings: Vec<String>,
 }
 
-/// A question asked in the agent's chat.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct InChat {
-    pub in_chat: bool,
-}
-
 /// A start handed to a place beside the caller's terminal, which opens the
 /// workspace and starts its agent there.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,6 +121,5 @@ outputs!(
     Revoked,
     Bases,
     Registered,
-    InChat,
     StartedBeside
 );

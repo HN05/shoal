@@ -162,21 +162,12 @@ async fn a_branch_another_workspace_holds_is_refused_before_anything_changes() {
 }
 
 #[tokio::test]
-async fn the_chats_open_questions_stay_with_the_space() {
+async fn the_chats_open_threads_stay_with_the_space() {
     let (root, manager) = manager().await;
     let repo = registered(root.path(), &manager).await;
     let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
     let selector = SpaceSelector::id(&talk.id);
-    let ask = shoal_protocol::questions::Ask {
-        question: "Which database?".into(),
-        recommendation: "SQLite".into(),
-        reason: None,
-        choices: Vec::new(),
-    };
-    let attacher = crate::daemon::workspace_files::Attacher::User;
-    let asked = (manager.ask_question(&selector, ask, Vec::new(), &attacher))
-        .await
-        .unwrap();
+    let asked = crate::daemon::test_support::ask(&manager, &talk.id, "Which database?").await;
     let converting = Converting {
         chat: talk.clone(),
         mode: ModeName::DEFAULT,
@@ -187,11 +178,13 @@ async fn the_chats_open_questions_stay_with_the_space() {
         .await
         .unwrap();
 
-    let listed = manager.questions(Some(&selector)).await.unwrap().questions;
-    let numbers: Vec<_> = (listed.iter())
-        .filter(|question| question.is_open())
-        .map(|question| question.number)
-        .collect();
+    let open = shoal_protocol::threads::ThreadState::Open;
+    let listed = manager
+        .threads(Some(&selector), open)
+        .await
+        .unwrap()
+        .threads;
+    let numbers: Vec<_> = listed.iter().map(|thread| thread.number).collect();
     assert_eq!(numbers, [asked.number]);
 }
 

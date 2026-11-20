@@ -176,13 +176,13 @@ pub(crate) fn every_unread(db: &Connection) -> Result<Vec<Alert>> {
 }
 
 /// Mark the alert `id` of the space `space_id` read, which its agent
-/// received, and delete the question whose answer it carried.
+/// received.
 pub(super) fn mark_delivered(tx: &Transaction<'_>, space_id: &SpaceId, id: i64) -> Result<()> {
     tx.execute(
         "UPDATE alerts SET read=1 WHERE id=?1 AND recipient_id=?2",
         params![id, space_id],
     )?;
-    crate::daemon::questions::delete_delivered(tx, space_id, id)
+    Ok(())
 }
 
 /// Give the user the unread alerts of the space `space_id`, which is being

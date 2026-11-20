@@ -1,9 +1,8 @@
-//! Arguments of commands agents and the user coordinate with: alerts, questions and completion.
+//! Arguments of commands agents and the user coordinate with: alerts, threads and completion.
 use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
 
-use shoal_protocol::item_numbers::ItemNumber;
 use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Debug, Subcommand)]
@@ -11,13 +10,17 @@ use shoal_protocol::space_names::SpaceSelector;
 pub enum CoordinationCommand {
     /// Send an alert: up to your coordinator, or else the user; with
     /// --space down to a space's agent, or with --all or --repo to every
-    /// agent below. From the user's terminal it picks the space.
+    /// agent below. From the user's terminal it picks the space. With a
+    /// thread's number first, post in that thread instead.
     Send {
-        /// Text such as "Stop the dev server before running tests".
-        #[arg(required_unless_present_any = ["body_file", "attach"])]
-        message: Option<String>,
+        /// The text, such as "Stop the dev server before running tests",
+        /// after a thread's number to post there, such as 3.2 or 2 for one
+        /// of your own space. A single argument without --body-file, or an
+        /// option only posts take, is an alert's text.
+        #[arg(value_name = "[THREAD] TEXT", num_args = 0..=2)]
+        args: Vec<String>,
         /// Read the text from a file, such as multi-line instructions.
-        #[arg(long, value_name = "PATH", conflicts_with = "message")]
+        #[arg(long, value_name = "PATH")]
         body_file: Option<PathBuf>,
         /// Attach a file, such as a screenshot or log, as PATH or
         /// PATH#TITLE, which Shoal copies where the recipient can read it;
@@ -25,20 +28,34 @@ pub enum CoordinationCommand {
         #[arg(long = "attach", value_name = "FILE")]
         attach: Vec<String>,
         /// Space, a workspace or chat, whose agent receives it.
-        #[arg(short = 's', long, conflicts_with_all = ["all", "repository"])]
+        #[arg(short = 's', long, conflicts_with_all = ["all", "repository", "PostArgs"])]
         space: Option<SpaceSelector>,
         /// Send to every agent of the workspaces and chats your scope
         /// reaches, such as to tell them the network works again: running
         /// ones now, and stopped, queued or restoring ones when they next
         /// run.
-        #[arg(short = 'A', long, conflicts_with = "repository")]
+        #[arg(short = 'A', long, conflicts_with_all = ["repository", "PostArgs"])]
         all: bool,
         /// Send to every agent of this repository's workspaces and chats,
         /// such as to have them rebase onto a fix on its default branch;
         /// without a value, the current repository, else a picker. Put the
         /// text before a --repo without a value.
-        #[arg(short = 'r', long = "repo", num_args = 0..=1, value_name = "REPOSITORY")]
+        #[arg(
+            short = 'r',
+            long = "repo",
+            num_args = 0..=1,
+            value_name = "REPOSITORY",
+            conflicts_with = "PostArgs"
+        )]
         repository: Option<Option<String>>,
+        #[command(flatten)]
+        post: crate::cli::args::threads::PostArgs,
+    },
+    /// Open, forward, resolve or list threads: conversations between a
+    /// space or the user and the space or user it asks.
+    Thread {
+        #[command(subcommand)]
+        command: crate::cli::args::threads::ThreadCommand,
     },
     /// List, withdraw or clear alerts.
     Alert {
@@ -66,14 +83,6 @@ pub enum CoordinationCommand {
         /// does not read.
         #[arg(long)]
         limit: Option<u32>,
-    },
-    /// Review and answer questions from the agents of workspaces and chats.
-    #[command(args_conflicts_with_subcommands = true)]
-    Questions {
-        #[command(subcommand)]
-        command: Option<QuestionsCommand>,
-        #[command(flatten)]
-        args: QuestionsArgs,
     },
     /// List, add or delete the files attached to a space, a workspace or
     /// chat: sent to its agents with a message, added, or handed back with
@@ -231,21 +240,6 @@ pub enum FilesCommand {
     },
 }
 
-#[derive(Debug, Default, Args)]
-pub struct QuestionsArgs {
-    /// Question number, such as 3.2; omit to choose an open question.
-    pub number: Option<ItemNumber>,
-    /// List questions from this space, a workspace or chat.
-    #[arg(short = 's', long, conflicts_with = "number")]
-    pub space: Option<SpaceSelector>,
-    /// Send an answer or choice number.
-    #[arg(long, requires = "number", conflicts_with = "withdraw")]
-    pub answer: Option<String>,
-    /// Withdraw a question no longer needed.
-    #[arg(long, requires = "number")]
-    pub withdraw: bool,
-}
-
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum AlertCommand {
@@ -308,63 +302,4 @@ pub struct SleepTimerArgs {
     /// Wake the agent when the local clock next shows this time, HH:MM.
     #[arg(long, value_name = "HH:MM")]
     pub until: Option<shoal_core::triggers::timer::ClockTime>,
-}
-
-// Arguments of `shoal questions ask` and the hidden `shoal ask`.
-#[derive(Debug, Args)]
-#[command(group(clap::ArgGroup::new("asking_space").args(["space", "handed_over"])))]
-pub struct QuestionAskArgs {
-    /// The decision, in one line, such as "Which database should the cache use?"
-    #[arg(required_unless_present = "in_chat")]
-    pub question: Option<String>,
-    /// The answer you recommend.
-    #[arg(long, required_unless_present = "in_chat")]
-    pub recommend: Option<String>,
-    /// Ask in your conversation instead: your turn's final message becomes
-    /// the question, and a reply in the conversation closes it.
-    #[arg(long, conflicts_with_all = ["question", "recommend", "reason", "choices", "attach", "wait", "resume"])]
-    pub in_chat: bool,
-    /// Why you recommend it.
-    #[arg(long)]
-    pub reason: Option<String>,
-    /// A possible answer; repeat for each. The user may answer with its number.
-    #[arg(long = "choice", value_name = "CHOICE")]
-    pub choices: Vec<String>,
-    /// Send a file with it, such as a screenshot of a choice, as PATH or
-    /// PATH#TITLE; repeat for more. shoal files lists it, after cleanup too.
-    #[arg(long = "attach", value_name = "FILE")]
-    pub attach: Vec<String>,
-    /// Wait for the answer and print it. Asking again waits for the same question.
-    #[arg(long)]
-    pub wait: bool,
-    /// Space, a workspace or chat, whose agents ask; defaults to the current
-    /// workspace or chat, or a picker.
-    #[arg(short = 's', long)]
-    pub space: Option<SpaceSelector>,
-    /// The workspace the wait of an earlier release names when an upgrade
-    /// hands it over to this one.
-    #[arg(
-        long = "workspace",
-        hide = true,
-        conflicts_with = "space",
-        requires = "resume"
-    )]
-    pub handed_over: Option<SpaceSelector>,
-    /// Continue waiting for the question with this number within the
-    /// space, as the installed release does after an upgrade restarted the
-    /// daemon.
-    #[arg(long, hide = true, requires = "asking_space")]
-    pub resume: Option<u32>,
-}
-
-#[derive(Debug, Subcommand)]
-#[command(defer = true)]
-pub enum QuestionsCommand {
-    /// Ask the user to decide something; the answer arrives as a message.
-    Ask(QuestionAskArgs),
-    /// Withdraw an open question the space's agent no longer needs answered.
-    Withdraw {
-        /// Question number, such as 3.2.
-        number: ItemNumber,
-    },
 }

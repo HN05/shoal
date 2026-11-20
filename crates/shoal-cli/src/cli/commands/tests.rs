@@ -1,8 +1,6 @@
 use super::*;
 use crate::cli::args::{
-    coordination::{CoordinationCommand, QuestionsCommand},
-    internal::InternalCommand,
-    items::ItemsCommand,
+    coordination::CoordinationCommand, internal::InternalCommand, items::ItemsCommand,
 };
 use anyhow::Context as _;
 use std::{cell::Cell, future::Future, task::Poll, time::Duration};
@@ -238,32 +236,59 @@ fn an_earlier_releases_review_watch_hands_over_its_workspace_unchanged() {
 }
 
 #[test]
-fn a_resumed_question_wait_names_its_space_or_an_earlier_releases_workspace() {
+fn send_posts_in_a_thread_its_number_leads_and_else_sends_an_alert() {
+    use crate::cli::commands::send::{Sending, sending};
     let parse = |arguments: &[&str]| {
-        let arguments = ["shoal", "questions", "ask", "Which?", "--recommend", "A"]
-            .iter()
-            .chain(arguments);
-        let cli = <Cli as clap::Parser>::try_parse_from(arguments)?;
-        let Some(Command::Coordination(CoordinationCommand::Questions {
-            command: Some(QuestionsCommand::Ask(args)),
+        let arguments = ["shoal", "send"].iter().chain(arguments);
+        let cli = <Cli as clap::Parser>::try_parse_from(arguments).unwrap();
+        let Some(Command::Coordination(CoordinationCommand::Send {
+            args,
+            body_file,
+            post,
             ..
         })) = cli.command
         else {
-            panic!("expected questions ask");
+            panic!("expected send");
         };
-        Ok::<_, clap::Error>((args.space, args.handed_over, args.resume))
+        sending(args, body_file.is_some(), &post)
     };
+    let post = |sending: Sending| match sending {
+        Sending::Post { thread, text } => Some((thread.to_string(), text)),
+        Sending::Alert(_) => None,
+    };
+    let thread =
+        |number: &str, text: Option<&str>| Some((number.to_owned(), text.map(str::to_owned)));
     assert_eq!(
-        parse(&["--space", "5", "--resume", "3"]).unwrap(),
-        (Some("5".into()), None, Some(3))
+        post(parse(&["3.2", "SQLite"]).unwrap()),
+        thread("3.2", Some("SQLite"))
     );
-    // The wait of an earlier release hands itself over this way.
     assert_eq!(
-        parse(&["--workspace", "5", "--resume", "3"]).unwrap(),
-        (None, Some("5".into()), Some(3))
+        post(parse(&["2", "--choose", "1"]).unwrap()),
+        thread("2", None)
     );
-    assert!(parse(&["--workspace", "5"]).is_err());
-    assert!(parse(&["--resume", "3"]).is_err());
+    assert_eq!(
+        post(parse(&["2", "--body-file", "a.md"]).unwrap()),
+        thread("2", None)
+    );
+    // One argument alone is an alert's text, even a number.
+    assert!(matches!(parse(&["2"]).unwrap(), Sending::Alert(Some(text)) if text == "2"));
+    assert!(matches!(
+        parse(&["--body-file", "a.md"]).unwrap(),
+        Sending::Alert(None)
+    ));
+    // A post's options need a thread.
+    assert!(parse(&["--wait"]).is_err());
+}
+
+#[test]
+fn a_post_takes_no_alert_recipient() {
+    let parse = |arguments: &[&str]| {
+        let arguments = ["shoal", "send"].iter().chain(arguments);
+        <Cli as clap::Parser>::try_parse_from(arguments).map(drop)
+    };
+    assert!(parse(&["3.2", "SQLite", "--space", "4"]).is_ok());
+    assert!(parse(&["3.2", "SQLite", "--space", "4", "--wait"]).is_err());
+    assert!(parse(&["3.2", "--in-chat", "--all"]).is_err());
 }
 
 #[test]

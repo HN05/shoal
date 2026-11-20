@@ -35,8 +35,8 @@ const ALERTS_SHOWN: u32 = 50;
 /// What a row stands for, by the picker id it is chosen with: an inbox
 /// item with its space's ID, a workspace, or the entry that adds one.
 pub(super) enum Row {
-    /// A question by its number, of a workspace or chat.
-    Question {
+    /// A thread by its number, of a workspace or chat.
+    Thread {
         number: ItemNumber,
         space: SpaceId,
     },
@@ -80,9 +80,9 @@ pub(super) enum Row {
 impl Row {
     fn of(item: &Item) -> Self {
         match item {
-            Item::Question { question } => Self::Question {
-                number: question.number,
-                space: question.space_id.clone(),
+            Item::Thread { thread } => Self::Thread {
+                number: thread.number,
+                space: thread.space_id.clone(),
             },
             Item::Approval { request } => Self::Approval {
                 number: request.number,
@@ -125,7 +125,7 @@ impl Row {
     /// last since it holds colons itself; a workspace row is its ID.
     fn id(&self) -> String {
         match self {
-            Self::Question { number, space } => format!("question:{space}:{number}"),
+            Self::Thread { number, space } => format!("thread:{space}:{number}"),
             Self::Approval {
                 number,
                 created_at,
@@ -173,7 +173,7 @@ impl Row {
         let space = SpaceId::from(space.to_owned());
         let number = || detail.parse().context("picker returned an invalid row");
         Ok(match kind {
-            "question" => Self::Question {
+            "thread" => Self::Thread {
                 number: number()?,
                 space,
             },
@@ -206,7 +206,7 @@ impl Row {
     /// The workspace or chat the row belongs to, which keys act on.
     pub(super) fn space(&self) -> Option<SpaceSelector> {
         match self {
-            Self::Question { space, .. }
+            Self::Thread { space, .. }
             | Self::Approval {
                 workspace: space, ..
             }

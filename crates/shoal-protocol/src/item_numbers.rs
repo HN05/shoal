@@ -1,5 +1,5 @@
-//! The numbers of questions and approval requests: the number of the space
-//! that asked, then the item's own number within it, written `3.2`.
+//! The numbers of threads and approval requests: the number of the space
+//! they belong to, then the item's own number within it, written `3.2`.
 use std::{fmt, str::FromStr};
 
 use anyhow::{Context, Result, bail};
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize, ser::SerializeStruct};
 
 use shoal_ids::space_ids::SpaceNumber;
 
-/// A question or approval request by its space's number and its own. Both
+/// A thread or approval request by its space's number and its own. Both
 /// kinds share one sequence per space, so a number names one item.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ItemNumber {
@@ -30,7 +30,7 @@ impl FromStr for ItemNumber {
         let Some((space, item)) = text.split_once('.') else {
             if text.parse::<u32>().is_ok() {
                 bail!(
-                    "{text} names no space: questions and approval requests are numbered SPACE.ITEM, such as 3.{text}"
+                    "{text} names no space: threads and approval requests are numbered SPACE.ITEM, such as 3.{text}"
                 );
             }
             bail!("invalid number {text}: expected SPACE.ITEM, such as 3.2");
@@ -48,10 +48,10 @@ impl FromStr for ItemNumber {
     }
 }
 
-/// A question or an approval request, which share their numbers.
+/// A thread or an approval request, which share their numbers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ItemKind {
-    Question,
+    Thread,
     Approval,
 }
 
@@ -60,7 +60,7 @@ impl ItemKind {
     /// where the other kind is expected.
     pub fn misdirected(self, number: ItemNumber) -> String {
         match self {
-            Self::Question => format!("{number} is a question; use shoal questions {number}"),
+            Self::Thread => format!("{number} is a thread; use shoal view thread {number}"),
             Self::Approval => {
                 format!("{number} is an approval request; use shoal approvals {number}")
             }

@@ -185,6 +185,6 @@ fn source_label(source: FileSource) -> &'static str {
         FileSource::Added => "added",
         FileSource::Result => "result",
         FileSource::Alert => "alert",
-        FileSource::Question => "question",
+        FileSource::Thread => "thread",
     }
 }

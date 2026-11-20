@@ -276,7 +276,7 @@ impl Gates {
         self.proposal_files.lock().await
     }
 
-    /// Order announcing a question or approval request against withdrawing
+    /// Order announcing a thread or approval request against withdrawing
     /// it, so a withdrawn one is never announced afterwards.
     pub async fn lock_announcements(&self) -> MutexGuard<'_, ()> {
         self.announcements.lock().await

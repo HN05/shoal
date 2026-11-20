@@ -17,7 +17,7 @@ states!(
         /// Its creation, renames, removal and restore; its agent's starts,
         /// stops and exits; its ready marks and completion; its issue and
         /// PR links, Shoal's changes to them and their closing, merging and
-        /// reopening; its questions, approvals and alerts; and the spaces
+        /// reopening; its threads, approvals and alerts; and the spaces
         /// created and removed below it; and Shoal's own events.
         Entries => "entries",
         /// Every event the journal holds for the log.
@@ -81,7 +81,7 @@ impl LogEntry {
 }
 
 /// The events of spaces the log shows, apart from forge activity.
-const ENTRY_KINDS: [EventKind; 32] = [
+const ENTRY_KINDS: [EventKind; 34] = [
     EventKind::Created,
     EventKind::Renamed,
     EventKind::RemovalStarted,
@@ -98,8 +98,10 @@ const ENTRY_KINDS: [EventKind; 32] = [
     EventKind::Linked,
     EventKind::Unlinked,
     EventKind::ItemChanged,
-    EventKind::QuestionAsked,
-    EventKind::QuestionAnswered,
+    EventKind::ThreadOpened,
+    EventKind::ThreadPosted,
+    EventKind::ThreadForwarded,
+    EventKind::ThreadResolved,
     EventKind::ApprovalRequested,
     EventKind::ApprovalDecided,
     EventKind::GateDecided,

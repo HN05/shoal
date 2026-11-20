@@ -111,7 +111,8 @@ fn subject(name: &str, local_config: &Path) -> String {
     let local_config = local_config.display();
     format!(
         "Set up Shoal for the {name} repository; this workspace is on branch {BRANCH}.\n\n\
-         Before you save the config, ask the user with `shoal questions ask` whether to \
+         Before you save the config, ask the user in a thread (`shoal thread open`, then \
+         `shoal send <thread>`) whether to \
          commit it to the repository or save it as the repository's local config, unless \
          they have said already. If the repository already has a committed config \
          (`.shoal.toml` or `.shoal/config.toml`) or a local config at `{local_config}`, \

@@ -179,15 +179,13 @@ fn redirected_requests_are_inspected_without_prompting_or_deciding() {
         "agent",
         &["acquire", "port", "web", "--reason", "serve preview"],
     ));
-    let question = fixture.ok(&[
-        "questions",
-        "ask",
+    let question = ask(
+        &fixture,
+        "agent",
         "Which database?",
-        "--recommend",
-        "SQLite",
-        "--space",
-        &fixture.id("agent"),
-    ]);
+        &["Postgres or SQLite?", "--recommend", "SQLite"],
+    );
+    let number = question["number"].as_str().unwrap().to_owned();
     install_test_script(fixture.root.path().join("bin/fzf"), "#!/bin/sh\nexit 77\n");
     for args in [
         vec![
@@ -195,11 +193,8 @@ fn redirected_requests_are_inspected_without_prompting_or_deciding() {
             pending["number"].as_str().unwrap().to_owned(),
         ],
         vec!["approvals".into()],
-        vec![
-            "questions".into(),
-            question["number"].as_str().unwrap().to_owned(),
-        ],
-        vec!["questions".into()],
+        vec!["view".into(), "thread".into(), number.clone()],
+        vec!["thread".into(), "list".into()],
     ] {
         let (output, transcript) =
             fixture.interactive_command(fixture.command().args(&args), "y\n");
@@ -222,10 +217,8 @@ fn redirected_requests_are_inspected_without_prompting_or_deciding() {
         fixture.ok(&["approvals", pending["number"].as_str().unwrap()])["status"],
         "pending"
     );
-    assert_eq!(
-        fixture.ok(&["questions", question["number"].as_str().unwrap()])["answer"],
-        Value::Null
-    );
+    let posts = fixture.ok(&["view", "thread", &number])["posts"].clone();
+    assert_eq!(posts.as_array().unwrap().len(), 1, "{posts}");
     // An explicit decision remains scriptable with redirected output.
     let (output, transcript) = fixture.interactive_command(
         fixture
@@ -400,62 +393,59 @@ fn approval_list_shortcuts_find_requests_of_workspaces_below_the_caller() {
     assert!(stderr.contains("routed to them"), "{stderr}");
 }
 
-#[test]
-fn question_picker_answers_the_selected_question_with_a_suggestion() {
-    let fixture = Fixture::new();
-    fixture.add("asker");
-    let question = fixture.ok(&[
-        "questions",
-        "ask",
-        "Which database?",
-        "--recommend",
-        "SQLite",
-        "--choice",
-        "SQLite",
-        "--choice",
-        "Postgres",
-        "--space",
-        &fixture.id("asker"),
-    ]);
-    let id = question["number"].as_str().unwrap().to_owned();
-    assert_eq!(fixture.ok(&["questions", &id])["answer"], Value::Null);
-    let (output, rows) = fixture.pick(&["questions"], &id, "1\n");
-    assert!(output.status.success(), "{}", printed(&output));
-    assert!(rows.contains("Which database?"), "{rows}");
-    assert_eq!(fixture.ok(&["questions", &id])["answer"], "SQLite");
+/// The text of the latest post of the thread `number`.
+fn last_post(fixture: &Fixture, number: &str) -> Value {
+    let posts = fixture.ok(&["view", "thread", number])["posts"].clone();
+    posts.as_array().unwrap().last().unwrap()["text"].clone()
 }
 
 #[test]
-fn question_prompt_accepts_the_recommendation_with_enter() {
+fn thread_picker_replies_to_the_selected_thread_with_its_recommendation() {
     let fixture = Fixture::new();
     fixture.add("asker");
-    let asker_id = fixture.id("asker");
-    for (recommendation, choices, input, expected) in [
-        ("SQLite", vec![], "\n", "SQLite"),
-        ("2", vec!["2", "4"], "\n", "2"),
-        ("2", vec!["2", "4"], "2\n", "4"),
-        ("/cancel", vec![], "\n", "/cancel"),
-        ("/withdraw", vec![], "\n", "/withdraw"),
-    ] {
-        let text = format!("Choose {recommendation} for {input:?}?");
-        let mut args = vec![
-            "questions",
-            "ask",
-            &text,
+    let question = ask(
+        &fixture,
+        "asker",
+        "Which database?",
+        &[
+            "Postgres or SQLite?",
             "--recommend",
-            recommendation,
-            "--space",
-            &asker_id,
-        ];
-        for choice in choices {
-            args.extend(["--choice", choice]);
-        }
-        let question = fixture.ok(&args);
-        let id = question["number"].as_str().unwrap().to_owned();
+            "SQLite",
+            "--choice",
+            "SQLite",
+            "--choice",
+            "Postgres",
+        ],
+    );
+    let id = question["number"].as_str().unwrap().to_owned();
+    let (output, rows) = fixture.pick(&["thread", "list"], &id, "\n");
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(rows.contains("Which database?"), "{rows}");
+    assert_eq!(last_post(&fixture, &id), "SQLite");
+}
+
+#[test]
+fn a_thread_prompt_takes_the_recommendation_with_enter_and_text_as_typed() {
+    let fixture = Fixture::new();
+    fixture.add("asker");
+    for (recommendation, input, expected) in [
+        ("SQLite", "\n", "SQLite"),
+        ("2", "\n", "2"),
+        ("2", "4\n", "4"),
+        ("/cancel", "\n", "/cancel"),
+    ] {
+        let name = format!("Choose {recommendation} for {input:?}?");
+        let asked = ask(
+            &fixture,
+            "asker",
+            &name,
+            &["Which?", "--recommend", recommendation],
+        );
+        let id = asked["number"].as_str().unwrap().to_owned();
         let (output, transcript) =
-            fixture.terminal_command(fixture.command().args(["questions", &id]), input, true);
+            fixture.terminal_command(fixture.command().args(["view", "thread", &id]), input, true);
         assert!(output.status.success(), "{transcript}");
-        assert_eq!(fixture.ok(&["questions", &id])["answer"], expected);
+        assert_eq!(last_post(&fixture, &id), expected);
     }
 }
 

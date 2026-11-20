@@ -93,7 +93,7 @@ async fn listing(ctx: &Context, args: &AlertListArgs) -> Result<Listing> {
 
 /// Whether this process acts in a space of its own, a scoped one or its
 /// chat's agent, whose alerts are its own and whose sends go up.
-pub(super) fn in_own_space() -> bool {
+pub(in crate::cli::commands) fn in_own_space() -> bool {
     crate::env::is_scoped() || crate::env::own_chat().is_some()
 }
 

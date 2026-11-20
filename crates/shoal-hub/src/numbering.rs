@@ -2,7 +2,7 @@
 //! the spares the hub keeps for it, which each report's answer brings, so
 //! a new space never waits for the hub, and once none is left, above its
 //! own highest number. A space whose number another machine's space held
-//! first takes the number the hub gives it instead, with its questions and
+//! first takes the number the hub gives it instead, with its threads and
 //! approval requests, and the user and its agent hear of it. A space this
 //! machine imports as another moves it here keeps the number it had there.
 use anyhow::Result;
@@ -47,7 +47,7 @@ impl Hub {
     async fn announce_renumbering(&self, daemon: &dyn Daemon, space: &Renumbered) {
         let Renumbered { id, name, from, to } = space;
         let message = format!(
-            "{name} is space {to} now, not {from}, which a space on another machine of the hub held first; its questions and approval requests are numbered {to}.N"
+            "{name} is space {to} now, not {from}, which a space on another machine of the hub held first; its threads and approval requests are numbered {to}.N"
         );
         let kind = AlertKind::SpaceRenumbered;
         let about = About::space(name, id);
@@ -164,7 +164,7 @@ pub fn keep_spares(tx: &Transaction<'_>, numbering: &Numbering) -> Result<()> {
 }
 
 /// Give each space `renumbered` names the number the hub gave it, with
-/// its questions and approval requests, unless this machine holds that
+/// its threads and approval requests, unless this machine holds that
 /// number, and return those it renumbered.
 fn renumber(
     tx: &Transaction<'_>,

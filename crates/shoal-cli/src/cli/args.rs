@@ -16,6 +16,7 @@ pub mod resources;
 pub mod service;
 pub mod sessions;
 pub mod space;
+pub mod threads;
 pub mod transfer;
 pub mod workspace;
 

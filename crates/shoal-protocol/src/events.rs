@@ -121,10 +121,14 @@ states!(EventKind {
     AgentStopped => "agent_stopped",
     /// The space's agent exited on its own.
     AgentExited => "agent_exited",
-    /// The space's agent asked a question.
-    QuestionAsked => "question_asked",
-    /// A question the space asked was answered.
-    QuestionAnswered => "question_answered",
+    /// A thread numbered in the space was opened.
+    ThreadOpened => "thread_opened",
+    /// A post came in a thread numbered in the space.
+    ThreadPosted => "thread_posted",
+    /// A thread numbered in the space went to another holder.
+    ThreadForwarded => "thread_forwarded",
+    /// A thread numbered in the space was resolved or reopened.
+    ThreadResolved => "thread_resolved",
     /// The space asked for an approval.
     ApprovalRequested => "approval_requested",
     /// An approval the space asked for was approved or denied.
@@ -246,9 +250,9 @@ pub struct EventDetails {
     /// with, which a chat's creation an earlier Shoal journaled names.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<AgentEvent>,
-    /// The question asked or answered.
+    /// The thread opened, posted in, forwarded or resolved.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub question: Option<Box<QuestionEvent>>,
+    pub thread: Option<Box<ThreadEvent>>,
     /// The approval requested or decided.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval: Option<Box<ApprovalEvent>>,
@@ -344,7 +348,7 @@ pub struct AbsorbEvent {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub questions: Vec<crate::item_numbers::ItemNumber>,
+    pub threads: Vec<crate::item_numbers::ItemNumber>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<crate::model::SpaceRef>,
     /// The files carried over as uncommitted changes.
@@ -404,12 +408,22 @@ pub struct AgentEvent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QuestionEvent {
+pub struct ThreadEvent {
     #[serde(flatten)]
     pub number: crate::item_numbers::ItemNumber,
-    pub question: String,
-    /// Null when it was asked.
-    pub answer: Option<String>,
+    pub name: String,
+    /// The post's text, or a forward's note.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// Who posted, as text names them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sender: Option<String>,
+    /// Whom it was forwarded to, as text names them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+    /// How it was resolved; none when it was reopened.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outcome: Option<crate::threads::OutcomeKind>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

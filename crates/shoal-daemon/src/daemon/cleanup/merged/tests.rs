@@ -7,7 +7,7 @@ use std::{fs, sync::Arc};
 use super::*;
 use crate::daemon::test_support::{commit, git, manager, repository};
 use crate::{
-    daemon::{notifications::AlertKind, workspace_files::Attacher},
+    daemon::notifications::AlertKind,
     execution::recovery,
     model::{CleanupReason, Workspace},
 };
@@ -430,7 +430,7 @@ async fn unsaved_files_of_a_merged_workspace_go_into_its_checkpoint() {
 }
 
 #[tokio::test]
-async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspace() {
+async fn holds_waiting_threads_running_work_and_unsaved_state_retain_a_merged_workspace() {
     let f = Fixture::new().await;
     f.squash_merge();
     let id = &f.workspace.id;
@@ -455,21 +455,9 @@ async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspac
         .await
         .unwrap();
 
-    let ask = crate::daemon::questions::Ask {
-        question: "Anything else?".into(),
-        recommendation: "No".into(),
-        reason: None,
-        choices: vec![],
-    };
-    let question = manager
-        .ask_question(&SpaceSelector::id(id), ask, Vec::new(), &Attacher::User)
-        .await
-        .unwrap();
-    assert!(f.kept_after(5).await, "an open question");
-    manager
-        .answer_question(question.number, "No".into(), None)
-        .await
-        .unwrap();
+    let thread = crate::daemon::test_support::ask(manager, id, "Anything else?").await;
+    assert!(f.kept_after(5).await, "a thread that waits");
+    crate::daemon::test_support::answer(manager, thread.number, "No").await;
 
     let repo_path = f.checkout.to_str().unwrap().to_owned();
     let stacked = manager

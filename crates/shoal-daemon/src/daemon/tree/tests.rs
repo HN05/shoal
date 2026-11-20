@@ -6,18 +6,16 @@ use crate::{
         events::{EventItem, EventKind},
         scope::{Caller, ScopedExecution},
         test_support::{manager, repository},
-        workspace_files::Attacher,
     },
     model::{CleanupReason, RefPart, SpaceRef, Workspace, WorkspaceRef},
     protocol::{
-        AgentMethod, ApprovalMethod, AssignmentMethod, Operation, QuestionMethod, QueueMethod,
-        RemovalMethod, WorkspaceMethod,
+        AgentMethod, ApprovalMethod, AssignmentMethod, Operation, QueueMethod, RemovalMethod,
+        ThreadMethod, WorkspaceMethod,
     },
     removal::{InspectionPolicy, UnsavedWork},
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::config::repo::Lifetime;
-use shoal_protocol::questions::QuestionStatus;
 use shoal_protocol::space_names::SpaceSelector;
 
 fn space(workspace: &Workspace) -> SpaceRef {
@@ -945,7 +943,7 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
 
 #[tokio::test]
 async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
-    use crate::{daemon::questions::Ask, state::AgentState};
+    use crate::state::AgentState;
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -975,40 +973,11 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
             .await
             .unwrap();
     }
-    let ask = |question: &str| Ask {
-        question: question.into(),
-        recommendation: "Yes".into(),
-        reason: None,
-        choices: vec![],
-    };
-    let below = manager
-        .ask_question(
-            &SpaceSelector::id(&child.id),
-            ask("Use SQLite?"),
-            Vec::new(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    let own = manager
-        .ask_question(
-            &SpaceSelector::id(&parent.id),
-            ask("Merge now?"),
-            Vec::new(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    let beside = manager
-        .ask_question(
-            &SpaceSelector::id(&sibling.id),
-            ask("Rename it?"),
-            Vec::new(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    // Only the question asked below the parent reaches it.
+    let ask = crate::daemon::test_support::ask;
+    let below = ask(&manager, &child.id, "Use SQLite?").await;
+    let own = ask(&manager, &parent.id, "Merge now?").await;
+    let beside = ask(&manager, &sibling.id, "Rename it?").await;
+    // Only the thread opened below the parent reaches it.
     let messages = manager
         .agent_messages(&SpaceSelector::id(&parent.id))
         .await
@@ -1053,15 +1022,19 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
             crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut alert).await;
         assert_eq!(authorized.is_ok(), allowed, "{} {alert:?}", workspace.name);
     }
-    for (question, allowed) in [(&below, true), (&own, false), (&beside, false)] {
-        let mut answer = QuestionMethod::AnswerQuestion {
-            number: question.number,
-            answer: "Yes".into(),
-            shown: None,
+    // It posts in the thread it holds and in its own, but not in a
+    // sibling's.
+    let scoped = crate::daemon::test_support::caller_in(&SpaceSelector::id(&parent.id));
+    for (thread, allowed) in [(&below, true), (&own, true), (&beside, false)] {
+        let post = shoal_protocol::threads::NewPost {
+            text: "Yes".into(),
+            ..Default::default()
         };
-        let authorized =
-            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut answer).await;
-        assert_eq!(authorized.is_ok(), allowed, "{}", question.ask.question);
+        let number = shoal_protocol::threads::ThreadNumber::Full(thread.number);
+        let posted = manager
+            .post_to_thread(Some(&scoped), number, post, Vec::new())
+            .await;
+        assert_eq!(posted.is_ok(), allowed, "{}", thread.name);
     }
 }
 
@@ -1202,117 +1175,6 @@ async fn an_agent_waiting_for_its_restore_keeps_its_workspaces_activity() {
             .await
             .unwrap()
             .is_empty()
-    );
-}
-
-#[tokio::test]
-async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
-    use crate::daemon::questions::Ask;
-    let (temp, manager) = manager().await;
-    let checkout = repository(temp.path(), "repo");
-    let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
-    let parent = create("parent").await.unwrap();
-    let child = manager
-        .create_child(
-            &SpaceSelector::id(&parent.id),
-            "child".into(),
-            None,
-            Default::default(),
-        )
-        .await
-        .unwrap();
-    let ask = |question: &str| Ask {
-        question: question.into(),
-        recommendation: "Yes".into(),
-        reason: None,
-        choices: vec![],
-    };
-    let asked = manager
-        .ask_question(
-            &SpaceSelector::id(&child.id),
-            ask("Use SQLite?"),
-            Vec::new(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    manager
-        .executions
-        .issue_scope(
-            "scope".into(),
-            Caller {
-                space_id: parent.id.clone(),
-                execution: None,
-                granted: None,
-                read_only: false,
-                vouched: None,
-            },
-        )
-        .await;
-    let mut answer = QuestionMethod::AnswerQuestion {
-        number: asked.number,
-        answer: "Yes".into(),
-        shown: None,
-    };
-    crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut answer)
-        .await
-        .unwrap();
-    let QuestionMethod::AnswerQuestion {
-        number,
-        answer,
-        shown,
-    } = answer
-    else {
-        panic!("authorization keeps the method");
-    };
-    assert!(shown.is_some());
-    // Meanwhile the question is answered and delivered, and the child's
-    // next question reuses its number.
-    let answered = manager
-        .answer_question(asked.number, "No".into(), None)
-        .await
-        .unwrap();
-    manager
-        .mark_agent_messages_delivered(
-            &SpaceSelector::id(&child.id),
-            vec![match answered.status {
-                QuestionStatus::Answered {
-                    message_id: Some(id),
-                    ..
-                } => id,
-                ref status => panic!("no answer message: {status:?}"),
-            }],
-        )
-        .await
-        .unwrap();
-    let reused = manager
-        .ask_question(
-            &SpaceSelector::id(&child.id),
-            ask("Rename it?"),
-            Vec::new(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    assert_eq!(reused.number, asked.number);
-    assert!(
-        manager
-            .answer_question(number, answer, shown)
-            .await
-            .is_err()
-    );
-    assert!(
-        manager
-            .question(reused.number)
-            .await
-            .unwrap()
-            .status
-            .answer()
-            .is_none()
     );
 }
 
@@ -2341,10 +2203,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
 
 #[tokio::test]
 async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
-    use crate::daemon::{
-        approvals::{ApprovalRequest, Specification, Target},
-        questions::Ask,
-    };
+    use crate::daemon::approvals::{ApprovalRequest, Specification, Target};
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -2397,42 +2256,34 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
             .await
             .unwrap()
             .unwrap();
-        let question = manager
-            .ask_question(
-                &SpaceSelector::id(&workspace.id),
-                Ask {
-                    question: "Which database?".into(),
-                    recommendation: "SQLite".into(),
-                    reason: None,
-                    choices: vec![],
-                },
-                Vec::new(),
-                &Attacher::User,
-            )
-            .await
-            .unwrap();
-        for (number, approval_request) in [(approval.number, true), (question.number, false)] {
+        let thread =
+            crate::daemon::test_support::ask(&manager, &workspace.id, "Which database?").await;
+        for (number, approval_request) in [(approval.number, true), (thread.number, false)] {
             let read = || -> Operation {
                 if approval_request {
                     ApprovalMethod::ShowApproval { number }.into()
                 } else {
-                    QuestionMethod::ShowQuestion { number }.into()
+                    let thread = shoal_protocol::threads::ThreadNumber::Full(number);
+                    ThreadMethod::ShowThread { thread }.into()
                 }
             };
             let mut method = read();
             let caller =
                 crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
-            assert_eq!(caller.is_ok(), allowed);
-            if !allowed {
-                continue;
+            // A thread's reader is checked as it is shown.
+            if approval_request {
+                assert_eq!(caller.is_ok(), allowed);
+                if !allowed {
+                    continue;
+                }
             }
             let caller = caller.unwrap();
             let server = crate::daemon::tests::server(manager.clone());
-            assert!(
-                crate::daemon::requests::handle(&server, read(), caller.as_ref(), None)
-                    .await
-                    .is_ok()
-            );
+            let shown = crate::daemon::requests::handle(&server, read(), caller.as_ref(), None);
+            assert_eq!(shown.await.is_ok(), allowed);
+            if !allowed {
+                continue;
+            }
             // Model the number being reassigned to an outside record after authorization.
             let replacement_owner = other.id.clone();
             manager.store.run(move |db| {
@@ -2442,7 +2293,7 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
                         rusqlite::params![replacement_owner, number.space, number.item],
                     )?;
                 } else {
-                    db.execute("UPDATE questions SET space_id=?1 WHERE space_number=?2 AND number=?3", rusqlite::params![replacement_owner, number.space, number.item])?;
+                    db.execute("UPDATE threads SET space_id=?1 WHERE space_number=?2 AND number=?3", rusqlite::params![replacement_owner, number.space, number.item])?;
                 }
                 Ok(())
             }).await.unwrap();
@@ -2463,7 +2314,7 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
                         )?;
                     } else {
                         db.execute(
-                            "DELETE FROM questions WHERE space_number=?1 AND number=?2",
+                            "DELETE FROM threads WHERE space_number=?1 AND number=?2",
                             params,
                         )?;
                     }

@@ -1,5 +1,5 @@
 //! The records an absorbed space hands over: its links, attached files and
-//! open questions go to the space that takes its work, and the requests
+//! open threads go to the space that takes its work, and the requests
 //! bound to its branch and commit are withdrawn. Issue proposals belong to
 //! the repository and stay.
 use anyhow::Result;
@@ -25,7 +25,7 @@ use shoal_protocol::{
 pub(super) struct TakenOver {
     pub(super) links: SpaceLinks,
     pub(super) files: Vec<String>,
-    pub(super) questions: Vec<ItemNumber>,
+    pub(super) threads: Vec<ItemNumber>,
     pub(super) withdrawn: Vec<ItemNumber>,
     pub(super) warnings: Vec<String>,
 }
@@ -43,12 +43,12 @@ impl Manager {
         let (links, warnings) = self.move_links(from, to, caller).await?;
         let files = self.copy_attached_files(from, to).await?;
         let copies = (files.iter()).map(|(old, file)| (*old, file.id)).collect();
-        let questions = self.move_open_questions(from, to, copies).await?;
+        let threads = self.move_open_threads(from, to, copies).await?;
         let files = files.into_iter().map(|(_, file)| file.name).collect();
         Ok(TakenOver {
             links,
             files,
-            questions,
+            threads,
             withdrawn,
             warnings,
         })

@@ -27,37 +27,32 @@ fn a_lone_sync_failure_names_its_repository() {
 }
 
 #[test]
-fn a_question_notes_its_recommendation_and_files() {
+fn a_thread_notes_its_latest_recommendation_and_files() {
     let file = |id, name: &str| shoal_protocol::files::SentFile {
         id,
         name: name.into(),
         title: None,
         path: format!("/files/{name}").into(),
     };
-    let question = shoal_protocol::questions::Question {
-        number: shoal_protocol::item_numbers::ItemNumber {
-            space: 2.into(),
-            item: 3,
-        },
-        space_id: "w1".into(),
-        space: "cache".into(),
-        created_at: UnixTime::from_seconds(0),
-        ask: shoal_protocol::questions::Ask {
-            question: "Which layout?".into(),
-            recommendation: "A".into(),
-            reason: None,
-            choices: Vec::new(),
-        },
-        status: shoal_protocol::questions::QuestionStatus::Open,
-        in_chat: false,
-        files: vec![file(1, "a.png"), file(2, "b.png")],
-    };
+    let thread: shoal_protocol::threads::Thread = serde_json::from_value(serde_json::json!({
+        "id": 1, "space_number": 2, "item": 3, "space_id": "w1", "space": "cache",
+        "kind": "question", "name": "Which layout?", "opener": "space",
+        "holder": {"kind": "user"}, "created_at": 0,
+        "posts": [{
+            "id": 1, "created_at": 0, "side": "opener", "sender": "space",
+            "text": "A or B?", "recommendation": "A",
+            "files": [file(1, "a.png"), file(2, "b.png")],
+        }],
+    }))
+    .unwrap();
     assert_eq!(
-        super::question_note(&question),
+        super::thread_note(&thread),
         "recommends A; files: a.png, b.png"
     );
-    let item = Item::Question { question };
-    assert_eq!(item.kind().0, "question 2.3");
+    let item = Item::Thread {
+        thread: Box::new(thread),
+    };
+    assert_eq!(item.kind().0, "thread 2.3");
 }
 
 #[test]
@@ -200,7 +195,7 @@ fn marks_wait_in_the_inbox_only_while_their_agent_is_not_working() {
 }
 
 #[test]
-fn another_machines_question_names_its_machine() {
+fn another_machines_thread_names_its_machine() {
     let view: shoal_protocol::hub::directory::HubView = serde_json::from_value(serde_json::json!({
         "machine": "desk",
         "machines": [
@@ -212,9 +207,12 @@ fn another_machines_question_names_its_machine() {
         "spaces": [{
             "machine": "laptop", "id": "remote", "number": 4, "name": "port", "kind": "chat",
             "status": "needs-input", "reported_at": 0,
-            "questions": [{
-                "space_number": 4, "item": 1, "space_id": "remote", "space": "port", "created_at": 0,
-                "question": "Which database?", "recommendation": "SQLite", "status": "open",
+            "threads": [{
+                "id": 1, "space_number": 4, "item": 1, "space_id": "remote", "space": "port",
+                "kind": "question", "name": "Which database?", "opener": "space",
+                "holder": {"kind": "user"}, "created_at": 0,
+                "posts": [{"id": 1, "created_at": 0, "side": "opener", "sender": "space",
+                           "text": "Postgres or SQLite?", "recommendation": "SQLite"}],
             }],
         }],
     }))
@@ -223,7 +221,7 @@ fn another_machines_question_names_its_machine() {
     // Each item names its own need, without its space's others.
     assert!(items.iter().all(|item| matches!(
         item,
-        Item::Elsewhere { space, .. } if space.space.questions.is_empty()
+        Item::Elsewhere { space, .. } if space.space.threads.is_empty()
     )));
     let inbox = Inbox {
         items,
@@ -234,7 +232,7 @@ fn another_machines_question_names_its_machine() {
     let rows = inbox.rows(&[], Palette::stdout(true), None);
     assert_eq!(rows.len(), 2, "{rows:?}");
     assert!(
-        rows[0].starts_with("question 4.1  port  laptop"),
+        rows[0].starts_with("thread 4.1") && rows[0].contains(" port  laptop"),
         "{rows:?}"
     );
     assert!(rows[0].contains("Which database?"), "{rows:?}");

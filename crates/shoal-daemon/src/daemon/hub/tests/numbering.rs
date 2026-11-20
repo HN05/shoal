@@ -6,13 +6,12 @@ use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::{
     alerts::AlertKind,
     hub::numbering::{Numbering, Renumbering},
-    questions::Ask,
     space_names::{SpaceName, SpaceSelector},
 };
 
 use crate::{
     config::permissions::PermissionsConfig,
-    daemon::{item_numbers::ItemNumber, spaces, test_support, workspace_files::Attacher},
+    daemon::{item_numbers::ItemNumber, spaces, test_support},
     model::SpaceKind,
 };
 
@@ -78,24 +77,18 @@ async fn a_machine_that_leaves_its_hub_numbers_on_its_own() -> Result<()> {
 }
 
 #[tokio::test]
-async fn a_renumbered_space_takes_its_questions_and_their_waits_along() -> Result<()> {
+async fn a_renumbered_space_takes_its_threads_and_their_waits_along() -> Result<()> {
     let (root, manager) = test_support::manager().await;
     let path = test_support::repository(root.path(), "repo");
     let repo = (manager.register_repository(path.to_str().unwrap().into(), None, None)).await?;
     let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
     let (asker, other) = (create("asker").await?, create("other").await?);
     let selector = SpaceSelector::id(&asker.id);
-    let ask = Ask {
-        question: "Which database?".into(),
-        recommendation: "SQLite".into(),
-        reason: None,
-        choices: Vec::new(),
-    };
-    let asked = manager.ask_question(&selector, ask.clone(), Vec::new(), &Attacher::User);
-    let item = asked.await?.number.item;
+    let asked = test_support::ask(&manager, &asker.id, "Which database?").await;
+    let (item, after) = (asked.number.item, asked.posts[0].id);
     let waiter = tokio::spawn({
         let (manager, selector) = (manager.clone(), selector.clone());
-        async move { manager.await_answer(&selector, item, &ask).await }
+        async move { manager.await_post(None, &selector, item, after).await }
     });
     // An issue proposal belongs to the repository and names its space in
     // its record.
@@ -141,10 +134,9 @@ async fn a_renumbered_space_takes_its_questions_and_their_waits_along() -> Resul
         space: SpaceNumber::new(4),
         item,
     };
-    manager
-        .answer_question(renumbered, "Postgres".into(), None)
-        .await?;
-    assert_eq!(waiter.await??.status.answer(), Some("Postgres"));
+    test_support::answer(&manager, renumbered, "Postgres").await;
+    let answered = waiter.await??;
+    assert_eq!(answered.posts.last().unwrap().post.text, "Postgres");
     let notifications = manager.notifications.list(false, 50).await?;
     let notice = (notifications.iter())
         .find(|notification| notification.kind == AlertKind::SpaceRenumbered)

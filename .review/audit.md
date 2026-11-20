@@ -55,7 +55,7 @@ by these areas, giving any path not listed to the closest one:
 - Forge integration, links, events and messages: `crates/shoal-forge`,
   `crates/shoal-daemon/src/daemon/links`,
   `crates/shoal-daemon/src/daemon/events`,
-  `crates/shoal-daemon/src/daemon/questions`,
+  `crates/shoal-daemon/src/daemon/threads`,
   `crates/shoal-daemon/src/daemon/chats`
 - CLI and configuration: `crates/shoal-cli/src/cli`,
   `crates/shoal-core/src/config`, `crates/shoal-core/src/presets`,

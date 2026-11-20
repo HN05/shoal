@@ -24,6 +24,23 @@ fn request(machine: &Base, method: Value) -> Value {
     daemon_client::exchange(root, &request)
 }
 
+/// What a process of `machine`'s space `id` prints for the Shoal command
+/// `args`, which must succeed.
+fn ok_in(machine: &Base, id: &str, args: &[&str]) -> Value {
+    let mut command = machine.command();
+    command.args(["run", "--workspace", id, "--", shoal_binary()]);
+    machine.ok_from(&mut command, args)
+}
+
+/// Have the agent of `machine`'s space `id` ask "Which database?" in a
+/// thread with its coordinator; the thread's number there.
+fn ask(machine: &Base, id: &str) -> String {
+    let opened = ok_in(machine, id, &["thread", "open", "Which database?"]);
+    let number = opened["number"].as_str().unwrap().to_owned();
+    ok_in(machine, id, &["send", &number, "Postgres or SQLite?"]);
+    number
+}
+
 /// Report that the agent of `machine`'s space `id` works, so the space
 /// counts as one with an agent.
 fn working(machine: &Base, id: &str) {
@@ -314,7 +331,7 @@ fn a_process_acting_as_its_space_sends_and_withdraws_an_alert_on_another_machine
 }
 
 #[test]
-fn a_child_s_question_reaches_its_coordinator_on_another_machine() {
+fn a_child_s_thread_reaches_its_coordinator_on_another_machine() {
     let Tree {
         hub,
         laptop,
@@ -323,15 +340,14 @@ fn a_child_s_question_reaches_its_coordinator_on_another_machine() {
         ..
     } = tree_across_machines();
     working(&laptop, &child);
-    let ask = json!({"question": "Which database?", "recommendation": "SQLite"});
-    let asked = request(
-        &laptop,
-        json!({"ask_question": {"space": child, "ask": ask}}),
+    let number = ask(&laptop, &child);
+    assert_eq!(
+        number,
+        format!("{}.1", listed_number(&hub, &child)),
+        "the hub names the thread as its machine does"
     );
-    assert_ne!(asked["type"], "error", "{asked}");
     message_with(&hub, &coordinator, "Which database?");
-    let number = format!("{}.1", listed_number(&hub, &child));
-    hub.ok(&["questions", &number, "--answer", "SQLite"]);
+    hub.ok(&["send", &number, "SQLite"]);
     message_with(&laptop, &child, "SQLite");
 }
 
@@ -367,7 +383,7 @@ fn the_hub_holds_a_message_for_an_offline_machine_and_refuses_what_cannot_wait()
 }
 
 #[test]
-fn a_question_for_an_offline_coordinator_goes_on_to_the_user() {
+fn a_thread_for_an_offline_coordinator_goes_on_to_the_user() {
     let hub = machine(true, "app");
     let desk = machine(false, "app");
     let config = "[machine.hub]\nescalate_after_minutes = 0\n";
@@ -401,16 +417,11 @@ fn a_question_for_an_offline_coordinator_goes_on_to_the_user() {
         let desk = (members.as_array().unwrap().iter()).find(|member| member["name"] == "desk");
         (desk?["connected"] == false).then_some(())
     });
-    let ask = json!({"question": "Which database?", "recommendation": "SQLite"});
-    let asked = request(
-        &laptop,
-        json!({"ask_question": {"space": child, "ask": ask}}),
-    );
-    assert_ne!(asked["type"], "error", "{asked}");
-    wait_for("the question to reach the user", || {
+    ask(&laptop, &child);
+    wait_for("the thread to reach the user", || {
         let alerts = laptop.ok(&["alert", "list", "--unread"]);
         (alerts.as_array().unwrap().iter())
-            .find(|alert| alert["kind"] == "question_asked" && alert["space_id"] == child.as_str())
+            .find(|alert| alert["kind"] == "thread_posted" && alert["space_id"] == child.as_str())
             .cloned()
     });
 }

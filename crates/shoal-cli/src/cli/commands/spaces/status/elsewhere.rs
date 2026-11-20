@@ -67,8 +67,8 @@ fn render(remote: &Listed, view: &HubView, palette: Palette) {
         outln!("Parent:        {parent}");
     }
     progress::render_section(space.progress.as_ref(), palette);
-    for question in &space.questions {
-        outln!("Question {}:  {}", question.number, question.one_line());
+    for thread in &space.threads {
+        outln!("Thread {}:  {}", thread.number, thread.one_line());
     }
     for request in &space.approvals {
         let about = crate::cli::commands::approvals::about(request);

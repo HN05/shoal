@@ -84,7 +84,7 @@ fn findings_message(review: &Review) -> String {
     let ending = format!(
         "\n\nResolve each finding with shoal review resolve <finding> <outcome>, or discuss \
          it with shoal review reply <finding>; leave one that needs the user's decision \
-         unresolved and ask with shoal questions ask.\n\n{AUTOMATED_NOTE}"
+         unresolved and ask in a thread with shoal thread open.\n\n{AUTOMATED_NOTE}"
     );
     let omitted = format!("\n\nshoal view review {id} shows the remaining findings.");
     for (shown, finding) in review.findings.iter().enumerate() {

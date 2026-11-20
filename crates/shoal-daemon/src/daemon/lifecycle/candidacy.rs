@@ -22,8 +22,8 @@ impl Manager {
         if self.has_holds(id).await? {
             return Ok(Some(Retention::Held));
         }
-        if self.has_open_questions(id).await? {
-            return Ok(Some(Retention::Question));
+        if self.has_waiting_threads(id).await? {
+            return Ok(Some(Retention::WaitingThread));
         }
         if self.has_pending_pull_proposal(id).await? {
             return Ok(Some(Retention::PrProposal));

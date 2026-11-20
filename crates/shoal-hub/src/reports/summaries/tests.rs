@@ -30,7 +30,7 @@ fn around() -> Around {
     Around {
         stopped: HashSet::new(),
         queued: Vec::new(),
-        questions: Vec::new(),
+        threads: Vec::new(),
         approvals: Vec::new(),
         parents: HashMap::new(),
         agents: HashSet::new(),

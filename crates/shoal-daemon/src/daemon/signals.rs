@@ -6,7 +6,7 @@ use tokio::sync::{Notify, futures::Notified, watch};
 #[derive(Default)]
 pub(crate) struct Signals {
     messages: Counter,
-    questions: Counter,
+    threads: Counter,
     item_updates: Counter,
     agents: Counter,
     cleanup: Notify,
@@ -27,13 +27,13 @@ impl Signals {
         self.messages.subscribe()
     }
 
-    /// Wake waits for an answer once a question is answered or closed.
-    pub(crate) fn question_changed(&self) {
-        self.questions.advance();
+    /// Wake waits for a post once a thread changes.
+    pub(crate) fn thread_changed(&self) {
+        self.threads.advance();
     }
 
-    pub(crate) fn watch_questions(&self) -> watch::Receiver<u64> {
-        self.questions.subscribe()
+    pub(crate) fn watch_threads(&self) -> watch::Receiver<u64> {
+        self.threads.subscribe()
     }
 
     /// Wake watches once a background poll queued item updates.

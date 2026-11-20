@@ -273,7 +273,7 @@ impl Manager {
             .collect())
     }
 
-    /// Hand the user `message`, such as an alert, a question or a
+    /// Hand the user `message`, such as an alert, a post or a
     /// completion, from `space` with `send`, passing it copies of the files
     /// `files` recorded as coming from `source` and attached by `attacher`,
     /// which outlive its removal. When `send` refuses the message, the copies

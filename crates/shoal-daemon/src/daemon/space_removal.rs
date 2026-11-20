@@ -23,7 +23,7 @@ use crate::{
         events,
         links::{self, issue::Dropped},
         notifications::AlertKind,
-        spaces, workspace_files,
+        spaces, threads, workspace_files,
     },
     fsutil::off_runtime,
     model::{Space, Workspace},
@@ -276,7 +276,7 @@ impl Manager {
     /// Delete the record of `space`, which `cause` removed, and give the user
     /// what only it kept: the approval requests it had not decided, the
     /// messages it had not read and its attached files, which stay for the
-    /// retention period. The forge assignments only it kept go, and so do
+    /// retention period. Its open threads close, telling their openers. The forge assignments only it kept go, and so do
     /// the carried commits only a workspace's record kept.
     pub(crate) async fn delete_space_record(
         &self,
@@ -289,6 +289,7 @@ impl Manager {
             .write(move |tx| delete_record(tx, &id, cause, expires_at))
             .await?;
         self.ask_user_about(&deleted.released).await;
+        self.announce_threads(deleted.threads).await;
         if let Some(id) = deleted.notification {
             self.notifications.recorded(id);
         }
@@ -363,13 +364,15 @@ struct Deleted {
     assignees: Vec<Dropped>,
     /// The assigned issues whose agent account its removal settles.
     issues: Vec<ItemRef>,
+    /// What closing its threads delivered.
+    threads: threads::ThreadsDelivered,
 }
 
 /// Delete the record of the space `id`, which `cause` removed, once the
 /// spaces below it are gone, in one transaction with what it recorded:
 /// the user gets its unread messages and the requests it decides, such as
-/// an issue proposal that outlives it, and its attached files stay until
-/// `expires_at`.
+/// an issue proposal that outlives it, its attached files stay until
+/// `expires_at`, and its open threads close.
 fn delete_record(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
@@ -388,6 +391,7 @@ fn delete_record(
     let released = release_decided_by(tx, id)?;
     let assignees = links::issue::removed_assignees(tx, id)?;
     let issues = links::issue::removed_issues(tx, id)?;
+    let (_, threads) = threads::close(tx, id, shoal_protocol::threads::CloseCause::Removal)?;
     ensure!(
         spaces::records::remove(tx, id)?,
         "the space was removed meanwhile"
@@ -397,5 +401,6 @@ fn delete_record(
         released,
         assignees,
         issues,
+        threads,
     })
 }

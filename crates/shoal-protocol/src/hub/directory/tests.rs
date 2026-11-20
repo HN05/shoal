@@ -48,19 +48,23 @@ fn a_view_larger_than_a_frame_arrives_in_pages_whole() {
 }
 
 #[test]
-fn a_space_whose_questions_fill_more_than_a_frame_arrives_whole() {
-    let questions: Vec<serde_json::Value> = (1..=6)
+fn a_space_whose_threads_fill_more_than_a_frame_arrives_whole() {
+    let threads: Vec<serde_json::Value> = (1..=6)
         .map(|item| {
             json!({
-                "space_number": 4, "item": item, "space_id": "remote", "space": "big",
-                "created_at": 0, "question": "x".repeat(12_000),
-                "recommendation": "y".repeat(4_000), "status": "open",
+                "id": item, "space_number": 4, "item": item, "space_id": "remote", "space": "big",
+                "kind": "question", "name": "Which?", "opener": "space",
+                "holder": {"kind": "user"}, "created_at": 0,
+                "posts": [{
+                    "id": item, "created_at": 0, "side": "opener", "sender": "space",
+                    "text": "x".repeat(16_000),
+                }],
             })
         })
         .collect();
     let listed: Listed = serde_json::from_value(json!({
         "machine": "laptop", "id": "remote", "number": 4, "name": "big", "kind": "chat",
-        "status": "needs-input", "reported_at": 0, "questions": questions,
+        "status": "needs-input", "reported_at": 0, "threads": threads,
     }))
     .unwrap();
     let view = HubView {
@@ -85,7 +89,7 @@ fn a_space_whose_questions_fill_more_than_a_frame_arrives_whole() {
     };
     let view = HubView::from_parts(parts).unwrap().unwrap();
     assert_eq!(view.directory.spaces.len(), 1);
-    assert_eq!(view.directory.spaces[0].space.questions.len(), 6);
+    assert_eq!(view.directory.spaces[0].space.threads.len(), 6);
 }
 
 fn member(id: &str, name: &str, kind: super::super::MemberKind) -> Member {

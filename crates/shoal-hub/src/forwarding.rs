@@ -378,7 +378,7 @@ type StreamCall = Box<dyn FnOnce(u64) -> Call + Send>;
 fn prepared(method: serde_json::Value, listed: &Listed) -> Result<(serde_json::Value, bool)> {
     let mut operation: shoal_protocol::protocol::Operation = serde_json::from_value(method)?;
     operation.leave_caller_machine();
-    operation.pin_item(&listed.space.questions, &listed.space.approvals);
+    operation.pin_item(&listed.space.approvals);
     let pinned = !operation.names_unpinned_item();
     Ok((serde_json::to_value(operation)?, pinned))
 }
