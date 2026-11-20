@@ -1404,6 +1404,31 @@ esac
         .unwrap();
     assert!(!cleared.status.success(), "{}", printed(&cleared));
     assert!(!String::from_utf8_lossy(&cleared.stdout).contains("agent only"));
+    // Nor withdraw what the user sent, or send as the user.
+    let asker_id = fixture.id("asker");
+    let sent = fixture.ok(&["send", "--space", &asker_id, "from the user"]);
+    let id = sent["alerts"][0].to_string();
+    for args in [
+        format!(r#"env -u SHOAL_SCOPE_TOKEN "$0" alert withdraw {id} --space {asker_id}"#),
+        format!(r#"env -u SHOAL_SCOPE_TOKEN "$0" send --space {asker_id} 'as the user'"#),
+    ] {
+        let cleared = fixture
+            .command()
+            .args(["run", "--workspace", &asker_id, "--", "sh", "-c"])
+            .arg(format!("{args}; exit $?"))
+            .arg(support::shoal_binary())
+            .output()
+            .unwrap();
+        assert!(!cleared.status.success(), "{}", printed(&cleared));
+        let refused = String::from_utf8_lossy(&cleared.stderr);
+        assert!(refused.contains("only with their scope token"), "{refused}");
+    }
+    let to_asker = fixture.ok(&["alert", "list", "--space", &asker_id, "--keep-unread"]);
+    let texts: Vec<_> = (to_asker.as_array().unwrap().iter())
+        .map(|alert| alert["message"].as_str().unwrap_or_default())
+        .collect();
+    assert!(texts.contains(&"from the user"), "{to_asker}");
+    assert!(!texts.contains(&"as the user"), "{to_asker}");
     assert_eq!(
         fixture
             .ok(&["alert", "list", "--unread"])

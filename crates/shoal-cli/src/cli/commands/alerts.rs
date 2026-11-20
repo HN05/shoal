@@ -98,8 +98,10 @@ pub(super) fn in_own_space() -> bool {
 }
 
 /// The space this process sends and withdraws alerts as, which the daemon
-/// takes from a scoped caller's scope; none for the user.
+/// takes from a scoped caller's scope; none for the user, whom a process
+/// that cleared its scope token may not act as.
 pub(super) async fn sending_space(ctx: &Context) -> Result<Option<SpaceSelector>> {
+    refuse_workspace_processes(ctx)?;
     match in_own_space() {
         true => Ok(Some(delivery::own_space(ctx).await?)),
         false => Ok(None),
@@ -149,13 +151,13 @@ pub(super) async fn clear(ctx: &Context) -> Result<i32> {
     Ok(0)
 }
 
-/// The daemon reads and clears for a scoped process only the alerts its
-/// scope and `notifications` permission allow; this refuses a descendant
-/// that cleared its scope token, which the daemon would take for the user.
+/// The daemon takes a scoped process's alerts only as its scope and
+/// `notifications` permission allow; this refuses a descendant that cleared
+/// its scope token, which the daemon would take for the user.
 fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
     ensure!(
         crate::env::is_scoped() || !crate::process::scoped::inherits_scope(&ctx.paths.state),
-        "workspace processes read and clear alerts only with their scope token"
+        "workspace processes read, send and withdraw alerts only with their scope token"
     );
     Ok(())
 }
