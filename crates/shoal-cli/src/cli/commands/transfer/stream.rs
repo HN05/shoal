@@ -53,6 +53,7 @@ impl Streaming {
         if !order.keep {
             end_here(ctx, moved).await?;
         }
+
         self.lock.release();
         eprintln!("Exported {}", exported(order, moved));
         Ok(0)
@@ -69,9 +70,17 @@ fn copy_to_stdout(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// End the `moved` space here, whose package its reader took.
+/// End the `moved` space here, whose package its reader took, unless it
+/// was already removed, which its record moved.
 async fn end_here(ctx: &Context, moved: &SpaceMoved) -> Result<()> {
-    let ending = crate::client::transfer::end_moved(&ctx.paths, SpaceSelector::id(&moved.id));
+    let selector = SpaceSelector::id(&moved.id);
+    if crate::client::workspaces::present_space(&ctx.paths, &selector)
+        .await?
+        .is_none()
+    {
+        return Ok(());
+    }
+    let ending = crate::client::transfer::end_moved(&ctx.paths, selector);
     ending.await.with_context(|| {
         format!(
             "it now exists here and wherever its package went; once the work you want is there, shoal rm {} removes it here",

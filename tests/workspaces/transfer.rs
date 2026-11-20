@@ -1361,6 +1361,10 @@ fn a_removed_chat_moves_from_its_removal_record() {
         exported["moved"][0]["manifest"]["record"]["name"], "talk",
         "{exported}"
     );
+    // Standard output takes the record too, which nothing ends here.
+    let streamed = fixture.run(&["move", &id, "-o", "-"]);
+    assert!(streamed.status.success(), "{}", printed(&streamed));
+    assert!(streamed.stdout.starts_with(b"shoal workspace "));
     let removed = fixture.ok(&["restore"])["removed"].clone();
     assert_eq!(removed[0]["workspace_id"], id.as_str(), "{removed}");
     // The record stays here, so the import elsewhere opens the chat again.
