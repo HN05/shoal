@@ -1,5 +1,5 @@
 use super::*;
-use crate::sessions::HostName;
+use crate::{model::Protection, sessions::HostName};
 
 fn agent_in(window: &str, execution: &str) -> Session {
     Session {

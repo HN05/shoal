@@ -3,6 +3,7 @@
 //! builds those processes' command lines for the daemon, which never
 //! depends on this crate.
 
+pub mod attach;
 pub mod execution;
 pub mod git_credential;
 pub mod homes;

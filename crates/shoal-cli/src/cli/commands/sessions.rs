@@ -1,16 +1,14 @@
-//! Persistent agent sessions run in terminal hosts; attaching hands this
-//! terminal to one of a workspace's or a chat's, first waking at once an
-//! agent that sleeps or is stopped there. A user on another machine
-//! attaches through a terminal the space's machine makes for them.
-mod owner;
+//! `shoal attach`: choosing the space to attach to, and what the CLI does
+//! its own way in the attach steps `shoal_workers::attach` takes, which
+//! hand this terminal to one of a workspace's or a chat's sessions. A user
+//! on another machine attaches through a terminal the space's machine
+//! makes for them.
 mod viewer;
 
-pub(in crate::cli::commands) use owner::attach_for_viewer;
-
-use anyhow::{Context as _, Result, bail, ensure};
-use shoal_ids::execution_ids::ExecutionId;
+use anyhow::{Result, ensure};
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::status::Inspection;
+use shoal_protocol::attaching::Viewer;
+use shoal_workers::attach::{Attaching, Target};
 
 use crate::{
     cli::{
@@ -20,8 +18,7 @@ use crate::{
         ui::{self, Fallback, NoCurrentWorkspace},
     },
     client::connection::CommandPaths,
-    model::{Chat, Protection, Spaces},
-    protocol::ConfigTarget,
+    model::{Chat, QueueEntry, Spaces},
     sessions::Origin,
     terminal::Session,
 };
@@ -44,72 +41,62 @@ pub(super) async fn attach(
         let machine = machine.map_or(remote.machine.as_str(), |machine| machine.name.as_str());
         return viewer::attach(ctx, remote.space.id.clone(), machine, session).await;
     }
-    let target = Target::resolve(ctx, target).await?;
-    // Attaching is the user's interaction with the space's agent.
-    crate::client::agents::report_attach(&ctx.paths, SpaceSelector::id(target.id())).await?;
-    let (target, session) = target.awake_session(ctx, session, None).await?;
-    if crate::terminal::attach(&target.number().to_string(), &session).await? {
-        target.record_detach(ctx).await;
+    let target = resolve(ctx, target).await?;
+    let id = SpaceSelector::id(target.id());
+    if shoal_workers::attach::here(&ctx.paths, target, session, &Callbacks(ctx)).await? {
+        // Remember the space once its session was shown and still runs, so
+        // `attach -` returns to the session last detached from rather than
+        // the one last attached, which another terminal may still show.
+        recent::record_attach(ctx, &id).await;
     }
     Ok(0)
 }
 
-/// The one of `target`'s `sessions` that `named` names, else the only one
-/// [`offered`] offers, or one picked among them; for a user on another
-/// machine, a refusal names `machine`, this one.
-fn chosen_session<'a>(
+/// `shoal internal attach`: attach this terminal, which `viewer` views
+/// from another machine, to a session of `space` on `machine`, this one,
+/// reporting the session chosen to the descriptor `report`.
+pub(in crate::cli::commands) async fn attach_for_viewer(
     ctx: &Context,
-    target: &Target,
-    named: Option<String>,
-    sessions: &'a [Session],
-    machine: Option<&str>,
-) -> Result<&'a Session> {
-    if let Some(name) = named {
-        return sessions
-            .iter()
-            .find(|session| session.name == name)
-            .with_context(|| format!("{} has no session {name}", target.name()));
-    }
-    Ok(match offered(sessions).as_slice() {
-        [] => bail!("{}", target.without_sessions(machine)),
-        [only] => only,
-        several => {
-            let labels: Vec<_> = several.iter().map(|session| session.label()).collect();
-            let choices: Vec<_> = several
-                .iter()
-                .zip(&labels)
-                .map(|(session, label)| (*session, label.as_str()))
-                .collect();
-            ui::require_argument(ctx, "session", "session")?;
-            ui::pick_choice(ctx, "Attach session> ", &choices)?
-        }
-    })
+    space: SpaceId,
+    viewer: Viewer,
+    machine: String,
+    report: i32,
+) -> Result<i32> {
+    let callbacks = Callbacks(ctx);
+    shoal_workers::attach::for_viewer(&ctx.paths, space, viewer, machine, report, &callbacks).await
 }
 
-/// The ones of `sessions` an attach that names none offers: those where the
-/// daemon recorded an agent, when any is, rather than a place such as one an
-/// earlier run of the agent left, else every one.
-fn offered(sessions: &[Session]) -> Vec<&Session> {
-    let agents: Vec<_> = (sessions.iter())
-        .filter(|session| session.agent.is_some())
-        .collect();
-    match agents.is_empty() {
-        true => sessions.iter().collect(),
-        false => agents,
-    }
-}
+/// What the CLI does its own way in an attach's steps.
+struct Callbacks<'a>(&'a Context);
 
-/// The name of the terminal session `shoal attach` takes in which the
-/// daemon recorded the agent of the workspace with the ID `id` running,
-/// only `execution`'s when given.
-pub(super) async fn agent_terminal_session(
-    ctx: &Context,
-    id: &SpaceId,
-    execution: Option<&ExecutionId>,
-) -> Result<Option<String>> {
-    let target = Target::by_id(ctx, id.clone()).await?;
-    let session = agent_session(target.sessions(ctx).await?, execution);
-    Ok(session.map(|session| session.name))
+impl Attaching for Callbacks<'_> {
+    fn pick_session<'s>(&self, sessions: &[&'s Session]) -> Result<&'s Session> {
+        let labels: Vec<_> = sessions.iter().map(|session| session.label()).collect();
+        let choices: Vec<_> = (sessions.iter().copied())
+            .zip(&labels)
+            .map(|(session, label)| (session, label.as_str()))
+            .collect();
+        ui::require_argument(self.0, "session", "session")?;
+        ui::pick_choice(self.0, "Attach session> ", &choices)
+    }
+
+    async fn resume_now(&self, space: &SpaceId) -> Result<bool> {
+        let targets = SpaceTargets {
+            space: vec![SpaceSelector::id(space)],
+            all: false,
+        };
+        let now = super::resume::Options {
+            execution: None,
+            now: true,
+            focus: false,
+            change: None,
+        };
+        Ok(super::resume::run(self.0, targets, now).await? == 0)
+    }
+
+    fn resuming(&self, entry: &QueueEntry) -> Result<()> {
+        self.0.emit(&format!("Resuming {}", entry.name), entry)
+    }
 }
 
 /// The spaces `attach -` returns to: every workspace and the chats whose
@@ -120,309 +107,62 @@ fn attachable(spaces: Spaces) -> Spaces {
         .collect()
 }
 
-/// The one of `sessions` where an agent runs that Shoal has not stopped,
-/// only `execution`'s when given, since a host may give the places of
-/// several agents one name.
-fn agent_session(sessions: Vec<Session>, execution: Option<&ExecutionId>) -> Option<Session> {
-    sessions.into_iter().find(|session| {
-        session.agent.is_some()
-            && session.stopped.is_none()
-            && execution.is_none_or(|execution| session.execution.as_ref() == Some(execution))
-    })
+/// The chat or workspace `name` selects, where `-` is the one whose session
+/// this terminal last left running; without one, the current workspace,
+/// else the current checkout's only running chat, else a picker of the
+/// workspaces and the chats with sessions or an agent that sleeps or is
+/// stopped.
+async fn resolve(ctx: &Context, name: Option<SpaceSelector>) -> Result<Target> {
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
+    if name.as_ref().is_some_and(recent::is_previous) {
+        let id = recent::previous_among(ctx, &attachable(spaces.clone()))?;
+        return Target::among(&ctx.paths, spaces.into_chats(), id).await;
+    }
+    let chats = spaces.into_chats();
+    let running: Vec<Chat> = (chats.iter())
+        .filter(|chat| chat.running)
+        .cloned()
+        .collect();
+    if let Some(name) = name {
+        return match (chats.into_iter()).find(|chat| name.selects(&chat.id, chat.number)) {
+            Some(chat) => Ok(Target::Chat(Box::new(chat))),
+            None => workspace(ctx, Some(name), Fallback::CurrentDirectory).await,
+        };
+    }
+    match workspace(ctx, None, Fallback::CurrentDirectoryOnly).await {
+        Err(error) if error.is::<NoCurrentWorkspace>() => {}
+        current => return current,
+    }
+    if let Some(chat) = checkout_chat(ctx, &running).await? {
+        return Ok(Target::Chat(Box::new(chat)));
+    }
+    picked(ctx, chats).await
 }
 
-/// What `shoal attach` returns to.
-enum Target {
-    /// A workspace with the places its executions were recorded running in
-    /// and those Shoal created for it.
-    Workspace(Box<Inspection>),
-    Chat(Box<Chat>),
+async fn workspace(
+    ctx: &Context,
+    name: Option<SpaceSelector>,
+    fallback: Fallback,
+) -> Result<Target> {
+    let workspace = ui::choose_workspace(ctx, name, fallback).await?;
+    Target::inspected(&ctx.paths, workspace).await
 }
 
-impl Target {
-    /// The chat or workspace `name` selects, where `-` is the one whose
-    /// session this terminal last left running; without one, the current
-    /// workspace, else the current checkout's only running chat, else a
-    /// picker of the workspaces and the chats with sessions or an agent that
-    /// sleeps or is stopped.
-    async fn resolve(ctx: &Context, name: Option<SpaceSelector>) -> Result<Self> {
-        let spaces = crate::client::spaces::list(&ctx.paths).await?;
-        if name.as_ref().is_some_and(recent::is_previous) {
-            let id = recent::previous_among(ctx, &attachable(spaces.clone()))?;
-            return Self::space(ctx, spaces.into_chats(), id).await;
-        }
-        let chats = spaces.into_chats();
-        let running: Vec<Chat> = (chats.iter())
-            .filter(|chat| chat.running)
-            .cloned()
-            .collect();
-        if let Some(name) = name {
-            return match (chats.into_iter()).find(|chat| name.selects(&chat.id, chat.number)) {
-                Some(chat) => Ok(Self::Chat(Box::new(chat))),
-                None => Self::workspace(ctx, Some(name), Fallback::CurrentDirectory).await,
-            };
-        }
-        match Self::workspace(ctx, None, Fallback::CurrentDirectoryOnly).await {
-            Err(error) if error.is::<NoCurrentWorkspace>() => {}
-            current => return current,
-        }
-        if let Some(chat) = checkout_chat(ctx, &running).await? {
-            return Ok(Self::Chat(Box::new(chat)));
-        }
-        Self::picked(ctx, chats).await
-    }
-
-    async fn workspace(
-        ctx: &Context,
-        name: Option<SpaceSelector>,
-        fallback: Fallback,
-    ) -> Result<Self> {
-        let workspace = ui::choose_workspace(ctx, name, fallback).await?;
-        Self::inspected(ctx, workspace).await
-    }
-
-    async fn inspected(ctx: &Context, workspace: SpaceSelector) -> Result<Self> {
-        let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
-        Ok(Self::Workspace(Box::new(inspection)))
-    }
-
-    /// A workspace or one of `chats` with an agent session, or whose agent
-    /// sleeps or is stopped, which the picker's status shows, from a picker.
-    async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Self> {
-        let places = chat_places(&ctx.paths, &chats).await;
-        let places: Vec<_> = places.iter().map(|(id, place)| (id, place)).collect();
-        let attachable = crate::terminal::session_owners(&places);
-        let chats: Vec<_> = chats
-            .into_iter()
-            .filter(|chat| attachable.contains(&chat.id) || !chat.running || chat.asleep.is_some())
-            .collect();
-        let workspaces = crate::client::spaces::list(&ctx.paths)
-            .await?
-            .into_workspaces();
-        let id = ui::pick_space(ctx, workspaces, &chats, "workspace").await?;
-        Self::space(ctx, chats, id).await
-    }
-
-    /// The one of `chats` with the ID `id`, else the workspace with it.
-    async fn space(ctx: &Context, chats: Vec<Chat>, id: SpaceId) -> Result<Self> {
-        if let Some(chat) = chats.into_iter().find(|chat| chat.id == id) {
-            return Ok(Self::Chat(Box::new(chat)));
-        }
-        Self::inspected(ctx, SpaceSelector::Id(id)).await
-    }
-
-    /// The chat or workspace with the ID `id`, as it is now.
-    async fn by_id(ctx: &Context, id: SpaceId) -> Result<Self> {
-        let chats = crate::client::spaces::list(&ctx.paths).await?.into_chats();
-        Self::space(ctx, chats, id).await
-    }
-
-    fn id(&self) -> &SpaceId {
-        match self {
-            Self::Workspace(inspection) => &inspection.workspace.id,
-            Self::Chat(chat) => &chat.id,
-        }
-    }
-
-    /// Remember the space once its session was shown and still runs, so
-    /// `attach -` returns to the session last detached from rather than the
-    /// one last attached, which another terminal may still show.
-    async fn record_detach(&self, ctx: &Context) {
-        recent::record_attach(ctx, &SpaceSelector::id(self.id())).await;
-    }
-
-    /// The target's open sessions, each where an agent Shoal stopped waits
-    /// marked with why.
-    async fn sessions(&self, ctx: &Context) -> Result<Vec<Session>> {
-        let settings = shoal_workers::settings::of(&ctx.paths, self.config()).await?;
-        let space = SpaceSelector::id(self.id());
-        let places = crate::client::workspaces::places(&ctx.paths, space).await?;
-        let recorded = crate::terminal::Recorded::space(&places.executions, &places.places);
-        crate::terminal::sessions(&settings, &recorded).await
-    }
-
-    /// The session `named` names, the target's only one or one picked,
-    /// taken once the agent there runs. With no session named and none
-    /// showing an agent, an agent that sleeps wakes first, and a stopped one
-    /// when no session is left to attach to; a session where Shoal stopped
-    /// the agent wakes it. For a user on another machine, a refusal names
-    /// `machine`, this one.
-    async fn awake_session(
-        self,
-        ctx: &Context,
-        named: Option<String>,
-        machine: Option<&str>,
-    ) -> Result<(Self, Session)> {
-        let sessions = self.sessions(ctx).await?;
-        let shows_agent = sessions.iter().any(|session| session.agent.is_some());
-        if named.is_none() && !shows_agent && self.wake(ctx, sessions.is_empty()).await? {
-            return self.awaited(ctx, None).await;
-        }
-        let chosen = chosen_session(ctx, &self, named, &sessions, machine)?.clone();
-        let (Some(execution), Some(protection)) = (&chosen.execution, &chosen.stopped) else {
-            return Ok((self, chosen));
-        };
-        if !super::queue::resume_stopped(ctx, execution).await? {
-            bail!("{}", stopped_agent(&self, protection));
-        }
-        self.awaited(ctx, Some(execution)).await
-    }
-
-    /// Wake the target's agent at once, whatever the agent limits and the
-    /// queue's rank: start the restore that waits for it, as for an agent
-    /// that sleeps, or when `stopped` too restore its stopped work now.
-    /// Whether it woke one.
-    async fn wake(&self, ctx: &Context, stopped: bool) -> Result<bool> {
-        if super::queue::resume_space(ctx, self.id()).await? {
-            return Ok(true);
-        }
-        if !stopped || !self.has_stopped_work(ctx).await? {
-            return Ok(false);
-        }
-        self.restore_now(ctx).await?;
-        Ok(true)
-    }
-
-    /// Whether the target saved stopped work or a last session to restore.
-    async fn has_stopped_work(&self, ctx: &Context) -> Result<bool> {
-        let saved = crate::client::saved::read(&ctx.paths, SpaceSelector::id(self.id())).await?;
-        Ok(!saved.is_empty())
-    }
-
-    /// Resume the target's stopped agent as `shoal resume --now` does, and
-    /// wait for the restore it starts through the queue; refused when the
-    /// resume reports that it failed, which it has reported already.
-    async fn restore_now(&self, ctx: &Context) -> Result<()> {
-        let targets = SpaceTargets {
-            space: vec![SpaceSelector::id(self.id())],
-            all: false,
-        };
-        let now = super::resume::Options {
-            execution: None,
-            now: true,
-            focus: false,
-            change: None,
-        };
-        let code = super::resume::run(ctx, targets, now).await?;
-        ensure!(
-            code == 0,
-            "{} did not resume; shoal alert list shows why",
-            self.name()
-        );
-        // A restore whose agent registered already left the queue, which
-        // `awaited` finds running.
-        super::queue::resume_space(ctx, self.id()).await?;
-        Ok(())
-    }
-
-    /// The target, read again, with the session its agent, only
-    /// `execution` when given, runs in once it does.
-    async fn awaited(
-        self,
-        ctx: &Context,
-        execution: Option<&ExecutionId>,
-    ) -> Result<(Self, Session)> {
-        let deadline = tokio::time::Instant::now() + super::queue::WAIT;
-        let id = self.id().clone();
-        loop {
-            let target = Self::by_id(ctx, id.clone()).await?;
-            if let Some(session) = agent_session(target.sessions(ctx).await?, execution) {
-                return Ok((target, session));
-            }
-            ensure!(
-                tokio::time::Instant::now() < deadline,
-                "{} has no agent session after {} seconds; shoal attach {} attaches once it has one",
-                target.name(),
-                super::queue::WAIT.as_secs(),
-                target.number()
-            );
-            tokio::time::sleep(super::queue::POLL).await;
-        }
-    }
-
-    /// Whose settings choose the hosts to look in.
-    fn config(&self) -> ConfigTarget {
-        match self {
-            Self::Workspace(inspection) => {
-                ConfigTarget::Space(SpaceSelector::id(&inspection.workspace.id))
-            }
-            Self::Chat(chat) => ConfigTarget::chat(chat),
-        }
-    }
-
-    fn name(&self) -> &shoal_protocol::space_names::SpaceName {
-        match self {
-            Self::Workspace(inspection) => &inspection.workspace.name,
-            Self::Chat(chat) => &chat.name,
-        }
-    }
-
-    fn number(&self) -> shoal_ids::space_ids::SpaceNumber {
-        match self {
-            Self::Workspace(inspection) => inspection.workspace.number,
-            Self::Chat(chat) => chat.number,
-        }
-    }
-
-    /// The target's session at `place`, as an attach that lost its
-    /// connection finds it again, without waking or restoring its agent.
-    async fn session_again(
-        self,
-        ctx: &Context,
-        place: &crate::sessions::Origin,
-    ) -> Result<(Self, Session)> {
-        let sessions = self.sessions(ctx).await?;
-        let found = sessions
-            .into_iter()
-            .find(|session| session.place.same_place(place));
-        let Some(session) = found else {
-            bail!("{}'s session is gone", self.name());
-        };
-        if let Some(protection) = &session.stopped {
-            bail!("{}", stopped_agent(&self, protection));
-        }
-        Ok((self, session))
-    }
-
-    /// Why there is nothing to attach to, and for a chat where it runs
-    /// instead; for a user on another machine, that it runs on `machine`.
-    fn without_sessions(&self, machine: Option<&str>) -> String {
-        let without = self.without_sessions_here();
-        match machine {
-            Some(machine) => format!(
-                "{without}; it runs on machine {machine}: attach there, or move it to your machine with shoal move"
-            ),
-            None => without,
-        }
-    }
-
-    fn without_sessions_here(&self) -> String {
-        match self {
-            Self::Workspace(inspection) => {
-                format!("{} has no agent sessions", inspection.workspace.name)
-            }
-            Self::Chat(chat) => match chat.agent.as_ref().and_then(crate::agents::chat_place) {
-                Some(place) => {
-                    format!("{} runs in {place}; it has no session to attach", chat.name)
-                }
-                None => format!(
-                    "{} has no session to attach; it runs in the terminal that started it",
-                    chat.name
-                ),
-            },
-        }
-    }
-}
-
-/// Why `target`'s agent, which `protection` stopped, cannot be attached to
-/// while no restore of it waits to start.
-fn stopped_agent(target: &Target, protection: &Protection) -> String {
-    format!(
-        "{}'s agent is stopped ({}) and resumes once {}",
-        target.name(),
-        protection.reason,
-        protection.resumes_when,
-    )
+/// A workspace or one of `chats` with an agent session, or whose agent
+/// sleeps or is stopped, which the picker's status shows, from a picker.
+async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Target> {
+    let places = chat_places(&ctx.paths, &chats).await;
+    let places: Vec<_> = places.iter().map(|(id, place)| (id, place)).collect();
+    let attachable = crate::terminal::session_owners(&places);
+    let chats: Vec<_> = chats
+        .into_iter()
+        .filter(|chat| attachable.contains(&chat.id) || !chat.running || chat.asleep.is_some())
+        .collect();
+    let workspaces = crate::client::spaces::list(&ctx.paths)
+        .await?
+        .into_workspaces();
+    let id = ui::pick_space(ctx, workspaces, &chats, "workspace").await?;
+    Target::among(&ctx.paths, chats, id).await
 }
 
 /// Where the daemon recorded `chats` running, by chat ID: where their agents
@@ -460,6 +200,3 @@ pub(in crate::cli::commands) async fn checkout_chat(
         _ => None,
     })
 }
-
-#[cfg(test)]
-mod tests;
