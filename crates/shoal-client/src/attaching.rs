@@ -1,7 +1,8 @@
 //! Attaching a terminal on this machine, or a device's, to an agent's
 //! session on whichever machine its space runs, which runs Shoal's attach
 //! on a terminal of its own for it: what that terminal shows comes back as
-//! frames, and the viewer's keys and size go there.
+//! frames, and the viewer's keys and size go there. A terminal demo's
+//! stream carries the same frames.
 use anyhow::Result;
 use shoal_protocol::{
     attaching::{FromSession, ToSession, Viewer},
@@ -37,8 +38,13 @@ pub async fn attach(
         Body::Ok => {}
         body => return Err(body.unexpected("Ok")),
     }
+    Ok(split(connection))
+}
+
+/// The two ways of a connection that carries a terminal's frames.
+pub(crate) fn split(connection: Connection) -> (Screen, Keys) {
     let (screen, keys) = tokio::io::split(connection);
-    Ok((Screen(screen), Keys(keys)))
+    (Screen(screen), Keys(keys))
 }
 
 impl Screen {

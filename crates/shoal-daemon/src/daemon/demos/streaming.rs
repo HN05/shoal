@@ -2,11 +2,14 @@
 //! carries the bytes of one TCP connection the daemon opens to a `server`
 //! or `web` demo's port, or a `simulator` demo's viewer's, on loopback, both
 //! ways and unread, so WebSockets and the like work as they do on the demo's
-//! own machine.
+//! own machine; a terminal demo's carries a terminal the daemon makes for
+//! the viewer, on which the demo's place is shown as its host shows a place
+//! to another machine.
 use std::{sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result};
 use shoal_protocol::{
+    attaching::Terminal,
     demos::{Kind, Running},
     protocol::{self, Body, Response},
     scope_tokens::ScopeToken,
@@ -15,27 +18,43 @@ use shoal_protocol::{
 use tokio::net::{TcpStream, UnixStream};
 
 use crate::{
-    daemon::{answer::OperationGuard, manager::Manager, scope::Caller},
+    daemon::{
+        answer::OperationGuard,
+        manager::Manager,
+        scope::Caller,
+        viewer_terminals::{Reports, ViewerTerminal},
+    },
     refusal::{Reason, Refusal},
+    workers::{Worker, internal_command},
 };
 
 /// How often a demo stream checks that the scope token it came with still
 /// acts for a caller.
 const SCOPE_CHECK: Duration = Duration::from_secs(1);
 
-/// A running demo a stream opens to, with the connection to it.
+/// A running demo a stream opens to, with what shows it.
 pub(crate) struct OpenDemo {
     demo: Running,
-    connection: TcpStream,
+    shown: Shown,
+}
+
+/// What a stream to a demo carries.
+enum Shown {
+    /// A connection to its port.
+    Port(TcpStream),
+    /// A terminal that shows its place.
+    Terminal(Box<ViewerTerminal>),
 }
 
 impl Manager {
     /// Connect to the running demo `name` of the workspace `selector`
-    /// names; refused for a demo of a kind Shoal does not stream.
+    /// names, a terminal demo on a terminal made like `terminal`; refused
+    /// for a demo of a kind Shoal does not stream.
     pub(crate) async fn open_demo(
         &self,
         selector: &SpaceSelector,
         name: &str,
+        terminal: &Terminal,
         caller: Option<&Caller>,
     ) -> Result<OpenDemo> {
         crate::demos::validate_name(name)?;
@@ -44,10 +63,27 @@ impl Manager {
             let message = format!("space {selector} has no running demo {name}");
             return Err(Refusal::new(Reason::NotFound, message).into());
         };
+        let shown = match demo.kind {
+            Kind::Terminal => {
+                let terminal = self.show_terminal_demo(&demo, terminal).await?;
+                Shown::Terminal(Box::new(terminal))
+            }
+            Kind::Server | Kind::Web | Kind::Simulator => {
+                Shown::Port(self.connect_demo(&mut demo, caller).await?)
+            }
+        };
+        Ok(OpenDemo { demo, shown })
+    }
+
+    /// Connect to the port `demo` serves on, a simulator demo's viewer's,
+    /// which this starts and records in `demo`; refused for a demo that
+    /// serves on none.
+    async fn connect_demo(&self, demo: &mut Running, caller: Option<&Caller>) -> Result<TcpStream> {
+        let name = &demo.launch.name;
         let port = match demo.kind {
             Kind::Server | Kind::Web => demo.launch.port(),
             Kind::Simulator => {
-                let port = self.open_viewer(&demo, caller).await?;
+                let port = self.open_viewer(demo, caller).await?;
                 demo.viewer = demo.launch.viewer(Some(port));
                 Some(port)
             }
@@ -60,37 +96,55 @@ impl Manager {
             );
             return Err(Refusal::new(Reason::NotReady, message).into());
         };
-        let connection = connect(port)
+        connect(port)
             .await
             .with_context(|| format!("demo {name} takes no connection on port {port}"))
-            .map_err(|error| Refusal::wrap(Reason::NotReady, error))?;
-        Ok(OpenDemo { demo, connection })
+            .map_err(|error| Refusal::wrap(Reason::NotReady, error))
     }
 
-    /// Answer the request `id` with `open`'s demo, then relay the bytes
-    /// of `stream` and of the demo's connection both ways, until both
-    /// sides end or either fails, or the scope token the request came
-    /// with, `scope`, stops acting for a caller.
+    /// Start showing the terminal demo `demo`'s place on a terminal made
+    /// like `terminal`, as its host shows a place to another machine.
+    async fn show_terminal_demo(
+        &self,
+        demo: &Running,
+        terminal: &Terminal,
+    ) -> Result<ViewerTerminal> {
+        let place = &demo.launch.origin;
+        let machine = self.hub.machine_name(self).await;
+        let place_json = serde_json::to_string(place)?;
+        let worker = Worker::ShowDemo {
+            name: &demo.launch.name,
+            place: &place_json,
+            machine: &machine,
+            app: terminal.app(place.host),
+        };
+        let argv = internal_command(&self.paths, false, worker)?;
+        ViewerTerminal::start(&argv, terminal, &self.paths.home, Reports::No)
+    }
+
+    /// Answer the request `id` with `open`'s demo, then relay what shows
+    /// the demo and what `stream` brings both ways, until both sides end or
+    /// either fails, or the scope token the request came with, `scope`,
+    /// stops acting for a caller.
     pub(crate) async fn relay_demo(
         self: Arc<Self>,
-        mut stream: UnixStream,
+        stream: UnixStream,
         id: u64,
         (open, scope): (OpenDemo, Option<ScopeToken>),
         startup: OperationGuard,
     ) -> Result<()> {
-        let OpenDemo {
-            demo,
-            mut connection,
-        } = open;
-        let answer = Response::new(id, Body::DemoStream(Box::new(demo)));
-        protocol::write(&mut stream, &answer).await?;
-        drop(startup);
-        tokio::select! {
-            // A connection either side resets ends as one that closes.
-            _ = tokio::io::copy_bidirectional(&mut stream, &mut connection) => {}
-            () = self.scope_revoked(scope.as_ref()) => {}
+        let OpenDemo { demo, shown } = open;
+        let answer = (id, Body::DemoStream(Box::new(demo)));
+        let revoked = self.scope_revoked(scope.as_ref());
+        match shown {
+            Shown::Port(connection) => {
+                relay_port(stream, answer, connection, revoked, startup).await
+            }
+            Shown::Terminal(terminal) => {
+                let manager = self.clone();
+                (manager.relay_viewer_terminal(stream, answer, *terminal, revoked, startup)).await
+            }
         }
-        Ok(())
     }
 
     /// Resolves once `scope` no longer acts for a caller; never for the
@@ -104,6 +158,26 @@ impl Manager {
             }
         }
     }
+}
+
+/// Answer the request with `answer` on `stream`, then relay its bytes and
+/// `connection`'s both ways, until both sides end or either fails, or
+/// `revoked` resolves.
+async fn relay_port(
+    mut stream: UnixStream,
+    (id, answer): (u64, Body),
+    mut connection: TcpStream,
+    revoked: impl Future<Output = ()>,
+    startup: OperationGuard,
+) -> Result<()> {
+    protocol::write(&mut stream, &Response::new(id, answer)).await?;
+    drop(startup);
+    tokio::select! {
+        // A connection either side resets ends as one that closes.
+        _ = tokio::io::copy_bidirectional(&mut stream, &mut connection) => {}
+        () = revoked => {}
+    }
+    Ok(())
 }
 
 /// A connection to `port` on loopback: IPv4's, else IPv6's.

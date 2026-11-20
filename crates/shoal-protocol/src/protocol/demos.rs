@@ -1,4 +1,4 @@
-use crate::space_names::SpaceSelector;
+use crate::{attaching::Terminal, space_names::SpaceSelector};
 use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
@@ -23,10 +23,14 @@ pub enum DemoMethod {
     /// machine it runs: answered with [`super::Body::DemoStream`], after
     /// which the connection carries the demo's bytes both ways until either
     /// side closes it. A `server` or `web` demo's are those of one TCP
-    /// connection to its port.
+    /// connection to its port. A terminal demo's are the frames of
+    /// [`crate::attaching`]: what a terminal made like `terminal` shows of
+    /// the demo's place one way, the viewer's keys and sizes the other.
     OpenDemoStream {
         workspace: SpaceSelector,
         name: String,
+        #[serde(default)]
+        terminal: Terminal,
     },
 }
 

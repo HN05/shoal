@@ -28,8 +28,14 @@ pub(super) async fn handle(
             manager.stop_demos(&workspace, name).await?;
             Body::Ok
         }
-        DemoMethod::OpenDemoStream { workspace, name } => {
-            let open = manager.open_demo(&workspace, &name, caller).await?;
+        DemoMethod::OpenDemoStream {
+            workspace,
+            name,
+            terminal,
+        } => {
+            let open = manager
+                .open_demo(&workspace, &name, &terminal, caller)
+                .await?;
             // Another machine's stream is checked there as it goes, its
             // token here standing for its caller only while it opens.
             let scope = scope.filter(|token| manager.hub.vouched_caller(token).is_none());

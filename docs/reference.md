@@ -866,8 +866,14 @@ demo's port, or a `simulator` demo's viewer's, which the first stream starts,
 and which an app serves from a local port its web view points at. The listed
 demo's `viewer` names the `tool` a client speaks to, serve-sim by default, and
 its `port` and `url` once it runs; a phone asks serve-sim for H.264 or a smaller frame,
-since full-resolution MJPEG is slow there. A terminal demo, a simulator demo
-whose viewer is off, or a demo outside a scoped caller's scope is refused.
+since full-resolution MJPEG is slow there. `demos::open_terminal` opens a
+terminal demo's stream, which carries the frames of an attach to another
+machine's session: that machine shows the demo's place on a terminal it makes
+at the size and `TERM` the app gives, as its host shows a place to another
+machine, and sends what it shows, while the app sends keys and resizes and
+renders the bytes in its own terminal emulator. A simulator demo whose viewer
+is off, or a demo outside a scoped caller's scope, is refused, and a scoped
+caller's stream ends once its token is revoked.
 Following an agent, though not following it again on
 its own, and messaging it are your [interaction](#sleep) with it, so an agent you watch and talk to from an app
 stays awake as one in your terminal does.

@@ -2274,9 +2274,12 @@ demo, and a demo nobody opens runs none. serve-sim's HTTP mode suits the
 hub's TCP streams, where WebRTC needs UDP. A missing viewer leaves the demo
 running and fails the open, naming its install command; Shoal installs
 nothing. Agents drive the device with serve-sim's or AXe's own commands, which
-Shoal does not wrap. Proposal, not yet implemented: a terminal demo's stream
-carries the bytes of a PTY attached to its host's session one way and keys and
-resizes the other. An agent on
+Shoal does not wrap. A terminal demo's stream is an attach to another
+machine's session pointed at the demo's place: the owning machine runs a worker
+on a terminal it makes at the viewer's size, which shows the place through the
+host callback that shows a session there, and carries the same frames, its
+screen one way and keys and resizes the other, so the host's own detach key
+detaches and a device renders the bytes in its own terminal emulator. An agent on
 another machine building and running on this one stays out: it needs leases
 across machines.
 The journal records a demo's start at its command's first run, when a start

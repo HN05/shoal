@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use shoal_protocol::{
+    attaching::Terminal,
     demos::{Launch, PORT, Preset},
     protocol::Response,
     space_names::SpaceSelector,
@@ -64,7 +65,9 @@ async fn a_web_demo_s_stream_carries_one_connection_both_ways() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let workspace = running(&manager, temp.path(), Some(Preset::Web), port).await;
-    let open = manager.open_demo(&workspace, "site", None).await.unwrap();
+    let terminal = Terminal::default();
+    let open = manager.open_demo(&workspace, "site", &terminal, None);
+    let open = open.await.unwrap();
     let (client, daemon) = UnixStream::pair().unwrap();
     let guard = manager.gates.owned_operation().await;
     let relay = tokio::spawn(manager.clone().relay_demo(daemon, 7, (open, None), guard));
@@ -92,19 +95,6 @@ async fn a_web_demo_s_stream_carries_one_connection_both_ways() {
 }
 
 #[tokio::test]
-async fn a_terminal_demo_is_refused_a_stream() {
-    let (temp, manager) = manager().await;
-    let workspace = running(&manager, temp.path(), None, 1).await;
-    let refused = manager
-        .open_demo(&workspace, "site", None)
-        .await
-        .err()
-        .unwrap();
-    assert_eq!(Reason::of(&refused), Some(Reason::NotReady));
-    assert!(refused.to_string().contains("terminal"), "{refused:#}");
-}
-
-#[tokio::test]
 async fn a_demo_that_takes_no_connection_is_refused_a_stream() {
     let (temp, manager) = manager().await;
     // A port nothing listens on any longer.
@@ -116,7 +106,7 @@ async fn a_demo_that_takes_no_connection_is_refused_a_stream() {
         .port();
     let workspace = running(&manager, temp.path(), Some(Preset::Server), port).await;
     let refused = manager
-        .open_demo(&workspace, "site", None)
+        .open_demo(&workspace, "site", &Terminal::default(), None)
         .await
         .err()
         .unwrap();

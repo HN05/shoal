@@ -115,23 +115,45 @@ impl Manager {
     }
 }
 
+/// Whether a worker reports to [`REPORT`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Reports {
+    Yes,
+    No,
+}
+
 impl ViewerTerminal {
     /// Start `argv`, a worker, in `dir` as the user on a terminal made for
-    /// `viewer`, with the descriptor [`REPORT`] open for its reports.
-    pub(crate) fn start(argv: &[OsString], viewer: &Terminal, dir: &Path) -> Result<Self> {
+    /// `viewer`, with the descriptor [`REPORT`] open for its reports when it
+    /// `reports`.
+    pub(crate) fn start(
+        argv: &[OsString],
+        viewer: &Terminal,
+        dir: &Path,
+        reports: Reports,
+    ) -> Result<Self> {
         let (pty, terminal) = pty::open(viewer.size)?;
-        let (report, reported) = std::os::unix::net::UnixStream::pair()?;
-        let term = viewer.term.as_deref();
-        let mut command = worker_command(argv, term, terminal, Some(reported.as_raw_fd()))?;
+        let pair = match reports {
+            Reports::Yes => Some(std::os::unix::net::UnixStream::pair()?),
+            Reports::No => None,
+        };
+        let reported = pair.as_ref().map(|(_, reported)| reported.as_raw_fd());
+        let mut command = worker_command(argv, viewer.term.as_deref(), terminal, reported)?;
         command.current_dir(dir);
         let worker = command.spawn().context("start the viewer's terminal")?;
-        drop(reported);
-        report.set_nonblocking(true)?;
-        let report = BufReader::new(UnixStream::from_std(report)?).lines();
+        let report = match pair {
+            Some((report, reported)) => {
+                // The worker holds its own.
+                drop(reported);
+                report.set_nonblocking(true)?;
+                Some(BufReader::new(UnixStream::from_std(report)?).lines())
+            }
+            None => None,
+        };
         Ok(Self {
             pty: Arc::new(pty),
             worker,
-            report: Some(report),
+            report,
             exited: None,
             screen: vec![0; CHUNK],
         })

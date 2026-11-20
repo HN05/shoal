@@ -26,7 +26,8 @@ async fn the_viewer_hears_a_report_the_attach_writes_after_its_terminal_closes()
     let script = "exec 0<&- 1>&- 2>&-; sleep 0.3; printf '%s\\n' \"$1\" >&3";
     let argv = ["sh", "-c", script, "sh", &left].map(std::ffi::OsString::from);
     let home = tempfile::tempdir()?;
-    let mut terminal = ViewerTerminal::start(&argv, &Terminal::default(), home.path())?;
+    let mut terminal =
+        ViewerTerminal::start(&argv, &Terminal::default(), home.path(), Reports::Yes)?;
     let (viewer, relayed) = UnixStream::pair()?;
     let mut input = ViewerInput::start(terminal.pty.clone(), relayed.into_split().0);
     let mut shown = Vec::new();

@@ -8,7 +8,7 @@ use shoal_protocol::{attaching::Viewer, space_names::SpaceSelector};
 use crate::{
     daemon::{
         manager::Manager,
-        viewer_terminals::{REPORT, ViewerTerminal},
+        viewer_terminals::{REPORT, Reports, ViewerTerminal},
     },
     workers::{Worker, internal_command},
 };
@@ -34,6 +34,6 @@ impl Manager {
                 report: REPORT,
             },
         )?;
-        ViewerTerminal::start(&argv, &viewer.terminal, &self.paths.home)
+        ViewerTerminal::start(&argv, &viewer.terminal, &self.paths.home, Reports::Yes)
     }
 }
