@@ -6,6 +6,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_refs::{BranchName, CommitId};
 
 use crate::model::{Space, SpaceRef, Workspace};
+use crate::state::WorkspaceState;
 
 #[cfg(test)]
 mod tests;
@@ -75,6 +76,26 @@ pub struct SpaceRemovalCheck {
     /// without asking.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub disposable_children: Vec<SpaceId>,
+}
+
+impl SpaceRemovalCheck {
+    /// Refuse to end a workspace while another lifecycle operation holds
+    /// it; a preparing workspace without commands is one whose setup never
+    /// started, which removal takes.
+    pub fn ensure_settled(&self) -> Result<()> {
+        if let Some(worktree) = &self.worktree {
+            let state = worktree.workspace.state;
+            anyhow::ensure!(
+                match state {
+                    WorkspaceState::Ready | WorkspaceState::Failed => true,
+                    WorkspaceState::Preparing => worktree.running_commands == 0,
+                    _ => false,
+                },
+                "workspace is {state}; wait for that operation to finish"
+            );
+        }
+        Ok(())
+    }
 }
 
 /// What a manual removal may delete that neither a branch nor a remote

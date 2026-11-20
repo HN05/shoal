@@ -165,7 +165,7 @@ async fn plan_space(
     };
     let checked = checks::check_export(paths, space, into, tree, &order.carrying()).await?;
     if let checks::Ending::Workspace(check) = &checked.space {
-        checks::ensure_settled(check)?;
+        check.ensure_settled()?;
     }
     Ok(Planned::Ending { checked, file })
 }

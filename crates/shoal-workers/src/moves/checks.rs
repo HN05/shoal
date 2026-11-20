@@ -8,7 +8,6 @@ use shoal_protocol::model::ByKind;
 use crate::{
     client::connection::CommandPaths,
     model::{Chat, Space, SpaceHold, SpaceKind, Spaces},
-    state::WorkspaceState,
 };
 use shoal_core::transfer::{Carrying, Placed};
 use shoal_ids::space_ids::SpaceId;
@@ -120,7 +119,7 @@ async fn check_ending(paths: &CommandPaths, space: Space, file: Option<&Path>) -
 async fn check_carried(paths: &CommandPaths, space: &Space, file: Option<&Path>) -> Result<()> {
     if space.kind() == SpaceKind::Workspace {
         let check = check_workspace_export(paths, &space.id, file).await?;
-        ensure_settled(&check)?;
+        check.ensure_settled()?;
     }
     Ok(())
 }
@@ -162,22 +161,6 @@ async fn check_workspace_export(
         );
     }
     Ok(check)
-}
-
-/// Refuse to end a workspace while another lifecycle operation holds it.
-pub fn ensure_settled(check: &SpaceRemovalCheck) -> Result<()> {
-    if let Some(worktree) = &check.worktree {
-        let state = worktree.workspace.state;
-        ensure!(
-            match state {
-                WorkspaceState::Ready | WorkspaceState::Failed => true,
-                WorkspaceState::Preparing => worktree.running_commands == 0,
-                _ => false,
-            },
-            "workspace is {state}; wait for that operation to finish"
-        );
-    }
-    Ok(())
 }
 
 /// The `spaces` a move of them all packs into a package each: those that

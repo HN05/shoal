@@ -21,7 +21,7 @@ pub(in crate::cli::commands) async fn ensure_batch_removable(
     check: &SpaceRemovalCheck,
     (noun, verb): (&str, &str),
 ) -> Result<()> {
-    shoal_workers::moves::checks::ensure_settled(check)?;
+    check.ensure_settled()?;
     let space = &check.space;
     ensure!(
         !crate::cli::terminal::closes_with(&ctx.paths, &space.id).await?,
