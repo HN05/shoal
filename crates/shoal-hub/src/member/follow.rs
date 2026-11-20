@@ -95,11 +95,21 @@ pub(super) fn reads_state(schema: i64) -> bool {
     schema >= shoal_store::SCHEMA_VERSION
 }
 
-/// The command that brings this machine to `version`.
-pub(super) fn command(version: &str) -> String {
+/// Whether Homebrew can bring this machine to `version`: it only ever
+/// upgrades, so never to a release older than the one running here.
+fn homebrew_reaches(version: &str) -> bool {
+    !update::is_newer(env!("CARGO_PKG_VERSION"), version).unwrap_or(false)
+}
+
+/// What brings this machine to `version`, as a join refused for another
+/// version tells the user.
+pub(super) fn join_advice(version: &str) -> String {
     match Installed::current() {
-        Ok(Installed::Homebrew) => HOMEBREW_UPGRADE.to_owned(),
-        _ => format!("shoal update --version {version}"),
+        Ok(Installed::Homebrew) if !homebrew_reaches(version) => {
+            "update the hub, then join again".to_owned()
+        }
+        Ok(Installed::Homebrew) => format!("run {HOMEBREW_UPGRADE} here, then join again"),
+        _ => format!("run shoal update --version {version} here, then join again"),
     }
 }
 
@@ -152,6 +162,10 @@ impl Hub {
                     ),
                 }
             }
+            Ok(Way::Homebrew) if !homebrew_reaches(version) => format!(
+                "The hub runs Shoal {version}, older than this machine's {}, which Homebrew never installs, {stays}: run shoal update on the hub, or shoal hub update from a machine connected to it",
+                env!("CARGO_PKG_VERSION")
+            ),
             Ok(Way::Homebrew) => format!(
                 "The hub runs Shoal {version}, and Homebrew installed Shoal here, {stays}: run {HOMEBREW_UPGRADE}"
             ),

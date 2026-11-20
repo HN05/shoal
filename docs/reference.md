@@ -919,7 +919,8 @@ its newer one migrated, and tells you to update the hub instead, there or with
 suggest one.
 [`[machine.hub] auto_update = false`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
 turns that off. A Homebrew installation never updates on its own: its machine
-tells you to run `brew upgrade hn05/tap/shoal` there. A machine that does not
+tells you to run `brew upgrade hn05/tap/shoal` there, or to update the hub
+when it runs an older release, which Homebrew never installs. A machine that does not
 follow, or fails to, stays off the hub and tells you what to run, and so does
 the hub's alert about it, which for a machine that follows comes only once
 the hub has refused it for 30 minutes.

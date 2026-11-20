@@ -78,8 +78,8 @@ impl Hub {
                 hub_version: Some(HubVersion { version, .. }),
                 ..
             }) => bail!(
-                "the hub runs Shoal {version} and takes only that one; run {} here, then join again",
-                follow::command(&version)
+                "the hub runs Shoal {version} and takes only that one; {}",
+                follow::join_advice(&version)
             ),
             Err(LinkRefused { refusal, .. }) => {
                 bail!("the hub refused this machine: {}", refusal.message)
