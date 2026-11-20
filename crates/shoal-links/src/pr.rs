@@ -19,9 +19,15 @@ pub fn watched_prs(db: &Connection, id: &SpaceId) -> rusqlite::Result<Vec<ItemRe
     Ok(watched_urls(registration.as_ref()).to_vec())
 }
 
+/// The PR registration of the space `id`, refusing an unreadable one.
+pub fn registration(db: &Connection, id: &SpaceId) -> anyhow::Result<Option<Registration>> {
+    let record = stored(db, id)?;
+    Ok(record.map(|text| serde_json::from_str(&text)).transpose()?)
+}
+
 /// The PR registration of the space `id` as stored, which each reader
 /// parses as it must take an unreadable one.
-pub(crate) fn stored(db: &Connection, id: &SpaceId) -> rusqlite::Result<Option<String>> {
+fn stored(db: &Connection, id: &SpaceId) -> rusqlite::Result<Option<String>> {
     db.query_row(
         "SELECT record FROM pr_cleanup WHERE space_id=?1",
         [id],
@@ -120,6 +126,12 @@ fn store_registration(
 }
 
 impl Links {
+    /// The PR registration of the space `id`, refusing an unreadable one.
+    pub async fn pr_registration(&self, id: &SpaceId) -> anyhow::Result<Option<Registration>> {
+        let id = id.to_owned();
+        self.store.read(move |tx| registration(tx, &id)).await
+    }
+
     /// Apply `change` to the PR registration of the space `id` in a transaction
     /// that finds it ready: a removed space has no registration to change, and
     /// writing one would outlive it.

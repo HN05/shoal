@@ -3,7 +3,6 @@
 use rusqlite::{Connection, Row};
 use shoal_forge_types::items::link::ItemKind;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::links::pr::Registration;
 
 use shoal_forge_types::items::reference::ItemRef;
 use shoal_protocol::model::{LinkedItem, Relation, SpaceLinks};
@@ -113,9 +112,7 @@ pub fn assigned_items(
     if kind != Some(ItemKind::Issue) {
         // An unreadable registration fails the read rather than passing
         // for watching nothing, which would let completion and cleanup go on.
-        let registration: Option<Registration> = (crate::pr::stored(db, id)?)
-            .map(|text| serde_json::from_str(&text))
-            .transpose()?;
+        let registration = crate::pr::registration(db, id)?;
         items.extend_from_slice(crate::pr::watched_urls(registration.as_ref()));
     }
     if kind != Some(ItemKind::Pr) {

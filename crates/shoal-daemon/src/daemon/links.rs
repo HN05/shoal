@@ -305,8 +305,8 @@ impl Manager {
         let id = &space.id;
         let issue =
             kind != Some(ItemKind::Pr) && !self.links.issue_registrations(id).await?.is_empty();
-        let pr =
-            kind != Some(ItemKind::Issue) && !matches!(self.pr_registration(id).await, Ok(None));
+        let pr = kind != Some(ItemKind::Issue)
+            && !matches!(self.links.pr_registration(id).await, Ok(None));
         ensure!(
             issue || pr,
             Refusal::new(

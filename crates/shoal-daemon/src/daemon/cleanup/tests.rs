@@ -1210,7 +1210,12 @@ async fn pr_cleanup_skips_a_base_whose_stacked_workspace_elsewhere_stalled() {
     manager.sweep_prs().await.unwrap();
 
     // Restacking never looked the PR up, so no lookup failure is recorded.
-    let registration = manager.pr_registration(&base.id).await.unwrap().unwrap();
+    let registration = manager
+        .links
+        .pr_registration(&base.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(registration.error, None);
 }
 
@@ -1424,7 +1429,14 @@ async fn completion_cleanup_removes_a_done_chat_whatever_prs_it_watches() {
         })
         .await
         .unwrap();
-    assert!(manager.pr_registration(&chat.id).await.unwrap().is_some());
+    assert!(
+        manager
+            .links
+            .pr_registration(&chat.id)
+            .await
+            .unwrap()
+            .is_some()
+    );
     manager
         .mark_space_done(
             &SpaceSelector::id(&chat.id),

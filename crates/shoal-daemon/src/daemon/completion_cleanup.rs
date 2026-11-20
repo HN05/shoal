@@ -95,7 +95,7 @@ impl Manager {
         }
         // A pre-existing PR registration keeps its own merge requirements
         // where the space has a worktree, whose branch the PR carries.
-        if space.worktree().is_some() && self.pr_registration(&space.id).await?.is_some() {
+        if space.worktree().is_some() && self.links.pr_registration(&space.id).await?.is_some() {
             return Ok(false);
         }
         let cause = self.completion_cause(&space.id).await?;

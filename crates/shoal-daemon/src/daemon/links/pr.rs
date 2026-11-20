@@ -1,7 +1,6 @@
 //! Persisted opt-in PR watches and manual merge acknowledgements.
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
-use rusqlite::OptionalExtension;
 use shoal_ids::space_ids::SpaceId;
 use shoal_links::space::LinkSpace;
 use shoal_protocol::space_names::SpaceSelector;
@@ -40,24 +39,6 @@ pub(crate) enum WatchCheck {
 const STACK_ERROR: &str = "could not move the workspaces stacked on it";
 
 impl Manager {
-    pub async fn pr_registration(&self, id: &SpaceId) -> Result<Option<Registration>> {
-        let id = id.to_owned();
-        self.store
-            .run(move |db| {
-                let record: Option<String> = db
-                    .query_row(
-                        "SELECT record FROM pr_cleanup WHERE space_id=?1",
-                        [id],
-                        |r| r.get(0),
-                    )
-                    .optional()?;
-                record
-                    .map(|s| serde_json::from_str(&s).map_err(Into::into))
-                    .transpose()
-            })
-            .await
-    }
-
     /// Change the PR registration of the space `selector` names under its
     /// PR gate, as [`Self::set_pr_gated`] does.
     pub async fn set_pr(&self, selector: &SpaceSelector, action: Action) -> Result<()> {
@@ -78,7 +59,7 @@ impl Manager {
         if !matches!(action, Action::Clear | Action::Unwatch { .. }) {
             self.verify_space(space).await?;
         }
-        let previous = match self.pr_registration(&space.id).await {
+        let previous = match self.links.pr_registration(&space.id).await {
             Ok(previous) => previous,
             Err(_) if matches!(action, Action::Clear) => None,
             Err(error) => return Err(error),
@@ -150,7 +131,7 @@ impl Manager {
 
     /// The PR watches of the space `id` with `url` among them.
     async fn adding_pr_watch(&self, id: &SpaceId, url: ItemRef) -> Result<RegistrationKind> {
-        let (mut urls, mut merged_head) = match self.pr_registration(id).await? {
+        let (mut urls, mut merged_head) = match self.links.pr_registration(id).await? {
             Some(Registration {
                 kind: RegistrationKind::Watch { urls, merged_head },
                 ..
@@ -180,7 +161,7 @@ impl Manager {
                     merged_head,
                 },
             ..
-        }) = self.pr_registration(id).await?
+        }) = self.links.pr_registration(id).await?
         else {
             return Err(Refusal::new(Reason::NotFound, format!("PR is not watched: {url}")).into());
         };
@@ -298,7 +279,7 @@ impl Manager {
     /// complete. The caller holds its PR gate and those of the workspaces
     /// stacked on it.
     async fn sweep_workspace_prs(&self, workspace: &Workspace) -> Result<()> {
-        let mut registration = match self.pr_registration(&workspace.id).await {
+        let mut registration = match self.links.pr_registration(&workspace.id).await {
             Ok(Some(registration)) => registration,
             Ok(None) => return Ok(()),
             Err(error) => {

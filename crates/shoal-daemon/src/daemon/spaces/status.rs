@@ -123,7 +123,7 @@ impl Manager {
     pub(crate) async fn space_records(&self, id: &SpaceId) -> Result<Records> {
         Ok(Records {
             issues: self.links.issue_registrations(id).await?,
-            pr_cleanup: self.pr_registration(id).await?,
+            pr_cleanup: self.links.pr_registration(id).await?,
             completion: self.completion(id).await?,
         })
     }

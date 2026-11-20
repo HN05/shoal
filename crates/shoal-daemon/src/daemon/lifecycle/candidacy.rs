@@ -53,7 +53,7 @@ impl Manager {
                 workspace: ancestor.name,
             }));
         }
-        if self.pr_registration(id).await?.is_some() {
+        if self.links.pr_registration(id).await?.is_some() {
             return Ok(Some(CleanupReason::PrWatch));
         }
         if let Some(completion) = self.completion(id).await? {

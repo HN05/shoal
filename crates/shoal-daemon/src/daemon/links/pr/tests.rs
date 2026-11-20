@@ -57,7 +57,7 @@ async fn unwatch_removes_only_the_selected_pr_even_when_cleanup_is_disabled() {
         .await
         .unwrap();
     assert!(
-        matches!(manager.pr_registration(&workspace.id).await.unwrap().unwrap().kind,
+        matches!(manager.links.pr_registration(&workspace.id).await.unwrap().unwrap().kind,
             RegistrationKind::Watch { urls, .. }
                 if urls.iter().map(|url| url.url()).eq(["https://github.com/team/repo/pull/2"]))
     );
@@ -72,6 +72,7 @@ async fn unwatch_removes_only_the_selected_pr_even_when_cleanup_is_disabled() {
         .unwrap();
     assert!(
         manager
+            .links
             .pr_registration(&workspace.id)
             .await
             .unwrap()
@@ -180,6 +181,7 @@ async fn a_chat_removed_before_its_pr_link_is_written_keeps_none() {
     assert!(refused.is_err());
     assert!(
         manager
+            .links
             .pr_registration(&SpaceId::from("removed-chat"))
             .await
             .unwrap()

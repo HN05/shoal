@@ -2308,6 +2308,7 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
     );
     assert!(
         manager
+            .links
             .pr_registration(&workspace.id)
             .await
             .unwrap()
