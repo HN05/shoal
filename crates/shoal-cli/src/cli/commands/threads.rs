@@ -62,7 +62,7 @@ pub(super) async fn open(
         None if from.is_some() => None,
         space => Some(ui::select_space(ctx, space, Fallback::CurrentDirectory).await?),
     };
-    let thread = threads::open(&ctx.paths, name, kind, to, from).await?;
+    let thread = threads::open(&ctx.paths, name, kind, to, from, Vec::new()).await?;
     let number = thread.number;
     ctx.emit(
         &format!(

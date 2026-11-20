@@ -317,15 +317,21 @@ pub(crate) async fn ask(
 ) -> shoal_protocol::threads::Thread {
     use shoal_protocol::threads::{NewPost, ThreadKind, ThreadNumber};
     let caller = caller_in(&shoal_protocol::space_names::SpaceSelector::id(id));
-    let thread = (manager.open_thread(Some(&caller), text.into(), ThreadKind::Question, None))
-        .await
-        .unwrap();
+    let thread = (manager.open_thread(
+        Some(&caller),
+        text.into(),
+        ThreadKind::Question,
+        None,
+        Vec::new(),
+    ))
+    .await
+    .unwrap();
     let post = NewPost {
         text: text.into(),
         ..NewPost::default()
     };
     let number = ThreadNumber::Full(thread.number);
-    (manager.post_to_thread(Some(&caller), number, post, Vec::new()))
+    (manager.post_to_thread(Some(&caller), number, post, Vec::new(), Vec::new()))
         .await
         .unwrap()
 }
@@ -341,9 +347,15 @@ pub(crate) async fn answer(
         text: text.into(),
         ..NewPost::default()
     };
-    (manager.post_to_thread(None, ThreadNumber::Full(number), post, Vec::new()))
-        .await
-        .unwrap()
+    (manager.post_to_thread(
+        None,
+        ThreadNumber::Full(number),
+        post,
+        Vec::new(),
+        Vec::new(),
+    ))
+    .await
+    .unwrap()
 }
 
 pub fn names(spaces: &[shoal_protocol::alerts::Recipient]) -> Vec<&str> {

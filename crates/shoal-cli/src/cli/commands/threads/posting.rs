@@ -44,7 +44,7 @@ pub(in crate::cli) async fn post(ctx: &Context, posting: Posting) -> Result<i32>
     let attachments = crate::cli::commands::send::attachments(&posting.attach)?;
     shoal_protocol::files::check_sent(&attachments)?;
     let post = new_post(posting)?;
-    let posted = threads::post(&ctx.paths, thread, post, attachments, from).await?;
+    let posted = threads::post(&ctx.paths, thread, post, attachments, Vec::new(), from).await?;
     let mine = posted.posts.last().context("the post was not recorded")?;
     if !wait {
         let to = match mine.side {

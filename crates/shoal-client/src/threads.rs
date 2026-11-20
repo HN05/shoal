@@ -1,6 +1,7 @@
 //! Threads: conversations between whoever opened one and whoever holds it.
 use anyhow::Result;
 use shoal_protocol::{
+    code::NewCodeRef,
     files::NewFile,
     item_numbers::ItemNumber,
     protocol::ThreadMethod,
@@ -10,37 +11,42 @@ use shoal_protocol::{
 
 use crate::connection::{Daemon, await_reply, request};
 
-/// Open an empty thread `name` of `kind` with the space `to`, else with
-/// the caller's coordinator or the user, acting as the space `from`.
+/// Open a thread `name` of `kind` with the space `to`, else with the
+/// caller's coordinator or the user, acting as the space `from`: empty, or
+/// with an opening post pointing at the places in code `code`.
 pub async fn open(
     daemon: &impl Daemon,
     name: String,
     kind: ThreadKind,
     to: Option<SpaceSelector>,
     from: Option<SpaceSelector>,
+    code: Vec<NewCodeRef>,
 ) -> Result<Thread> {
     let method = ThreadMethod::OpenThread {
         name,
         kind,
         to,
         from,
+        code,
     };
     Ok(*request::<Box<Thread>>(daemon, method).await?)
 }
 
-/// Add `post` with `attachments` to the thread `thread`, acting as the
-/// space `from`.
+/// Add `post` with `attachments`, pointing at the places in code `code`,
+/// to the thread `thread`, acting as the space `from`.
 pub async fn post(
     daemon: &impl Daemon,
     thread: ThreadNumber,
     post: NewPost,
     attachments: Vec<NewFile>,
+    code: Vec<NewCodeRef>,
     from: Option<SpaceSelector>,
 ) -> Result<Thread> {
     let method = ThreadMethod::Post {
         thread,
         post,
         attachments,
+        code,
         from,
     };
     Ok(*request::<Box<Thread>>(daemon, method).await?)

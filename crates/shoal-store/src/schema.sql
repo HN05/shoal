@@ -930,6 +930,28 @@ CREATE TABLE moved_parents (
     parent_id TEXT NOT NULL
 );
 
+CREATE TABLE thread_code (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id INTEGER NOT NULL REFERENCES thread_posts(id) ON DELETE CASCADE,
+    space_id TEXT NOT NULL,
+    space_name TEXT NOT NULL,
+    repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    commit_id TEXT,
+    path TEXT NOT NULL,
+    start INTEGER,
+    end INTEGER,
+    blob TEXT,
+    snippet TEXT,
+    latest_path TEXT NOT NULL,
+    latest_start INTEGER,
+    latest_end INTEGER,
+    latest_blob TEXT,
+    state TEXT NOT NULL CHECK(state IN ('unchanged','changed','outdated')),
+    CHECK((start IS NULL) = (end IS NULL)
+        AND (latest_start IS NULL) = (latest_end IS NULL)
+        AND (start IS NULL) = (latest_start IS NULL))
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -1018,6 +1040,12 @@ CREATE INDEX threads_space ON threads(space_id, id);
 CREATE INDEX threads_holder ON threads(holder_id);
 
 CREATE INDEX thread_posts_thread ON thread_posts(thread_id, id);
+
+CREATE INDEX thread_code_post ON thread_code(post_id);
+
+CREATE INDEX thread_code_space ON thread_code(space_id);
+
+CREATE INDEX thread_code_repository ON thread_code(repository_id);
 
 CREATE VIEW space_refs AS
     SELECT spaces.id, CASE spaces.kind

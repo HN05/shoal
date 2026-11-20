@@ -24,18 +24,18 @@ use shoal_protocol::assignments::Done;
 
 /// A workspace `parent` whose agent runs, two workspaces below it whose
 /// agents run, and a workspace beside it without one.
-struct Tree {
+pub(super) struct Tree {
     _root: tempfile::TempDir,
-    manager: Arc<Manager>,
-    parent: Workspace,
-    child: Workspace,
+    pub(super) manager: Arc<Manager>,
+    pub(super) parent: Workspace,
+    pub(super) child: Workspace,
     sibling: Workspace,
-    beside: Workspace,
+    pub(super) beside: Workspace,
     /// The execution the parent's agent runs as.
     agent: ExecutionId,
 }
 
-async fn tree() -> Tree {
+pub(super) async fn tree() -> Tree {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
@@ -109,22 +109,26 @@ async fn track_agent(manager: &Manager, workspace: &Workspace) -> ExecutionId {
     id
 }
 
-fn caller(workspace: &Workspace) -> Caller {
+pub(super) fn caller(workspace: &Workspace) -> Caller {
     caller_in(&SpaceSelector::id(&workspace.id))
 }
 
-fn post(text: &str) -> NewPost {
+pub(super) fn post(text: &str) -> NewPost {
     NewPost {
         text: text.into(),
         ..NewPost::default()
     }
 }
 
-fn full(thread: &Thread) -> ThreadNumber {
+pub(super) fn full(thread: &Thread) -> ThreadNumber {
     ThreadNumber::Full(thread.number)
 }
 
-async fn open(manager: &Manager, from: Option<&Caller>, to: Option<&Workspace>) -> Thread {
+pub(super) async fn open(
+    manager: &Manager,
+    from: Option<&Caller>,
+    to: Option<&Workspace>,
+) -> Thread {
     let to = to.map(|workspace| SpaceSelector::id(&workspace.id));
     manager
         .open_thread(
@@ -132,6 +136,7 @@ async fn open(manager: &Manager, from: Option<&Caller>, to: Option<&Workspace>) 
             "Which database?".into(),
             ThreadKind::Question,
             to.as_ref(),
+            Vec::new(),
         )
         .await
         .unwrap()
@@ -139,13 +144,13 @@ async fn open(manager: &Manager, from: Option<&Caller>, to: Option<&Workspace>) 
 
 async fn send(manager: &Manager, from: Option<&Caller>, thread: &Thread, text: &str) -> Thread {
     manager
-        .post_to_thread(from, full(thread), post(text), Vec::new())
+        .post_to_thread(from, full(thread), post(text), Vec::new(), Vec::new())
         .await
         .unwrap()
 }
 
 /// The unread alerts of `workspace`'s agent about threads.
-async fn alerts(manager: &Manager, workspace: &Workspace) -> Vec<String> {
+pub(super) async fn alerts(manager: &Manager, workspace: &Workspace) -> Vec<String> {
     let unread = manager
         .agent_messages(&SpaceSelector::id(&workspace.id))
         .await
@@ -222,7 +227,13 @@ async fn the_user_asks_a_space_and_hears_its_reply() {
             .is_err()
     );
     let posted = manager
-        .post_to_thread(Some(&outsider), full(&thread), post("Hi"), Vec::new())
+        .post_to_thread(
+            Some(&outsider),
+            full(&thread),
+            post("Hi"),
+            Vec::new(),
+            Vec::new(),
+        )
         .await;
     assert!(posted.is_err());
 }
@@ -231,7 +242,13 @@ async fn the_user_asks_a_space_and_hears_its_reply() {
 async fn the_user_opens_a_thread_only_with_a_space() {
     let tree = tree().await;
     let opened = (tree.manager)
-        .open_thread(None, "Which?".into(), ThreadKind::Question, None)
+        .open_thread(
+            None,
+            "Which?".into(),
+            ThreadKind::Question,
+            None,
+            Vec::new(),
+        )
         .await;
     assert!(opened.is_err());
 }
@@ -314,7 +331,7 @@ async fn a_post_that_would_outgrow_one_response_is_refused_whole() {
     let long = "x".repeat(shoal_protocol::threads::MAX_POST_LEN);
     let mut posted = 0;
     let refused = loop {
-        let post = manager.post_to_thread(None, full(&thread), post(&long), Vec::new());
+        let post = manager.post_to_thread(None, full(&thread), post(&long), Vec::new(), Vec::new());
         match post.await {
             Ok(_) => posted += 1,
             Err(error) => break error,
@@ -340,7 +357,13 @@ async fn a_rename_keeps_a_full_thread_within_one_response() {
     // Short posts from the space, until the thread is full.
     for index in 0.. {
         let text = format!("Step {index}");
-        let posted = manager.post_to_thread(Some(&beside), full(&thread), post(&text), Vec::new());
+        let posted = manager.post_to_thread(
+            Some(&beside),
+            full(&thread),
+            post(&text),
+            Vec::new(),
+            Vec::new(),
+        );
         if posted.await.is_err() {
             break;
         }
@@ -364,12 +387,24 @@ async fn a_space_being_removed_starts_no_wait() {
     let child = caller(&tree.child);
     let thread = open(manager, Some(&child), None).await;
     let _removal = manager.space_removals.reserve(&tree.child.id).unwrap();
-    let asked = manager.post_to_thread(Some(&child), full(&thread), post("Which?"), Vec::new());
+    let asked = manager.post_to_thread(
+        Some(&child),
+        full(&thread),
+        post("Which?"),
+        Vec::new(),
+        Vec::new(),
+    );
     assert!(asked.await.is_err());
     assert!(!manager.has_waiting_threads(&tree.child.id).await.unwrap());
     // Its holder's post makes nothing wait.
     let parent = caller(&tree.parent);
-    let told = manager.post_to_thread(Some(&parent), full(&thread), post("FYI"), Vec::new());
+    let told = manager.post_to_thread(
+        Some(&parent),
+        full(&thread),
+        post("FYI"),
+        Vec::new(),
+        Vec::new(),
+    );
     told.await.unwrap();
 }
 
@@ -432,7 +467,8 @@ async fn a_post_from_a_side_lost_meanwhile_is_refused() {
     let posted = manager
         .store
         .write(move |tx| {
-            super::posting::record_post(tx, id, &poster, &reply, &[], false, &removing)
+            let attached = super::posting::Attached::default();
+            super::posting::record_post(tx, id, &poster, &reply, attached, false, &removing)
         })
         .await;
     assert!(posted.is_err());
@@ -450,7 +486,7 @@ async fn the_user_s_threads_list_past_larger_newer_threads() {
     let long = "x".repeat(shoal_protocol::threads::MAX_POST_LEN);
     for space in [&tree.child, &tree.sibling] {
         let thread = open(manager, None, Some(space)).await;
-        while (manager.post_to_thread(None, full(&thread), post(&long), Vec::new()))
+        while (manager.post_to_thread(None, full(&thread), post(&long), Vec::new(), Vec::new()))
             .await
             .is_ok()
         {}
@@ -586,7 +622,13 @@ async fn the_opener_resolves_its_thread_and_takes_back_an_unread_notice() {
         Some(Outcome::Withdrawn { reason: None })
     );
     assert!(alerts(manager, &tree.parent).await.is_empty());
-    let resolved = manager.post_to_thread(Some(&child), full(&thread), post("More"), Vec::new());
+    let resolved = manager.post_to_thread(
+        Some(&child),
+        full(&thread),
+        post("More"),
+        Vec::new(),
+        Vec::new(),
+    );
     assert!(resolved.await.is_err());
 
     let reopened = manager
@@ -608,7 +650,7 @@ async fn an_answer_picks_one_of_the_choices_the_other_side_offered() {
         recommendation: Some("SQLite".into()),
         ..post("Which database?")
     };
-    (manager.post_to_thread(Some(&child), full(&thread), asked, Vec::new()))
+    (manager.post_to_thread(Some(&child), full(&thread), asked, Vec::new(), Vec::new()))
         .await
         .unwrap();
     let parent = caller(&tree.parent);
@@ -616,15 +658,33 @@ async fn an_answer_picks_one_of_the_choices_the_other_side_offered() {
         choice: Some(choice),
         ..NewPost::default()
     };
-    let outside = manager.post_to_thread(Some(&parent), full(&thread), choose(3), Vec::new());
+    let outside = manager.post_to_thread(
+        Some(&parent),
+        full(&thread),
+        choose(3),
+        Vec::new(),
+        Vec::new(),
+    );
     assert!(outside.await.is_err());
     let chose = manager
-        .post_to_thread(Some(&parent), full(&thread), choose(2), Vec::new())
+        .post_to_thread(
+            Some(&parent),
+            full(&thread),
+            choose(2),
+            Vec::new(),
+            Vec::new(),
+        )
         .await
         .unwrap();
     assert_eq!(chose.last_post().unwrap().post.text, "SQLite");
     // The opener offered no choices to itself.
-    let own = manager.post_to_thread(Some(&child), full(&thread), choose(1), Vec::new());
+    let own = manager.post_to_thread(
+        Some(&child),
+        full(&thread),
+        choose(1),
+        Vec::new(),
+        Vec::new(),
+    );
     assert!(own.await.is_err());
 }
 

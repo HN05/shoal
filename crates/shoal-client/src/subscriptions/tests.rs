@@ -70,7 +70,7 @@ fn caller(id: &SpaceId) -> shoal_daemon::test_daemon::Caller {
 async fn ask(manager: &shoal_daemon::test_daemon::Manager, id: &SpaceId) -> Thread {
     let caller = caller(id);
     let name = "Which database?".to_owned();
-    let thread = (manager.open_thread(Some(&caller), name, ThreadKind::Question, None))
+    let thread = (manager.open_thread(Some(&caller), name, ThreadKind::Question, None, Vec::new()))
         .await
         .unwrap();
     let post = NewPost {
@@ -81,6 +81,7 @@ async fn ask(manager: &shoal_daemon::test_daemon::Manager, id: &SpaceId) -> Thre
         Some(&caller),
         ThreadNumber::Full(thread.number),
         post,
+        Vec::new(),
         Vec::new(),
     ))
     .await

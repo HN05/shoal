@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
+use crate::code::NewCodeRef;
 use crate::item_numbers::ItemNumber;
 use crate::space_names::SpaceSelector;
 use crate::threads::{NewPost, OutcomeKind, ThreadKind, ThreadNumber, ThreadState};
@@ -21,6 +22,10 @@ pub enum ThreadMethod {
         /// not start does; a scoped caller acts as its own.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         from: Option<SpaceSelector>,
+        /// Places in code the thread is about, which an opening post,
+        /// named as the thread, carries at once.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        code: Vec<NewCodeRef>,
     },
     /// Add a post to the thread from the caller's side.
     Post {
@@ -29,6 +34,9 @@ pub enum ThreadMethod {
         /// Files to send with it by absolute path, which the daemon copies.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<crate::files::NewFile>,
+        /// Places in code it points at.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        code: Vec<NewCodeRef>,
         /// The space the user acts as, as a session in it that Shoal did
         /// not start does; a scoped caller acts as its own.
         #[serde(default, skip_serializing_if = "Option::is_none")]

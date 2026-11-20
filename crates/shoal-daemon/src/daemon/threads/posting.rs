@@ -4,11 +4,13 @@ use anyhow::{Context as _, Result, ensure};
 use rusqlite::Transaction;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
+    code::NewCodeRef,
     space_names::{SpaceName, SpaceSelector},
     threads::{Holder, MAX_CHOICES, MAX_POST_LEN, NewPost, Sender, Side, Thread, ThreadNumber},
 };
 
 use super::{
+    code::{self, NewCode},
     delivery::{self, Delivered},
     ensure_open,
     records::{self, Author, NewRecord},
@@ -90,16 +92,25 @@ impl Poster {
     }
 }
 
-/// Record `post` with `files` from `poster` in the thread `id`, which must
-/// still be open, and deliver it; the thread as it is now. A post from the
-/// side of a space that opened the thread makes the thread wait, which
-/// keeps that space, so a space `removing` reserved takes none.
+/// What a post carries besides its text: copies of files and places in
+/// code.
+#[derive(Clone, Copy, Default)]
+pub(super) struct Attached<'a> {
+    pub(super) files: &'a [SentFile],
+    pub(super) code: &'a [NewCode],
+}
+
+/// Record `post` with what it has `attached` from `poster` in the thread
+/// `id`, which must still be open, and deliver it; the thread as it is
+/// now. A post from the side of a space that opened the thread makes the
+/// thread wait, which keeps that space, so a space `removing` reserved
+/// takes none.
 pub(super) fn record_post(
     tx: &Transaction<'_>,
     id: i64,
     poster: &Poster,
     post: &NewPost,
-    files: &[SentFile],
+    attached: Attached<'_>,
     in_chat: bool,
     removing: &Removing,
 ) -> Result<(Thread, Delivered)> {
@@ -117,7 +128,8 @@ pub(super) fn record_post(
             thread: id,
             author: poster.author(),
             post,
-            files,
+            files: attached.files,
+            code: attached.code,
             in_chat,
             forwards: None,
         },
@@ -130,17 +142,32 @@ pub(super) fn record_post(
 }
 
 impl Manager {
-    /// Add `post` with copies of the files `attachments` to the thread
-    /// `number` from `caller`'s side, or the user's without a caller, and
-    /// deliver it to the other side.
+    /// Add `post` with copies of the files `attachments` and the places in
+    /// code `code` to the thread `number` from `caller`'s side, or the
+    /// user's without a caller, and deliver it to the other side.
     pub async fn post_to_thread(
         &self,
         caller: Option<&Caller>,
         number: ThreadNumber,
         post: NewPost,
         attachments: Vec<NewFile>,
+        code: Vec<NewCodeRef>,
     ) -> Result<Thread> {
         workspace_files::check_sent(&attachments)?;
+        let code = self.new_code(caller, code).await?;
+        self.post_made(caller, number, post, attachments, code)
+            .await
+    }
+
+    /// [`Manager::post_to_thread`] with its references made.
+    pub(super) async fn post_made(
+        &self,
+        caller: Option<&Caller>,
+        number: ThreadNumber,
+        post: NewPost,
+        attachments: Vec<NewFile>,
+        code: Vec<NewCode>,
+    ) -> Result<Thread> {
         let thread = self.readable_thread(caller, number).await?;
         let side = self.side(caller, &thread).await?;
         let post = picked(&thread, side, post)?;
@@ -150,6 +177,7 @@ impl Manager {
         let attacher = self.attacher(caller).await;
         let text = post.text.clone();
         let (id, removing) = (thread.id, self.space_removals.clone());
+        let versioned = code::versioned(&code);
         let (thread, delivered) = self
             .send_with_files(
                 &files_space,
@@ -159,12 +187,19 @@ impl Manager {
                 &attacher,
                 |files| {
                     self.store.write(move |tx| {
-                        record_post(tx, id, &poster, &post, &files, false, &removing)
+                        let attached = Attached {
+                            files: &files,
+                            code: &code,
+                        };
+                        record_post(tx, id, &poster, &post, attached, false, &removing)
                     })
                 },
             )
             .await?;
         self.announce_threads(delivered).await;
+        for (repository, spaces) in versioned {
+            self.keep_code_versions(&repository, spaces).await;
+        }
         Ok(thread)
     }
 

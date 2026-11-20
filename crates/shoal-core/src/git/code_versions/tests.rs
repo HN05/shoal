@@ -30,19 +30,19 @@ async fn a_space_s_ref_keeps_exactly_the_versions_its_records_keep() {
     keep(&repo, &reference, &[first.clone(), second.clone()])
         .await
         .unwrap();
-    let kept = git(&repo, &["ls-tree", "--object-only", &reference]);
     let mut expected = vec![first.clone(), second];
     expected.sort();
-    assert_eq!(kept.lines().collect::<Vec<_>>(), expected);
+    assert_eq!(kept(&repo, &reference).await.unwrap(), expected);
+    assert_eq!(spaces(&repo).await.unwrap(), ["w1"]);
 
     keep(&repo, &reference, std::slice::from_ref(&first))
         .await
         .unwrap();
-    let kept = git(&repo, &["ls-tree", "--object-only", &reference]);
-    assert_eq!(kept.trim(), first);
+    assert_eq!(kept(&repo, &reference).await.unwrap(), [first]);
 
     keep(&repo, &reference, &[]).await.unwrap();
-    assert!(!crate::git::ref_exists(&repo, &reference).await.unwrap());
+    assert!(kept(&repo, &reference).await.unwrap().is_empty());
+    assert!(spaces(&repo).await.unwrap().is_empty());
 }
 
 #[tokio::test]

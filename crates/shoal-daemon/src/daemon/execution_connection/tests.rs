@@ -741,6 +741,7 @@ async fn a_wrapper_whose_terminal_reads_status_reports_hears_the_spaces_status()
             "Database".into(),
             shoal_protocol::threads::ThreadKind::Question,
             None,
+            Vec::new(),
         )
         .await
         .unwrap();
@@ -753,6 +754,7 @@ async fn a_wrapper_whose_terminal_reads_status_reports_hears_the_spaces_status()
             Some(&asking),
             shoal_protocol::threads::ThreadNumber::Full(thread.number),
             question,
+            Vec::new(),
             Vec::new(),
         )
         .await

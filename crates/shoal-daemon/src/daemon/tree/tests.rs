@@ -1033,7 +1033,7 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
         };
         let number = shoal_protocol::threads::ThreadNumber::Full(thread.number);
         let posted = manager
-            .post_to_thread(Some(&scoped), number, post, Vec::new())
+            .post_to_thread(Some(&scoped), number, post, Vec::new(), Vec::new())
             .await;
         assert_eq!(posted.is_ok(), allowed, "{}", thread.name);
     }

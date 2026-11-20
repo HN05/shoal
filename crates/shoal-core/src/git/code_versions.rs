@@ -16,6 +16,25 @@ pub fn reference(space: &str) -> String {
     format!("{REFS}{space}")
 }
 
+/// The spaces whose refs keep versions in the repository.
+pub async fn spaces(repo: &Path) -> Result<Vec<String>> {
+    let refs = super::refs::list(repo, &[REFS]).await?;
+    Ok((refs.into_iter())
+        .filter_map(|reference| Some(reference.name.strip_prefix(REFS)?.to_owned()))
+        .collect())
+}
+
+/// The blobs `reference` keeps, sorted; none without the ref.
+pub async fn kept(repo: &Path, reference: &str) -> Result<Vec<String>> {
+    if !super::ref_exists(repo, reference).await? {
+        return Ok(Vec::new());
+    }
+    let tree = run_isolated(repo, &["ls-tree", "--object-only", reference]).await?;
+    let mut blobs: Vec<String> = tree.lines().map(str::to_owned).collect();
+    blobs.sort();
+    Ok(blobs)
+}
+
 /// Write `contents` into the repository as a blob, as they are, without
 /// Git's filters; its object ID.
 pub async fn write(repo: &Path, contents: impl Into<Vec<u8>>) -> Result<String> {

@@ -14,7 +14,7 @@ use shoal_protocol::{
 use super::{
     delivery::{self, Delivered, Party, Texts},
     ensure_open,
-    posting::{Poster, record_post},
+    posting::{Attached, Poster, record_post},
     records,
 };
 use crate::daemon::{manager::Manager, scope::Caller};
@@ -139,6 +139,7 @@ fn record_replies(
                 },
                 post: &reply,
                 files: &[],
+                code: &[],
                 in_chat: true,
                 forwards: None,
             },
@@ -261,7 +262,8 @@ impl Manager {
                     space: Some((space.id.clone(), space.name.clone())),
                     seen: thread.holder.clone(),
                 };
-                let (_, delivered) = record_post(tx, id, &poster, &post, &[], true, &removing)?;
+                let (_, delivered) =
+                    record_post(tx, id, &poster, &post, Attached::default(), true, &removing)?;
                 Ok(delivered)
             })
             .await?;

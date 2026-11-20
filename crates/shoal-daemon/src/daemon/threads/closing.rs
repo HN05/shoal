@@ -78,6 +78,7 @@ fn tell_opener(
             },
             post: &post,
             files: &[],
+            code: &[],
             in_chat: false,
             forwards: None,
         },

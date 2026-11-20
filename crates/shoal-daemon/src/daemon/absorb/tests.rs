@@ -212,6 +212,7 @@ async fn a_forced_squash_takes_the_open_threads_of_work_that_is_not_done() {
             "Which database?".into(),
             ThreadKind::Question,
             None,
+            Vec::new(),
         )
         .await
         .unwrap();
@@ -221,7 +222,7 @@ async fn a_forced_squash_takes_the_open_threads_of_work_that_is_not_done() {
     };
     let attached = vec![NewFile::from(screenshot)];
     let number = ThreadNumber::Full(thread.number);
-    (manager.post_to_thread(Some(&caller), number, post, attached))
+    (manager.post_to_thread(Some(&caller), number, post, attached, Vec::new()))
         .await
         .unwrap();
     let parent_head = head(&parent.path);

@@ -13,6 +13,7 @@ use shoal_protocol::{
     },
 };
 
+use super::code::NewCode;
 use crate::daemon::{
     item_numbers::{self, ItemKind, ItemNumber},
     store::sent_files::{sent_files, sent_ids},
@@ -110,6 +111,7 @@ fn post(row: &rusqlite::Row<'_>) -> rusqlite::Result<(i64, Post)> {
             choice: row.get("choice")?,
         },
         files: (crate::daemon::store::json_column(row, "files")?).unwrap_or_default(),
+        code: Vec::new(),
         in_chat: row.get("in_chat")?,
         forwarded_to,
         alert_id: row.get("alert_id")?,
@@ -136,7 +138,10 @@ pub(super) fn query(
         ))?
         .query_map([serde_json::to_string(&ids)?], post)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    for (thread, post) in found {
+    let post_ids: Vec<i64> = found.iter().map(|(_, post)| post.id).collect();
+    let mut code = super::code::records::of_posts(db, &post_ids)?;
+    for (thread, mut post) in found {
+        post.code = code.remove(&post.id).unwrap_or_default();
         posts.entry(thread).or_default().push(post);
     }
     for thread in &mut threads {
@@ -267,14 +272,15 @@ pub(super) struct Author<'a> {
     pub(super) space: Option<(&'a SpaceId, &'a SpaceName)>,
 }
 
-/// A post to record in the thread `thread`: `post` with the files `files`,
-/// in the chat when `in_chat`, or forwarding the thread to `forwards`,
-/// `Some(None)` for the user.
+/// A post to record in the thread `thread`: `post` with the files `files`
+/// and the places in code `code`, in the chat when `in_chat`, or
+/// forwarding the thread to `forwards`, `Some(None)` for the user.
 pub(super) struct NewRecord<'a> {
     pub(super) thread: i64,
     pub(super) author: Author<'a>,
     pub(super) post: &'a NewPost,
     pub(super) files: &'a [SentFile],
+    pub(super) code: &'a [NewCode],
     pub(super) in_chat: bool,
     pub(super) forwards: Option<Option<&'a SpaceId>>,
 }
@@ -304,7 +310,11 @@ pub(super) fn insert_post(tx: &Transaction<'_>, new: &NewRecord<'_>) -> Result<i
             new.forwards.flatten()
         ],
     )?;
-    Ok(tx.last_insert_rowid())
+    let post = tx.last_insert_rowid();
+    for code in new.code {
+        super::code::records::insert(tx, post, code)?;
+    }
+    Ok(post)
 }
 
 /// Replace the text of the post `post` with `text`.

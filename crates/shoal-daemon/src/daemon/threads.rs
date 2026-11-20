@@ -10,8 +10,9 @@
 use anyhow::{Context as _, Result, bail, ensure};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
+    code::NewCodeRef,
     space_names::SpaceSelector,
-    threads::{Sender, Thread, ThreadKind},
+    threads::{NewPost, Sender, Thread, ThreadKind, ThreadNumber},
 };
 
 use crate::daemon::{alerts::Recipients, manager::Manager, notifications::Source, scope::Caller};
@@ -19,6 +20,7 @@ use records::NewThread;
 
 mod chat;
 mod closing;
+mod code;
 mod delivery;
 mod forwarding;
 mod moving;
@@ -33,18 +35,21 @@ pub(crate) use delivery::Delivered as ThreadsDelivered;
 pub(crate) use reading::{newest_waiting_for_user, waiting_count, waiting_on_spaces};
 
 impl Manager {
-    /// Open an empty thread of `kind` named `name` from `caller`, or from
-    /// the user without one, with the space `to` names, else with the
-    /// caller's coordinator or the user. It notifies no one until its
-    /// first post.
+    /// Open a thread of `kind` named `name` from `caller`, or from the
+    /// user without one, with the space `to` names, else with the caller's
+    /// coordinator or the user. An empty one notifies no one until its
+    /// first post; one about the places in code `code` gets its opening
+    /// post at once, named as the thread, which carries them.
     pub async fn open_thread(
         &self,
         caller: Option<&Caller>,
         name: String,
         kind: ThreadKind,
         to: Option<&SpaceSelector>,
+        code: Vec<NewCodeRef>,
     ) -> Result<Thread> {
         crate::validate::message(&name).context("invalid thread name")?;
+        let code = self.new_code(caller, code).await?;
         let target = match to {
             Some(to) => Some(self.space(to).await?.id),
             None => None,
@@ -65,6 +70,10 @@ impl Manager {
             }
         };
         let removing = self.space_removals.clone();
+        let opening = NewPost {
+            text: name.clone(),
+            ..NewPost::default()
+        };
         let thread = self
             .store
             .write(move |tx| {
@@ -83,7 +92,12 @@ impl Manager {
             })
             .await?;
         self.signals.thread_changed();
-        Ok(thread)
+        if code.is_empty() {
+            return Ok(thread);
+        }
+        let number = ThreadNumber::Full(thread.number);
+        self.post_made(caller, number, opening, Vec::new(), code)
+            .await
     }
 
     /// The space whose agent coordinates the space `id`, here or on another

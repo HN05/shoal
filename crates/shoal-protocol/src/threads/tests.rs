@@ -19,6 +19,7 @@ fn post(id: i64, side: Side) -> Post {
             ..NewPost::default()
         },
         files: Vec::new(),
+        code: Vec::new(),
         in_chat: false,
         forwarded_to: None,
         alert_id: None,

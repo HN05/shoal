@@ -262,6 +262,9 @@ pub struct Post {
     /// The files sent with it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<crate::files::SentFile>,
+    /// The places in code it points at.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub code: Vec<crate::code::CodeRef>,
     /// Whether it is the final message of a turn in the sender's chat.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub in_chat: bool,

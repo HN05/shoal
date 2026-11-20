@@ -53,6 +53,7 @@ impl Manager {
                         author: poster.author(),
                         post: &post,
                         files: &[],
+                        code: &[],
                         in_chat: false,
                         forwards: Some(holder.as_ref()),
                     },
