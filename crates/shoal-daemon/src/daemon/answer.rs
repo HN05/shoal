@@ -123,6 +123,8 @@ fn error_code(error: &anyhow::Error) -> ErrorCode {
         .is_some()
     {
         ErrorCode::UnprovenStop
+    } else if (error.downcast_ref::<super::agent_queue::StoppedAgent>()).is_some() {
+        ErrorCode::StoppedAgent
     } else if let Some(exiting) = error.downcast_ref::<super::gates::Exiting>() {
         exiting.code()
     } else if error.downcast_ref::<super::scope::ScopeRefusal>().is_some() {

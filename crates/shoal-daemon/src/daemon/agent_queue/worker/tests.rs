@@ -49,9 +49,11 @@ async fn a_queued_agent_refuses_another_worker() {
 }
 
 /// An agent that waits for its restore holds its workspace's one agent,
-/// whether its wrapper or, once that is gone, the daemon restores it.
+/// whether its wrapper or, once that is gone, the daemon restores it, as
+/// an asleep agent.
 #[tokio::test]
 async fn an_agent_waiting_for_its_restore_refuses_another_worker() {
+    use super::StoppedAgent;
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     let workspace = create(&manager, &repo, "asleep").await;
@@ -73,19 +75,22 @@ async fn an_agent_waiting_for_its_restore_refuses_another_worker() {
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();
-    let refused = refusal(queue_worker(&manager, &workspace).await);
-    assert!(refused.contains("shoal queue"), "{refused}");
     let entries = manager.queue_entries().await.unwrap();
     assert_eq!(entries.len(), 1, "{entries:?}");
+    let refused = queue_worker(&manager, &workspace).await;
+    assert!(
+        refused
+            .as_ref()
+            .is_err_and(|error| error.is::<StoppedAgent>()),
+        "{refused:?}"
+    );
 }
 
-#[tokio::test]
-async fn a_stopped_agent_refuses_another_worker_until_it_is_resumed_or_forgotten() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    let workspace = create(&manager, &repo, "stopped").await;
+/// Record a stopped agent of `workspace` awaiting `shoal resume`,
+/// returning its record's path.
+fn stopped_agent(manager: &Manager, workspace: &Workspace) -> std::path::PathBuf {
     let execution = ExecutionId::from("stopped-agent".to_owned());
-    let record = crate::execution::recovery::save_record(
+    crate::execution::recovery::save_record(
         &manager.paths,
         &workspace.id,
         &execution,
@@ -93,11 +98,22 @@ async fn a_stopped_agent_refuses_another_worker_until_it_is_resumed_or_forgotten
         None,
         None,
     )
-    .unwrap();
-    let refused = refusal(queue_worker(&manager, &workspace).await);
+    .unwrap()
+}
+
+#[tokio::test]
+async fn a_stopped_agent_refuses_another_worker_until_it_is_resumed_or_forgotten() {
+    use super::StoppedAgent;
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let workspace = create(&manager, &repo, "stopped").await;
+    let record = stopped_agent(&manager, &workspace);
+    let refused = queue_worker(&manager, &workspace).await;
     assert!(
-        refused.contains("shoal restore --discard-agent"),
-        "{refused}"
+        refused
+            .as_ref()
+            .is_err_and(|error| error.is::<StoppedAgent>()),
+        "{refused:?}"
     );
     std::fs::remove_file(record).unwrap();
     queue_worker(&manager, &workspace).await.unwrap();

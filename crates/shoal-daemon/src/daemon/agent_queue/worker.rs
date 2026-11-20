@@ -8,13 +8,22 @@ use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Refuse a launch in `space` while it has an agent of its own: a
-    /// running one, one in the agent queue, or a stopped one awaiting
-    /// `shoal resume`. A last session, whose agent exited on its own, does
-    /// not count, since the new agent replaces it, nor does a start whose
-    /// setup failed, whose place the agent left waiting takes. Requires the
-    /// queue gate, which keeps another launch out until this one is
-    /// recorded.
+    /// running one, one in the agent queue, or a stopped or asleep one
+    /// awaiting `shoal resume`. A last session, whose agent exited on its own, does not
+    /// count, since the new agent replaces it, nor does a start whose setup
+    /// failed, whose place the agent left waiting takes. Requires the queue
+    /// gate, which keeps another launch out until this one is recorded.
     pub(super) async fn ensure_takes_worker(&self, space: &Space) -> Result<()> {
+        self.ensure_no_live_worker(space).await?;
+        if self.has_stopped_worker(space).await? {
+            bail!(StoppedAgent::of(space));
+        }
+        Ok(())
+    }
+
+    /// Refuse a launch in `space` while an agent of its own runs there or
+    /// waits in the agent queue.
+    async fn ensure_no_live_worker(&self, space: &Space) -> Result<()> {
         let (number, kind) = (space.number, space.kind());
         if self.running_agent_workspaces().await.contains(&space.id)
             || self.recorded_agent_spaces().await?.contains(&space.id)
@@ -33,12 +42,19 @@ impl Manager {
                 "{kind} {number} already has an agent in the agent queue; `shoal queue` lists it"
             )));
         }
-        if !recovery::agent_records(&self.paths, &space.id)?.is_empty() {
-            bail!(HasAgent(format!(
-                "{kind} {number} has a stopped agent; resume it with `shoal resume {number}` or discard it with `shoal restore --discard-agent {number}`"
-            )));
-        }
         Ok(())
+    }
+
+    /// Whether `space` has a stopped agent awaiting `shoal resume`, or an
+    /// asleep one whose restore waits in the queue.
+    async fn has_stopped_worker(&self, space: &Space) -> Result<bool> {
+        if !recovery::agent_records(&self.paths, &space.id)?.is_empty() {
+            return Ok(true);
+        }
+        let id = space.id.clone();
+        (self.store)
+            .read(move |tx| super::store::sleeps_agent_in(tx, &id))
+            .await
     }
 
     /// Take the queue gate for an agent that registers in `space` without a
@@ -79,6 +95,29 @@ impl std::fmt::Display for HasAgent {
 }
 
 impl std::error::Error for HasAgent {}
+
+/// The refusal of a launch in a space with a stopped or asleep agent,
+/// which names how to resume or discard that agent.
+#[derive(Debug)]
+pub struct StoppedAgent(String);
+
+impl StoppedAgent {
+    /// The refusal of a launch in `space`.
+    fn of(space: &Space) -> Self {
+        let (number, kind) = (space.number, space.kind());
+        Self(format!(
+            "{kind} {number} has a stopped agent; resume it with `shoal resume {number}` or discard it with `shoal restore --discard-agent {number}`"
+        ))
+    }
+}
+
+impl std::fmt::Display for StoppedAgent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for StoppedAgent {}
 
 #[cfg(test)]
 mod tests;

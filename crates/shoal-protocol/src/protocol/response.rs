@@ -73,6 +73,8 @@ shoal_states::open_enum! {
         /// Stopping needs the user to confirm that an execution Shoal cannot
         /// prove ended did.
         UnprovenStop => "unproven_stop",
+        /// The workspace a start goes into has a stopped or asleep agent.
+        StoppedAgent => "stopped_agent",
         /// The workspace, repository, link, thread or approval does not exist.
         NotFound => "not_found",
         /// A workspace, an unfinished rename or a running chat has the name or
@@ -118,6 +120,7 @@ impl ErrorCode {
         matches!(
             self,
             Self::OperationFailed
+                | Self::StoppedAgent
                 | Self::NotFound
                 | Self::NameTaken
                 | Self::NotReady
