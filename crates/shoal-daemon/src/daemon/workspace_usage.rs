@@ -151,7 +151,7 @@ impl WorkspaceUsages {
 
     /// The containers' usage that was read, logging each workspace's failure
     /// once: a runtime that cannot be read leaves its workspaces' usage as
-    /// their processes'. With it, why each reading failed.
+    /// their processes'. With it, why each reading failed and what clears it.
     fn read_containers(
         &mut self,
         readings: ContainerReadings,
@@ -165,7 +165,7 @@ impl WorkspaceUsages {
                 }
                 return (
                     Vec::new(),
-                    vec![format!("the container runtime: {error:#}")],
+                    vec![format!("the container runtime ({error:#}); start it")],
                 );
             }
         };
@@ -183,7 +183,7 @@ impl WorkspaceUsages {
                         log!("container usage of {workspace}: {error:#}");
                     }
                     missed.push(format!(
-                        "the containers of workspace {workspace}: {error:#}"
+                        "the containers of workspace {workspace} ({error:#}); stop them with shoal release containers --space {workspace}"
                     ));
                 }
             }

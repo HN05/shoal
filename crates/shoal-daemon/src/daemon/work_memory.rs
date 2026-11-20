@@ -55,7 +55,7 @@ impl UnreadContainers {
             return;
         }
         let message = format!(
-            "Shoal's work memory cannot be read under memory_limit, so no agent starts and no stopped agent recovers, until every running container project can be read: {}; start the container runtime, or stop the workspace's containers with shoal release containers --space <workspace>",
+            "Shoal's work memory cannot be read under memory_limit, so no agent starts and no stopped agent recovers, until every running container project can be read: {}",
             holding.unwrap_or_default()
         );
         let kind = crate::daemon::alerts::AlertKind::LoadWarning;

@@ -527,7 +527,7 @@ async fn a_sample_says_which_containers_it_missed() {
     };
     let failed = Ok(vec![("a".into(), Err(anyhow::anyhow!("no such project")))]);
     let missed = record(failed).unwrap();
-    assert!(missed.contains("workspace a"), "{missed}");
+    assert!(missed.contains("--space a"), "{missed}");
     assert!(record(Err(anyhow::anyhow!("timed out"))).is_some());
     assert_eq!(record(Ok(Vec::new())), None);
 }
