@@ -11,6 +11,8 @@ pub mod pr;
 mod raw;
 mod reads;
 pub mod space;
+#[cfg(test)]
+mod stand_in;
 pub mod target;
 pub mod wait;
 

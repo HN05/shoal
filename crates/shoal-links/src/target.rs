@@ -227,3 +227,6 @@ fn only_assigned(kind: ItemKind, assigned: Vec<ItemRef>) -> Result<ItemRef> {
         _ => bail!("several {noun}s are linked; pass a number or URL"),
     }
 }
+
+#[cfg(test)]
+mod tests;
