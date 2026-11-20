@@ -4289,9 +4289,10 @@ stays a plain command and the key must work without a prompt, as Git's
 fetches need. `--machine` streams it to the other machine's daemon over a
 duplex stream of the hub's links, which pipes it into `shoal internal
 import-moved`, the same restore path, so that side too is a plain command.
-That machine's claim of the space at the hub commits such a move: it claims
-the space before it records it, so a refused claim records nothing, and an
-error after the claim leaves the space there. Each recorded move holds a
+That machine's claim of the space at the hub commits such a move: it records
+the space as removed, then claims it, so a refused claim forgets the record,
+and once the claim stands the record stays there for `shoal restore` whatever
+fails after it. Each recorded move holds a
 ticket its destination's claims carry; a source that cannot learn from the
 destination whether it claimed the space asks the hub to settle the move,
 which answers from its claims and owners and, when the destination has not

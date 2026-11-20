@@ -74,34 +74,47 @@ impl Manager {
     /// workspace's checkpoint fetched from its bundle or else on the
     /// default branch, and its agents' session files, and claim it at the
     /// hub, so it takes the ID over from the machine it moves from; with
-    /// the warnings of what it changed. An error that says nothing was
-    /// imported leaves no record. A move through the hub claims it first,
-    /// since that claim makes the space this machine's: a refused claim
-    /// records nothing, and an error after it leaves the space here.
+    /// the warnings of what it changed. An error leaves no record. The
+    /// claim of a move through the hub makes the space this machine's, so
+    /// a refused one forgets the record, and an import whose claim stood
+    /// keeps the record for `shoal restore` whatever fails after it.
     pub(crate) async fn record_import(
         &self,
         import: SpaceImport,
     ) -> Result<(RemovedSpace, Vec<String>)> {
         let id = import.space.space_id.clone();
-        let Some(ticket) = import.ticket.clone() else {
-            let recorded = (self.record_package(import).await)
-                .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
+        let ticket = import.ticket.clone();
+        let recorded = (self.record_package(import).await)
+            .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
+        let Some(ticket) = ticket else {
             // The machine it moves from keeps it until this import is done.
             self.hub.claim_space(self, &id).await;
             return Ok(recorded);
         };
-        (self.hub.claim_moved(self, &id, &ticket).await).map_err(|error| {
-            Refusal::wrap(
-                Reason::NotImported,
-                error.context("the hub took no claim of it"),
-            )
-        })?;
-        (self.record_package(import).await)
-            .with_context(|| format!("space {id} is this machine's now, but recording it failed"))
+        if let Err(error) = self.hub.claim_moved(self, &id, &ticket).await {
+            self.forget_unclaimed(&id).await;
+            let error = error.context("the hub took no claim of it");
+            return Err(Refusal::wrap(Reason::NotImported, error));
+        }
+        Ok(recorded)
+    }
+
+    /// Forget the removal record an import of the space `id` made, whose
+    /// claim the hub refused; its checkpoint and kept session files expire
+    /// with no record to own them.
+    async fn forget_unclaimed(&self, id: &SpaceId) {
+        let space = id.clone();
+        let forgotten = (self.store).write(move |tx| {
+            tx.execute("DELETE FROM removed_spaces WHERE space_id=?1", [&space])?;
+            Ok(())
+        });
+        if let Err(error) = forgotten.await {
+            crate::daemon::log!("forget the unclaimed import of space {id}: {error:#}");
+        }
     }
 
     /// Record the space `import` packages as removed here, as
-    /// [`Self::record_import`] does before claiming it.
+    /// [`Self::record_import`] does before it claims it.
     async fn record_package(&self, import: SpaceImport) -> Result<(RemovedSpace, Vec<String>)> {
         self.ensure_not_here(&import.space.space_id, import.copy)
             .await?;
