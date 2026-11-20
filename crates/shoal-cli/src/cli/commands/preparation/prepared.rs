@@ -21,6 +21,7 @@ pub(super) fn workspace_start(launched: Launched) -> Result<StartedWorkspace> {
         entry,
         warnings,
         start,
+        ..
     } = launched;
     let (operation, reused) = match start {
         Started::Preparing { operation, reused } => (operation, reused),

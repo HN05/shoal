@@ -41,9 +41,9 @@ impl Manager {
         launch.forwarded = Some(self.carried(&mut launch, &machine, caller).await?);
         // That machine starts it as its own.
         launch.machine = None;
-        self.forward_launch(&machine, launch, caller)
-            .await
-            .map(Some)
+        let mut launched = self.forward_launch(&machine, launch, caller).await?;
+        launched.machine = Some(machine.name);
+        Ok(Some(launched))
     }
 
     /// The modes `launch` may start in for `caller` as `machine`, which it

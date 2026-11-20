@@ -2,16 +2,20 @@
 //! creation without an agent enters it.
 use anyhow::Result;
 
-use super::{finish::finish_workspace, prepared};
+use super::{
+    finish::{finish_workspace, show_prepared},
+    prepared,
+};
 use crate::{
     cli::{
         commands::{
-            links, queued_agents,
+            links, operations, queued_agents,
             start::{self, Attach, StartOptions},
         },
         context::Context,
         output::{Palette, Style},
     },
+    client::preparation::{Preparing, Unprepared},
     model::QueueEntry,
     protocol::{
         ConfigTarget,
@@ -73,11 +77,38 @@ pub(in crate::cli::commands) async fn report_launched(
                 ..
             }
         );
+    let machine = launched.machine.clone();
     let started = prepared::workspace_start(launched)?;
-    match (worker, follows) {
-        (true, _) => report_worker(ctx, started),
-        (false, true) => follow_workspace(ctx, started, agent).await,
-        (false, false) => report_workspace(ctx, started),
+    match (worker, follows, machine) {
+        (true, ..) => report_worker(ctx, started),
+        (false, true, Some(machine)) => follow_elsewhere(ctx, started, &machine).await,
+        (false, true, None) => follow_workspace(ctx, started, agent).await,
+        (false, false, _) => report_workspace(ctx, started),
+    }
+}
+
+/// Follow the preparation of the workspace `machine`, another joined
+/// machine, `started`, of which nothing runs in this caller, and report
+/// the workspace and the entry of its agent, which that machine's queue
+/// starts, once it ends; a failure names what shows and retries it there.
+async fn follow_elsewhere(ctx: &Context, started: StartedWorkspace, machine: &str) -> Result<i32> {
+    let preparing = Preparing::follow(&ctx.paths, started).await?;
+    let reused = preparing.reused();
+    let Prepared { workspace, agent } = match operations::follow_preparation(ctx, preparing).await?
+    {
+        Ok(prepared) => prepared,
+        Err(Unprepared { workspace, failure }) => {
+            let number = workspace.number;
+            return Err(crate::operations::error(failure).context(format!(
+                "preparing {} on machine {machine} failed; `shoal status {number}` shows it, and `shoal setup {number}` on that machine retries it",
+                workspace.name
+            )));
+        }
+    };
+    show_prepared(ctx, &workspace, reused)?;
+    match agent {
+        Some(entry) => start::report_queued_in(ctx, &workspace.name, &entry),
+        None => Ok(0),
     }
 }
 

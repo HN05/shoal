@@ -143,6 +143,7 @@ fn queued(workspace: Workspace, entry: crate::model::QueueEntry) -> Launched {
         entry: Some(Box::new(entry)),
         warnings: Vec::new(),
         start: Started::Worker,
+        machine: None,
     }
 }
 

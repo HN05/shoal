@@ -126,6 +126,18 @@ fn a_space_starts_a_child_workspace_on_another_machine_that_clones_its_repositor
 }
 
 #[test]
+fn a_start_on_another_machine_waits_for_the_preparation_there() {
+    let machines = machines();
+    let repo = machines.hub.repo.to_str().unwrap().to_owned();
+    let started = start_in_coordinator(&machines, &[&repo, "--branch", "child", "--wait"]);
+    assert!(started.status.success(), "{}", printed(&started));
+    // It returns the workspace once that machine prepared it.
+    let mut shown = serde_json::Deserializer::from_slice(&started.stdout).into_iter::<Value>();
+    let workspace = shown.next().unwrap().unwrap();
+    assert_eq!(workspace["state"], "ready", "{}", printed(&started));
+}
+
+#[test]
 fn a_space_starts_a_child_chat_on_another_machine() {
     let machines = machines();
     let repo = machines.hub.repo.to_str().unwrap().to_owned();

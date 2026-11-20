@@ -83,6 +83,10 @@ pub struct Launched {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
     pub start: Started,
+    /// The joined machine that started it, by name, when another one than
+    /// the caller's did, whose daemon runs what follows its recording.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<String>,
 }
 
 /// How a launch started its agent, with what only that kind of start
@@ -135,6 +139,7 @@ impl From<StartedWorkspace> for Launched {
             entry,
             warnings,
             start: Started::Preparing { operation, reused },
+            machine: None,
         }
     }
 }

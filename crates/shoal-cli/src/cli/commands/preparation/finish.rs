@@ -57,19 +57,25 @@ pub(super) async fn finish_workspace(
     };
     let workspace = &prepared.workspace;
     if !named {
-        ctx.show(workspace, |workspace| {
-            outln!(
-                "{} {} {}",
-                if reused { "Opened" } else { "Created" },
-                Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
-                crate::cli::commands::workspaces::location_phrase(workspace),
-            );
-        })?;
+        show_prepared(ctx, workspace, reused)?;
     }
     let starts = agent.filter(|_| post_setup.is_ok());
     enter_workspace(ctx, workspace, starts).await?;
     post_setup?;
     Ok(Some(prepared))
+}
+
+/// Show `workspace`, which its preparation readied, as created, or as
+/// opened when it was `reused`.
+pub(super) fn show_prepared(ctx: &Context, workspace: &Workspace, reused: bool) -> Result<()> {
+    ctx.show(workspace, |workspace| {
+        outln!(
+            "{} {} {}",
+            if reused { "Opened" } else { "Created" },
+            Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
+            crate::cli::commands::workspaces::location_phrase(workspace),
+        );
+    })
 }
 
 /// Follow the preparation of the started workspace and settle a failed

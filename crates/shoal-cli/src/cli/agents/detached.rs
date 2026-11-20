@@ -179,6 +179,7 @@ fn report_session(
             log: launch.log.clone(),
             delivery: delivered.fields,
         }),
+        machine: None,
     };
     ctx.emit(
         &format!(
