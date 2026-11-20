@@ -3946,6 +3946,20 @@ fn questions_become_threads_with_their_posts_and_resolutions() -> Result<()> {
          INSERT INTO spaces(id,kind,repository_id,name,number)
              VALUES ('leaf','chat','repo','leaf',4);
          INSERT INTO space_parents(space_id,parent_id) VALUES ('leaf','plain');
+         INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
+             VALUES ('stopped','/stopped','stopped','ready','abc','/admin'),
+                 ('quiet','/quiet','quiet','ready','abc','/admin');
+         INSERT INTO spaces(id,kind,repository_id,name,number)
+             VALUES ('stopped','workspace','repo','stopped',5),
+                 ('quiet','workspace','repo','quiet',6);
+         INSERT INTO space_parents(space_id,parent_id) VALUES ('quiet','stopped');
+         INSERT INTO chats(id) VALUES ('deep');
+         INSERT INTO spaces(id,kind,repository_id,name,number)
+             VALUES ('deep','chat','repo','deep',7);
+         INSERT INTO space_parents(space_id,parent_id) VALUES ('deep','quiet');
+         INSERT INTO agent_queue(id,kind,repository_id,name,agent,execution_id,state,created_at,
+                 space_id)
+             VALUES ('back','restore','repo','stopped','claude','gone','queued',1,'stopped');
          COMMIT;
          INSERT INTO alerts(id,created_at,kind,sender,recipient_id,message)
              VALUES (5,1,'question_answered','user','chat','Answer to question 2.2: B'),
@@ -3960,7 +3974,8 @@ fn questions_become_threads_with_their_posts_and_resolutions() -> Result<()> {
                  (4,'workspace',1,1,4,'Which port?','80',NULL,'[]',NULL,NULL,NULL,5,1,0,'[]'),
                  (5,'workspace',1,2,5,'Long
 question','',NULL,'[]',NULL,NULL,NULL,NULL,0,1,'[]'),
-                 (6,'leaf',4,1,6,'Which index?','B-tree',NULL,'[]',NULL,NULL,NULL,NULL,0,0,'[]');
+                 (6,'leaf',4,1,6,'Which index?','B-tree',NULL,'[]',NULL,NULL,NULL,NULL,0,0,'[]'),
+                 (7,'deep',7,1,7,'Which cache?','Redis',NULL,'[]',NULL,NULL,NULL,NULL,0,0,'[]');
          INSERT INTO space_files(id,space_id,space,source,name,path,bytes,created_at)
              VALUES (7,'chat','helper','question','a.png','/repo/.attachments/a.png',1,1);
          INSERT INTO executions(id,space_id,state,agent,asks_in_chat)
@@ -4004,7 +4019,8 @@ question','',NULL,'[]',NULL,NULL,NULL,NULL,0,1,'[]'),
     let some = |text: &str| Some(text.to_owned());
     // Each keeps its ID and number, held by its coordinator: the chat's and
     // the leaf's by the workspace with an agent above them, past the leaf's
-    // agentless parent, and the top-level workspace's by the user.
+    // agentless parent, the deep chat's by the stopped workspace whose agent
+    // waits to be restored, and the top-level workspace's by the user.
     assert_eq!(
         threads,
         [
@@ -4035,6 +4051,7 @@ question','',NULL,'[]',NULL,NULL,NULL,NULL,0,1,'[]'),
             ),
             (5, 2, "Asked in the chat".into(), None, None, None),
             (6, 1, "Which index?".into(), some("workspace"), None, None),
+            (7, 1, "Which cache?".into(), some("stopped"), None, None),
         ]
     );
     type Post = (
@@ -4133,6 +4150,6 @@ question','',NULL,'[]',NULL,NULL,NULL,NULL,0,1,'[]'),
             VALUES ('chat',4,'question','Next?',6,'space')",
         [],
     )?;
-    assert_eq!(db.last_insert_rowid(), 7);
+    assert_eq!(db.last_insert_rowid(), 8);
     Ok(())
 }

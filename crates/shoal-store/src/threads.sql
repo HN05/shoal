@@ -69,8 +69,10 @@ CREATE TABLE thread_links (
 );
 
 -- A question went to its coordinator: the nearest space above with an
--- agent, a chat or a workspace with an agent's execution recorded, else
--- to the user.
+-- agent, else to the user. A space has one, as coordination reads it at
+-- this version, when it is a chat, when its agent's execution or state
+-- is recorded, when a restore of its agent waits in the queue, or when a
+-- chat it was converted from hands its agent over.
 CREATE TEMP TABLE question_holders AS
     WITH RECURSIVE above(question, space_id, depth) AS (
         SELECT q.id, p.parent_id, 1 FROM questions q JOIN space_parents p ON p.space_id=q.space_id
@@ -83,7 +85,12 @@ CREATE TEMP TABLE question_holders AS
         FROM above
         WHERE EXISTS (SELECT 1 FROM spaces WHERE id=above.space_id AND kind='chat')
             OR EXISTS (SELECT 1 FROM executions
-                WHERE space_id=above.space_id AND agent IS NOT NULL))
+                WHERE space_id=above.space_id AND agent IS NOT NULL)
+            OR EXISTS (SELECT 1 FROM space_agent_state WHERE space_id=above.space_id)
+            OR EXISTS (SELECT 1 FROM agent_queue
+                WHERE space_id=above.space_id AND kind='restore')
+            OR EXISTS (SELECT 1 FROM space_conversions WHERE space_id=above.space_id
+                AND json_extract(record,'$.to')='workspace'))
     WHERE nearest=1;
 
 -- Each question becomes a question thread under its ID and number, opened
