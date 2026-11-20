@@ -2,12 +2,15 @@
 //! reachable under private refs until their records expire.
 use std::path::Path;
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Result, ensure};
 use shoal_refs::{BranchName, CommitId};
 
 use crate::fsutil::off_runtime;
 
-use super::{isolated_command_without_submodules, run_isolated, run_without_submodules};
+use super::{
+    isolated_command_without_submodules, run_isolated, run_without_submodules,
+    temporary_index::TemporaryIndex,
+};
 
 const REFS: &str = "refs/shoal/checkpoints/";
 
@@ -141,7 +144,7 @@ async fn snapshot_commit(
     if !files || status.is_empty() {
         return Ok(head.clone());
     }
-    let index = WorktreeIndex::new(worktree).await?;
+    let index = TemporaryIndex::copy_of(worktree).await?;
     let tree = index.tree().await?;
     let commit = index
         .run(&["commit-tree", &tree, "-p", head.as_str(), "-m", message])
@@ -152,7 +155,7 @@ async fn snapshot_commit(
 /// Whether the worktree's files are those `snapshot` keeps, as a snapshot
 /// taken now would keep them.
 pub(crate) async fn matches(worktree: &Path, snapshot: &str) -> Result<bool> {
-    let tree = WorktreeIndex::new(worktree).await?.tree().await?;
+    let tree = TemporaryIndex::copy_of(worktree).await?.tree().await?;
     let kept = super::revision(worktree, &format!("{snapshot}^{{tree}}"), run_isolated).await?;
     Ok(tree == kept.trim())
 }
@@ -160,53 +163,11 @@ pub(crate) async fn matches(worktree: &Path, snapshot: &str) -> Result<bool> {
 /// The tree the worktree's index records, written without touching the
 /// index itself.
 pub async fn index_tree(worktree: &Path) -> Result<String> {
-    let tree = WorktreeIndex::new(worktree)
+    let tree = TemporaryIndex::copy_of(worktree)
         .await?
         .run(&["write-tree"])
         .await?;
     Ok(tree.trim().to_owned())
-}
-
-/// A temporary copy of a worktree's index, so a snapshot of its files leaves
-/// its own index and files untouched.
-struct WorktreeIndex<'a> {
-    worktree: &'a Path,
-    _dir: tempfile::TempDir,
-    index: std::path::PathBuf,
-}
-
-impl<'a> WorktreeIndex<'a> {
-    async fn new(worktree: &'a Path) -> Result<Self> {
-        let dir = tempfile::tempdir().context("create a temporary index directory")?;
-        let index = dir.path().join("index");
-        // The worktree's own index keeps paths staged despite ignore rules.
-        let own = super::git_path(worktree, "index").await?;
-        std::fs::copy(own, &index).context("copy the worktree's index")?;
-        Ok(Self {
-            worktree,
-            _dir: dir,
-            index,
-        })
-    }
-
-    /// The tree of every file in the worktree, ignored ones excepted unless
-    /// staged.
-    async fn tree(&self) -> Result<String> {
-        self.run(&["add", "--all", "--", ":/"]).await?;
-        Ok(self.run(&["write-tree"]).await?.trim().to_owned())
-    }
-
-    async fn run(&self, args: &[&str]) -> Result<String> {
-        let mut command = isolated_command_without_submodules(self.worktree);
-        command
-            .env("GIT_INDEX_FILE", &self.index)
-            .env("GIT_AUTHOR_NAME", "Shoal")
-            .env("GIT_AUTHOR_EMAIL", "shoal@localhost")
-            .env("GIT_COMMITTER_NAME", "Shoal")
-            .env("GIT_COMMITTER_EMAIL", "shoal@localhost")
-            .args(args);
-        super::output(command).await
-    }
 }
 
 /// Whether two snapshots keep the same files.
