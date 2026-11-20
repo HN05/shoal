@@ -190,7 +190,7 @@ pub async fn resolve<'a>(
     let message = match resumed_prompt(ending, handoff) {
         Some(message) => Some(message),
         // A configured command runs without the hooks that deliver them.
-        None if configured.is_none() => waking_prompt(paths, home, &settings, &name).await?,
+        None if configured.is_none() => waking_prompt(paths, home, &settings, &name).await,
         None => None,
     };
     let restore = RestoreCommand {
@@ -230,18 +230,23 @@ pub async fn resolve<'a>(
 /// What a session that opens between turns with nothing to be told
 /// starts with: the prompt its wrapper wakes an idle agent with, whose hook
 /// delivers them, while updates wait for it in `home` and its agent has
-/// that hook; otherwise nothing, so that it waits for them.
+/// that hook; otherwise nothing, so that it waits for them, as it does
+/// when the daemon cannot say, which a later wake makes up for.
 async fn waking_prompt(
     paths: &CommandPaths,
     home: AgentHome<'_>,
     settings: &crate::config::Effective,
     name: &Agent,
-) -> Result<Option<String>> {
-    if crate::agents::prompt_wake(settings.integration(name)).is_none() {
-        return Ok(None);
-    }
+) -> Option<String> {
+    crate::agents::prompt_wake(settings.integration(name))?;
     let waiting = crate::client::agent_updates::waiting(paths, SpaceSelector::id(home.id()));
-    Ok(waiting.await?.then(|| WAKE_PROMPT.to_owned()))
+    match waiting.await {
+        Ok(waiting) => waiting.then(|| WAKE_PROMPT.to_owned()),
+        Err(error) => {
+            eprintln!("warning: cannot tell whether updates wait for the agent: {error:#}");
+            None
+        }
+    }
 }
 
 /// The command restoring the agent stopped with `record`, with the
