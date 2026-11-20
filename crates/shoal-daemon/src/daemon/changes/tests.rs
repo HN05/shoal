@@ -3,7 +3,7 @@ use std::{fs, sync::Arc};
 use shoal_protocol::{
     changes::{Change, ChangeAuthor, ChangeKind, ChangeNumber, Hunk, ToolChange},
     space_names::SpaceSelector,
-    threads::{OutcomeKind, Thread, ThreadKind, ThreadNumber},
+    threads::{NewPost, OutcomeKind, Thread, ThreadKind, ThreadNumber, ThreadStatus},
 };
 
 use super::records;
@@ -348,6 +348,7 @@ async fn changes_go_to_the_thread_switched_to_and_move_as_the_agent_says() {
         "a resolved thread takes no changes"
     );
 }
+
 #[tokio::test]
 async fn a_space_that_forwards_a_thread_works_for_it_no_longer() {
     let fixture = fixture().await;
@@ -375,4 +376,53 @@ async fn a_space_that_forwards_a_thread_works_for_it_no_longer() {
         .await
         .unwrap();
     assert_eq!(manager.current_thread(&to).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn a_thread_shows_its_changes_and_whether_its_holder_works_for_it() {
+    let fixture = fixture().await;
+    let (manager, agent) = (&fixture.manager, Some(&fixture.agent));
+    let to = SpaceSelector::id(&fixture.workspace.id);
+    let opened = manager.open_thread(
+        None,
+        "Fix the parser".into(),
+        ThreadKind::Request,
+        Some(&to),
+        Vec::new(),
+    );
+    let thread = opened.await.unwrap();
+    let number = ThreadNumber::Full(thread.number);
+    let asked = NewPost {
+        text: "Please".into(),
+        ..NewPost::default()
+    };
+    (manager.post_to_thread(None, number, asked, Vec::new(), Vec::new(), Vec::new()))
+        .await
+        .unwrap();
+    let delivered = manager.agent_messages(&to).await.unwrap();
+    let switch = format!("shoal thread switch {}", thread.number);
+    assert!(delivered[0].message.contains(&switch), "{delivered:?}");
+
+    fixture.switch(Some(&thread)).await;
+    fixture.write("lib.rs", "a\n");
+    fixture.command("1", "lib.rs", "a\nb\nc\n").await;
+    let done = NewPost {
+        text: "Done".into(),
+        ..NewPost::default()
+    };
+    (manager.post_to_thread(agent, number, done, Vec::new(), Vec::new(), Vec::new()))
+        .await
+        .unwrap();
+    let shown = manager.thread(None, number).await.unwrap();
+    assert_eq!(shown.status(), ThreadStatus::Working);
+    let entries: Vec<String> = (shown.changes.iter())
+        .map(|entry| entry.numbers_text())
+        .collect();
+    assert_eq!(entries, ["1"]);
+    let told = manager.notifications.list(true, 10).await.unwrap();
+    let size = (told.iter()).find(|alert| alert.message.contains("Done"));
+    assert!(
+        size.unwrap().message.contains("1 file changed, +2 −0"),
+        "{told:?}"
+    );
 }

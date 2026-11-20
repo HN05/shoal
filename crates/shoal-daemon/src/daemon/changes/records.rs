@@ -1,11 +1,13 @@
 //! The rows of changes: recording them in their space's sequence, reading
 //! them as protocol records, and the snapshot base and running commands
 //! their recording diffs against.
+use std::collections::HashMap;
+
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension as _, Transaction, params};
 use shoal_ids::{execution_ids::ExecutionId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    changes::{Change, ChangeAuthor, ChangeDiff, ChangeKind, Hunk},
+    changes::{Change, ChangeAuthor, ChangeDiff, ChangeEntry, ChangeKind, Counted, Hunk},
     code::{CodeAt, CodeState, Lines},
     item_numbers::ItemNumber,
     space_names::SpaceName,
@@ -41,8 +43,8 @@ pub(super) const CHANGES: &str = "SELECT c.id,c.number,c.space_id,
         COALESCE(s.name,c.space_name) AS space_name,s.number AS space_number,c.author,c.kind,
         c.made_at,c.turn,c.execution_id,t.space_number AS thread_space,t.number AS thread_item,
         c.commit_id,c.path,c.start,c.end,c.blob,c.latest_path,c.latest_start,c.latest_end,
-        c.latest_blob,c.state,json_array_length(c.added) AS added_count,
-        json_array_length(c.removed) AS removed_count,c.size,c.before_start,c.removed,c.added
+        c.latest_blob,c.state,c.added_count,c.removed_count,c.size,c.before_start,c.removed,
+        c.added
     FROM space_changes c LEFT JOIN spaces s ON s.id=c.space_id
         LEFT JOIN threads t ON t.id=c.thread_id";
 
@@ -95,6 +97,7 @@ pub(super) fn diff(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChangeDiff> {
         before: row.get("before_start")?,
         removed_lines: (crate::daemon::store::json_column(row, "removed")?).unwrap_or_default(),
         added_lines: (crate::daemon::store::json_column(row, "added")?).unwrap_or_default(),
+        cut: false,
     })
 }
 
@@ -132,10 +135,10 @@ pub(super) fn insert(
         tx.execute(
             "INSERT INTO space_changes(space_id,space_name,number,repository_id,author,kind,
                     made_at,turn,execution_id,thread_id,commit_id,path,start,end,blob,size,
-                    before_start,removed,added,latest_path,latest_start,latest_end,latest_blob,
-                    state)
+                    before_start,removed,added,removed_count,added_count,latest_path,
+                    latest_start,latest_end,latest_blob,state)
                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,
-                    ?12,?13,?14,?15,?20)",
+                    ?20,?21,?12,?13,?14,?15,?22)",
             params![
                 made.space_id,
                 made.space_name,
@@ -156,6 +159,8 @@ pub(super) fn insert(
                 hunk.map_or(0, |hunk| hunk.before),
                 serde_json::to_string(hunk.map_or(&[][..], |hunk| &hunk.removed))?,
                 serde_json::to_string(hunk.map_or(&[][..], |hunk| &hunk.added))?,
+                hunk.map_or(0, |hunk| hunk.removed.len() as i64),
+                hunk.map_or(0, |hunk| hunk.added.len() as i64),
                 CodeState::Unchanged,
             ],
         )?;
@@ -308,6 +313,57 @@ pub(super) fn of_thread<T>(
     )
 }
 
+/// What change entries count of a change, without its lines.
+const COUNTED: &str = "SELECT c.thread_id,c.number,c.space_id,
+        COALESCE(s.name,c.space_name) AS space_name,s.number AS space_number,c.kind,c.made_at,
+        c.turn,c.execution_id,c.latest_path,c.added_count,c.removed_count
+    FROM space_changes c LEFT JOIN spaces s ON s.id=c.space_id";
+
+fn counted(row: &rusqlite::Row<'_>) -> rusqlite::Result<(i64, Counted)> {
+    let counted = Counted {
+        number: row.get("number")?,
+        space: ThreadSpace {
+            id: row.get("space_id")?,
+            name: row.get("space_name")?,
+            number: row.get("space_number")?,
+        },
+        kind: row.get("kind")?,
+        made_at: row.get("made_at")?,
+        turn: row.get("turn")?,
+        execution: row.get("execution_id")?,
+        path: row.get("latest_path")?,
+        added: row.get("added_count")?,
+        removed: row.get("removed_count")?,
+    };
+    Ok((row.get("thread_id")?, counted))
+}
+
+/// The change entries of each of the threads `threads` that has changes,
+/// split where one of its posts, made at the times `posts` gives by
+/// thread, falls inside a turn.
+pub(crate) fn entries(
+    db: &Connection,
+    threads: &[i64],
+    posts: &HashMap<i64, Vec<UnixTime>>,
+) -> Result<HashMap<i64, Vec<ChangeEntry>>> {
+    let found = db
+        .prepare(&format!(
+            "{COUNTED} WHERE c.thread_id IN (SELECT value FROM json_each(?1)) ORDER BY c.id"
+        ))?
+        .query_map([serde_json::to_string(threads)?], counted)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut by_thread: HashMap<i64, Vec<Counted>> = HashMap::new();
+    for (thread, change) in found {
+        by_thread.entry(thread).or_default().push(change);
+    }
+    Ok((by_thread.into_iter())
+        .map(|(thread, changes)| {
+            let times = posts.get(&thread).map_or(&[][..], Vec::as_slice);
+            (thread, shoal_protocol::changes::entries(changes, times))
+        })
+        .collect())
+}
+
 /// The changes whose IDs are `ids`.
 pub(super) fn of_ids(db: &Connection, ids: &[i64]) -> Result<Vec<Change>> {
     query(
@@ -368,4 +424,37 @@ pub(super) fn switch(tx: &Transaction<'_>, space: &SpaceId, thread: Option<i64>)
         )?,
     };
     Ok(())
+}
+
+/// Record that the post `post` points at the changes `named` names.
+pub(crate) fn point(tx: &Transaction<'_>, post: i64, named: &[(SpaceId, u32)]) -> Result<()> {
+    for (id, _) in self::named(tx, named)? {
+        tx.execute(
+            "INSERT OR IGNORE INTO thread_post_changes(post_id,change_id) VALUES (?1,?2)",
+            params![post, id],
+        )?;
+    }
+    Ok(())
+}
+
+/// The changes each of the posts `posts` points at, by post, with their
+/// lines up to a snippet's length.
+pub(crate) fn of_posts(db: &Connection, posts: &[i64]) -> Result<HashMap<i64, Vec<ChangeDiff>>> {
+    let pointed =
+        |row: &rusqlite::Row<'_>| Ok((row.get::<_, i64>("post_id")?, diff(row)?.cut_to_snippet()));
+    let joined = CHANGES.replace(
+        "FROM space_changes c",
+        ",p.post_id FROM thread_post_changes p JOIN space_changes c ON c.id=p.change_id",
+    );
+    let found = db
+        .prepare(&format!(
+            "{joined} WHERE p.post_id IN (SELECT value FROM json_each(?1)) ORDER BY c.id"
+        ))?
+        .query_map([serde_json::to_string(posts)?], pointed)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut by_post: HashMap<i64, Vec<ChangeDiff>> = HashMap::new();
+    for (post, diff) in found {
+        by_post.entry(post).or_default().push(diff);
+    }
+    Ok(by_post)
 }

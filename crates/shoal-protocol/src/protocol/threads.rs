@@ -37,6 +37,10 @@ pub enum ThreadMethod {
         /// Places in code it points at.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         code: Vec<NewCodeRef>,
+        /// Changes it points at, bare numbers of the space it is posted
+        /// from.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        changes: Vec<crate::changes::ChangeNumber>,
         /// The space the user acts as, as a session in it that Shoal did
         /// not start does; a scoped caller acts as its own.
         #[serde(default, skip_serializing_if = "Option::is_none")]

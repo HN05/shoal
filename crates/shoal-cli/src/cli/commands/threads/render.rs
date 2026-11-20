@@ -1,6 +1,7 @@
 //! How a thread reads on the terminal: one line to choose it by, a row of
 //! a list, and the whole thread with its posts.
 use shoal_protocol::{
+    changes::{ChangeDiff, ChangeEntry, ChangeKind, ChangeSize},
     code::CodeRef,
     threads::{Post, Side, Thread},
 };
@@ -11,12 +12,17 @@ use crate::cli::{
     ui::{self, Cell},
 };
 
-/// Where `thread` stands: whose turn it is, or how it was settled.
+/// Where `thread` stands: whose turn it is, and whether its holder's agent
+/// works for it, or how it was settled.
 pub(super) fn status(thread: &Thread) -> String {
-    match (&thread.resolution, thread.awaits()) {
-        (Some(resolution), _) => resolution.outcome.describe(),
+    let turn = match (&thread.resolution, thread.awaits()) {
+        (Some(resolution), _) => return resolution.outcome.describe(),
         (None, None) => "empty".into(),
         (None, Some(side)) => format!("waiting for {}", thread.party(side)),
+    };
+    match thread.working {
+        true => format!("working; {turn}"),
+        false => turn,
     }
 }
 
@@ -69,20 +75,59 @@ pub(super) fn details(thread: &Thread, palette: Palette) -> String {
             .into_iter()
             .map(|line| format!("  {line}")),
     );
+    let mut entries = thread.changes.iter().peekable();
+    let mut number = 0;
     for post in &thread.posts {
+        while let Some(entry) = entries.next_if(|entry| entry.at < post.created_at) {
+            lines.push(String::new());
+            lines.extend(entry_lines(entry, palette));
+        }
+        number += u32::from(post.speaks());
         lines.push(String::new());
-        lines.extend(post_lines(post, palette));
+        lines.extend(post_lines(number, post, palette));
+    }
+    for entry in entries {
+        lines.push(String::new());
+        lines.extend(entry_lines(entry, palette));
     }
     lines.join("\n")
 }
 
-/// A post: who sent it, its text, and what it offers or picks.
-fn post_lines(post: &Post, palette: Palette) -> Vec<String> {
+/// What one turn of an agent changed for the thread: its size and change
+/// numbers, then each file, with its size or kind.
+fn entry_lines(entry: &ChangeEntry, palette: Palette) -> Vec<String> {
+    let size = ChangeSize::of_entries([entry]);
+    let heading = format!(
+        "Changes {} by {}: {size}",
+        entry.numbers_text(),
+        entry.space.label()
+    );
+    let files = (entry.files.iter()).map(|file| match file.kind {
+        ChangeKind::Text => format!("    {}  +{} −{}", file.path, file.added, file.removed),
+        kind => format!("    {} ({kind})", file.path),
+    });
+    let more = (entry.more.iter()).map(|more| {
+        let files = ChangeSize {
+            files: more.files as usize,
+            added: more.added,
+            removed: more.removed,
+        };
+        format!("    and {files} in other files")
+    });
+    std::iter::once(format!("  {}", palette.paint(Style::Muted, heading)))
+        .chain(files)
+        .chain(more)
+        .collect()
+}
+
+/// A post, `number` among those that speak: who sent it, its text, and
+/// what it offers or picks.
+fn post_lines(number: u32, post: &Post, palette: Palette) -> Vec<String> {
     let author = post.author();
     let heading = match &post.forwarded_to {
         Some(holder) => format!("{author} forwarded it to {}", holder.label()),
-        None if post.in_chat => format!("{author}, in the chat"),
-        None => author,
+        None if post.in_chat => format!("#{number} {author}, in the chat"),
+        None => format!("#{number} {author}"),
     };
     let mut lines = vec![format!("  {}", palette.paint(Style::Muted, heading))];
     lines.extend((post.post.text.lines()).map(|line| format!("    {line}").trim_end().to_owned()));
@@ -102,7 +147,23 @@ fn post_lines(post: &Post, palette: Palette) -> Vec<String> {
         lines.push(format!("    Attached file: {}", file.path.display()));
     }
     lines.extend(post.code.iter().flat_map(code_lines));
+    lines.extend(post.changes.iter().flat_map(change_lines));
     lines
+}
+
+/// A change a post points at, where it is now in the worktree of its
+/// space, with its diff.
+fn change_lines(diff: &ChangeDiff) -> Vec<String> {
+    let change = &diff.change;
+    let place = format!(
+        "    Change {}: {} in {}",
+        change.number,
+        change.place(),
+        change.space.label()
+    );
+    let patch = diff.patch().unwrap_or_default();
+    let patch = patch.lines().map(|line| format!("      {line}"));
+    std::iter::once(place).chain(patch).collect()
 }
 
 /// A place in code a post points at, where it is now in the worktree of

@@ -3,7 +3,7 @@ use shoal_ids::space_ids::SpaceId;
 use super::*;
 use crate::code::Lines;
 
-fn change(path: &str, kind: ChangeKind, added: u32, removed: u32) -> Change {
+pub(super) fn change(path: &str, kind: ChangeKind, added: u32, removed: u32) -> Change {
     let at = CodeAt {
         path: path.into(),
         lines: Some(Lines {
@@ -58,4 +58,25 @@ fn a_change_is_named_in_its_own_space_by_its_number_alone() {
     assert!(own.resolve(None).is_err());
     let full: ChangeNumber = "3.12".parse().unwrap();
     assert_eq!(full.resolve(None).unwrap(), (SpaceNumber::from(3), 12));
+}
+
+#[test]
+fn a_post_s_diff_stops_at_a_snippet_s_length_and_keeps_its_counts() {
+    let added: Vec<String> = (0..1000).map(|line| format!("line {line}")).collect();
+    let diff = ChangeDiff {
+        change: change("big.rs", ChangeKind::Text, 1000, 0),
+        before: 0,
+        removed_lines: Vec::new(),
+        added_lines: added,
+        cut: false,
+    };
+    let cut = diff.cut_to_snippet();
+    assert!(cut.cut);
+    assert!(cut.added_lines.join("\n").len() <= crate::code::MAX_SNIPPET_LEN);
+    let patch = cut.patch().unwrap();
+    assert!(
+        patch.starts_with("@@ -0,0 +1,1000 @@\n+line 0\n"),
+        "{patch}"
+    );
+    assert!(patch.ends_with("…\n"), "{patch}");
 }

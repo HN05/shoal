@@ -41,8 +41,10 @@ pub(in crate::cli) async fn post(ctx: &Context, mut posting: Posting) -> Result<
     let attachments = crate::cli::commands::send::attachments(&posting.attach)?;
     shoal_protocol::files::check_sent(&attachments)?;
     let code = super::code_refs(std::mem::take(&mut posting.options.code))?;
+    let changes = std::mem::take(&mut posting.options.changes);
     let post = new_post(posting)?;
-    let posted = threads::post(&ctx.paths, thread, post, attachments, code, from).await?;
+    let posted = threads::post(&ctx.paths, thread, post, attachments, code, changes, from);
+    let posted = posted.await?;
     let mine = posted.posts.last().context("the post was not recorded")?;
     if !wait {
         let to = match mine.side {

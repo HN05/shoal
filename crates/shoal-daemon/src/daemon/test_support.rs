@@ -369,9 +369,16 @@ pub(crate) async fn ask(
         ..NewPost::default()
     };
     let number = ThreadNumber::Full(thread.number);
-    (manager.post_to_thread(Some(&caller), number, post, Vec::new(), Vec::new()))
-        .await
-        .unwrap()
+    (manager.post_to_thread(
+        Some(&caller),
+        number,
+        post,
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    ))
+    .await
+    .unwrap()
 }
 
 /// Have the user reply `text` in the thread `number`, as the holder.
@@ -389,6 +396,7 @@ pub(crate) async fn answer(
         None,
         ThreadNumber::Full(number),
         post,
+        Vec::new(),
         Vec::new(),
         Vec::new(),
     ))

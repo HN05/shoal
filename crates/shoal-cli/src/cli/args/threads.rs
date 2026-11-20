@@ -146,6 +146,11 @@ pub struct PostArgs {
     /// receives each at its lines then; --attach sends a copy instead.
     #[arg(long, value_name = "PATH[:FIRST-LAST]")]
     pub code: Vec<CodeArg>,
+    /// Changes, as shoal changes numbers them, that the post points at,
+    /// such as 12,14, or 3.12 for change 12 of space 3; the other side
+    /// receives their diff where their code is then.
+    #[arg(long, value_name = "CHANGES", value_delimiter = ',')]
+    pub changes: Vec<ChangeNumber>,
     /// Wait for the other side's next post and print it.
     #[arg(long)]
     pub wait: bool,
@@ -162,6 +167,7 @@ impl PostArgs {
             || self.recommend.is_some()
             || self.choose.is_some()
             || !self.code.is_empty()
+            || !self.changes.is_empty()
             || self.wait
             || self.resume.is_some()
     }

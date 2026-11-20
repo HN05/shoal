@@ -43,10 +43,12 @@ pub(super) async fn handle(
             post,
             attachments,
             code,
+            changes,
             from,
         } => {
             let acting = acting(manager, caller, from).await?;
-            let posted = manager.post_to_thread(acting.as_ref(), number, post, attachments, code);
+            let posted =
+                manager.post_to_thread(acting.as_ref(), number, post, attachments, code, changes);
             thread(posted.await?)
         }
         ThreadMethod::PostInChat {

@@ -6,6 +6,7 @@ use anyhow::{Context as _, Result};
 use rusqlite::{Connection, OptionalExtension as _, Transaction, params};
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::{
+    changes::MAX_ENTRIES_BYTES,
     space_names::{MAX_SPACE_NAME_LEN, SpaceName},
     threads::{
         Holder, MAX_THREAD_BYTES, NewPost, Outcome, Post, Resolution, Sender, Side, Thread,
@@ -19,6 +20,7 @@ use crate::daemon::{
     store::sent_files::{sent_files, sent_ids},
     workspace_files::SentFile,
 };
+use crate::time::UnixTime;
 
 /// The filter on a `threads` row aliased `t` that keeps open threads.
 pub(super) const OPEN: &str = "t.outcome IS NULL";
@@ -30,7 +32,8 @@ const NUMBERED: &str = "t.space_number IS NOT NULL";
 const THREADS: &str = "SELECT t.id,t.space_number,t.number,t.space_id,
         COALESCE(s.name,t.space_id) AS space,t.kind,t.name,t.created_at,t.opener,t.holder_id,
         h.name AS holder_name,h.number AS holder_number,t.outcome,t.resolved_by,t.resolver_id,
-        t.resolved_at
+        t.resolved_at,EXISTS (SELECT 1 FROM space_current_thread c
+            WHERE c.thread_id=t.id AND c.space_id=t.holder_id) AS working
     FROM threads t LEFT JOIN spaces s ON s.id=t.space_id LEFT JOIN spaces h ON h.id=t.holder_id";
 
 fn thread(row: &rusqlite::Row<'_>) -> rusqlite::Result<Thread> {
@@ -66,6 +69,8 @@ fn thread(row: &rusqlite::Row<'_>) -> rusqlite::Result<Thread> {
         created_at: row.get("created_at")?,
         posts: Vec::new(),
         resolution,
+        working: row.get("working")?,
+        changes: Vec::new(),
     })
 }
 
@@ -112,6 +117,7 @@ fn post(row: &rusqlite::Row<'_>) -> rusqlite::Result<(i64, Post)> {
         },
         files: (crate::daemon::store::json_column(row, "files")?).unwrap_or_default(),
         code: Vec::new(),
+        changes: Vec::new(),
         in_chat: row.get("in_chat")?,
         forwarded_to,
         alert_id: row.get("alert_id")?,
@@ -131,23 +137,40 @@ pub(super) fn query(
         .query_map(params, thread)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let ids: Vec<i64> = threads.iter().map(|thread| thread.id).collect();
-    let mut posts: HashMap<i64, Vec<Post>> = HashMap::new();
+    let mut posts = posts_of(db, &ids)?;
+    let times: HashMap<i64, Vec<UnixTime>> = (posts.iter())
+        .map(|(thread, posts)| {
+            let speaking = posts.iter().filter(|post| post.speaks());
+            (*thread, speaking.map(|post| post.created_at).collect())
+        })
+        .collect();
+    let mut changes = crate::daemon::changes::records::entries(db, &ids, &times)?;
+    for thread in &mut threads {
+        thread.posts = posts.remove(&thread.id).unwrap_or_default();
+        thread.changes = changes.remove(&thread.id).unwrap_or_default();
+    }
+    Ok(threads)
+}
+
+/// The posts of each of the threads `threads`, oldest first, with the
+/// code and changes each points at.
+fn posts_of(db: &Connection, threads: &[i64]) -> Result<HashMap<i64, Vec<Post>>> {
     let found = db
         .prepare(&format!(
             "{POSTS} WHERE p.thread_id IN (SELECT value FROM json_each(?1)) ORDER BY p.id"
         ))?
-        .query_map([serde_json::to_string(&ids)?], post)?
+        .query_map([serde_json::to_string(threads)?], post)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let post_ids: Vec<i64> = found.iter().map(|(_, post)| post.id).collect();
     let mut code = super::code::records::of_posts(db, &post_ids)?;
+    let mut changes = crate::daemon::changes::records::of_posts(db, &post_ids)?;
+    let mut posts: HashMap<i64, Vec<Post>> = HashMap::new();
     for (thread, mut post) in found {
         post.code = code.remove(&post.id).unwrap_or_default();
+        post.changes = changes.remove(&post.id).unwrap_or_default();
         posts.entry(thread).or_default().push(post);
     }
-    for thread in &mut threads {
-        thread.posts = posts.remove(&thread.id).unwrap_or_default();
-    }
-    Ok(threads)
+    Ok(posts)
 }
 
 /// The thread `number` names, while its space has that number.
@@ -416,10 +439,12 @@ pub(super) fn set_link(
 /// Refuse `thread` once it takes more than one response carries, which
 /// rolls back the post that made it so. It is measured with every space it
 /// names at its longest name and number, since a rename or a renumbering
-/// of a space it names later changes what it takes.
+/// of a space it names later changes what it takes, and with its change
+/// entries at their budget, since changes keep coming without a post.
 pub(super) fn ensure_fits(thread: &Thread) -> Result<()> {
+    let posts = serde_json::to_vec(&at_longest(thread))?.len();
     anyhow::ensure!(
-        serde_json::to_vec(&at_longest(thread))?.len() <= MAX_THREAD_BYTES,
+        posts + MAX_ENTRIES_BYTES <= MAX_THREAD_BYTES,
         "thread {} would take more than {MAX_THREAD_BYTES} bytes; open a new thread to go on",
         thread.number
     );
@@ -441,8 +466,12 @@ fn at_longest(thread: &Thread) -> Thread {
     if let Holder::Space(holder) = &mut thread.holder {
         longest(holder);
     }
+    thread.changes.clear();
     for post in &mut thread.posts {
         post.space.iter_mut().for_each(longest);
+        for change in &mut post.changes {
+            longest(&mut change.change.space);
+        }
         if let Some(Holder::Space(to)) = &mut post.forwarded_to {
             longest(to);
         }

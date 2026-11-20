@@ -38,6 +38,7 @@ async fn a_post_s_code_reaches_the_other_side_at_its_lines_with_its_snippet() {
             post("Rename it"),
             Vec::new(),
             code,
+            Vec::new(),
         )
         .await
         .unwrap();
@@ -78,6 +79,7 @@ async fn code_outside_the_caller_s_scope_is_refused() {
             post("Look"),
             Vec::new(),
             elsewhere,
+            Vec::new(),
         )
         .await;
     let refused = posted.unwrap_err().to_string();
@@ -90,6 +92,7 @@ async fn code_outside_the_caller_s_scope_is_refused() {
             post("Look"),
             Vec::new(),
             past_the_end,
+            Vec::new(),
         )
         .await;
     let refused = posted.unwrap_err().to_string();
@@ -106,6 +109,7 @@ async fn code_outside_the_caller_s_scope_is_refused() {
             post("Look"),
             Vec::new(),
             backwards,
+            Vec::new(),
         )
         .await;
     let refused = posted.unwrap_err().to_string();
@@ -150,9 +154,16 @@ async fn expiry_lets_go_of_the_versions_of_threads_that_went() {
     let (manager, child) = (&tree.manager, caller(&tree.child));
     let thread = open(manager, Some(&child), None).await;
     let code = vec![at(parser(&tree.child), "1-3")];
-    (manager.post_to_thread(Some(&child), full(&thread), post("Here"), Vec::new(), code))
-        .await
-        .unwrap();
+    (manager.post_to_thread(
+        Some(&child),
+        full(&thread),
+        post("Here"),
+        Vec::new(),
+        code,
+        Vec::new(),
+    ))
+    .await
+    .unwrap();
     let repository = tree.child.repository_id.clone().unwrap();
     let repo = manager.repository(&repository).await.unwrap();
     let reference = git::code_versions::reference(tree.child.id.as_str());
@@ -175,9 +186,16 @@ async fn about_parser(tree: &super::super::tests::Tree, lines: &str) -> ThreadNu
     let (manager, child) = (&tree.manager, caller(&tree.child));
     let thread = open(manager, Some(&child), None).await;
     let code = vec![at(parser(&tree.child), lines)];
-    (manager.post_to_thread(Some(&child), full(&thread), post("Here"), Vec::new(), code))
-        .await
-        .unwrap();
+    (manager.post_to_thread(
+        Some(&child),
+        full(&thread),
+        post("Here"),
+        Vec::new(),
+        code,
+        Vec::new(),
+    ))
+    .await
+    .unwrap();
     full(&thread)
 }
 
@@ -236,7 +254,14 @@ async fn a_reference_that_cannot_be_followed_leaves_the_others_to_follow() {
     fs::write(&lexer, "fn lex() {}\n").unwrap();
     let code = vec![at(lexer.clone(), "1"), at(parser(&tree.child), "5")];
     let posted = manager
-        .post_to_thread(Some(&child), full(&thread), post("Here"), Vec::new(), code)
+        .post_to_thread(
+            Some(&child),
+            full(&thread),
+            post("Here"),
+            Vec::new(),
+            code,
+            Vec::new(),
+        )
         .await
         .unwrap();
     // The version the first was last followed to is gone from Git.
@@ -291,6 +316,7 @@ async fn a_chat_points_at_code_in_the_worktree_it_runs_in() {
             post("This?"),
             Vec::new(),
             code,
+            Vec::new(),
         )
         .await
         .unwrap();

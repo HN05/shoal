@@ -756,6 +756,7 @@ async fn a_wrapper_whose_terminal_reads_status_reports_hears_the_spaces_status()
             question,
             Vec::new(),
             Vec::new(),
+            Vec::new(),
         )
         .await
         .unwrap();

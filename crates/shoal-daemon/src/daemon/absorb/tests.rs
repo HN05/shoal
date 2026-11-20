@@ -224,9 +224,16 @@ async fn a_forced_squash_takes_the_open_threads_of_work_that_is_not_done() {
     };
     let attached = vec![NewFile::from(screenshot)];
     let number = ThreadNumber::Full(thread.number);
-    (manager.post_to_thread(Some(&caller), number, post, attached, Vec::new()))
-        .await
-        .unwrap();
+    (manager.post_to_thread(
+        Some(&caller),
+        number,
+        post,
+        attached,
+        Vec::new(),
+        Vec::new(),
+    ))
+    .await
+    .unwrap();
     let parent_head = head(&parent.path);
 
     let refused = manager.absorb_space(&absorb(&worker), None).await;

@@ -38,25 +38,30 @@ impl Hunk {
 
     /// Its header and lines, as a unified diff without context shows it.
     pub fn patch(&self) -> String {
-        let (removed, added) = (self.removed.len(), self.added.len());
-        // A header counts from 1, and names the line before an empty side.
+        self.header(self.removed.len(), self.added.len()) + &self.lines()
+    }
+
+    /// Its removed lines marked `-`, then its added ones marked `+`.
+    pub fn lines(&self) -> String {
+        let removed = self.removed.iter().map(|line| format!("-{line}\n"));
+        let added = self.added.iter().map(|line| format!("+{line}\n"));
+        removed.chain(added).collect()
+    }
+
+    /// Its unified diff header for a hunk that removed `removed` lines and
+    /// added `added`, which counts from 1 and names the line before an
+    /// empty side.
+    pub fn header(&self, removed: usize, added: usize) -> String {
         let side = |start: u32, count: usize| match count {
             0 => format!("{start},0"),
             1 => (start + 1).to_string(),
             count => format!("{},{count}", start + 1),
         };
-        let mut patch = format!(
+        format!(
             "@@ -{} +{} @@\n",
             side(self.before, removed),
             side(self.lines.start, added)
-        );
-        for line in &self.removed {
-            patch.push_str(&format!("-{line}\n"));
-        }
-        for line in &self.added {
-            patch.push_str(&format!("+{line}\n"));
-        }
-        patch
+        )
     }
 }
 

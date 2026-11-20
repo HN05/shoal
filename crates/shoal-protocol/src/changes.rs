@@ -14,8 +14,10 @@ use crate::{
     threads::ThreadSpace,
 };
 
+mod entries;
 mod hunks;
 
+pub use entries::{ChangeEntry, Counted, EntryFile, MAX_ENTRIES_BYTES, MoreFiles, entries};
 pub use hunks::{Hunk, diff, header_start, split, unapply};
 
 states!(
@@ -133,34 +135,50 @@ pub struct ChangeDiff {
     pub removed_lines: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub added_lines: Vec<String>,
+    /// Whether its lines stop short of the change's, as a post's do.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cut: bool,
 }
 
 impl ChangeDiff {
     /// Its hunk where Shoal last followed it to, as a unified diff without
-    /// context shows it; none for a file without hunks.
+    /// context shows it, marked where its lines stop short; none for a
+    /// file without hunks.
     pub fn patch(&self) -> Option<String> {
-        let lines = self.change.latest.lines?;
         let hunk = Hunk {
             before: self.before,
-            lines,
+            lines: self.change.latest.lines?,
             removed: self.removed_lines.clone(),
             added: self.added_lines.clone(),
         };
-        Some(hunk.patch())
+        let mut patch = hunk.header(self.change.removed as usize, self.change.added as usize);
+        patch.push_str(&hunk.lines());
+        if self.cut {
+            patch.push_str("…\n");
+        }
+        Some(patch)
     }
-}
 
-/// What one turn of one agent changed for a thread, which its history
-/// shows between its posts.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ChangeEntry {
-    /// When its first change was made.
-    pub at: crate::time::UnixTime,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub turn: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub execution: Option<ExecutionId>,
-    pub changes: Vec<Change>,
+    /// It with whole lines only up to [`MAX_SNIPPET_LEN`] bytes, removed
+    /// ones first, as a post carries it; `diff --thread` shows the rest.
+    pub fn cut_to_snippet(mut self) -> Self {
+        let mut left = crate::code::MAX_SNIPPET_LEN;
+        let mut keep = |lines: &mut Vec<String>| {
+            let kept = lines.iter().take_while(|line| {
+                let fits = line.len() < left;
+                left = left.saturating_sub(line.len() + 1);
+                fits
+            });
+            let kept = kept.count();
+            let cut = kept < lines.len();
+            lines.truncate(kept);
+            cut
+        };
+        let removed = keep(&mut self.removed_lines);
+        let added = keep(&mut self.added_lines);
+        self.cut = removed || added;
+        self
+    }
 }
 
 /// The size of a set of changes: the files whose hunks they hold, and the
@@ -182,6 +200,31 @@ impl ChangeSize {
             size.removed += u64::from(change.removed);
         }
         size.files = files.len();
+        size
+    }
+
+    /// The size of the changes `entries` count; the files an entry sums up
+    /// without naming them count as files of their own.
+    pub fn of_entries<'a>(entries: impl IntoIterator<Item = &'a ChangeEntry>) -> Self {
+        let mut files = BTreeSet::new();
+        let mut size = Self::default();
+        for entry in entries {
+            let text = entry
+                .files
+                .iter()
+                .filter(|file| file.kind == ChangeKind::Text);
+            for file in text {
+                files.insert((&entry.space.id, &file.path));
+                size.added += u64::from(file.added);
+                size.removed += u64::from(file.removed);
+            }
+            if let Some(more) = &entry.more {
+                size.files += more.files as usize;
+                size.added += more.added;
+                size.removed += more.removed;
+            }
+        }
+        size.files += files.len();
         size
     }
 

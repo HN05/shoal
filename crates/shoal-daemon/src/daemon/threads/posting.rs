@@ -6,6 +6,7 @@ use anyhow::{Context as _, Result, ensure};
 use rusqlite::Transaction;
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
+    changes::ChangeNumber,
     code::NewCodeRef,
     space_names::{SpaceName, SpaceSelector},
     threads::{Holder, MAX_CHOICES, MAX_POST_LEN, NewPost, Sender, Side, Thread, ThreadNumber},
@@ -94,12 +95,13 @@ impl Poster {
     }
 }
 
-/// What a post carries besides its text: copies of files and places in
-/// code.
+/// What a post carries besides its text: copies of files, places in code
+/// and changes, by their space and number.
 #[derive(Clone, Copy, Default)]
 pub(super) struct Attached<'a> {
     pub(super) files: &'a [SentFile],
     pub(super) code: &'a [NewCode],
+    pub(super) changes: &'a [(SpaceId, u32)],
 }
 
 /// The opening post of a thread about code: who posts it, and the places
@@ -125,8 +127,8 @@ impl Opening {
             ..NewPost::default()
         };
         let attached = Attached {
-            files: &[],
             code: &self.code,
+            ..Attached::default()
         };
         record_post(tx, id, &self.poster, &post, attached, false, removing)
     }
@@ -154,7 +156,7 @@ pub(super) fn record_post(
     if poster.side == Side::Opener && thread.opener == Sender::Space {
         removing.require_taking_work(tx, &thread.space_id)?;
     }
-    records::insert_post(
+    let recorded = records::insert_post(
         tx,
         &NewRecord {
             thread: id,
@@ -166,6 +168,7 @@ pub(super) fn record_post(
             forwards: None,
         },
     )?;
+    crate::daemon::changes::records::point(tx, recorded, attached.changes)?;
     let thread = records::reread(tx, id)?;
     records::ensure_fits(&thread)?;
     let mut delivered = Delivered::default();
@@ -174,9 +177,10 @@ pub(super) fn record_post(
 }
 
 impl Manager {
-    /// Add `post` with copies of the files `attachments` and the places in
-    /// code `code` to the thread `number` from `caller`'s side, or the
-    /// user's without a caller, and deliver it to the other side.
+    /// Add `post` with copies of the files `attachments`, the places in
+    /// code `code` and the changes `changes` to the thread `number` from
+    /// `caller`'s side, or the user's without a caller, and deliver it to
+    /// the other side.
     pub async fn post_to_thread(
         &self,
         caller: Option<&Caller>,
@@ -184,9 +188,11 @@ impl Manager {
         post: NewPost,
         attachments: Vec<NewFile>,
         code: Vec<NewCodeRef>,
+        changes: Vec<ChangeNumber>,
     ) -> Result<Thread> {
         workspace_files::check_sent(&attachments)?;
         let code = self.new_code(caller, code).await?;
+        let changes = self.named_changes(caller, None, &changes).await?;
         let thread = self.readable_thread(caller, number).await?;
         let side = self.side(caller, &thread).await?;
         let post = picked(&thread, side, post)?;
@@ -209,6 +215,7 @@ impl Manager {
                         let attached = Attached {
                             files: &files,
                             code: &code,
+                            changes: &changes,
                         };
                         record_post(tx, id, &poster, &post, attached, false, &removing)
                     })

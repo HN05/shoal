@@ -114,7 +114,16 @@ async fn reply(ctx: &Context, thread: Thread) -> Result<i32> {
         ..NewPost::default()
     };
     let number = ThreadNumber::Full(thread.number);
-    let posted = threads::post(&ctx.paths, number, post, Vec::new(), Vec::new(), None).await?;
+    let posted = threads::post(
+        &ctx.paths,
+        number,
+        post,
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        None,
+    );
+    let posted = posted.await?;
     ctx.emit(&format!("Replied in thread {}.", posted.number), &posted)?;
     Ok(0)
 }

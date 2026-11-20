@@ -151,6 +151,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         },
         attachments: Vec::new(),
         code: Vec::new(),
+        changes: Vec::new(),
         from: None,
     };
     let answered = reply(&mut send(socket, answer).await).await;

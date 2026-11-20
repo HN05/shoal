@@ -20,6 +20,7 @@ fn post(id: i64, side: Side) -> Post {
         },
         files: Vec::new(),
         code: Vec::new(),
+        changes: Vec::new(),
         in_chat: false,
         forwarded_to: None,
         alert_id: None,
@@ -39,6 +40,8 @@ fn thread(opener: Sender, holder: Holder, posts: Vec<Post>) -> Thread {
         created_at: crate::time::UnixTime::from_seconds(1),
         posts,
         resolution: None,
+        working: false,
+        changes: Vec::new(),
     }
 }
 
@@ -152,6 +155,9 @@ fn a_thread_s_status_follows_whose_turn_it_is_and_its_outcome() {
     let replied = vec![post(1, Side::Opener), post(2, Side::Holder)];
     let mut replied = thread(Sender::Space, Holder::User, replied);
     assert_eq!(replied.status(), ThreadStatus::Waiting);
+    // Its holder's agent switched to it, whoever's turn it is.
+    replied.working = true;
+    assert_eq!(replied.status(), ThreadStatus::Working);
     replied.resolution = Some(Resolution {
         outcome: Outcome::Done,
         by: Sender::Space,

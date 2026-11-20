@@ -265,6 +265,9 @@ pub struct Post {
     /// The places in code it points at.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub code: Vec<crate::code::CodeRef>,
+    /// The changes it points at, where Shoal followed them to.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changes: Vec<crate::changes::ChangeDiff>,
     /// Whether it is the final message of a turn in the sender's chat.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub in_chat: bool,
@@ -297,6 +300,8 @@ impl Post {
 /// comes from its posts and resolution, not a record of its own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThreadStatus {
+    /// Open, and its holder's agent works for it: its changes go to it.
+    Working,
     /// Open, and its last post is its opener's: its holder's turn.
     Queued,
     /// Open, and its last post is its holder's, or it has none: its
@@ -309,6 +314,7 @@ pub enum ThreadStatus {
 impl fmt::Display for ThreadStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Working => f.write_str("working"),
             Self::Queued => f.write_str("queued"),
             Self::Waiting => f.write_str("waiting"),
             Self::Resolved(outcome) => outcome.fmt(f),
@@ -350,6 +356,13 @@ pub struct Thread {
     pub posts: Vec<Post>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resolution: Option<Resolution>,
+    /// Whether its holder's agent works for it now, having switched to it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub working: bool,
+    /// What agents changed for it, one entry per turn, which its history
+    /// shows between its posts.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changes: Vec<crate::changes::ChangeEntry>,
 }
 
 impl Thread {
@@ -374,6 +387,7 @@ impl Thread {
     pub fn status(&self) -> ThreadStatus {
         match (&self.resolution, self.awaits()) {
             (Some(resolution), _) => ThreadStatus::Resolved(resolution.outcome.kind()),
+            (None, _) if self.working => ThreadStatus::Working,
             (None, Some(Side::Holder)) => ThreadStatus::Queued,
             (None, Some(Side::Opener) | None) => ThreadStatus::Waiting,
         }

@@ -9,8 +9,9 @@ use anyhow::Result;
 use rusqlite::{Transaction, params};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
+    changes::ChangeSize,
     space_names::SpaceName,
-    threads::{Holder, Post, Sender, Side, Thread, ThreadKind},
+    threads::{Holder, Post, Sender, Side, Thread, ThreadKind, ThreadSpace},
 };
 
 use crate::daemon::{
@@ -204,11 +205,24 @@ impl Texts {
         }
         let reader = Party::of(thread, to);
         agent.push_str(&code_lines(post, reader.as_ref()));
+        let changed = changes_since(thread, post);
+        if let Some((size, command)) = &changed {
+            agent.push_str(&format!(
+                "\nChanges for it since then: {size} (`{command}`)"
+            ));
+        }
         agent.push_str(&format!("\n{}", hint(thread, to)));
+        agent.push_str(&switch_reminder(thread, reader.as_ref()));
         Self {
             kind: AlertKind::ThreadPosted,
             agent: crate::validate::shorten(agent, crate::validate::MAX_AGENT_MESSAGE_LEN),
-            user: thread.notice(),
+            user: match changed {
+                Some((size, _)) => crate::validate::shorten(
+                    format!("{} [{size}]", thread.notice()),
+                    crate::validate::MAX_MESSAGE_LEN,
+                ),
+                None => thread.notice(),
+            },
         }
     }
 
@@ -292,19 +306,65 @@ impl Texts {
     }
 }
 
-/// The places in code `post` points at, each on lines of its own with its
-/// snippet, naming the space whose worktree it is in unless that is
-/// `reader`'s.
+/// The places in code and the changes `post` points at, each on lines of
+/// its own with its snippet or diff, naming the space whose worktree it is
+/// in unless that is `reader`'s.
 fn code_lines(post: &Post, reader: Option<&Party>) -> String {
     let mut lines = String::new();
+    let elsewhere = |space: &ThreadSpace| reader != Some(&Party::Space(space.id.clone()));
     for code in &post.code {
         lines.push_str(&format!("\nCode: {}", code.place()));
-        if reader != Some(&Party::Space(code.space.id.clone())) {
+        if elsewhere(&code.space) {
             lines.push_str(&format!(" in {}", code.space.label()));
         }
         lines.push_str(&code.snippet_lines("    "));
     }
+    for diff in &post.changes {
+        let change = &diff.change;
+        lines.push_str(&format!("\nChange {}: {}", change.number, change.place()));
+        if elsewhere(&change.space) {
+            lines.push_str(&format!(" in {}", change.space.label()));
+        }
+        for line in diff.patch().iter().flat_map(|patch| patch.lines()) {
+            lines.push_str(&format!("\n    {line}"));
+        }
+    }
     lines
+}
+
+/// The size of the changes made for `thread` since the last post before
+/// `post` from its side, with the command that shows them; none without
+/// any.
+fn changes_since(thread: &Thread, post: &Post) -> Option<(ChangeSize, String)> {
+    let speaking: Vec<&Post> = thread.posts.iter().filter(|post| post.speaks()).collect();
+    let last = (speaking.iter().enumerate())
+        .rfind(|(_, earlier)| earlier.id < post.id && earlier.side == post.side);
+    let since = last.map(|(_, earlier)| earlier.created_at);
+    let entries =
+        (thread.changes.iter()).filter(|entry| since.is_none_or(|since| entry.at >= since));
+    let size = ChangeSize::of_entries(entries);
+    if size.is_empty() {
+        return None;
+    }
+    let number = thread.number;
+    let command = match last {
+        Some((index, _)) => format!("shoal diff --thread {number} --since {}", index + 1),
+        None => format!("shoal diff --thread {number}"),
+    };
+    Some((size, command))
+}
+
+/// The reminder a space's agent reads with a post in `thread` to switch to
+/// it before working on it, which sends a workspace's changes to it and
+/// shows it `working`; nothing for the user.
+fn switch_reminder(thread: &Thread, reader: Option<&Party>) -> String {
+    match reader {
+        Some(Party::Space(_)) => format!(
+            " Run `shoal thread switch {}` before working on it.",
+            thread.number
+        ),
+        _ => String::new(),
+    }
 }
 
 /// What the party on `side` of `thread` does next.

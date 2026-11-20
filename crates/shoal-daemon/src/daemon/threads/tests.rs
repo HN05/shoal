@@ -114,7 +114,14 @@ pub(super) async fn open(
 
 async fn send(manager: &Manager, from: Option<&Caller>, thread: &Thread, text: &str) -> Thread {
     manager
-        .post_to_thread(from, full(thread), post(text), Vec::new(), Vec::new())
+        .post_to_thread(
+            from,
+            full(thread),
+            post(text),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
         .await
         .unwrap()
 }
@@ -201,6 +208,7 @@ async fn the_user_asks_a_space_and_hears_its_reply() {
             Some(&outsider),
             full(&thread),
             post("Hi"),
+            Vec::new(),
             Vec::new(),
             Vec::new(),
         )
@@ -301,7 +309,14 @@ async fn a_post_that_would_outgrow_one_response_is_refused_whole() {
     let long = "x".repeat(shoal_protocol::threads::MAX_POST_LEN);
     let mut posted = 0;
     let refused = loop {
-        let post = manager.post_to_thread(None, full(&thread), post(&long), Vec::new(), Vec::new());
+        let post = manager.post_to_thread(
+            None,
+            full(&thread),
+            post(&long),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
         match post.await {
             Ok(_) => posted += 1,
             Err(error) => break error,
@@ -331,6 +346,7 @@ async fn a_rename_keeps_a_full_thread_within_one_response() {
             Some(&beside),
             full(&thread),
             post(&text),
+            Vec::new(),
             Vec::new(),
             Vec::new(),
         );
@@ -363,6 +379,7 @@ async fn a_space_being_removed_starts_no_wait() {
         post("Which?"),
         Vec::new(),
         Vec::new(),
+        Vec::new(),
     );
     assert!(asked.await.is_err());
     assert!(!manager.has_waiting_threads(&tree.child.id).await.unwrap());
@@ -372,6 +389,7 @@ async fn a_space_being_removed_starts_no_wait() {
         Some(&parent),
         full(&thread),
         post("FYI"),
+        Vec::new(),
         Vec::new(),
         Vec::new(),
     );
@@ -456,9 +474,16 @@ async fn the_user_s_threads_list_past_larger_newer_threads() {
     let long = "x".repeat(shoal_protocol::threads::MAX_POST_LEN);
     for space in [&tree.child, &tree.sibling] {
         let thread = open(manager, None, Some(space)).await;
-        while (manager.post_to_thread(None, full(&thread), post(&long), Vec::new(), Vec::new()))
-            .await
-            .is_ok()
+        while (manager.post_to_thread(
+            None,
+            full(&thread),
+            post(&long),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        ))
+        .await
+        .is_ok()
         {}
     }
     let open = shoal_protocol::threads::ThreadState::Open;
@@ -598,6 +623,7 @@ async fn the_opener_resolves_its_thread_and_takes_back_an_unread_notice() {
         post("More"),
         Vec::new(),
         Vec::new(),
+        Vec::new(),
     );
     assert!(resolved.await.is_err());
 
@@ -620,9 +646,16 @@ async fn an_answer_picks_one_of_the_choices_the_other_side_offered() {
         recommendation: Some("SQLite".into()),
         ..post("Which database?")
     };
-    (manager.post_to_thread(Some(&child), full(&thread), asked, Vec::new(), Vec::new()))
-        .await
-        .unwrap();
+    (manager.post_to_thread(
+        Some(&child),
+        full(&thread),
+        asked,
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    ))
+    .await
+    .unwrap();
     let parent = caller(&tree.parent);
     let choose = |choice| NewPost {
         choice: Some(choice),
@@ -634,6 +667,7 @@ async fn an_answer_picks_one_of_the_choices_the_other_side_offered() {
         choose(3),
         Vec::new(),
         Vec::new(),
+        Vec::new(),
     );
     assert!(outside.await.is_err());
     let chose = manager
@@ -641,6 +675,7 @@ async fn an_answer_picks_one_of_the_choices_the_other_side_offered() {
             Some(&parent),
             full(&thread),
             choose(2),
+            Vec::new(),
             Vec::new(),
             Vec::new(),
         )
@@ -652,6 +687,7 @@ async fn an_answer_picks_one_of_the_choices_the_other_side_offered() {
         Some(&child),
         full(&thread),
         choose(1),
+        Vec::new(),
         Vec::new(),
         Vec::new(),
     );

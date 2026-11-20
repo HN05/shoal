@@ -239,7 +239,7 @@ const REQUESTS: &[&str] = &[
     r#"{"agent_session":{"space":"app-chat"}}"#,
     // Threads.
     r#"{"open_thread":{"name":"Which database?","kind":"question","to":"part","from":"planning"}}"#,
-    r#"{"post":{"thread":4,"post":{"text":"Which?","choices":["A","B"],"recommendation":"A","reason":"Simpler"}}}"#,
+    r#"{"post":{"thread":4,"post":{"text":"Which?","choices":["A","B"],"recommendation":"A","reason":"Simpler"},"changes":[12,14]}}"#,
     r#"{"post_in_chat":{"space":"fix","thread":6}}"#,
     r#"{"alert_in_chat":{"to":{"space":{"space":"part"}},"attachments":[{"path":"/fix/log.txt"}]}}"#,
     r#"{"replied_in_chat":{"space":"fix","prompt":"Use SQLite"}}"#,

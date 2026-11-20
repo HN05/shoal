@@ -148,7 +148,7 @@ impl Manager {
     /// The space and number of each change `numbers` names for `caller`:
     /// a bare number of `space`, else of the caller's own, and a full one
     /// of the space numbered so, each a space the caller's scope reaches.
-    async fn named_changes(
+    pub(in crate::daemon) async fn named_changes(
         &self,
         caller: Option<&Caller>,
         space: Option<&SpaceSelector>,

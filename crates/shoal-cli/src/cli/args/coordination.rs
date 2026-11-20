@@ -27,7 +27,7 @@ pub enum CoordinationCommand {
         /// post in the thread named first, which a prompt in your
         /// conversation answers, or else as the alert. A prompt the user
         /// submits during the turn drops it.
-        #[arg(long, conflicts_with_all = ["body_file", "code", "choices", "recommend", "choose", "wait", "resume"])]
+        #[arg(long, conflicts_with_all = ["body_file", "code", "changes", "choices", "recommend", "choose", "wait", "resume"])]
         in_chat: bool,
         /// Attach a file, such as a screenshot or log, as PATH or
         /// PATH#TITLE, which Shoal copies where the recipient can read it;

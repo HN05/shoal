@@ -33,14 +33,16 @@ pub async fn open(
     Ok(*request::<Box<Thread>>(daemon, method).await?)
 }
 
-/// Add `post` with `attachments`, pointing at the places in code `code`,
-/// to the thread `thread`, acting as the space `from`.
+/// Add `post` with `attachments`, pointing at the places in code `code`
+/// and the changes `changes`, to the thread `thread`, acting as the space
+/// `from`.
 pub async fn post(
     daemon: &impl Daemon,
     thread: ThreadNumber,
     post: NewPost,
     attachments: Vec<NewFile>,
     code: Vec<NewCodeRef>,
+    changes: Vec<shoal_protocol::changes::ChangeNumber>,
     from: Option<SpaceSelector>,
 ) -> Result<Thread> {
     let method = ThreadMethod::Post {
@@ -48,6 +50,7 @@ pub async fn post(
         post,
         attachments,
         code,
+        changes,
         from,
     };
     Ok(*request::<Box<Thread>>(daemon, method).await?)

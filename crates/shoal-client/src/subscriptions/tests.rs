@@ -83,6 +83,7 @@ async fn ask(manager: &shoal_daemon::test_daemon::Manager, id: &SpaceId) -> Thre
         post,
         Vec::new(),
         Vec::new(),
+        Vec::new(),
     ))
     .await
     .unwrap()
