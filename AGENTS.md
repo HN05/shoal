@@ -165,7 +165,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `crates/shoal-leases` for ports, resource permits, simulators, containers
   and secrets, `crates/shoal-reviews` for local reviews, the gate agent
   and the one-shot agent runs they start, `crates/shoal-hub` for the hub
-  role and membership of a hub, and `crates/shoal-runner` for triggers.
+  role and membership of a hub, and `crates/shoal-runner` for triggers and
+  the CI jobs this machine runs.
   Its service, a field of `Manager`, holds what the subsystem
   keeps in memory and offers its operations; what it needs of other
   subsystems is an interface it declares, as the base does, which the daemon

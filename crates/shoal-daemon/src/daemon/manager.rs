@@ -24,7 +24,7 @@ pub struct Manager {
     /// The spaces automatic cleanup removed since Shoal's log recorded it.
     pub(crate) cleanup_removals: super::cleanup::Removed,
     pub(crate) syncs: super::checkout_sync::Syncs,
-    /// The triggers.
+    /// The triggers and the CI jobs this machine runs.
     pub runner: Arc<shoal_runner::Runner>,
     /// The spaces whose PRs' progress sections wait for an update.
     pub(crate) publications: super::progress::Publications,
