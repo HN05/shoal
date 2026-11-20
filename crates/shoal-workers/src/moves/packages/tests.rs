@@ -35,7 +35,7 @@ fn copied(name: &str, copy: &str) -> SpaceMoved {
     SpaceMoved {
         id: "talk".into(),
         name: name.into(),
-        manifest: manifest.unwrap(),
+        manifest: Some(manifest.unwrap()),
         file: None,
         removal: None,
         arrived: Some(Arrived {

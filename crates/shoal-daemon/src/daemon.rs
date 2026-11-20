@@ -266,6 +266,12 @@ pub async fn run(
     spawn_supervised(
         &mut background,
         &manager,
+        "interrupted moves",
+        moves::finish_interrupted,
+    );
+    spawn_supervised(
+        &mut background,
+        &manager,
         "lost hook reports",
         lost_reports::run,
     );

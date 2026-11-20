@@ -21,12 +21,28 @@ use crate::{
     resume::{Resuming, queue::queue_each},
 };
 use shoal_core::execution::recovery::{SavedCommand, SavedSession};
-use shoal_core::transfer::{Arrived, MoveDestination, MoveOrder, SpaceMoved, StoppedExecutions};
+use shoal_core::transfer::{
+    Arrived, Carrying, ExportedSpace, Manifest, MoveDestination, MoveLock, MoveOrder, SpaceMoved,
+    StoppedExecutions,
+};
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::removal::{RemovalResult, UnsavedWork};
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+
+/// One space on its move: where its package goes on the way, which of the
+/// spaces below it go with it, and what its end here may delete.
+pub(super) struct Moving<'a> {
+    pub(super) id: SpaceId,
+    pub(super) name: SpaceName,
+    pub(super) destination: &'a MoveDestination,
+    pub(super) carrying: Carrying,
+    pub(super) unsaved: UnsavedWork,
+    pub(super) file: PathBuf,
+}
 
 /// Move the `checked` space, with the spaces it carries, as `order` says,
-/// its package going to `file` on the way, telling `steps` how far it got.
+/// its package going to `file` on the way, telling `steps` how far it got,
+/// while it holds the move's lock.
 pub(super) async fn move_one(
     paths: &CommandPaths,
     order: &MoveOrder,
@@ -37,30 +53,98 @@ pub(super) async fn move_one(
     let unsaved = (order.spaces.iter())
         .find(|ordered| ordered.space == id)
         .map_or_else(|| checked.unsaved(), |ordered| ordered.unsaved.clone());
-    steps.reached(Step::MovePacking).await;
-    let space = SpaceSelector::id(&id);
-    let carrying = order.carrying();
-    let destination = order.destination.clone();
-    let packing =
-        crate::client::transfer::export_moving(paths, space, unsaved, destination, carrying);
-    let exported = match packing.await {
-        Ok(exported) => exported,
-        Err(error) => return Err(stays_here(paths, &id, error).await),
-    };
-    let arrived = deliver(paths, &order.destination, (&id, &file), steps).await?;
-    steps.reached(Step::MoveEnding).await;
-    let removal = crate::client::transfer::end_moved(paths, SpaceSelector::id(&id))
-        .await
-        .with_context(|| both_places(&order.destination, &file, &id))?;
-    Ok(SpaceMoved {
+    let moving = Moving {
         id,
         name: checked.name().clone(),
-        manifest: exported.manifest,
-        file: (!matches!(order.destination, MoveDestination::Ssh(_))).then_some(file),
-        removal: Some(removal),
-        arrived,
-        warnings: exported.warnings,
-    })
+        destination: &order.destination,
+        carrying: order.carrying(),
+        unsaved,
+        file,
+    };
+    let lock = MoveLock::take(paths, &moving.id).await?;
+    let moved = move_locked(paths, &moving, steps).await;
+    lock.release();
+    moved
+}
+
+/// Pack the `moving` space, deliver its package and end it here.
+pub(super) async fn move_locked(
+    paths: &CommandPaths,
+    moving: &Moving<'_>,
+    steps: &impl Steps,
+) -> Result<SpaceMoved> {
+    let exported = pack(paths, moving, steps).await?;
+    let mut moved = deliver_and_end(paths, moving, Some(exported.manifest), steps).await?;
+    moved.warnings = exported.warnings;
+    Ok(moved)
+}
+
+/// Have the daemon record the move of the `moving` space, stop its agents
+/// and those of the spaces that go with it, and write their package; a
+/// failure leaves them here.
+async fn pack(
+    paths: &CommandPaths,
+    moving: &Moving<'_>,
+    steps: &impl Steps,
+) -> Result<ExportedSpace> {
+    steps.reached(Step::MovePacking).await;
+    let space = SpaceSelector::id(&moving.id);
+    let (unsaved, carrying) = (moving.unsaved.clone(), moving.carrying.clone());
+    let destination = moving.destination.clone();
+    let packing =
+        crate::client::transfer::export_moving(paths, space, unsaved, destination, carrying);
+    match packing.await {
+        Ok(exported) => Ok(exported),
+        Err(error) => Err(stays_here(paths, &moving.id, error).await),
+    }
+}
+
+/// Deliver the package of the `moving` space, which `manifest` describes
+/// where known, and end the space here once its destination has it.
+pub(super) async fn deliver_and_end(
+    paths: &CommandPaths,
+    moving: &Moving<'_>,
+    manifest: Option<Manifest>,
+    steps: &impl Steps,
+) -> Result<SpaceMoved> {
+    let arrived = deliver(paths, moving.destination, (&moving.id, &moving.file), steps).await?;
+    let removal = end(paths, moving, steps).await?;
+    Ok(moving.moved(manifest, removal, arrived))
+}
+
+impl Moving<'_> {
+    /// The report of this space, whose package `manifest` describes where
+    /// known, once it ended here with `removal`, where it `arrived` on
+    /// another machine.
+    pub(super) fn moved(
+        &self,
+        manifest: Option<Manifest>,
+        removal: RemovalResult,
+        arrived: Option<Arrived>,
+    ) -> SpaceMoved {
+        let shipped = matches!(self.destination, MoveDestination::Ssh(_));
+        SpaceMoved {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            manifest,
+            file: (!shipped).then(|| self.file.clone()),
+            removal: Some(removal),
+            arrived,
+            warnings: Vec::new(),
+        }
+    }
+}
+
+/// End the `moving` space here, which its destination has.
+pub(super) async fn end(
+    paths: &CommandPaths,
+    moving: &Moving<'_>,
+    steps: &impl Steps,
+) -> Result<RemovalResult> {
+    steps.reached(Step::MoveEnding).await;
+    crate::client::transfer::end_moved(paths, SpaceSelector::id(&moving.id))
+        .await
+        .with_context(|| both_places(moving.destination, &moving.file, &moving.id))
 }
 
 /// Hand the package of the space `id` in `file` to `destination`: import
@@ -81,16 +165,27 @@ async fn deliver(
         Ok(arrived) => Ok(Some(arrived)),
         Err(ImportFailure::Refused(error)) => Err(stays_here(paths, id, error).await),
         Err(ImportFailure::Unknown(error)) => {
-            let space = SpaceSelector::id(id);
-            if let Err(abandoned) = crate::client::transfer::abandon_move(paths, space).await {
-                super::warn(&format!("warning: {abandoned:#}"));
-            }
-            Err(error.context(format!(
-                "{host} may already have it, so its agents stay stopped here; if it arrived there, shoal rm {id} removes it here, and otherwise shoal resume {id} continues it here",
-                host = remote.host(),
-            )))
+            Err(maybe_there(paths, id, remote.host(), error).await)
         }
     }
+}
+
+/// `error`, which left it unknown whether `host` has the space `id`, once
+/// its move is forgotten and its agents stay stopped here, since the space
+/// may continue there.
+pub(super) async fn maybe_there(
+    paths: &CommandPaths,
+    id: &SpaceId,
+    host: &str,
+    error: anyhow::Error,
+) -> anyhow::Error {
+    let space = SpaceSelector::id(id);
+    if let Err(abandoned) = crate::client::transfer::abandon_move(paths, space).await {
+        super::warn(&format!("warning: {abandoned:#}"));
+    }
+    error.context(format!(
+        "{host} may already have it, so its agents stay stopped here; if it arrived there, shoal rm {id} removes it here, and otherwise shoal resume {id} continues it here"
+    ))
 }
 
 /// What a move to `destination` of the space `id`, whose package went to

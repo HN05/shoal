@@ -64,7 +64,7 @@ pub(super) async fn export_removed(
     Ok(SpaceMoved {
         id: space.space_id.clone(),
         name: space.name.clone(),
-        manifest: exported.manifest,
+        manifest: Some(exported.manifest),
         file: Some(file),
         removal: exported.removal,
         arrived: None,

@@ -31,7 +31,7 @@ pub(super) async fn copy_one(
     let mut moved = SpaceMoved {
         id: space.id.clone(),
         name: space.name.clone(),
-        manifest: exported.manifest,
+        manifest: Some(exported.manifest),
         file: Some(file.clone()),
         removal: None,
         arrived: None,

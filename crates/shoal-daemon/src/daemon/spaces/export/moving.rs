@@ -81,13 +81,16 @@ impl Manager {
     /// Forget the recorded move of the space `selector` names, which
     /// failed, returning the executions whose stopped work its spaces saved
     /// once it stopped their agents, which the caller restores here when the
-    /// destination has nothing of them.
+    /// destination has nothing of them; none when nothing recorded it.
     pub async fn abandon_move(&self, selector: &SpaceSelector) -> Result<StoppedExecutions> {
         let id = match self.space(selector).await {
             Ok(space) => space.id,
             Err(error) => selector.given_id().cloned().ok_or(error)?,
         };
-        let record = self.recorded_move(&id).await?;
+        let space = id.clone();
+        let Some(record) = self.store.read(move |db| records::read(db, &space)).await? else {
+            return Ok(StoppedExecutions::new());
+        };
         let mut stopped = StoppedExecutions::new();
         for (space, before) in &record.saved_before {
             let Ok(saved) = self.saved_work(&SpaceSelector::id(space)).await else {
@@ -101,6 +104,11 @@ impl Manager {
         }
         self.forget_move(&record).await;
         Ok(stopped)
+    }
+
+    /// The moves in progress.
+    pub(crate) async fn recorded_moves(&self) -> Result<Vec<MoveRecord>> {
+        self.store.read(records::all).await
     }
 
     /// Record the move of `space` and the spaces below it that `carrying`

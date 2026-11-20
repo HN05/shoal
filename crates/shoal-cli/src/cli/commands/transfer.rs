@@ -94,7 +94,11 @@ fn finish(ctx: &Context, chosen: &Chosen, report: MoveReport) -> Result<i32> {
             std::io::copy(&mut file, stdout)?;
             stdout.flush()
         })?;
-        match moved.manifest.copy {
+        match moved
+            .manifest
+            .as_ref()
+            .and_then(|manifest| manifest.copy.as_ref())
+        {
             Some(_) => eprintln!("Exported a copy of {}", moved.name),
             None => eprintln!("Exported {}", moved.name),
         }

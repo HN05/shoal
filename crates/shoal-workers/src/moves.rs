@@ -6,6 +6,7 @@
 //! the same checks to ask before ending what needs the user.
 pub mod checks;
 mod copying;
+mod finishing;
 mod moving;
 mod packages;
 mod ssh;
@@ -16,6 +17,7 @@ use anyhow::{Context as _, Result, ensure};
 
 use crate::{client::connection::CommandPaths, model::Space, protocol::operations::Step};
 use checks::Checked;
+pub use finishing::finish;
 use shoal_core::transfer::{MoveDestination, MoveFailure, MoveOrder, MoveReport, SpaceMoved};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::RemovedSpace;

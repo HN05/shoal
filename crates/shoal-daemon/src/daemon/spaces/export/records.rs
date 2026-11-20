@@ -62,6 +62,14 @@ pub(super) fn read(db: &Connection, space: &SpaceId) -> Result<Option<MoveRecord
         .optional()?)
 }
 
+/// Every recorded move.
+pub(crate) fn all(db: &Transaction<'_>) -> Result<Vec<MoveRecord>> {
+    Ok(db
+        .prepare(&format!("SELECT {COLUMNS} FROM space_moves"))?
+        .query_map([], record)?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// Forget the move of the space `space`.
 pub(super) fn forget(tx: &Transaction<'_>, space: &SpaceId) -> Result<()> {
     tx.execute("DELETE FROM space_moves WHERE space_id=?1", [space])?;

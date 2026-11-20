@@ -263,6 +263,11 @@ pub enum OperationSpec {
     Move {
         order: Box<crate::transfer::MoveOrder>,
     },
+    /// Finish the move `record` records, whose worker went before it ended,
+    /// as when the machine restarted during it.
+    FinishMove {
+        record: Box<crate::transfer::MoveRecord>,
+    },
 }
 
 /// What preparing a workspace runs: creating its worktree when it has none
@@ -438,7 +443,7 @@ impl OperationSpec {
             | Self::Merge { workspace, .. }
             | Self::Unmerge { workspace }
             | Self::Push { workspace, .. } => Some(workspace),
-            Self::Move { .. } => None,
+            Self::Move { .. } | Self::FinishMove { .. } => None,
         }
     }
 
@@ -450,6 +455,7 @@ impl OperationSpec {
             Self::Unmerge { .. } => OperationKind::Unmerge,
             Self::Push { .. } => OperationKind::Push,
             Self::Move { .. } => OperationKind::Move,
+            Self::FinishMove { .. } => OperationKind::FinishMove,
         }
     }
 }
@@ -463,6 +469,7 @@ shoal_states::states!(
         Unmerge => "unmerge",
         Push => "push",
         Move => "move",
+        FinishMove => "finish_move",
     }
 );
 

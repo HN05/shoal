@@ -4787,7 +4787,13 @@ closes. The command checks the spaces and asks what needs the user, then
 follows the move, printing a line for each space as it goes; with `--json`
 it prints what the move did with each space, `moved` and `failed`. An
 interrupt cancels the move before its next space, and a second one stops
-following, leaving it running.
+following, leaving it running. Shoal records each space's move before its
+agents stop, and finishes a move whose worker went, as when the machine
+restarted during it, from how far it got: a space whose destination has its
+package ends here, one nothing of which left moves again, one whose package
+was going to `-o -` stays here with its agents' restores queued, and one
+another machine may have imported stays here with its agents stopped, as
+when the connection drops. An alert tells how each one finished.
 
 `shoal move [space] -o <file>` writes a workspace or chat to a new file, or
 to standard output for `-`, refusing a terminal, and ends it here once the file

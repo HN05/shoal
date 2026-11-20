@@ -3,7 +3,9 @@ use std::fs;
 
 use super::Import;
 use super::transfer::{exporter, import, importer, packaged_workspace};
+use crate::daemon::notifications::AlertKind;
 use crate::daemon::restore::SpaceImport;
+use crate::protocol::operations::{Ended, OperationKind, Outcome};
 use crate::refusal::Reason;
 use crate::{
     daemon::{
@@ -14,7 +16,10 @@ use crate::{
     model::Workspace,
     process::identity,
     removal::UnsavedWork,
-    transfer::{Carrying, ExportedSpace, ManifestExt, MoveDestination, MovePhase, MoveRecord},
+    transfer::{
+        Carrying, ExportedSpace, ManifestExt, MoveDestination, MoveFailure, MoveLock, MovePhase,
+        MoveRecord, MoveReport,
+    },
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_ids::space_ids::SpaceId;
@@ -140,6 +145,45 @@ async fn a_move_is_recorded_with_its_package_until_it_ends() {
 
     exporting.end_moved_space(&selector).await.unwrap();
     assert!(recorded(&exporting, &workspace.id).await.is_none());
+}
+
+#[tokio::test]
+async fn a_move_recorded_before_its_package_was_written_packs_again_under_its_record() {
+    let (source, exporting, source_repo, _origin) = exporter().await;
+    let workspace = stopped_workspace(&exporting, &source_repo).await;
+    let destination = MoveDestination::File {
+        path: source.path().join("moving.shoal"),
+    };
+    // As a daemon that stopped while it packed the space left it.
+    let saved_before = [(workspace.id.clone(), ["earlier".into()].into())].into();
+    let left = MoveRecord {
+        space: workspace.id.clone(),
+        destination: destination.clone(),
+        carrying: Carrying::Subtree,
+        unsaved: UnsavedWork::All,
+        phase: MovePhase::Packing,
+        checkpoints: Default::default(),
+        saved_before,
+    };
+    let inserted = left.clone();
+    (exporting.store)
+        .write(move |tx| super::super::records::insert(tx, &inserted))
+        .await
+        .unwrap();
+
+    let selector = SpaceSelector::id(&workspace.id);
+    let unsaved = UnsavedWork::default();
+    let carrying = Carrying::Subtree;
+    let packing = exporting.export_moving_space(&selector, unsaved, &destination, &carrying);
+    let exported = packing.await.unwrap();
+    let record = recorded(&exporting, &workspace.id).await.unwrap();
+    assert_eq!(record.phase, MovePhase::Delivered);
+    assert_eq!(record.checkpoints, exported_checkpoints(&exported));
+    // What the move's caller let it delete, and what it saved before, stay.
+    assert_eq!(
+        (record.unsaved, record.saved_before),
+        (left.unsaved, left.saved_before)
+    );
 }
 
 #[tokio::test]
@@ -372,4 +416,56 @@ async fn an_import_that_records_nothing_says_so() {
     let error = importing.import_space(import).await.unwrap_err();
     assert_eq!(Reason::of(&error), Some(Reason::NotImported));
     assert!(importing.removed_workspaces().await.unwrap().is_empty());
+}
+
+/// The finishing operations `manager` runs, by the space each finishes.
+fn finishing(manager: &Manager) -> Vec<SpaceId> {
+    (manager.operations.running().into_iter())
+        .filter(|entry| entry.kind == OperationKind::FinishMove)
+        .map(|entry| entry.workspace.clone())
+        .collect()
+}
+
+#[tokio::test]
+async fn a_move_whose_worker_went_finishes_in_a_worker_of_its_own() {
+    let (source, exporting, source_repo, _origin) = exporter().await;
+    let workspace = stopped_workspace(&exporting, &source_repo).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    export_moving(&exporting, &selector, source.path()).await;
+
+    // A worker that holds the move's lock finishes it itself.
+    let held = MoveLock::try_take(&exporting.paths, &workspace.id)
+        .unwrap()
+        .unwrap();
+    exporting.finish_interrupted_moves().await.unwrap();
+    assert!(finishing(&exporting).is_empty());
+
+    held.release();
+    exporting.finish_interrupted_moves().await.unwrap();
+    // A pass while the finishing worker runs starts no other.
+    exporting.finish_interrupted_moves().await.unwrap();
+    assert_eq!(finishing(&exporting), std::slice::from_ref(&workspace.id));
+}
+
+#[tokio::test]
+async fn a_finished_move_tells_the_user_how_each_space_ended() {
+    let (_root, manager) = test_support::manager().await;
+    let report = MoveReport {
+        moved: Vec::new(),
+        failed: vec![MoveFailure {
+            id: "talk".into(),
+            name: "talk".into(),
+            error: "mini may already have it".into(),
+        }],
+    };
+    let ended = Ended::Succeeded(Box::new(Outcome::Moved(report)));
+    manager.tell_finished_move(&ended).await;
+
+    let alerts = manager.notifications.list(true, 10).await.unwrap();
+    let [alert] = alerts.as_slice() else {
+        panic!("expected one alert: {alerts:?}");
+    };
+    assert_eq!(alert.kind, AlertKind::MoveFinished);
+    assert!(alert.message.contains("talk"), "{}", alert.message);
+    assert!(alert.message.contains("mini may already have it"));
 }

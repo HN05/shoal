@@ -133,6 +133,9 @@ async fn work(
         OperationSpec::Move { order } => crate::moves::run(paths, *order, reporter)
             .await
             .map(Outcome::Moved),
+        OperationSpec::FinishMove { record } => crate::moves::finish(paths, *record, reporter)
+            .await
+            .map(Outcome::Moved),
     }
 }
 

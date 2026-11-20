@@ -28,12 +28,15 @@ pub use shoal_protocol::transfer::{
 };
 
 mod carried;
+mod move_lock;
+
 use crate::{
     config::Effective,
     execution::recovery::{Copied, LastSession, Record, StoppedAgent},
     git::{self, default_branch::DefaultBranchLookup},
     model::{RemovedSpace, Repository},
 };
+pub use move_lock::MoveLock;
 use shoal_protocol::transcripts;
 use shoal_protocol::transcripts::Environments;
 

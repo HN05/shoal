@@ -1,15 +1,34 @@
 //! Moves the daemon runs as operations: started on the machine whose
 //! spaces they take, by a worker that checks the spaces, packs them,
 //! delivers the packages and ends the spaces here once their destination
-//! has them, so a move goes on when the caller goes.
+//! has them, so a move goes on when the caller goes. A recorded move whose
+//! worker went, as when the machine restarted during it, finishes in a
+//! worker of its own, which tells the user how it ended.
 use anyhow::{Result, ensure};
 use shoal_ids::space_ids::SpaceId;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
-use super::{manager::Manager, scope::Caller};
-use crate::protocol::operations::OperationSpec;
-use crate::transfer::{MoveDestination, MoveOrder};
+use super::{log, manager::Manager, notifications::AlertKind, scope::Caller};
+use crate::protocol::operations::{Ended, OperationSpec, Outcome};
+use crate::transfer::{MoveDestination, MoveLock, MoveOrder, MoveReport};
 use shoal_protocol::space_names::SpaceSelector;
+
+/// How often the daemon looks for recorded moves whose worker went.
+const INTERRUPTED_MOVES_INTERVAL: Duration = Duration::from_secs(60);
+
+/// Finish the recorded moves whose worker went, at startup and then as
+/// often as [`INTERRUPTED_MOVES_INTERVAL`] says.
+pub(crate) async fn finish_interrupted(manager: Arc<Manager>) {
+    loop {
+        {
+            let _pass = manager.gates.background_pass().await;
+            if let Err(error) = manager.finish_interrupted_moves().await {
+                log!("finishing interrupted moves: {error:#}");
+            }
+        }
+        tokio::time::sleep(INTERRUPTED_MOVES_INTERVAL).await;
+    }
+}
 
 impl Manager {
     /// Start `order` in a worker that acts with `caller`'s scope, in `env`
@@ -52,6 +71,41 @@ impl Manager {
         }
     }
 
+    /// Start a worker that finishes each recorded move whose worker went:
+    /// one that holds no lock on it and that no operation runs.
+    pub(crate) async fn finish_interrupted_moves(&self) -> Result<()> {
+        for record in self.recorded_moves().await? {
+            let space = record.space.clone();
+            if self.operation_runs_in(&space) || MoveLock::try_take(&self.paths, &space)?.is_none()
+            {
+                continue;
+            }
+            log!("finishing the move of {space}, whose worker went");
+            let spec = OperationSpec::FinishMove {
+                record: Box::new(record),
+            };
+            self.spawn_operation(space, spec, None, None).await?;
+        }
+        Ok(())
+    }
+
+    /// Tell the user how a move whose worker went finished, as `ended` says.
+    pub(crate) async fn tell_finished_move(&self, ended: &Ended) {
+        let messages = match ended {
+            Ended::Succeeded(outcome) => match outcome.as_ref() {
+                Outcome::Moved(report) => finished_moves(report),
+                _ => Vec::new(),
+            },
+            Ended::Failed(failure) => vec![format!(
+                "A move that stopped when its worker went could not finish: {}",
+                failure.message().unwrap_or("its worker failed")
+            )],
+        };
+        for message in messages {
+            self.notify(None, AlertKind::MoveFinished, message).await;
+        }
+    }
+
     /// Refuse a scoped `caller` a move of a space its scope does not
     /// reach, or one another machine sent, since a move reaches outside the
     /// hub's trust.
@@ -69,4 +123,22 @@ impl Manager {
         }
         Ok(())
     }
+}
+
+/// What the user hears of the moves `report` finished after their worker
+/// went: each space that ended here, and each that could not move.
+fn finished_moves(report: &MoveReport) -> Vec<String> {
+    let moved = (report.moved.iter()).map(|moved| {
+        format!(
+            "Finished moving {}, which stopped when its worker went; it ended here",
+            moved.name
+        )
+    });
+    let failed = (report.failed.iter()).map(|failed| {
+        format!(
+            "The move of {}, which stopped when its worker went, did not finish: {}",
+            failed.name, failed.error
+        )
+    });
+    moved.chain(failed).collect()
 }

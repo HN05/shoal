@@ -4241,6 +4241,16 @@ differs by destination: `-o` writes the package where the daemon writes it,
 stays a plain command and the key must work without a prompt, as Git's
 fetches need. The command checks the spaces first to ask what needs the user,
 and the worker deletes only the work the user saw.
+The daemon records each space's move, with its destination and the stopped
+work its spaces saved, before any agent stops, and the package's checkpoints
+and phase once written, and the worker holds a lock on the space while it
+moves it. A recorded move whose lock is free lost its worker, so the daemon
+finishes it from the phase its record reached instead of guessing, in a
+worker of its own: a package that left ends the spaces here, nothing that
+left moves again, and an import that may have happened leaves the agents
+stopped on both machines, as a dropped connection does. A worker that
+outlives a daemon restart finishes its move itself, losing only the reports
+its followers would have read.
 Moving a workspace is a removal there and a restore here:
 export writes the removal record and a Git bundle of its checkpoint from the
 daemon, and the destination is checked before anything ends. Import records both as a removal of this

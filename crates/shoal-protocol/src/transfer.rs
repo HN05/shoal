@@ -327,7 +327,10 @@ pub struct MoveReport {
 pub struct SpaceMoved {
     pub id: SpaceId,
     pub name: SpaceName,
-    pub manifest: Manifest,
+    /// What its package holds; none for a move Shoal finished after its
+    /// package went.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manifest: Option<Manifest>,
     /// The file it went to; none for another machine.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<PathBuf>,
