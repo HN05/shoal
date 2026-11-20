@@ -4,7 +4,7 @@
 //! launch names it.
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_protocol::launches::{IssueChoice, Launch, Setup, SpaceChoice};
+use shoal_protocol::launches::{ItemChoice, Launch, Setup, SpaceChoice};
 
 use super::{
     shape::Shape,
@@ -157,12 +157,12 @@ fn ensure_chat_takes(launch: &Launch, shape: &Shape) -> Result<()> {
 /// The issue a chat in `mode` starts on: one the launch names, since a
 /// pick needs a terminal, which leaves it open where it `picks`.
 fn named_issue(
-    issue: Option<IssueChoice>,
+    issue: Option<ItemChoice>,
     mode: &ModeName,
     picks: bool,
 ) -> Result<Option<ItemInput>> {
     match issue {
-        Some(IssueChoice::Pick) => {
+        Some(ItemChoice::Pick) => {
             ensure!(
                 *mode == ModeName::PLAN,
                 "--issue needs a number or URL outside plan mode"
@@ -173,7 +173,7 @@ fn named_issue(
             );
             Ok(None)
         }
-        Some(IssueChoice::Named(issue)) => Ok(Some(issue)),
+        Some(ItemChoice::Named(issue)) => Ok(Some(issue)),
         None => Ok(None),
     }
 }

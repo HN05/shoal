@@ -62,7 +62,7 @@ async fn a_check_without_a_mode_refuses_an_unreadable_issue() {
     let repo = registered(&manager, &temp).await;
     let launch = Launch {
         target: Some(StartTarget::Repository(repo.id.to_string())),
-        issue: Some(shoal_protocol::launches::IssueChoice::Named(
+        issue: Some(shoal_protocol::launches::ItemChoice::Named(
             "34".parse().unwrap(),
         )),
         ..Launch::default()

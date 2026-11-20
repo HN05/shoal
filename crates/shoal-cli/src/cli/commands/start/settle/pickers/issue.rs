@@ -3,7 +3,7 @@
 //! plan goes to the issue's body, which is all an implementing agent
 //! receives.
 use anyhow::{Context as _, Result, ensure};
-use shoal_protocol::launches::{IssueChoice, Launch};
+use shoal_protocol::launches::{ItemChoice, Launch};
 
 use crate::{
     cli::{client, commands::issues, context::Context, ui},
@@ -21,13 +21,13 @@ pub(in crate::cli::commands::start::settle) async fn pick_plan_issue(
     launch: &mut Launch,
     (repository, settings): (Option<&Repository>, &Effective),
 ) -> Result<()> {
-    if !matches!(launch.issue, Some(IssueChoice::Pick)) || !ctx.interactive() {
+    if !matches!(launch.issue, Some(ItemChoice::Pick)) || !ctx.interactive() {
         return Ok(());
     }
     let repo = repository.context("name the repository whose issue the plan settles")?;
     let mode = (launch.mode.clone()).unwrap_or(config::modes::ModeName::DEFAULT);
     let issue = picked(ctx, repo, settings, &mode).await?;
-    launch.issue = Some(IssueChoice::Named(issue));
+    launch.issue = Some(ItemChoice::Named(issue));
     Ok(())
 }
 

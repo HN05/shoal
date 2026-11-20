@@ -2,7 +2,7 @@
 //! terminal: a new or existing branch, an issue or a PR.
 use crate::git::existing_branch::BranchExt;
 use anyhow::Result;
-use shoal_protocol::launches::{IssueChoice, Launch, StartTarget};
+use shoal_protocol::launches::{ItemChoice, Launch, StartTarget};
 
 use crate::{
     cli::{client, commands::issues, context::Context, ui},
@@ -104,7 +104,7 @@ fn names_no_branch(launch: &Launch) -> bool {
 /// `creation` opens, or the issue `picked`.
 fn picked_source(launch: &mut Launch, creation: Creation, picked: Option<ItemInput>) {
     if let Some(issue) = picked {
-        launch.issue = Some(IssueChoice::Named(issue));
+        launch.issue = Some(ItemChoice::Named(issue));
     }
     match creation.pr {
         Some(ItemInput::Url(pull)) => {

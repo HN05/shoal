@@ -1,6 +1,6 @@
 use crate::daemon::manager::Manager;
 use crate::daemon::test_support::{global_config, manager, repository};
-use shoal_protocol::launches::{IssueChoice, Launch, LaunchSource, StartTarget};
+use shoal_protocol::launches::{ItemChoice, Launch, LaunchSource, StartTarget};
 
 /// A registered repository whose remote is a forge's, which Shoal never
 /// reaches, and an agent that starts without limits.
@@ -28,7 +28,7 @@ fn launch_on_issue(repo: &crate::model::Repository, branch: Option<&str>) -> Lau
         name: Some("fix".into()),
         branch: branch.map(Into::into),
         agent: Some("claude".into()),
-        issue: Some(IssueChoice::Named("316".parse().unwrap())),
+        issue: Some(ItemChoice::Named("316".parse().unwrap())),
         ..Launch::default()
     }
 }

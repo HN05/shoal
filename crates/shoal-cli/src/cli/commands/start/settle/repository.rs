@@ -3,7 +3,7 @@
 //! register an unregistered one, and only once its mode says it starts in
 //! one, a picked one.
 use anyhow::Result;
-use shoal_protocol::launches::{IssueChoice, Launch, SpaceChoice, StartTarget};
+use shoal_protocol::launches::{ItemChoice, Launch, SpaceChoice, StartTarget};
 
 use super::mode;
 use crate::{
@@ -203,7 +203,7 @@ async fn linked_repository(
             .map(Some);
     }
     match &launch.issue {
-        Some(IssueChoice::Named(ItemInput::Url(issue))) => {
+        Some(ItemChoice::Named(ItemInput::Url(issue))) => {
             issues::repository_for(ctx, repos, issue, offers())
                 .await
                 .map(Some)

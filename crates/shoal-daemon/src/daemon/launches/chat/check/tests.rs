@@ -1,6 +1,6 @@
 use super::super::tests::offline_machine;
 use crate::daemon::test_support::manager;
-use shoal_protocol::launches::{IssueChoice, Launch, LaunchSource, SpaceChoice, StartTarget};
+use shoal_protocol::launches::{ItemChoice, Launch, LaunchSource, SpaceChoice, StartTarget};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// A check of a chat in a workspace's worktree answers with that
@@ -42,7 +42,7 @@ async fn a_chat_check_leaves_a_plan_issue_to_a_picker() {
     let launch = Launch {
         target: Some(StartTarget::Repository(repo.id.to_string())),
         mode: Some("plan".into()),
-        issue: Some(IssueChoice::Pick),
+        issue: Some(ItemChoice::Pick),
         agent: Some("claude".into()),
         ..Launch::default()
     };

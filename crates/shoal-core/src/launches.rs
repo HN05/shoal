@@ -3,7 +3,7 @@
 //! arguments a kind of space or another argument refuses, which a start
 //! checks before it asks or creates anything.
 use anyhow::{Result, ensure};
-use shoal_protocol::launches::{IssueChoice, Launch, StartTarget};
+use shoal_protocol::launches::{ItemChoice, Launch, StartTarget};
 use shoal_refs::BranchName;
 
 use crate::{
@@ -75,7 +75,7 @@ fn ensure_worker_fits(launch: &Launch) -> Result<()> {
     };
     let workspace =
         (workspace.named()).map_or_else(|| "<workspace>".to_owned(), ToString::to_string);
-    if let Some(IssueChoice::Named(issue)) = &launch.issue {
+    if let Some(ItemChoice::Named(issue)) = &launch.issue {
         anyhow::bail!(
             "--issue names a new space's issue; link it to the workspace with `shoal link issue {issue} assigned --space {workspace}`"
         );
@@ -250,7 +250,7 @@ impl std::error::Error for SeveralModes {}
 /// The issue `--issue` or the positional argument names by number or URL.
 pub fn named_issue(launch: &Launch) -> Result<Option<ItemInput>> {
     Ok(match (&launch.issue, &launch.target) {
-        (Some(IssueChoice::Named(issue)), _) => Some(issue.clone()),
+        (Some(ItemChoice::Named(issue)), _) => Some(issue.clone()),
         (_, Some(positional)) => match positional.clone().decided(false)? {
             StartTarget::Issue(issue) => Some(issue),
             _ => None,
@@ -272,7 +272,7 @@ pub fn positional_repository(launch: &Launch) -> Option<&str> {
 /// The issue and PR the arguments name by URL.
 pub fn linked_items(launch: &Launch) -> impl Iterator<Item = &ItemRef> {
     let issue = match &launch.issue {
-        Some(IssueChoice::Named(ItemInput::Url(issue))) => Some(issue),
+        Some(ItemChoice::Named(ItemInput::Url(issue))) => Some(issue),
         _ => None,
     };
     let positional = match &launch.target {
@@ -317,9 +317,9 @@ pub fn ensure_no_repository(launch: &Launch, mode: &ModeName) -> Result<()> {
 pub fn chat_target(
     positional: Option<StartTarget>,
     repository: Option<String>,
-    issue: Option<IssueChoice>,
+    issue: Option<ItemChoice>,
     in_workspace: bool,
-) -> Result<(Option<String>, Option<IssueChoice>)> {
+) -> Result<(Option<String>, Option<ItemChoice>)> {
     let (repository, issue) = match positional {
         Some(positional) => positional_target(positional, repository, issue)?,
         None => (repository, issue),
@@ -336,8 +336,8 @@ pub fn chat_target(
 fn positional_target(
     positional: StartTarget,
     repository: Option<String>,
-    issue: Option<IssueChoice>,
-) -> Result<(Option<String>, Option<IssueChoice>)> {
+    issue: Option<ItemChoice>,
+) -> Result<(Option<String>, Option<ItemChoice>)> {
     // A chat takes a positional number as its issue.
     match positional.decided(false)? {
         StartTarget::Pull(_) | StartTarget::Branch { .. } => anyhow::bail!(
@@ -348,7 +348,7 @@ fn positional_target(
                 issue.is_none(),
                 "name the issue once, positionally or with --issue"
             );
-            Ok((repository, Some(IssueChoice::Named(positional))))
+            Ok((repository, Some(ItemChoice::Named(positional))))
         }
         StartTarget::Repository(positional) | StartTarget::Number(positional) => {
             ensure!(

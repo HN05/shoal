@@ -9,7 +9,7 @@ use crate::{
     config::permissions::PermissionChange,
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
-use shoal_protocol::launches::{IssueChoice, Launch, SpaceChoice, StartTarget};
+use shoal_protocol::launches::{ItemChoice, Launch, SpaceChoice, StartTarget};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// clap parser for [`StartTarget`].
@@ -181,7 +181,7 @@ impl CreateArgs {
             path: self.path.clone(),
             base: self.base.clone(),
             git_profile: self.git_profile.clone(),
-            issue: self.issue.clone().map(IssueChoice::Named),
+            issue: self.issue.clone().map(ItemChoice::Named),
             copy: self.copy.copy.clone().map(SpaceChoice::from),
             checkpoint: self.copy.checkpoint,
             skip_setup: self.creation.skip_setup,
@@ -326,7 +326,7 @@ impl StartArgs {
             path: self.path.clone(),
             base: self.base.clone(),
             git_profile: self.git_profile.clone(),
-            issue: self.issue.clone().map(IssueChoice::from),
+            issue: self.issue.clone().map(ItemChoice::from),
             copy: self.copy.copy.clone().map(SpaceChoice::from),
             checkpoint: self.copy.checkpoint,
             skip_setup: self.creation.skip_setup,

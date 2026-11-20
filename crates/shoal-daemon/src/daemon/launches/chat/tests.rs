@@ -110,7 +110,7 @@ async fn a_launched_chat_is_recorded_with_its_issue_before_its_agent_starts() {
         mode: Some("chat".into()),
         name: Some("planning".into()),
         agent: Some("claude".into()),
-        issue: Some(IssueChoice::Named("316".parse().unwrap())),
+        issue: Some(ItemChoice::Named("316".parse().unwrap())),
         ..Launch::default()
     };
 
@@ -182,7 +182,7 @@ async fn a_chat_on_an_issue_nothing_can_resolve_is_refused() {
         mode: Some("chat".into()),
         name: Some("planning".into()),
         agent: Some("claude".into()),
-        issue: Some(IssueChoice::Named("316".parse().unwrap())),
+        issue: Some(ItemChoice::Named("316".parse().unwrap())),
         ..Launch::default()
     };
 

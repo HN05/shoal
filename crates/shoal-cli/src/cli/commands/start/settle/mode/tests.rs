@@ -1,5 +1,5 @@
 use super::{ensure_fits, fit};
-use shoal_protocol::launches::{IssueChoice, Launch};
+use shoal_protocol::launches::{ItemChoice, Launch};
 
 /// A start on an issue, by number positionally or with `--issue`, picks
 /// only among the modes that start in a repository, since a space
@@ -11,7 +11,7 @@ fn a_start_on_an_issue_number_picks_only_modes_in_a_repository() {
         ..Launch::default()
     };
     let flagged = Launch {
-        issue: Some(IssueChoice::Named("37".parse().unwrap())),
+        issue: Some(ItemChoice::Named("37".parse().unwrap())),
         ..Launch::default()
     };
     for launch in [positional, flagged] {

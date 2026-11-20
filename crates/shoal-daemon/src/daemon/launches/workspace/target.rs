@@ -4,7 +4,7 @@
 //! on, an issue, or a PR's or a branch link's branch, which fills the
 //! creation.
 use anyhow::{Context as _, Result, ensure};
-use shoal_protocol::launches::{IssueChoice, Launch, StartTarget};
+use shoal_protocol::launches::{ItemChoice, Launch, StartTarget};
 
 use crate::{
     daemon::{manager::Manager, scope::Caller},
@@ -37,10 +37,10 @@ impl Manager {
         (state, fetches, caller): (&LaunchState, bool, Option<&Caller>),
     ) -> Result<Target> {
         let issue = match &launch.issue {
-            Some(IssueChoice::Pick) => {
+            Some(ItemChoice::Pick) => {
                 anyhow::bail!("--issue needs a number or URL outside plan mode")
             }
-            Some(IssueChoice::Named(issue)) => Some(issue.clone()),
+            Some(ItemChoice::Named(issue)) => Some(issue.clone()),
             None => None,
         };
         let Some(positional) = crate::launches::decided_target(launch)? else {

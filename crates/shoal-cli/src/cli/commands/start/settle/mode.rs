@@ -1,7 +1,7 @@
 //! The mode a start's agent starts in: named, else the one its issue's
 //! labels call for, else on a terminal a picked one, else the default mode.
 use anyhow::Result;
-use shoal_protocol::launches::{IssueChoice, Launch};
+use shoal_protocol::launches::{ItemChoice, Launch};
 
 use crate::{
     cli::{
@@ -36,7 +36,7 @@ pub(super) async fn decided(
         return Ok(ModeChoice::Named(mode.clone()));
     }
     let picks = ui::can_pick(ctx);
-    if picks && launch.issue == Some(IssueChoice::Pick) {
+    if picks && launch.issue == Some(ItemChoice::Pick) {
         return Ok(ModeChoice::Named(modes::ModeName::PLAN));
     }
     let labelled = match found {

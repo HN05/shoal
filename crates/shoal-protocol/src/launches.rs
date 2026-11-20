@@ -46,7 +46,7 @@ pub struct Launch {
     pub git_profile: Option<String>,
     /// The issue the agent starts on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub issue: Option<IssueChoice>,
+    pub issue: Option<ItemChoice>,
     /// The workspace whose files a new workspace copies.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copy: Option<SpaceChoice>,
@@ -194,18 +194,18 @@ impl std::fmt::Display for LaunchSource {
     }
 }
 
-/// The issue a start names.
+/// The issue or PR a start names.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum IssueChoice {
-    /// One picked among the open issues that need a plan, in plan mode.
+pub enum ItemChoice {
+    /// One a terminal picks among the repository's open ones.
     Pick,
-    /// The issue of this number or URL.
+    /// The item of this number or URL.
     Named(ItemInput),
 }
 
-impl IssueChoice {
-    /// The issue it names, if it names one.
+impl ItemChoice {
+    /// The item it names, if it names one.
     pub fn named(&self) -> Option<&ItemInput> {
         match self {
             Self::Pick => None,
@@ -214,8 +214,8 @@ impl IssueChoice {
     }
 }
 
-impl From<Option<ItemInput>> for IssueChoice {
-    /// `--issue` with a value, else without one.
+impl From<Option<ItemInput>> for ItemChoice {
+    /// A flag such as `--issue` with a value, else without one.
     fn from(issue: Option<ItemInput>) -> Self {
         issue.map_or(Self::Pick, Self::Named)
     }

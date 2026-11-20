@@ -19,8 +19,8 @@ fn in_workspace(change: impl FnOnce(&mut Launch)) -> Launch {
     })
 }
 
-fn issue(number: &str) -> Option<IssueChoice> {
-    Some(IssueChoice::Named(number.parse().unwrap()))
+fn issue(number: &str) -> Option<ItemChoice> {
+    Some(ItemChoice::Named(number.parse().unwrap()))
 }
 
 #[test]
@@ -163,7 +163,7 @@ fn a_start_in_a_workspace_refuses_what_no_role_takes_before_its_picker() {
 
 #[test]
 fn a_chat_takes_a_positional_issue_as_its_issue() {
-    let target = |positional: &str, repository: Option<&str>, issue: Option<IssueChoice>| {
+    let target = |positional: &str, repository: Option<&str>, issue: Option<ItemChoice>| {
         chat_target(
             Some(positional.to_owned().parse().unwrap()),
             repository.map(str::to_owned),
@@ -178,8 +178,8 @@ fn a_chat_takes_a_positional_issue_as_its_issue() {
     );
     assert_eq!(target(url, None, None).unwrap(), (None, issue(url)));
     assert_eq!(
-        target("repo", None, Some(IssueChoice::Pick)).unwrap(),
-        (Some("repo".into()), Some(IssueChoice::Pick))
+        target("repo", None, Some(ItemChoice::Pick)).unwrap(),
+        (Some("repo".into()), Some(ItemChoice::Pick))
     );
     for (positional, repository, named, refusal) in [
         ("37", None, issue("38"), "name the issue once"),
@@ -295,9 +295,7 @@ fn a_start_names_an_issue_with_issue_or_positionally() {
         named(launch(Some("https://forge.example/o/r/pulls/8"), |_| ())),
         None
     );
-    let picked = launch(Some("repo"), |launch| {
-        launch.issue = Some(IssueChoice::Pick)
-    });
+    let picked = launch(Some("repo"), |launch| launch.issue = Some(ItemChoice::Pick));
     assert_eq!(named(picked), None);
 }
 

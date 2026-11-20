@@ -4,7 +4,7 @@
 use std::{collections::BTreeMap, str::FromStr};
 
 use anyhow::{Context, Result, bail, ensure};
-use shoal_protocol::launches::{IssueChoice, Launch, SpaceChoice, StartTarget};
+use shoal_protocol::launches::{ItemChoice, Launch, SpaceChoice, StartTarget};
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_schedule::priority::Priority;
 
@@ -123,7 +123,7 @@ impl LaunchKeys {
             repository: render("repository", &self.repository)?,
             branch,
             base: render("base", &self.base)?,
-            issue: issue.map(IssueChoice::Named),
+            issue: issue.map(ItemChoice::Named),
             in_workspace: in_workspace.map(SpaceChoice::Space),
             mode,
             agent,
