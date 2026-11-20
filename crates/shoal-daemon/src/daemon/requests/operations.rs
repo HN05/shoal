@@ -200,19 +200,8 @@ impl Scoped for OperationMethod {
     ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             OperationMethod::StartOperation { spec, .. } => spec.workspace_mut(),
-            // Moving spaces is the `admin` permission's.
             OperationMethod::StartMove { order, .. } => {
-                manager.confine_move(caller, order).await?;
-                let first = order.spaces.first().cloned();
-                let repository = match first {
-                    Some(first) => manager
-                        .space(&SpaceSelector::id(&first))
-                        .await
-                        .ok()
-                        .and_then(|space| space.repository_id),
-                    None => None,
-                };
-                manager.administer(caller, &**order, repository).await?;
+                manager.authorize_move(caller, order).await?;
                 None
             }
             OperationMethod::StartChild { parent, copy, .. } => {

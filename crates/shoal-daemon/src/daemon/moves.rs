@@ -108,22 +108,26 @@ impl Manager {
         }
     }
 
-    /// Refuse a scoped `caller` a move of a space its scope does not
-    /// reach, or one another machine sent, since a move reaches outside the
-    /// hub's trust.
-    pub(crate) async fn confine_move(&self, caller: &Caller, order: &MoveOrder) -> Result<()> {
+    /// Let a scoped `caller` move the spaces `order` takes, as its `admin`
+    /// permission allows, refusing one its scope does not reach, or a move
+    /// another machine sent, since a move reaches outside the hub's trust.
+    pub(crate) async fn authorize_move(&self, caller: &Caller, order: &MoveOrder) -> Result<()> {
         ensure!(
             caller.vouched.is_none(),
             "only the user moves spaces from another machine"
         );
-        for ordered in &order.spaces {
-            let selector = SpaceSelector::id(ordered);
+        let mut repository = None;
+        for id in &order.spaces {
+            let selector = SpaceSelector::id(id);
             match self.space(&selector).await {
-                Ok(space) => self.ensure_reaches(caller, &space).await?,
+                Ok(space) => {
+                    self.ensure_reaches(caller, &space).await?;
+                    repository = repository.or(space.repository_id);
+                }
                 Err(_) => self.ensure_restorable_by(&selector, caller).await?,
             }
         }
-        Ok(())
+        self.administer(caller, order, repository).await
     }
 }
 
