@@ -47,6 +47,20 @@ impl OutsideChat {
     }
 }
 
+/// The roots a move of `chats` to `root_dir`, which names or links to
+/// `destination`, leaves: those their files are in, and `root_dir` itself
+/// while it is not `destination` yet.
+fn roots_left(chats: &[OutsideChat], root_dir: &Path, destination: &Path) -> Vec<PathBuf> {
+    let mut left: Vec<PathBuf> = (chats.iter())
+        .filter_map(OutsideChat::source_root)
+        .chain(std::fs::canonicalize(root_dir))
+        .filter(|left| left != destination)
+        .collect();
+    left.sort();
+    left.dedup();
+    left
+}
+
 impl Manager {
     /// The chats without a repository, running, stopped or removed, whose
     /// files or records a move to `root_dir`, which names or links to
@@ -58,8 +72,6 @@ impl Manager {
         destination: &Path,
         running: Running,
     ) -> Result<Vec<OutsideChat>> {
-        self.ensure_no_import_in(self.outside_imports(root_dir))
-            .await?;
         let mut moving = Vec::new();
         for chat in self.outside_chats().await? {
             if !chat.moves(root_dir, destination) {
@@ -72,7 +84,25 @@ impl Manager {
             );
             moving.push(chat);
         }
+        self.ensure_no_import_left(&moving, root_dir, destination)
+            .await?;
         Ok(moving)
+    }
+
+    /// Refuse while an import reads a package into a root a move of
+    /// `chats` to `root_dir`, which names or links to `destination`,
+    /// leaves.
+    async fn ensure_no_import_left(
+        &self,
+        chats: &[OutsideChat],
+        root_dir: &Path,
+        destination: &Path,
+    ) -> Result<()> {
+        for root in roots_left(chats, root_dir, destination) {
+            self.ensure_no_import_in(self.outside_imports(&root))
+                .await?;
+        }
+        Ok(())
     }
 
     /// Every chat without a repository, running, stopped or removed.
@@ -129,22 +159,16 @@ impl Manager {
     /// the root `root_dir` names or links to once the move is done, and
     /// record that each runs there from now on, then delete what is left in
     /// the roots they left, `root_dir` itself among them while it is not
-    /// `destination` yet. Refused while an import into `root_dir` reads a
-    /// package; the caller holds the gate of those chats' files.
+    /// `destination` yet. Refused while an import reads a package into one
+    /// of those roots; the caller holds the gate of those chats' files.
     pub(super) async fn move_outside_chats(
         &self,
         chats: Vec<OutsideChat>,
         root_dir: &Path,
         destination: &Path,
     ) -> Result<()> {
-        let mut left: Vec<PathBuf> = (chats.iter())
-            .filter_map(OutsideChat::source_root)
-            .chain(std::fs::canonicalize(root_dir))
-            .filter(|left| left != destination)
-            .collect();
-        left.sort();
-        left.dedup();
-        self.ensure_no_import_in(self.outside_imports(root_dir))
+        let left = roots_left(&chats, root_dir, destination);
+        self.ensure_no_import_left(&chats, root_dir, destination)
             .await?;
         self.move_chat_files(chats, root_dir, destination).await?;
         for root in left {

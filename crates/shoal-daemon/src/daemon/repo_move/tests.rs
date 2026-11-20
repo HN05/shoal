@@ -931,3 +931,23 @@ async fn a_root_move_takes_what_imports_left_in_root_dir_unless_one_reads() -> R
     assert!(!root.join(".imports").exists());
     Ok(())
 }
+
+#[tokio::test]
+async fn a_root_move_keeps_a_package_an_import_reads_into_the_root_it_leaves() -> Result<()> {
+    let (temp, manager, chat, root) = with_master().await?;
+    manager.end_executions(&chat.id).await;
+    let imports = manager.outside_imports(&root);
+    reading_import(&imports)?;
+    let moved_to = fs::canonicalize(temp.path())?.join("new");
+    let config = format!("[cleanup]\ngrace_minutes = 0\n[machine]\nroot_dir = {moved_to:?}\n");
+    test_support::configure(&manager, &config).await;
+
+    let refused = manager
+        .move_repositories(Layout::Regular)
+        .await
+        .unwrap_err();
+
+    assert!(format!("{refused:#}").contains("an import"), "{refused:#}");
+    assert!(imports.root().join("package-1").exists());
+    Ok(())
+}
