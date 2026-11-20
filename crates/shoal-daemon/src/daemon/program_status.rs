@@ -87,9 +87,11 @@ impl Reports {
     /// cannot be read.
     async fn status(&self, manager: &Manager, reports_itself: bool) -> Option<ProgramStatus> {
         let (space, execution) = (self.space.id.clone(), self.execution.clone());
+        let operations = manager.operations.clone();
+        let pushing = move |operation: &str| operations.runs(operation);
         let facts = manager
             .store
-            .read(move |db| facts::read(db, &space, &execution))
+            .read(move |db| facts::read(db, &space, &execution, &pushing))
             .await;
         let facts = facts.ok()??;
         Some(decision::status(&facts, reports_itself))

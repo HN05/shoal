@@ -47,12 +47,14 @@ pub(super) struct Steps {
     pub(super) total: usize,
 }
 
-/// The facts of the space `id`, whose agent runs as `execution`; none once
-/// the space is gone.
+/// The facts of the space `id`, whose agent runs as `execution`, with
+/// `pushing` telling which operations still push what the user approved;
+/// none once the space is gone.
 pub(super) fn read(
     db: &Connection,
     id: &SpaceId,
     execution: &ExecutionId,
+    pushing: &dyn Fn(&str) -> bool,
 ) -> Result<Option<Facts>> {
     let Some(name) = name(db, id)? else {
         return Ok(None);
@@ -67,7 +69,7 @@ pub(super) fn read(
                     .map_or(&thread.name, |post| &post.post.text),
             ),
         }),
-        approval: approvals::oldest_for_user(db, id)?.map(|request| Waiting {
+        approval: approvals::oldest_for_user(db, id, pushing)?.map(|request| Waiting {
             number: request.number,
             about: request.subject(),
         }),

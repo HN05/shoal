@@ -395,13 +395,13 @@ pub enum GateStep {
 
 impl ApprovalRequest {
     /// Whether the user decides it now: it is pending, no space above its
-    /// own decides it, the gate is neither deciding nor carrying out its
-    /// allow, and no push the user approved is running.
+    /// own decides it, and the gate is neither deciding it nor carrying out
+    /// its allow. A push the user approved may also still run, which only
+    /// the daemon knows.
     pub fn waits_for_user(&self) -> bool {
         self.status == DecisionStatus::Pending
             && self.decider.is_none()
             && !matches!(self.gate, Some(GateStep::Deciding | GateStep::Allowed))
-            && self.operation.is_none()
     }
 
     /// The permissions that govern the request, each of which a coordinator

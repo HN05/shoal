@@ -173,8 +173,13 @@ pub fn list(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<ApprovalRequ
 }
 
 /// The oldest request the space `id` made or proposed that waits for the
-/// user's decision.
-pub(crate) fn oldest_for_user(db: &Connection, id: &SpaceId) -> Result<Option<ApprovalRequest>> {
+/// user's decision: no push the user approved runs for it, as `pushing`
+/// tells of an operation.
+pub(crate) fn oldest_for_user(
+    db: &Connection,
+    id: &SpaceId,
+    pushing: &dyn Fn(&str) -> bool,
+) -> Result<Option<ApprovalRequest>> {
     let pending = db
         .prepare(&format!(
             "{COLUMNS} WHERE (space_id=?1 OR {REPOSITORY_OWNED})
@@ -184,7 +189,9 @@ pub(crate) fn oldest_for_user(db: &Connection, id: &SpaceId) -> Result<Option<Ap
         .query_map(params![id, DecisionStatus::Pending], record_row)?
         .map(|row| decode_record(row?))
         .collect::<Result<Vec<_>>>()?;
-    Ok(pending.into_iter().find(ApprovalRequest::waits_for_user))
+    Ok(pending.into_iter().find(|request| {
+        request.waits_for_user() && !request.operation.as_deref().is_some_and(pushing)
+    }))
 }
 
 /// Every request, or those the space `space` made, proposed or decides, in

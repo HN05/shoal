@@ -116,7 +116,7 @@ async fn only_a_request_nothing_else_carries_out_waits_for_the_user() -> Result<
             let held = [
                 ("deciding", Some(GateStep::Deciding), None, None),
                 ("allowed", Some(GateStep::Allowed), None, None),
-                ("pushing", None, Some("push"), None),
+                ("pushing", None, Some("running"), None),
                 ("routed", None, None, Some("other")),
             ];
             for (key, gate, operation, decider) in held {
@@ -133,17 +133,13 @@ async fn only_a_request_nothing_else_carries_out_waits_for_the_user() -> Result<
                 request.decider = decider.map(SpaceId::from);
                 save(db, &request)?;
             }
-            assert!(oldest_for_user(db, &owner)?.is_none());
-            let mut asked = sample(
-                &owner,
-                Target::Resource {
-                    scope: Scope::Global,
-                    pool: "asked".into(),
-                },
-            );
-            asked.key = "asked".into();
-            save(db, &asked)?;
-            assert_eq!(oldest_for_user(db, &owner)?.unwrap().key, "asked");
+            let pushing = |operation: &str| operation == "running";
+            assert!(oldest_for_user(db, &owner, &pushing)?.is_none());
+            // A push that no longer runs, as after a restart, leaves its
+            // request to the user again.
+            let restarted = |_: &str| false;
+            let left = oldest_for_user(db, &owner, &restarted)?;
+            assert_eq!(left.unwrap().key, "pushing");
             Ok(())
         })
         .await

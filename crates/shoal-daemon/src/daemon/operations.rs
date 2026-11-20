@@ -83,6 +83,11 @@ impl Operations {
         entries.get(id).cloned()
     }
 
+    /// Whether operation `id` still runs.
+    pub(crate) fn runs(&self, id: &str) -> bool {
+        self.get(id).is_some_and(|entry| entry.running())
+    }
+
     /// The workspaces an operation works in until its worker ends.
     pub(crate) fn working_in(&self) -> HashSet<SpaceId> {
         let entries = self.entries.lock().unwrap_or_else(PoisonError::into_inner);
@@ -285,7 +290,7 @@ impl Manager {
 
     /// Whether operation `id` still runs.
     pub(crate) fn operation_running(&self, id: &str) -> bool {
-        self.operations.get(id).is_some_and(|entry| entry.running())
+        self.operations.runs(id)
     }
 
     /// Operation `id`, refusing a scoped caller one outside its tree.
