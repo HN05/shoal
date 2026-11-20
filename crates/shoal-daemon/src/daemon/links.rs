@@ -123,7 +123,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> (Option<String>, Option<String>) {
         let read = async {
-            let context = self.link_space(selector).await?.item_context();
+            let context = self.links.link_space(self, selector).await?.item_context();
             let forge = self.links.context_forge(self, &context).await?;
             let item = ItemRef::in_repository(&forge, kind.into(), input)?;
             let account = self.links.read_account(caller);
@@ -172,7 +172,7 @@ impl Manager {
         input: &ItemInput,
         caller: Option<&Caller>,
     ) -> Result<()> {
-        let space = self.link_space(selector).await?;
+        let space = self.links.link_space(self, selector).await?;
         // A watch reads the run as the user where it is not the space's own,
         // so linking it is a change there.
         let target = space.item_context().into();
@@ -196,7 +196,7 @@ impl Manager {
         input: &ItemInput,
         title: Option<String>,
     ) -> Result<()> {
-        let space = self.link_space(selector).await?;
+        let space = self.links.link_space(self, selector).await?;
         self.verify_space(&space).await?;
         let url = self.space_item(&space, kind, input).await?;
         let item = LinkedItem { url, title };
@@ -212,7 +212,7 @@ impl Manager {
         kind: Option<LinkKind>,
         input: Option<&ItemInput>,
     ) -> Result<()> {
-        let space = self.link_space(selector).await?;
+        let space = self.links.link_space(self, selector).await?;
         self.verify_space(&space).await?;
         let url = match (kind, input) {
             (Some(kind), Some(input)) => Some(self.space_item(&space, kind, input).await?),
@@ -317,7 +317,7 @@ impl Manager {
         selector: &SpaceSelector,
         kind: Option<ItemKind>,
     ) -> Result<()> {
-        let space = self.link_space(selector).await?;
+        let space = self.links.link_space(self, selector).await?;
         let id = &space.id;
         let issue = kind != Some(ItemKind::Pr) && !self.issue_registrations(id).await?.is_empty();
         let pr =

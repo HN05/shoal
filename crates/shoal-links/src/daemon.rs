@@ -14,7 +14,6 @@ use shoal_forge_types::{
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     model::{Repository, Selected, Space},
-    protocol::ItemContext,
     space_names::SpaceSelector,
 };
 
@@ -29,9 +28,8 @@ pub trait Spaces: Send + Sync {
     /// The workspace or chat `selector` names, by ID or name.
     fn space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>>;
 
-    /// The space `context` names, acting in its own repository or, for a
-    /// chat without one, in the registered repository it names.
-    fn context_space<'a>(&'a self, context: &'a ItemContext) -> BoxFuture<'a, Result<LinkSpace>>;
+    /// The workspace or chat with the ID `id`, while it exists.
+    fn find_space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Space>>>;
 
     /// Verify a workspace's worktree before a request relies on it.
     fn verify_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<()>>;

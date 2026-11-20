@@ -134,7 +134,7 @@ impl Manager {
     /// `[pr] progress` is off, and record it as published once every one
     /// shows it.
     pub(crate) async fn publish_progress(&self, id: &SpaceId) -> Result<()> {
-        let space = self.link_space(&SpaceSelector::id(id)).await?;
+        let space = self.links.link_space(self, &SpaceSelector::id(id)).await?;
         if !self.acting_settings(&space).await?.pr.progress {
             return Ok(());
         }

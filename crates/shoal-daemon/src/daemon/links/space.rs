@@ -1,6 +1,6 @@
-//! Finding the space a request about items comes from, and what it reads
-//! of the space's repository.
-use shoal_ids::repository_ids::RepositoryId;
+//! What the daemon checks and reads for the space a request about items
+//! comes from: its worktree, the registered repository a name names, the
+//! settings it acts with, and whether it takes changes.
 use shoal_ids::space_ids::SpaceId;
 
 use anyhow::{Context, Result, bail};
@@ -11,94 +11,10 @@ use crate::{
     config::Effective,
     daemon::{manager::Manager, store},
     model::{Repository, Space},
-    protocol::ItemContext,
 };
 use shoal_forge::RepoRequests;
-use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
-    /// The workspace or running chat `selector` names, by ID or name.
-    pub async fn link_space(&self, selector: &SpaceSelector) -> Result<LinkSpace> {
-        self.own_link_space(self.space(selector).await?).await
-    }
-
-    /// `space` acting in its own repository, reading its `origin` in the
-    /// registered checkout while its worktree is still to be created.
-    pub(crate) async fn own_link_space(&self, space: Space) -> Result<LinkSpace> {
-        let pending = (space.worktree()).is_some_and(|worktree| worktree.checkout.is_pending());
-        let linked = LinkSpace::own(space)?;
-        if !pending {
-            return Ok(linked);
-        }
-        let checkout = self.repository(linked.repository_id()).await?.path;
-        Ok(linked.origin_in(checkout))
-    }
-
-    /// The space `context` names, a workspace or a chat, acting in its own
-    /// repository or, for a chat without one, in the registered repository
-    /// it names; a registered checkout is none.
-    pub(crate) async fn context_space(&self, context: &ItemContext) -> Result<LinkSpace> {
-        match context {
-            ItemContext::Space {
-                space,
-                repository: None,
-            } => self.link_space(space).await,
-            ItemContext::Space {
-                space,
-                repository: Some(repository),
-            } => self.space_acting_in(space, repository).await,
-            ItemContext::Checkout(_) => bail!("a registered checkout is no space"),
-        }
-    }
-
-    /// The space `space` names acting in the registered repository
-    /// `repository` names: its own, or for a space without one, a chat, any,
-    /// which then counts as its own. A space with a repository acts only in
-    /// that one.
-    async fn space_acting_in(
-        &self,
-        space: &SpaceSelector,
-        repository: &RepositoryId,
-    ) -> Result<LinkSpace> {
-        let space = self.space(space).await?;
-        match &space.repository_id {
-            Some(own) => {
-                anyhow::ensure!(
-                    own == repository,
-                    "space {} acts only in its own repository",
-                    space.name
-                );
-                self.own_link_space(space).await
-            }
-            None => Ok(LinkSpace::acting_in(
-                space,
-                self.repository(repository).await?,
-            )),
-        }
-    }
-
-    /// The space `id`, while it exists, acting in the registered repository
-    /// `repository` when it is a chat without a repository.
-    pub(crate) async fn find_link_space(
-        &self,
-        id: &SpaceId,
-        repository: Option<&RepositoryId>,
-    ) -> Result<Option<LinkSpace>> {
-        let owned = id.to_owned();
-        let kind = (self.store)
-            .run(move |db| crate::daemon::spaces::space_kind(db, &owned))
-            .await?;
-        if kind.is_none() {
-            return Ok(None);
-        }
-        let outside = (self.chat_by_id(id).await?).is_some_and(|chat| chat.repository_id.is_none());
-        let space = SpaceSelector::id(id);
-        match repository.filter(|_| outside) {
-            Some(repository) => self.space_acting_in(&space, repository).await.map(Some),
-            None => self.link_space(&space).await.map(Some),
-        }
-    }
-
     /// Verify a workspace's worktree before a request relies on it; a
     /// chat owns no worktree to verify, nor does a workspace whose worktree
     /// is still to be created, which reads its forge in the checkout.

@@ -68,7 +68,7 @@ impl Manager {
         title: Option<String>,
         assigner: Assigner,
     ) -> Result<Vec<String>> {
-        let id = self.link_space(selector).await?.id.to_owned();
+        let id = self.links.link_space(self, selector).await?.id.to_owned();
         let _guard = self.gates.lock_prs([&id]).await;
         self.set_issue_gated(&SpaceSelector::id(&id), input, title, assigner)
             .await
@@ -82,7 +82,7 @@ impl Manager {
         title: Option<String>,
         assigner: Assigner,
     ) -> Result<Vec<String>> {
-        let space = self.link_space(selector).await?;
+        let space = self.links.link_space(self, selector).await?;
         self.verify_space(&space).await?;
         let (forge, url) = self.issue_forge(space.origin_path(), input).await?;
         let fresh = self
@@ -144,9 +144,9 @@ impl Manager {
         selector: &SpaceSelector,
         input: Option<&ItemInput>,
     ) -> Result<Vec<String>> {
-        let id = self.link_space(selector).await?.id.to_owned();
+        let id = self.links.link_space(self, selector).await?.id.to_owned();
         let _guard = self.gates.lock_prs([&id]).await;
-        let space = self.link_space(&SpaceSelector::id(&id)).await?;
+        let space = self.links.link_space(self, &SpaceSelector::id(&id)).await?;
         let selected = match input {
             Some(input) => Some(self.issue_forge(space.origin_path(), input).await?.1),
             None => None,

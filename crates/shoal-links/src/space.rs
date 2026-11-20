@@ -4,14 +4,16 @@
 //! completes.
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
-use shoal_ids::repository_ids::RepositoryId;
+use anyhow::{Context, Result, bail};
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     model::{Repository, Space, Workspace},
     protocol::ItemContext,
     space_names::SpaceSelector,
 };
 use shoal_refs::BranchName;
+
+use crate::{Links, daemon::Daemon};
 
 /// A space as a request about its items sees it.
 pub struct LinkSpace {
@@ -113,6 +115,98 @@ impl LinkSpace {
         (self.acting_in.as_deref())
             .or(self.origin_in.as_deref())
             .unwrap_or_else(|| self.workdir.path())
+    }
+}
+
+impl Links {
+    /// The workspace or running chat `selector` names, by ID or name.
+    pub async fn link_space(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+    ) -> Result<LinkSpace> {
+        self.own_link_space(daemon, daemon.space(selector).await?)
+            .await
+    }
+
+    /// `space` acting in its own repository, reading its `origin` in the
+    /// registered checkout while its worktree is still to be created.
+    pub async fn own_link_space(&self, daemon: &dyn Daemon, space: Space) -> Result<LinkSpace> {
+        let pending = (space.worktree()).is_some_and(|worktree| worktree.checkout.is_pending());
+        let linked = LinkSpace::own(space)?;
+        if !pending {
+            return Ok(linked);
+        }
+        let checkout = daemon.repository(linked.repository_id()).await?.path;
+        Ok(linked.origin_in(checkout))
+    }
+
+    /// The space `context` names, a workspace or a chat, acting in its own
+    /// repository or, for a chat without one, in the registered repository
+    /// it names; a registered checkout is none.
+    pub async fn context_space(
+        &self,
+        daemon: &dyn Daemon,
+        context: &ItemContext,
+    ) -> Result<LinkSpace> {
+        match context {
+            ItemContext::Space {
+                space,
+                repository: None,
+            } => self.link_space(daemon, space).await,
+            ItemContext::Space {
+                space,
+                repository: Some(repository),
+            } => {
+                let space = daemon.space(space).await?;
+                self.space_acting_in(daemon, space, repository).await
+            }
+            ItemContext::Checkout(_) => bail!("a registered checkout is no space"),
+        }
+    }
+
+    /// The space `id`, while it exists, acting in the registered repository
+    /// `repository` when it is a chat without a repository.
+    pub async fn find_link_space(
+        &self,
+        daemon: &dyn Daemon,
+        id: &SpaceId,
+        repository: Option<&RepositoryId>,
+    ) -> Result<Option<LinkSpace>> {
+        let Some(space) = daemon.find_space(id).await? else {
+            return Ok(None);
+        };
+        let outside = space.repository_id.is_none();
+        let found = match repository.filter(|_| outside) {
+            Some(repository) => self.space_acting_in(daemon, space, repository).await,
+            None => self.own_link_space(daemon, space).await,
+        };
+        found.map(Some)
+    }
+
+    /// `space` acting in the registered repository `repository`: its own,
+    /// or for a space without one, a chat, any, which then counts as its
+    /// own. A space with a repository acts only in that one.
+    async fn space_acting_in(
+        &self,
+        daemon: &dyn Daemon,
+        space: Space,
+        repository: &RepositoryId,
+    ) -> Result<LinkSpace> {
+        match &space.repository_id {
+            Some(own) => {
+                anyhow::ensure!(
+                    own == repository,
+                    "space {} acts only in its own repository",
+                    space.name
+                );
+                self.own_link_space(daemon, space).await
+            }
+            None => Ok(LinkSpace::acting_in(
+                space,
+                daemon.repository(repository).await?,
+            )),
+        }
     }
 }
 

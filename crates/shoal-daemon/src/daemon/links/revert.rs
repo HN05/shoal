@@ -37,11 +37,11 @@ impl Manager {
             options.base.is_none(),
             "a revert targets the reverted PR's base branch"
         );
-        let id = self.link_space(selector).await?.id.to_owned();
+        let id = self.links.link_space(self, selector).await?.id.to_owned();
         // Cleanup holds the workspace's gate, so it cannot remove the
         // workspace between opening the revert and recording it.
         let _gate = self.gates.lock_prs([&id]).await;
-        let space = self.link_space(&SpaceSelector::id(&id)).await?;
+        let space = self.links.link_space(self, &SpaceSelector::id(&id)).await?;
         self.verify_space(&space).await?;
         if let Some(workspace) = space.to_workspace() {
             ensure!(
@@ -122,7 +122,7 @@ impl Manager {
         selector: &SpaceSelector,
         input: Option<ItemInput>,
     ) -> Result<MergedPull> {
-        let space = self.link_space(selector).await?;
+        let space = self.links.link_space(self, selector).await?;
         self.verify_space(&space).await?;
         let (forge, account) = (
             shoal_links::forges::of_space(self, &space).await?,

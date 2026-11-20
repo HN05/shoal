@@ -11,7 +11,6 @@ use crate::{
         reference::ItemRef,
     },
     model::{Repository, Selected, Space},
-    protocol::ItemContext,
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
@@ -25,8 +24,8 @@ impl Spaces for Manager {
         Box::pin(Manager::space(self, selector))
     }
 
-    fn context_space<'a>(&'a self, context: &'a ItemContext) -> BoxFuture<'a, Result<LinkSpace>> {
-        Box::pin(Manager::context_space(self, context))
+    fn find_space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Space>>> {
+        Box::pin(Manager::find_space(self, id))
     }
 
     fn verify_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<()>> {

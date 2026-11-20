@@ -100,7 +100,7 @@ impl Links {
                 Ok(Place::Checkout(daemon.repository(repository).await?))
             }
             ItemContext::Space { .. } => {
-                let space = daemon.context_space(context).await?;
+                let space = self.context_space(daemon, context).await?;
                 daemon.verify_space(&space).await?;
                 anyhow::ensure!(
                     access == Access::Read || space.keeps_links() || space.running,

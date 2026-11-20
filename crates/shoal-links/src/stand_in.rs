@@ -16,7 +16,6 @@ use shoal_forge_types::{
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     model::{Repository, Selected, Space},
-    protocol::ItemContext,
     space_names::SpaceSelector,
 };
 
@@ -44,8 +43,8 @@ impl Spaces for StandIn {
         Box::pin(async { bail!(NOT_HERE) })
     }
 
-    fn context_space<'a>(&'a self, _: &'a ItemContext) -> BoxFuture<'a, Result<LinkSpace>> {
-        Box::pin(async { bail!(NOT_HERE) })
+    fn find_space<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<Option<Space>>> {
+        Box::pin(async { Ok(None) })
     }
 
     fn verify_space<'a>(&'a self, _: &'a Space) -> BoxFuture<'a, Result<()>> {

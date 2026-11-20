@@ -64,7 +64,7 @@ impl Manager {
         if issues.is_empty() {
             return Ok(None);
         }
-        let space = self.link_space(&SpaceSelector::id(id)).await?;
+        let space = self.links.link_space(self, &SpaceSelector::id(id)).await?;
         let warnings = self.settle_issue_agents(&space, &issues).await;
         Ok(Some((space, warnings)))
     }
@@ -80,7 +80,7 @@ impl Manager {
         if issues.is_empty() {
             return Ok(Vec::new());
         }
-        let linked = self.own_link_space(space.clone()).await?;
+        let linked = self.links.own_link_space(self, space.clone()).await?;
         Ok(self.settle_issue_agents(&linked, issues).await)
     }
 
@@ -205,7 +205,10 @@ impl Manager {
     /// work is not done, it has an agent or one asleep, or else an agent
     /// assigned it the issue and no agent of its own ended since.
     async fn agent_works(&self, linker: &Linker) -> Result<bool> {
-        let space = self.link_space(&SpaceSelector::id(&linker.id)).await?;
+        let space = self
+            .links
+            .link_space(self, &SpaceSelector::id(&linker.id))
+            .await?;
         if !self.acting_settings(&space).await?.issue.assign.agent() {
             return Ok(false);
         }

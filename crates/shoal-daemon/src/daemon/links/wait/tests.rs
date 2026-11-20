@@ -2724,7 +2724,8 @@ async fn sensitive_files_changed_on_both_sides_are_reported_beside_a_linked_pr()
     let linked = &workspaces[1];
     register_watch(&manager, &linked.id, PR.as_str()).await;
     let space = manager
-        .link_space(&SpaceSelector::id(&linked.id))
+        .links
+        .link_space(&*manager, &SpaceSelector::id(&linked.id))
         .await
         .unwrap();
     let polled = manager.poll_space_item_activity(&space).await;
@@ -2777,7 +2778,8 @@ async fn a_stalled_worktree_fails_the_background_branch_check_at_once() {
 
     // Even reading which files the repository lists waits for the worktree.
     let space = manager
-        .link_space(&SpaceSelector::id(&workspace.id))
+        .links
+        .link_space(&*manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     let polled = manager.poll_space_item_activity(&space).await;
@@ -2812,7 +2814,11 @@ async fn a_done_workspace_records_no_branch_check() {
     register_watch(&manager, &workspace.id, PR.as_str()).await;
     let selector = SpaceSelector::id(&workspace.id);
     // A poll in flight read the space before its completion.
-    let space = manager.link_space(&selector).await.unwrap();
+    let space = manager
+        .links
+        .link_space(&*manager, &selector)
+        .await
+        .unwrap();
     manager
         .mark_space_done(&selector, Done::default(), &Attacher::User)
         .await

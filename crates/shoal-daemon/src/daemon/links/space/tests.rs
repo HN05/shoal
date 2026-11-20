@@ -72,7 +72,8 @@ async fn a_chat_without_a_repository_acts_in_each_repository_under_its_permissio
     let mut openings = Vec::new();
     for repo in &repos {
         let space = manager
-            .context_space(&acting_in(&master, repo))
+            .links
+            .context_space(&*manager, &acting_in(&master, repo))
             .await
             .unwrap();
         assert_eq!(*space.repository_id(), repo.id);
@@ -85,13 +86,15 @@ async fn a_chat_without_a_repository_acts_in_each_repository_under_its_permissio
     // Its proposal names the repository it acts in, where the decision
     // finds it again.
     let space = manager
-        .context_space(&acting_in(&master, &repos[0]))
+        .links
+        .context_space(&*manager, &acting_in(&master, &repos[0]))
         .await
         .unwrap();
     let proposal = store_issue_proposal(&manager, &space).await;
     assert_eq!(proposal.repository_id.as_ref(), Some(&repos[0].id));
     let found = manager
-        .find_link_space(&master.id, proposal.repository_id.as_ref())
+        .links
+        .find_link_space(&*manager, &master.id, proposal.repository_id.as_ref())
         .await
         .unwrap()
         .unwrap();
@@ -100,7 +103,8 @@ async fn a_chat_without_a_repository_acts_in_each_repository_under_its_permissio
     // A chat of a repository acts only in its own.
     let planning = chat(&manager, "planning", Some(&repos[0])).await;
     let elsewhere = manager
-        .context_space(&acting_in(&planning, &repos[1]))
+        .links
+        .context_space(&*manager, &acting_in(&planning, &repos[1]))
         .await;
     assert!(elsewhere.is_err());
 }
@@ -117,7 +121,11 @@ async fn a_space_naming_its_own_repository_acts_there_as_itself() {
         space: SpaceSelector::id(&workspace.id),
         repository: Some(repository.id.clone()),
     };
-    let own = manager.context_space(&context(&repos[0])).await.unwrap();
+    let own = manager
+        .links
+        .context_space(&*manager, &context(&repos[0]))
+        .await
+        .unwrap();
     assert_eq!(
         (
             own.id.clone(),
@@ -126,7 +134,13 @@ async fn a_space_naming_its_own_repository_acts_there_as_itself() {
         ),
         (workspace.id.clone(), repos[0].id.clone(), true)
     );
-    assert!(manager.context_space(&context(&repos[1])).await.is_err());
+    assert!(
+        manager
+            .links
+            .context_space(&*manager, &context(&repos[1]))
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]

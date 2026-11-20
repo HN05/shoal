@@ -35,7 +35,7 @@ impl Manager {
     ) {
         // Logs are read in the space's own context: a chat reads them from
         // its repository's checkout.
-        let Ok(space) = self.link_space(space).await else {
+        let Ok(space) = self.links.link_space(self, space).await else {
             return;
         };
         let target = RepoTarget::from(space.item_context());

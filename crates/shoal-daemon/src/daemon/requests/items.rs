@@ -223,7 +223,12 @@ pub(super) async fn handle(
                 .await?,
         ),
         ItemMethod::RelinkSpace { space, links } => {
-            let id = manager.link_space(&space).await?.id.to_owned();
+            let id = manager
+                .links
+                .link_space(&**manager, &space)
+                .await?
+                .id
+                .to_owned();
             let warnings = manager.relink_space(&id, &links, caller).await;
             Body::Linked(shoal_protocol::links::Linked {
                 title_error: None,
@@ -428,7 +433,7 @@ pub(super) async fn reached_change_context(
 ) -> Result<RepositoryId> {
     let space = change_context_space(manager, caller, context).await?;
     manager.ensure_selected_reached(caller, Some(space)).await?;
-    let space = manager.context_space(context).await?;
+    let space = manager.links.context_space(manager, context).await?;
     Ok(space.repository_id().clone())
 }
 

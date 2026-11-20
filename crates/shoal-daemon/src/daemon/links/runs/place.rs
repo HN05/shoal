@@ -157,7 +157,7 @@ impl Manager {
         if self.space(selector).await?.repository_id.as_ref().is_none() {
             return Ok(());
         }
-        let space = self.link_space(selector).await?;
+        let space = self.links.link_space(self, selector).await?;
         ensure!(
             named == shoal_links::forges::of_space(self, &space).await?,
             ELSEWHERE

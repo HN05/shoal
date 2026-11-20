@@ -67,9 +67,9 @@ impl Manager {
     /// Change the PR registration of the space `selector` names under its
     /// PR gate, as [`Self::set_pr_gated`] does.
     pub async fn set_pr(&self, selector: &SpaceSelector, action: Action) -> Result<()> {
-        let id = self.link_space(selector).await?.id.to_owned();
+        let id = self.links.link_space(self, selector).await?.id.to_owned();
         let _guard = self.gates.lock_prs([&id]).await;
-        let space = self.link_space(&SpaceSelector::id(&id)).await?;
+        let space = self.links.link_space(self, &SpaceSelector::id(&id)).await?;
         self.set_pr_gated(&space, action, WatchCheck::Lookup).await
     }
 

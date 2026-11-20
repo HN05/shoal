@@ -23,7 +23,7 @@ impl Manager {
         let name = space.name.to_string();
         let open = match space.repository_id.is_some() {
             true => {
-                self.open_own_pulls(self.own_link_space(space).await?)
+                self.open_own_pulls(self.links.own_link_space(self, space).await?)
                     .await?
             }
             // A chat without a repository records no links.

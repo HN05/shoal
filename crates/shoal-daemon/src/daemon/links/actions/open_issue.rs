@@ -93,7 +93,7 @@ impl Manager {
         match self.outside_repositories(context).await? {
             Some(chat) => Ok((self.registered_named(named).await?)
                 .map(|checkout| LinkSpace::acting_in(chat, checkout))),
-            None => self.context_space(context).await.map(Some),
+            None => self.links.context_space(self, context).await.map(Some),
         }
     }
 

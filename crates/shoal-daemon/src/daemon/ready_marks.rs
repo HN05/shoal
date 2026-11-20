@@ -88,9 +88,9 @@ impl Manager {
         selection: Selection,
         caller: Option<&Caller>,
     ) -> Result<ReadyMarks> {
-        let id = self.link_space(selector).await?.id.to_owned();
+        let id = self.links.link_space(self, selector).await?.id.to_owned();
         let _guard = self.lock_change_gates(&id, &[]).await?;
-        let space = self.link_space(&SpaceSelector::id(&id)).await?;
+        let space = self.links.link_space(self, &SpaceSelector::id(&id)).await?;
         let head = self.ready_head(&space, caller).await?;
         let settings = self.acting_settings(&space).await?;
         let command = HookKind::PostReady
@@ -227,9 +227,9 @@ impl Manager {
         selection: Selection,
         draft: Option<bool>,
     ) -> Result<Vec<ReviewMark>> {
-        let id = self.link_space(selector).await?.id.to_owned();
+        let id = self.links.link_space(self, selector).await?.id.to_owned();
         let _guard = self.lock_change_gates(&id, &[]).await?;
-        let space = self.link_space(&SpaceSelector::id(&id)).await?;
+        let space = self.links.link_space(self, &SpaceSelector::id(&id)).await?;
         let kind = marked_kind(&selection)?;
         let explicit = marked_item(self.explicit_item(space.origin_path(), &selection).await?);
         let selected = self.selected_marks(&space.id, kind, explicit).await?;

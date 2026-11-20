@@ -83,7 +83,7 @@ impl Manager {
             None => self.delegated_spaces(id).await?,
         };
         let guard = self.gates.lock_prs(receiving(id, &children)).await;
-        let space = (self.find_link_space(id, repository).await?)
+        let space = (self.links.find_link_space(self, id, repository).await?)
             .with_context(|| format!("space {id} no longer exists"))?;
         let items = self.watched_items(&space, selection).await?;
         let report = branch_report(&items);

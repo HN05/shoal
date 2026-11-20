@@ -662,7 +662,10 @@ impl Manager {
                     url: url.into(),
                     title,
                 };
-                let space = self.link_space(&SpaceSelector::id(space)).await?;
+                let space = self
+                    .links
+                    .link_space(self, &SpaceSelector::id(space))
+                    .await?;
                 self.set_pr_gated(&space, watch, check).await?;
                 Ok(Vec::new())
             }

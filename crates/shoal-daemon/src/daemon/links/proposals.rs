@@ -202,7 +202,10 @@ impl Manager {
         }
         self.ensure_not_pushing(&request)?;
         let repository = request.repository_id.as_ref();
-        let space = self.find_link_space(&request.space_id, repository).await?;
+        let space = self
+            .links
+            .find_link_space(self, &request.space_id, repository)
+            .await?;
         let space = space.as_ref();
         // A PR an earlier approval posted was pushed already.
         if approve && request.pending_push().is_some() && request.url.is_none() {
@@ -896,6 +899,16 @@ fn comment(finding: Finding) -> Action {
 }
 
 mod files;
+
+/// The space `selector` names as links see it, which other crates' tests
+/// pass to [`store_issue_proposal`].
+#[cfg(feature = "test-support")]
+pub async fn link_space(
+    manager: &Manager,
+    selector: &shoal_protocol::space_names::SpaceSelector,
+) -> Result<LinkSpace> {
+    manager.links.link_space(manager, selector).await
+}
 
 /// A pending issue proposal from `workspace`, which tests read.
 #[cfg(any(test, feature = "test-support"))]

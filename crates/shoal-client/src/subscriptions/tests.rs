@@ -5,7 +5,9 @@ use crate::forge::items::link::LinkKind;
 use crate::test_daemon::Connect as _;
 use shoal_core::execution::recovery::LastSessionExt as _;
 use shoal_core::removal::{InspectionPolicy, UnsavedWork};
-use shoal_daemon::test_daemon::{ApprovalRequestExt as _, HANG, TestDaemon, store_issue_proposal};
+use shoal_daemon::test_daemon::{
+    ApprovalRequestExt as _, HANG, TestDaemon, link_space, store_issue_proposal,
+};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::alerts::Sender;
 use shoal_protocol::config::repo::Lifetime;
@@ -287,9 +289,7 @@ async fn a_chats_subscription_follows_the_issues_it_proposed() {
     let mut subscription = subscribe(connector, &[Topic::Approvals]).await;
     let records = snapshot(&mut subscription).await;
     assert!(records.is_empty(), "{records:?}");
-    let space = daemon
-        .manager
-        .link_space(&SpaceSelector::id(&chat.id))
+    let space = link_space(&daemon.manager, &SpaceSelector::id(&chat.id))
         .await
         .unwrap();
     let proposal = store_issue_proposal(&daemon.manager, &space).await;
