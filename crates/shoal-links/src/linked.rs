@@ -1,9 +1,9 @@
 //! The items recorded as linked to a space, as lists and its status show
 //! them.
-use rusqlite::{Connection, OptionalExtension, Row};
+use rusqlite::{Connection, Row};
 use shoal_forge_types::items::link::ItemKind;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::links::pr::{Registration, RegistrationKind};
+use shoal_protocol::links::pr::Registration;
 
 use shoal_forge_types::items::reference::ItemRef;
 use shoal_protocol::model::{LinkedItem, Relation, SpaceLinks};
@@ -111,22 +111,12 @@ pub fn assigned_items(
 ) -> anyhow::Result<Vec<ItemRef>> {
     let mut items = Vec::new();
     if kind != Some(ItemKind::Issue) {
-        let registration: Option<String> = db
-            .query_row(
-                "SELECT record FROM pr_cleanup WHERE space_id=?1",
-                [id],
-                |row| row.get(0),
-            )
-            .optional()?;
-        if let Some(Registration {
-            kind: RegistrationKind::Watch { urls, .. },
-            ..
-        }) = registration
+        // An unreadable registration fails the read rather than passing
+        // for watching nothing, which would let completion and cleanup go on.
+        let registration: Option<Registration> = (crate::pr::stored(db, id)?)
             .map(|text| serde_json::from_str(&text))
-            .transpose()?
-        {
-            items.extend(urls);
-        }
+            .transpose()?;
+        items.extend_from_slice(crate::pr::watched_urls(registration.as_ref()));
     }
     if kind != Some(ItemKind::Pr) {
         items.extend(assigned_urls(db, id)?);

@@ -9,15 +9,19 @@ pub mod titles;
 
 /// The PRs the space `id` watches; an unreadable registration watches none.
 pub fn watched_prs(db: &Connection, id: &SpaceId) -> rusqlite::Result<Vec<ItemRef>> {
-    let record: Option<String> = db
-        .query_row(
-            "SELECT record FROM pr_cleanup WHERE space_id=?1",
-            [id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    let registration = record.and_then(|record| serde_json::from_str(&record).ok());
+    let registration = stored(db, id)?.and_then(|record| serde_json::from_str(&record).ok());
     Ok(watched_urls(registration.as_ref()).to_vec())
+}
+
+/// The PR registration of the space `id` as stored, which each reader
+/// parses as it must take an unreadable one.
+pub(crate) fn stored(db: &Connection, id: &SpaceId) -> rusqlite::Result<Option<String>> {
+    db.query_row(
+        "SELECT record FROM pr_cleanup WHERE space_id=?1",
+        [id],
+        |row| row.get(0),
+    )
+    .optional()
 }
 
 /// The PRs `registration` watches, none without one.
