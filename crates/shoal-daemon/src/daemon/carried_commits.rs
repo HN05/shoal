@@ -17,7 +17,7 @@ use tokio::{io::AsyncReadExt as _, net::UnixStream};
 
 use super::{
     answer::{self, OperationGuard},
-    hub::sending::{Answers, blocking, send_file},
+    hub::sending::{blocking, deliver_file},
     manager::Manager,
     scope::Caller,
 };
@@ -60,9 +60,8 @@ impl Manager {
         })
     }
 
-    /// Send the bundle `file` to `machine` for `caller` as `receive` asks:
-    /// once that machine's daemon answers it, write the bundle and end this
-    /// side, then wait for its answer that it took the commits.
+    /// Send the bundle `file` to `machine` for `caller` as `receive` asks,
+    /// and wait for its answer that it took the commits.
     async fn send_bundle(
         &self,
         machine: &Member,
@@ -71,15 +70,11 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<()> {
         let operation = Operation::Repository(receive);
-        let (incoming, mut outgoing) = self
+        let (incoming, outgoing) = self
             .hub
             .open_duplex(self, machine, operation, caller)
             .await?;
-        let mut answers = Answers::new(incoming);
-        answers.next().await?;
-        send_file(file, &mut outgoing).await?;
-        outgoing.end(None).await;
-        answers.next().await.map(drop)
+        deliver_file(file, incoming, outgoing).await.map(drop)
     }
 
     /// Take the bundle of `commit` that the caller writes on `stream` once

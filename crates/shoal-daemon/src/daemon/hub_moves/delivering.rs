@@ -12,10 +12,7 @@ use shoal_protocol::{
 
 use crate::{
     daemon::{
-        hub::{
-            Named,
-            sending::{Answers, send_file},
-        },
+        hub::{Named, sending::deliver_file},
         manager::Manager,
     },
     time::UnixTime,
@@ -101,23 +98,7 @@ impl Manager {
             .hub
             .open_duplex(self, &machine, operation, None)
             .await?;
-        let mut answers = Answers::new(incoming);
-        answers.next().await?;
-        let sending = async move {
-            let mut outgoing = outgoing;
-            if send_file(&file, &mut outgoing).await.is_ok() {
-                outgoing.end(None).await;
-            }
-        };
-        // An import that refuses the package answers before it read all of
-        // it, which ends the sending.
-        let answer = answers.next();
-        tokio::pin!(answer);
-        tokio::select! {
-            answer = &mut answer => return ImportedMove::try_from(answer?),
-            () = sending => {}
-        }
-        ImportedMove::try_from(answer.await?)
+        ImportedMove::try_from(deliver_file(&file, incoming, outgoing).await?)
     }
 }
 
