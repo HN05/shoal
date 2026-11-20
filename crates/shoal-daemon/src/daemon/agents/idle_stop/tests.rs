@@ -808,6 +808,33 @@ async fn an_agent_the_user_is_away_from_sleeps_to_make_room_for_queued_work() {
     assert!(!*with_user.stop.borrow(), "the user is engaged with it");
 }
 
+#[tokio::test]
+async fn no_agent_sleeps_for_a_slot_the_machine_does_not_have() {
+    let (root, manager) = manager().await;
+    manager.publish_config(crate::test_support::global_config(
+        "[machine]\nmax_heavy_agents = 0\n[machine.overload.disk]\nenabled = false",
+    ));
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    (manager.write_local_config(&repo.id, Some("[sleep]\nenabled = false\n".into())))
+        .await
+        .unwrap();
+    let (_, away) = agent(&manager, &repo.id, "away", IDLE).await;
+    let queued = crate::daemon::agent_queue::tests::request(&manager, &repo, "later", false);
+    manager.queue_add(queued.await).await.unwrap();
+    manager.dispatch_queue().await.unwrap();
+    let entries = manager.queue_entries().await.unwrap();
+    assert_eq!(
+        (entries.iter().map(|entry| entry.held_by)).collect::<Vec<_>>(),
+        [Some(crate::model::HeldBy::MaxHeavyAgents)]
+    );
+    manager.stop_idle_agents(later()).await.unwrap();
+    assert!(!*away.stop.borrow());
+}
+
 /// The agent of a new workspace `name`, put to sleep as idle while the user
 /// is away, its restore queued as its wrapper queues it, with disk space
 /// left out of the restore's wait.

@@ -16,7 +16,10 @@ use super::{
     Manager, Protection, ProtectionExt,
     idle_stop::{Candidate, Chosen},
 };
-use crate::{daemon::engagement::FLOOR, model::HeldBy, state::QueueState, time::UnixTime};
+use crate::{
+    config::MachineLimit, daemon::engagement::FLOOR, model::HeldBy, state::QueueState,
+    time::UnixTime,
+};
 
 /// A queued entry waiting for room, with its priority and what it needs.
 struct Waiting {
@@ -91,9 +94,12 @@ impl Manager {
         Ok(room)
     }
 
-    /// The queued entries that a slot or memory holds back, in queue order.
+    /// The queued entries that a slot or memory holds back, in queue order,
+    /// leaving out those waiting for a machine slot where the machine has
+    /// none, which no sleep frees.
     async fn waiting_for_room(&self) -> Result<Vec<Waiting>> {
         let entries = self.queue_entries().await?;
+        let slots = self.config().machine.max_heavy_agents != MachineLimit::Fixed(0);
         Ok((entries.into_iter())
             .filter(|entry| entry.state == QueueState::Queued)
             .filter_map(|entry| {
@@ -101,7 +107,7 @@ impl Manager {
                     HeldBy::RepositoryLimit => Room::Slot {
                         repository: Some(entry.repository_id?),
                     },
-                    HeldBy::MaxHeavyAgents => Room::Slot { repository: None },
+                    HeldBy::MaxHeavyAgents if slots => Room::Slot { repository: None },
                     HeldBy::Memory { .. } | HeldBy::MemoryKept => Room::Memory,
                     _ => return None,
                 };
