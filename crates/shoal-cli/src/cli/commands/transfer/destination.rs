@@ -133,11 +133,11 @@ fn file_destination(path: &Path, several: bool) -> Result<Chosen> {
     })
 }
 
-/// The destination the user picks: its kind, `Joined machine` first on a
-/// machine joined to a hub, and a file only where `files`, then the
-/// machine, the host or the path, a directory for `several` spaces.
+/// The destination the user picks: its kind, `Joined machine` first where
+/// another joined machine is online, and a file only where `files`, then
+/// the machine, the host or the path, a directory for `several` spaces.
 async fn pick(ctx: &Context, several: bool, files: bool) -> Result<Named> {
-    let view = crate::cli::hub_view::view(ctx).await;
+    let view = (crate::cli::hub_view::view(ctx).await).filter(ui::can_pick_machine);
     let mut kinds = Vec::new();
     if view.is_some() {
         kinds.push((Kind::Machine, "Joined machine"));

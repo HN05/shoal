@@ -26,6 +26,11 @@ pub fn pick_machine(ctx: &Context, prompt: &str, view: &HubView) -> Result<Strin
     Ok(named(view, &id))
 }
 
+/// Whether `view` has another machine online to pick.
+pub fn can_pick_machine(view: &HubView) -> bool {
+    !other_machines(view).0.is_empty()
+}
+
 /// The machines of `view` but this one, online and offline, each by name.
 fn other_machines(view: &HubView) -> (Vec<&Member>, Vec<&Member>) {
     let mut others: Vec<&Member> = (view.directory.machines.iter())

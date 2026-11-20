@@ -32,6 +32,7 @@ fn the_other_machines_online_are_picked_by_name_and_the_offline_ones_listed() {
             .collect()
     };
     assert_eq!(names(&online), ["desk", "server"]);
+    assert!(can_pick_machine(&view));
     assert_eq!(names(&offline), ["old"]);
     let header = offline_header(&offline, UnixTime::from_seconds(0)).unwrap();
     assert!(header.contains("old (seen"), "{header}");
@@ -47,4 +48,13 @@ fn a_machine_whose_name_another_shares_is_named_by_its_id() {
     ]);
     assert_eq!(named(&view, "2"), "2");
     assert_eq!(named(&view, "3"), "server");
+}
+
+#[test]
+fn no_machine_is_offered_while_every_other_one_is_offline() {
+    let view = view(vec![
+        member("here", "laptop", "machine", None),
+        member("5", "old", "machine", Some(0)),
+    ]);
+    assert!(!can_pick_machine(&view));
 }

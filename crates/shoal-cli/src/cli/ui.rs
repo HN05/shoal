@@ -31,7 +31,7 @@
 //! - [`elsewhere`]: the other joined machines' spaces those pickers offer
 //!   after this machine's, for a command that acts on them.
 //! - [`machines`]: another joined machine, picked among those online
-//!   ([`pick_machine`]).
+//!   ([`pick_machine`]) where there is one ([`can_pick_machine`]).
 //! - [`rows`]: the aligned labels pickers and lists show ([`workspace_rows`],
 //!   [`aligned`]).
 //!
@@ -57,7 +57,7 @@ mod workspaces;
 use elsewhere::elsewhere_entries;
 pub use keys::Key;
 pub use linked::pick_linked;
-pub use machines::pick_machine;
+pub use machines::{can_pick_machine, pick_machine};
 pub use modes::{ModeChoice, ModeFit};
 pub use picker::*;
 pub use prompt::*;

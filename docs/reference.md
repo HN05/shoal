@@ -4794,8 +4794,8 @@ shoal restore --from moving                    # continue every space written to
 
 `shoal move [space]...` takes one destination: `--ssh <host>`,
 `--machine <machine>` or `-o <file>`. Without one, on a terminal, it picks the spaces when none are
-named, then asks for the destination's kind, `Joined machine` first on a
-machine joined to a hub, `SSH host` or `File`, without `File` given
+named, then asks for the destination's kind, `Joined machine` first where
+another joined machine is online, `SSH host` or `File`, without `File` given
 `--no-resume`, and picks the machine among the other joined machines online,
 by name, listing the offline ones above them with when the hub last saw them,
 or asks for the host or path; given `--shoal` it asks only for the host. It
