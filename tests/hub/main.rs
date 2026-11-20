@@ -142,7 +142,7 @@ fn a_machine_joins_over_the_listener_with_a_code_it_uses_once() {
     let install = format!("{}/install", listener.as_str().unwrap());
     assert_eq!(
         pairing["installer"],
-        format!("curl -fsSL {install} | sh -s -- '{code}'")
+        format!("curl -fsSL '{install}' | sh -s -- '{code}'")
     );
     let script = std::process::Command::new("curl")
         .args(["-fsS", &install])
