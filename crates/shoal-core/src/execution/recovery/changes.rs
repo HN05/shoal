@@ -40,13 +40,20 @@ impl Change {
     }
 
     /// What the agent of `space` is told, carrying on from a fork of its
-    /// session when `forked`, followed by `handoff`, before its mode's
+    /// session when `forked`, to continue its assignment when its session
+    /// ended `mid_turn`, followed by `handoff`, before its mode's
     /// instructions, which take the fields of the issue `space` links.
-    pub fn told(self, space: &Space, forked: bool, handoff: Option<&str>) -> Subject {
+    pub fn told(
+        self,
+        space: &Space,
+        forked: bool,
+        mid_turn: bool,
+        handoff: Option<&str>,
+    ) -> Subject {
         let mut text = match self {
             Self::Converted => converted_prompt(space, forked),
-            Self::Copied(copied) => copied_prompt(space, copied, forked),
-            Self::Moved => moved_prompt(space),
+            Self::Copied(copied) => copied_prompt(space, copied, forked, mid_turn),
+            Self::Moved => moved_prompt(space, mid_turn),
         };
         if let Some(handoff) = handoff {
             text.push_str("\n\n");
@@ -90,8 +97,8 @@ fn converted_prompt(space: &Space, forked: bool) -> String {
 
 /// What the agent of `space`, copied from another or restored while
 /// another space holds its session as `copied` says, is told, from a fork
-/// of its session there when `forked`.
-fn copied_prompt(space: &Space, copied: Copied, forked: bool) -> String {
+/// of its session there when `forked`, to continue when it was `mid_turn`.
+fn copied_prompt(space: &Space, copied: Copied, forked: bool, mid_turn: bool) -> String {
     let mut prompt = match (copied.held_elsewhere, space.worktree()) {
         (true, _) => {
             "Shoal restored this space while another space holds its agent's session.".to_owned()
@@ -113,23 +120,34 @@ fn copied_prompt(space: &Space, copied: Copied, forked: bool) -> String {
         Some(_) => "its linked issue, its commits and its uncommitted changes",
         None => "its linked issue",
     };
-    prompt.push_str(&format!(
-        " Continue working on the unfinished assignment: read {read} to see where it stands."
-    ));
+    prompt.push(' ');
+    prompt.push_str(&where_it_stands(read, mid_turn));
     prompt
 }
 
 /// What the new agent of `space`, which moved where its earlier session is
-/// not available, is told.
-fn moved_prompt(space: &Space) -> String {
+/// not available, is told, to continue when it was `mid_turn`.
+fn moved_prompt(space: &Space, mid_turn: bool) -> String {
     let read = match space.worktree() {
         Some(_) => "its linked issue and PRs, its commits and its uncommitted changes",
         None => "its linked issue",
     };
     format!(
-        "Shoal moved this {}, and your earlier session is not available here. Continue working on the unfinished assignment: read {read} to see where it stands.",
-        space.kind()
+        "Shoal moved this {}, and your earlier session is not available here. {}",
+        space.kind(),
+        where_it_stands(read, mid_turn)
     )
+}
+
+/// Where the agent reads where its work stands, `read`, told to continue
+/// the assignment only when its session ended `mid_turn`.
+fn where_it_stands(read: &str, mid_turn: bool) -> String {
+    match mid_turn {
+        true => format!(
+            "Continue working on the unfinished assignment: read {read} to see where it stands."
+        ),
+        false => format!("Read {read} to see where the work stands."),
+    }
 }
 
 #[cfg(test)]

@@ -19,7 +19,7 @@ use crate::{
     protocol::ConfigTarget,
 };
 use shoal_core::execution::recovery::{
-    Record, RecordExt as _, Recovery, Stop, StopExt as _, resumed_prompt,
+    Ending, Record, RecordExt as _, Recovery, Stop, StopExt as _, resumed_prompt,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -128,7 +128,7 @@ pub(super) async fn for_launch(
         narrowing: agent.narrowing,
         session: None,
     };
-    let resolved = resolve_in(paths, workspace, restored, None).await;
+    let resolved = resolve_in(paths, workspace, restored, Ending::Unrecorded).await;
     resolved.unwrap_or_else(|error| {
         eprintln!("warning: automatic agent recovery unavailable: {error:#}");
         Recovery {
@@ -149,24 +149,25 @@ async fn resolve_in(
     paths: &CommandPaths,
     space: &SpaceSelector,
     restored: Restored<'_>,
-    stop: Option<&Stop>,
+    ending: Ending<'_>,
 ) -> Result<Recovery> {
     let records = crate::homes::records(paths, space).await?;
-    resolve(paths, records.home()?, restored, None, stop).await
+    resolve(paths, records.home()?, restored, None, ending).await
 }
 
-/// Ask the `restored` session to continue, telling it about its `stop`
-/// and including `handoff` where the command accepts a prompt: agents
-/// with resume arguments and `{prompt}` in its `resume_command`. Resume
-/// arguments restore its session when known, otherwise the workspace's
-/// latest session, with its model and effort, in `home`, a workspace or
-/// a chat.
+/// Restore the `restored` session, which ended as `ending` says: one that
+/// ended mid-turn is asked to continue, told about its stop, and any other
+/// waits, and either is told `handoff` where the command accepts a prompt:
+/// agents with resume arguments and `{prompt}` in its `resume_command`.
+/// Resume arguments restore its session when known, otherwise the
+/// workspace's latest session, with its model and effort, in `home`, a
+/// workspace or a chat.
 pub async fn resolve<'a>(
     paths: &CommandPaths,
     home: impl Into<AgentHome<'a>>,
     restored: Restored<'_>,
     handoff: Option<&str>,
-    stop: Option<&Stop>,
+    ending: Ending<'_>,
 ) -> Result<Recovery> {
     let home = home.into();
     let settings =
@@ -184,13 +185,13 @@ pub async fn resolve<'a>(
         .arguments
         .resume_args(restored.session);
     let automatic = configured.is_some() || resume_args.is_some();
-    let message = resumed_prompt(stop, handoff);
+    let message = resumed_prompt(ending, handoff);
     let restore = RestoreCommand {
         paths,
         settings: &settings,
         name: &name,
         home,
-        prompt: Some(OsStr::new(&message)),
+        prompt: message.as_deref().map(OsStr::new),
         // A restore runs with what the agent ran with, or not at all, so
         // the record stays for once its templates take the values again.
         model_args: crate::agents::model_args(&settings, &name, restored.model)?,
@@ -221,7 +222,8 @@ pub async fn resolve<'a>(
 
 /// The command restoring the agent stopped with `record`, with the
 /// proxy it was resolved to go through: the session it saved, told why
-/// and when it stopped, otherwise the restore command resolved at launch.
+/// and when it stopped when that was mid-turn, otherwise the restore
+/// command resolved at launch.
 pub(super) async fn restore_command(
     recovery: &Recovery,
     paths: &CommandPaths,
@@ -243,7 +245,7 @@ pub(super) async fn restore_command(
         session: record.session.as_ref(),
     };
     let space = SpaceSelector::id(&space.id);
-    match resolve_in(paths, &space, restored, Some(&stop)).await {
+    match resolve_in(paths, &space, restored, Ending::Stopped(&stop)).await {
         Ok(resolved) if !resolved.command.is_empty() => (resolved.command, resolved.proxy),
         Ok(_) => launched(),
         Err(error) => {

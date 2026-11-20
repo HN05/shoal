@@ -183,6 +183,9 @@ pub struct Stop {
     /// When its recovery record was saved.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at: Option<crate::time::UnixTime>,
+    /// What the agent was doing when it stopped, as [`Record::turn`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn: Option<AgentState>,
 }
 
 /// An agent stopped in a removed workspace, which `shoal restore` saves

@@ -61,6 +61,7 @@ impl StopExt for Stop {
         Self {
             reason: record.stop_reason.clone(),
             at: saved_at(path),
+            turn: record.turn,
         }
     }
 
@@ -85,17 +86,53 @@ pub fn saved_at(path: &Path) -> Option<crate::time::UnixTime> {
     Some(crate::time::UnixTime::from_system_time(modified.ok()?))
 }
 
-/// What a restored session is told: why and when it stopped when known, to
-/// continue, then `handoff`.
-pub fn resumed_prompt(stop: Option<&Stop>, handoff: Option<&str>) -> String {
-    let mut prompt = stop.map_or_else(|| "Shoal resumed this session.".to_owned(), Stop::describe);
-    prompt.push(' ');
+/// How a restored agent's session ended, which decides whether it is told
+/// to continue.
+#[derive(Debug, Clone, Copy)]
+pub enum Ending<'a> {
+    /// Shoal stopped it, as the stop says.
+    Stopped(&'a Stop),
+    /// It exited on its own, between turns.
+    Exited,
+    /// Nothing records how, which counts as mid-turn.
+    Unrecorded,
+}
+
+impl Ending<'_> {
+    /// Whether it ended in the middle of a turn: one whose turn is unknown
+    /// counts as such.
+    pub fn mid_turn(self) -> bool {
+        match self {
+            Self::Stopped(stop) => !idle(stop.turn),
+            Self::Exited => false,
+            Self::Unrecorded => true,
+        }
+    }
+}
+
+/// What a restored session is told, if anything: when it ended mid-turn,
+/// why and when it stopped when known and to continue, then `handoff`;
+/// otherwise `handoff` alone, so that it waits for what comes next.
+pub fn resumed_prompt(ending: Ending<'_>, handoff: Option<&str>) -> Option<String> {
+    if !ending.mid_turn() {
+        return handoff.map(str::to_owned);
+    }
+    let mut prompt = match ending {
+        Ending::Stopped(stop) => format!("{} ", stop.describe()),
+        Ending::Exited | Ending::Unrecorded => String::new(),
+    };
     prompt.push_str("Continue working on the unfinished assignment from where you left off.");
     if let Some(handoff) = handoff {
         prompt.push_str("\n\n");
         prompt.push_str(handoff);
     }
-    prompt
+    Some(prompt)
+}
+
+/// Whether an agent that reported `turn` last was between turns, with no
+/// work in flight.
+fn idle(turn: Option<AgentState>) -> bool {
+    turn == Some(AgentState::Idle)
 }
 
 impl Recovery {
@@ -265,7 +302,7 @@ impl RecordExt for Record {
     }
 
     fn between_turns(&self) -> bool {
-        self.turn == Some(AgentState::Idle)
+        idle(self.turn)
     }
 
     fn moved(self) -> Self {
@@ -666,6 +703,9 @@ pub trait LastSessionExt: Sized {
     /// This session where it is not available, which starts a new one.
     fn moved(self) -> Self;
 
+    /// How the session ended: as Shoal stopped it, or on its own.
+    fn ending(&self) -> Ending<'_>;
+
     fn path(paths: &Paths, space_id: &SpaceId, execution: &ExecutionId) -> PathBuf;
 
     /// Save execution `id` of `agent` as one of the space's last
@@ -698,6 +738,10 @@ impl LastSessionExt for LastSession {
             origin: None,
             ..self
         }
+    }
+
+    fn ending(&self) -> Ending<'_> {
+        self.stop.as_ref().map_or(Ending::Exited, Ending::Stopped)
     }
 
     fn path(paths: &Paths, space_id: &SpaceId, execution: &ExecutionId) -> PathBuf {

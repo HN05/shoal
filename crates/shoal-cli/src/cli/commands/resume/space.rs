@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use super::reports::{self, Reporting};
 use super::{changed, sessions};
-use crate::execution::recovery::RecordExt;
+use crate::execution::recovery::{LastSessionExt as _, RecordExt};
 use crate::{
     cli::{context::Context, terminal},
     config::permissions::PermissionChange,
@@ -138,7 +138,7 @@ async fn restore(
         home.home()?,
         restored,
         handoff.as_deref(),
-        session.stop.as_ref(),
+        session.ending(),
     )
     .await?;
     if !commands.is_empty() && !recovery.handoff_delivered {

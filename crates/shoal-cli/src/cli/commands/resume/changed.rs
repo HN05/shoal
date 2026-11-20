@@ -8,7 +8,7 @@ use super::reports;
 use crate::{
     cli::context::Context,
     config::templates::Subject,
-    execution::recovery::{LastSession, changes::Change},
+    execution::recovery::{LastSession, LastSessionExt as _, changes::Change},
     model::Space,
     protocol::ConfigTarget,
 };
@@ -45,7 +45,7 @@ pub(super) async fn start_changed(
     let fork = session.session.clone().filter(|_| forks);
     reports::starting_changed(&session.agent, space.kind(), change, fork.is_some());
     let start = ChangedStart {
-        told: change.told(space, fork.is_some(), handoff),
+        told: change.told(space, fork.is_some(), session.ending().mid_turn(), handoff),
         session,
         change,
         fork,

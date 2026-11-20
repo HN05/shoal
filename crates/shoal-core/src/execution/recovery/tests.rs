@@ -534,6 +534,7 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
             stop: Some(Stop {
                 reason: Some("its terminal closed".into()),
                 at: Some(UnixTime::from_seconds(1_800_000_000)),
+                turn: None,
             }),
             converted: false,
         }]
@@ -584,18 +585,51 @@ fn a_restored_session_learns_why_and_when_it_stopped_and_what_the_stop_ended() {
         Stop {
             reason: Some("critical memory pressure".into()),
             at: Some(UnixTime::from_seconds(1_800_000_000)),
+            turn: None,
         }
     );
+    // A stop whose turn is unknown came mid-turn.
     let at = UnixTime::from_seconds(1_800_000_000).local_minutes();
-    let prompt = resumed_prompt(Some(&stop), Some("handoff"));
+    let prompt = resumed_prompt(Ending::Stopped(&stop), Some("handoff")).unwrap();
     assert!(prompt.contains(&at), "{prompt}");
     assert!(prompt.contains("critical memory pressure"), "{prompt}");
     assert!(prompt.ends_with("\n\nhandoff"), "{prompt}");
-    // A last session, which exited on its own, has no stop to describe.
-    assert_ne!(
-        resumed_prompt(Some(&Stop::default()), None),
-        resumed_prompt(None, None)
-    );
+    // Without a stop to describe, it is still told to continue.
+    let unrecorded = resumed_prompt(Ending::Unrecorded, None).unwrap();
+    assert!(unrecorded.starts_with("Continue"), "{unrecorded}");
+}
+
+#[test]
+fn a_session_that_ended_between_turns_is_told_only_its_handoff() {
+    let idle = Stop {
+        turn: Some(AgentState::Idle),
+        ..Stop::default()
+    };
+    for ending in [Ending::Stopped(&idle), Ending::Exited] {
+        assert_eq!(resumed_prompt(ending, None), None);
+        assert_eq!(
+            resumed_prompt(ending, Some("handoff")).as_deref(),
+            Some("handoff")
+        );
+    }
+    let working = Stop {
+        turn: Some(AgentState::Working),
+        ..Stop::default()
+    };
+    assert!(resumed_prompt(Ending::Stopped(&working), None).is_some());
+}
+
+#[test]
+fn a_stop_keeps_the_turn_its_record_saved() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    let (space, execution) = (SpaceId::from("workspace"), ExecutionId::from("execution"));
+    let agent = shoal_protocol::executions::TrackedAgent::named("claude");
+    let turn = Some(AgentState::Idle);
+    let path = save_record(&paths, &space, &execution, &agent, None, turn).unwrap();
+    let record = Record::load(&path).unwrap().unwrap();
+    let last = record.into_last_session(execution, &path);
+    assert!(!last.ending().mid_turn());
 }
 
 #[test]
