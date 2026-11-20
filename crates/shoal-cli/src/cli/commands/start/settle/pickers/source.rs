@@ -90,11 +90,12 @@ fn names_nothing(launch: &Launch) -> bool {
 }
 
 /// Whether `launch` names nothing its workspace's branch comes from: no
-/// branch, issue, link or copy; a base or a repository alone settles no
-/// branch.
+/// existing workspace, which has its own, branch, issue, link or copy; a
+/// base or a repository alone settles no branch.
 fn names_no_branch(launch: &Launch) -> bool {
     let names_link = !matches!(launch.target, None | Some(StartTarget::Repository(_)));
-    launch.branch.is_none()
+    launch.in_workspace.is_none()
+        && launch.branch.is_none()
         && launch.issue.is_none()
         && launch.copy.is_none()
         && launch.checkpoint.is_none()

@@ -48,3 +48,19 @@ fn a_repository_alone_leaves_the_source_to_the_picker() {
     };
     assert!(!names_nothing(&linked));
 }
+
+/// A start in an existing workspace, which has its branch, keeps what
+/// only a workspace takes, such as a blocker, even where nothing checked
+/// it first.
+#[test]
+fn a_start_in_an_existing_workspace_keeps_its_blockers() {
+    let in_workspace = Launch {
+        in_workspace: Some(shoal_protocol::launches::SpaceChoice::Space(
+            "3".parse().unwrap(),
+        )),
+        blockers: vec!["7".into()],
+        ..Launch::default()
+    };
+    ensure_branch_takes(&in_workspace).unwrap();
+    assert!(!names_nothing(&in_workspace));
+}
