@@ -1,13 +1,13 @@
 //! The stopped work and last sessions a restore of agents acts on.
 use anyhow::{Result, ensure};
 
-use crate::cli::commands::restore::targets::Selected;
+use super::targets::Selected;
 use crate::{cli::context::Context, execution::recovery::Saved, model::Space};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The stopped work and last sessions of the `selected` spaces, or of every
 /// space with any, as [`saved_work`] keeps them for `discard`.
-pub(super) async fn stopped(
+pub(in crate::cli::commands) async fn stopped(
     ctx: &Context,
     selected: &Selected,
     discard: bool,
@@ -34,7 +34,7 @@ async fn stopped_in(
             !saved.is_empty(),
             "{} has no stopped agent or commands to {}",
             space.name,
-            if discard { "discard" } else { "restore" }
+            if discard { "discard" } else { "resume" }
         );
         stopped.push((space, saved));
     }

@@ -2382,7 +2382,7 @@ fn resume_changes_the_permissions_a_stopped_agent_was_given() {
         || fixture.ok(&["status", &fixture.id("stopped")])["workspace"]["narrowing"].clone();
     let resume = |args: &[&str]| {
         let resume = [
-            "restore",
+            "resume",
             &fixture.id("stopped"),
             "--execution",
             "stopped-agent",
@@ -2404,7 +2404,7 @@ fn resume_changes_the_permissions_a_stopped_agent_was_given() {
     let output = fixture
         .command()
         .args([
-            "restore",
+            "resume",
             &fixture.id("stopped"),
             "--now",
             "--permission",
@@ -2438,7 +2438,7 @@ fn queued_restore_narrowing(args: &[&str]) -> Value {
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let workspace = fixture.add("stopped");
     stop_narrowed_agent(&fixture, &workspace);
-    let queued = fixture.ok(&[&["restore", &fixture.id("stopped")][..], args].concat());
+    let queued = fixture.ok(&[&["resume", &fixture.id("stopped")][..], args].concat());
     assert_eq!(queued["queued"].as_array().unwrap().len(), 1, "{queued}");
     let path = Path::new(workspace["path"].as_str().unwrap());
     wait_until("the restore", || path.join("restored").exists());
@@ -2483,7 +2483,7 @@ fn resume_changes_the_permissions_a_stopped_chat_was_given() {
     let resume = |fixture: &Fixture, args: &[&str]| {
         let mut command = fixture.command();
         command
-            .args(["restore", &fixture.id("talk"), "--focus"])
+            .args(["resume", &fixture.id("talk"), "--focus"])
             .args(args);
         let (output, transcript) = fixture.interactive_command(&mut command, "");
         assert!(
@@ -3601,7 +3601,7 @@ fn resume_now_without_a_terminal_has_the_daemon_start_its_restores() {
         .iter()
         .zip(&paths)
     {
-        let resumed = fixture.ok(&[&["restore"][..], args].concat());
+        let resumed = fixture.ok(&[&["resume"][..], args].concat());
         let queued = resumed["queued"].as_array().unwrap();
         assert_eq!(queued.len(), 1, "{resumed}");
         assert_eq!(queued[0]["state"], "starting", "{resumed}");
@@ -3630,7 +3630,7 @@ fn resume_without_a_terminal_or_host_is_refused_before_queuing() {
     fs::create_dir(&bin).unwrap();
     let output = fixture
         .command()
-        .args(["restore", &fixture.id("stopped"), "--now"])
+        .args(["resume", &fixture.id("stopped"), "--now"])
         .env("PATH", fixture.restricted_path(&bin))
         .stdin(Stdio::null())
         .output()
@@ -3678,7 +3678,7 @@ fn resume_queues_restores_that_start_as_agent_slots_free() {
     }
     fixture.ok(&["done", &fixture.id("finished")]);
 
-    let queued = fixture.ok(&["restore", "--all"]);
+    let queued = fixture.ok(&["resume", "--all"]);
     let names: Vec<_> = queued["queued"]
         .as_array()
         .unwrap()

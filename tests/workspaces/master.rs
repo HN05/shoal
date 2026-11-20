@@ -84,7 +84,7 @@ fn orchestrate_starts_a_chat_without_a_repository_in_root_dir() {
     assert_eq!(chats[0]["running"], false, "{chats}");
 
     // StartedRestores, it runs there again under its name.
-    let resumed = run_agent(&fixture, &["restore", &fixture.id("master"), "--focus"]);
+    let resumed = run_agent(&fixture, &["resume", &fixture.id("master"), "--focus"]);
     assert_eq!(resumed.chats[0]["id"], id);
     assert_eq!(resumed.directory, root);
 }
@@ -184,7 +184,7 @@ fn a_master_session_moves_and_continues_its_session_in_root_dir() {
     );
     assert_eq!(fixture.ok(&["list", "--chats"]), serde_json::json!([]));
     fixture.ok(&["restore", "--from", file, "--no-resume"]);
-    let imported = run_agent(&fixture, &["restore", &id, "--focus"]);
+    let imported = run_agent(&fixture, &["resume", &id, "--focus"]);
     assert_eq!(
         (
             &imported.chats[0]["id"],
@@ -217,7 +217,7 @@ fn a_root_move_takes_a_master_session_with_it() {
     fixture.ok(&["repo", "move", "~/moved", "--yes"]);
 
     let moved = fs::canonicalize(home.join("moved")).unwrap();
-    let resumed = run_agent(&fixture, &["restore", &fixture.id("master"), "--focus"]);
+    let resumed = run_agent(&fixture, &["resume", &fixture.id("master"), "--focus"]);
     assert_eq!(resumed.directory, moved);
     assert_eq!(
         fs::read_to_string(resumed.tmp_dir.join("notes")).unwrap(),

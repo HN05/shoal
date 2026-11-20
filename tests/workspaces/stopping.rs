@@ -304,7 +304,7 @@ fn stop_stops_named_or_all_running_workspaces_and_marks_them_stopped() {
         assert!(!child.wait().unwrap().success());
     }
     // Without agents, every workspace's commands are reported once.
-    let resumed = fixture.ok(&["restore", "--all"]);
+    let resumed = fixture.ok(&["resume", "--all"]);
     assert_eq!(
         resumed["commands"].as_array().unwrap().len(),
         3,
@@ -312,7 +312,7 @@ fn stop_stops_named_or_all_running_workspaces_and_marks_them_stopped() {
     );
     assert!(resumed["queued"].as_array().unwrap().is_empty());
     assert!(
-        fixture.ok(&["restore", "--all"])["commands"]
+        fixture.ok(&["resume", "--all"])["commands"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -340,7 +340,7 @@ fn resume_all_skips_the_agents_of_done_workspaces() {
     }
     fixture.ok(&["done", &fixture.id("finished")]);
     // Without a terminal the daemon starts the restore at once.
-    let all = fixture.ok(&["restore", "--all", "--now"]);
+    let all = fixture.ok(&["resume", "--all", "--now"]);
     let queued = all["queued"].as_array().unwrap();
     assert_eq!(queued.len(), 1, "{all}");
     assert_eq!(queued[0]["name"], "active", "{all}");
@@ -380,7 +380,7 @@ fn resuming_several_goes_on_after_one_fails() {
     // workspace's settings.
     let (output, transcript) = fixture.terminal_command(
         fixture.command().args([
-            "restore",
+            "resume",
             &fixture.id("broken"),
             &fixture.id("good"),
             "--now",
@@ -393,8 +393,8 @@ fn resuming_several_goes_on_after_one_fails() {
         "{}\n{transcript}",
         printed(&output)
     );
-    assert!(transcript.contains("cannot restore broken"), "{transcript}");
-    assert!(!transcript.contains("cannot restore good"), "{transcript}");
+    assert!(transcript.contains("cannot resume broken"), "{transcript}");
+    assert!(!transcript.contains("cannot resume good"), "{transcript}");
 }
 
 #[test]
@@ -419,10 +419,10 @@ fn a_parent_discards_only_the_stopped_agents_of_its_children() {
     for args in [
         &["restore", &fixture.id("parent"), "--discard-agent"][..],
         &["restore", &fixture.id("other"), "--discard-agent"],
-        &["restore", &fixture.id("other")],
+        &["resume", &fixture.id("other")],
         // Starting regardless of the limits is the user's.
-        &["restore", &fixture.id("child"), "--now"],
-        &["restore"],
+        &["resume", &fixture.id("child"), "--now"],
+        &["resume"],
     ] {
         let output = scoped_command(&fixture, "parent", args);
         assert!(!output.status.success(), "{args:?}: {}", printed(&output));
@@ -512,7 +512,7 @@ fn a_parent_stops_its_children_and_resumes_them_whoever_stopped_them() {
         PathBuf::from(workspace["path"].as_str().unwrap())
     });
     let restored = || paths.iter().all(|path| path.join("restored").exists());
-    fixture.ok(&["restore", &fixture.id("child"), &fixture.id("grandchild")]);
+    fixture.ok(&["resume", &fixture.id("child"), &fixture.id("grandchild")]);
     wait_until("the user's restores", restored);
     for workspace in ["parent", "other"] {
         let output = scoped_command(&fixture, "parent", &["stop", &fixture.id(workspace)]);
@@ -530,7 +530,7 @@ fn a_parent_stops_its_children_and_resumes_them_whoever_stopped_them() {
     let output = scoped_command(
         &fixture,
         "parent",
-        &["restore", &fixture.id("child"), &fixture.id("grandchild")],
+        &["resume", &fixture.id("child"), &fixture.id("grandchild")],
     );
     assert!(output.status.success(), "{}", printed(&output));
     wait_until("the parent's restores of the user's stops", restored);
@@ -546,7 +546,7 @@ fn a_parent_stops_its_children_and_resumes_them_whoever_stopped_them() {
     for path in &paths {
         fs::remove_file(path.join("restored")).unwrap();
     }
-    let output = scoped_command(&fixture, "parent", &["restore", "--all"]);
+    let output = scoped_command(&fixture, "parent", &["resume", "--all"]);
     assert!(output.status.success(), "{}", printed(&output));
     let queued: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(queued["queued"].as_array().unwrap().len(), 2, "{queued}");
@@ -579,7 +579,7 @@ fn stopping_a_workspace_stops_the_workspaces_below_it() {
     )
     .unwrap();
     let path = PathBuf::from(child["path"].as_str().unwrap());
-    fixture.ok(&["restore", &fixture.id("child")]);
+    fixture.ok(&["resume", &fixture.id("child")]);
     wait_until("the restore", || path.join("restored").exists());
     let running = || {
         fixture.ok(&["status", &fixture.id("child")])["executions"]
@@ -720,7 +720,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         assert!(
             fixture
                 .run(&[
-                    "restore",
+                    "resume",
                     &fixture.id("stopped"),
                     "--execution",
                     id,

@@ -4,7 +4,7 @@ use anyhow::{Result, ensure};
 use std::path::PathBuf;
 
 use super::{changed, commands, permission_change, picker, queue, reports, sessions, stale};
-use crate::client::output::restore::StartedRestores;
+use crate::client::output::resume::StartedRestores;
 use crate::execution::recovery::RecordExt;
 use crate::{
     cli::{context::Context, terminal},

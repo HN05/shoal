@@ -17,29 +17,15 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             name,
             workspace,
         } => demo::run(&ctx, command, name, workspace).await,
-        SessionsCommand::Restore {
-            import, no_resume, ..
-        } if !import.from.is_empty() => {
-            let options = restore::import::ImportOptions {
-                sessions: import.sessions(),
-                repository: import.repository,
-                restore: !no_resume,
-            };
-            restore::import::import(&ctx, import.from, options).await
-        }
-        SessionsCommand::Restore {
+        SessionsCommand::Resume {
             targets,
-            checkpoint,
             execution,
-            discard_agent,
-            no_resume,
             now,
             focus,
             permissions,
             queue_entry,
             opened_in,
             close_in,
-            import: _,
         } => {
             if let Some(host) = opened_in {
                 resume::queued::record_place(&ctx, host, &targets).await;
@@ -51,16 +37,54 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
                 None => {
                     let options = resume::Options {
                         execution,
-                        discard: discard_agent,
-                        no_resume,
                         now,
                         focus,
                         change: change(&permissions),
                     };
-                    restore::run(&ctx, targets, checkpoint, options).await
+                    resume::run(&ctx, targets, options).await
                 }
                 Some(entry) => resume::queued::start_entry(&ctx, targets, execution, entry).await,
             }
+        }
+        SessionsCommand::Restore {
+            import, no_resume, ..
+        } if !import.from.is_empty() => {
+            let options = restore::import::ImportOptions {
+                sessions: import.sessions(),
+                repository: import.repository,
+                restore: !no_resume,
+            };
+            restore::import::import(&ctx, import.from, options).await
+        }
+        SessionsCommand::Restore {
+            space,
+            all,
+            import: _,
+            checkpoint,
+            discard_agent,
+            execution,
+            no_resume,
+            now,
+            focus,
+            permissions,
+        } => {
+            let action = match (checkpoint, discard_agent, no_resume) {
+                (Some(checkpoint), ..) => restore::Action::Checkpoint(checkpoint),
+                (None, true, _) => restore::Action::DiscardAgent { all, execution },
+                (None, false, true) => restore::Action::Reopen { resume: None },
+                (None, false, false) => {
+                    let options = resume::Options {
+                        execution: None,
+                        now,
+                        focus,
+                        change: change(&permissions),
+                    };
+                    restore::Action::Reopen {
+                        resume: Some(options),
+                    }
+                }
+            };
+            restore::run(&ctx, space, action).await
         }
         SessionsCommand::Restart {
             targets,

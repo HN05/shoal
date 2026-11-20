@@ -143,41 +143,40 @@ fn restore_refuses_focus_without_one_agent_before_reopening() {
 }
 
 #[test]
-fn restore_without_agents_leaves_a_live_spaces_stopped_work_saved() {
+fn restore_refuses_a_live_space_and_keeps_its_stopped_work() {
     let fixture = Fixture::new();
     let stopped = fixture.add("stopped");
     fixture.save_stopped_command(&stopped);
-    let restored = fixture.ok(&["restore", &fixture.id("stopped"), "--no-resume"]);
-    assert_eq!(restored["commands"], serde_json::json!([]), "{restored}");
-    let listed = fixture.ok(&["restore"]);
-    assert_eq!(listed["stopped"][0]["saved"]["commands"], 1, "{listed}");
+    let refused = fixture.run(&["restore", &fixture.id("stopped")]);
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    let error = String::from_utf8_lossy(&refused.stderr);
+    let resume = format!("shoal resume {}", stopped["number"]);
+    assert!(error.contains(&resume), "{error}");
+    let listed = fixture.ok(&["resume"]);
+    assert_eq!(listed["spaces"][0]["saved"]["commands"], 1, "{listed}");
 }
 
 #[test]
-fn restore_without_a_terminal_lists_stopped_work_and_removed_workspaces() {
+fn without_a_terminal_resume_lists_stopped_spaces_and_restore_removed_ones() {
     let fixture = Fixture::new();
     let stopped = fixture.add("stopped");
     fixture.add("gone");
     fixture.ok(&["rm", "--wait", &fixture.id("gone"), "--yes"]);
     fixture.save_stopped_command(&stopped);
+    let listed = fixture.ok(&["resume"]);
+    assert_eq!(listed["spaces"][0]["space"]["name"], "stopped", "{listed}");
+    assert_eq!(listed["spaces"][0]["saved"]["commands"], 1, "{listed}");
+    assert_eq!(listed["spaces"].as_array().unwrap().len(), 1, "{listed}");
     let listed = fixture.ok(&["restore"]);
-    assert_eq!(
-        listed["stopped"][0]["workspace"]["name"], "stopped",
-        "{listed}"
-    );
-    assert_eq!(listed["stopped"][0]["saved"]["commands"], 1, "{listed}");
     assert_eq!(listed["removed"][0]["name"], "gone", "{listed}");
     assert_eq!(listed["removed"][0]["checkpoint"]["number"], 1, "{listed}");
 
-    // --all restores the stopped work and leaves the removed workspace.
-    let restored = fixture.ok(&["restore", "--all"]);
-    assert_eq!(
-        restored["commands"][0]["workspace"], "stopped",
-        "{restored}"
-    );
-    assert_eq!(restored.get("reopened"), None, "{restored}");
+    // --all resumes the stopped work and leaves the removed workspace.
+    let resumed = fixture.ok(&["resume", "--all"]);
+    assert_eq!(resumed["commands"][0]["workspace"], "stopped", "{resumed}");
+    assert_eq!(resumed.get("reopened"), None, "{resumed}");
+    assert_eq!(fixture.ok(&["resume"])["spaces"], serde_json::json!([]));
     let listed = fixture.ok(&["restore"]);
-    assert_eq!(listed["stopped"], serde_json::json!([]), "{listed}");
     assert_eq!(listed["removed"][0]["name"], "gone", "{listed}");
 }
 
@@ -343,7 +342,7 @@ fn restoring_a_removed_workspace_queues_the_agent_its_removal_stopped() {
 }
 
 #[test]
-fn restoring_a_removed_workspace_without_agents_keeps_them_for_a_later_restore() {
+fn restoring_a_removed_workspace_without_agents_keeps_them_for_a_later_resume() {
     let removed = RemovedWithAgent::new();
     let (restored, reopened) = removed.restore(&["--no-resume"]);
     assert_eq!(restored["queued"], serde_json::json!([]), "{restored}");
@@ -351,24 +350,28 @@ fn restoring_a_removed_workspace_without_agents_keeps_them_for_a_later_restore()
     // The interrupted command is not saved, so only the agent restores.
     let record = format!("{}.recovery.json", removed.execution);
     assert_eq!(removed.saved(&reopened), [record]);
-    let restored = removed
+    let resumed = removed
         .fixture
-        .run(&["restore", &removed.fixture.id("removed"), "--focus"]);
-    assert!(restored.status.success(), "{}", printed(&restored));
+        .run(&["resume", &removed.fixture.id("removed"), "--focus"]);
+    assert!(resumed.status.success(), "{}", printed(&resumed));
     assert!(removed.path.join("resumed").exists());
     assert!(removed.saved(&reopened).is_empty());
 }
 
 #[test]
-fn restoring_a_removed_workspace_with_discard_agent_drops_its_agents() {
+fn discard_agent_drops_the_agents_a_reopened_workspace_kept() {
     let removed = RemovedWithAgent::new();
-    let (restored, reopened) = removed.restore(&["--discard-agent"]);
+    let (_, reopened) = removed.restore(&["--no-resume"]);
+    let id = reopened["space"]["id"].as_str().unwrap();
+    // A removed space has no agent to discard until it is reopened.
+    let discarded = removed.fixture.ok(&["restore", id, "--discard-agent"]);
     assert_eq!(
-        restored["discarded"],
+        discarded["discarded"],
         serde_json::json!([removed.execution]),
-        "{restored}"
+        "{discarded}"
     );
     assert!(removed.saved(&reopened).is_empty());
+    assert!(Path::new(reopened["space"]["path"].as_str().unwrap()).is_dir());
     assert_eq!(removed.fixture.ok(&["queue"]), serde_json::json!([]));
 }
 

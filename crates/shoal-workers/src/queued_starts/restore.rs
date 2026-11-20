@@ -1,4 +1,4 @@
-//! An admitted restore: `shoal restore` of its stopped agent runs where the
+//! An admitted restore: `shoal resume` of its stopped agent runs where the
 //! agent stopped when that place is back at its prompt, otherwise in a
 //! background place, and takes over the entry's slot.
 use std::ffi::OsString;
@@ -55,7 +55,7 @@ async fn stopped_place(
 /// `space`, for the admitted `entry`, whose slot it takes over.
 fn restore_args(space: &Space, execution: &ExecutionId, entry: &QueueEntry) -> [OsString; 7] {
     [
-        "restore",
+        "resume",
         space.id.as_str(),
         "--execution",
         execution.as_str(),

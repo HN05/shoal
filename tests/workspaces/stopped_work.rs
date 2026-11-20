@@ -1,5 +1,5 @@
 //! What a stop saves of a workspace's agents and commands, and how
-//! `shoal restore` restores it or `--discard-agent` discards it.
+//! `shoal resume` resumes it or `shoal restore --discard-agent` discards it.
 use super::creation::{WAITER, fail_setup, require_fix};
 use super::*;
 
@@ -162,12 +162,21 @@ impl Stopped {
             .collect()
     }
 
-    /// Run `shoal restore` for the workspace in this process, with `args`.
+    /// Run `shoal resume` for the workspace in this process, with `args`.
     fn resume(&self, fixture: &Fixture, args: &[&str]) -> Output {
         fixture
             .command()
-            .args(["restore", &fixture.id(self.name)])
+            .args(["resume", &fixture.id(self.name)])
             .args(args)
+            .output()
+            .unwrap()
+    }
+
+    /// Run `shoal restore --discard-agent` for the workspace in this process.
+    fn discard(&self, fixture: &Fixture) -> Output {
+        let workspace = fixture.id(self.name);
+        (fixture.command())
+            .args(["restore", &workspace, "--discard-agent"])
             .output()
             .unwrap()
     }
@@ -279,7 +288,7 @@ fn resume_retries_a_failed_setup_beside_the_stopped_work_it_resumes() {
     require_fix(&fixture);
     let failing = fail_setup(&fixture, "failing");
 
-    let resumed = fixture.ok(&["restore", &fixture.id("stopped"), &fixture.id("failing")]);
+    let resumed = fixture.ok(&["resume", &fixture.id("stopped"), &fixture.id("failing")]);
     assert_eq!(resumed["set_up"].as_array().unwrap().len(), 1, "{resumed}");
     assert_eq!(
         resumed["commands"].as_array().unwrap().len(),
@@ -341,12 +350,7 @@ fn discarding_clears_pending_recovery_without_launching_an_agent() {
     // Protection keeps the record of an agent it stopped while the wrapper
     // still runs; discarding leaves an agent whose execution is active.
     workspace.save_record(&execution, "test memory pressure");
-    assert!(
-        !workspace
-            .resume(&fixture, &["--discard-agent"])
-            .status
-            .success()
-    );
+    assert!(!workspace.discard(&fixture).status.success());
     assert!(workspace.record(&execution).exists());
     fs::remove_file(workspace.record(&execution)).unwrap();
     workspace.stop(&fixture, vec![agent]);
@@ -358,7 +362,7 @@ fn discarding_clears_pending_recovery_without_launching_an_agent() {
     )
     .unwrap();
 
-    let output = workspace.resume(&fixture, &["--discard-agent"]);
+    let output = fixture.run(&["restore", &fixture.id("stopped"), "--discard-agent"]);
     assert!(output.status.success(), "{}", printed(&output));
     assert!(!workspace.pending());
     assert!(!workspace.path.join("restored").exists());
@@ -408,7 +412,7 @@ fn a_failed_launch_restores_beside_a_stopped_space() {
         fixture.request(serde_json::json!({"queue_fail": {"entry": entry, "error": "no place"}}));
     assert!(ended.get("error").is_none(), "{ended}");
 
-    let restored = fixture.ok(&["restore", &fixture.id("stopped"), failed]);
+    let restored = fixture.ok(&["resume", &fixture.id("stopped"), failed]);
 
     let queued: Vec<_> = (restored["queued"].as_array().unwrap().iter())
         .filter_map(|entry| entry["opens"].as_str())

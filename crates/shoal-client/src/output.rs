@@ -24,6 +24,7 @@ pub mod leases;
 pub mod overviews;
 pub mod repositories;
 pub mod restore;
+pub mod resume;
 pub mod shell;
 pub mod skill;
 pub mod status;

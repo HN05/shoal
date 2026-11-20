@@ -5,8 +5,8 @@ use anyhow::{Context as _, Result};
 use shoal_protocol::model::ByKind;
 
 use super::permission_change;
-use crate::cli::commands::restore::targets::Selected;
-use crate::client::output::{batch::Failure, restore::SetUp};
+use super::targets::Selected;
+use crate::client::output::{batch::Failure, resume::SetUp};
 use crate::{
     cli::{
         commands::{queued_agents, workspaces},
@@ -86,7 +86,7 @@ pub(super) async fn retry_each(
     for setup in setups {
         match retry(ctx, setup, now).await {
             Ok(done) => set_up.push(done),
-            Err(error) => failed.push(ui::failure(ctx, "restore", &setup.workspace.name, &error)),
+            Err(error) => failed.push(ui::failure(ctx, "resume", &setup.workspace.name, &error)),
         }
     }
     (set_up, failed)

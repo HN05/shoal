@@ -19,7 +19,7 @@ fn the_user_stops_a_chat_and_resumes_it() {
     assert!(!chat_runs(&fixture, "talk"));
 
     let talk = fixture.id("talk");
-    fixture.ok(&["restore", &talk]);
+    fixture.ok(&["resume", &talk]);
     wait_until("chat restored", || home.join("chat-restored").exists());
     fixture.ok(&["rm", &talk, "--yes"]);
     wait_zmx_sessions_ended(&home);
@@ -43,7 +43,7 @@ fn a_queued_chat_restore_reruns_in_its_idle_pane() {
     fs::write(fixture.root.path().join("idle-panes"), "w1:p5\n").unwrap();
 
     let talk = fixture.id("talk");
-    fixture.ok(&["restore", &talk]);
+    fixture.ok(&["resume", &talk]);
     let reran = || {
         let calls = fixture.root.path().join("herdr-calls");
         let calls = if calls.exists() {
@@ -57,7 +57,7 @@ fn a_queued_chat_restore_reruns_in_its_idle_pane() {
     };
     wait_until("the restore in the stopped pane", || reran().is_some());
     let run = reran().unwrap();
-    let restore = format!(" restore {talk} --execution ");
+    let restore = format!(" resume {talk} --execution ");
     assert!(run[3].contains(&restore), "{run:?}");
     assert!(run[3].contains(" --queue-entry "), "{run:?}");
     let calls = herdr_calls(&fixture);
@@ -176,12 +176,12 @@ fn stops_and_resumes_the_chats_below(fixture: &Fixture, parent: &Parent) {
         assert_eq!(stopped["stopped"], true, "{stopped}");
     });
     let talk = fixture.id("talk");
-    parent.ok(fixture, &["restore", &talk]);
+    parent.ok(fixture, &["resume", &talk]);
     wait_until("the parent's restore", || restored.exists());
 
     fs::remove_file(&restored).unwrap();
     fixture.ok(&["stop", &talk]);
-    parent.ok(fixture, &["restore", &talk]);
+    parent.ok(fixture, &["resume", &talk]);
     wait_until("the parent's restore of the user's stop", || {
         restored.exists()
     });

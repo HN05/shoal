@@ -89,12 +89,12 @@ and the agent's queue entry, which waits while the daemon creates the
 worktree and runs setup and the post-setup hook; until the worktree exists,
 commands that read it refuse the workspace. A failed preparation reaches the
 agent of the nearest space above with one, or else the user, naming what
-retries it, `shoal restore <space>`, or `shoal setup <space>` for a failed
+retries it, `shoal resume <space>`, or `shoal setup <space>` for a failed
 post-setup hook, and `shoal rm <space>`. `--wait`
 returns once that preparation ends. An agent whose start fails, in a
 workspace or a chat, stays on its space as a `failed` entry `shoal queue` and
 `shoal inbox` list with its error, and its failure reaches the same way,
-naming `shoal restore <space>`, which queues it again as it was, and
+naming `shoal resume <space>`, which queues it again as it was, and
 `shoal rm <space>`. The daemon starts queued agents of heavy modes as `max_heavy_agents` allows
 (`state: queued`, `position`), work close to finished, work that other work
 waits on and new workspaces whose issues share fewer `[issue] area_prefix`
@@ -171,7 +171,8 @@ shoal questions <S.N> --answer "<answer or choice number>"
 shoal stop <child>                  # --skip-children stops only the child
 shoal stop --interrupt <child>      # Cancel its agent's turn, keeping it running
 shoal restart <child>               # Its agent, a workspace's or a chat's
-shoal restore <child>               # --discard-agent discards the saved session
+shoal resume <child>                # Bring back its agent, a workspace's or a chat's
+shoal restore --discard-agent <child>  # Discard its stopped agent instead
 shoal files <child>
 shoal absorb <child> [--into <space>] [-X squash] [--force]
 ```
@@ -191,9 +192,11 @@ keeping their sessions, and cancels agents queued to start there; `restart` stop
 starts its session again at once, or with `--wait` once its turn ends, which
 `restart --cancel` drops; `stop --interrupt` cancels the current
 turn of the child's agent, a workspace's or a chat's, which stays running;
-`restore` continues a turn an interrupt ended and queues the stopped agents,
-a workspace's or a chat's, whoever stopped them; for a workspace whose setup
-failed, it retries the setup, and the agent waiting for it starts. `--all`
+`resume` continues a turn an interrupt ended and queues the stopped agents,
+a workspace's or a chat's, whoever stopped them, and a launch that failed to
+start; for a workspace whose setup failed, it retries the setup, and the agent
+waiting for it starts. `restore --discard-agent` discards a stopped agent,
+its last sessions, stopped commands and failed launch, leaving the files. `--all`
 acts on every space below the caller's on this machine, `restart --machine
 <name>` on those of another joined machine, and `stop --yes` confirms that an
 execution Shoal cannot prove ended did. A space outside the caller's scope is
@@ -276,7 +279,7 @@ turn ends, Shoal stops it and restores it when nothing blocks the space any
 longer, its first message naming what cleared: an issue closing, a PR merging
 or closing, a space done or removed, or a CI run, or a later run of its
 workflow on the default branch, passing. A coordinator removes a blocker of a
-space below with `--space`; `shoal restore` restores a blocked agent at once,
+space below with `--space`; `shoal resume` restores a blocked agent at once,
 and `shoal done` removes the blockers.
 
 ## Sleep
@@ -305,7 +308,7 @@ its next timer each turn; Claude Code's own timer tools are refused, since
 Shoal's stops end their timers. A coordinator puts a space below to sleep
 with `shoal sleep <space>`. An agent Shoal stopped on its own is asleep; `list` and
 `status` show it with why and what wakes it. One stopped by `shoal stop`, or
-that quit, stays stopped until `shoal restore`.
+that quit, stays stopped until `shoal resume`.
 
 ## Issues and pull requests
 
@@ -346,7 +349,7 @@ commands act on the linked item, or on the number or URL given.
 `issue open` records the issue as opened by the space, or with `--link`
 assigns it instead. An issue a space links as assigned has the agent account
 among its assignees on the forge while an agent works it, from the link or the
-agent's start until `shoal done`, a stop that waits for `shoal restore`, an
+agent's start until `shoal done`, a stop that waits for `shoal resume`, an
 unlink or the space's removal, and linking it warns of anyone else assigned;
 `[issue] assign` also or instead adds the user's own login. `--repo OWNER/NAME`, or a repository URL on another forge, opens it
 in another repository, as the space's `issue_other_repositories` permission
@@ -385,7 +388,7 @@ sets; `shoal status` lists them, each with where it comes from. A command acting
 caller's own. `shoal start --permission KEY=VALUE`, repeatable, gives a child
 a permission whatever its mode allows, such as `--permission push=propose`;
 you give only what your own space holds, and a value above that is refused.
-`shoal restore` and `shoal restart` take `--permission` too, which sets the
+`shoal resume` and `shoal restart` take `--permission` too, which sets the
 keys it names, `KEY=mode` dropping one, and keeps the rest; without it they
 keep them all.
 
@@ -661,7 +664,7 @@ agents placed, and the user's as their `user_holds` permission allows.
 ```sh
 shoal rm <space>
 shoal checkpoint --name "<what comes next>"
-shoal restore <space>
+shoal restore <id>
 shoal restore [workspace] --checkpoint [<number>]
 shoal cleanup spaces
 shoal cleanup --dry-run
@@ -674,10 +677,11 @@ Removing a space removes the spaces below it first, held ones included, and
 asks what to do with unmerged work. `rm` returns once its checks pass and
 removes the space in the background; a later failure arrives as a message,
 and `--wait` waits for the removal. A checkpoint keeps HEAD and unsaved files;
-Shoal also takes one when an agent exits or is stopped. `restore <id>` also
-reopens a removed workspace or chat with its agents, below the space it was
-below; an agent restores one whose parent its scope reaches. `restore --from`
-opens the spaces `shoal move` wrote to a file. `cleanup`, `move` and
+Shoal also takes one when an agent exits or is stopped. `restore <id>`
+reopens a removed workspace or chat and resumes its agents, below the space it
+was below, and `--no-resume` leaves them for `shoal resume`; a space that is
+not removed is refused. An agent restores one whose parent its scope reaches.
+`restore --from` opens the spaces `shoal move` wrote to a file. `cleanup`, `move` and
 `restore --from` are as the space's `admin` permission allows; `restore --checkpoint` lists a workspace's checkpoints,
 and with a number returns to one after keeping the current state in a new
 checkpoint, refusing while another command runs in the workspace. `cleanup spaces` removes every

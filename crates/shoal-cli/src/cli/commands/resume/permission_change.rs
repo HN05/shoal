@@ -1,4 +1,4 @@
-//! `--permission` on `shoal restore`: a change to the permissions the restored
+//! `--permission` on `shoal resume`: a change to the permissions the resumed
 //! agents and chats, the agents waiting for failed setups and the failed
 //! launches restored were given. A
 //! scoped process gives only what it holds, which is checked for every
@@ -7,7 +7,7 @@
 use anyhow::{Context as _, Result};
 
 use super::setups::FailedSetup;
-use crate::cli::commands::restore::targets::Selected;
+use super::targets::Selected;
 use crate::{
     cli::context::Context,
     config::permissions::PermissionChange,

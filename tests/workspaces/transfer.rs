@@ -86,7 +86,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     assert!(record.exists());
     let resumed = fixture
         .command()
-        .args(["restore", &fixture.id("moving"), "--focus"])
+        .args(["resume", &fixture.id("moving"), "--focus"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -1007,7 +1007,7 @@ fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
         let output = fixture
             .command()
             .current_dir(path)
-            .args(["restore", "--focus"])
+            .args(["resume", "--focus"])
             .stdin(Stdio::null())
             .output()
             .unwrap();
@@ -1135,7 +1135,7 @@ fn export_carries_session_files_that_import_puts_back() {
     let output = fixture
         .command()
         .current_dir(path)
-        .args(["restore", "--focus"])
+        .args(["resume", "--focus"])
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -1280,10 +1280,10 @@ fn resumes(args: &str, session: &str) -> bool {
     args.windows(2).any(|pair| pair == ["--resume", session])
 }
 
-/// Restore the agent of the space `id` in this terminal until it exits.
+/// Resume the agent of the space `id` in this terminal until it exits.
 fn restore_here(fixture: &Fixture, id: &str) {
     let (output, transcript) =
-        fixture.interactive_command(fixture.command().args(["restore", id, "--focus"]), "");
+        fixture.interactive_command(fixture.command().args(["resume", id, "--focus"]), "");
     assert!(
         output.status.success(),
         "{}\n{transcript}",
@@ -1354,6 +1354,7 @@ fn a_removed_chat_moves_from_its_removal_record() {
     let removed = fixture.ok(&["restore"])["removed"].clone();
     assert_eq!(removed[0]["workspace_id"], id.as_str(), "{removed}");
     // The record stays here, so the import elsewhere opens the chat again.
+    fixture.ok(&["restore", &id, "--no-resume"]);
     fixture.ok(&["restore", &id, "--discard-agent"]);
     fixture.ok(&["rm", "--wait", &id, "--yes"]);
     import_continues_the_chat(&fixture, file, &id);

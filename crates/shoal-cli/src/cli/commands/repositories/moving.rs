@@ -1,7 +1,7 @@
 //! `shoal repo move`: move every repository directory into a new `root_dir`.
 use super::super::resume::queue::{Stopped, restore_stopped, saved_executions};
 use crate::cli::commands::resume::reports::QueuedExt;
-use crate::client::output::restore::Queued;
+use crate::client::output::resume::Queued;
 use crate::config_file::ConfigExt;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;

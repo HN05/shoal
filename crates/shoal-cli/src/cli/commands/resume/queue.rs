@@ -3,9 +3,9 @@
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 
+use super::targets::Selected;
 use super::{commands, permission_change, reports, stale};
-use crate::cli::commands::restore::targets::Selected;
-use crate::client::output::restore::Queued;
+use crate::client::output::resume::Queued;
 use crate::{
     cli::{context::Context, ui},
     config::permissions::PermissionChange,
@@ -60,7 +60,7 @@ pub(in crate::cli::commands) type Stopped =
 
 /// Queue the restores of the agents among `stopped`; their workspaces'
 /// stopped commands go to them, and those of workspaces without one stay
-/// for `shoal restore`.
+/// for `shoal resume`.
 pub(in crate::cli::commands) async fn queue_stopped(
     ctx: &Context,
     stopped: &Stopped,
@@ -78,7 +78,7 @@ pub(in crate::cli::commands) async fn queue_stopped(
 }
 
 /// Queue the restores of the agents among `stopped`, warning when that
-/// fails, since `shoal restore` still restores them.
+/// fails, since `shoal resume` still resumes them.
 pub(in crate::cli::commands) async fn restore_stopped(
     ctx: &Context,
     stopped: &Stopped,
@@ -89,7 +89,7 @@ pub(in crate::cli::commands) async fn restore_stopped(
     match queue_stopped(ctx, stopped).await {
         Ok(queued) => Some(queued),
         Err(error) => {
-            eprintln!("warning: cannot restore the stopped agents; run shoal restore: {error:#}");
+            eprintln!("warning: cannot resume the stopped agents; run shoal resume: {error:#}");
             None
         }
     }
@@ -262,13 +262,13 @@ pub(super) async fn queue_each(ctx: &Context, stopped: Vec<(Space, Saved)>, now:
             let _claims = commands::claim(&mut saved.commands);
             match commands::report(ctx, &space, &saved.commands) {
                 Ok(report) => commands.push(report),
-                Err(error) => failed.push(ui::failure(ctx, "restore", &space.name, &error)),
+                Err(error) => failed.push(ui::failure(ctx, "resume", &space.name, &error)),
             }
         }
         for saved in saved.agents.iter().chain(&saved.sessions) {
             match queue(ctx, &space, &saved.id, now).await {
                 Ok(entry) => queued.push(entry),
-                Err(error) => failed.push(ui::failure(ctx, "restore", &space.name, &error)),
+                Err(error) => failed.push(ui::failure(ctx, "resume", &space.name, &error)),
             }
         }
     }

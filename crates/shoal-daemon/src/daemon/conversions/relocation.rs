@@ -408,7 +408,7 @@ impl Manager {
     }
 }
 
-/// Continue the last session of the workspace `id` as `shoal restore` does,
+/// Continue the last session of the workspace `id` as `shoal resume` does,
 /// where its agent ran at `origin` or in a background place.
 async fn restore_workspace(
     paths: &crate::paths::Paths,
@@ -425,7 +425,7 @@ async fn restore_workspace(
     }
 
     let mut argv = crate::workers::shoal_argv(paths)?;
-    argv.extend(["restore".into(), id.to_string().into()]);
+    argv.extend(["resume".into(), id.to_string().into()]);
     let env = crate::terminal::detached_start_environment(origin);
     let output = crate::workers::detached_command(&argv)
         .envs(&env)
@@ -435,7 +435,7 @@ async fn restore_workspace(
         .stderr(Stdio::piped())
         .output()
         .await
-        .context("run shoal restore")?;
+        .context("run shoal resume")?;
     anyhow::ensure!(
         output.status.success(),
         "{}",

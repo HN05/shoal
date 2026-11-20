@@ -1,4 +1,4 @@
-//! The `shoal restore` tests drive: it records each workspace whose last
+//! The `shoal resume` tests drive: it records each workspace whose last
 //! session a relocation continued, for the daemon that continued it.
 use shoal_ids::space_ids::SpaceId;
 

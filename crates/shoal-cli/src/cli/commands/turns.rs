@@ -89,7 +89,7 @@ async fn interrupt_turn(ctx: &Context, interruption: &Interruption) -> Result<()
     Ok(())
 }
 
-/// The turns an interrupt ended that `shoal restore` continues.
+/// The turns an interrupt ended that `shoal resume` continues.
 #[derive(Default)]
 pub(super) struct Continuation(Vec<Target>);
 
@@ -124,11 +124,6 @@ impl Continuation {
 
     pub(super) fn is_empty(&self) -> bool {
         self.0.is_empty()
-    }
-
-    /// Continue the turns `other` plans too.
-    pub(super) fn extend(&mut self, other: Self) {
-        self.0.extend(other.0);
     }
 
     /// Submit the prompt that continues each turn, returning the exit code.

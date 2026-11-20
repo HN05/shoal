@@ -881,7 +881,7 @@ fn a_failed_setup_leaves_its_agent_waiting_until_resume_retries_it() {
 
     // Several failed setups resume together in one result.
     fail_setup(&fixture, "second");
-    let resumed = fixture.ok(&["restore", &fixture.id("failing"), &fixture.id("second")]);
+    let resumed = fixture.ok(&["resume", &fixture.id("failing"), &fixture.id("second")]);
     assert_eq!(resumed["set_up"].as_array().unwrap().len(), 2, "{resumed}");
     for name in ["failing", "second"] {
         let ready = &fixture.ok(&["status", &fixture.id(name)])["workspace"];
@@ -897,7 +897,7 @@ fn resume_starts_the_agent_waiting_for_a_failed_setup_now_with_the_permission_gi
     let fixture = failing_setup_fixture();
     let path = fail_setup(&fixture, "failing");
     let resumed = fixture.ok(&[
-        "restore",
+        "resume",
         &fixture.id("failing"),
         "--now",
         "--permission",
@@ -920,7 +920,7 @@ fn resume_with_focus_runs_the_agent_waiting_for_a_failed_setup_here() {
     let fixture = failing_setup_fixture();
     let path = fail_setup(&fixture, "failing");
     let output = fixture.run(&[
-        "restore",
+        "resume",
         &fixture.id("failing"),
         "--focus",
         "--permission",
@@ -935,17 +935,16 @@ fn resume_with_focus_runs_the_agent_waiting_for_a_failed_setup_here() {
 }
 
 #[test]
-fn restore_without_agents_retries_a_failed_setup() {
+fn restore_refuses_a_live_workspace_naming_resume() {
     let fixture = failing_setup_fixture();
     fail_setup(&fixture, "failing");
-    let restored = fixture.ok(&["restore", &fixture.id("failing"), "--no-resume"]);
-    assert_eq!(
-        restored["set_up"].as_array().unwrap().len(),
-        1,
-        "{restored}"
-    );
-    let ready = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
-    assert_eq!(ready["state"], "ready", "{ready}");
+    let refused = fixture.run(&["restore", &fixture.id("failing"), "--no-resume"]);
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    let number = fixture.ok(&["status", &fixture.id("failing")])["workspace"]["number"].to_string();
+    let error = String::from_utf8_lossy(&refused.stderr);
+    assert!(error.contains(&format!("shoal resume {number}")), "{error}");
+    let kept = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
+    assert_eq!(kept["state"], "failed", "{kept}");
 }
 
 #[test]
@@ -955,7 +954,7 @@ fn resume_checks_every_target_before_it_retries_a_failed_setup() {
     let repo = fixture.repo.to_str().unwrap();
     // A workspace with nothing to resume refuses the selection.
     fixture.ok(&["create", repo, "--branch", "plain", "--skip-setup"]);
-    let mixed = fixture.run(&["restore", &fixture.id("failing"), &fixture.id("plain")]);
+    let mixed = fixture.run(&["resume", &fixture.id("failing"), &fixture.id("plain")]);
     assert!(!mixed.status.success(), "{}", printed(&mixed));
     let kept = &fixture.ok(&["status", &fixture.id("failing")])["workspace"];
     assert_eq!(kept["state"], "failed", "{kept}");

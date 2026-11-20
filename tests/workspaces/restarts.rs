@@ -76,7 +76,7 @@ fn restart_starts_the_agent_in_a_new_wrapper_where_the_old_one_could_not() {
     wait_zmx_sessions_ended(fixture.root.path());
 }
 
-/// A chat restarts as `shoal restore` restores it: the daemon saves its
+/// A chat restarts as `shoal resume` resumes it: the daemon saves its
 /// session and stops its agent, then restores it in a zmx session, where the
 /// agent continues the session.
 #[test]
@@ -321,7 +321,7 @@ fn a_workspaces_agent_resumes_the_agents_below_whoever_stopped_them() {
     assert!(!output.status.success(), "{}", printed(&output));
     install_test_script(&zmx, terminal_zmx());
 
-    parent.ok(&fixture, &["restore", &fixture.id("child")]);
+    parent.ok(&fixture, &["resume", &fixture.id("child")]);
     wait_until("the parent's restore", || restored.exists());
     fixture.ok(&["stop", &fixture.id("child")]);
     drop(agent);
@@ -513,7 +513,7 @@ fn resumes_the_chats_below(fixture: &Fixture, parent: &Parent) {
         chat.join().unwrap();
     });
     install_test_script(&zmx, terminal_zmx());
-    let resumed = parent.ok(fixture, &["restore", &fixture.id("talk")]);
+    let resumed = parent.ok(fixture, &["resume", &fixture.id("talk")]);
     assert_eq!(resumed["queued"][0]["name"], "talk", "{resumed}");
     wait_until("the parent's restore", || restored.exists());
     fixture.ok(&["rm", "--wait", &fixture.id("talk"), "--yes"]);

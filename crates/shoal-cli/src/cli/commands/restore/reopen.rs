@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use anyhow::{Context as _, Result};
 
 use crate::cli::commands::resume::queue::Stopped;
-use crate::client::output::restore::{Queued, Reopened};
+use crate::client::output::{restore::Reopened, resume::Queued};
 use crate::{
     cli::{
         context::Context,
@@ -66,7 +66,7 @@ pub(in crate::cli::commands) async fn prepare_set_up(
         RestoredSpace::Chat(restored) => (restored.chat.name.clone(), restored.chat.number),
     };
     (prepare_restored(ctx, restored).await?).with_context(|| {
-        format!("the preparation of {name} did not finish; shoal restore {number} retries it")
+        format!("the preparation of {name} did not finish; shoal setup {number} retries it")
     })
 }
 
@@ -178,7 +178,7 @@ pub(crate) trait ReopenedExt {
 
     /// Queue the restores of the agents the removal stopped and of the
     /// last sessions it kept, warning when that fails, since `shoal
-    /// restore` still restores them.
+    /// resume` still resumes them.
     async fn queue_agents(&mut self, ctx: &Context);
 }
 
@@ -202,14 +202,8 @@ impl ReopenedExt for Reopened {
                 .unwrap_or_default(),
             _ if !self.agents_saved => String::new(),
             0 => String::new(),
-            1 => format!(
-                "; shoal restore {} restores its stopped agent",
-                space.number
-            ),
-            _ => format!(
-                "; shoal restore {} restores its stopped agents",
-                space.number
-            ),
+            1 => format!("; shoal resume {} resumes its stopped agent", space.number),
+            _ => format!("; shoal resume {} resumes its stopped agents", space.number),
         };
         let location = match space.to_workspace() {
             Some(workspace) => super::super::workspaces::location_phrase(&workspace),
@@ -233,7 +227,7 @@ impl ReopenedExt for Reopened {
                 self.agents_saved = false;
             }
             Err(error) => eprintln!(
-                "warning: cannot queue the stopped agents; shoal restore {} restores them: {error:#}",
+                "warning: cannot queue the stopped agents; shoal resume {} resumes them: {error:#}",
                 self.space.number
             ),
         }

@@ -15,33 +15,84 @@ use shoal_protocol::space_names::SpaceSelector;
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum SessionsCommand {
-    /// Restore what of a space is stopped, interrupted or removed, or return a workspace to a checkpoint.
+    /// Bring back the agents of spaces, workspaces and chats alike.
     ///
-    /// Queues the restore of stopped agent sessions and lists interrupted commands. The daemon
-    /// starts queued restores as `max_heavy_agents` allows: where each agent stopped, otherwise in a
-    /// background place of the terminal host it was queued from or of `terminal.default_host`,
-    /// such as a Herdr tab or a detached zmx session. A named workspace or running chat whose
-    /// agent's turn `shoal stop --interrupt` ended continues that turn instead. A stopped chat
-    /// restores at once under its name, continuing its session. A removed workspace, named by its
-    /// ID, opens again with its unsaved files and links, and its agents restore as a stopped
-    /// space's do.
+    /// Queues the restore of a stopped agent, which the daemon starts as `max_heavy_agents`
+    /// allows: where the agent stopped, otherwise in a background place of the terminal host it
+    /// was queued from or of `terminal.default_host`, such as a Herdr tab or a detached zmx
+    /// session. An asleep agent's restore waits only for its turn in the queue, a turn
+    /// `shoal stop --interrupt` ended continues, the last session of an agent that exited on its
+    /// own continues, and a launch that failed to start queues again as it was. Stopped commands
+    /// are listed.
     ///
-    /// Without a space, restores the current one when it has something to restore; otherwise
-    /// picks among stopped work, stopped chats and removed workspaces, or lists them without a
-    /// terminal. `--all` restores every space with stopped work whose assignment is not done.
+    /// Without a space, resumes the current one when its agent can resume; otherwise picks among
+    /// the spaces whose agent can resume, or lists them without a terminal. `--all` resumes every
+    /// space with a stopped agent whose assignment is not done.
+    Resume {
+        #[command(flatten)]
+        targets: SpaceTargets,
+        /// Select a stopped execution when the space has several records.
+        #[arg(long, conflicts_with = "all")]
+        execution: Option<ExecutionId>,
+        /// Start at once regardless of the agent limits, where each agent
+        /// stopped or in the background.
+        #[arg(long)]
+        now: bool,
+        /// Resume one agent in this terminal at once, regardless of the
+        /// agent limits.
+        #[arg(short = 'f', long, conflicts_with = "all")]
+        focus: bool,
+        /// Set a permission of the resumed agents, as KEY=VALUE such as
+        /// push=direct, whatever their mode allows; KEY=mode drops the value
+        /// given before, and keys left out keep theirs. Repeatable. A
+        /// space's agent gives only what it holds itself.
+        #[arg(
+            long = "permission",
+            value_name = "KEY=VALUE",
+            value_parser = permission_assignment,
+            conflicts_with_all = ["all", "queue_entry"]
+        )]
+        permissions: Vec<crate::config::permissions::PermissionChange>,
+        /// The queue entry whose slot the resumed agent takes, for the
+        /// daemon's start of a queued restore.
+        #[arg(long, hide = true, requires_all = ["execution", "focus"])]
+        queue_entry: Option<shoal_ids::queue_entry_ids::QueueEntryId>,
+        /// The host that opened this place in the background for this
+        /// resume, which records it as the space's before resuming.
+        #[arg(long, hide = true, requires_all = ["execution", "focus"])]
+        opened_in: Option<HostName>,
+        /// The host whose place, opened in the background for this resume,
+        /// closes once the space is done.
+        #[arg(long, hide = true, requires_all = ["execution", "focus"])]
+        close_in: Option<HostName>,
+    },
+    /// Reopen removed spaces, return a workspace to a checkpoint, or discard a space's agent.
+    ///
+    /// A removed workspace or chat, named by its ID, opens again with its unsaved files and
+    /// links, and its agents resume as `shoal resume` resumes them. A space that is not removed
+    /// is refused, naming `shoal resume`. Without a space, picks among the removed spaces, or
+    /// lists them without a terminal.
     ///
     /// `--from` continues the workspaces and chats shoal move wrote to a file, in the repository
     /// with the same origin: each space is recorded as removed and opens again under its ID, a
     /// workspace fetching the default branch when the file builds on commits the repository
     /// lacks, a chat in the worktree it ran in when that workspace is here, else in the
-    /// repository's checkout, or in root_dir without a repository, and their agents restore. The
+    /// repository's checkout, or in root_dir without a repository, and their agents resume. The
     /// spaces a file carries open after it, parents first, each below its parent. The agents'
     /// session files go where the agents look for them; a session the file lacks continues only
     /// on the machine that wrote it, which --keep-sessions and --new-sessions override. `-`
     /// reads standard input, and a directory each .shoal file in it.
     Restore {
-        #[command(flatten)]
-        targets: SpaceTargets,
+        #[arg(value_name = "SPACE")]
+        space: Vec<SpaceSelector>,
+        /// Discard the agents of every space with one, with --discard-agent.
+        #[arg(
+            short = 'A',
+            long,
+            conflicts_with = "space",
+            requires = "discard_agent"
+        )]
+        all: bool,
         #[command(flatten)]
         import: ImportArgs,
         /// Return the workspace to this checkpoint after keeping its current state in a new
@@ -50,58 +101,41 @@ pub enum SessionsCommand {
             long,
             value_name = "N",
             num_args = 0..=1,
-            conflicts_with_all = ["all", "execution", "discard_agent", "no_resume", "now", "focus", "permissions"]
+            conflicts_with_all = ["discard_agent", "no_resume", "now", "focus", "permissions"]
         )]
         checkpoint: Option<Option<CheckpointNumber>>,
-        /// Select a stopped execution when the workspace has several records.
-        #[arg(long, conflicts_with = "all")]
-        execution: Option<ExecutionId>,
-        /// Discard the stopped agent, last sessions, stopped commands and failed launch instead
-        /// of restoring them, which leaves the files, branch and worktree as they are.
-        #[arg(long)]
+        /// Discard the stopped agent, last sessions, stopped commands and failed launch of the
+        /// space instead, which leaves its files, branch and worktree as they are.
+        #[arg(long, conflicts_with_all = ["no_resume", "now", "focus", "permissions"])]
         discard_agent: bool,
-        /// Restore everything but the agents, which stay saved for a later restore: open a
-        /// removed workspace again, or the spaces --from reads, or retry a failed setup, whose
-        /// waiting agent stays queued.
-        #[arg(long, conflicts_with_all = ["discard_agent", "now", "focus", "permissions"])]
+        /// Select a stopped execution to discard when the space has several records.
+        #[arg(long, requires = "discard_agent", conflicts_with = "all")]
+        execution: Option<ExecutionId>,
+        /// Reopen the spaces, or those --from reads, leaving their agents saved for a later shoal
+        /// resume.
+        #[arg(long, conflicts_with_all = ["now", "focus", "permissions"])]
         no_resume: bool,
-        /// Start at once regardless of the agent limits, where each agent
-        /// stopped or in the background.
-        #[arg(long, conflicts_with = "discard_agent")]
+        /// Start the agents at once regardless of the agent limits, where
+        /// each agent stopped or in the background.
+        #[arg(long)]
         now: bool,
-        /// Restore one agent in this terminal at once, regardless of the
+        /// Resume the one agent in this terminal at once, regardless of the
         /// agent limits.
-        #[arg(short = 'f', long, conflicts_with_all = ["discard_agent", "all"])]
+        #[arg(short = 'f', long)]
         focus: bool,
-        /// Set a permission of the restored agents and chats, as KEY=VALUE
-        /// such as push=direct, whatever their mode allows; KEY=mode drops
-        /// the value given before, and keys left out keep theirs.
-        /// Repeatable. A space's agent gives only what it holds itself.
+        /// Set a permission of the resumed agents, as shoal resume does.
         #[arg(
             long = "permission",
             value_name = "KEY=VALUE",
-            value_parser = permission_assignment,
-            conflicts_with_all = ["discard_agent", "all", "queue_entry"]
+            value_parser = permission_assignment
         )]
         permissions: Vec<crate::config::permissions::PermissionChange>,
-        /// The queue entry whose slot the restored agent takes, for the
-        /// daemon's start of a queued restore.
-        #[arg(long, hide = true, requires_all = ["execution", "focus"])]
-        queue_entry: Option<shoal_ids::queue_entry_ids::QueueEntryId>,
-        /// The host that opened this place in the background for this
-        /// restore, which records it as the workspace's before restoring.
-        #[arg(long, hide = true, requires_all = ["execution", "focus"])]
-        opened_in: Option<HostName>,
-        /// The host whose place, opened in the background for this restore,
-        /// closes once the workspace is done.
-        #[arg(long, hide = true, requires_all = ["execution", "focus"])]
-        close_in: Option<HostName>,
     },
     /// Restart running agents in new terminals, resuming their sessions.
     ///
     /// Agents restart together and run the agent's current binary; commands
-    /// keep running. A chat restarts in a background place, as shoal restore
-    /// restores it. A newer restart of a space supersedes the earlier one,
+    /// keep running. A chat restarts in a background place, as shoal resume
+    /// resumes it. A newer restart of a space supersedes the earlier one,
     /// keeping the permissions that one set unless it sets them again.
     Restart {
         #[command(flatten)]

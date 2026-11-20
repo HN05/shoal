@@ -108,15 +108,15 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             .all(|(i, _)| i > target)
     );
     // `--all` comes once, before a scope's workspaces, until it is typed.
-    let choices = complete(&["restore", ""], fixture.root.path());
+    let choices = complete(&["resume", ""], fixture.root.path());
     assert_eq!(choices[0], "--all", "{choices:?}");
     assert!(choices.contains(&"1".into()), "{choices:?}");
     assert_eq!(choices.iter().filter(|v| *v == "--all").count(), 1);
-    // Resume describes each workspace by what it would restore.
+    // Resume describes each workspace by what it would resume.
     let resumable = || {
         let output = fixture
             .command()
-            .args(["--", "shoal", "restore", ""])
+            .args(["--", "shoal", "resume", ""])
             .env("SHOAL_COMPLETE", "zsh")
             .env("_CLAP_COMPLETE_INDEX", "2")
             .output()
@@ -1553,31 +1553,35 @@ fn workspace_pickers_offer_all_workspaces_after_the_workspaces() {
 }
 
 #[test]
-fn restore_picker_describes_what_each_space_would_restore() {
+fn resume_picker_describes_what_each_space_would_resume() {
     let fixture = Fixture::new();
     let first = fixture.add("first");
     let second = fixture.add("second");
     let idle = fixture.add("idle");
     let gone = fixture.add("gone");
     let idle_path = Path::new(idle["path"].as_str().unwrap());
-    // Nothing to restore: no picker.
-    let (output, rows) = fixture.pick(&["restore"], "--all", "");
+    // Nothing to resume: no picker.
+    let (output, rows) = fixture.pick(&["resume"], "--all", "");
     assert!(output.status.success(), "{}", printed(&output));
     assert!(rows.is_empty(), "{rows}");
     fixture.ok(&["rm", "--wait", &fixture.id("gone"), "--yes"]);
     let gone = gone["id"].as_str().unwrap();
-    // Stopped work comes first, each workspace with what it would restore,
-    // then the removed workspaces, by ID; idle workspaces stay out.
+    // Only the spaces whose agent can resume are offered, each with what it
+    // would resume; idle and removed workspaces stay out.
     fixture.save_stopped_command(&second);
-    let (output, rows) = fixture.pick(&["restore"], second["id"].as_str().unwrap(), "");
+    let (output, rows) = fixture.pick(&["resume"], second["id"].as_str().unwrap(), "");
     assert!(output.status.success(), "{}", printed(&output));
     let rows = rows.lines().collect::<Vec<_>>();
-    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert_eq!(rows.len(), 1, "{rows:?}");
     assert!(
         rows[0].contains("second") && rows[0].contains("stopped: 1 command"),
         "{rows:?}"
     );
-    assert!(rows[1].starts_with(&format!("{gone}\t")), "{rows:?}");
+    // Restore's picker offers the removed workspaces, by ID.
+    let (_, rows) = fixture.pick(&["restore"], "", "");
+    let rows = rows.lines().collect::<Vec<_>>();
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert!(rows[0].starts_with(&format!("{gone}\t")), "{rows:?}");
     assert!(
         String::from_utf8_lossy(&output.stdout)
             .contains(&format!("Stopped commands in {} second", second["number"])),
@@ -1586,23 +1590,22 @@ fn restore_picker_describes_what_each_space_would_restore() {
     );
     // A current workspace without stopped work falls back to the picker.
     fixture.save_stopped_command(&first);
-    let (output, rows) =
-        fixture.pick_in(idle_path, &["restore"], first["id"].as_str().unwrap(), "");
+    let (output, rows) = fixture.pick_in(idle_path, &["resume"], first["id"].as_str().unwrap(), "");
     assert!(output.status.success(), "{}", printed(&output));
-    assert_eq!(rows.lines().count(), 2, "{rows}");
+    assert_eq!(rows.lines().count(), 1, "{rows}");
     assert!(
         String::from_utf8_lossy(&output.stdout)
             .contains(&format!("Stopped commands in {} first", first["number"])),
         "{}",
         printed(&output)
     );
-    // Several workspaces restore together, each with stopped work.
+    // Several workspaces resume together, each with stopped work.
     fixture.save_stopped_command(&first);
     fixture.save_stopped_command(&second);
-    let refused = fixture.run(&["restore", &fixture.id("first"), &fixture.id("idle")]);
+    let refused = fixture.run(&["resume", &fixture.id("first"), &fixture.id("idle")]);
     assert!(!refused.status.success());
     let refused = fixture.run(&[
-        "restore",
+        "resume",
         &fixture.id("first"),
         &fixture.id("second"),
         "--execution",
@@ -1614,7 +1617,7 @@ fn restore_picker_describes_what_each_space_would_restore() {
         first["id"].as_str().unwrap(),
         second["id"].as_str().unwrap()
     );
-    let (output, _) = fixture.pick(&["restore"], &picked, "");
+    let (output, _) = fixture.pick(&["resume"], &picked, "");
     assert!(output.status.success(), "{}", printed(&output));
     let stdout = String::from_utf8_lossy(&output.stdout);
     for workspace in [&first, &second] {

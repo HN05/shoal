@@ -35,7 +35,7 @@ fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
     .unwrap();
 
     let output = fixture.run(&[
-        "restore",
+        "resume",
         &fixture.id("quarantined"),
         "--execution",
         execution,

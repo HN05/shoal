@@ -5,7 +5,7 @@ use anyhow::Result;
 use std::ffi::OsString;
 
 use super::{commands, queue, reports};
-use crate::client::output::restore::{RestoredAgent, StartedRestores};
+use crate::client::output::resume::{RestoredAgent, StartedRestores};
 use crate::{
     cli::{context::Context, terminal, ui},
     execution::recovery::{Saved, SavedSession},
@@ -33,7 +33,7 @@ pub(super) async fn run_all(
             match commands::report(ctx, &space, &saved.commands) {
                 Ok(report) => resumed.commands.push(report),
                 Err(error) => {
-                    let failure = ui::failure(ctx, "restore", &space.name, &error);
+                    let failure = ui::failure(ctx, "resume", &space.name, &error);
                     resumed.failed.push(failure);
                 }
             }
@@ -88,7 +88,7 @@ pub(super) async fn start_sessions(
                 continue;
             }
             Err(error) => {
-                let failure = ui::failure(ctx, "restore", &space.name, &error);
+                let failure = ui::failure(ctx, "resume", &space.name, &error);
                 output.failed.push(failure);
                 continue;
             }
@@ -140,7 +140,7 @@ async fn start_session(
     let target = ConfigTarget::Space(SpaceSelector::id(&space.id));
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     let args = [
-        "restore",
+        "resume",
         space.id.as_str(),
         "--execution",
         session.id.as_str(),

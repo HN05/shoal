@@ -221,7 +221,7 @@ instead of the PR delivery guidance below.
   entries, send them alerts,
   answer questions, stop their executions and agents, confirming a stop Shoal cannot prove, restart their agents, convert and rename them,
   queue restores of the agents, a workspace's or a chat's, whoever stopped them,
-  which the daemon starts a chat's in the place it ran in, and forget stopped work; the nearest space above with an agent, of either kind, receives a child agent's alerts,
+  which the daemon starts a chat's in the place it ran in, and discard their stopped agents; the nearest space above with an agent, of either kind, receives a child agent's alerts,
   questions, completion and ready marks and its agent's exits and stops instead of the user,
   except what a process causes in a child without an agent of its own. Own-workspace setup, rename, base workspace, PR registration,
   linking and watching CI runs of the own repository,
@@ -249,7 +249,7 @@ instead of the PR delivery guidance below.
   hook wakes the idle agent; an agent idle as long as its mode's
   `idle_wake_minutes` gets an alert asking it to continue, again each period,
   unless its space is done or `shoal sleep` holds it. An agent Shoal stopped and
-  brings back on its own is asleep; one that waits for `shoal restore` is
+  brings back on its own is asleep; one that waits for `shoal resume` is
   stopped. An idle heavy agent sleeps seconds after its turn ends unless the
   user is engaged with it, having interacted since its turn before the last
   ended (a key the agent reads, which its wrapper reports from the terminal's
@@ -269,7 +269,7 @@ instead of the PR delivery guidance below.
   idle Claude Code's after an interrupted turn or once it has idled with no
   wait for its updates for three minutes, once per idle stretch, the
   agent's interrupt key the CLI types for `shoal stop --interrupt`, and the
-  fixed prompt with which `shoal restore` continues that turn, each reported to
+  fixed prompt with which `shoal resume` continues that turn, each reported to
   the daemon before it types; the daemon never writes to a terminal. Space events are an unscoped, durable lifecycle
   stream with replay gaps, independent of alert read state, recorded
   for chats through the same path and in the same shape as workspaces, keyed
@@ -539,9 +539,9 @@ instead of the PR delivery guidance below.
   focus, and explicit focus settings override either default. `--focus` also
   starts the agent past `max_heavy_agents`, as `--now` does; the `focus` setting does not.
   Help calls, calls without a terminal and `--here` calls run in place, except
-  that a scoped caller's agent, and an agent of `start` or `restore --now` from a
+  that a scoped caller's agent, and an agent of `start` or `resume --now` from a
   caller without a terminal, start detached through the daemon unless `start --here`,
-  or for an unscoped caller `restore --focus`, keeps it in place. Shell and untracked
+  or for an unscoped caller `resume --focus`, keeps it in place. Shell and untracked
   desktop handoffs retain the tab.
 - Each command, flag and value has one name; flag a clap alias, including an
   old name kept after a rename. A short form is not an alias, but its letter
@@ -672,7 +672,7 @@ configured command for another agent, plus proven child
   terminate signal to an agent's wrapper or agent saves the agent's recovery the
   same way, with the signal as its reason, and is not an exit on its own. Its
   queued restore of an agent stopped between turns, with no processes left
-  outside its process group, waits for an update unless `shoal restore` asked
+  outside its process group, waits for an update unless `shoal resume` asked
   for it.
   Scoped callers stop only the executions of the workspaces below theirs.
 - Command wrappers keep running when the daemon goes away and reattach only after
@@ -697,7 +697,7 @@ configured command for another agent, plus proven child
   `{diff_base}` resolves lazily through the shared daemon diff-base lookup.
   AI tools (built-in providers and `[agents.<name>]` entries with a `command`
   or `base`) are agents, which start only through `shoal start` (or
-  `contribute`), `restore` and `restart`, as tracked agents; pickers and
+  `contribute`), `resume` and `restart`, as tracked agents; pickers and
   completion offer AI tools only. `shoal run <name>` runs only `[commands]`
   entries, whose names may be agents'. Agents'
   `{prompt}` combines general instructions and issue context, prepended to

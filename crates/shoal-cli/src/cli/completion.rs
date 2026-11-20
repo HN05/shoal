@@ -79,9 +79,11 @@ enum Target {
     /// Spaces: workspaces as [`Target::Workspaces`] offers them, then
     /// chats.
     Spaces(Need),
-    /// Workspaces described by what `shoal restore` restores in them, then
-    /// the stopped chats, then the removed spaces it opens again.
-    RestoreSpaces,
+    /// Workspaces described by what `shoal resume` brings back in them,
+    /// then the stopped chats.
+    ResumeSpaces,
+    /// The removed spaces `shoal restore` opens again.
+    RemovedSpaces,
     Pools,
     Members,
     ResourceNames,
@@ -177,7 +179,7 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                     && !typed.all
                     && matches!(
                         target,
-                        Target::Workspaces(_) | Target::Spaces(_) | Target::RestoreSpaces
+                        Target::Workspaces(_) | Target::Spaces(_) | Target::ResumeSpaces
                     );
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     let mut values = typed.complete(target, current);
@@ -350,7 +352,10 @@ impl Typed {
         };
         let workspaces = matches!(
             target,
-            Target::Workspaces(_) | Target::Spaces(_) | Target::RestoreSpaces
+            Target::Workspaces(_)
+                | Target::Spaces(_)
+                | Target::ResumeSpaces
+                | Target::RemovedSpaces
         );
         values.retain(|value| {
             value.get_value().to_str().is_some_and(|s| {
@@ -426,13 +431,13 @@ impl Typed {
             }
             return Ok(candidates);
         }
-        if matches!(target, Target::RestoreSpaces) {
+        if matches!(target, Target::ResumeSpaces) {
             let summaries = ui::saved_summaries(&paths).await;
             let mut candidates: Vec<_> = workspaces
                 .into_iter()
                 .map(|w| {
-                    let status = ui::restorable(summaries.get(&w.id))
-                        .map_or_else(|| ui::NOTHING_TO_RESTORE.into(), |(text, _)| text);
+                    let status = ui::saved_status(summaries.get(&w.id))
+                        .map_or_else(|| ui::NOTHING_TO_RESUME.into(), |(text, _)| text);
                     let help = format!("{}: {status}", w.name);
                     space_candidate(w.number, &w.name).help(Some(help.into()))
                 })
@@ -440,12 +445,16 @@ impl Typed {
             candidates.extend(stopped_chat_candidates(
                 crate::client::spaces::list(&paths).await?.into_chats(),
             ));
-            let removed = crate::client::removal::removed(&paths).await?;
-            candidates.extend(removed.into_iter().map(|space| {
-                let help = format!("{} (removed)", space.name);
-                CompletionCandidate::new(space.space_id.to_string()).help(Some(help.into()))
-            }));
             return Ok(candidates);
+        }
+        if matches!(target, Target::RemovedSpaces) {
+            let removed = crate::client::removal::removed(&paths).await?;
+            return Ok((removed.into_iter())
+                .map(|space| {
+                    let help = format!("{} (removed)", space.name);
+                    CompletionCandidate::new(space.space_id.to_string()).help(Some(help.into()))
+                })
+                .collect());
         }
         let workspace = self
             .workspace(&workspaces)
@@ -493,7 +502,8 @@ impl Typed {
             | Target::Branches
             | Target::Workspaces(_)
             | Target::Spaces(_)
-            | Target::RestoreSpaces
+            | Target::ResumeSpaces
+            | Target::RemovedSpaces
             | Target::ApprovalRequests
             | Target::Questions => unreachable!(),
         }
@@ -548,7 +558,7 @@ async fn chat_candidates(paths: &CommandPaths, need: Need) -> Result<Vec<Complet
         .collect())
 }
 
-/// The stopped chats among `chats`, which `shoal restore` restores.
+/// The stopped chats among `chats`, whose agents `shoal resume` brings back.
 fn stopped_chat_candidates(chats: Vec<Chat>) -> Vec<CompletionCandidate> {
     chats
         .iter()
@@ -569,7 +579,8 @@ fn target_of(id: &str, parent: &str, name: &str, need: Need) -> Option<Target> {
         ("name", _, "run") => Some(Target::Commands),
         ("repository" | "repository_override" | "repo", _, _) => Some(Target::Repositories),
         ("branch", _, "start") => Some(Target::Branches),
-        ("space", _, "restore") => Some(Target::RestoreSpaces),
+        ("space", _, "resume") => Some(Target::ResumeSpaces),
+        ("space", _, "restore") => Some(Target::RemovedSpaces),
         ("workspace", _, _) | ("in_workspace", _, "start") => Some(Target::Workspaces(need)),
         ("parent", _, "start") => Some(Target::Spaces(need)),
         ("space", _, _) => Some(Target::Spaces(need)),

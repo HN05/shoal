@@ -265,10 +265,14 @@ fn a_repositorys_own_agents_complete_as_agents() {
 }
 
 #[test]
-fn restore_completes_restorable_spaces() {
+fn resume_completes_resumable_spaces_and_restore_removed_ones() {
+    assert_eq!(
+        target_of("space", "", "resume", Need::Any),
+        Some(Target::ResumeSpaces)
+    );
     assert_eq!(
         target_of("space", "", "restore", Need::Any),
-        Some(Target::RestoreSpaces)
+        Some(Target::RemovedSpaces)
     );
     let chat = |name: &str, running| Chat {
         narrowing: Default::default(),

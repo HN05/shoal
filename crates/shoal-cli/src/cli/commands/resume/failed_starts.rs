@@ -4,7 +4,7 @@
 use anyhow::Result;
 
 use super::permission_change;
-use crate::cli::commands::restore::targets::Selected;
+use super::targets::Selected;
 use crate::client::output::batch::Failure;
 use crate::{
     cli::{commands::queued_agents, context::Context, ui},
@@ -61,7 +61,7 @@ pub(super) async fn retry_each(
     for entry in failed {
         match retry(ctx, entry, now).await {
             Ok(entry) => retried.push(entry),
-            Err(error) => failures.push(ui::failure(ctx, "restore", &entry.name, &error)),
+            Err(error) => failures.push(ui::failure(ctx, "resume", &entry.name, &error)),
         }
     }
     (retried, failures)

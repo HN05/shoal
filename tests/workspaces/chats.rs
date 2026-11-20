@@ -133,7 +133,7 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
     let (output, transcript) = fixture.interactive_command(
         fixture
             .command()
-            .args(["restore", &fixture.id("talk"), "--focus"]),
+            .args(["resume", &fixture.id("talk"), "--focus"]),
         "",
     );
     assert!(
@@ -207,21 +207,17 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
         &chat,
         &fixture.ok(&["restore", "--all", "--discard-agent"]),
     );
-    // The picker offers the stopped chats after the workspaces with stopped
-    // work, then the removed chats.
+    // The picker offers the spaces whose agent can resume, the workspaces
+    // before the chats, and no removed space.
     let chat = save_chat(&mut fixture);
     stop_agent(&fixture, &worker);
     let both = format!("{chat} {}", worker["id"].as_str().unwrap());
     let (output, rows) = fixture.pick(&["restore", "--discard-agent"], &both, "");
     assert!(output.status.success(), "{}", printed(&output));
     let rows = rows.lines().collect::<Vec<_>>();
-    assert_eq!(rows.len(), 4, "{rows:?}");
+    assert_eq!(rows.len(), 2, "{rows:?}");
     assert!(rows[0].contains("worker"), "{rows:?}");
     assert!(rows[1].contains("talk"), "{rows:?}");
-    assert!(
-        rows[2..].iter().all(|row| row.contains("removed")),
-        "{rows:?}"
-    );
 }
 
 /// `shoal daemon stop` names the spaces whose work it stopped, here a done
@@ -258,7 +254,7 @@ fn restore_all_skips_a_done_chat_beside_a_stopped_workspace() {
     );
     fixture.restart();
 
-    let restored = fixture.ok(&["restore", "--all"]);
+    let restored = fixture.ok(&["resume", "--all"]);
     let names: Vec<_> = (restored["queued"].as_array().unwrap().iter())
         .map(|entry| entry["name"].as_str().unwrap())
         .collect();
@@ -2123,7 +2119,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     let (output, transcript) = fixture.interactive_command(
         fixture
             .command()
-            .args(["restore", &fixture.id("worker chat"), "--focus"]),
+            .args(["resume", &fixture.id("worker chat"), "--focus"]),
         "",
     );
     assert!(
@@ -2651,7 +2647,7 @@ fn a_restored_chat_continues_its_session_with_its_messages_waiting() {
     assert!(output.status.success(), "{}", printed(&output));
 
     let (output, transcript) =
-        fixture.interactive_command(fixture.command().args(["restore", &talk, "--focus"]), "");
+        fixture.interactive_command(fixture.command().args(["resume", &talk, "--focus"]), "");
     assert!(
         output.status.success(),
         "{}\n{transcript}",
@@ -2701,22 +2697,23 @@ fn a_removed_chat_restores_under_its_id_from_the_removed_chats() {
     assert_eq!(fixture.ok(&["restore"])["removed"], serde_json::json!([]));
 }
 
-/// A chat's failed launch restores only with its agent: `--no-resume`
-/// leaves it failed, and `shoal restore` queues it again and reports it.
+/// A chat's failed launch is its agent's to resume: `shoal restore`
+/// refuses the live chat, naming `shoal resume`, which queues the launch
+/// again and reports it.
 #[test]
-fn a_chats_failed_launch_restores_only_with_its_agent() {
+fn a_chats_failed_launch_resumes_with_shoal_resume() {
     let fixture = failed_chat_launch();
     let chats = fixture.ok(&["list", "--chats"]);
     let chat = chats[0]["id"].as_str().unwrap().to_owned();
+    let number = chats[0]["number"].to_string();
 
-    fixture
-        .command()
-        .args(["restore", &chat, "--no-resume"])
-        .output()
-        .unwrap();
-    assert_failed_launch_kept(&fixture, "after --no-resume");
+    let refused = fixture.run(&["restore", &chat]);
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    let error = String::from_utf8_lossy(&refused.stderr);
+    assert!(error.contains(&format!("shoal resume {number}")), "{error}");
+    assert_failed_launch_kept(&fixture, "after the refused restore");
 
-    let restored = fixture.ok(&["restore", &chat]);
+    let restored = fixture.ok(&["resume", &chat]);
     let queued: Vec<_> = (restored["queued"].as_array().unwrap().iter())
         .map(|entry| entry["space_id"].as_str().unwrap())
         .collect();
@@ -2740,18 +2737,19 @@ fn discarding_a_chats_agent_drops_its_failed_launch() {
     assert_eq!(fixture.ok(&["list", "--chats"])[0]["id"], chat.as_str());
 }
 
-/// A failed chat launch the restore picker chooses queues again, as one
+/// A failed chat launch the resume picker chooses queues again, as one
 /// the command line names does.
 #[test]
-fn a_failed_chat_launch_picked_to_restore_queues_again() {
+fn a_failed_chat_launch_picked_to_resume_queues_again() {
     let fixture = failed_chat_launch();
 
-    // The picker takes the first restorable space, the failed chat.
+    // The picker takes the first space whose agent can resume, the failed
+    // chat.
     let fzf = fixture.root.path().join("bin/fzf");
     install_test_script(fzf, "#!/bin/sh\nhead -n 1\n");
-    let mut restore = fixture.command();
-    restore.arg("restore");
-    let (output, transcript) = fixture.interactive_command(&mut restore, "");
+    let mut resume = fixture.command();
+    resume.arg("resume");
+    let (output, transcript) = fixture.interactive_command(&mut resume, "");
 
     assert!(output.status.success(), "{} {transcript}", printed(&output));
     let stdout = String::from_utf8_lossy(&output.stdout);

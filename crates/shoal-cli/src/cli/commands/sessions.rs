@@ -291,9 +291,9 @@ impl Target {
         Ok(!saved.is_empty())
     }
 
-    /// Restore the target's stopped work as `shoal restore --now` does, and
+    /// Resume the target's stopped agent as `shoal resume --now` does, and
     /// wait for the restore it starts through the queue; refused when the
-    /// restore reports that it failed, which it has reported already.
+    /// resume reports that it failed, which it has reported already.
     async fn restore_now(&self, ctx: &Context) -> Result<()> {
         let targets = SpaceTargets {
             space: vec![SpaceSelector::id(self.id())],
@@ -301,16 +301,14 @@ impl Target {
         };
         let now = super::resume::Options {
             execution: None,
-            discard: false,
-            no_resume: false,
             now: true,
             focus: false,
             change: None,
         };
-        let code = super::restore::run(ctx, targets, None, now).await?;
+        let code = super::resume::run(ctx, targets, now).await?;
         ensure!(
             code == 0,
-            "{} did not restore; shoal alert list shows why",
+            "{} did not resume; shoal alert list shows why",
             self.name()
         );
         // A restore whose agent registered already left the queue, which

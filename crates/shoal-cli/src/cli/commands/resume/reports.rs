@@ -1,12 +1,13 @@
-//! What `shoal restore` tells the user: the report of each outcome, and the
-//! notices a restore in this terminal prints before its agent starts.
+//! What `shoal resume` tells the user: the report of each outcome, and the
+//! notices a resume in this terminal prints before its agent starts.
 use crate::execution::recovery::changes::Change;
 use anyhow::Result;
 use std::fmt::Display;
 
 use crate::cli::commands::restore::reopen::ReopenedExt;
-use crate::client::output::restore::{
-    DiscardedAgents, Queued, Reopened, SetUp, StartedRestores, StoppedCommands,
+use crate::client::output::{
+    restore::Reopened,
+    resume::{Queued, SetUp, StartedRestores, StoppedCommands},
 };
 use crate::{
     cli::context::Context, execution::recovery::SavedCommand, model::Space, state::QueueState,
@@ -22,7 +23,7 @@ pub(super) fn nothing(ctx: &Context, first: Queued, started: bool) -> Result<i32
         queued(ctx, &first)?;
         return Ok(if first.failed.is_empty() { 0 } else { 1 });
     }
-    let message = "No stopped agents, commands or chats";
+    let message = "No agents to resume";
     match started {
         true => ctx.emit(message, StartedRestores::default())?,
         false => ctx.emit(message, Queued::default())?,
@@ -41,7 +42,7 @@ pub(super) fn first(ctx: &Context, first: Queued) -> Result<i32> {
 }
 
 /// Report the `queued` restores and the workspaces reopened and set up.
-pub(super) fn queued(ctx: &Context, queued: &Queued) -> Result<()> {
+pub(in crate::cli::commands) fn queued(ctx: &Context, queued: &Queued) -> Result<()> {
     ctx.show(queued, |queued| {
         reopened_lines(ctx, &queued.reopened);
         set_up(&queued.set_up);
@@ -138,32 +139,22 @@ pub(super) fn started(
         if let Some(place) = place {
             let started = output.agents.len() - listed.len() - in_wrappers;
             let noun = if started == 1 { "agent" } else { "agents" };
-            outln!("Restoring {started} {noun} in {place}");
+            outln!("Resuming {started} {noun} in {place}");
         }
         if !listed.is_empty() {
-            outln!("Restore each agent in its own terminal:");
+            outln!("Resume each agent in its own terminal:");
         }
         for (space, id) in listed {
             let number = space.number.to_string();
             let words = [
                 "shoal",
-                "restore",
+                "resume",
                 &number,
                 "--execution",
                 id.as_str(),
                 "--focus",
             ];
             outln!("  {}", crate::shell::quote(&words));
-        }
-    })
-}
-
-/// Report the agents `discarded` of the spaces `names` lists.
-pub(super) fn discarded(ctx: &Context, discarded: &DiscardedAgents, names: &[&str]) -> Result<()> {
-    ctx.show(discarded, |discarded| {
-        reopened_lines(ctx, &discarded.reopened);
-        if !names.is_empty() {
-            outln!("Discarded the agents of {}", names.join(", "));
         }
     })
 }

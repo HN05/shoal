@@ -9,6 +9,7 @@ use super::{
     Cell, Entries, chat_entries, pick, pick_many, picker_width, require_argument, rows_with_status,
     status_cell,
 };
+use crate::client::output::resume::ResumableSpace;
 use crate::{
     cli::{
         args::WorkspaceScope,
@@ -82,29 +83,6 @@ pub async fn choose_workspace(
             SpaceSelector::Id(pick_workspace(ctx, workspaces, WORKSPACE).await?)
         }
     })
-}
-
-/// The workspaces a command that acts on several takes: those named, each
-/// once and in order, otherwise the current one, otherwise those picked.
-pub async fn select_workspaces(
-    ctx: &Context,
-    names: Vec<SpaceSelector>,
-) -> Result<Vec<SpaceSelector>> {
-    let mut selected = named_workspaces(ctx, names).await?;
-    if selected.is_empty() {
-        selected = match resolve_workspace(ctx, None, Fallback::CurrentDirectory).await? {
-            Resolution::Named(selector) => vec![selector],
-            Resolution::Current(id) => vec![SpaceSelector::Id(id)],
-            Resolution::Picker(workspaces) => (pick_workspaces(ctx, workspaces).await?)
-                .into_iter()
-                .map(SpaceSelector::Id)
-                .collect(),
-        };
-    }
-    for workspace in &selected {
-        record_workspace(ctx, workspace).await;
-    }
-    Ok(selected)
 }
 
 /// The spaces, workspaces or chats, a command that acts on several takes:
@@ -196,60 +174,44 @@ pub async fn select_workspace_filter(
     )
 }
 
-/// The spaces `shoal restore` acts on: those `names` selects, else the
-/// current workspace when it has something to restore, else those picked
-/// among the workspaces with stopped work, the `saved` chats and the
-/// `removed` workspaces, whose picker entries the caller labels. `None`
-/// without a terminal or anything to pick, which the caller lists instead.
-pub async fn select_restorable(
+/// The spaces `shoal resume` picks without a space: the current workspace
+/// when it is among the `resumable` spaces, else those picked among them,
+/// workspaces then chats. `None` without a terminal or anything to pick,
+/// which the caller lists instead.
+pub async fn select_resumable(
     ctx: &Context,
-    names: Vec<SpaceSelector>,
-    saved: &[Chat],
-    removed: Entries,
+    resumable: &[ResumableSpace],
 ) -> Result<Option<Vec<SpaceSelector>>> {
-    if !names.is_empty() {
-        return select_workspaces(ctx, names).await.map(Some);
+    if let Resolution::Current(id) =
+        resolve_workspace(ctx, None, Fallback::CurrentDirectory).await?
+        && resumable.iter().any(|space| space.space.id == id)
+    {
+        return Ok(Some(vec![SpaceSelector::Id(id)]));
     }
-    let summaries = saved_summaries(&ctx.paths).await;
-    let workspaces = match resolve_workspace(ctx, None, Fallback::CurrentDirectory).await? {
-        Resolution::Current(id) if summaries.contains_key(&id) => {
-            return Ok(Some(vec![SpaceSelector::Id(id)]));
-        }
-        Resolution::Named(_) | Resolution::Current(_) => crate::client::spaces::list(&ctx.paths)
-            .await?
-            .into_workspaces(),
-        Resolution::Picker(workspaces) => workspaces,
-    };
-    let mut entries = stopped_entries(ctx, workspaces, &summaries);
+    let mut entries = resumable_workspace_entries(ctx, resumable);
+    let chats: Vec<_> = (resumable.iter())
+        .filter_map(|space| space.space.clone().into_chat().ok())
+        .collect();
     entries.extend(chat_entries(
-        saved,
+        &chats,
         Palette::stderr(ctx.json),
         picker_width(),
     ));
-    entries.extend(removed);
     if entries.is_empty() || !ctx.interactive() {
         return Ok(None);
     }
     pick_many(ctx, "Spaces> ", entries).map(|picked| Some(picked_ids(picked)))
 }
 
-/// The workspaces with stopped work, then those with only a last session,
-/// each with what `summaries` says it saved.
-fn stopped_entries(
-    ctx: &Context,
-    workspaces: Vec<Workspace>,
-    summaries: &HashMap<SpaceId, SavedSummary>,
-) -> Entries {
-    let mut rows = workspaces
-        .into_iter()
-        .filter_map(|w| Some((restorable(summaries.get(&w.id))?, w)))
-        .collect::<Vec<_>>();
-    rows.sort_by_key(|((_, unfinished), _)| !unfinished);
-    let (statuses, workspaces): (Vec<_>, Vec<_>) = rows
-        .into_iter()
-        .map(|((text, unfinished), w)| {
-            let status = ListStatus::of_workspace(&w, unfinished);
-            ((status, restorable_status_cell(text, unfinished)), w)
+/// The picker entries of the workspaces among `resumable`, in its order,
+/// each with what of it resumes.
+fn resumable_workspace_entries(ctx: &Context, resumable: &[ResumableSpace]) -> Entries {
+    let (statuses, workspaces): (Vec<_>, Vec<_>) = (resumable.iter())
+        .filter_map(|space| {
+            let workspace = space.space.to_workspace()?;
+            let (text, unfinished) = self::resumable(space);
+            let status = ListStatus::of_workspace(&workspace, unfinished);
+            Some(((status, resumable_status_cell(text, unfinished)), workspace))
         })
         .unzip();
     let palette = Palette::stderr(ctx.json);
@@ -261,8 +223,8 @@ fn stopped_entries(
         .collect()
 }
 
-/// What each workspace this process sees saved, in brief, by workspace;
-/// none when the daemon cannot say, which only loses what the lists show.
+/// What each space this process sees saved, in brief, by space; none when
+/// the daemon cannot say, which only loses what the lists show.
 pub async fn saved_summaries(paths: &CommandPaths) -> HashMap<SpaceId, SavedSummary> {
     let summaries = crate::client::saved::summaries(paths).await;
     let summaries = summaries.unwrap_or_default().into_iter();
@@ -271,10 +233,20 @@ pub async fn saved_summaries(paths: &CommandPaths) -> HashMap<SpaceId, SavedSumm
         .collect()
 }
 
-/// What `shoal restore` restores in a workspace that saved `summary`, such
-/// as `stopped: claude, 1 command`, and whether it is unfinished work
-/// rather than only last sessions; `None` when nothing is saved.
-pub fn restorable(summary: Option<&SavedSummary>) -> Option<(String, bool)> {
+/// What `shoal resume` brings back in `space`, such as `stopped: claude,
+/// 1 command` or `launch failed`, and whether it is unfinished work rather
+/// than only last sessions.
+pub fn resumable(space: &ResumableSpace) -> (String, bool) {
+    match (&space.failed_launch, &space.saved) {
+        (Some(_), _) => ("launch failed".into(), true),
+        (None, saved) => saved_status(saved.as_ref()).unwrap_or_default(),
+    }
+}
+
+/// What a space that saved `summary` resumes, such as `stopped: claude,
+/// 1 command`, and whether it is unfinished work rather than only last
+/// sessions; `None` when nothing is saved.
+pub fn saved_status(summary: Option<&SavedSummary>) -> Option<(String, bool)> {
     let summary = summary?;
     let mut parts = (summary.agents.iter())
         .map(|agent| {
@@ -291,10 +263,10 @@ pub fn restorable(summary: Option<&SavedSummary>) -> Option<(String, bool)> {
     Some((format!("stopped: {}", parts.join(", ")), summary.unfinished))
 }
 
-/// How completion names a workspace without stopped work.
-pub const NOTHING_TO_RESTORE: &str = "nothing to restore";
+/// How completion names a workspace whose agent has nothing to resume.
+pub const NOTHING_TO_RESUME: &str = "nothing to resume";
 
-fn restorable_status_cell(text: String, unfinished: bool) -> Cell {
+fn resumable_status_cell(text: String, unfinished: bool) -> Cell {
     match unfinished {
         true => (text, Some(ListStatus::Stopped.style())),
         false => (text, None),
@@ -600,21 +572,6 @@ async fn space_entries(ctx: &Context, workspaces: Vec<Workspace>, chats: &[Chat]
         picker_width(),
     ));
     entries
-}
-
-async fn pick_workspaces(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Vec<SpaceId>> {
-    // `stop` takes spaces, of which it picks workspaces.
-    let argument = match crate::cli::usage::of(&ctx.command, WORKSPACE) {
-        Some(_) => WORKSPACE,
-        None => SPACE,
-    };
-    require_argument(ctx, "workspaces", argument)?;
-    let entries = workspace_entries(ctx, workspaces, false).await;
-    ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
-    Ok(pick_many(ctx, "Workspaces> ", entries)?
-        .into_iter()
-        .map(SpaceId::from)
-        .collect())
 }
 
 /// The spaces picked by the IDs their entries carry.
