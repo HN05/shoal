@@ -4,6 +4,7 @@ use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
+        commands::machines,
         context::Context,
         terminal,
         ui::{self, Fallback},
@@ -12,6 +13,7 @@ use crate::{
     protocol::ConfigTarget,
     sessions::Origin,
 };
+use shoal_ids::space_ids::SpaceNumber;
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -112,21 +114,53 @@ pub(in crate::cli::commands) async fn request_name(
 ) -> Result<i32> {
     super::super::start::ensure_scope_token(ctx)?;
     let selector = chosen_space(ctx, space).await?;
-    let space = (crate::client::workspaces::present_space(&ctx.paths, &selector).await?)
-        .with_context(|| format!("no space {selector}"))?;
-    let selector = SpaceSelector::id(&space.id);
-    let agents = crate::client::agents::running(&ctx.paths, selector.clone()).await?;
+    let asked = asked_space(ctx, &selector).await?;
     ensure!(
-        !agents.is_empty(),
+        asked.running,
         "{} has no running agent to ask; set its name with shoal rename {} <NAME>",
-        space.label(),
-        space.number
+        asked.label,
+        asked.number
     );
-    let to = shoal_protocol::protocol::AlertTarget::Space { space: selector };
+    let to = shoal_protocol::protocol::AlertTarget::Space {
+        space: asked.selector,
+    };
     let request = NAME_REQUEST.into();
     crate::client::alerts::send(&ctx.paths, to, None, request, Vec::new()).await?;
     ctx.emit("Asked the space's agent to choose its name.", ())?;
     Ok(0)
+}
+
+/// The space `rename --request` asks, by its ID, with whether an agent runs
+/// there to ask.
+struct AskedSpace {
+    selector: SpaceSelector,
+    label: String,
+    number: SpaceNumber,
+    running: bool,
+}
+
+/// The space `selector` selects, on this machine or another joined one,
+/// as `rename --request` asks it.
+async fn asked_space(ctx: &Context, selector: &SpaceSelector) -> Result<AskedSpace> {
+    if let Some(space) = crate::client::workspaces::present_space(&ctx.paths, selector).await? {
+        let id = SpaceSelector::id(&space.id);
+        let agents = crate::client::agents::running(&ctx.paths, id.clone()).await?;
+        return Ok(AskedSpace {
+            selector: id,
+            label: space.label(),
+            number: space.number,
+            running: !agents.is_empty(),
+        });
+    }
+    let (remote, _) = (machines::space_elsewhere(ctx, selector).await?)
+        .with_context(|| format!("no space {selector}"))?;
+    let space = remote.space;
+    Ok(AskedSpace {
+        selector: SpaceSelector::id(&space.id),
+        label: shoal_protocol::space_names::label(space.number, &space.name),
+        number: space.number,
+        running: space.running.is_some(),
+    })
 }
 
 /// The space `space` names, else the current workspace or the chat this runs
