@@ -152,7 +152,7 @@ pub(super) async fn supervise(
     let report = SignalReport { paths, plan };
     let outcome = wait_for_child(link, &mut child, &group, signals, saving.ending, report).await?;
     if let Outcome::Exited(code) = outcome {
-        link.status().agent_exited(code);
+        link.status().agent_exited(code).await;
     }
     // A command owns its process group; descendants do not outlive its lease.
     drop(group);

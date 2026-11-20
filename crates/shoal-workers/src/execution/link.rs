@@ -302,7 +302,7 @@ async fn read_controls(
     loop {
         let control = match protocol::read_buffered::<Control>(&mut reader).await {
             Ok(Control::ProgramStatus { status: report }) => {
-                status.report(report);
+                status.report(report).await;
                 continue;
             }
             control => control,
