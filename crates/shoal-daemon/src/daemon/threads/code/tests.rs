@@ -296,3 +296,31 @@ async fn a_chat_points_at_code_in_the_worktree_it_runs_in() {
         .unwrap();
     assert_eq!(posted.posts[0].code[0].space.id, tree.beside.id);
 }
+
+#[tokio::test]
+async fn a_thread_whose_opening_post_is_refused_is_never_opened() {
+    let tree = tree().await;
+    let (manager, child) = (&tree.manager, caller(&tree.child));
+    let long = tree.child.path.join("long.rs");
+    fs::write(&long, format!("// {}\n", "x".repeat(97)).repeat(20)).unwrap();
+    // Each snippet takes 2 KiB, and together they outgrow a thread.
+    let code = (0..40).map(|_| at(long.clone(), "1-20")).collect();
+    let opened = manager
+        .open_thread(
+            Some(&child),
+            "Too much".into(),
+            ThreadKind::Request,
+            None,
+            code,
+        )
+        .await;
+    let refused = opened.unwrap_err().to_string();
+    assert!(refused.contains("would take more than"), "{refused}");
+    let selector = shoal_protocol::space_names::SpaceSelector::id(&tree.child.id);
+    let state = shoal_protocol::threads::ThreadState::All;
+    let listed = manager
+        .threads(Some(&selector), state, false)
+        .await
+        .unwrap();
+    assert!(listed.threads.is_empty(), "{:?}", listed.threads);
+}

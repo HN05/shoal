@@ -155,19 +155,6 @@ impl Manager {
     ) -> Result<Thread> {
         workspace_files::check_sent(&attachments)?;
         let code = self.new_code(caller, code).await?;
-        self.post_made(caller, number, post, attachments, code)
-            .await
-    }
-
-    /// [`Manager::post_to_thread`] with its references made.
-    pub(super) async fn post_made(
-        &self,
-        caller: Option<&Caller>,
-        number: ThreadNumber,
-        post: NewPost,
-        attachments: Vec<NewFile>,
-        code: Vec<NewCode>,
-    ) -> Result<Thread> {
         let thread = self.readable_thread(caller, number).await?;
         let side = self.side(caller, &thread).await?;
         let post = picked(&thread, side, post)?;

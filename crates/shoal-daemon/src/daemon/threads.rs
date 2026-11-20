@@ -12,10 +12,12 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     code::NewCodeRef,
     space_names::SpaceSelector,
-    threads::{NewPost, Sender, Thread, ThreadKind, ThreadNumber},
+    threads::{Holder, NewPost, Sender, Side, Thread, ThreadKind},
 };
 
 use crate::daemon::{alerts::Recipients, manager::Manager, notifications::Source, scope::Caller};
+use code::NewCode;
+use posting::{Attached, Poster, record_post};
 use records::NewThread;
 
 mod chat;
@@ -49,7 +51,6 @@ impl Manager {
         code: Vec<NewCodeRef>,
     ) -> Result<Thread> {
         crate::validate::message(&name).context("invalid thread name")?;
-        let code = self.new_code(caller, code).await?;
         let target = match to {
             Some(to) => Some(self.space(to).await?.id),
             None => None,
@@ -70,11 +71,9 @@ impl Manager {
             }
         };
         let removing = self.space_removals.clone();
-        let opening = NewPost {
-            text: name.clone(),
-            ..NewPost::default()
-        };
-        let thread = self
+        let opening = self.opening_post(caller, code).await?;
+        let versioned = opening.as_ref().map(|(_, code)| code::versioned(code));
+        let (thread, delivered) = self
             .store
             .write(move |tx| {
                 // A space reserved for removal takes no thread its cleanup
@@ -88,16 +87,50 @@ impl Manager {
                     holder: holder.as_ref(),
                 };
                 let id = records::insert_thread(tx, &new)?;
-                records::reread(tx, id)
+                match opening {
+                    Some((poster, code)) => {
+                        let post = NewPost {
+                            text: name.clone(),
+                            ..NewPost::default()
+                        };
+                        let attached = Attached {
+                            files: &[],
+                            code: &code,
+                        };
+                        let posted =
+                            record_post(tx, id, &poster, &post, attached, false, &removing)?;
+                        Ok((posted.0, Some(posted.1)))
+                    }
+                    None => Ok((records::reread(tx, id)?, None)),
+                }
             })
             .await?;
         self.signals.thread_changed();
-        if code.is_empty() {
-            return Ok(thread);
+        if let Some(delivered) = delivered {
+            self.announce_threads(delivered).await;
         }
-        let number = ThreadNumber::Full(thread.number);
-        self.post_made(caller, number, opening, Vec::new(), code)
-            .await
+        for (repository, spaces) in versioned.into_iter().flatten() {
+            self.keep_code_versions(&repository, spaces).await;
+        }
+        Ok(thread)
+    }
+
+    /// Who makes the opening post of a thread about the places in code
+    /// `code` that `caller` opens, and the references made; none without
+    /// code, as an empty thread has no post. The thread's transaction
+    /// records the post, so a refused one leaves no thread behind.
+    async fn opening_post(
+        &self,
+        caller: Option<&Caller>,
+        code: Vec<NewCodeRef>,
+    ) -> Result<Option<(Poster, Vec<NewCode>)>> {
+        if code.is_empty() {
+            return Ok(None);
+        }
+        let code = self.new_code(caller, code).await?;
+        // The opener's side is checked against no holder.
+        let poster = self.poster(caller, Side::Opener, &Holder::User).await?;
+        Ok(Some((poster, code)))
     }
 
     /// The space whose agent coordinates the space `id`, here or on another
