@@ -4796,6 +4796,8 @@ package ends here, one nothing of which left moves again, one whose package
 `-o -` had yet to write stays here with its agents' restores queued, and one
 another machine, or what read a package `-o -` wrote, may have taken stays
 here with its agents stopped, as when the connection drops. An alert tells how each one finished.
+Until Shoal finished such a move, another move of that space is refused with
+the error code `move_in_progress`.
 
 `shoal move [space] -o <file>` writes a workspace or chat to a new file, or
 to standard output for `-`, refusing a terminal, and ends it here once the file
