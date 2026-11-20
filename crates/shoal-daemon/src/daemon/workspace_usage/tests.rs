@@ -42,6 +42,7 @@ fn sample(
         processes: processes.into_iter().collect(),
         unreaped: HashSet::new(),
         in_work_slice: HashSet::new(),
+        oneshots: Oneshots::default(),
     }
 }
 
@@ -488,4 +489,31 @@ async fn a_sample_missing_containers_gives_no_work_memory() {
     // One project's reading failed.
     let failed = vec![("a".into(), Err(anyhow::anyhow!("no such project")))];
     assert_eq!(readings(Ok(failed)), None);
+}
+
+#[tokio::test(start_paused = true)]
+async fn one_shot_runs_count_in_the_work_memory_in_the_slice_or_beside_it() {
+    let found = [process(30, 1, "a", 0).0, process(31, 1, "a", 0).0];
+    let reading = |pid: u32| Ok(Some(process(pid, 1, "a", 0).1.1));
+    // A reviewer in a scope of the slice; its child started directly beside it.
+    let oneshots = Oneshots::read(&found, reading, |pid| pid == 30).unwrap();
+    assert_eq!(
+        oneshots,
+        Oneshots {
+            memory: 2048,
+            in_work_slice: 1024
+        }
+    );
+    let start = Instant::now();
+    let mut sampled = sample(start, [process(10, 1, "a", 0)]);
+    sampled.oneshots = oneshots;
+    let mut usages = WorkspaceUsages::default();
+    usages.record(Ok(sampled), Ok(Vec::new()));
+    assert_eq!(
+        usages.memory(start),
+        Some(SampledWork {
+            all: 3072,
+            outside_slice: 2048
+        })
+    );
 }

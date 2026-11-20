@@ -98,6 +98,14 @@ impl Runs {
         self.unfinished.lock().unwrap().insert(files.to_owned());
     }
 
+    /// The run directories of the runs whose processes may still run, as
+    /// their marker names them.
+    pub fn unfinished(&self) -> HashSet<String> {
+        (self.unfinished.lock().unwrap().iter())
+            .map(|files| files.to_string_lossy().into_owned())
+            .collect()
+    }
+
     fn end(&self, files: &Path) {
         self.unfinished.lock().unwrap().remove(files);
     }
@@ -167,9 +175,11 @@ pub async fn run(run: &Run<'_>, cancel: &mut watch::Receiver<bool>) -> Result<En
     ended
 }
 
-/// [`run`] for the command's own process group.
+/// [`run`] for the command's own process group, in a scope of its own in
+/// the work slice where one can start, as an agent's.
 async fn run_group(run: &Run<'_>, cancel: &mut watch::Receiver<bool>) -> Result<Ended> {
-    let mut child = command(run)?.spawn().context("start the agent")?;
+    let launcher = shoal_core::service::work::launcher().await;
+    let mut child = command(run, launcher)?.spawn().context("start the agent")?;
     let group = child.id().context("agent process ID unavailable")? as i32;
     // Dropping the run, as a daemon stop does, kills its whole group.
     let mut guard = GroupGuard(Some(group));
@@ -262,7 +272,7 @@ fn has_exited(pid: i32) -> std::io::Result<bool> {
 
 /// The command as its own process group in the run's directory, with the
 /// configured variables and none of the daemon's Shoal variables or secrets.
-fn command(run: &Run) -> Result<Command> {
+fn command(run: &Run, launcher: &[std::ffi::OsString]) -> Result<Command> {
     let (program, args) = run
         .command
         .argv
@@ -286,8 +296,9 @@ fn command(run: &Run) -> Result<Command> {
         command.env_remove(name);
     }
     command.env(env::ONESHOT_RUN, run.files);
+    command.current_dir(run.directory);
+    let mut command = shoal_core::service::work::launched(command, launcher);
     command
-        .current_dir(run.directory)
         .stdin(Stdio::null())
         .stdout(fs::File::create(stdout(run.files))?)
         .stderr(fs::File::create(stderr(run.files))?)

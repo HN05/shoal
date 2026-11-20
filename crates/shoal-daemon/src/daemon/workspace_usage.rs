@@ -1,6 +1,7 @@
 //! What each space's processes use, a workspace's or a chat's, sampled on a
 //! fixed cadence, and at once when a workspace's containers start, from the
-//! processes carrying its identity, with what its containers use.
+//! processes carrying its identity, with what its containers use, and the
+//! memory of the one-shot agent runs, which belong to no space.
 use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::{HashMap, HashSet},
@@ -46,6 +47,38 @@ struct Sample {
     unreaped: HashSet<Identity>,
     /// Processes running in the work slice, whose memory the slice reads.
     in_work_slice: HashSet<Identity>,
+    /// The memory of the one-shot agent runs' processes, such as reviewers,
+    /// which belong to no space, and what of it is in the work slice.
+    oneshots: Oneshots,
+}
+
+/// The memory, in bytes, of one-shot agent runs' processes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct Oneshots {
+    memory: u64,
+    in_work_slice: u64,
+}
+
+impl Oneshots {
+    /// The memory of the processes `found` and whether each runs in the
+    /// work slice, read by `reading`; one gone meanwhile counts none.
+    fn read(
+        found: &[Identity],
+        reading: impl Fn(u32) -> Result<Option<Reading>>,
+        in_slice: impl Fn(u32) -> bool,
+    ) -> Result<Self> {
+        let mut oneshots = Self::default();
+        for identity in found {
+            let Some(reading) = reading(identity.pid)? else {
+                continue;
+            };
+            oneshots.memory = oneshots.memory.saturating_add(reading.memory);
+            if in_slice(identity.pid) {
+                oneshots.in_work_slice = oneshots.in_work_slice.saturating_add(reading.memory);
+            }
+        }
+        Ok(oneshots)
+    }
 }
 
 impl Sample {
@@ -159,12 +192,15 @@ impl WorkspaceUsages {
         if now.duration_since(latest.time) > STALE || !self.containers_complete {
             return None;
         }
-        let all = (self.usage.values()).fold(0u64, |total, usage| {
+        let spaces = (self.usage.values()).fold(0u64, |total, usage| {
             total.saturating_add(usage.memory_bytes)
         });
+        let all = spaces.saturating_add(latest.oneshots.memory);
+        let in_slice =
+            (latest.in_work_slice_memory()).saturating_add(latest.oneshots.in_work_slice);
         Some(SampledWork {
             all,
-            outside_slice: all.saturating_sub(latest.in_work_slice_memory()),
+            outside_slice: all.saturating_sub(in_slice),
         })
     }
 
@@ -381,12 +417,14 @@ pub(super) async fn run(manager: Arc<Manager>) {
 }
 
 /// Every space's processes, and those of `tracked` that have exited
-/// unreaped, whose environment no scan can read.
+/// unreaped, whose environment no scan can read, with what the one-shot
+/// agent runs' processes hold.
 async fn sample(manager: &Manager, tracked: Vec<(SpaceId, Identity)>) -> Result<Sample> {
     let ids = (manager.store)
         .read(|db| crate::daemon::spaces::space_ids(db))
         .await?;
     let running = identity::scan_workspaces(ids).await?;
+    let oneshots = identity::scan_oneshot_runs(manager.reviews.unfinished_runs()).await?;
     let found: HashSet<&Identity> = running.iter().map(|(_, identity)| identity).collect();
     let missed: Vec<_> = tracked
         .into_iter()
@@ -394,10 +432,12 @@ async fn sample(manager: &Manager, tracked: Vec<(SpaceId, Identity)>) -> Result<
         .collect();
     let reading = move || {
         let mut sample = read(running, missed, usage::read, state)?;
+        let holds = crate::service::work::holds;
         sample.in_work_slice = (sample.processes.keys())
-            .filter(|identity| crate::service::work::holds(identity.pid))
+            .filter(|identity| holds(identity.pid))
             .cloned()
             .collect();
+        sample.oneshots = Oneshots::read(&oneshots, usage::read, holds)?;
         Ok(sample)
     };
     tokio::task::spawn_blocking(reading)
@@ -460,6 +500,7 @@ fn read(
         processes,
         unreaped,
         in_work_slice: HashSet::new(),
+        oneshots: Oneshots::default(),
     })
 }
 

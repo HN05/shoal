@@ -100,6 +100,12 @@ impl Reviews {
         self.runs.stop_all().await;
     }
 
+    /// The run directories of one-shot agent runs whose processes may still
+    /// run, as their marker names them.
+    pub fn unfinished_runs(&self) -> std::collections::HashSet<String> {
+        self.runs.unfinished()
+    }
+
     /// Wait until a review's run ends, after subscribing.
     #[cfg(any(test, feature = "test-support"))]
     pub fn ends(&self) -> watch::Receiver<u64> {

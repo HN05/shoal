@@ -291,10 +291,12 @@ Monitoring does not guarantee that the OS will never reach its OOM limit.
 ### Work slice
 
 On Linux every command an execution wrapper starts for work, an agent, a CI
-job's runner, a demo, a setup or a `shoal run` command, runs in a transient
-systemd scope of its own in `shoal-work.slice`, with `OOMPolicy=continue`,
-wherever the wrapper runs, such as in a terminal host's place: the command
-keeps the wrapper's terminal and environment. The daemon, places, workers and
+job's runner, a demo, a setup or a `shoal run` command, and every one-shot
+agent the daemon runs, a [reviewer](#local-reviews) or the gate, runs in a
+transient systemd scope of its own in `shoal-work.slice`, with
+`OOMPolicy=continue`, wherever the wrapper runs, such as in a terminal host's
+place: the command keeps the wrapper's terminal and its own environment,
+including the runtime directory and bus its configuration sets. The daemon, places, workers and
 wrappers, and the pushes and merges Shoal runs, stay out of it. A CI job's
 scope ends whole with any process of it the kernel's OOM killer takes. Where
 no scope can start, as without a user bus, from a login whose processes the
@@ -320,7 +322,8 @@ cache aside, with what it swapped out, and the memory the latest usage
 sample counts for work running outside it, as a command whose scope could
 not start; before the slice exists, and on
 macOS, where the kernel does not enforce the limit, it is the memory the
-latest usage sample counts for every space's processes and containers.
+latest usage sample counts for every space's processes and containers and
+the one-shot agents' processes.
 Without a current sample, or with one that could not read every workspace's
 containers, there is no reading of the work, and nothing starts.
 
