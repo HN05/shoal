@@ -94,6 +94,15 @@ impl Remote {
         }
     }
 
+    /// The destination of a move here, which the daemon records.
+    fn destination(&self) -> crate::transfer::MoveDestination {
+        crate::transfer::MoveDestination::Ssh(crate::transfer::SshDestination {
+            host: self.host.clone(),
+            shoal: Some(self.shoal.clone()),
+            resume: self.resume,
+        })
+    }
+
     /// Refuse a machine `ssh` cannot reach, or whose Shoal does not answer.
     async fn check(&self) -> Result<()> {
         let output = Run::new(self.command(&["repo", "ls"]))

@@ -63,11 +63,6 @@ impl Checked {
         }
     }
 
-    /// The space and the spaces that go with it, whose agents a move stops.
-    pub(in super::super) fn spaces(&self) -> impl Iterator<Item = &SpaceId> {
-        std::iter::once(self.id()).chain(self.carried.iter().map(|space| &space.id))
-    }
-
     /// Consent to end the chat with the spaces that go with it, the only
     /// spaces below it its removal may take.
     pub(in super::super) fn chat_ending(&self) -> UnsavedWork {

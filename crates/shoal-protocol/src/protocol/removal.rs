@@ -121,31 +121,26 @@ pub enum RemovalMethod {
         #[serde(default)]
         carrying: crate::transfer::Carrying,
     },
-    /// Stop the agents of the workspace or chat `space` and of the spaces
-    /// below it that `carrying` carries, saving their sessions, and write
-    /// them for another Shoal to the new file `file` without ending them
-    /// here, as `shoal move --ssh` does before its import there.
+    /// Record the move of the workspace or chat `space` and the spaces
+    /// below it that `carrying` carries to `destination`, letting it delete
+    /// the `unsaved` work the caller saw, then stop their agents, saving
+    /// their sessions, and write their package for another Shoal to the
+    /// new file the destination takes, without ending them here.
     ExportMovingSpace {
         space: SpaceSelector,
-        file: std::path::PathBuf,
-        #[serde(default)]
-        carrying: crate::transfer::Carrying,
-    },
-    /// End `space` here with the spaces below it that `carrying` carries,
-    /// once another Shoal imported their move, deleting only the `unsaved`
-    /// work the caller saw: each workspace only while it still has what
-    /// its exported checkpoint in `checkpoints` keeps.
-    EndMovedSpace {
-        space: SpaceSelector,
         unsaved: UnsavedWork,
-        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-        checkpoints: std::collections::BTreeMap<
-            shoal_ids::space_ids::SpaceId,
-            shoal_ids::checkpoint_numbers::CheckpointNumber,
-        >,
+        destination: crate::transfer::MoveDestination,
         #[serde(default)]
         carrying: crate::transfer::Carrying,
     },
+    /// End `space` here with the spaces below it that its recorded move
+    /// carries, once the destination has their package, as the move's
+    /// record allows; the move ends either way.
+    EndMovedSpace { space: SpaceSelector },
+    /// Forget the recorded move of `space`, which failed, answering with the
+    /// executions whose stopped work its spaces saved once it stopped their
+    /// agents.
+    AbandonMove { space: SpaceSelector },
     /// Read a package another Shoal exported, cloning the repositories it
     /// needs that are not here, record its spaces as removed here once the
     /// whole package checks out, and open its own space again.

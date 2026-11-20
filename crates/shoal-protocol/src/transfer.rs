@@ -1,17 +1,22 @@
 //! Packages of spaces `shoal move` carries between machines: what one holds.
-use std::path::PathBuf;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::{Path, PathBuf},
+};
 
 use serde::{Deserialize, Serialize};
 
 use crate::{
     executions::{Copied, LastSession, StoppedAgent},
     model::{RemovedSpace, RestoredSpace},
-    removal::RemovalResult,
+    removal::{RemovalResult, UnsavedWork},
     repository::Selector,
     space_names::SpaceName,
     transcripts::SessionFile,
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
+use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
 /// What a package holds besides its session files and bundle.
@@ -182,3 +187,88 @@ pub enum CarriedRecord {
     /// Not recorded, for `error`.
     Failed { name: SpaceName, error: String },
 }
+
+/// Where a move delivers the packages of its spaces.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum MoveDestination {
+    /// Another machine's Shoal, which `ssh` reaches.
+    Ssh(SshDestination),
+    /// A new file, by its absolute path, that takes the one space moved.
+    File { path: PathBuf },
+    /// A directory, by its absolute path, that takes a new file per space,
+    /// named after its ID.
+    Directory { path: PathBuf },
+    /// A new file, by its absolute path, that the client which started the
+    /// move copies to its standard output once the move ends.
+    Client { path: PathBuf },
+}
+
+/// Another machine's Shoal, which `ssh` reaches without a prompt.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SshDestination {
+    /// A host, `user@host` or an alias of the SSH config of the machine
+    /// that runs the move.
+    pub host: String,
+    /// The shoal program there, when SSH's PATH does not find it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shoal: Option<String>,
+    /// Whether the import there resumes the agents.
+    pub resume: bool,
+}
+
+impl MoveDestination {
+    /// The file the package of the space `id` goes to: the file named, its
+    /// file in the directory named, or for another machine its file among
+    /// the packages being delivered in `staging`.
+    pub fn package(&self, id: &SpaceId, staging: &Path) -> PathBuf {
+        match self {
+            Self::File { path } | Self::Client { path } => path.clone(),
+            Self::Directory { path } => path.join(package_name(id)),
+            Self::Ssh(_) => staging.join(package_name(id)),
+        }
+    }
+}
+
+/// The name of the package file of the space `id`, after its ID, since
+/// names repeat and may hold any character.
+pub fn package_name(id: &SpaceId) -> String {
+    format!("{id}.shoal")
+}
+
+shoal_states::states!(
+    /// How far a recorded move got, which tells a daemon restarted during
+    /// it how to finish it.
+    MovePhase {
+        /// The move stops the agents and writes the package; nothing has
+        /// left this machine.
+        Packing => "packing",
+        /// The package is written and goes to another machine, which may
+        /// have imported it.
+        Delivering => "delivering",
+        /// The destination has the package, so the spaces end here.
+        Delivered => "delivered",
+    }
+);
+
+/// A move of a space and those it carries, which the daemon records before
+/// any agent stops and forgets once the move ends.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MoveRecord {
+    pub space: SpaceId,
+    pub destination: MoveDestination,
+    pub carrying: Carrying,
+    /// The unsaved work the caller let the move delete.
+    pub unsaved: UnsavedWork,
+    pub phase: MovePhase,
+    /// The checkpoint the package holds of each workspace, once written.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub checkpoints: BTreeMap<SpaceId, CheckpointNumber>,
+    /// The executions whose stopped work each space saved before the move
+    /// stopped its agents, which a move that fails leaves stopped.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub saved_before: StoppedExecutions,
+}
+
+/// Executions by the space whose stopped work saves them.
+pub type StoppedExecutions = BTreeMap<SpaceId, BTreeSet<ExecutionId>>;

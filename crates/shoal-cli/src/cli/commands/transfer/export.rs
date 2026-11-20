@@ -371,11 +371,6 @@ impl PlannedExport {
         &self.check
     }
 
-    /// The file its export goes to.
-    pub(super) fn file(&self) -> PathBuf {
-        self.output.file()
-    }
-
     /// Which of the spaces below it go with it.
     pub(super) fn carrying(&self) -> &Carrying {
         &self.carrying

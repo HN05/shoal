@@ -59,6 +59,12 @@ impl Paths {
         })
     }
 
+    /// The directory of the packages being delivered from here to another
+    /// machine, each until its move ends.
+    pub fn move_packages(&self) -> PathBuf {
+        self.state.join("moves")
+    }
+
     pub fn prepare(&self) -> Result<()> {
         fs::create_dir_all(&self.state).context("create state directory")?;
         fs::set_permissions(&self.state, fs::Permissions::from_mode(0o700))?;

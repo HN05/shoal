@@ -5,6 +5,7 @@
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
 use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;
@@ -20,8 +21,9 @@ use anyhow::{Context, Result, ensure};
 
 pub use carried::{CarriedSpaceExt, Placed, carried_spaces};
 pub use shoal_protocol::transfer::{
-    CarriedRecord, CarriedSpace, Carrying, ExportedSpace, ImportedPackage, Manifest, PackageImport,
-    PackageSource, PackagedSpace, Sessions,
+    CarriedRecord, CarriedSpace, Carrying, ExportedSpace, ImportedPackage, Manifest,
+    MoveDestination, MovePhase, MoveRecord, PackageImport, PackageSource, PackagedSpace, Sessions,
+    SshDestination, StoppedExecutions, package_name,
 };
 
 mod carried;
@@ -249,6 +251,10 @@ pub trait ManifestExt: Sized {
     /// order.
     fn packaged(&self) -> impl Iterator<Item = &PackagedSpace>;
 
+    /// The checkpoint it holds of each workspace it packages, by the
+    /// workspace's ID.
+    fn checkpoints(&self) -> BTreeMap<SpaceId, CheckpointNumber>;
+
     /// Whether the export carries the files of `session`.
     fn carries(&self, session: &AgentSessionId) -> bool;
 }
@@ -299,6 +305,15 @@ impl ManifestExt for Manifest {
     fn packaged(&self) -> impl Iterator<Item = &PackagedSpace> {
         let carried = self.carried.iter().map(|carried| &carried.space);
         std::iter::once(&self.space).chain(carried)
+    }
+
+    fn checkpoints(&self) -> BTreeMap<SpaceId, CheckpointNumber> {
+        (self.packaged())
+            .filter_map(|packaged| {
+                let kept = packaged.record.workspace()?;
+                Some((packaged.record.space_id.clone(), kept.checkpoint.number))
+            })
+            .collect()
     }
 
     fn carries(&self, session: &AgentSessionId) -> bool {

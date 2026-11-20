@@ -34,7 +34,6 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         | RemovalMethod::RestoreSpace { .. }
         | RemovalMethod::ExportSpace { .. }
         | RemovalMethod::ExportMovingSpace { .. }
-        | RemovalMethod::EndMovedSpace { .. }
         | RemovalMethod::ImportPackage(_) => true,
         RemovalMethod::Cleanup { dry_run, .. } => !dry_run,
         RemovalMethod::StopTargets
@@ -44,6 +43,9 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         | RemovalMethod::RemovedSpaces
         | RemovalMethod::RemovedSpace { .. }
         | RemovalMethod::DropRestoredSessions { .. } => false,
+        // A move in progress finishes, which an exit that waits for it
+        // waits for.
+        RemovalMethod::EndMovedSpace { .. } | RemovalMethod::AbandonMove { .. } => false,
     }
 }
 
@@ -151,19 +153,20 @@ pub(super) async fn handle(
         ),
         RemovalMethod::ExportMovingSpace {
             space,
-            file,
-            carrying,
-        } => Body::ExportedSpace(manager.export_moving_space(&space, file, &carrying).await?),
-        RemovalMethod::EndMovedSpace {
-            space,
             unsaved,
-            checkpoints,
+            destination,
             carrying,
-        } => Body::RemovalResult(
+        } => Body::ExportedSpace(
             manager
-                .end_moved_space(&space, unsaved, &checkpoints, &carrying)
+                .export_moving_space(&space, unsaved, &destination, &carrying)
                 .await?,
         ),
+        RemovalMethod::EndMovedSpace { space } => {
+            Body::RemovalResult(manager.end_moved_space(&space).await?)
+        }
+        RemovalMethod::AbandonMove { space } => {
+            Body::MoveAbandoned(manager.abandon_move(&space).await?)
+        }
         RemovalMethod::ImportPackage(import) => {
             return import_package(manager, *import, caller).await;
         }
@@ -328,6 +331,7 @@ impl Scoped for RemovalMethod {
             | RemovalMethod::ExportSpace { .. }
             | RemovalMethod::ExportMovingSpace { .. }
             | RemovalMethod::EndMovedSpace { .. }
+            | RemovalMethod::AbandonMove { .. }
             | RemovalMethod::ImportPackage(_) => administer(manager, caller, self).await,
         }
     }
@@ -370,7 +374,8 @@ fn administered(method: &mut RemovalMethod) -> Option<&mut SpaceSelector> {
     match method {
         RemovalMethod::ExportSpace { space, .. }
         | RemovalMethod::ExportMovingSpace { space, .. }
-        | RemovalMethod::EndMovedSpace { space, .. }
+        | RemovalMethod::EndMovedSpace { space }
+        | RemovalMethod::AbandonMove { space }
         | RemovalMethod::DropRestoredSessions { space } => Some(space),
         _ => None,
     }

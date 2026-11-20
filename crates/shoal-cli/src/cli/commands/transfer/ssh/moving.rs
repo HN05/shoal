@@ -7,19 +7,16 @@ use super::{
     super::export::{self, Ending, ExportDirectory, PlannedExport},
     ImportFailure, Remote, arrived, summary,
 };
-use crate::cli::commands::resume::queue::{Stopped, restore_stopped, saved_executions};
+use crate::cli::commands::resume::queue::restore_stopped;
 use crate::client::output::{restore::Reopened, transfer::Moves};
-use crate::transfer::{Carrying, ExportedSpace, ManifestExt};
+use crate::transfer::Carrying;
 use crate::{
     cli::{context::Context, ui},
     model::Space,
     removal::UnsavedWork,
 };
-use shoal_ids::checkpoint_numbers::CheckpointNumber;
-use shoal_ids::execution_ids::ExecutionId;
-use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
-use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
 
 /// Move `spaces` with the spaces below them that `carrying` carries to
 /// `remote` once each one can end here, asking once where ending them
@@ -66,17 +63,18 @@ pub(super) async fn move_spaces(
 /// export stopped restore here; when how the import ended is unknown, they
 /// stay stopped, since the space may continue there.
 async fn move_one(ctx: &Context, remote: &Remote, planned: &PlannedExport) -> Result<Reopened> {
-    let saved = saved_now(ctx, planned).await?;
-    let checkpoints = match export_moving(ctx, planned).await {
-        Ok(checkpoints) => checkpoints,
-        Err(error) => return Err(stays_here(ctx, planned, saved, error).await),
+    let file = match export_moving(ctx, remote, planned).await {
+        Ok(file) => file,
+        Err(error) => return Err(stays_here(ctx, planned, error).await),
     };
-    let imported = match remote.import(&planned.file()).await {
+    let imported = match remote.import(&file).await {
         Ok(imported) => imported,
         Err(ImportFailure::Refused(error)) => {
-            return Err(stays_here(ctx, planned, saved, error).await);
+            return Err(stays_here(ctx, planned, error).await);
         }
         Err(ImportFailure::Unknown(error)) => {
+            let space = SpaceSelector::id(planned.id());
+            let _ = crate::client::transfer::abandon_move(&ctx.paths, space).await;
             return Err(error.context(format!(
                 "{host} may already have it, so its agents stay stopped here; if it arrived there, shoal rm {id} removes it here, and otherwise shoal resume {id} continues it here",
                 host = remote.host,
@@ -84,106 +82,59 @@ async fn move_one(ctx: &Context, remote: &Remote, planned: &PlannedExport) -> Re
             )));
         }
     };
-    end_moved(ctx, planned, checkpoints)
-        .await
-        .with_context(|| {
-            format!(
-                "it now exists here and on {}; once the work you want is there, shoal rm {} removes it here",
-                remote.host,
-                planned.id()
-            )
-        })?;
+    end_moved(ctx, planned).await.with_context(|| {
+        format!(
+            "it now exists here and on {}; once the work you want is there, shoal rm {} removes it here",
+            remote.host,
+            planned.id()
+        )
+    })?;
     Ok(imported)
 }
 
-/// `error`, which kept the planned space here, once the agents its export
-/// stopped, those it saves beyond the `saved` before, restore here.
-async fn stays_here(
-    ctx: &Context,
-    planned: &PlannedExport,
-    saved: Stopped,
-    error: anyhow::Error,
-) -> anyhow::Error {
-    restore_here(ctx, planned, saved).await;
+/// `error`, which kept the planned space here, once the move is forgotten
+/// and the agents its export stopped restore here.
+async fn stays_here(ctx: &Context, planned: &PlannedExport, error: anyhow::Error) -> anyhow::Error {
+    let space = SpaceSelector::id(planned.id());
+    match crate::client::transfer::abandon_move(&ctx.paths, space).await {
+        Ok(stopped) => {
+            restore_stopped(ctx, &stopped).await;
+        }
+        Err(abandoned) => eprintln!("warning: {abandoned:#}"),
+    }
     error.context("it stays here")
 }
 
-/// Stop the agents of the planned space and of the spaces it carries and
-/// export them to its file, leaving them here, returning the checkpoint
-/// each workspace's package holds.
-async fn export_moving(ctx: &Context, planned: &PlannedExport) -> Result<Checkpoints> {
+/// Record the planned space's move to `remote`, stop the agents of the
+/// space and of the spaces it carries and export them, leaving them here,
+/// returning the package's file.
+async fn export_moving(ctx: &Context, remote: &Remote, planned: &PlannedExport) -> Result<PathBuf> {
     let space = SpaceSelector::id(planned.id());
+    let unsaved = match &planned.checked().space {
+        Ending::Workspace(check) => UnsavedWork::confirming(check),
+        Ending::Chat(_) => planned.checked().chat_ending(),
+    };
+    let destination = remote.destination();
+    let file = destination.package(planned.id(), &ctx.paths.move_packages());
     let carrying = planned.carrying().clone();
     let exporting =
-        crate::client::transfer::export_moving(&ctx.paths, space, planned.file(), carrying);
+        crate::client::transfer::export_moving(&ctx.paths, space, unsaved, destination, carrying);
     let exported = exporting.await?;
     export::warn(&exported);
-    Ok(exported_checkpoints(&exported))
-}
-
-/// The checkpoints a package holds, by the ID of each workspace it holds.
-type Checkpoints = BTreeMap<SpaceId, CheckpointNumber>;
-
-/// The number of the checkpoint the package holds of each workspace.
-fn exported_checkpoints(exported: &ExportedSpace) -> Checkpoints {
-    (exported.manifest.packaged())
-        .filter_map(|packaged| {
-            let kept = packaged.record.workspace()?;
-            Some((packaged.record.space_id.clone(), kept.checkpoint.number))
-        })
-        .collect()
+    Ok(file)
 }
 
 /// End the `planned` space with the spaces it carries, which the other
-/// machine imported from its export at `checkpoints`.
-async fn end_moved(ctx: &Context, planned: &PlannedExport, checkpoints: Checkpoints) -> Result<()> {
-    let (checked, carrying) = (planned.checked(), planned.carrying().clone());
-    let removal = match &checked.space {
+/// machine imported.
+async fn end_moved(ctx: &Context, planned: &PlannedExport) -> Result<()> {
+    let space = SpaceSelector::id(planned.id());
+    let end = crate::client::transfer::end_moved(&ctx.paths, space);
+    let removal = match &planned.checked().space {
         Ending::Workspace(check) => {
-            let space = SpaceSelector::id(&check.space.id);
-            let unsaved = UnsavedWork::confirming(check);
-            let end = crate::client::transfer::end_moved;
-            let ended = end(&ctx.paths, space, unsaved, checkpoints, carrying);
-            super::super::super::workspaces::leaving(ctx, &check.space, ended).await?
+            super::super::super::workspaces::leaving(ctx, &check.space, end).await?
         }
-        Ending::Chat(chat) => {
-            let space = SpaceSelector::id(&chat.id);
-            let unsaved = checked.chat_ending();
-            let end = crate::client::transfer::end_moved;
-            end(&ctx.paths, space, unsaved, checkpoints, carrying).await?
-        }
+        Ending::Chat(_) => end.await?,
     };
     export::warn_removal(Some(&removal));
     Ok(())
-}
-
-/// The executions whose stopped work the planned space, and each space
-/// that goes with it, saves now.
-async fn saved_now(ctx: &Context, planned: &PlannedExport) -> Result<Stopped> {
-    let mut saved = Stopped::new();
-    for space in planned.checked().spaces() {
-        saved.insert(space.clone(), saved_executions(ctx, space).await?);
-    }
-    Ok(saved)
-}
-
-/// Queue the restores of the agents the export of the planned space
-/// stopped, its own and those of the spaces that go with it: those they
-/// save now beyond the `saved` before the export.
-async fn restore_here(ctx: &Context, planned: &PlannedExport, saved: Stopped) {
-    let now = match saved_now(ctx, planned).await {
-        Ok(now) => now,
-        Err(error) => {
-            eprintln!("warning: cannot read the stopped agents; run shoal resume: {error:#}");
-            return;
-        }
-    };
-    let stopped = (now.into_iter())
-        .map(|(space, now)| {
-            let before = saved.get(&space).cloned().unwrap_or_default();
-            let stopped: BTreeSet<ExecutionId> = now.difference(&before).cloned().collect();
-            (space, stopped)
-        })
-        .collect();
-    restore_stopped(ctx, &stopped).await;
 }

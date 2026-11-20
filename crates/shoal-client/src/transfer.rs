@@ -1,7 +1,8 @@
 //! Packages of spaces `shoal move` carries between machines: what one holds.
-use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::transfer::{Carrying, ExportedSpace, ImportedPackage, PackageImport};
-use std::{collections::BTreeMap, path::PathBuf};
+use shoal_protocol::transfer::{
+    Carrying, ExportedSpace, ImportedPackage, MoveDestination, PackageImport, StoppedExecutions,
+};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
@@ -37,41 +38,38 @@ pub async fn export(
     request(daemon, method).await
 }
 
-/// Stop the agents of `space` and of the spaces below it that `carrying`
-/// carries, saving their sessions, and package them into `file` for a
-/// move, leaving them here until [`end_moved`] ends them.
+/// Record the move of `space` and of the spaces below it that `carrying`
+/// carries to `destination`, which may delete the `unsaved` work the caller
+/// saw, then stop their agents, saving their sessions, and package them
+/// into the file the destination takes, leaving them here until
+/// [`end_moved`] ends them or [`abandon_move`] forgets the move.
 pub async fn export_moving(
     daemon: &impl Daemon,
     space: SpaceSelector,
-    file: PathBuf,
+    unsaved: UnsavedWork,
+    destination: MoveDestination,
     carrying: Carrying,
 ) -> Result<ExportedSpace> {
     let method = RemovalMethod::ExportMovingSpace {
         space,
-        file,
+        unsaved,
+        destination,
         carrying,
     };
     request(daemon, method).await
 }
 
-/// End `space` with the spaces below it that `carrying` carries, which
-/// another Shoal imported, deleting only the `unsaved` work the caller
-/// saw: each workspace only while it still has what its exported
-/// checkpoint in `checkpoints` keeps. Returns the removal.
-pub async fn end_moved(
-    daemon: &impl Daemon,
-    space: SpaceSelector,
-    unsaved: UnsavedWork,
-    checkpoints: BTreeMap<SpaceId, CheckpointNumber>,
-    carrying: Carrying,
-) -> Result<RemovalResult> {
-    let method = RemovalMethod::EndMovedSpace {
-        space,
-        unsaved,
-        checkpoints,
-        carrying,
-    };
-    request(daemon, method).await
+/// End `space` with the spaces below it that its recorded move carries,
+/// once the destination has their package. Returns the removal.
+pub async fn end_moved(daemon: &impl Daemon, space: SpaceSelector) -> Result<RemovalResult> {
+    request(daemon, RemovalMethod::EndMovedSpace { space }).await
+}
+
+/// Forget the recorded move of `space`, which failed, returning the
+/// executions whose stopped work its spaces saved once it stopped their
+/// agents.
+pub async fn abandon_move(daemon: &impl Daemon, space: SpaceSelector) -> Result<StoppedExecutions> {
+    request(daemon, RemovalMethod::AbandonMove { space }).await
 }
 
 /// Package a copy of `space`, with copies of the spaces below it that

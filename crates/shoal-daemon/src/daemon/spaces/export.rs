@@ -23,6 +23,7 @@ use shoal_protocol::transcripts::Environments;
 mod carried;
 mod copy;
 mod moving;
+mod records;
 mod staying;
 mod worktree;
 

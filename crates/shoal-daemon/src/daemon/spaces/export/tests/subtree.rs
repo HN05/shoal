@@ -9,7 +9,7 @@ use crate::{
     },
     model::{Repository, Workspace},
     removal::{InspectionPolicy, UnsavedWork},
-    transfer::{CarriedRecord, Carrying},
+    transfer::{CarriedRecord, Carrying, MoveDestination},
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
@@ -231,7 +231,9 @@ async fn an_import_whose_carried_space_is_here_records_nothing() {
     // The child arrives first on its own, as a move that left it running.
     let file = source.path().join("child.shoal");
     let selector = SpaceSelector::id(&child);
-    (exporting.export_moving_space(&selector, file.clone(), &Carrying::Subtree))
+    let destination = MoveDestination::File { path: file.clone() };
+    let unsaved = UnsavedWork::default();
+    (exporting.export_moving_space(&selector, unsaved, &destination, &Carrying::Subtree))
         .await
         .unwrap();
     import_file(&importing, Some(&target_repo), &fs::read(file).unwrap())
