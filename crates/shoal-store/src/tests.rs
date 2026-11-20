@@ -3732,7 +3732,8 @@ fn notifications_and_space_messages_become_alerts_with_their_sender() -> Result<
          UPDATE sqlite_sequence SET seq=6 WHERE name='notifications';
          INSERT INTO space_messages(id,space_id,created_at,message,wakes,about,about_id,kind)
              VALUES (2,'chat',3,'from the user',1,NULL,NULL,NULL),
-                 (3,'chat',4,'done',0,'worker','workspace','agent_message');
+                 (3,'chat',4,'done',0,'worker','workspace','agent_message'),
+                 (5,'chat',5,'exited',1,'worker','workspace','agent_exited');
          UPDATE sqlite_sequence SET seq=9 WHERE name='space_messages';
          INSERT INTO questions(space_id,created_at,question,recommendation,choices,answer,
                  answered_at,message_id,number)
@@ -3845,13 +3846,26 @@ fn notifications_and_space_messages_become_alerts_with_their_sender() -> Result<
                 false,
                 "[]"
             )),
+            // A space's own message passed up stays that space's; an
+            // event about it is Shoal's.
             row((
                 9,
                 "message",
-                "shoal",
+                "space",
                 Some("chat"),
                 Some("workspace"),
                 "done",
+                false,
+                true,
+                "[]"
+            )),
+            row((
+                11,
+                "agent_exited",
+                "shoal",
+                Some("chat"),
+                Some("workspace"),
+                "exited",
                 false,
                 true,
                 "[]"

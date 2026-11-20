@@ -41,8 +41,9 @@ INSERT INTO alerts(id,created_at,kind,sender,space,space_id,subject,message,atta
 
 -- Space messages become alerts to their space, unread until delivered,
 -- with IDs above every ID notifications gave, as are the questions whose
--- answers they carry: Shoal's when they are about another space, which
--- the user receives if the space goes first, else the user's.
+-- answers they carry: a space's own message passed up is that space's,
+-- one about another space Shoal's, which the user receives if the space
+-- goes first, and the rest the user's.
 CREATE TEMP TABLE message_shift AS SELECT MAX(
     COALESCE((SELECT seq FROM sqlite_sequence WHERE name='notifications'), 0),
     COALESCE((SELECT MAX(id) FROM notifications), 0)
@@ -52,7 +53,8 @@ INSERT INTO alerts(id,created_at,kind,sender,recipient_id,space,space_id,message
     SELECT m.id+shift,m.created_at,
         CASE COALESCE(m.kind,'message') WHEN 'agent_message' THEN 'message'
             ELSE COALESCE(m.kind,'message') END,
-        CASE WHEN m.about IS NULL THEN 'user' ELSE 'shoal' END,
+        CASE WHEN m.kind='agent_message' AND m.about_id IS NOT NULL THEN 'space'
+            WHEN m.about IS NULL THEN 'user' ELSE 'shoal' END,
         m.space_id,m.about,m.about_id,m.message,m.attachments,m.wakes,m.kind IS NOT NULL
     FROM space_messages m, message_shift;
 UPDATE questions SET message_id=message_id+(SELECT shift FROM message_shift)
