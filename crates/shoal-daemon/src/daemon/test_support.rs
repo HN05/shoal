@@ -11,6 +11,25 @@ use shoal_ids::space_ids::SpaceId;
 #[cfg_attr(not(feature = "test-support"), allow(dead_code))]
 pub mod overload;
 
+/// Import the package `bytes` as `shoal restore --from` asks the daemon to,
+/// into `repository` or the one with its origin.
+pub async fn import_file(
+    manager: &Manager,
+    repository: Option<&crate::model::Repository>,
+    bytes: &[u8],
+) -> anyhow::Result<crate::transfer::ImportedPackage> {
+    let directory = tempfile::tempdir()?;
+    let file = directory.path().join("space.shoal");
+    fs::write(&file, bytes)?;
+    let import = crate::transfer::PackageImport {
+        package: crate::transfer::PackageSource::File(file.clone()),
+        repository: repository.map(|repository| (&repository.id).into()),
+        sessions: None,
+    };
+    let input = super::restore::PackageInput::File(file);
+    manager.import_package(&import, input, None).await
+}
+
 /// Keep the temporary root alive until all manager operations have finished.
 /// Its global config removes eligible workspaces on their first sweep, as
 /// reopened managers also read; grace period tests set their own.

@@ -1,15 +1,15 @@
-use std::{collections::BTreeMap, fs};
+use std::fs;
 
 use super::Import;
 use super::transfer::{exporter, importer};
 use crate::{
     daemon::{
         manager::Manager,
-        test_support::{self, commit},
+        test_support::{self, commit, import_file},
     },
-    model::{Repository, RestoredSpace, Workspace},
+    model::{Repository, Workspace},
     removal::{InspectionPolicy, UnsavedWork},
-    transfer::{Carrying, ManifestExt, PackagedSpaceExt, SpaceImport},
+    transfer::{CarriedRecord, Carrying},
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
@@ -34,40 +34,19 @@ async fn tree(manager: &std::sync::Arc<Manager>, repo: &Repository) -> [SpaceId;
     [worker.id, child.id, notes.id]
 }
 
-/// Import the package `bytes` into `repo` as `shoal restore --from` does: its
-/// space, then each space it carries, a copy below the copies made before
-/// it.
+/// Import the package `bytes` into `repo` as `shoal restore --from` does:
+/// the daemon opens its space, then the caller opens each space it carries,
+/// in order; the IDs they opened under.
 async fn import_package(manager: &Manager, repo: &Repository, bytes: &[u8]) -> Vec<SpaceId> {
-    let import = Import::read(&mut &bytes[..]).unwrap();
-    let manifest = &import.manifest;
-    let own = std::iter::once((&manifest.space, manifest.sessions_on(None, None)));
-    let carried = (manifest.carried.iter()).map(|carried| {
-        (
-            &carried.space,
-            manifest.carried_sessions_on(carried, None, None),
-        )
-    });
-    let mut copies = BTreeMap::new();
-    let mut opened = Vec::new();
-    for (packaged, sessions) in own.chain(carried) {
-        let id = &packaged.record.space_id;
-        let space = SpaceImport {
-            repository: Some((&repo.id).into()),
-            bundle: (import.bundles.get(id)).map(|bundle| bundle.path().to_owned()),
-            prerequisite: packaged.prerequisite.clone(),
-            space: packaged.record_with(sessions),
-            copy: manifest.copy.is_some(),
-            session_files: Vec::new(),
-            copies: copies.clone(),
-            carried: Vec::new(),
+    let imported = import_file(manager, Some(repo), bytes).await.unwrap();
+    let mut opened = vec![imported.restored.id().clone()];
+    for carried in imported.carried {
+        let CarriedRecord::Recorded { space, .. } = carried else {
+            panic!("a carried space was not recorded: {carried:?}");
         };
-        let restored = manager.import_space(space).await.unwrap();
-        let restored = match restored {
-            RestoredSpace::Workspace(restored) => restored.opened.workspace.id,
-            RestoredSpace::Chat(restored) => restored.chat.id,
-        };
-        copies.insert(id.clone(), restored.clone());
-        opened.push(restored);
+        let selector = SpaceSelector::id(&space);
+        manager.restore_space(&selector, None).await.unwrap();
+        opened.push(space);
     }
     opened
 }
@@ -249,31 +228,23 @@ async fn an_import_whose_carried_space_is_here_records_nothing() {
     let (source, exporting, source_repo, origin) = exporter().await;
     let (_target, importing, target_repo) = importer(&origin).await;
     let [worker, child, _notes] = tree(&exporting, &source_repo).await;
-    let bytes = export_tree(&exporting, &worker, source.path()).await;
-    let import = Import::read(&mut &bytes[..]).unwrap();
-    let here = (importing.create_workspace(&target_repo.id, "here".into(), None, None, None))
+    // The child arrives first on its own, as a move that left it running.
+    let file = source.path().join("child.shoal");
+    let selector = SpaceSelector::id(&child);
+    (exporting.export_moving_space(&selector, file.clone(), &Carrying::Subtree))
         .await
         .unwrap();
-    let carried = |space: SpaceId| crate::transfer::ImportTarget {
-        repository: Some((&target_repo.id).into()),
-        space,
-    };
-    let import = SpaceImport {
-        repository: Some((&target_repo.id).into()),
-        bundle: None,
-        prerequisite: import.manifest.space.prerequisite.clone(),
-        space: import.manifest.space.record.clone(),
-        copy: false,
-        session_files: Vec::new(),
-        copies: BTreeMap::new(),
-        carried: vec![carried(child), carried(here.id)],
-    };
+    import_file(&importing, Some(&target_repo), &fs::read(file).unwrap())
+        .await
+        .unwrap();
+    let bytes = export_tree(&exporting, &worker, source.path()).await;
 
-    let refused = importing.import_space(import).await.unwrap_err();
+    let refused = (import_file(&importing, Some(&target_repo), &bytes).await).unwrap_err();
 
     let reason = crate::refusal::Reason::of(&refused);
     assert_eq!(reason, Some(crate::refusal::Reason::NotImported));
-    assert!(importing.removed_spaces().await.unwrap().is_empty());
+    let removed = importing.removed_spaces().await.unwrap();
+    assert!(removed.iter().all(|removed| removed.space_id != worker));
     assert!(importing.find_space(&worker).await.unwrap().is_none());
 }
 

@@ -1,14 +1,15 @@
 //! Packages of spaces `shoal move` carries between machines: what one holds.
-use std::{collections::BTreeMap, path::PathBuf};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
 use crate::{
     executions::{Copied, LastSession, StoppedAgent},
-    model::RemovedSpace,
+    model::{RemovedSpace, RestoredSpace},
     removal::RemovalResult,
     repository::Selector,
-    transcripts::{CarriedSessionFile, SessionFile},
+    space_names::SpaceName,
+    transcripts::SessionFile,
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::space_ids::SpaceId;
@@ -130,46 +131,54 @@ pub struct ExportedSpace {
     pub warnings: Vec<String>,
 }
 
-/// A packaged space to record as removed here and open again.
+/// A package `shoal move` wrote, which the daemon reads and imports, and
+/// how its spaces open here.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SpaceImport {
-    /// The repository it goes to; none for a chat without one.
+pub struct PackageImport {
+    pub package: PackageSource,
+    /// The registered repository to import into instead of the one with the
+    /// package's origin.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repository: Option<Selector>,
-    /// A Git bundle of a workspace's checkpoint, whose commits it fetches.
+    /// Whether the agents keep their sessions; `None` keeps those on the
+    /// machine that wrote the package or whose files it carries.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub bundle: Option<PathBuf>,
-    /// A commit of the default branch the bundle builds on, which the
-    /// repository fetches when it lacks it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prerequisite: Option<String>,
-    /// Its removal record, with the agents that continue here.
-    pub space: RemovedSpace,
-    /// Set for a copy, which opens as a new space, a workspace on a branch
-    /// of its own.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub copy: bool,
-    /// The agents' session files, which the daemon keeps with the record.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub session_files: Vec<CarriedSessionFile>,
-    /// The copies this import opened before it of the other spaces of its
-    /// package, by the original's ID, which stand in for them as its
-    /// parent and, for a workspace on its parent's branch, as the branch
-    /// it builds on.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub copies: BTreeMap<SpaceId, SpaceId>,
-    /// The spaces of its package the caller imports after it, which refuse
-    /// it before anything is recorded when their repository is not here or,
-    /// unless they are copies, a space here has their ID.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub carried: Vec<ImportTarget>,
+    pub sessions: Option<bool>,
 }
 
-/// A space an import opens after the one it records first.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ImportTarget {
-    /// The repository it goes to; none for a chat without one.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub repository: Option<Selector>,
-    pub space: SpaceId,
+/// Where the daemon reads a package from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PackageSource {
+    /// A file, by its absolute path.
+    File(PathBuf),
+    /// The bytes the client sends on the request's connection once the
+    /// daemon's first reply asks for them, until it shuts its sending half.
+    Stream,
+}
+
+/// What an import opened: the package's own space, opened again, and the
+/// spaces it carries, recorded as removed here for the caller to open after
+/// it, parents first.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ImportedPackage {
+    pub restored: RestoredSpace,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub carried: Vec<CarriedRecord>,
+}
+
+/// A space a package carries, as its import recorded it.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum CarriedRecord {
+    /// Recorded as removed under `space`, its own ID or a copy's, with
+    /// what recording it changed.
+    Recorded {
+        name: SpaceName,
+        space: SpaceId,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        warnings: Vec<String>,
+    },
+    /// Not recorded, for `error`.
+    Failed { name: SpaceName, error: String },
 }

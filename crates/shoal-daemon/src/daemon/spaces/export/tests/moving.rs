@@ -3,6 +3,7 @@ use std::fs;
 
 use super::Import;
 use super::transfer::{exporter, import, importer, packaged_workspace};
+use crate::daemon::restore::SpaceImport;
 use crate::refusal::Reason;
 use crate::{
     daemon::{
@@ -13,7 +14,7 @@ use crate::{
     model::Workspace,
     process::identity,
     removal::UnsavedWork,
-    transfer::{Carrying, ExportedSpace, ManifestExt, SpaceImport},
+    transfer::{Carrying, ExportedSpace, ManifestExt},
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_ids::space_ids::SpaceId;
@@ -331,8 +332,8 @@ async fn an_import_that_records_nothing_says_so() {
         space: packaged.record.clone(),
         copy: false,
         session_files: Vec::new(),
-        copies: BTreeMap::new(),
-        carried: Vec::new(),
+        copies: Default::default(),
+        recorded: Default::default(),
     };
     let error = importing.import_space(import).await.unwrap_err();
     assert_eq!(Reason::of(&error), Some(Reason::NotImported));

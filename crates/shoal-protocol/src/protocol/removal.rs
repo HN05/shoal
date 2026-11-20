@@ -146,7 +146,8 @@ pub enum RemovalMethod {
         #[serde(default)]
         carrying: crate::transfer::Carrying,
     },
-    /// Record a space another Shoal exported as removed here, keeping its
-    /// agents' session files with the record, and open it again.
-    ImportSpace(Box<crate::transfer::SpaceImport>),
+    /// Read a package another Shoal exported, cloning the repositories it
+    /// needs that are not here, record its spaces as removed here once the
+    /// whole package checks out, and open its own space again.
+    ImportPackage(Box<crate::transfer::PackageImport>),
 }

@@ -4790,8 +4790,9 @@ the original conversations never change. A copy of an earlier checkpoint warns a
 export and import that the agents' conversations describe work its files lack,
 and tells the agents so. `restore --from` refuses `--keep-sessions` for a copy.
 
-`shoal restore --from <file>` reads an export, or standard input for `-`,
-refusing a terminal and an export another Shoal version wrote, and continues it in the registered repository with the
+`shoal restore --from <file>` hands an export, or standard input for `-`,
+refusing a terminal, to the daemon, which reads it whole, refusing an export
+another Shoal version wrote, and continues it in the registered repository with the
 exported repository's origin, or the one `--repo` names, or a chat without a
 repository in `root_dir`. A space the file carries goes to the repository
 with its own origin, or where the file goes when it is of the file's

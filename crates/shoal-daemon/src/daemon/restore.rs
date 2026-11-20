@@ -388,6 +388,11 @@ fn forked(agent: &crate::agent::Agent, holder: &SpaceName) -> String {
 
 mod chats;
 mod imports;
+mod packages;
+
+#[cfg(test)]
+pub(crate) use imports::SpaceImport;
+pub(crate) use packages::PackageInput;
 mod records;
 mod worktree;
 

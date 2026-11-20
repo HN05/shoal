@@ -304,6 +304,7 @@ response_bodies! {
     Absorbed(Box<crate::absorb::Absorbed>),
     StoppedProcesses(crate::processes::Stopped),
     ExportedSpace(crate::transfer::ExportedSpace),
+    ImportedPackage(crate::transfer::ImportedPackage),
     DiffBase(DiffBase),
     Conflicts(ConflictCheck),
     Diff(crate::diffs::DiffOutput),

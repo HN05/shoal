@@ -424,6 +424,13 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     {
         log!("{error:#}");
     }
+    let imports = manager.remove_interrupted_imports();
+    if let Err(error) = startup
+        .step("removing interrupted imports' packages", imports)
+        .await
+    {
+        log!("{error:#}");
+    }
     let gate = manager.reviews.recover_gate_runs(&*manager);
     if let Err(error) = startup.step("stopping interrupted gate runs", gate).await {
         log!("{error:#}");

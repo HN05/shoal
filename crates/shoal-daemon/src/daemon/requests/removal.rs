@@ -4,17 +4,21 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
+use tokio::net::UnixStream;
+
 use super::super::{
-    answer::Answer,
+    answer::{self, Answer},
     cleanup,
     manager::Manager,
+    restore::PackageInput,
     scope::{Caller, Scoped},
 };
 use crate::{
     model::StoppedSpace,
     process::identity,
-    protocol::{Body, QueuedLaunches, RemovalMethod, UntrackedProcesses},
+    protocol::{self, Body, QueuedLaunches, RemovalMethod, Response, UntrackedProcesses},
     removal::InspectionPolicy,
+    transfer::{PackageImport, PackageSource},
 };
 use shoal_protocol::processes::Selection;
 use shoal_protocol::space_names::SpaceSelector;
@@ -31,7 +35,7 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         | RemovalMethod::ExportSpace { .. }
         | RemovalMethod::ExportMovingSpace { .. }
         | RemovalMethod::EndMovedSpace { .. }
-        | RemovalMethod::ImportSpace(_) => true,
+        | RemovalMethod::ImportPackage(_) => true,
         RemovalMethod::Cleanup { dry_run, .. } => !dry_run,
         RemovalMethod::StopTargets
         | RemovalMethod::CheckStop { .. }
@@ -160,10 +164,55 @@ pub(super) async fn handle(
                 .end_moved_space(&space, unsaved, &checkpoints, &carrying)
                 .await?,
         ),
-        RemovalMethod::ImportSpace(import) => {
-            Body::RestoredSpace(manager.import_space(*import).await?)
+        RemovalMethod::ImportPackage(import) => {
+            return import_package(manager, *import, caller).await;
         }
     }))
+}
+
+/// Import the package `import` names: from its file, or from the request's
+/// connection once the first reply asks for it.
+async fn import_package(
+    manager: &Arc<Manager>,
+    import: PackageImport,
+    caller: Option<&Caller>,
+) -> Result<Answer> {
+    let PackageSource::File(file) = &import.package else {
+        let manager = manager.clone();
+        let caller = caller.cloned();
+        return Ok(Answer::connection(
+            move |stream, request_id, guard| async move {
+                let _guard = guard;
+                let caller = caller.as_ref();
+                import_streamed(&manager, &import, caller, stream, request_id).await
+            },
+        ));
+    };
+    let input = PackageInput::File(file.clone());
+    let imported = manager.import_package(&import, input, caller).await?;
+    Ok(Answer::Body(Body::ImportedPackage(imported)))
+}
+
+/// Ask the client on `stream` for the package `import` streams, then answer
+/// `request_id` with how its import went.
+async fn import_streamed(
+    manager: &Manager,
+    import: &PackageImport,
+    caller: Option<&Caller>,
+    mut stream: UnixStream,
+    request_id: u64,
+) -> Result<()> {
+    protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
+    let replying = stream.into_std()?;
+    let input = PackageInput::Connection(replying.try_clone()?);
+    let imported = manager.import_package(import, input, caller).await;
+    replying.set_nonblocking(true)?;
+    let mut stream = UnixStream::from_std(replying)?;
+    let body = match imported {
+        Ok(imported) => Body::ImportedPackage(imported),
+        Err(error) => answer::failure(&error),
+    };
+    answer::reply(&mut stream, request_id, body).await
 }
 
 /// Whether removing `space` at `caller`'s request releases the user's holds
@@ -279,7 +328,7 @@ impl Scoped for RemovalMethod {
             | RemovalMethod::ExportSpace { .. }
             | RemovalMethod::ExportMovingSpace { .. }
             | RemovalMethod::EndMovedSpace { .. }
-            | RemovalMethod::ImportSpace(_) => administer(manager, caller, self).await,
+            | RemovalMethod::ImportPackage(_) => administer(manager, caller, self).await,
         }
     }
 }
@@ -293,7 +342,7 @@ async fn administer<'a>(
     method: &'a mut RemovalMethod,
 ) -> Result<Option<&'a mut SpaceSelector>> {
     let importing = match method {
-        RemovalMethod::ImportSpace(import) => import.repository.as_mut(),
+        RemovalMethod::ImportPackage(import) => import.repository.as_mut(),
         _ => None,
     };
     let repository = match importing {

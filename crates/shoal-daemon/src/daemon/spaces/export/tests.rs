@@ -5,6 +5,7 @@ use anyhow::Result;
 use crate::{
     daemon::{
         manager::Manager,
+        restore::SpaceImport,
         test_support::{manager, repository, unmarked},
     },
     model::RemovedSpace,
@@ -12,7 +13,7 @@ use crate::{
     removal::{InspectionPolicy, UnsavedWork},
     transfer::{
         Carrying, ExportedSpace, ImportedSessionFile, Manifest, ManifestExt, PackagedSpaceExt,
-        Parts, SpaceImport,
+        Parts,
     },
 };
 use shoal_ids::space_ids::SpaceId;
@@ -100,7 +101,7 @@ fn chat_import(repository: Option<&crate::model::Repository>, chat: RemovedSpace
         copy: false,
         session_files: Vec::new(),
         copies: Default::default(),
-        carried: Vec::new(),
+        recorded: Default::default(),
     }
 }
 

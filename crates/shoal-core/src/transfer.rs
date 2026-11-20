@@ -20,8 +20,8 @@ use anyhow::{Context, Result, ensure};
 
 pub use carried::{CarriedSpaceExt, Placed, carried_spaces};
 pub use shoal_protocol::transfer::{
-    CarriedSpace, Carrying, ExportedSpace, ImportTarget, Manifest, PackagedSpace, Sessions,
-    SpaceImport,
+    CarriedRecord, CarriedSpace, Carrying, ExportedSpace, ImportedPackage, Manifest, PackageImport,
+    PackageSource, PackagedSpace, Sessions,
 };
 
 mod carried;

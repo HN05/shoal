@@ -1,9 +1,10 @@
 //! Importing a space another Shoal exported: recording its removal record
 //! here as its kind needs, then restoring it as `shoal restore` does.
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::repository::Selector;
 use shoal_protocol::transcripts::CarriedSessionFile;
 use shoal_refs::CommitId;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail, ensure};
 
@@ -11,29 +12,53 @@ use crate::daemon::manager::Manager;
 use crate::refusal::{Reason, Refusal};
 use crate::{
     git,
-    model::{Head, RemovedKind, RemovedSpace, Repository, RestoredSpace, SpaceRef, WorkspaceRef},
+    model::{
+        Head, RefPart, RemovedKind, RemovedSpace, Repository, RestoredSpace, SpaceRef, WorkspaceRef,
+    },
     time::UnixTime,
-    transfer::{ImportTarget, SpaceImport},
 };
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+
+/// A space of a package to record as removed here.
+#[derive(Debug, Clone)]
+pub(crate) struct SpaceImport {
+    /// The repository it goes to; none for a chat without one.
+    pub(crate) repository: Option<Selector>,
+    /// A Git bundle of a workspace's checkpoint, whose commits it fetches.
+    pub(crate) bundle: Option<PathBuf>,
+    /// A commit of the default branch the bundle builds on, which the
+    /// repository fetches when it lacks it.
+    pub(crate) prerequisite: Option<String>,
+    /// Its removal record, with the agents that continue here.
+    pub(crate) space: RemovedSpace,
+    /// Set for a copy, which opens as a new space, a workspace on a branch
+    /// of its own.
+    pub(crate) copy: bool,
+    /// The agents' session files, which the daemon keeps with the record.
+    pub(crate) session_files: Vec<CarriedSessionFile>,
+    /// The copies this import made before it of the other spaces of its
+    /// package, by the original's ID, which stand in for them as its
+    /// parent and, for a workspace on its parent's branch, as the branch
+    /// it builds on.
+    pub(crate) copies: BTreeMap<SpaceId, SpaceId>,
+    /// The other spaces of its package recorded before it, by the ID each
+    /// has here, which stay its parent and the workspace a chat ran in
+    /// though they open only after this import.
+    pub(crate) recorded: BTreeSet<SpaceId>,
+}
 
 impl Manager {
     /// Open a space another Shoal exported, as `import` describes: record
-    /// it as removed here, with a workspace's checkpoint fetched from its
-    /// bundle or else on the default branch, and its agents' session files,
-    /// and restore it under its ID, below its parent where that is here, a
-    /// copy under an ID of its own. A failed restore leaves the record for
-    /// `shoal restore`. It claims the space at the hub, so it takes the ID
-    /// over from the machine it moves from.
-    pub async fn import_space(&self, import: SpaceImport) -> Result<RestoredSpace> {
-        let (removed, warnings) = (self.record_package(import))
+    /// it as [`Self::record_import`] does and restore it under its ID,
+    /// below its parent where that is here, a copy under an ID of its own.
+    /// A failed restore leaves the record for `shoal restore`.
+    pub(crate) async fn import_space(&self, import: SpaceImport) -> Result<RestoredSpace> {
+        let (removed, warnings) = (self.record_import(import))
             .await
             .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
         let id = removed.space_id;
-        // The machine it moves from keeps it until this import is done.
-        self.hub.claim_space(self, &id).await;
         let mut restored = (self.reopen_space(&SpaceSelector::id(&id), None))
             .await
             .with_context(|| {
@@ -43,13 +68,26 @@ impl Manager {
         Ok(restored)
     }
 
+    /// Record the space `import` packages as removed here, with a
+    /// workspace's checkpoint fetched from its bundle or else on the
+    /// default branch, and its agents' session files, and claim it at the
+    /// hub, so it takes the ID over from the machine it moves from; with
+    /// the warnings of what it changed. An error leaves no record.
+    pub(crate) async fn record_import(
+        &self,
+        import: SpaceImport,
+    ) -> Result<(RemovedSpace, Vec<String>)> {
+        let recorded = self.record_package(import).await?;
+        // The machine it moves from keeps it until this import is done.
+        self.hub.claim_space(self, &recorded.0.space_id).await;
+        Ok(recorded)
+    }
+
     /// Record the space `import` packages as removed here, as
-    /// [`Self::import_space`] does before opening it, with the warnings of
-    /// what it changed; an error leaves no record.
+    /// [`Self::record_import`] does before claiming it.
     async fn record_package(&self, import: SpaceImport) -> Result<(RemovedSpace, Vec<String>)> {
         self.ensure_not_here(&import.space.space_id, import.copy)
             .await?;
-        self.ensure_importable(&import.carried, import.copy).await?;
         let repo = match &import.repository {
             Some(selector) => Some(self.repository(selector).await?),
             None => None,
@@ -57,8 +95,11 @@ impl Manager {
         let mut warnings = Vec::new();
         let prerequisite = import.prerequisite.as_deref();
         let space = self.below_copies(import.space, &import.copies).await?;
-        let removed =
-            (self.recorded_here(repo.as_ref(), prerequisite, space, &mut warnings)).await?;
+        let here = Here {
+            repo: repo.as_ref(),
+            recorded: &import.recorded,
+        };
+        let removed = (self.recorded_here(here, prerequisite, space, &mut warnings)).await?;
         // A repository move holds this gate; the checkout may have moved.
         let locked = match &repo {
             Some(repo) => Some(self.lock_repository(&repo.id).await?),
@@ -80,23 +121,10 @@ impl Manager {
         Ok((removed, warnings))
     }
 
-    /// Refuse the spaces of a package an import opens after the one it
-    /// records first, `carried`, copies when `copy`, when their repository
-    /// is not here or a space here has the ID one of them keeps.
-    async fn ensure_importable(&self, carried: &[ImportTarget], copy: bool) -> Result<()> {
-        for target in carried {
-            if let Some(repository) = &target.repository {
-                self.repository(repository).await?;
-            }
-            self.ensure_not_here(&target.space, copy).await?;
-        }
-        Ok(())
-    }
-
     /// Refuse to import the packaged space `id` under its ID while a space
     /// here has that ID, whose kept session files and record the import
     /// would replace; a `copy` takes an ID of its own.
-    async fn ensure_not_here(&self, id: &SpaceId, copy: bool) -> Result<()> {
+    pub(super) async fn ensure_not_here(&self, id: &SpaceId, copy: bool) -> Result<()> {
         if copy {
             return Ok(());
         }
@@ -110,17 +138,19 @@ impl Manager {
         Ok(())
     }
 
-    /// The exported `removed` as [`Self::imported_record`] records it here,
-    /// once a workspace's checkpoint is its own and its repository has the
-    /// `prerequisite` its bundle builds on, a chat in the place it runs here,
-    /// with a warning in `warnings` when that is not where it ran.
+    /// The exported `removed` as [`Self::imported_record`] records it
+    /// `here`, once a workspace's checkpoint is its own and its repository
+    /// has the `prerequisite` its bundle builds on, a chat in the place it
+    /// runs here, with a warning in `warnings` when that is not where it
+    /// ran.
     async fn recorded_here(
         &self,
-        repo: Option<&Repository>,
+        here: Here<'_>,
         prerequisite: Option<&str>,
         removed: RemovedSpace,
         warnings: &mut Vec<String>,
     ) -> Result<RemovedSpace> {
+        let repo = here.repo;
         if let Some(kept) = removed.workspace() {
             ensure!(
                 kept.checkpoint.workspace_id == removed.space_id,
@@ -130,20 +160,29 @@ impl Manager {
         if let (Some(commit), Some(repo)) = (prerequisite, repo) {
             self.fetch_missing(repo, &commit.into()).await?;
         }
-        let mut removed = self.imported_record(repo, removed).await?;
-        warnings.extend(self.without_absent_worktree(&mut removed).await);
+        let mut removed = self.imported_record(here, removed).await?;
+        let recorded = here.recorded;
+        warnings.extend(self.without_absent_worktree(&mut removed, recorded).await);
         Ok(removed)
     }
 
     /// Record that the imported chat `removed` runs in its repository's
     /// checkout when the workspace whose worktree it ran in is not ready
     /// here, which its restore would otherwise wait for in vain, with the
-    /// warning that says so.
-    async fn without_absent_worktree(&self, removed: &mut RemovedSpace) -> Option<String> {
+    /// warning that says so; a workspace among the `recorded` spaces of its
+    /// package opens before it.
+    async fn without_absent_worktree(
+        &self,
+        removed: &mut RemovedSpace,
+        recorded: &BTreeSet<SpaceId>,
+    ) -> Option<String> {
         let RemovedKind::Chat { chat } = &mut removed.kind else {
             return None;
         };
         let workspace = chat.workspace.as_ref()?;
+        if recorded.contains(&workspace.id) {
+            return None;
+        }
         let selector = SpaceSelector::id(&workspace.id);
         if self.chat_workspace(&selector).await.is_ok() {
             return None;
@@ -185,8 +224,8 @@ impl Manager {
         Ok(removed)
     }
 
-    /// The copy among `copies` of the space `id`, when this import opened
-    /// one.
+    /// The copy among `copies` of the space `id`, when this import made
+    /// one, open or recorded to open after it.
     async fn copy_among(
         &self,
         copies: &BTreeMap<SpaceId, SpaceId>,
@@ -195,9 +234,12 @@ impl Manager {
         let Some(copy) = copies.get(id) else {
             return Ok(None);
         };
-        let copy = (self.find_space(copy).await?)
+        if let Some(open) = self.find_space(copy).await? {
+            return Ok(Some(open.space_ref()));
+        }
+        let recorded = (self.removed_space(&SpaceSelector::id(copy)).await)
             .with_context(|| format!("the copy of {id} is no longer here"))?;
-        Ok(Some(copy.space_ref()))
+        Ok(Some(recorded_ref(&recorded)))
     }
 
     /// Fetch the default branch when the repository lacks `commit`, which
@@ -211,21 +253,20 @@ impl Manager {
             .context("fetch the default branch the export builds on")
     }
 
-    /// The exported record as this repository's, or a chat's without one,
-    /// expiring after its retention as a removal here would, a workspace's
-    /// checkpoint with it; a chat without a repository runs in `root_dir`,
-    /// which this prepares as a chat's start does.
-    async fn imported_record(
-        &self,
-        repo: Option<&Repository>,
-        removed: RemovedSpace,
-    ) -> Result<RemovedSpace> {
+    /// The exported record as the repository's `here`, or a chat's without
+    /// one, expiring after its retention as a removal here would, a
+    /// workspace's checkpoint with it; a chat without a repository runs in
+    /// `root_dir`, which this prepares as a chat's start does.
+    async fn imported_record(&self, here: Here<'_>, removed: RemovedSpace) -> Result<RemovedSpace> {
+        let repo = here.repo;
         let settings = self.space_settings_in(repo.map(|repo| &repo.id)).await?;
         let retention = settings.cleanup.restore.retention();
         let expires_at = UnixTime::now() + retention;
         // The space it was below where it was exported stays its parent only
-        // where that space is here too, or runs on another joined machine.
+        // where that space is here too, or opens after it as part of its
+        // package, or runs on another joined machine.
         let parent = match removed.parent {
+            Some(parent) if here.recorded.contains(&parent.id) => Some(parent),
             Some(parent) if self.find_space(&parent.id).await?.is_some() => Some(parent),
             Some(parent) if self.hub.runs_elsewhere(self, &parent.id).await => Some(parent),
             _ => None,
@@ -335,6 +376,32 @@ impl Manager {
             return Err(error);
         }
         Ok(removed)
+    }
+}
+
+/// Where an import records a space: in its repository, none for a chat
+/// without one, beside the other spaces of its package it `recorded` before.
+#[derive(Clone, Copy)]
+struct Here<'a> {
+    repo: Option<&'a Repository>,
+    recorded: &'a BTreeSet<SpaceId>,
+}
+
+/// A reference to the space `removed` records, as it opens.
+fn recorded_ref(removed: &RemovedSpace) -> SpaceRef {
+    let part = match removed.workspace() {
+        Some(kept) => RefPart::Workspace {
+            branch: match &kept.head {
+                Head::Branch(branch) => Some(branch.clone()),
+                Head::Commit(_) => None,
+            },
+        },
+        None => RefPart::Chat,
+    };
+    SpaceRef {
+        id: removed.space_id.clone(),
+        name: removed.name.clone(),
+        part,
     }
 }
 

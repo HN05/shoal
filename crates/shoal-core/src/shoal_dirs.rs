@@ -36,12 +36,14 @@ pub enum Contents {
     /// The agents' session files an import carried, until a restore puts
     /// them in place.
     ImportedSessions,
+    /// The packages imports are reading, until they record their spaces.
+    Imports,
     /// The seed build new workspaces start from.
     Seed,
 }
 
 impl Contents {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::TmpDirs,
         Self::Attachments,
         Self::ProposalFiles,
@@ -49,6 +51,7 @@ impl Contents {
         Self::GateRuns,
         Self::Caches,
         Self::ImportedSessions,
+        Self::Imports,
         Self::Seed,
     ];
 
@@ -62,6 +65,7 @@ impl Contents {
             Self::GateRuns => ".gate",
             Self::Caches => ".caches",
             Self::ImportedSessions => ".sessions",
+            Self::Imports => ".imports",
             Self::Seed => ".seed",
         }
     }
@@ -75,6 +79,7 @@ impl Contents {
             Self::GateRuns => "gate runs",
             Self::Caches => "shared caches",
             Self::ImportedSessions => "imported session files",
+            Self::Imports => "packages being imported",
             Self::Seed => "seed build",
         }
     }

@@ -174,6 +174,7 @@ impl Manager {
         delete_shoal_dir(&repo, Contents::TmpDirs).await?;
         delete_shoal_dir(&repo, Contents::ReviewRuns).await?;
         delete_shoal_dir(&repo, Contents::GateRuns).await?;
+        delete_shoal_dir(&repo, Contents::Imports).await?;
         self.delete_proposal_files(&repo).await?;
         super::imported_sessions::remove_imported_sessions(&repo).await?;
         self.delete_repository_files(&repo).await?;

@@ -135,7 +135,11 @@ fn error_code(error: &anyhow::Error) -> ErrorCode {
 /// Write the reply to `request_id`, a list in pages when it takes more than
 /// one frame, or an error saying another reply does not fit in a frame; the
 /// oversized reply still fails the connection, for the log.
-async fn reply(stream: &mut (impl AsyncWrite + Unpin), request_id: u64, body: Body) -> Result<()> {
+pub(super) async fn reply(
+    stream: &mut (impl AsyncWrite + Unpin),
+    request_id: u64,
+    body: Body,
+) -> Result<()> {
     let Err(error) = write_frames(stream, Response::new(request_id, body)).await else {
         return Ok(());
     };

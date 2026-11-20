@@ -872,7 +872,7 @@ async fn a_root_move_takes_the_session_files_kept_for_chats_without_a_repository
         contents,
     };
     // Imported again, the chat keeps them until a caller puts them in place.
-    let import = crate::transfer::SpaceImport {
+    let import = crate::daemon::restore::SpaceImport {
         repository: None,
         bundle: None,
         prerequisite: None,
@@ -880,7 +880,7 @@ async fn a_root_move_takes_the_session_files_kept_for_chats_without_a_repository
         copy: false,
         session_files: vec![carried],
         copies: Default::default(),
-        carried: Vec::new(),
+        recorded: Default::default(),
     };
     manager.import_space(import).await?;
 

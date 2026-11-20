@@ -4184,6 +4184,12 @@ earlier checkpoint carries sessions newer than its files, which export, import
 and the forked agents are told. The bundle leaves out the default
 remote's default branch, which the importer fetches when it lacks the commit the
 bundle builds on, since that branch only advances. Repositories match by origin.
+The daemon reads a package itself, from a file or from the bytes a client
+streams on its connection, and checks it whole before it records anything, so
+every import takes one path whether a terminal, another daemon or the hub
+delivers it; it records the spaces the package carries with its own and opens
+its own, and the caller opens the rest in order, setting each workspace up
+before the chats in its worktree.
 Exporting every workspace of a repository checks each one before removing any, so
 one that cannot leave refuses the set while all stay; a failure once removals
 begin leaves the exported ones moved and the rest in place, each reported.

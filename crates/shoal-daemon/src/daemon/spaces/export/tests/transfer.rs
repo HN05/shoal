@@ -5,6 +5,7 @@ use shoal_refs::BranchName;
 use std::{fs, path::Path, sync::Arc};
 
 use super::Import;
+use crate::daemon::restore::SpaceImport;
 use crate::{
     daemon::{
         manager::Manager,
@@ -157,7 +158,7 @@ pub(super) fn workspace_import(
         copy: import.manifest.copy.is_some(),
         session_files: session_files.to_vec(),
         copies: Default::default(),
-        carried: Vec::new(),
+        recorded: Default::default(),
     }
 }
 
