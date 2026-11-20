@@ -71,6 +71,7 @@ pub(crate) mod per_daemon;
 mod permissions;
 pub(crate) mod places;
 mod pr_gate;
+mod program_status;
 pub(crate) mod progress;
 pub(crate) mod proxy_retries;
 mod quarantine;

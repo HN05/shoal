@@ -110,6 +110,10 @@ impl Integration for Claude {
         Wake::Hook
     }
 
+    fn reports_program_status(&self) -> bool {
+        true
+    }
+
     /// Esc.
     fn interrupt_key(&self) -> Option<&'static str> {
         Some("\x1b")

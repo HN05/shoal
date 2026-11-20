@@ -79,20 +79,7 @@ impl Manager {
     /// The completion the space `id` recorded, a workspace's or a chat's.
     pub async fn completion(&self, id: &SpaceId) -> Result<Option<Completion>> {
         let id = id.to_owned();
-        self.store
-            .run(move |db| {
-                let record: Option<String> = db
-                    .query_row(
-                        "SELECT record FROM space_completion WHERE space_id=?1",
-                        [id],
-                        |row| row.get(0),
-                    )
-                    .optional()?;
-                record
-                    .map(|record| serde_json::from_str(&record).map_err(Into::into))
-                    .transpose()
-            })
-            .await
+        self.store.run(move |db| recorded(db, &id)).await
     }
 
     /// Record that another branch has the work of the space `id` at `head`
@@ -276,6 +263,20 @@ struct Persisted {
     closed: Vec<ItemNumber>,
     /// Whether it changed the status line.
     progressed: bool,
+}
+
+/// The completion the space `id` recorded.
+pub(crate) fn recorded(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<Completion>> {
+    let record: Option<String> = db
+        .query_row(
+            "SELECT record FROM space_completion WHERE space_id=?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    record
+        .map(|record| serde_json::from_str(&record).map_err(Into::into))
+        .transpose()
 }
 
 /// Record `completion` for the space `id`, returning whether it differs from

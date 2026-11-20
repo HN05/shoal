@@ -172,6 +172,14 @@ pub fn list(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<ApprovalRequ
     .collect()
 }
 
+/// The oldest request the space `id` made or proposed that waits for the
+/// user's decision.
+pub(crate) fn oldest_for_user(db: &Connection, id: &SpaceId) -> Result<Option<ApprovalRequest>> {
+    Ok(list(db, Some(id))?
+        .into_iter()
+        .find(|request| request.status == DecisionStatus::Pending && request.decider.is_none()))
+}
+
 /// Every request, or those the space `space` made, proposed or decides, in
 /// the order they were made: what the space lists.
 fn list_of_space(db: &Connection, space: Option<&SpaceId>) -> Result<Vec<ApprovalRequest>> {

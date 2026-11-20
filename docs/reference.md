@@ -6246,6 +6246,38 @@ first.
 Scoped callers report only for their own space, which their scope names
 wherever they run; `--space` selects another one for unscoped callers.
 
+
+### Terminal status
+
+Where an agent runs in a terminal that reads the
+[Program Status Protocol](https://www.superlogical.com/rex/docs/build/program-status)
+(OSC 7501), such as a Rex block, Shoal reports its space's status there on a
+record of its own, `id=shoal` with `app=shoal` and the space's name as its
+title, leaving the agent's own root record to an agent that reports itself, as
+Claude Code does. Before the agent starts, Shoal asks the terminal whether it
+reads the protocol, followed by a device attributes request; a terminal that
+answers only that request, such as tmux, zmx or Zellij, receives nothing, nor
+does an agent that runs detached. Input typed during the query, before the
+agent starts, may be lost. The first of these that holds decides the report:
+
+| Space | Report | Message |
+|---|---|---|
+| A [thread](#threads) of the space waits for the user | `blocked`, `kind=question` | the thread's number and the first line of its latest post |
+| An [approval request](#resource-approvals) of the space waits for the user | `blocked`, `kind=permission` | the request's number and what it asks for |
+| The agent's turn failed and Shoal does not [retry](#agents) it | `error` | the failure |
+| The agent exited with an error | `error` | the exit code or signal |
+| `shoal done` recorded completion, between the agent's turns | `done` | the summary |
+| A [ready mark](#ready-for-review) stands, between the agent's turns | `done` | the marked item |
+| Shoal stopped the agent and brings it back on its own | `idle` | why it stopped |
+| The agent's hooks report `working`, for an agent that does not report itself | `working`, with the share of its [steps](#progress) done | its status line |
+| The hooks report `waiting`, likewise | `blocked`, `kind=permission` | |
+| The hooks report `idle`, likewise | `idle` | |
+| Nothing above, or the agent exited cleanly | `clear` | |
+
+A thread or request a coordinating agent holds blocks nothing. The report
+changes as the space does, and the wrapper writes the agent's exit itself,
+also while the daemon is away.
+
 ### Progress
 
 ```sh

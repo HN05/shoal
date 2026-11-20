@@ -22,6 +22,7 @@ use super::{
     executions::{Completing, ExecutionKind, ReattachedExecution, StopRequest},
     manager::Manager,
     places::ExecutionPlace,
+    program_status::Reports,
     scope::Caller,
     workspace::RecordChange,
 };
@@ -77,6 +78,8 @@ struct Connected {
     /// The wrapper restores its agent under the narrowing a
     /// [`Control::Resume`] gives.
     takes_narrowing: bool,
+    /// The wrapper's terminal reads the space's status reports.
+    reports_status: bool,
     /// The daemon stopped the command before it finished.
     stopped: bool,
     stop: watch::Receiver<bool>,
@@ -204,6 +207,7 @@ pub(super) async fn reattach(
         unqueued: false,
         hears_restore_waits: version >= protocol::RESTORE_WAITS,
         takes_narrowing: version >= protocol::RESUME_NARROWING,
+        reports_status: request.reports_status,
         stopped: false,
         stop,
         records: None,
@@ -246,19 +250,33 @@ async fn serve(
         None => Ok(()),
     };
     let controls = Controls::new(writer);
-    let result = async {
-        responded?;
-        relay(
-            manager,
-            &mut execution,
-            &controls,
-            &mut incoming,
-            &mut handoff_claimed,
-            &mut unattachable,
-        )
-        .await
-    }
-    .await;
+    let (wants_reports, wanted) = watch::channel(execution.reports_status);
+    let (ending, ended) = watch::channel(false);
+    let reports = Reports {
+        space: execution.space.clone(),
+        execution: execution.id.clone(),
+        agent: execution.agent.as_ref().map(|agent| agent.name.clone()),
+    };
+    let relayed = async {
+        let result = async {
+            responded?;
+            relay(
+                manager,
+                &mut execution,
+                &controls,
+                &wants_reports,
+                &mut incoming,
+                &mut handoff_claimed,
+                &mut unattachable,
+            )
+            .await
+        }
+        .await;
+        // A report being sent goes out whole before the connection's end.
+        ending.send_replace(true);
+        result
+    };
+    let (result, ()) = tokio::join!(relayed, reports.run(manager, &controls, wanted, ended));
     readers.abort_all();
     // The Git gate the registration holds keeps the default branch as the
     // execution left it until the records and the lookup of a pushed merge's
@@ -318,6 +336,7 @@ async fn relay(
     manager: &Manager,
     execution: &mut Connected,
     controls: &Controls,
+    wants_reports: &watch::Sender<bool>,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     handoff_claimed: &mut bool,
     unattachable: &mut Option<OwnedRwLockReadGuard<()>>,
@@ -394,9 +413,12 @@ async fn relay(
                 group_id,
                 restored,
                 restored_from,
-                ..
+                reports_status,
             } => {
                 awaiting_started = false;
+                if reports_status {
+                    wants_reports.send_replace(true);
+                }
                 *started = true;
                 // The started agent restored from the record, which goes
                 // while claimed: the wrapper consumes it only once this

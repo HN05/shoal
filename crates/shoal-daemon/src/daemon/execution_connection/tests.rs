@@ -662,3 +662,127 @@ fn a_run_restored_after_a_pause_reports_its_own_memory_alone() {
     restored.finished(None);
     assert_eq!(restored.last(), None);
 }
+
+/// The next status report `wrapper` receives, past its start's
+/// acknowledgement.
+async fn next_status(
+    wrapper: &mut BufReader<UnixStream>,
+) -> shoal_protocol::program_status::ProgramStatus {
+    loop {
+        match read(wrapper).await {
+            Control::ProgramStatus { status } => return status,
+            Control::Started => {}
+            control => panic!("expected a status report, got {control:?}"),
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_wrapper_whose_terminal_reads_status_reports_hears_the_spaces_status() {
+    use shoal_protocol::program_status::{ProgramState, Waits};
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "status".into(), None, None, None)
+        .await
+        .unwrap();
+    let wrapper = crate::process::identity::capture(std::process::id())
+        .unwrap()
+        .unwrap();
+    let (client, server) = UnixStream::pair().unwrap();
+    let executing = tokio::spawn(execute(
+        server,
+        1,
+        manager.clone(),
+        ExecutionContext {
+            space: SpaceSelector::id(&workspace.id),
+            wrapper: wrapper.clone(),
+            kind: ExecutionKind::Command,
+            agent: Some(TrackedAgent::named("codex")),
+            recover: false,
+            reattach: false,
+            queue_entry: None,
+            demo: None,
+            origin: None,
+            merge: None,
+            caller: None,
+        },
+        manager.gates.owned_operation().await,
+    ));
+    let mut wrapper_side = BufReader::new(client);
+    let response: Response = read(&mut wrapper_side).await;
+    assert!(matches!(response.body, Body::Execution(_)));
+    protocol::write(
+        wrapper_side.get_mut(),
+        &ExecutionEvent::Started {
+            child: None,
+            group_id: wrapper.pid,
+            restored: false,
+            restored_from: Vec::new(),
+            reports_status: true,
+        },
+    )
+    .await
+    .unwrap();
+    let status = next_status(&mut wrapper_side).await;
+    assert_eq!(
+        (status.state, status.title.as_str()),
+        (ProgramState::Clear, "status")
+    );
+    // The space asks the user, which blocks it on them.
+    let asking = crate::daemon::test_support::caller_in(&SpaceSelector::id(&workspace.id));
+    let thread = manager
+        .open_thread(
+            Some(&asking),
+            "Database".into(),
+            shoal_protocol::threads::ThreadKind::Question,
+            None,
+        )
+        .await
+        .unwrap();
+    let question = shoal_protocol::threads::NewPost {
+        text: "Which database?\nSQLite needs no server.".into(),
+        ..Default::default()
+    };
+    manager
+        .post_to_thread(
+            Some(&asking),
+            shoal_protocol::threads::ThreadNumber::Full(thread.number),
+            question,
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+    let status = next_status(&mut wrapper_side).await;
+    assert_eq!(
+        status.state,
+        ProgramState::Blocked {
+            kind: Waits::Question
+        }
+    );
+    assert_eq!(
+        status.message,
+        Some(format!("{}: Which database?", thread.number))
+    );
+    protocol::write(
+        wrapper_side.get_mut(),
+        &ExecutionEvent::Finished {
+            exit_code: 0,
+            memory: None,
+        },
+    )
+    .await
+    .unwrap();
+    loop {
+        match read(&mut wrapper_side).await {
+            Control::Finished { .. } => break,
+            Control::ProgramStatus { .. } => {}
+            control => panic!("expected the execution to finish, got {control:?}"),
+        }
+    }
+    bounded(executing).await.unwrap().unwrap();
+}

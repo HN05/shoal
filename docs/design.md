@@ -2086,6 +2086,33 @@ blocks in its window and panes in its tab; Herdr closes a tab with its last
 pane. Rex's own
 `own_block` arbitrates terminal size between clients and is not ownership.
 
+Shoal reports each space's status to the terminal its agent runs in through
+the Program Status Protocol (OSC 7501), so any terminal that reads it, such as
+Rex, shows which agents work and which wait on the user without a plugin. It
+writes the record `id=shoal`, never the root record, so it never overwrites
+an agent's own report, and every report carries `app=shoal` and the space's
+name as its title, since a report replaces its record whole. Each agent
+integration declares whether its agent reports its own turns there, as Claude
+Code does; for one that does not, Shoal also reports the turn its hooks
+report. The daemon decides each report from the space's records and sends it
+over the wrapper's existing connection whenever it changes, and the wrapper
+writes it in one write to the terminal it holds: the daemon never opens a
+terminal, since pty device names are reused and terminal I/O stays in the
+wrapper, and hooks write nothing there. The wrapper reports the agent's exit
+itself, also while the daemon is away. Reports go only to a terminal that
+answers the protocol's query: before it hands the terminal to the agent, the
+wrapper sends the query followed by a primary device attributes request,
+which every terminal answers, so a device attributes reply arriving first
+means the terminal does not read the protocol, and a generous time limit
+guards only against a terminal that answers neither. tmux, zmx and Zellij
+answer only that request, so Shoal sends nothing into a host that would drop
+it; no host declares support and there is no option. Each launch queries
+again, a detached one sends nothing, and input typed during the query, before
+the agent starts, may be lost. A thread or approval request that waits on the
+user blocks the space, and one a coordinating agent holds does not, since
+`blocked` means the user must act; completion and ready marks show as `done`
+between the agent's turns, so a new turn replaces them.
+
 tmux is an opt-in host for users who already work in it, so agents run in their
 tmux panes without a zmx session nested inside one. tmux draws panes through its
 own emulator, so images and notifications reach the outer terminal only through
@@ -3339,10 +3366,6 @@ forge, which Shoal's own edits and the background poll report, takes one path.
 It is opt-in: a status line written for `shoal list` reads as noise in a
 description written for reviewers, so only someone following agents on the
 forge, who opens their PRs as drafts, turns it on.
-
-The wrapper does not report progress to the terminal through OSC 7501: its
-writes, from a second process, interleave with the agent's own TUI output and
-corrupt it, and Claude Code and Codex already report their turns there.
 
 A chat is a conversation with an agent about a repository, not an assignment,
 so it runs in the registered checkout instead of in a workspace: coordinating

@@ -30,7 +30,7 @@ mod resolving;
 
 pub(crate) use closing::{close, reopen};
 pub(crate) use delivery::Delivered as ThreadsDelivered;
-pub(crate) use reading::{waiting_count, waiting_on_spaces};
+pub(crate) use reading::{newest_waiting_for_user, waiting_count, waiting_on_spaces};
 
 impl Manager {
     /// Open an empty thread of `kind` named `name` from `caller`, or from

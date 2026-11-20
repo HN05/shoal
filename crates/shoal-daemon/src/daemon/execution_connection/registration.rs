@@ -181,6 +181,8 @@ pub(super) async fn register(
         // Registration requires this daemon's protocol.
         hears_restore_waits: true,
         takes_narrowing: true,
+        // Its child's start says whether it does.
+        reports_status: false,
         stopped: false,
         stop,
         records: RecordChange::of(&plan),

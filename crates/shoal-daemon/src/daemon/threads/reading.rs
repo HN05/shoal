@@ -168,6 +168,20 @@ pub(crate) fn waiting_count(db: &rusqlite::Connection, id: &SpaceId) -> Result<u
     Ok(opened.iter().filter(|thread| thread.is_waiting()).count())
 }
 
+/// The newest open thread numbered in the space `id` whose turn is the
+/// user's.
+pub(crate) fn newest_waiting_for_user(
+    db: &rusqlite::Connection,
+    id: &SpaceId,
+) -> Result<Option<Thread>> {
+    let threads = records::query(
+        db,
+        &format!("WHERE t.space_id=?1 AND {}", records::OPEN),
+        [id],
+    )?;
+    Ok(threads.into_iter().rev().find(Thread::waits_for_user))
+}
+
 /// Each space with a thread it opened that waits for a space that holds it,
 /// with that holder.
 pub(crate) fn waiting_on_spaces(db: &rusqlite::Connection) -> Result<Vec<(SpaceId, SpaceId)>> {

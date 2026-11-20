@@ -146,6 +146,12 @@ pub trait Integration: Sync {
         Wake::Never
     }
 
+    /// Whether the agent reports its own turns to a terminal that reads the
+    /// Program Status Protocol, so Shoal reports only what it knows itself.
+    fn reports_program_status(&self) -> bool {
+        false
+    }
+
     /// The key that cancels the agent's running turn in its terminal and
     /// leaves it waiting for the next message, unless Shoal knows none.
     fn interrupt_key(&self) -> Option<&'static str> {

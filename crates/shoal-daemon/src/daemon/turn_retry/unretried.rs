@@ -2,7 +2,7 @@
 //! its agent ends a turn normally, so a run of failed turns adds one
 //! notification rather than one each.
 use anyhow::Result;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension as _};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
@@ -62,6 +62,21 @@ fn record(
         rusqlite::params![execution, failure],
     )?;
     Ok(noted > 0)
+}
+
+/// The failure that ended the unretried turn of `execution`, until its agent
+/// ends a turn normally.
+pub(in crate::daemon) fn failure(
+    db: &Connection,
+    execution: &ExecutionId,
+) -> Result<Option<TurnFailure>> {
+    Ok(db
+        .query_row(
+            "SELECT failure FROM execution_unretried_turns WHERE execution_id=?1",
+            [execution],
+            |row| row.get(0),
+        )
+        .optional()?)
 }
 
 /// Follow a report of `state` after `previous` from `execution`, for a turn
