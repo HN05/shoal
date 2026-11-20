@@ -1124,9 +1124,11 @@ reports to the hub. A
 origin's branches holds; a base with commits only your machine has, such as
 a stacked branch you have not pushed, goes along as a Git bundle of what the
 origin's default branch lacks, so nothing needs a push first.
-`--wait` follows the workspace's preparation there. `--here`, `--focus`,
-`--in`, `--copy` and `--fork`, which need your machine's terminal, files or
-sessions, do not combine with `--machine`. A
+`--wait` follows the workspace's preparation there, and `--here` and
+`--focus` start the agent there at once and attach your terminal to it once
+the workspace is prepared, as `shoal attach` does. `--in`, `--copy` and
+`--fork`, which need your machine's files or sessions, do not combine with
+`--machine`. A
 start from a device, such as an app, goes to the machine its launch names,
 else to the hub's
 [`[machine.hub] default_machine`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub),

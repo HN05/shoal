@@ -233,11 +233,12 @@ pub struct StartArgs {
     pub parent: Option<SpaceSelector>,
     /// The joined machine the new space starts on, by its name or the ID
     /// shoal hub ls shows, where that machine's queue starts its agent in
-    /// the background; defaults to this machine.
+    /// the background, or at once for --here and --focus, which attach this
+    /// terminal to it there; defaults to this machine.
     #[arg(
         long,
         value_name = "MACHINE",
-        conflicts_with_all = ["here", "focus", "in_workspace", "fork", "copy", "checkpoint"]
+        conflicts_with_all = ["in_workspace", "fork", "copy", "checkpoint"]
     )]
     pub machine: Option<String>,
     /// Run in this terminal instead of a new tab or detached session.

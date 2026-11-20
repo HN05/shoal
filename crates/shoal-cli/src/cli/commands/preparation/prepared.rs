@@ -15,7 +15,7 @@ use shoal_protocol::protocol::{Launched, Started};
 /// The workspace a launch started its agent in, as a start's workspace: a
 /// new or reopened one with its preparation, or an existing one whose
 /// worker it queued, with nothing left to prepare.
-pub(super) fn workspace_start(launched: Launched) -> Result<StartedWorkspace> {
+pub(in crate::cli::commands) fn workspace_start(launched: Launched) -> Result<StartedWorkspace> {
     let Launched {
         space,
         entry,

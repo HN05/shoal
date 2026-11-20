@@ -286,7 +286,10 @@ nothing needs the commit: its launch failed, or no workspace there waits
 to start from it or records it as a base that no branch holds. That
 machine answers the start once the hub lists the new space, so the caller
 follows its preparation there, naming the operation with its space as every
-request across machines names one, at once. A start
+request across machines names one, at once, and a start that shows its
+agent in the caller's terminal, with `--here` or `--focus`, starts it there
+at once and attaches to it as `shoal attach` does, since the agent runs on
+the space's machine. A start
 below another machine's space, on whichever machine, in a repository that
 machine has not registered, clones the URL of its origin, which the
 parent's machine reports to the hub beside the key repositories match by,

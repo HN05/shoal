@@ -90,25 +90,38 @@ pub(in crate::cli::commands) async fn report_launched(
 /// Follow the preparation of the workspace `machine`, another joined
 /// machine, `started`, of which nothing runs in this caller, and report
 /// the workspace and the entry of its agent, which that machine's queue
-/// starts, once it ends; a failure names what shows and retries it there.
+/// starts, once it ends.
 async fn follow_elsewhere(ctx: &Context, started: StartedWorkspace, machine: &str) -> Result<i32> {
-    let preparing = Preparing::follow(&ctx.paths, started).await?;
-    let reused = preparing.reused();
-    let Prepared { workspace, agent } = match operations::follow_preparation(ctx, preparing).await?
-    {
-        Ok(prepared) => prepared,
-        Err(Unprepared { workspace, failure }) => {
-            let number = workspace.number;
-            return Err(crate::operations::error(failure).context(format!(
-                "preparing {} on machine {machine} failed; `shoal status {number}` shows it, and `shoal setup {number}` on that machine retries it",
-                workspace.name
-            )));
-        }
-    };
+    let reused = started.reused;
+    let Prepared { workspace, agent } = prepared_on(ctx, started, Some(machine)).await?;
     show_prepared(ctx, &workspace, reused)?;
     match agent {
         Some(entry) => start::report_queued_in(ctx, &workspace.name, &entry),
         None => Ok(0),
+    }
+}
+
+/// The workspace `started` once its preparation, which `machine` runs
+/// where another joined machine than this one does, ended, without
+/// entering it or offering a retry, which act on its worktree; a failure
+/// names what shows and retries it.
+pub(in crate::cli::commands) async fn prepared_on(
+    ctx: &Context,
+    started: StartedWorkspace,
+    machine: Option<&str>,
+) -> Result<Prepared> {
+    let preparing = Preparing::follow(&ctx.paths, started).await?;
+    match operations::follow_preparation(ctx, preparing).await? {
+        Ok(prepared) => Ok(prepared),
+        Err(Unprepared { workspace, failure }) => {
+            let number = workspace.number;
+            let there = machine.map(|machine| format!(" on machine {machine}"));
+            Err(crate::operations::error(failure).context(format!(
+                "preparing {}{} failed; `shoal status {number}` shows it, and `shoal setup {number}` on its machine retries it",
+                workspace.name,
+                there.unwrap_or_default()
+            )))
+        }
     }
 }
 

@@ -68,12 +68,38 @@ async fn attach_elsewhere(
     session: Option<String>,
 ) -> Result<i32> {
     let machine = view.machine_name(remote);
-    let viewed = Viewed::session(remote.space.id.clone(), session).await;
+    view_elsewhere(ctx, remote.space.id.clone(), machine, session).await
+}
+
+/// Attach to a session of `space`, which another joined machine, `machine`,
+/// runs, through that machine, and remember it for `attach -` once its
+/// session was shown and still runs there.
+async fn view_elsewhere(
+    ctx: &Context,
+    space: SpaceId,
+    machine: &str,
+    session: Option<String>,
+) -> Result<i32> {
+    let viewed = Viewed::session(space.clone(), session).await;
     let ended = viewer::view(ctx, viewed, machine).await?;
     if ended.open {
-        recent::record_attach_elsewhere(ctx, &remote.space.id);
+        recent::record_attach_elsewhere(ctx, &space);
     }
     Ok(ended.code)
+}
+
+/// Attach this terminal to the agent a start began in `space`, which
+/// `machine` runs where another joined machine than this one does, once
+/// it runs in a session, as `shoal attach` does.
+pub(in crate::cli::commands) async fn attach_started(
+    ctx: &Context,
+    space: SpaceId,
+    machine: Option<&str>,
+) -> Result<i32> {
+    match machine {
+        Some(machine) => view_elsewhere(ctx, space, machine, None).await,
+        None => attach(ctx, Some(SpaceSelector::id(&space)), None).await,
+    }
 }
 
 /// `shoal internal attach`: attach this terminal, which `viewer` views

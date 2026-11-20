@@ -6,5 +6,6 @@ mod prepared;
 mod reports;
 
 pub(super) use finish::enter_workspace;
+pub(super) use prepared::workspace_start;
 pub(super) use prepared::{follow_preparation, shell_in, unprepared};
-pub(super) use reports::{enter_created, report_launched};
+pub(super) use reports::{enter_created, prepared_on, report_launched};

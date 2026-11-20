@@ -10,9 +10,10 @@ use super::{
     routing::{ready_at, scope_of},
     support::{
         fixture::{Base, home},
-        git, git_with_identity, printed,
+        git, git_with_identity, install_test_script, printed,
         prompt::{self, AnswerOptions},
         wait::wait_for,
+        zmx,
     },
 };
 
@@ -135,6 +136,35 @@ fn a_start_on_another_machine_waits_for_the_preparation_there() {
     let mut shown = serde_json::Deserializer::from_slice(&started.stdout).into_iter::<Value>();
     let workspace = shown.next().unwrap().unwrap();
     assert_eq!(workspace["state"], "ready", "{}", printed(&started));
+}
+
+#[test]
+fn a_start_on_another_machine_here_attaches_this_terminal_to_its_agent_there() {
+    let machines = machines();
+    // The laptop's queue starts the agent in a session of its zmx.
+    let laptop = machines.laptop.root.path();
+    install_test_script(laptop.join("bin/zmx"), zmx::terminal_zmx());
+    // Debug builds only open an existing ownership lock of the host.
+    fs::write(laptop.join("zmx.shoal-ownership.lock"), "").unwrap();
+    fs::write(laptop.join("zmx-keep-sessions"), "").unwrap();
+    let repo = machines.hub.repo.to_str().unwrap().to_owned();
+    let mut command = machines.hub.command();
+    let args = ["start", "--machine", "laptop", "--agent", "pi", &repo];
+    command.args(args).args(["--branch", "child", "--here"]);
+    let options = AnswerOptions {
+        controlling_terminal: true,
+        kill_on_timeout: true,
+        terminal_stdout: true,
+    };
+    let (output, transcript) = prompt::answer(&mut command, "", options);
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
+    // That machine attached its terminal for this one to the agent's session.
+    let calls = fs::read_to_string(laptop.join("zmx-calls")).unwrap();
+    assert!(calls.contains(r#"["attach", "#), "{calls}");
 }
 
 #[test]

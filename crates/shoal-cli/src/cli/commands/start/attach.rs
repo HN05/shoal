@@ -53,8 +53,10 @@ impl Placed {
 
 /// Send `launch` under `settings`, its agent, the one it names or else
 /// `agent.default`, run in this caller where `options` and this terminal
-/// say, else by the daemon. An `issue_linked` workspace's own issue
-/// prompts the agent where the launch names nothing to start on.
+/// say, else by the daemon, which for a start on another machine this
+/// terminal attaches to where `options` show it here. An `issue_linked`
+/// workspace's own issue prompts the agent where the launch names nothing
+/// to start on.
 pub(in crate::cli::commands) async fn place(
     ctx: &Context,
     mut launch: Launch,
@@ -62,6 +64,9 @@ pub(in crate::cli::commands) async fn place(
     settings: &Effective,
     options: &super::StartOptions,
 ) -> Result<i32> {
+    if super::shown::shown_elsewhere(&launch, options) {
+        return super::shown::start(ctx, launch).await;
+    }
     let agent = (launch.agent.clone()).or_else(|| settings.agent.default.clone());
     let started = (&launch, issue_linked);
     let attach = Attach::of(ctx, started, agent.as_ref(), settings, options);
