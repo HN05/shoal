@@ -101,11 +101,12 @@ percentage under [`[machine.overload]`](#overload) that the file leaves out,
 and so dynamic admission.
 
 `memory_limit` caps the memory Shoal's work holds together on the machine:
-its agents, CI jobs, demos and setups, without the daemon. It takes a size in
+every command Shoal starts as [work](../../../../../../docs/reference.md#work-slice),
+which leaves out the daemon and Shoal's own pushes and merges. It takes a size in
 `B`, `KiB`, `MiB`, `GiB` or `TiB`, or a percentage of RAM; without it, work may
-use the whole machine. On Linux the kernel enforces it on the
-[work slice](../../../../../../docs/reference.md#work-slice); it applies after
-`shoal config reload`.
+use the whole machine. On Linux the kernel enforces it on the work slice;
+elsewhere only memory protection does, so with `[machine.overload.memory]`
+disabled it does nothing there. It applies after `shoal config reload`.
 
 `keep_awake` keeps the machine from sleeping while an agent works or waits on
 a watched PR; see [keeping the machine awake](../../../../../../docs/reference.md#keeping-the-machine-awake).

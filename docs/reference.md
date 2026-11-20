@@ -312,9 +312,9 @@ reclaiming its cache and swapping it out, and where that cannot keep it below
 `MemoryMax`, its OOM killer kills inside the slice only, in the order of the
 OOM scores above, while the daemon and the desktop keep their memory. The service manager keeps the cap until the next boot.
 
-Overload protection and dynamic admission count the limit as the machine's
-memory too, so Shoal warns agents, holds back starts and stops work before
-the kernel throttles it: the work's memory against the limit, and on Linux
+With [memory protection](#overload-protection) on, overload protection and
+dynamic admission count the limit as the machine's memory too, so Shoal warns
+agents, holds back starts and stops work before the kernel throttles it: the work's memory against the limit, and on Linux
 the slice's own stall, at the same levels as the machine's, press as the
 machine's do, and a start fits only where both leave room. On Linux the
 work's memory is what the slice holds that reclaim cannot free, its page
