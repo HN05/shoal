@@ -48,17 +48,18 @@ impl Unretried {
     }
 }
 
-/// Drop the space's retry and note that `execution`'s failed turn went
-/// unretried, together. Whether the note is new.
+/// Drop the space's retry and note that `execution`'s turn `failure` ended
+/// went unretried, together. Whether the note is new.
 fn record(
     tx: &rusqlite::Transaction<'_>,
     space_id: &SpaceId,
     execution: &ExecutionId,
+    failure: TurnFailure,
 ) -> Result<bool> {
     cancel(tx, space_id)?;
     let noted = tx.execute(
-        "INSERT OR IGNORE INTO execution_unretried_turns(execution_id) VALUES (?1)",
-        [execution],
+        "INSERT OR IGNORE INTO execution_unretried_turns(execution_id,failure) VALUES (?1,?2)",
+        rusqlite::params![execution, failure],
     )?;
     Ok(noted > 0)
 }
@@ -99,7 +100,7 @@ impl Manager {
         let (id, execution) = (space.id.clone(), execution.to_owned());
         if self
             .store
-            .write(move |tx| record(tx, &id, &execution))
+            .write(move |tx| record(tx, &id, &execution, failure))
             .await?
         {
             let message = reason.message(agent, failure);

@@ -121,7 +121,7 @@ CREATE TABLE execution_upstream_resets (
 
 CREATE TABLE execution_unretried_turns (
     execution_id TEXT PRIMARY KEY REFERENCES executions(id) ON DELETE CASCADE
-);
+, failure TEXT NOT NULL DEFAULT 'other');
 
 CREATE TABLE "space_files" (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
