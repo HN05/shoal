@@ -749,6 +749,11 @@ async fn finish(
     // A restart whose stop the agent never took saved a handoff for nothing.
     let restarting = agent.is_some() && manager.restart_before_resume(&execution_id).await;
     let renewed = agent.is_some() && manager.restart_continues_elsewhere(&execution_id).await;
+    // Its last session keeps the turn it ended in, which goes with its record.
+    let turn = match agent {
+        Some(_) => manager.reported_turn(&execution_id).await,
+        None => None,
+    };
     // A demo's viewer that spawns from here on would outlive the final
     // inventory, so its spawn waits, then finds the execution completing.
     let spawning = manager.viewers.spawn_lock(&execution_id);
@@ -788,7 +793,7 @@ async fn finish(
     {
         let exited = started && !stopped && failed_restore.is_none();
         manager
-            .end_agent_session(&space.id, agent, &execution_id, exited)
+            .end_agent_session(&space.id, agent, &execution_id, exited, turn)
             .await;
     }
     if (overload_reason.is_some() || restarting) && !handoff_claimed && complete {

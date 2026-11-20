@@ -10,9 +10,10 @@ use crate::{
     execution::recovery::{Stage, record_path},
     model::Workspace,
     process::identity::{self as process, Identity},
-    state::ExecutionState,
+    state::{AgentState, ExecutionState},
 };
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::space_names::SpaceSelector;
 use std::{fs, time::Duration};
 
 /// A process whose identity stays verifiable until it is killed.
@@ -182,6 +183,11 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
         &"rebooted-session".into(),
     )
     .unwrap();
+    // The reboot ended its agent mid-turn, which its last session keeps.
+    let unrecorded = Some(ExecutionId::from("unrecorded"));
+    let selector = SpaceSelector::id(&workspace.id);
+    let working = manager.set_agent_state(&selector, AgentState::Working, unrecorded, None);
+    working.await.unwrap();
     let reopened = restart(&manager).await;
     reopened.reconcile_interrupted_agents().await.unwrap();
     let kept: Vec<_> = executions(&reopened, &workspace)
@@ -206,7 +212,7 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
                 narrowing: Default::default(),
                 mode: "worker".into(),
                 model: Default::default(),
-                turn: None,
+                turn: Some(AgentState::Working),
                 execution: "unrecorded".into(),
                 agent: "fixture".into(),
                 session: Some("rebooted-session".into()),

@@ -652,6 +652,26 @@ async fn tracked_command_child() {
 }
 
 #[tokio::test]
+async fn an_agent_that_exits_keeps_the_turn_it_ended_in_with_its_last_session() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let test = "execution::tests::overload::tracked_agent_exiting_child";
+    let agent = launch_child(&manager, &workspace, test);
+    wait_started(&manager, &workspace).await;
+    // It reports itself idle between turns, then exits.
+    report_session(&manager, &workspace, "idle-session").await;
+    fs::write(workspace.path.join("exit"), "").unwrap();
+    assert_eq!(bounded(agent).await.unwrap().unwrap(), 0);
+    let last = shoal_core::execution::recovery::LastSession::all(&manager.paths, &workspace.id);
+    let last = last.unwrap();
+    let [last] = &last[..] else {
+        panic!("{last:?}");
+    };
+    assert_eq!(last.turn, Some(crate::state::AgentState::Idle));
+    assert!(!last.ending().mid_turn());
+    serving.abort();
+}
+
+#[tokio::test]
 async fn an_agent_whose_terminal_closes_is_saved_as_stopped() {
     use shoal_core::execution::recovery::{LastSession, Record, Saved};
     let (_root, manager, workspace, serving) = fixture().await;

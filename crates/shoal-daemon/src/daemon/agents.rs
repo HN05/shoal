@@ -314,18 +314,21 @@ impl Manager {
             .await;
     }
 
-    /// Forget a finished agent's reported session, first keeping it as one of
-    /// the last sessions of the space `space_id` when the agent `exited` on
-    /// its own before the assignment finished, for `shoal resume` to continue.
+    /// Forget a finished agent's reported session, first keeping it, with
+    /// the `turn` it ended in, as one of the last sessions of the space
+    /// `space_id` when the agent `exited` on its own before the assignment
+    /// finished, for `shoal resume` to continue.
     pub(crate) async fn end_agent_session(
         &self,
         space_id: &SpaceId,
         agent: &TrackedAgent,
         execution: &ExecutionId,
         exited: bool,
+        turn: Option<AgentState>,
     ) {
         let kept = if exited {
-            self.keep_agent_session(space_id, agent, execution).await
+            self.keep_agent_session(space_id, agent, execution, turn)
+                .await
         } else {
             crate::execution::recovery::forget_session(&self.paths, space_id, execution)
         };
@@ -335,20 +338,17 @@ impl Manager {
     }
 
     /// Forget an ended agent's reported session, first keeping it, with the
-    /// turn it reported last, as one of the last sessions of the space
+    /// `turn` it ended in, as one of the last sessions of the space
     /// `space_id` while its assignment is unfinished.
     pub(crate) async fn keep_agent_session(
         &self,
         space_id: &SpaceId,
         agent: &TrackedAgent,
         execution: &ExecutionId,
+        turn: Option<AgentState>,
     ) -> anyhow::Result<()> {
         use crate::execution::recovery::{self, LastSession};
         if self.completion(space_id).await?.is_none() {
-            let id = execution.clone();
-            let turn = (self.store)
-                .read(move |db| crate::daemon::agent_state::reported_by_execution(db, &id))
-                .await?;
             LastSession::save(&self.paths, space_id, agent, execution, turn)?;
         }
         recovery::forget_session(&self.paths, space_id, execution)
