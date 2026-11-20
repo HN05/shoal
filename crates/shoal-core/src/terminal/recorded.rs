@@ -21,7 +21,7 @@ pub struct Recorded<'a> {
     /// The execution recorded there.
     execution: Option<&'a ExecutionId>,
     /// Why Shoal stopped that agent, while its wrapper waits to restore it.
-    pub stopped: Option<&'a Protection>,
+    stopped: Option<&'a Protection>,
 }
 
 impl<'a> Recorded<'a> {

@@ -36,8 +36,10 @@ pub trait Attaching: Sync {
 }
 
 /// Attach this terminal to a session of `target`: the one `session` names,
-/// else its only one or one `attaching` picks, waking its agent first as
-/// [`Target::awake_session`] says. Returns whether the session still runs
+/// else its only one or one `attaching` picks, once the agent there runs.
+/// With no session named and none showing an agent, an agent that sleeps
+/// wakes first, and a stopped one when no session is left; a session where
+/// Shoal stopped the agent wakes it. Returns whether the session still runs
 /// once this terminal left it.
 pub async fn here(
     paths: &CommandPaths,
