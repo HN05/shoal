@@ -1,4 +1,5 @@
 //! Every request routed to the handler of its domain.
+mod acting;
 mod agents;
 mod alerts;
 mod approvals;

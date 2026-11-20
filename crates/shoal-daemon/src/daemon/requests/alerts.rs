@@ -10,8 +10,8 @@ use super::super::{
     manager::Manager,
     scope::{Caller, Scoped},
 };
+use super::acting::acting;
 use crate::protocol::{self, AlertMethod, AlertTarget, AlertsFor, Body, Response};
-use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn handle(
@@ -66,37 +66,6 @@ pub(super) async fn handle(
         }
         AlertMethod::ClearAlerts => Body::Cleared(manager.notifications.clear().await?),
     }))
-}
-
-/// Who sends or withdraws an alert: a scoped caller, or the user acting as
-/// the space `from` names, as a session in it that Shoal did not start does,
-/// or else the user.
-async fn acting(
-    manager: &Manager,
-    caller: Option<&Caller>,
-    from: Option<SpaceSelector>,
-) -> Result<Option<Caller>> {
-    if let Some(caller) = caller {
-        return Ok(Some(caller.clone()));
-    }
-    let Some(from) = from else {
-        return Ok(None);
-    };
-    Ok(Some(Caller::of_space(acting_space(manager, &from).await?)))
-}
-
-/// The ID of the space `from` names: one of this machine's, or else one the
-/// hub lists on another machine, as the chat of a request that machine
-/// forwarded here, which only it has.
-async fn acting_space(manager: &Manager, from: &SpaceSelector) -> Result<SpaceId> {
-    let missing = match manager.space(from).await {
-        Ok(space) => return Ok(space.id),
-        Err(missing) => missing,
-    };
-    match manager.hub.machine_of(manager, from).await {
-        Ok(Some((_, listed))) => Ok(listed.space.id),
-        _ => Err(missing),
-    }
 }
 
 /// Reading, clearing and watching the user's alerts is the `notifications`
