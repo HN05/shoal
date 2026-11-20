@@ -122,6 +122,7 @@ mod untracked;
 pub(crate) mod upstream_limits;
 pub(crate) mod wake_timers;
 mod warnings;
+mod work_memory;
 pub mod workspace;
 pub mod workspace_files;
 mod workspace_usage;
@@ -235,6 +236,8 @@ pub async fn run(
     spawn_supervised(&mut background, &manager, "disk monitor", disk::run);
     #[cfg(target_os = "linux")]
     spawn_supervised(&mut background, &manager, "OOM scores", oom_scores::run);
+    #[cfg(target_os = "linux")]
+    spawn_supervised(&mut background, &manager, "work memory", work_memory::run);
     spawn_supervised(
         &mut background,
         &manager,

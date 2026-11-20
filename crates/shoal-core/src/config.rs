@@ -9,6 +9,7 @@ pub mod git_profiles;
 pub mod hooks;
 pub mod machine;
 pub mod mcp;
+pub mod memory_limit;
 pub mod modes;
 pub mod named_commands;
 pub mod overload;

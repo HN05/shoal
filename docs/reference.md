@@ -302,6 +302,14 @@ user's service manager cannot move, or before systemd 254, and in a
 development build, the command starts directly in the wrapper's control
 group.
 
+With [`memory_limit`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine)
+set, the daemon gives the slice `MemoryHigh` at the limit and `MemoryMax` a
+twentieth above it, at startup and on `shoal config reload`, and lifts both
+once the limit is removed: the kernel throttles work above the limit,
+reclaiming its cache and swapping it out, and where that cannot keep it below
+`MemoryMax`, its OOM killer kills inside the slice only, in the order of the
+OOM scores above, while the daemon and the desktop keep their memory. The service manager keeps the cap until the next boot.
+
 When space available to unprivileged processes on a filesystem holding
 workspaces or daemon state falls below `disk.cleanup_free_gib`, the daemon
 deletes the Xcode data there that removing a workspace of a repository using

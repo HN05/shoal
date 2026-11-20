@@ -73,6 +73,7 @@ max_heavy_agents = "dynamic" # Or a number from 0
 max_jobs = "dynamic"     # Or a number from 0
 schedule = "balanced"    # "balanced", "speed" or "cache"
 load = "balanced"        # "light", "balanced" or "full"
+memory_limit = "24GiB"   # Or a share of RAM, such as "75%"; no default
 keep_awake = false       # Keep the machine from sleeping while agents work
 availability = "auto"    # "auto", "always_on" or "intermittent"
 ```
@@ -98,6 +99,13 @@ restores of agents whose prompt cache has not expired; see
 work on, `full` for one that only runs agents. It sets each CPU and memory
 percentage under [`[machine.overload]`](#overload) that the file leaves out,
 and so dynamic admission.
+
+`memory_limit` caps the memory Shoal's work holds together on the machine:
+its agents, CI jobs, demos and setups, without the daemon. It takes a size in
+`B`, `KiB`, `MiB`, `GiB` or `TiB`, or a percentage of RAM; without it, work may
+use the whole machine. On Linux the kernel enforces it on the
+[work slice](../../../../../../docs/reference.md#work-slice); it applies after
+`shoal config reload`.
 
 `keep_awake` keeps the machine from sleeping while an agent works or waits on
 a watched PR; see [keeping the machine awake](../../../../../../docs/reference.md#keeping-the-machine-awake).

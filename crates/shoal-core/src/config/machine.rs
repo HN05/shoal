@@ -43,6 +43,9 @@ pub struct Machine {
     pub max_jobs: MachineLimit,
     /// What the agent queue starts first after priority.
     pub schedule: Schedule,
+    /// The most memory Shoal's work holds together; no limit without it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_limit: Option<super::memory_limit::MemoryLimit>,
     pub overload: overload::Overload,
     /// What each AI tool needs of this machine.
     pub agents: std::collections::BTreeMap<String, super::agents::MachineAgent>,

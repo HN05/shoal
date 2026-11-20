@@ -573,7 +573,14 @@ builds at 100, so it killed a small shoal process before a large rustc. The
 daemon maps places in the order onto scores from 900 down to 200 and lowers its
 own to the floor its service manager allows without privilege, which differs
 between machines, so the unit cannot state one; a CI job's scope has the kernel
-kill the whole job, which fails anyway, and so frees all of it. Whether a terminal
+kill the whole job, which fails anyway, and so frees all of it. A user's
+`memory_limit` caps Shoal's work, not the machine: on Linux the kernel
+enforces it on `shoal-work.slice`, with `MemoryHigh` at the limit, so work
+above it is throttled, reclaimed and swapped out before anything dies, and
+`MemoryMax` a twentieth above it as the last resort, whose kills stay inside the slice, so
+the desktop and the daemon keep their memory whatever work does. The daemon
+sets both at runtime rather than in a unit file, so the cap follows `shoal
+config reload` and nothing outlives the boot. Whether a terminal
 shows an agent plays no part, since a host such as Herdr may count every agent
 as shown and a user who attaches may walk away. An idle agent with a running subagent, which
 its hooks report, or processes outside its process group counts as working,

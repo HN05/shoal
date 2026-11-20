@@ -67,6 +67,29 @@ pub fn memory(levels: &MemoryLevels) -> Result<MemoryReading> {
     })
 }
 
+/// The machine's RAM in bytes, without swap.
+#[cfg(target_os = "linux")]
+pub fn ram() -> Result<u64> {
+    let text = std::fs::read_to_string("/proc/meminfo").context("read memory availability")?;
+    meminfo_bytes(&text, "MemTotal:")
+}
+
+/// The bytes the line `name` of `/proc/meminfo`'s `text` reports.
+#[cfg(any(target_os = "linux", test))]
+fn meminfo_bytes(text: &str, name: &str) -> Result<u64> {
+    let line = text
+        .lines()
+        .find_map(|line| line.strip_prefix(name))
+        .with_context(|| format!("missing {name} in memory reading"))?;
+    let mut fields = line.split_whitespace();
+    let value: u64 = fields.next().context("missing memory value")?.parse()?;
+    ensure!(
+        fields.next() == Some("kB") && fields.next().is_none(),
+        "invalid memory units"
+    );
+    value.checked_mul(1024).context("memory reading overflow")
+}
+
 /// The memory stall the kernel reports, `None` without PSI: a kernel built
 /// without it, or booted with `psi=0`, has no pressure file.
 #[cfg(target_os = "linux")]
@@ -82,19 +105,7 @@ fn read_stall() -> Result<Option<Stall>> {
 /// `/proc/meminfo`'s `text` reports.
 #[cfg(any(target_os = "linux", test))]
 fn linux_memory(text: &str) -> Result<Memory> {
-    let read = |name: &str| -> Result<u64> {
-        let line = text
-            .lines()
-            .find_map(|line| line.strip_prefix(name))
-            .with_context(|| format!("missing {name} in memory reading"))?;
-        let mut fields = line.split_whitespace();
-        let value: u64 = fields.next().context("missing memory value")?.parse()?;
-        ensure!(
-            fields.next() == Some("kB") && fields.next().is_none(),
-            "invalid memory units"
-        );
-        value.checked_mul(1024).context("memory reading overflow")
-    };
+    let read = |name: &str| meminfo_bytes(text, name);
     let total = read("MemTotal:")?;
     let available = read("MemAvailable:")?;
     let swap_total = read("SwapTotal:")?;
@@ -186,6 +197,12 @@ pub fn memory(_levels: &MemoryLevels) -> Result<MemoryReading> {
     })
 }
 
+/// The machine's RAM in bytes.
+#[cfg(target_os = "macos")]
+pub fn ram() -> Result<u64> {
+    sysctl(c"hw.memsize")
+}
+
 /// macOS reports the percentage of memory available beside its pressure level.
 #[cfg(target_os = "macos")]
 fn native_memory() -> Result<Memory> {
@@ -239,6 +256,11 @@ fn sysctl<T: Default>(name: &std::ffi::CStr) -> Result<T> {
         name.to_string_lossy()
     );
     Ok(value)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+pub fn ram() -> Result<u64> {
+    anyhow::bail!("memory monitoring is unsupported on this platform")
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
