@@ -301,8 +301,9 @@ impl Manager {
         forge: &ForgeRepo,
         job: &QueuedJob,
     ) -> Result<()> {
-        let linked = self
+        let linked = (self.runner)
             .link_job(
+                self,
                 forge,
                 entry.job_repository()?,
                 job.job.clone(),

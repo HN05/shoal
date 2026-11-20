@@ -68,8 +68,8 @@ impl Manager {
             run: took.run,
             ..job.job.job.clone()
         };
-        let mut record = self
-            .link_job(&forge, &job.repository_id, taken_job, taken_run)
+        let mut record = (self.runner)
+            .link_job(self, &forge, &job.repository_id, taken_job, taken_run)
             .await?;
         // Recorded first, so stopping the job cancels the run it belongs
         // to whatever fails next.

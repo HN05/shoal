@@ -331,6 +331,6 @@ async fn a_waiting_job_serves_the_workspace_that_links_its_pr_after_it_queued() 
         })
         .await
         .unwrap();
-    let linked = manager.waiting_job_spaces().await.unwrap();
+    let linked = manager.runner.waiting_job_spaces(&*manager).await.unwrap();
     assert_eq!(linked[&entry.id], [pull.id]);
 }

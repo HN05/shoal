@@ -91,7 +91,8 @@ impl Manager {
                 continue;
             }
             let run = forge.job_run(&account, job.run).await?;
-            let mut job = self.link_job(&forge, &repository.id, job, run).await?;
+            let linked = self.runner.link_job(self, &forge, &repository.id, job, run);
+            let mut job = linked.await?;
             job.default_branch =
                 on_branch(&job.run, default_branch.as_ref().map(BranchName::as_str));
             let id = repository.id.clone();

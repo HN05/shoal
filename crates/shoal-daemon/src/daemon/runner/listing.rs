@@ -75,7 +75,7 @@ impl Manager {
             if let (Some(job), Some(repository)) =
                 (entry.job.as_deref_mut(), entry.repository_id.as_ref())
             {
-                self.relink_job(&spaces, repository, job).await;
+                self.runner.relink_job(self, &spaces, repository, job).await;
             }
         }
         Ok(entries)
@@ -89,7 +89,8 @@ impl Manager {
         }
         let spaces = self.present_spaces().await?;
         for job in &mut claimed {
-            self.relink_job(&spaces, &job.repository_id, &mut job.job)
+            (self.runner)
+                .relink_job(self, &spaces, &job.repository_id, &mut job.job)
                 .await;
         }
         Ok(claimed)

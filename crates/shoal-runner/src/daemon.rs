@@ -12,12 +12,12 @@ use rusqlite::Connection;
 use shoal_core::config::{Config, Effective, repo::ConfigLayers};
 use shoal_daemon_base::callers::Caller;
 use shoal_forge::account::Account;
-use shoal_forge_types::ForgeRepo;
+use shoal_forge_types::{ForgeRepo, items::reference::ItemRef};
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     config::permissions::PermissionKey,
     launches::{Launch, LaunchSource},
-    model::Repository,
+    model::{QueuedJob, Repository, Space},
     protocol::ItemContext,
 };
 
@@ -106,13 +106,22 @@ pub trait Forges: Send + Sync {
 
     /// The forge repository at the web URL `url`.
     fn resolve_forge<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<ForgeRepo>>;
+
+    /// The forge repository `item` belongs to.
+    fn item_forge<'a>(&'a self, item: &'a ItemRef) -> BoxFuture<'a, Result<ForgeRepo>>;
+}
+
+/// The spaces a job's run is for.
+pub trait Spaces: Send + Sync {
+    /// The spaces this machine has.
+    fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>>;
 }
 
 /// Everything the triggers and the runner need of the daemon, which each of
 /// their operations that reaches beyond them takes.
-pub trait Daemon: Repositories + Agents + Permissions + Forges {}
+pub trait Daemon: Repositories + Agents + Permissions + Forges + Spaces {}
 
-impl<T> Daemon for T where T: Repositories + Agents + Permissions + Forges {}
+impl<T> Daemon for T where T: Repositories + Agents + Permissions + Forges + Spaces {}
 
 /// The agent queue's rows the runner changes in its own connection or
 /// transaction. Its methods run on the store's thread, so they are not
@@ -120,4 +129,8 @@ impl<T> Daemon for T where T: Repositories + Agents + Permissions + Forges {}
 pub trait Records: Send + Sync {
     /// Take the job entries of `repository` out of the agent queue.
     fn forget_job_entries(&self, db: &Connection, repository: &RepositoryId) -> Result<()>;
+
+    /// Each waiting job's entry ID, repository and job.
+    fn waiting_jobs(&self, db: &Connection)
+    -> Result<Vec<(QueueEntryId, RepositoryId, QueuedJob)>>;
 }

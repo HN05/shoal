@@ -13,7 +13,6 @@
 mod claims;
 mod costs;
 mod ends;
-mod linked;
 mod listing;
 mod overrun;
 mod single_use;
@@ -30,15 +29,19 @@ use anyhow::Result;
 use futures_util::future::BoxFuture;
 use rusqlite::{Connection, params};
 use shoal_forge::{RepoRequests, account::Account};
+use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_runner::{daemon::Forges, jobs::INTERVAL};
+use shoal_runner::{
+    daemon::{Forges, Spaces},
+    jobs::INTERVAL,
+};
 use tokio::time::Instant;
 
 use crate::{
     daemon::{log, manager::Manager},
-    forge::ForgeRepo,
-    model::Repository,
-    state::QueueKind,
+    forge::{ForgeRepo, items::reference::ItemRef},
+    model::{QueuedJob, Repository, Space},
+    state::{QueueKind, QueueState},
 };
 
 /// How often the forge's waiting jobs are read while one could start.
@@ -121,6 +124,26 @@ impl shoal_runner::daemon::Records for RunnerRecords {
         )?;
         Ok(())
     }
+
+    fn waiting_jobs(
+        &self,
+        db: &Connection,
+    ) -> Result<Vec<(QueueEntryId, RepositoryId, QueuedJob)>> {
+        let rows = db
+            .prepare(
+                "SELECT id,repository_id,job FROM agent_queue
+                 WHERE kind=?1 AND state=?2 AND job IS NOT NULL",
+            )?
+            .query_map(params![QueueKind::Job, QueueState::Queued], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get::<_, String>(2)?))
+            })?
+            .collect::<rusqlite::Result<Vec<(QueueEntryId, RepositoryId, String)>>>()?;
+        let mut jobs = Vec::new();
+        for (id, repository, job) in rows {
+            jobs.push((id, repository, serde_json::from_str(&job)?));
+        }
+        Ok(jobs)
+    }
 }
 
 impl Forges for Manager {
@@ -137,6 +160,16 @@ impl Forges for Manager {
 
     fn resolve_forge<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<ForgeRepo>> {
         Box::pin(async move { ForgeRepo::resolve(url, &self.forge_hosts()).await })
+    }
+
+    fn item_forge<'a>(&'a self, item: &'a ItemRef) -> BoxFuture<'a, Result<ForgeRepo>> {
+        Box::pin(Manager::item_forge(self, item))
+    }
+}
+
+impl Spaces for Manager {
+    fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>> {
+        Box::pin(Manager::present_spaces(self))
     }
 }
 

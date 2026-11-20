@@ -23,19 +23,20 @@ use shoal_forge::{
     RepoRequests,
     account::Account,
     hosts::{HostType, HostTypes},
+    items::reference::ReferenceRequests,
 };
-use shoal_forge_types::{ForgeRepo, backends::ForgeKind};
+use shoal_forge_types::{ForgeRepo, backends::ForgeKind, items::reference::ItemRef};
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     config::permissions::PermissionKey,
     launches::{Launch, LaunchSource},
-    model::Repository,
+    model::{QueuedJob, Repository, Space},
     protocol::ItemContext,
 };
 
 use crate::{
     Runner,
-    daemon::{Agents, Daemon, Forges, Permissions, Records, Repositories},
+    daemon::{Agents, Daemon, Forges, Permissions, Records, Repositories, Spaces},
 };
 
 /// The service over a stand-in daemon with one registered repository.
@@ -74,6 +75,7 @@ impl Fixture {
             queue: Mutex::default(),
             opened: Mutex::default(),
             forgotten: Mutex::default(),
+            spaces: Mutex::default(),
         });
         let runner = runner(&root, &daemon).await;
         let record = daemon.repository.clone();
@@ -162,6 +164,8 @@ pub(crate) struct StandIn {
     pub(crate) opened: Mutex<HashMap<QueueEntryId, SpaceId>>,
     /// The repositories whose job entries left the queue, in order.
     pub(crate) forgotten: Mutex<Vec<RepositoryId>>,
+    /// The spaces this machine has.
+    pub(crate) spaces: Mutex<Vec<Space>>,
 }
 
 impl StandIn {
@@ -335,6 +339,17 @@ impl Forges for StandIn {
     fn resolve_forge<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<ForgeRepo>> {
         Box::pin(async move { ForgeRepo::resolve(url, &self.hosts()).await })
     }
+
+    fn item_forge<'a>(&'a self, item: &'a ItemRef) -> BoxFuture<'a, Result<ForgeRepo>> {
+        Box::pin(async move { item.forge(&self.hosts()).await })
+    }
+}
+
+impl Spaces for StandIn {
+    fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>> {
+        let spaces = self.spaces.lock().unwrap().clone();
+        Box::pin(async move { Ok(spaces) })
+    }
 }
 
 /// The agent queue's rows, which the stand-in only records the runner
@@ -343,6 +358,11 @@ impl Records for StandIn {
     fn forget_job_entries(&self, _: &Connection, repository: &RepositoryId) -> Result<()> {
         self.forgotten.lock().unwrap().push(repository.clone());
         Ok(())
+    }
+
+    /// The stand-in's queue holds no jobs.
+    fn waiting_jobs(&self, _: &Connection) -> Result<Vec<(QueueEntryId, RepositoryId, QueuedJob)>> {
+        Ok(Vec::new())
     }
 }
 
