@@ -48,12 +48,17 @@ impl Manager {
             Some(caller) => self.speaker(caller).await?.1.to_string(),
             None => "the user".to_owned(),
         };
-        let id = thread.id;
+        let (id, removing) = (thread.id, self.space_removals.clone());
         let (thread, delivered) = self
             .store
             .write(move |tx| {
                 records::set_resolution(tx, id, resolution.as_ref())?;
                 let thread = records::reread(tx, id)?;
+                // A reopened thread that waits keeps the space that opened
+                // it, which a space reserved for removal takes no more.
+                if thread.is_waiting() && thread.opener == Sender::Space {
+                    removing.require_taking_work(tx, &thread.space_id)?;
+                }
                 let delivered = tell_resolution(tx, &thread, side, &by)?;
                 Ok((thread, delivered))
             })

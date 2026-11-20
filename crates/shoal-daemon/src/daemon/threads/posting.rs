@@ -16,6 +16,7 @@ use super::{
 use crate::daemon::{
     manager::Manager,
     scope::Caller,
+    spaces::Removing,
     workspace_files::{self, FileSource, NewFile, SentFile},
 };
 
@@ -88,7 +89,9 @@ impl Poster {
 }
 
 /// Record `post` with `files` from `poster` in the thread `id`, which must
-/// still be open, and deliver it; the thread as it is now.
+/// still be open, and deliver it; the thread as it is now. A post from the
+/// side of a space that opened the thread makes the thread wait, which
+/// keeps that space, so a space `removing` reserved takes none.
 pub(super) fn record_post(
     tx: &Transaction<'_>,
     id: i64,
@@ -96,9 +99,13 @@ pub(super) fn record_post(
     post: &NewPost,
     files: &[SentFile],
     in_chat: bool,
+    removing: &Removing,
 ) -> Result<(Thread, Delivered)> {
     let thread = records::reread(tx, id)?;
     ensure_open(&thread)?;
+    if poster.side == Side::Opener && thread.opener == Sender::Space {
+        removing.require_taking_work(tx, &thread.space_id)?;
+    }
     records::insert_post(
         tx,
         &NewRecord {
@@ -145,7 +152,7 @@ impl Manager {
         };
         let attacher = self.attacher(caller).await;
         let text = post.text.clone();
-        let id = thread.id;
+        let (id, removing) = (thread.id, self.space_removals.clone());
         let (thread, delivered) = self
             .send_with_files(
                 &files_space.into(),
@@ -154,8 +161,9 @@ impl Manager {
                 attachments,
                 &attacher,
                 |files| {
-                    self.store
-                        .write(move |tx| record_post(tx, id, &poster, &post, &files, false))
+                    self.store.write(move |tx| {
+                        record_post(tx, id, &poster, &post, &files, false, &removing)
+                    })
                 },
             )
             .await?;

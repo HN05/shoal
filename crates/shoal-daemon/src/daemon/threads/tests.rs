@@ -358,6 +358,22 @@ async fn a_rename_keeps_a_full_thread_within_one_response() {
 }
 
 #[tokio::test]
+async fn a_space_being_removed_starts_no_wait() {
+    let tree = tree().await;
+    let manager = &tree.manager;
+    let child = caller(&tree.child);
+    let thread = open(manager, Some(&child), None).await;
+    let _removal = manager.space_removals.reserve(&tree.child.id).unwrap();
+    let asked = manager.post_to_thread(Some(&child), full(&thread), post("Which?"), Vec::new());
+    assert!(asked.await.is_err());
+    assert!(!manager.has_waiting_threads(&tree.child.id).await.unwrap());
+    // Its holder's post makes nothing wait.
+    let parent = caller(&tree.parent);
+    let told = manager.post_to_thread(Some(&parent), full(&thread), post("FYI"), Vec::new());
+    told.await.unwrap();
+}
+
+#[tokio::test]
 async fn the_opener_resolves_its_thread_and_takes_back_an_unread_notice() {
     let tree = tree().await;
     let manager = &tree.manager;

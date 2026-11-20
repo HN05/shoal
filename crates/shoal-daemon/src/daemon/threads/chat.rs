@@ -224,6 +224,7 @@ impl Manager {
     ) -> Result<()> {
         let space = self.space(selector).await?;
         let post = in_chat(message.as_deref());
+        let removing = self.space_removals.clone();
         let delivered = self
             .store
             .write(move |tx| {
@@ -239,7 +240,7 @@ impl Manager {
                     side,
                     space: Some((space.id.clone(), space.name.clone())),
                 };
-                let (_, delivered) = record_post(tx, id, &poster, &post, &[], true)?;
+                let (_, delivered) = record_post(tx, id, &poster, &post, &[], true, &removing)?;
                 Ok(delivered)
             })
             .await?;
