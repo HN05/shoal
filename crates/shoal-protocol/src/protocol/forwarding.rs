@@ -187,6 +187,7 @@ impl Operation {
                     ItemMethod::LinkItem { .. }
                         | ItemMethod::UnlinkItems { .. }
                         | ItemMethod::ViewItems { .. }
+                        | ItemMethod::ListItems { .. }
                         | ItemMethod::ItemAction { .. }
                         | ItemMethod::SelectItems { .. }
                         | ItemMethod::OpenIssue { .. }
