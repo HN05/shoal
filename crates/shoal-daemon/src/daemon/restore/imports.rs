@@ -18,6 +18,7 @@ use crate::{
     },
     time::UnixTime,
 };
+use shoal_hub::ClaimFailure;
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
 use std::collections::{BTreeMap, BTreeSet};
@@ -76,8 +77,8 @@ impl Manager {
     /// hub, so it takes the ID over from the machine it moves from; with
     /// the warnings of what it changed. An error leaves no record. The
     /// claim of a move through the hub makes the space this machine's, so
-    /// a refused one forgets the record, and an import whose claim stood
-    /// keeps the record for `shoal restore` whatever fails after it.
+    /// one the hub refused forgets the record, and an import whose claim
+    /// stood, or may have, keeps the record for `shoal restore`.
     pub(crate) async fn record_import(
         &self,
         import: SpaceImport,
@@ -91,12 +92,17 @@ impl Manager {
             self.hub.claim_space(self, &id).await;
             return Ok(recorded);
         };
-        if let Err(error) = self.hub.claim_moved(self, &id, &ticket).await {
-            self.forget_unclaimed(&id).await;
-            let error = error.context("the hub took no claim of it");
-            return Err(Refusal::wrap(Reason::NotImported, error));
+        match self.hub.claim_moved(self, &id, &ticket).await {
+            Ok(()) => Ok(recorded),
+            Err(ClaimFailure::Refused(error)) => {
+                self.forget_unclaimed(&id).await;
+                let error = error.context("the hub took no claim of it");
+                Err(Refusal::wrap(Reason::NotImported, error))
+            }
+            Err(ClaimFailure::Unknown(error)) => Err(error.context(format!(
+                "the hub may have taken this machine's claim of it, so its record stays here for shoal restore {id}"
+            ))),
         }
-        Ok(recorded)
     }
 
     /// Forget the removal record an import of the space `id` made, whose

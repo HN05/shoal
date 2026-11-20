@@ -23,6 +23,7 @@ use shoal_store::Store;
 
 pub use forwarding::{Elsewhere, Unanswered};
 pub use machines::Named;
+pub use owners::ClaimFailure;
 pub use streams::{Incoming, Outgoing};
 pub use telling::Event;
 

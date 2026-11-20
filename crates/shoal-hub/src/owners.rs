@@ -14,8 +14,27 @@ use shoal_protocol::hub::{
     link::{Call, Reply},
 };
 
-use super::membership;
+use super::{membership, session};
 use crate::{Hub, daemon::Daemon, log};
+
+/// Why the claim of a space that a move through the hub brings failed.
+#[derive(Debug)]
+pub enum ClaimFailure {
+    /// The hub took no claim.
+    Refused(anyhow::Error),
+    /// The hub may have taken it, as when its answer never came.
+    Unknown(anyhow::Error),
+}
+
+impl ClaimFailure {
+    /// The failure a call to claim a space failed with `error` is.
+    fn of(error: anyhow::Error) -> Self {
+        match error.is::<session::Unanswered>() {
+            true => Self::Unknown(error),
+            false => Self::Refused(error),
+        }
+    }
+}
 
 impl Hub {
     /// Refuse to open the space `id` again while the hub lists it on
@@ -61,16 +80,23 @@ impl Hub {
 
     /// Claim the space `id` at the hub for the move `ticket` through it,
     /// which this machine imports, and keep the number the hub keeps for
-    /// it; refused while the hub cannot be asked, or once the move's
-    /// source settled it without this claim, so the import records nothing
-    /// and the space stays where it was.
+    /// it, without which the claim stands too. The hub refuses it while it
+    /// cannot be asked, or once the move's source settled the move without
+    /// it, so the import records nothing and the space stays where it was;
+    /// a claim whose answer never came may stand.
     pub async fn claim_moved(
         &self,
         daemon: &dyn Daemon,
         id: &SpaceId,
         ticket: &MoveTicket,
-    ) -> Result<()> {
-        self.claim_with(daemon, id, Some(ticket)).await
+    ) -> Result<(), ClaimFailure> {
+        let claimed = self.claim_at_hub(daemon, id, Some(ticket)).await;
+        if let Some(number) = claimed.map_err(ClaimFailure::of)?
+            && let Err(error) = self.keep_imported_number(id, number).await
+        {
+            log!("hub: could not keep the number of space {id}: {error:#}");
+        }
+        Ok(())
     }
 
     /// Claim the space `id` at the hub, with the `ticket` of the move that
