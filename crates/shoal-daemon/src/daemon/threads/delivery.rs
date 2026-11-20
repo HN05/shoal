@@ -165,6 +165,11 @@ pub(super) fn retract(tx: &Transaction<'_>, thread: &Thread, party: &Party) -> R
     Ok(deleted > 0)
 }
 
+/// Take back the alert `id` while it is unread; whether it was.
+pub(super) fn retract_alert(tx: &Transaction<'_>, id: i64) -> Result<bool> {
+    Ok(tx.execute("DELETE FROM alerts WHERE id=?1 AND read=0", [id])? > 0)
+}
+
 /// What an alert of `kind` says to an agent and, in one line, to the user.
 pub(super) struct Texts {
     pub(super) kind: AlertKind,

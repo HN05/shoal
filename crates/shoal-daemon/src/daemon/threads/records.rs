@@ -307,6 +307,28 @@ pub(super) fn insert_post(tx: &Transaction<'_>, new: &NewRecord<'_>) -> Result<i
     Ok(tx.last_insert_rowid())
 }
 
+/// Replace the text of the post `post` with `text`.
+pub(super) fn replace_text(tx: &Transaction<'_>, post: i64, text: &str) -> Result<()> {
+    tx.execute(
+        "UPDATE thread_posts SET text=?2 WHERE id=?1",
+        params![post, text],
+    )?;
+    Ok(())
+}
+
+/// Delete Shoal's posts in the thread `id` made at `since` or later, as the
+/// ones that told its opener a closing did; how many there were.
+pub(super) fn drop_shoal_posts_since(
+    tx: &Transaction<'_>,
+    id: i64,
+    since: Option<crate::time::UnixTime>,
+) -> Result<usize> {
+    Ok(tx.execute(
+        "DELETE FROM thread_posts WHERE thread_id=?1 AND sender='shoal' AND created_at>=?2",
+        params![id, since],
+    )?)
+}
+
 /// Record that the alert `alert` carried the post `post`.
 pub(super) fn set_alert(tx: &Transaction<'_>, post: i64, alert: i64) -> Result<()> {
     tx.execute(

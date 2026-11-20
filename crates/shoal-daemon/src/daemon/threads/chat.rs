@@ -146,16 +146,13 @@ fn record_replies(
         // A prompt too long for the thread records only that the user
         // replied, which the agent read in its chat.
         if records::ensure_fits(&records::reread(tx, thread.id)?).is_err() {
-            tx.execute(
-                "UPDATE thread_posts SET text=?2 WHERE id=?1",
-                rusqlite::params![reply_id, REPLIED],
-            )?;
+            records::replace_text(tx, reply_id, REPLIED)?;
         }
         let Some(party) = Party::of(&thread, side) else {
             continue;
         };
         let retracted = match post.alert_id {
-            Some(alert) => tx.execute("DELETE FROM alerts WHERE id=?1 AND read=0", [alert])? > 0,
+            Some(alert) => delivery::retract_alert(tx, alert)?,
             None => false,
         };
         if !retracted && party != Party::User {

@@ -112,16 +112,8 @@ pub(crate) fn reopen(
     let label = records::label(tx, space_id)?;
     let mut delivered = Delivered::default();
     for thread in &closed {
-        let told = tx.execute(
-            "DELETE FROM thread_posts WHERE thread_id=?1 AND sender='shoal' AND created_at>=?2",
-            params![
-                thread.id,
-                thread
-                    .resolution
-                    .as_ref()
-                    .map(|resolution| resolution.resolved_at)
-            ],
-        )?;
+        let closed_at = (thread.resolution.as_ref()).map(|resolution| resolution.resolved_at);
+        let told = records::drop_shoal_posts_since(tx, thread.id, closed_at)?;
         records::set_resolution(tx, thread.id, None)?;
         if told == 0 {
             continue;

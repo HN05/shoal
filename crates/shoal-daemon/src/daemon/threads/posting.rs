@@ -146,21 +146,13 @@ impl Manager {
         let post = picked(&thread, side, post)?;
         validate(&post)?;
         let poster = self.poster(caller, side, &thread.holder).await?;
-        // A poster on another machine keeps its files in the thread's space.
-        let files_space = match &poster.space {
-            Some((id, _)) => self.find_space(id).await?,
-            None => None,
-        };
-        let files_space = match files_space {
-            Some(space) => space,
-            None => self.space(&SpaceSelector::id(&thread.space_id)).await?,
-        };
+        let files_space = self.files_space(&poster, &thread).await?;
         let attacher = self.attacher(caller).await;
         let text = post.text.clone();
         let (id, removing) = (thread.id, self.space_removals.clone());
         let (thread, delivered) = self
             .send_with_files(
-                &files_space.into(),
+                &files_space,
                 FileSource::Thread,
                 &text,
                 attachments,
@@ -174,6 +166,27 @@ impl Manager {
             .await?;
         self.announce_threads(delivered).await;
         Ok(thread)
+    }
+
+    /// The space whose attached files keep the files `poster` sends in
+    /// `thread`: the poster's own, or the thread's for the user or a
+    /// poster on another machine.
+    async fn files_space(
+        &self,
+        poster: &Poster,
+        thread: &Thread,
+    ) -> Result<workspace_files::Space> {
+        let own = match &poster.space {
+            Some((id, _)) => self.find_space(id).await?,
+            None => None,
+        };
+        match own {
+            Some(space) => Ok(space.into()),
+            None => Ok(self
+                .space(&SpaceSelector::id(&thread.space_id))
+                .await?
+                .into()),
+        }
     }
 
     /// Who posts for `caller` on `side`, checked while `seen` held the
