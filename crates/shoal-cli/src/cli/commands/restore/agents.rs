@@ -27,7 +27,7 @@ pub struct Options {
     /// Forget the stopped work instead of restoring it.
     pub forget: bool,
     /// Restore everything but the agents, which stay saved.
-    pub no_agents: bool,
+    pub no_resume: bool,
     /// Start the restores at once, regardless of the agent limits.
     pub now: bool,
     /// Restore one agent in this terminal.
@@ -58,7 +58,7 @@ pub(super) async fn restore(
 ) -> Result<i32> {
     let scoped = crate::process::scoped::inherits_scope(&ctx.paths.state);
     let change = options.change.as_ref();
-    let restores_agents = !options.forget && !options.no_agents;
+    let restores_agents = !options.forget && !options.no_resume;
     let whole = named && !options.forget && options.execution.is_none();
     if whole {
         setups::take_failed(ctx, &mut selected).await?;
@@ -68,7 +68,7 @@ pub(super) async fn restore(
     if !options.forget && options.execution.is_none() {
         failed_starts::take(ctx, &mut selected).await?;
     }
-    let turns = match whole && !options.no_agents {
+    let turns = match whole && !options.no_resume {
         true => interrupted_turns(ctx, &mut selected, change.is_some()).await?,
         false => Continuation::default(),
     };
@@ -133,7 +133,7 @@ impl Alongside {
 
 /// Restore the `selected` spaces once the workspaces reopened for them are
 /// open again, with what it does `alongside`: everything but the agents for
-/// `--no-agents`, otherwise their agents too, the reopened workspaces'
+/// `--no-resume`, otherwise their agents too, the reopened workspaces'
 /// among them.
 async fn restore_reopened(
     ctx: &Context,
@@ -141,7 +141,7 @@ async fn restore_reopened(
     mut alongside: Alongside,
     options: Options,
 ) -> Result<i32> {
-    if options.no_agents {
+    if options.no_resume {
         return restore_without_agents(ctx, &selected, alongside).await;
     }
     select_reopened(ctx, &mut selected, &mut alongside.reopened).await?;

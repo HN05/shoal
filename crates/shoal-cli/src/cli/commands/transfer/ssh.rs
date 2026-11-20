@@ -114,7 +114,7 @@ impl Remote {
     async fn import(&self, file: &Path) -> Result<Reopened, ImportFailure> {
         let mut args = vec!["restore", "--from", "-"];
         if !self.restore {
-            args.push("--no-agents");
+            args.push("--no-resume");
         }
         let input =
             std::fs::File::open(file).map_err(|error| ImportFailure::Refused(error.into()))?;

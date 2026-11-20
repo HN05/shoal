@@ -147,7 +147,7 @@ fn restore_without_agents_leaves_a_live_spaces_stopped_work_saved() {
     let fixture = Fixture::new();
     let stopped = fixture.add("stopped");
     fixture.save_stopped_command(&stopped);
-    let restored = fixture.ok(&["restore", &fixture.id("stopped"), "--no-agents"]);
+    let restored = fixture.ok(&["restore", &fixture.id("stopped"), "--no-resume"]);
     assert_eq!(restored["commands"], serde_json::json!([]), "{restored}");
     let listed = fixture.ok(&["restore"]);
     assert_eq!(listed["stopped"][0]["saved"]["commands"], 1, "{listed}");
@@ -345,7 +345,7 @@ fn restoring_a_removed_workspace_queues_the_agent_its_removal_stopped() {
 #[test]
 fn restoring_a_removed_workspace_without_agents_keeps_them_for_a_later_restore() {
     let removed = RemovedWithAgent::new();
-    let (restored, reopened) = removed.restore(&["--no-agents"]);
+    let (restored, reopened) = removed.restore(&["--no-resume"]);
     assert_eq!(restored["queued"], serde_json::json!([]), "{restored}");
     assert_eq!(reopened["agents_saved"], true, "{restored}");
     // The interrupted command is not saved, so only the agent restores.

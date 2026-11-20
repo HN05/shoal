@@ -938,7 +938,7 @@ fn resume_with_focus_runs_the_agent_waiting_for_a_failed_setup_here() {
 fn restore_without_agents_retries_a_failed_setup() {
     let fixture = failing_setup_fixture();
     fail_setup(&fixture, "failing");
-    let restored = fixture.ok(&["restore", &fixture.id("failing"), "--no-agents"]);
+    let restored = fixture.ok(&["restore", &fixture.id("failing"), "--no-resume"]);
     assert_eq!(
         restored["set_up"].as_array().unwrap().len(),
         1,

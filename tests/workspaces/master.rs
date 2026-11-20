@@ -183,7 +183,7 @@ fn a_master_session_moves_and_continues_its_session_in_root_dir() {
         "{exported}"
     );
     assert_eq!(fixture.ok(&["list", "--chats"]), serde_json::json!([]));
-    fixture.ok(&["restore", "--from", file, "--no-agents"]);
+    fixture.ok(&["restore", "--from", file, "--no-resume"]);
     let imported = run_agent(&fixture, &["restore", &id, "--focus"]);
     assert_eq!(
         (

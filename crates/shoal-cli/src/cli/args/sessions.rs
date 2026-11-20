@@ -50,7 +50,7 @@ pub enum SessionsCommand {
             long,
             value_name = "N",
             num_args = 0..=1,
-            conflicts_with_all = ["all", "execution", "forget", "no_agents", "now", "focus", "permissions"]
+            conflicts_with_all = ["all", "execution", "forget", "no_resume", "now", "focus", "permissions"]
         )]
         checkpoint: Option<Option<CheckpointNumber>>,
         /// Select a stopped execution when the workspace has several records.
@@ -63,7 +63,7 @@ pub enum SessionsCommand {
         /// removed workspace again, or the spaces --from reads, or retry a failed setup, whose
         /// waiting agent stays queued.
         #[arg(long, conflicts_with_all = ["forget", "now", "focus", "permissions"])]
-        no_agents: bool,
+        no_resume: bool,
         /// Start at once regardless of the agent limits, where each agent
         /// stopped or in the background.
         #[arg(long, conflicts_with = "forget")]

@@ -302,7 +302,7 @@ impl Target {
         let now = super::restore::agents::Options {
             execution: None,
             forget: false,
-            no_agents: false,
+            no_resume: false,
             now: true,
             focus: false,
             change: None,

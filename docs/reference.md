@@ -530,7 +530,7 @@ is restored, naming `--focus` to restore one agent here. `-f`/`--focus` restores
 regardless of the limits.
 Use `--forget` to forget the workspace's stopped agents, last sessions and commands, every
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
-`--no-agents` restores everything but the agents, which stay saved: it reopens a
+`--no-resume` restores everything but the agents, which stay saved: it reopens a
 removed workspace and retries a failed setup, leaving the agent waiting for it
 in the queue as `shoal setup` does, and with nothing else to restore reports
 that.
@@ -4524,7 +4524,7 @@ keeps the workspace's ID, takes an ID of its own with the checkpoints, which
 `shoal restore` lists and opens it under beside that chat. Once its post-setup hook succeeds, it restores those agents and last
 sessions as it restores a stopped space's, queued unless `--now` or `--focus`, under
 `--permission`; one it cannot restore is reported and stays saved, and the workspace
-stays open. `--no-agents` keeps them saved for a later `shoal restore`, keeping the
+stays open. `--no-resume` keeps them saved for a later `shoal restore`, keeping the
 workspace from idle cleanup as stopped work does, and `--forget` forgets them.
 An agent whose session another space here holds, running or stopped, starts
 from a fork of it, as a [copy](#copies)'s does, with a warning naming that
@@ -4739,7 +4739,7 @@ repository. The spaces a file carries open again after its space the same way,
 parents first, each below its parent and each workspace set up before the
 spaces below it; one that cannot open fails the import, which goes on with the
 rest and names each failure, so `shoal move ssh` keeps the spaces here, and its
-record, where the import made one, stays for `shoal restore <id>`. With `--no-agents`, the agents of every imported space
+record, where the import made one, stays for `shoal restore <id>`. With `--no-resume`, the agents of every imported space
 stay stopped and the report names the `shoal restore` that restores them.
 An import is refused, before it records anything, when a space with the ID of
 the package's space, or of a space it carries, is already here, or a carried

@@ -2704,7 +2704,7 @@ fn a_removed_chat_restores_under_its_id_from_the_removed_chats() {
     assert_eq!(removed[0]["workspace_id"], chat.as_str(), "{listed}");
     assert!(removed[0]["chat"].is_object(), "{listed}");
 
-    let restored = fixture.ok(&["restore", &chat, "--no-agents"]);
+    let restored = fixture.ok(&["restore", &chat, "--no-resume"]);
     let reopened = &restored["reopened"][0];
     assert_eq!(reopened["space"]["kind"], "chat", "{restored}");
     assert_eq!(reopened["space"]["id"], chat.as_str(), "{restored}");
@@ -2714,7 +2714,7 @@ fn a_removed_chat_restores_under_its_id_from_the_removed_chats() {
     assert_eq!(fixture.ok(&["restore"])["removed"], serde_json::json!([]));
 }
 
-/// A chat's failed launch restores only with its agent: `--no-agents`
+/// A chat's failed launch restores only with its agent: `--no-resume`
 /// leaves it failed, and `shoal restore` queues it again and reports it.
 #[test]
 fn a_chats_failed_launch_restores_only_with_its_agent() {
@@ -2724,10 +2724,10 @@ fn a_chats_failed_launch_restores_only_with_its_agent() {
 
     fixture
         .command()
-        .args(["restore", &chat, "--no-agents"])
+        .args(["restore", &chat, "--no-resume"])
         .output()
         .unwrap();
-    assert_failed_launch_kept(&fixture, "after --no-agents");
+    assert_failed_launch_kept(&fixture, "after --no-resume");
 
     let restored = fixture.ok(&["restore", &chat]);
     let queued: Vec<_> = (restored["queued"].as_array().unwrap().iter())
