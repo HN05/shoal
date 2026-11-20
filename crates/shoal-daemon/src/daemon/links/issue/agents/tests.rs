@@ -133,7 +133,11 @@ async fn a_moved_space_leaves_the_agent_account_to_the_other_machine() {
     let workspace = &fixture.workspaces[0];
     fixture.link_as(workspace, Assigner::Agent).await;
     let manager = &fixture.manager;
-    manager.hand_over_assignees(&workspace.id).await.unwrap();
+    manager
+        .links
+        .hand_over_assignees(&workspace.id)
+        .await
+        .unwrap();
     remove(&fixture, workspace).await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"])]);
 }

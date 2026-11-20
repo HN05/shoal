@@ -19,23 +19,33 @@ pub mod wait;
 
 use std::sync::Arc;
 
-use shoal_daemon_base::config_state::ConfigState;
+use shoal_daemon_base::{config_state::ConfigState, gates::Gates, notifications::Notifications};
 use shoal_store::Store;
 
 /// The links' service, which `Manager` holds.
 pub struct Links {
     store: Store,
+    gates: Arc<Gates>,
     config: Arc<ConfigState>,
+    notifications: Arc<Notifications>,
     records: Arc<dyn daemon::Records>,
     memories: memories::ForgeMemories,
     waits: wait::ActiveWaits,
 }
 
 impl Links {
-    pub fn new(store: Store, config: Arc<ConfigState>, records: Arc<dyn daemon::Records>) -> Self {
+    pub fn new(
+        store: Store,
+        gates: Arc<Gates>,
+        config: Arc<ConfigState>,
+        notifications: Arc<Notifications>,
+        records: Arc<dyn daemon::Records>,
+    ) -> Self {
         Self {
             store,
+            gates,
             config,
+            notifications,
             records,
             memories: Default::default(),
             waits: Default::default(),

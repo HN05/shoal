@@ -132,7 +132,9 @@ impl Manager {
         ));
         let links = Arc::new(shoal_links::Links::new(
             store.clone(),
+            gates.clone(),
             config_state.clone(),
+            notifications.clone(),
             Arc::new(super::links::records::LinkRecords),
         ));
         let reviews = Arc::new(shoal_reviews::Reviews::new(

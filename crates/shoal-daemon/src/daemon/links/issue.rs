@@ -79,11 +79,15 @@ impl Manager {
     ) -> Vec<String> {
         let assign = match self.acting_settings(space).await {
             Ok(settings) => settings.issue.assign,
-            Err(error) => return vec![assignees::unassigned(url, &error)],
+            Err(error) => return vec![shoal_links::issue::assignees::unassigned(url, &error)],
         };
         let mut warnings = Vec::new();
         if fresh && assign.user() {
-            warnings.extend(self.assign_on_forge(&space.id, forge, url).await);
+            warnings.extend(
+                self.links
+                    .assign_on_forge(self, &space.id, forge, url)
+                    .await,
+            );
         }
         if assign.agent() {
             // The user's assignment names the others already.
@@ -134,7 +138,7 @@ impl Manager {
             .write(move |tx| links.unlink(tx, &id, selected.as_ref().map(ItemRef::url)))
             .await?;
         self.signals.wake_cleanup();
-        let mut warnings = self.release_assignees(dropped).await;
+        let mut warnings = self.links.release_assignees(self, dropped).await;
         warnings.extend(self.settle_issue_agents(&space, &removed).await);
         Ok(warnings)
     }
@@ -157,13 +161,6 @@ pub(crate) fn removed_issues(db: &Connection, id: &SpaceId) -> Result<Vec<ItemRe
 /// worked without one.
 pub(crate) fn agent_ended(db: &Connection, id: &SpaceId) -> Result<()> {
     agent_records::agent_ended(db, id)
-}
-
-/// What the caller hears of the issue `url`'s assignees but the accounts
-/// Shoal assigns: the `others`.
-fn also_assigned(url: &ItemRef, others: &[String]) -> String {
-    let others = others.join(", ");
-    format!("{url} is also assigned to {others}")
 }
 
 #[cfg(test)]

@@ -215,7 +215,7 @@ impl Manager {
         let unsaved = record.unsaved.clone();
         let moved = (self.moved_work(space, unsaved, exported.get(&space.id).copied())).await?;
         for handed in std::iter::once(space).chain(&carried) {
-            self.hand_over_assignees(&handed.id).await?;
+            self.links.hand_over_assignees(&handed.id).await?;
         }
         let leaving = (&record.carrying, &record.destination);
         self.leave_uncarried(space, &carried, leaving).await?;

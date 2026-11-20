@@ -6,6 +6,7 @@ use anyhow::Result;
 use futures_util::future::BoxFuture;
 use rusqlite::Connection;
 use shoal_daemon_base::{callers::Caller, permitted_actions::Action};
+use shoal_forge::updates::Edited;
 use shoal_forge_types::{
     ForgeRepo,
     items::{
@@ -102,4 +103,8 @@ pub trait Records: Send + Sync {
     /// Refuse a change to the links, cursor or marks of the space `id`
     /// while it is not ready, as a removed space is not.
     fn require_ready_space(&self, db: &Connection, id: &SpaceId) -> Result<()>;
+
+    /// Record `edited`, a change Shoal just made on its own to the item
+    /// `url`, on every space's cursor of the item, so no watch reports it.
+    fn record_shoal_change(&self, db: &Connection, url: &str, edited: &Edited) -> Result<()>;
 }

@@ -309,7 +309,7 @@ impl Manager {
         dropped: Vec<Dropped>,
         issues: &[ItemRef],
     ) {
-        let mut warnings = self.release_assignees(dropped).await;
+        let mut warnings = self.links.release_assignees(self, dropped).await;
         match self.settle_removed_agents(space, issues).await {
             Ok(unsettled) => warnings.extend(unsettled),
             Err(error) => crate::daemon::log!(

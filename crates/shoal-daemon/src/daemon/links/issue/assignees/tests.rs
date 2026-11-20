@@ -1,11 +1,12 @@
 use super::*;
 use crate::daemon::links::issue::test_support::{AGENT_TOKEN, Fixture, Refuse, USER};
 use crate::{
-    model::Workspace,
+    forge::items::reference::ItemRef,
+    model::{IssueAssignee, Workspace},
     removal::{InspectionPolicy, UnsavedWork},
 };
 use serde_json::json;
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{alerts::AlertKind, space_names::SpaceSelector};
 
 #[tokio::test]
 async fn linking_assigns_the_account_once() {
@@ -86,7 +87,11 @@ async fn a_moved_space_leaves_its_assignee_to_the_other_machine() {
     let workspace = &fixture.workspaces[0];
     fixture.link(workspace).await;
     let manager = &fixture.manager;
-    manager.hand_over_assignees(&workspace.id).await.unwrap();
+    manager
+        .links
+        .hand_over_assignees(&workspace.id)
+        .await
+        .unwrap();
     let selector = SpaceSelector::id(&workspace.id);
     (manager.remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly))
         .await

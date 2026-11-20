@@ -40,7 +40,7 @@ impl Manager {
                 Err(error) => warnings.push(format!("cannot link issue {}: {error:#}", issue.url)),
             }
         }
-        if let Err(error) = self.claim_assignees(id, carried.to_vec()).await {
+        if let Err(error) = self.links.claim_assignees(id, carried.to_vec()).await {
             warnings.push(format!("cannot record the issues' assignees: {error:#}"));
         }
         warnings.extend(self.relink_recorded(id, links, caller).await);
