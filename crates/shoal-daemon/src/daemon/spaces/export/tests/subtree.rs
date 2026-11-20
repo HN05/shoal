@@ -326,6 +326,38 @@ async fn a_selection_leaves_the_other_spaces_below_one_level_up() {
 }
 
 #[tokio::test]
+async fn a_move_to_a_joined_machine_leaves_the_spaces_below_it_below_it() {
+    let (_source, manager, repo, _origin) = exporter().await;
+    let top = test_support::chat(&manager, "top", "chat", Some(&repo), None).await;
+    let worker = test_support::working_below(&manager, &repo, "worker", &top.id, "worker").await;
+    let below = SpaceSelector::id(&worker.id);
+    let child = (manager.create_child(&below, "child".into(), None, Default::default()))
+        .await
+        .unwrap();
+    let packing = crate::daemon::spaces::MovePacking {
+        unsaved: UnsavedWork::All,
+        destination: MoveDestination::Machine(crate::transfer::MachineDestination {
+            machine: "desk".into(),
+            resume: true,
+        }),
+        carrying: Carrying::Selected(Vec::new()),
+        again: false,
+    };
+
+    manager.export_moving_space(&below, packing).await.unwrap();
+    manager.end_moved_space(&below).await.unwrap();
+
+    assert!(manager.find_space(&worker.id).await.unwrap().is_none());
+    // It stays below the worker, which runs on the other machine now.
+    let id = child.id.clone();
+    let parent = (manager.store)
+        .read(move |db| crate::daemon::tree::parent_id(db, &id))
+        .await
+        .unwrap();
+    assert_eq!(parent, Some(worker.id));
+}
+
+#[tokio::test]
 async fn a_selection_moves_nothing_while_a_removal_holds_the_space_above() {
     let (source, manager, repo, _origin) = exporter().await;
     let top = test_support::chat(&manager, "top", "chat", Some(&repo), None).await;

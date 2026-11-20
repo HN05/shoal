@@ -217,9 +217,13 @@ impl Manager {
         for handed in std::iter::once(space).chain(&carried) {
             self.hand_over_assignees(&handed.id).await?;
         }
-        (self.leave_uncarried(space, &carried, &record.carrying)).await?;
+        let leaving = (&record.carrying, &record.destination);
+        let detached = self.leave_uncarried(space, &carried, leaving).await?;
         let inspection = InspectionPolicy::GitOnly;
-        (self.remove_packaged(space, &carried, moved, inspection, Some(exported))).await
+        let removal = self.remove_packaged(space, &carried, moved, inspection, Some(exported));
+        let removed = removal.await;
+        self.attach_behind(detached).await;
+        removed
     }
 
     /// Forget the move `record` records, with the package it delivers to

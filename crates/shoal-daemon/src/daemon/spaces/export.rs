@@ -15,7 +15,7 @@ use crate::{
     daemon::manager::Manager,
     model::{RemovedSpace, Repository, Space},
     removal::{InspectionPolicy, RemovalResult, UnsavedWork},
-    transfer::{Carrying, ExportedSpace, Manifest, SessionSource},
+    transfer::{Carrying, ExportedSpace, Manifest, MoveDestination, SessionSource},
 };
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::transcripts::Environments;
@@ -118,17 +118,26 @@ impl Manager {
     }
 
     /// Leave the spaces below `space` that a selection does not carry here,
-    /// as [`Self::leave_behind`] does; carrying every space below it leaves
-    /// none, and one that joins it meanwhile retains it.
+    /// as [`Self::leave_behind`] does, or for a move to a joined machine
+    /// below the spaces they are below, detached until the removal here
+    /// ends, which [`Self::attach_behind`] then links again; carrying
+    /// every space below it leaves none, and one that joins it meanwhile
+    /// retains it.
     async fn leave_uncarried(
         &self,
         space: &Space,
         carried: &[Space],
-        carrying: &Carrying,
-    ) -> Result<()> {
-        match carrying {
-            Carrying::Subtree => Ok(()),
-            Carrying::Selected(_) => self.leave_behind(space, carried).await,
+        (carrying, destination): (&Carrying, &MoveDestination),
+    ) -> Result<Vec<staying::Detached>> {
+        match (carrying, destination) {
+            (Carrying::Subtree, _) => Ok(Vec::new()),
+            (Carrying::Selected(_), MoveDestination::Machine(_)) => {
+                self.detach_behind(space, carried).await
+            }
+            (Carrying::Selected(_), _) => {
+                self.leave_behind(space, carried).await?;
+                Ok(Vec::new())
+            }
         }
     }
 
