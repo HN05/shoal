@@ -246,6 +246,24 @@ async fn viewer_process(manager: &Manager, demo: &Running) -> Identity {
     viewer.expect("the viewer runs").process
 }
 
+/// Run `future` with the clock paused until `resumed` holds, checked every
+/// [`START_POLL`] of paused time, and with real time from then on.
+async fn paused_until<T>(future: impl Future<Output = T>, resumed: impl Fn() -> bool) -> T {
+    tokio::time::pause();
+    let mut future = std::pin::pin!(future);
+    while !resumed() {
+        tokio::select! {
+            output = &mut future => {
+                tokio::time::resume();
+                return output;
+            }
+            () = tokio::time::sleep(START_POLL) => {}
+        }
+    }
+    tokio::time::resume();
+    future.await
+}
+
 #[tokio::test]
 async fn the_first_open_starts_the_viewer_on_the_demo_s_device_and_later_ones_reuse_it() {
     let (temp, manager) = manager().await;
@@ -553,11 +571,10 @@ async fn a_viewer_an_earlier_daemon_left_starting_that_never_serves_is_replaced(
     (manager.record_viewer(&demo.execution_id, &starting))
         .await
         .unwrap();
-    // Paused only for the wait that must reach its limit, so the daemon's
-    // own guards elsewhere keep real time.
-    tokio::time::pause();
-    let refused = manager.open_viewer(&demo, None).await.err().unwrap();
-    tokio::time::resume();
+    // Paused only until the wait for it to serve reaches its limit and the
+    // stuck viewer is killed, so the stop's own guards keep real time.
+    let open = manager.open_viewer(&demo, None);
+    let refused = paused_until(open, || !runs(&process)).await.err().unwrap();
     assert_eq!(Reason::of(&refused), Some(Reason::NotReady), "{refused:#}");
     assert!(!runs(&process), "the stuck viewer still runs");
     // The next open starts a viewer of its own.
