@@ -128,7 +128,7 @@ pub(in crate::daemon) async fn exit(
     replied
 }
 
-/// What an exit that `stopped` spaces left for `shoal restore`: those of
+/// What an exit that `stopped` spaces left for `shoal resume`: those of
 /// them whose work waits for it, when it stopped every running space's work
 /// there, else stopped work in spaces it cannot name.
 async fn exited(manager: &Manager, stopped: &StoppedSpaces) -> Exited {
@@ -171,7 +171,7 @@ impl RequestedExit {
     }
 
     /// Tell the client what ending work that `stopped` spaces left for
-    /// `shoal restore`, after the reply to its request, which every release
+    /// `shoal resume`, after the reply to its request, which every release
     /// reads alone.
     pub async fn answer(&mut self, manager: &Manager, stopped: &StoppedSpaces) {
         let exited = exited(manager, stopped).await;

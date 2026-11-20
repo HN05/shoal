@@ -1,6 +1,6 @@
 //! Dispatch: each pass ends abandoned starts, takes over the restores whose
 //! wrapper is gone, queues the restores stopped agents request, leaves those
-//! recovery no longer restores for `shoal restore`, then admits the waiting
+//! recovery no longer restores for `shoal resume`, then admits the waiting
 //! entries that fit and starts what the daemon starts itself.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceName;

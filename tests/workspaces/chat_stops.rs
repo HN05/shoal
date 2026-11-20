@@ -1,4 +1,4 @@
-//! `shoal stop` of chats: it saves them for `shoal restore`, for the user or
+//! `shoal stop` of chats: it saves them for `shoal resume`, for the user or
 //! a parent's agent, and takes the chats below a stopped space.
 use super::chats::start_test_chat;
 use super::herdr::{herdr_calls, install_fake_herdr};
@@ -7,7 +7,7 @@ use super::zmx::wait_zmx_sessions_ended;
 use super::*;
 
 /// The user stops a running chat, which waits for the user's
-/// `shoal restore`.
+/// `shoal resume`.
 #[test]
 fn the_user_stops_a_chat_and_resumes_it() {
     let fixture = parent_fixture();

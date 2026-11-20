@@ -174,7 +174,7 @@ fn leave_to_queue(paths: &CommandPaths, plan: &ExecutionPlan, ended: Halt, saved
     };
 }
 
-/// What restores the paused agent besides `shoal restore`: this wrapper when
+/// What restores the paused agent besides `shoal resume`: this wrapper when
 /// protection stopped it to restore it `automatic`ally, the agent queue when a
 /// signal ended its session or the system shut down and its restore needs no
 /// user, otherwise nothing.
@@ -259,7 +259,7 @@ async fn report_pause(link: &mut Link, awaited: Option<Protection>) -> Result<()
     link.send(&ExecutionEvent::Paused).await
 }
 
-/// Keep a stopped command for `shoal restore` to report.
+/// Keep a stopped command for `shoal resume` to report.
 pub(super) fn record_stopped_command(
     paths: &Paths,
     plan: &ExecutionPlan,
@@ -268,7 +268,7 @@ pub(super) fn record_stopped_command(
 ) {
     match recovery::save_command(paths, &plan.space.id, &plan.id, command) {
         Ok(_) => eprintln!(
-            "shoal: command stopped{}; shoal restore {} lists it",
+            "shoal: command stopped{}; shoal resume {} lists it",
             stop.stated_reason(),
             plan.space.number
         ),
@@ -286,14 +286,14 @@ fn this_wrapper() -> Option<process::identity::Identity> {
 /// Why the daemon stopped a command it expects to be restored.
 #[derive(Debug)]
 pub(super) enum Halt {
-    /// Overload or disk space protection; the reason is saved for `shoal restore`.
+    /// Overload or disk space protection; the reason is saved for `shoal resume`.
     Protection {
         recover: bool,
         reason: String,
         resumes_when: String,
     },
     /// `shoal stop`, workspace removal, a daemon shutdown or a refused
-    /// reattachment; the reason is saved for `shoal restore`.
+    /// reattachment; the reason is saved for `shoal resume`.
     Pause {
         reason: Option<String>,
         /// The removal record of the removed workspace keeps the session.
@@ -301,10 +301,10 @@ pub(super) enum Halt {
     },
     /// A hangup or terminate signal ended the session the command ran in, as
     /// closing its terminal, logging out or shutting down does; the reason is
-    /// saved for `shoal restore`.
+    /// saved for `shoal resume`.
     Ended { reason: &'static str },
     /// The daemon stopped it before the system shut down; the reason is
-    /// saved for `shoal restore`.
+    /// saved for `shoal resume`.
     Shutdown { reason: Option<String> },
 }
 
@@ -388,7 +388,7 @@ fn restore_steps(workspace: &SpaceId, execution: &ExecutionId, removed: bool) ->
     if removed {
         format!("restore with shoal restore {workspace}")
     } else {
-        format!("restore with shoal restore {workspace} --execution {execution}")
+        format!("resume with shoal resume {workspace} --execution {execution}")
     }
 }
 

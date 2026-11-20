@@ -33,7 +33,7 @@ pub struct Status {
 }
 
 /// A daemon started, or stopped with whether work it stopped waits for
-/// `shoal restore` and in which spaces, after the work in progress its exit
+/// `shoal resume` and in which spaces, after the work in progress its exit
 /// waited for.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Running {

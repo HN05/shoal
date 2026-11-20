@@ -1,4 +1,4 @@
-//! What a stop saved for `shoal restore`: keeping stopped agents as last
+//! What a stop saved for `shoal resume`: keeping stopped agents as last
 //! sessions after `shoal stop`, and forgetting them, which the daemon does so
 //! it can confine coordinating agents to the workspaces below theirs.
 use anyhow::{Context as _, Result, ensure};
@@ -24,7 +24,7 @@ pub struct PermissionTargets<'a> {
 
 impl Manager {
     /// Whether a stop saved an agent of workspace `id`: one a wrapper waits
-    /// to restore, stopped work or a last session, which `shoal restore`
+    /// to restore, stopped work or a last session, which `shoal resume`
     /// restores. A state directory that cannot be read counts as none, so
     /// it costs only its own workspace.
     pub(crate) fn has_saved_agent(&self, id: &SpaceId) -> bool {
@@ -34,7 +34,7 @@ impl Manager {
         })
     }
 
-    /// What the existing space `selector` names saved for `shoal restore`.
+    /// What the existing space `selector` names saved for `shoal resume`.
     pub(crate) async fn saved_work(&self, selector: &SpaceSelector) -> Result<Saved> {
         let space = self.space(selector).await?;
         Saved::load(&self.paths, &space.id)

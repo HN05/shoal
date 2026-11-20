@@ -530,7 +530,7 @@ async fn a_failed_post_setup_hook_stops_the_agent_for_shoal_resume() {
 
     manager.relocate_finished_turns().await.unwrap();
 
-    // Stopped with its session kept for shoal restore, not restarted.
+    // Stopped with its session kept for shoal resume, not restarted.
     process.wait().unwrap();
     assert!(resumed(&manager.paths).is_empty());
     assert!(manager.caller(&token).await.unwrap().is_none());

@@ -9,7 +9,7 @@ use shoal_protocol::space_names::SpaceSelector;
 impl Manager {
     /// Refuse a launch in `space` while it has an agent of its own: a
     /// running one, one in the agent queue, or a stopped one awaiting
-    /// `shoal restore`. A last session, whose agent exited on its own, does
+    /// `shoal resume`. A last session, whose agent exited on its own, does
     /// not count, since the new agent replaces it, nor does a start whose
     /// setup failed, whose place the agent left waiting takes. Requires the
     /// queue gate, which keeps another launch out until this one is
@@ -35,7 +35,7 @@ impl Manager {
         }
         if !recovery::agent_records(&self.paths, &space.id)?.is_empty() {
             bail!(HasAgent(format!(
-                "{kind} {number} has a stopped agent; restore it with `shoal restore {number}` or discard it with `shoal restore --discard-agent {number}`"
+                "{kind} {number} has a stopped agent; resume it with `shoal resume {number}` or discard it with `shoal restore --discard-agent {number}`"
             )));
         }
         Ok(())

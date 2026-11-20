@@ -1,4 +1,4 @@
-//! What a workspace saved for `shoal restore` when its agents and commands
+//! What a workspace saved for `shoal resume` when its agents and commands
 //! stopped, which the daemon reads from its state, and how a resume
 //! restores it.
 use shoal_ids::execution_ids::ExecutionId;
@@ -21,7 +21,7 @@ pub struct SavedSummary {
     /// It saved stopped agents or commands, which are unfinished work; last
     /// sessions alone are not.
     pub unfinished: bool,
-    /// Its stopped work waits for `shoal restore`.
+    /// Its stopped work waits for `shoal resume`.
     pub restorable: bool,
 }
 
@@ -161,7 +161,7 @@ impl Saved {
         !(self.agents.is_empty() && self.commands.is_empty())
     }
 
-    /// Whether stopped work waits for `shoal restore`, which an agent whose
+    /// Whether stopped work waits for `shoal resume`, which an agent whose
     /// wrapper still waits to restore it does not.
     pub fn is_restorable(&self) -> bool {
         !self.commands.is_empty() || self.agents.iter().any(|agent| !agent.waits_in_wrapper)

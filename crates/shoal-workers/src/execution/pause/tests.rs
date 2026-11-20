@@ -12,7 +12,7 @@ fn stopped_lines_name_the_cause_and_how_to_restore() {
     assert!(line.contains("free disk space is below 2 GiB"), "{line}");
     assert!(line.contains("free disk space reaches 5 GiB"), "{line}");
     assert!(
-        line.ends_with("shoal restore workspace-id --execution id"),
+        line.ends_with("shoal resume workspace-id --execution id"),
         "{line}"
     );
     let stop = Halt::Pause {
@@ -50,7 +50,7 @@ fn only_an_ended_session_or_shutdown_of_an_agent_that_restores_unattended_queues
         restorer(&recovery(true), &closed, false),
         Restorer::Queue(env) if env.contains_key(crate::env::OUTPUT)
     ));
-    // A restore that needs the user's choice waits for `shoal restore`.
+    // A restore that needs the user's choice waits for `shoal resume`.
     assert!(matches!(
         restorer(&recovery(false), &closed, false),
         Restorer::User

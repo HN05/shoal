@@ -77,7 +77,7 @@ impl Manager {
     /// Run the agent of `chat` as its execution at `origin`, as its wrapper
     /// registers and tracks it, and return the chat running it. Asked to
     /// stop, the agent ends its processes and exits, as its wrapper stops
-    /// it, first saving itself for `shoal restore` when the stop asks that.
+    /// it, first saving itself for `shoal resume` when the stop asks that.
     #[cfg(any(test, feature = "test-support"))]
     pub(crate) async fn run_chat_agent(
         self: &std::sync::Arc<Self>,

@@ -1802,7 +1802,7 @@ async fn an_entrys_wait_for_memory_lasts_while_passes_hold_it_for_memory() {
 }
 
 /// Save a stopped agent of `mode` in the space `id` for its restore, and
-/// queue the restore as `shoal restore` does.
+/// queue the restore as `shoal resume` does.
 async fn queue_saved_restore(
     manager: &Manager,
     id: &shoal_ids::space_ids::SpaceId,

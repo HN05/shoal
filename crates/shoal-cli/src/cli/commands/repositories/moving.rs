@@ -77,7 +77,7 @@ async fn plan_moves(
 }
 
 /// Stop the spaces `executions` run in, keeping their agents' sessions, and
-/// add to `stopped` the executions each stop saved for `shoal restore`, by
+/// add to `stopped` the executions each stop saved for `shoal resume`, by
 /// space, including any started since the plan or ended by a stop that
 /// failed. A CI job's workspace is waited for until the job, whose run
 /// the stop cancelled, ends and its workspace goes, and stays out of
@@ -182,7 +182,7 @@ impl Registrations {
 
 /// For each repository whose directory moved since `before`, remove agent
 /// trust for its old paths and trust its workspaces for the agents whose
-/// sessions `shoal restore` continues there. Failures only warn.
+/// sessions `shoal resume` continues there. Failures only warn.
 async fn retrust(ctx: &Context, before: &Registrations) {
     let after = match Registrations::load(ctx).await {
         Ok(after) => after,

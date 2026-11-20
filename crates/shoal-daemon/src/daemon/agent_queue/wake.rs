@@ -3,7 +3,7 @@
 //! because its space was blocked, an update for one stopped between turns,
 //! which has nothing to do until then, sustained healthy readings for one
 //! load or disk space stopped mid-turn, and a free slot for any other, or
-//! for one `shoal restore` asked for.
+//! for one `shoal resume` asked for.
 use crate::execution::recovery::RecordExt;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
@@ -169,7 +169,7 @@ impl Manager {
     }
 
     /// What the queued restore of `execution` in the space `id` waits for,
-    /// whatever carries it out: a slot once `shoal restore` asked for it, no
+    /// whatever carries it out: a slot once `shoal resume` asked for it, no
     /// longer `automatic`, otherwise what its recovery record says. An
     /// update is due only while free disk space has recovered as for any
     /// other restore, since disk protection stops agents that start below

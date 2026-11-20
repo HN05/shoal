@@ -119,7 +119,7 @@ states!(
         Queued => "queued",
         /// Admitted from the queue; it has not started yet.
         Starting => "starting",
-        /// Its launch failed to start; `shoal restore` queues it again.
+        /// Its launch failed to start; `shoal resume` queues it again.
         Failed => "failed",
         /// Stopped with a session to restore.
         Stopped => "stopped",

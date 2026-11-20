@@ -145,7 +145,7 @@ impl Stopped {
             .collect()
     }
 
-    /// Whether stopped agents or commands wait for `shoal restore`.
+    /// Whether stopped agents or commands wait for `shoal resume`.
     fn pending(&self) -> bool {
         !self.saved(".recovery.json").is_empty() || !self.saved(".command.json").is_empty()
     }

@@ -40,7 +40,7 @@ pub struct MoveArgs {
     /// Leave the spaces below each space here, one level up, except those named too.
     #[arg(long, overrides_with = "recursive")]
     pub no_recursive: bool,
-    /// Leave the agents stopped on the other machine for a later shoal restore instead of
+    /// Leave the agents stopped on the other machine for a later shoal resume instead of
     /// resuming them.
     #[arg(long, conflicts_with = "output")]
     pub no_resume: bool,

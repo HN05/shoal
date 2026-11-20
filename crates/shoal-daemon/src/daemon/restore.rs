@@ -236,13 +236,13 @@ impl Manager {
         let saved = crate::execution::recovery::save_stopped_agents(&self.paths, id, &agents);
         if let Err(error) = saved {
             warnings.push(format!(
-                "cannot save stopped agents for shoal restore: {error:#}"
+                "cannot save stopped agents for shoal resume: {error:#}"
             ));
         }
         for last in &last_sessions {
             if let Err(error) = last.write(&self.paths, id) {
                 warnings.push(format!(
-                    "cannot save the last {} session for shoal restore: {error:#}",
+                    "cannot save the last {} session for shoal resume: {error:#}",
                     last.agent
                 ));
             }

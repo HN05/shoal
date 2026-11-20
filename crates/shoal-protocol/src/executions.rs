@@ -186,18 +186,18 @@ pub struct Stop {
 }
 
 /// An agent stopped in a removed workspace, which `shoal restore` saves
-/// again for `shoal restore`.
+/// again for `shoal resume`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoppedAgent {
     pub execution: ExecutionId,
     pub record: Record,
-    /// When its record was saved, which `shoal restore` shows as its stop
+    /// When its record was saved, which `shoal resume` shows as its stop
     /// time.
     pub stopped_at: crate::time::UnixTime,
 }
 
 /// An agent that exited on its own before its assignment was done, which
-/// `shoal restore` continues. Unlike stopped work, it uses no heavy slot, never
+/// `shoal resume` continues. Unlike stopped work, it uses no heavy slot, never
 /// delays cleanup and nothing restores it on its own. A workspace keeps one
 /// per agent.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

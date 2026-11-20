@@ -392,7 +392,7 @@ impl Manager {
 
     /// End a starting entry that cannot start its agent and say why: a
     /// launch in a recorded space stays there as a failed entry, whatever
-    /// its kind, which `shoal restore` queues again. An entry that already
+    /// its kind, which `shoal resume` queues again. An entry that already
     /// ended, such as with its removed space, has no slot left to free.
     pub async fn fail_queue_entry(&self, id: &QueueEntryId, error: &str) -> Result<()> {
         let (entry, text) = (id.to_owned(), error.to_owned());

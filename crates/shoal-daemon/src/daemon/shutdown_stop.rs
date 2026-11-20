@@ -200,7 +200,7 @@ impl Manager {
         .await;
     }
 
-    /// Those of the `stopped` spaces whose saved work only `shoal restore`
+    /// Those of the `stopped` spaces whose saved work only `shoal resume`
     /// continues; one whose saved work is unreadable counts.
     pub(crate) async fn awaiting_restore<'a>(&self, stopped: &'a [Space]) -> Vec<&'a Space> {
         let queued = self
@@ -224,9 +224,9 @@ impl Manager {
     }
 }
 
-/// Whether the space saved work only `shoal restore` continues: a command,
+/// Whether the space saved work only `shoal resume` continues: a command,
 /// or an agent or last session whose restore is neither `queued` nor
-/// requested. A done space's requests wait for `shoal restore` to name it.
+/// requested. A done space's requests wait for `shoal resume` to name it.
 fn waits_for_resume(
     paths: &crate::paths::Paths,
     space: &Space,
@@ -246,17 +246,17 @@ fn waits_for_resume(
             .any(|agent| !requested.contains(&agent.id) && !queued.contains(&agent.id)))
 }
 
-/// How the work of the `waiting` spaces continues. `shoal restore --all`
+/// How the work of the `waiting` spaces continues. `shoal resume --all`
 /// skips done spaces, so they are named.
 fn continuation(waiting: &[&Space]) -> String {
     let (done, open): (Vec<&Space>, Vec<&Space>) = waiting.iter().partition(|space| space.done());
     let mut commands = Vec::new();
     if !open.is_empty() {
-        commands.push("shoal restore --all".to_owned());
+        commands.push("shoal resume --all".to_owned());
     }
     if !done.is_empty() {
         let numbers: Vec<String> = done.iter().map(|space| space.number.to_string()).collect();
-        commands.push(format!("shoal restore {}", numbers.join(" ")));
+        commands.push(format!("shoal resume {}", numbers.join(" ")));
     }
     if commands.is_empty() {
         "the agent queue restores its agents".into()

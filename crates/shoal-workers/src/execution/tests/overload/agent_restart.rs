@@ -226,7 +226,7 @@ async fn restart_starts_the_agent_in_a_new_wrapper_in_the_slot_it_kept() {
 }
 
 /// A new wrapper that cannot start answers the restart with why, and leaves
-/// the agent's record for `shoal restore`.
+/// the agent's record for `shoal resume`.
 #[tokio::test]
 async fn a_restart_whose_new_wrapper_fails_to_start_leaves_the_agent_for_shoal_resume() {
     let (_root, manager, workspace, serving) = fixture().await;
@@ -297,7 +297,7 @@ async fn a_restart_in_a_new_wrapper_follows_the_agent_from_the_execution_it_ran_
 }
 
 /// A restart's new wrapper restores the agent from its record, as
-/// `shoal restore` does, but the restart keeps a done workspace's completion.
+/// `shoal resume` does, but the restart keeps a done workspace's completion.
 #[tokio::test]
 async fn a_restart_in_a_new_wrapper_keeps_a_done_workspaces_completion() {
     let (_root, manager, workspace, serving) = fixture().await;

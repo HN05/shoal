@@ -1,4 +1,4 @@
-//! Exclusive claims on saved records, so only one `shoal restore` restores,
+//! Exclusive claims on saved records, so only one `shoal resume` restores,
 //! reports or forgets each.
 use super::{
     LastSession, LastSessionExt as _, Record, RecordExt as _, Saved, SavedSession, consume,

@@ -55,7 +55,7 @@ async fn a_failed_launch_stays_on_its_space_with_its_error() {
         .find(|notification| notification.kind == AlertKind::StartFailed)
         .unwrap();
     let number = workspace.number;
-    assert!(told.message.contains(&format!("`shoal restore {number}`")));
+    assert!(told.message.contains(&format!("`shoal resume {number}`")));
     assert!(told.message.contains(&format!("`shoal rm {number}`")));
 }
 

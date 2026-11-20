@@ -101,7 +101,7 @@ pub enum Exit {
 /// answer to the request once its work has ended.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Exited {
-    /// The exit stopped work that waits for `shoal restore`, or may have
+    /// The exit stopped work that waits for `shoal resume`, or may have
     /// where `spaces` names none.
     pub stopped_work: bool,
     /// The spaces of that work, by number; none from a daemon that cannot
@@ -111,7 +111,7 @@ pub struct Exited {
 }
 
 impl Exited {
-    /// The spaces whose work the exit stopped and left for `shoal restore`;
+    /// The spaces whose work the exit stopped and left for `shoal resume`;
     /// `None` when the daemon left stopped work without naming its spaces.
     pub fn stopped_spaces(self) -> Option<Vec<SpaceNumber>> {
         match self.stopped_work && self.spaces.is_empty() {

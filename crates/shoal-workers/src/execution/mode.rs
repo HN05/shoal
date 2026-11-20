@@ -7,7 +7,7 @@ use shoal_protocol::executions::ExecutionKind;
 #[derive(Clone)]
 pub(super) enum Mode {
     /// An arbitrary command chosen by the caller; `record` keeps it for
-    /// `shoal restore` to report when `shoal stop` interrupts it.
+    /// `shoal resume` to report when `shoal stop` interrupts it.
     Command { record: bool },
     /// A restored agent session; `records` are consumed once it starts.
     /// `source` says what made a restore the user runs here.

@@ -356,7 +356,7 @@ async fn tell_restore_waits(notices: Option<&mut OwnedWriteHalf>, issue: String)
 }
 
 /// A protection stop without automatic recovery still ends what the agent left
-/// running outside its process group, so `shoal restore` can restore it.
+/// running outside its process group, so `shoal resume` can restore it.
 pub(super) async fn stop_survivors(
     manager: &Manager,
     execution_id: &ExecutionId,
@@ -479,7 +479,7 @@ impl Resumes<'_> {
             .map(|_| record.narrowing);
         ensure!(
             narrowing.is_none() || self.takes_narrowing,
-            "the agent's wrapper runs an earlier Shoal, which cannot restore it under the permissions it was given since; shoal restore {} restores it in a new one",
+            "the agent's wrapper runs an earlier Shoal, which cannot restore it under the permissions it was given since; shoal resume {} restores it in a new one",
             self.workspace_id
         );
         Ok((Some(claim), narrowing))

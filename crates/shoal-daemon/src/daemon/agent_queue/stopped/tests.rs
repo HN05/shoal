@@ -330,7 +330,7 @@ async fn a_daemon_restart_returns_an_admitted_load_restore_to_its_place() {
 }
 
 /// Disabling recovery leaves a restore the daemon would start after a load
-/// stop for `shoal restore`, keeping the agent's record.
+/// stop for `shoal resume`, keeping the agent's record.
 #[tokio::test]
 async fn disabling_recovery_leaves_a_daemon_started_load_restore_for_shoal_restore() {
     let (temp, manager) = manager().await;
@@ -634,7 +634,7 @@ async fn a_restore_whose_agent_never_starts_expires_and_says_so() {
     assert!(notifications.iter().any(|notification| {
         notification.kind == crate::daemon::notifications::AlertKind::QueueFailed
     }));
-    // The agent stays stopped for `shoal restore`.
+    // The agent stays stopped for `shoal resume`.
     assert!(record_path(&manager.paths, &workspace.id, &ExecutionId::from("agent")).exists());
 }
 

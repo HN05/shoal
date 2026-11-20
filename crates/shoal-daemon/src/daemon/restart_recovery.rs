@@ -2,7 +2,7 @@
 //! interruption or a stop that could not be proven. A saved recovery record
 //! names the stop Shoal started; once its wrapper is gone and no process of
 //! the execution survives, the record alone represents the agent and
-//! `shoal restore` restores it. Survivors and incomplete evidence keep the
+//! `shoal resume` restores it. Survivors and incomplete evidence keep the
 //! execution, are checked again, and only they notify the user. Executions
 //! of an earlier boot need no evidence, and those that never started their
 //! command need only their wrapper gone.
@@ -302,7 +302,7 @@ impl Manager {
         self.notify_space(&space.name, &space.id,
             AlertKind::RecoveryBlocked,
             format!(
-                "{} stopped{reason}, but its execution {} is not proven stopped: {issue}; Shoal reconciles it once those processes exit, or stop them with shoal stop {}; then run shoal restore {} --execution {}",
+                "{} stopped{reason}, but its execution {} is not proven stopped: {issue}; Shoal reconciles it once those processes exit, or stop them with shoal stop {}; then run shoal resume {} --execution {}",
                 record.agent, execution.id, space.number, space.number, execution.id
             ),
         )

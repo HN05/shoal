@@ -10,7 +10,7 @@ use shoal_protocol::space_names::SpaceSelector;
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum LifecycleCommand {
-    /// Stop tracked agents and commands, and chats, saving them for `shoal restore`, and the other
+    /// Stop tracked agents and commands, and chats, saving them for `shoal resume`, and the other
     /// processes of the workspaces; keep the spaces.
     ///
     /// Agents waiting in the agent queue to start in the workspaces leave the queue, as does a queued

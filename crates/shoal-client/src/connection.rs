@@ -562,7 +562,7 @@ pub struct Exiting {
 }
 
 impl Exiting {
-    /// The spaces whose work the exit stopped and left for `shoal restore`,
+    /// The spaces whose work the exit stopped and left for `shoal resume`,
     /// once its work has ended; `None` when the daemon does not say which.
     pub async fn stopped_spaces(mut self) -> Option<Vec<SpaceNumber>> {
         let limit = timing::DAEMON_WAIT_TIMEOUT + timing::WORKSPACE_STOP_TIMEOUT;

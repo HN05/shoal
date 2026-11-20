@@ -1,4 +1,4 @@
-//! What a workspace saved for `shoal restore` when its agents and commands
+//! What a workspace saved for `shoal resume` when its agents and commands
 //! stopped, which the daemon reads from its state, and how a resume
 //! restores it.
 use shoal_protocol::saved::{Saved, SavedSummary};

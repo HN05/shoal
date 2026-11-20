@@ -1,6 +1,6 @@
 //! A restore waiting for an update to an agent stopped between turns keeps
 //! its workspace from no cleanup; removal cancels it and keeps the agent for
-//! `shoal restore`.
+//! `shoal resume`.
 use super::*;
 use crate::{model::CleanupReason, state::AgentState};
 use shoal_ids::execution_ids::ExecutionId;

@@ -69,7 +69,7 @@ async fn an_exit_request_is_served_at_every_protocol_version_except_to_scopes() 
 }
 
 /// An exit answers again with the spaces whose work it stopped and left
-/// for `shoal restore`, leaving out stopped work it did not stop, and
+/// for `shoal resume`, leaving out stopped work it did not stop, and
 /// names none where some work stopped outside the spaces it stopped.
 #[tokio::test]
 async fn an_exit_answers_again_with_the_spaces_of_the_work_it_stopped() {

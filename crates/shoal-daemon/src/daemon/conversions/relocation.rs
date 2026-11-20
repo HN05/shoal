@@ -29,7 +29,7 @@ use crate::{
 /// How a stop of a converting workspace's agents settles its conversion.
 #[derive(Clone, Copy)]
 pub(crate) struct ConversionStop {
-    /// Whether the stop keeps them down until `shoal restore`, which keeps the
+    /// Whether the stop keeps them down until `shoal resume`, which keeps the
     /// chat a conversion makes of the workspace stopped too.
     pub holds: bool,
 }
@@ -154,7 +154,7 @@ impl Manager {
 
     /// Stop the agent of the chat that became the workspace `id`, whose row
     /// was `chat`, as a stop of the workspace's agents does, keeping its
-    /// session as `execution` for `shoal restore` in `mode`, since the
+    /// session as `execution` for `shoal resume` in `mode`, since the
     /// workspace's post-setup hook failed with `failure`, and tell the user.
     /// A hand-over that fails leaves the conversion pending, to try again.
     async fn stop_after_failed_hook(
@@ -172,7 +172,7 @@ impl Manager {
         let workspace = self.workspace_by_id(id).await?;
         let (name, number) = (workspace.name, workspace.number);
         let message = format!(
-            "The post-setup hook of {name} failed: {failure}; its agent stopped instead of restarting there, and shoal restore {number} continues it once the hook is repaired"
+            "The post-setup hook of {name} failed: {failure}; its agent stopped instead of restarting there, and shoal resume {number} continues it once the hook is repaired"
         );
         let about = About::space(&name, id);
         (self.notify_about(about, AlertKind::RecoveryBlocked, message)).await;
@@ -205,7 +205,7 @@ impl Manager {
     /// them down holds a conversion into a chat, and the agent of a chat that
     /// became the workspace, which the stop finds nowhere else, is handed
     /// over to it, once its session is kept as the workspace's last session,
-    /// which `shoal restore` continues. Whether it had such an agent.
+    /// which `shoal resume` continues. Whether it had such an agent.
     pub(crate) async fn stop_converting_agent(
         &self,
         id: &SpaceId,
@@ -249,7 +249,7 @@ impl Manager {
     }
 
     /// Keep the chat that the workspace `id` becomes stopped, as a stop of
-    /// its agent keeps that agent down until `shoal restore`.
+    /// its agent keeps that agent down until `shoal resume`.
     async fn hold_converting_chat(&self, id: &SpaceId) -> Result<()> {
         let id = id.to_owned();
         (self.store)
@@ -324,7 +324,7 @@ impl Manager {
     /// the chat's agent in the repository's checkout through the agent
     /// queue, continuing the session the agent reported last, whether it
     /// still runs or exited, told what the space is now, unless a stop
-    /// `held` it, which leaves the chat for `shoal restore`.
+    /// `held` it, which leaves the chat for `shoal resume`.
     async fn relocate_to_chat(&self, id: &SpaceId, chat: ConvertedChat, held: bool) -> Result<()> {
         let session = self.latest_session(id, &chat.execution);
         self.convert_worktree_to_chat(id, &chat).await?;
@@ -392,15 +392,15 @@ impl Manager {
         };
         let message = match pending {
             Pending::Workspace { .. } => format!(
-                "The agent of {name} did not restart in its new worktree: {error:#}; continue it with shoal restore {number}"
+                "The agent of {name} did not restart in its new worktree: {error:#}; continue it with shoal resume {number}"
             ),
             Pending::Chat { .. } if self.chat_by_id(id).await.is_ok_and(|chat| chat.is_some()) => {
                 format!(
-                    "{name} became a chat, whose agent did not restart: {error:#}; continue it with shoal restore {number}"
+                    "{name} became a chat, whose agent did not restart: {error:#}; continue it with shoal resume {number}"
                 )
             }
             Pending::Chat { .. } => format!(
-                "{name} did not become a chat: {error:#}; it stays a workspace, whose stopped agent shoal restore {number} continues"
+                "{name} did not become a chat: {error:#}; it stays a workspace, whose stopped agent shoal resume {number} continues"
             ),
         };
         self.notify_about(About::space(&name, id), AlertKind::RecoveryBlocked, message)

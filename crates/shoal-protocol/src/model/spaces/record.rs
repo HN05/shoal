@@ -35,7 +35,7 @@ pub struct Space<P = SpacePart> {
     #[serde(default, skip_serializing_if = "PermissionsConfig::is_empty")]
     pub narrowing: PermissionsConfig,
     /// Whether an agent or command started through Shoal is running here. A
-    /// stopped space keeps what its agent's stop saved for `shoal restore`.
+    /// stopped space keeps what its agent's stop saved for `shoal resume`.
     #[serde(default)]
     pub running: bool,
     /// The issues, PRs and CI runs it links.

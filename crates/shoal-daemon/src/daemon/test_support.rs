@@ -165,7 +165,7 @@ impl Manager {
     }
 
     /// Open the removed workspace `selector` names again for the user, as
-    /// `shoal restore` does.
+    /// `shoal resume` does.
     pub async fn restore_workspace(
         &self,
         selector: &shoal_protocol::space_names::SpaceSelector,

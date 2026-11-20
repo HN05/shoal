@@ -119,7 +119,7 @@ pub(super) async fn restart(ctx: &Context, when: ExitWhen) -> Result<i32> {
     Ok(0)
 }
 
-/// What a daemon's exit left for `shoal restore`.
+/// What a daemon's exit left for `shoal resume`.
 pub(super) enum Left {
     /// The stopped work of these spaces, by number, which the exit stopped.
     Spaces(Vec<SpaceNumber>),
@@ -136,11 +136,11 @@ impl Left {
             Self::Spaces(spaces) => {
                 let numbers: Vec<String> = spaces.iter().map(ToString::to_string).collect();
                 Some(format!(
-                    "restore its stopped work with shoal restore {}",
+                    "resume its stopped work with shoal resume {}",
                     numbers.join(" ")
                 ))
             }
-            Self::Unknown => Some("restore any stopped work with shoal restore".into()),
+            Self::Unknown => Some("resume any stopped work with shoal resume".into()),
         }
     }
 }

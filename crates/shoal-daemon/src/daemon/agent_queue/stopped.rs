@@ -1,5 +1,5 @@
 //! Restores of stopped agents and last sessions that the daemon starts, as
-//! it starts launches in existing workspaces: `shoal restore` queues them, so
+//! it starts launches in existing workspaces: `shoal resume` queues them, so
 //! does a signal that ended an agent's session, through a request beside its
 //! record, and the daemon takes over one whose waiting wrapper is gone. Each
 //! waits as its agent's record says and leaves the queue once its
@@ -57,7 +57,7 @@ struct Restore {
     execution: ExecutionId,
     env: String,
     /// Why Shoal put the agent to sleep and what wakes it, when Shoal queued
-    /// it on its own rather than `shoal restore`, so an agent stopped between
+    /// it on its own rather than `shoal resume`, so an agent stopped between
     /// turns waits for an update.
     asleep: Option<Asleep>,
     /// Queued, or starting at once.
@@ -509,7 +509,7 @@ impl Manager {
     /// for an update, while one load stopped, which healthy readings
     /// admitted already, waits only for a free slot; the daemon starts it
     /// where the agent ran. Returns whether it
-    /// is queued; otherwise its record stays for `shoal restore`.
+    /// is queued; otherwise its record stays for `shoal resume`.
     pub async fn queue_failed_restore(
         &self,
         space: &Space,
@@ -552,7 +552,7 @@ impl Manager {
     }
 
     /// Queue the restores that stopped agents request once their execution
-    /// has ended. A done space's agent waits until `shoal restore` names its
+    /// has ended. A done space's agent waits until `shoal resume` names its
     /// space.
     pub(super) async fn queue_requested_restores(&self) -> Result<()> {
         let (spaces, recorded) = self
@@ -613,7 +613,7 @@ impl Manager {
     }
 
     /// Leave the waiting restores the daemon starts of agents load or disk
-    /// space stopped mid-turn for `shoal restore` while
+    /// space stopped mid-turn for `shoal resume` while
     /// `[machine.overload.recovery]` is disabled, as their waiting wrappers
     /// leave theirs, telling each space. Their records stay.
     pub(super) async fn leave_unrecovered_restores(&self) -> Result<()> {
@@ -662,7 +662,7 @@ impl Manager {
     /// its agent stays stopped and what restores it.
     async fn tell_restore_left(&self, restore: &AutomaticRestore) {
         let message = format!(
-            "Automatic recovery is disabled, so {} stays stopped; `shoal restore {}` restores it",
+            "Automatic recovery is disabled, so {} stays stopped; `shoal resume {}` restores it",
             restore.agent, restore.space
         );
         let kind = AlertKind::RecoveryBlocked;
@@ -684,7 +684,7 @@ impl Manager {
 
     /// Cancel the restores of `workspace_id`'s stopped agents, requested,
     /// waiting or admitted, and the restarts that would start one in a new
-    /// wrapper, which stay stopped until `shoal restore`. The queue gate keeps
+    /// wrapper, which stay stopped until `shoal resume`. The queue gate keeps
     /// dispatch from queueing a request meanwhile, and a restart from
     /// recording its restore, and a restore whose agent already registered
     /// has left the queue.

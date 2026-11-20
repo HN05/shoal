@@ -1,5 +1,5 @@
 //! Whether a space's agent is asleep: Shoal stopped it and queued its
-//! restore on its own, so it comes back without `shoal restore`. The restore
+//! restore on its own, so it comes back without `shoal resume`. The restore
 //! the daemon starts keeps why and what wakes it; one a waiting wrapper
 //! carries out reads both from the agent's recorded stop.
 use anyhow::Result;
@@ -29,7 +29,7 @@ pub(crate) fn current(db: &Connection, id: &SpaceId) -> Result<Option<Asleep>> {
 
 /// Wake the agent of the space `id` if it is asleep: the restores Shoal
 /// queued on its own for it wait only for their turn in the agent queue, as
-/// after `shoal restore`, without withdrawing a completion.
+/// after `shoal resume`, without withdrawing a completion.
 pub(crate) fn wake(db: &Connection, id: &SpaceId) -> Result<()> {
     db.execute(
         "UPDATE agent_queue SET automatic=0 WHERE space_id=?1 AND kind=?2 AND automatic",

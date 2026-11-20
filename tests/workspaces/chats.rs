@@ -96,7 +96,7 @@ fn a_saved_chats_open_question_stays_in_the_inbox() {
 fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
     let mut fixture = chat_session_fixture();
     let home = fixture.root.path().to_owned();
-    // `shoal daemon stop` saves the chat for `shoal restore`.
+    // `shoal daemon stop` saves the chat for `shoal resume`.
     let chat = save_running_chat(&fixture, |fixture| {
         let output = fixture.run(&["daemon", "stop"]);
         assert!(output.status.success(), "{}", printed(&output));
@@ -221,7 +221,7 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
 }
 
 /// `shoal daemon stop` names the spaces whose work it stopped, here a done
-/// chat, and no other; `shoal restore --all` leaves out that chat's
+/// chat, and no other; `shoal resume --all` leaves out that chat's
 /// stopped agent, which only naming the chat restores, and restores the
 /// stopped agents beside it.
 #[test]
@@ -2113,7 +2113,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
         "worker chat"
     );
 
-    // Its agent exited; `shoal restore` restores it in the worktree.
+    // Its agent exited; `shoal resume` restores it in the worktree.
     assert_eq!(chats[0]["running"], false, "{chats}");
     fs::remove_file(home.join("chat-cwd")).unwrap();
     let (output, transcript) = fixture.interactive_command(
@@ -2236,7 +2236,7 @@ fn chat_with_an_open_tab() -> (Fixture, Command) {
 
 /// A chat whose focused tab opens, but whose start there fails before its
 /// agent runs, stays with its failed launch, as a workspace's would, for
-/// `shoal restore` to start again.
+/// `shoal resume` to start again.
 #[test]
 fn a_chat_whose_tab_fails_to_start_its_agent_stays_with_its_failed_launch() {
     let fixture = failed_chat_launch();

@@ -52,7 +52,7 @@ impl Manager {
         let entry = self.selected_entry(selector, caller).await?;
         ensure!(
             entry.state != QueueState::Failed,
-            "the start of {} failed; `shoal restore` queues it again",
+            "the start of {} failed; `shoal resume` queues it again",
             entry.name
         );
         ensure!(
@@ -170,7 +170,7 @@ impl Manager {
     }
 
     /// Cancel the waiting entry `selector` names, or drop a failed launch.
-    /// A cancelled restore leaves its agent stopped for `shoal restore`; a
+    /// A cancelled restore leaves its agent stopped for `shoal resume`; a
     /// waiting wrapper is stopped as `shoal stop` stops it.
     pub async fn queue_remove(
         &self,

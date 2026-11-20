@@ -60,7 +60,7 @@ pub struct DetachedExecution {
 
 impl DetachedExecution {
     /// Interrupt the execution as Ctrl-C interrupts a command, which stops
-    /// it without saving it for `shoal restore`, and wait until its wrapper
+    /// it without saving it for `shoal resume`, and wait until its wrapper
     /// reported the end and exited. The wrapper is this process's child, not
     /// yet reaped, so its ID names no other process.
     pub async fn interrupt(mut self) -> Result<()> {

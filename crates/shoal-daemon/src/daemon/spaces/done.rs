@@ -117,7 +117,7 @@ impl Manager {
             .await
     }
 
-    /// `shoal restore` restores a stopped agent of the space, which says its
+    /// `shoal resume` restores a stopped agent of the space, which says its
     /// work is not finished: withdraw a standing completion, so a protection
     /// stop restores the agent and completion cleanup leaves the space.
     pub(crate) async fn reopen_for_resume(&self, space_id: &SpaceId) {

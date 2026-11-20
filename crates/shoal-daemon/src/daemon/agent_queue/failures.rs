@@ -1,6 +1,6 @@
 //! Launches whose start failed: each stays on the space it was to start
 //! its agent in as a failed entry, which nothing admits and which keeps no
-//! space from cleanup, listed with its error until `shoal restore` queues
+//! space from cleanup, listed with its error until `shoal resume` queues
 //! it again as it was, a new launch in the space replaces it, or the space
 //! goes with it.
 use anyhow::{Context as _, Result};
@@ -224,7 +224,7 @@ impl Manager {
         };
         let (name, number, kind) = (&space.name, space.number, space.kind());
         let message = format!(
-            "{name} did not start: {error}; `shoal restore {number}` starts its agent again, and `shoal rm {number}` removes the {kind}"
+            "{name} did not start: {error}; `shoal resume {number}` starts its agent again, and `shoal rm {number}` removes the {kind}"
         );
         (self.notify_space(name, &space.id, AlertKind::StartFailed, message)).await;
     }

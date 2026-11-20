@@ -78,7 +78,7 @@ async fn move_one(ctx: &Context, remote: &Remote, planned: &PlannedExport) -> Re
         }
         Err(ImportFailure::Unknown(error)) => {
             return Err(error.context(format!(
-                "{host} may already have it, so its agents stay stopped here; if it arrived there, shoal rm {id} removes it here, and otherwise shoal restore {id} continues it here",
+                "{host} may already have it, so its agents stay stopped here; if it arrived there, shoal rm {id} removes it here, and otherwise shoal resume {id} continues it here",
                 host = remote.host,
                 id = planned.id()
             )));
@@ -174,7 +174,7 @@ async fn restore_here(ctx: &Context, planned: &PlannedExport, saved: Stopped) {
     let now = match saved_now(ctx, planned).await {
         Ok(now) => now,
         Err(error) => {
-            eprintln!("warning: cannot read the stopped agents; run shoal restore: {error:#}");
+            eprintln!("warning: cannot read the stopped agents; run shoal resume: {error:#}");
             return;
         }
     };

@@ -38,7 +38,7 @@ pub(super) async fn cancel(ctx: &Context, entry: Option<String>) -> Result<i32> 
     let message = match entry.kind {
         QueueKind::Launch => format!("Removed {} from the agent queue", entry.name),
         QueueKind::Restore => format!(
-            "Removed the restore of {} from the agent queue; restore it with shoal restore {}",
+            "Removed the restore of {} from the agent queue; resume it with shoal resume {}",
             entry.name,
             (entry.space_id.as_ref()).map_or("", |id| id.as_str())
         ),

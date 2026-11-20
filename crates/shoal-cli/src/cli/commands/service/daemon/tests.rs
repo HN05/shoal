@@ -57,6 +57,6 @@ fn status_names_why_the_link_to_the_hub_is_down() {
 fn an_exit_points_to_restoring_only_the_spaces_it_stopped() {
     let left = Left::Spaces(vec![2.into(), 5.into()]);
     let restore = left.restore().unwrap_or_default();
-    assert!(restore.ends_with("shoal restore 2 5"), "{restore}");
+    assert!(restore.ends_with("shoal resume 2 5"), "{restore}");
     assert_eq!(Left::Spaces(Vec::new()).restore(), None);
 }

@@ -106,7 +106,7 @@ pub(crate) enum Wake {
     /// An update for an agent stopped between turns, which holds no slot
     /// meanwhile; `due` once one waits.
     Update { due: bool },
-    /// Only a free slot, for a restore `shoal restore` asked for or an agent
+    /// Only a free slot, for a restore `shoal resume` asked for or an agent
     /// stopped mid-turn otherwise, which holds none meanwhile.
     Slot,
 }

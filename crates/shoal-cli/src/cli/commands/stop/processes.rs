@@ -1,5 +1,5 @@
 //! Stopping the processes Shoal does not track, which are not saved for
-//! `shoal restore`.
+//! `shoal resume`.
 use anyhow::{Result, ensure};
 
 use crate::cli::{context::Context, ui};
@@ -9,7 +9,7 @@ use shoal_protocol::space_names::SpaceSelector;
 
 /// Stop the processes Shoal does not track that `selection` takes, of each
 /// space `selectors` names, else of the current chat or workspace, else of
-/// one picked. They are not saved for `shoal restore`.
+/// one picked. They are not saved for `shoal resume`.
 pub(in crate::cli::commands) async fn processes(
     ctx: &Context,
     selectors: Vec<SpaceSelector>,

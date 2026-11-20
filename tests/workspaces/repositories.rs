@@ -444,7 +444,7 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
         .spawn()
         .unwrap();
     wait_until("agent started", || old.join("started").exists());
-    // A workspace running only a command keeps it for `shoal restore`.
+    // A workspace running only a command keeps it for `shoal resume`.
     let building = fixture.add("building");
     let building = PathBuf::from(building["path"].as_str().unwrap());
     let command = fixture

@@ -26,7 +26,7 @@ pub struct Protection {
 
 /// Why Shoal put a space's agent to sleep and what wakes it: an asleep
 /// agent comes back on its own through the agent queue, unlike a stopped
-/// one, which waits for `shoal restore`.
+/// one, which waits for `shoal resume`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Asleep {
     pub reason: String,
@@ -48,7 +48,7 @@ pub struct RunningAgent {
     /// until it reports again.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<crate::state::AgentState>,
-    /// Whether an interrupt ended its last turn, which `shoal restore`
+    /// Whether an interrupt ended its last turn, which `shoal resume`
     /// continues.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub interrupted: bool,

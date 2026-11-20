@@ -1375,7 +1375,7 @@ async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup()
         )
         .await
         .unwrap();
-    // Saved for `shoal restore`, it is kept as a workspace's saved agent
+    // Saved for `shoal resume`, it is kept as a workspace's saved agent
     // keeps it.
     manager.end_executions(&chat.id).await;
     let saved = save_agent(&manager, &chat.id);
@@ -1403,7 +1403,7 @@ async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup()
     assert!(manager.merged_snapshot(&chat.id).await.unwrap().is_some());
 }
 
-/// Save a stopped agent for `shoal restore` in the space `id`, returning
+/// Save a stopped agent for `shoal resume` in the space `id`, returning
 /// its record.
 fn save_agent(manager: &Manager, id: &shoal_ids::space_ids::SpaceId) -> std::path::PathBuf {
     use crate::paths::StateFiles;

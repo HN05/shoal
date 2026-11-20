@@ -38,7 +38,7 @@ pub enum RemovalMethod {
     /// The workspaces and chats `stop --all` stops.
     StopTargets,
     /// Stop the agents and commands of the workspace or chat `space`,
-    /// saving them for `shoal restore`.
+    /// saving them for `shoal resume`.
     StopSpace {
         space: SpaceSelector,
         /// The caller confirmed that executions Shoal cannot prove ended did.

@@ -1062,7 +1062,7 @@ fn a_start_without_a_terminal_admits_a_happy_agent_before_it_opens_here() {
 
 /// A Happy chat whose session Happy cannot prepare, as without a login,
 /// fails its start through the agent queue, as any chat's start does: the
-/// chat stays with its failed launch for `shoal restore`.
+/// chat stays with its failed launch for `shoal resume`.
 #[test]
 fn a_happy_chat_whose_start_fails_keeps_its_failed_launch() {
     let fixture = Fixture::with_config(Some(HAPPY_ENABLED));

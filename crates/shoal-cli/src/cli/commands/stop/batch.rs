@@ -45,7 +45,7 @@ pub(super) async fn stop_all(ctx: &Context) -> Result<i32> {
 /// Stop `spaces` in parallel, reporting each; one failure does not keep the
 /// others running, and an execution Shoal cannot prove ended fails its
 /// workspace unless `acknowledge_unproven`. `restore` is what the hint to
-/// continue them passes `shoal restore`; empty, it names each one.
+/// continue them passes `shoal resume`; empty, it names each one.
 pub(super) async fn stop_each(
     ctx: &Context,
     spaces: &[Space],
@@ -130,7 +130,7 @@ async fn stop(ctx: &Context, space: &Space, acknowledge_unproven: bool) -> Resul
 enum Stop {
     /// A space's agents and commands stopped, with how many untracked
     /// processes, the launches the stop removed from the queue, and whether
-    /// it saved work for `shoal restore`.
+    /// it saved work for `shoal resume`.
     Space {
         other_processes: usize,
         cancelled: Vec<QueueEntry>,
@@ -162,7 +162,7 @@ impl Stop {
         }
     }
 
-    /// Whether this stop saved work for `shoal restore`, which refuses to
+    /// Whether this stop saved work for `shoal resume`, which refuses to
     /// resume a space without any.
     fn saved(&self) -> bool {
         match self {

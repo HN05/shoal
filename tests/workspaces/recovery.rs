@@ -179,7 +179,7 @@ fn daemon_stop_and_signals_stop_tracked_agents() {
         saved
     };
     // `shoal daemon stop` stops the agent as `shoal stop` does, so it stays
-    // down until `shoal restore`.
+    // down until `shoal resume`.
     let agent = start(&fixture);
     let output = fixture.run(&["daemon", "stop"]);
     assert!(output.status.success(), "{}", printed(&output));

@@ -22,7 +22,7 @@ pub(crate) enum Ending {
     /// Wrappers detach and reattach to the next daemon.
     Detach,
     /// Work stops as `shoal stop --all` stops it and stays down until
-    /// `shoal restore`, as running chats do.
+    /// `shoal resume`, as running chats do.
     Stop,
     /// Work stops saved first, with restores that need no user queued and
     /// running chats saved to come back, as before a system shutdown, but
@@ -85,7 +85,7 @@ impl Manager {
     }
 
     /// Stop what `shoal stop --all` stops, as it does, keeping stopped
-    /// agents down until `shoal restore`, after a stop before a shutdown that
+    /// agents down until `shoal resume`, after a stop before a shutdown that
     /// is under way. Returns the spaces stopped.
     async fn stop_all_for_exit(&self) -> StoppedSpaces {
         let _shutdown_stop = self.shutdown_stopped.lock().await;

@@ -120,7 +120,7 @@ impl Manager {
     /// Start the agent of `execution` in `space` in a new wrapper for
     /// the restart its wrapper `finished` with, through the agent queue,
     /// where the agent ran. A restart that cannot start it fails, leaving
-    /// the record for `shoal restore`; one a stop cancelled starts nothing.
+    /// the record for `shoal resume`; one a stop cancelled starts nothing.
     pub(crate) async fn restart_in_new_wrapper(
         &self,
         space: &Space,
@@ -248,7 +248,7 @@ impl Manager {
     }
 
     /// Cancel the restarts that would start an agent of `workspace_id` in a
-    /// new wrapper, leaving its record for `shoal restore`. Requires the
+    /// new wrapper, leaving its record for `shoal resume`. Requires the
     /// queue gate, which a restart holds while it records its restore.
     pub(crate) async fn cancel_renewals(&self, workspace_id: &SpaceId) {
         let cancelled: Vec<Handover> = self

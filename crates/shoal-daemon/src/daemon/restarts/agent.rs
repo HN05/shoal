@@ -84,7 +84,7 @@ fn stopped_reason(space: &Space, running: &RunningAgent) -> Option<String> {
 
 /// The agent `running`, of `space`, runs, or why it cannot restart.
 fn restartable(space: &Space, running: &RunningAgent) -> Result<Agent, String> {
-    let manual = format!("use shoal stop {0} and shoal restore {0}", space.number);
+    let manual = format!("use shoal stop {0} and shoal resume {0}", space.number);
     match &running.agent {
         None => Err(format!(
             "execution {} is disconnected; {manual}",

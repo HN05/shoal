@@ -486,7 +486,7 @@ async fn restores_of(manager: &Manager, execution: &str) -> usize {
 
 /// A stop cancels a restart between its wrappers, whether it comes before
 /// the restart records the new wrapper's start or after, and leaves the
-/// agent's record for `shoal restore`.
+/// agent's record for `shoal resume`.
 #[tokio::test]
 async fn a_stop_cancels_a_restart_between_its_wrappers() {
     let (root, manager) = manager().await;

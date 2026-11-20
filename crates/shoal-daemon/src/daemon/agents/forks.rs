@@ -1,5 +1,5 @@
 //! The session a new agent starts from a fork of: the one a space's agent
-//! reported last, which its hooks keep for `shoal restore`.
+//! reported last, which its hooks keep for `shoal resume`.
 use anyhow::{Context as _, Result, bail};
 
 use super::super::manager::Manager;

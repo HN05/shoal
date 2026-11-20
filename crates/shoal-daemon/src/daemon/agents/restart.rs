@@ -153,7 +153,7 @@ impl Manager {
         );
         agent.ensure_not_stopped(stopped.as_ref())?;
         // Save the handoff before the stop, so a wrapper that dies stopping
-        // the agent leaves it for `shoal restore`.
+        // the agent leaves it for `shoal resume`.
         let handoff = recovery::save_record(
             &self.paths,
             &agent.workspace_id,

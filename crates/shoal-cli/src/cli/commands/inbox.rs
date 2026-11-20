@@ -565,7 +565,7 @@ impl ItemExt for Item {
             Self::ChatAsleep { chat } => ui::wake_now(chat.number),
             Self::StartFailed { number, .. } => {
                 format!(
-                    "start it again with shoal restore {number}, or remove it with shoal rm {number}"
+                    "start it again with shoal resume {number}, or remove it with shoal rm {number}"
                 )
             }
             _ => String::new(),

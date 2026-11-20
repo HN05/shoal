@@ -100,7 +100,7 @@ async fn agent_terminal_session(
         {
             let error = failed.error.as_deref().unwrap_or("its start failed");
             bail!(
-                "{} did not start: {error}; shoal restore starts it again",
+                "{} did not start: {error}; shoal resume starts it again",
                 entry.name
             );
         }

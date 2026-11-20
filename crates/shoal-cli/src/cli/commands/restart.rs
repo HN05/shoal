@@ -2,7 +2,7 @@
 //! agent's current binary: the daemon restarts the agent of each space the
 //! command asks it to, and says what it did, passing the request through the
 //! hub for a space of another joined machine. A chat's agent restarts in a
-//! new place, as `shoal restore` restores a chat.
+//! new place, as `shoal resume` resumes a chat.
 use anyhow::Result;
 use futures_util::{StreamExt, stream::FuturesUnordered};
 
@@ -143,7 +143,7 @@ async fn with_restore(ctx: &Context, space: &Target, error: anyhow::Error) -> an
     let saved = crate::client::saved::read(&ctx.paths, SpaceSelector::id(&space.id)).await;
     match saved.is_ok_and(|saved| saved.is_restorable()) {
         true => error.context(format!(
-            "the agent stays stopped; restore it with shoal restore {}",
+            "the agent stays stopped; resume it with shoal resume {}",
             space.number
         )),
         false => error,

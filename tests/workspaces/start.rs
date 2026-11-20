@@ -2367,7 +2367,7 @@ fn stop_narrowed_agent(fixture: &Fixture, workspace: &Value) -> PathBuf {
     record
 }
 
-/// `shoal restore --permission` changes the permissions a stopped agent was
+/// `shoal resume --permission` changes the permissions a stopped agent was
 /// given, which its restore registers: a key it names takes its value, even
 /// wider than the mode's, `KEY=mode` drops one, and the rest keep theirs.
 /// Without it the restore keeps them all, and a refused resume changes
@@ -2429,7 +2429,7 @@ fn resume_changes_the_permissions_a_stopped_agent_was_given() {
 }
 
 /// The narrowing a restore the daemon starts from the queue runs under,
-/// which `shoal restore` with `args` queued for an agent that started with
+/// which `shoal resume` with `args` queued for an agent that started with
 /// `push=propose`.
 fn queued_restore_narrowing(args: &[&str]) -> Value {
     let fixture = Fixture::with_config(Some(
@@ -2458,7 +2458,7 @@ fn a_queued_restore_keeps_the_recorded_narrowing() {
 }
 
 /// A restore the daemon starts from the queue runs with the permissions its
-/// `shoal restore --permission` gave.
+/// `shoal resume --permission` gave.
 #[test]
 fn a_queued_restore_runs_with_the_permissions_its_resume_gave() {
     assert_eq!(
@@ -2467,7 +2467,7 @@ fn a_queued_restore_runs_with_the_permissions_its_resume_gave() {
     );
 }
 
-/// `shoal restore --permission` restores a stopped chat with the permissions
+/// `shoal resume --permission` restores a stopped chat with the permissions
 /// it gives, even wider than its mode's, which the chat records with the
 /// keys it leaves out; without it the chat keeps them all.
 #[test]
@@ -3569,7 +3569,7 @@ fn a_start_without_a_terminal_leaves_its_agent_to_the_daemon() {
     fixture.ok(&["stop", &fixture.id("detached")]);
 }
 
-/// Without a terminal, as from another agent's tool call, `shoal restore
+/// Without a terminal, as from another agent's tool call, `shoal resume
 /// --now` has the daemon start each restore at once, whatever the limit,
 /// instead of naming commands to run them here, and so does resuming a last
 /// session by itself.
@@ -3645,7 +3645,7 @@ fn resume_without_a_terminal_or_host_is_refused_before_queuing() {
     assert!(record.exists());
 }
 
-/// `shoal restore` queues restores, which the daemon starts in detached
+/// `shoal resume` queues restores, which the daemon starts in detached
 /// sessions as `max_heavy_agents` allows, leaving out done workspaces.
 #[test]
 fn resume_queues_restores_that_start_as_agent_slots_free() {
