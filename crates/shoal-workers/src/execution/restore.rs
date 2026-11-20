@@ -21,6 +21,7 @@ use crate::{
 use shoal_core::execution::recovery::{
     Ending, Record, RecordExt as _, Recovery, Stop, StopExt as _, resumed_prompt,
 };
+use shoal_core::terminal::WAKE_PROMPT;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// What a restore command of agent `name` in `home` is built from: the
@@ -157,8 +158,9 @@ async fn resolve_in(
 
 /// Restore the `restored` session, which ended as `ending` says: one that
 /// ended mid-turn is asked to continue, told about its stop, and any other
-/// waits, and either is told `handoff` where the command accepts a prompt:
-/// agents with resume arguments and `{prompt}` in its `resume_command`.
+/// waits, or with resume arguments takes the updates that wait for it, and
+/// either is told `handoff` where the command accepts a prompt: agents with
+/// resume arguments and `{prompt}` in its `resume_command`.
 /// Resume arguments restore its session when known, otherwise the
 /// workspace's latest session, with its model and effort, in `home`, a
 /// workspace or a chat.
@@ -185,7 +187,12 @@ pub async fn resolve<'a>(
         .arguments
         .resume_args(restored.session);
     let automatic = configured.is_some() || resume_args.is_some();
-    let message = resumed_prompt(ending, handoff);
+    let message = match resumed_prompt(ending, handoff) {
+        Some(message) => Some(message),
+        // A configured command runs without the hooks that deliver them.
+        None if configured.is_none() => waking_prompt(paths, home, &settings, &name).await?,
+        None => None,
+    };
     let restore = RestoreCommand {
         paths,
         settings: &settings,
@@ -218,6 +225,23 @@ pub async fn resolve<'a>(
         handoff_delivered: handoff_delivered && handoff.is_some(),
         proxy,
     })
+}
+
+/// What a session that opens between turns with nothing to be told
+/// starts with: the prompt its wrapper wakes an idle agent with, whose hook
+/// delivers them, while updates wait for it in `home` and its agent has
+/// that hook; otherwise nothing, so that it waits for them.
+async fn waking_prompt(
+    paths: &CommandPaths,
+    home: AgentHome<'_>,
+    settings: &crate::config::Effective,
+    name: &Agent,
+) -> Result<Option<String>> {
+    if crate::agents::prompt_wake(settings.integration(name)).is_none() {
+        return Ok(None);
+    }
+    let waiting = crate::client::agent_updates::waiting(paths, SpaceSelector::id(home.id()));
+    Ok(waiting.await?.then(|| WAKE_PROMPT.to_owned()))
 }
 
 /// The command restoring the agent stopped with `record`, with the

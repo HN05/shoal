@@ -166,6 +166,9 @@ pub enum AgentMethod {
     AgentUpdates { space: SpaceSelector },
     /// Long-lived: what [`Self::AgentUpdates`] answers, once there is any.
     WaitAgentUpdates { space: SpaceSelector },
+    /// Whether messages that wake an idle agent or item updates a hook
+    /// would deliver wait for the agent of the space, without taking them.
+    UpdatesWaiting { space: SpaceSelector },
     /// The caller's login for Git over HTTPS to `host`: the agent token
     /// `[machine.forges]` sets for it, for any scoped caller; none for an
     /// unscoped caller or a host without one.
@@ -180,6 +183,13 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         leftovers: Vec<u32>,
     },
+}
+
+/// Whether updates wait for a space's agent, as
+/// [`AgentMethod::UpdatesWaiting`] answers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WaitingUpdates {
+    pub waiting: bool,
 }
 
 /// Whether the turn a wake hook starts goes ahead: not when a stop of the

@@ -508,6 +508,25 @@ async fn built_in_restore_child() {
         panic!("{:?}", waits.command);
     };
     assert_eq!([program, separator], ["saved-session", "--"]);
+    // A built-in resume between turns opens with the wake prompt once
+    // updates wait, whose hook delivers them.
+    fs::write(
+        workspace.path.join(".shoal.toml"),
+        "[agents.codex]\ncommand = ['codex-fixture', '{args}']\n",
+    )
+    .unwrap();
+    let opens = async || {
+        let ending = shoal_core::execution::recovery::Ending::Stopped(&stop);
+        let resolved =
+            crate::execution::resolve(&paths, &workspace, restored("codex", None), None, ending);
+        let command = resolved.await.unwrap().command;
+        command.last().unwrap().to_string_lossy().into_owned()
+    };
+    assert_ne!(opens().await, shoal_core::terminal::WAKE_PROMPT);
+    let space = SpaceSelector::id(&workspace.id);
+    let message = manager.send_space_message(None, &space, "Review requested".into(), Vec::new());
+    message.await.unwrap();
+    assert_eq!(opens().await, shoal_core::terminal::WAKE_PROMPT);
     serving.abort();
 }
 

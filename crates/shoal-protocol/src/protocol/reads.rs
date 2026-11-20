@@ -16,6 +16,7 @@ impl Operation {
             Self::Daemon(DaemonMethod::Status)
                 | Self::Agent(
                     AgentMethod::AgentUpdates { .. }
+                        | AgentMethod::UpdatesWaiting { .. }
                         | AgentMethod::Progress { .. }
                         | AgentMethod::GitCredential { .. }
                 )

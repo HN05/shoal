@@ -1,7 +1,7 @@
 //! The response envelope, its bodies and the errors they carry.
 use super::{
-    DaemonStatus, DownloadPiece, Exited, MAX_FRAME, ReviewPiece, VERSION, ViewPiece, WokenTurn,
-    Work, chats, frame_pages, operations,
+    DaemonStatus, DownloadPiece, Exited, MAX_FRAME, ReviewPiece, VERSION, ViewPiece,
+    WaitingUpdates, WokenTurn, Work, chats, frame_pages, operations,
 };
 use crate::alerts::Alert;
 use crate::events::EventItem;
@@ -275,6 +275,7 @@ response_bodies! {
     Slept(crate::sleep::Slept),
     Prioritized(crate::priority::Prioritized),
     WokenTurn(WokenTurn),
+    WaitingUpdates(WaitingUpdates),
     AgentSession(crate::model::AgentSession),
     SpaceStatus(Box<SpaceStatus>),
     SpaceSessions(crate::transcripts::SpaceSessions),

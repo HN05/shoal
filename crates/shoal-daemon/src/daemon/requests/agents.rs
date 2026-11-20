@@ -10,7 +10,7 @@ use super::super::{
     scope::{Caller, Scoped},
 };
 use crate::{
-    protocol::{AgentMethod, Body, WokenTurn},
+    protocol::{AgentMethod, Body, WaitingUpdates, WokenTurn},
     state::AgentState,
     time::UnixTime,
 };
@@ -198,6 +198,9 @@ pub(super) async fn handle(
         AgentMethod::AgentUpdates { space } => {
             Body::PrUpdates(manager.agent_updates(&space).await?)
         }
+        AgentMethod::UpdatesWaiting { space } => Body::WaitingUpdates(WaitingUpdates {
+            waiting: manager.updates_waiting(&space).await?,
+        }),
     }))
 }
 
@@ -212,6 +215,7 @@ impl Scoped for AgentMethod {
             AgentMethod::AwaitAgentWake { workspace, .. } => Some(workspace),
             AgentMethod::AgentSession { space }
             | AgentMethod::AgentUpdates { space }
+            | AgentMethod::UpdatesWaiting { space }
             | AgentMethod::WaitAgentUpdates { space }
             | AgentMethod::ReportWakeEnd { space, .. }
             | AgentMethod::Progress { space }

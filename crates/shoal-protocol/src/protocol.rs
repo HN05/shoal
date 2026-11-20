@@ -42,7 +42,7 @@ mod version;
 mod workspaces;
 mod wrapper;
 
-pub use agents::{AgentMethod, SubagentChange, TurnEnd, WakeEnd, WokenTurn};
+pub use agents::{AgentMethod, SubagentChange, TurnEnd, WaitingUpdates, WakeEnd, WokenTurn};
 pub use alerts::{AlertMethod, AlertTarget, AlertsFor};
 pub use approvals::ApprovalMethod;
 pub use apps::AppMethod;
