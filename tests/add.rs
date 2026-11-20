@@ -219,7 +219,11 @@ fn unregistered_repositories_are_registered_on_confirmation() {
         (url_args, "y\n", registered.clone()),
         (url_args, "n\n", vec!["list_repositories"]),
         (explicit_args, "y\n", named),
-        (explicit_args, "n\n", vec!["list_repositories", "list_repositories"]),
+        (
+            explicit_args,
+            "n\n",
+            vec!["list_repositories", "list_repositories"],
+        ),
     ] {
         let daemon = FakeDaemon::start();
         let (output, transcript) = prompt::answer(
@@ -391,7 +395,10 @@ impl FakeDaemon {
                     }
                     "check_launch" => {
                         let launch = &request["method"]["check_launch"]["launch"];
-                        method = format!("check_launch {}", launch["repository"].as_str().unwrap());
+                        // The repository named by `--repo` or positionally.
+                        let repository =
+                            launch["repository"].as_str().or(launch["target"].as_str());
+                        method = format!("check_launch {}", repository.unwrap());
                         if let Some(branch) = launch["branch"].as_str() {
                             method = format!("{method} {branch}");
                         }

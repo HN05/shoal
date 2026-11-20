@@ -80,17 +80,24 @@ pub(super) fn chosen(
 }
 
 /// The spaces a mode picked for `launch` must start: of the kind its
-/// arguments other than the mode fit, and in a repository where they name
-/// one or an issue, which only a space in a repository starts on.
+/// arguments other than the mode fit, and in a repository where they
+/// [require](requires_repository) one.
 fn fit(launch: &Launch) -> Result<ModeFit> {
-    let in_repository = launch.in_workspace.is_some()
-        || launch.issue.is_some()
-        || launches::names_repository(launch)?
-        || launches::named_issue(launch)?.is_some();
     Ok(ModeFit {
         kind: launches::fitting_kind(launch),
-        repository: in_repository.then_some(true),
+        repository: requires_repository(launch)?.then_some(true),
     })
+}
+
+/// Whether the arguments of `launch` call for a repository whatever its
+/// mode: they name one, an existing workspace, an issue, which only a
+/// space in a repository starts on, or what only a workspace takes.
+pub(super) fn requires_repository(launch: &Launch) -> Result<bool> {
+    Ok(launch.in_workspace.is_some()
+        || launch.issue.is_some()
+        || launches::fitting_kind(launch).is_some()
+        || launches::names_repository(launch)?
+        || launches::named_issue(launch)?.is_some())
 }
 
 /// The mode `mode` of `launch` under `settings`, which says what a

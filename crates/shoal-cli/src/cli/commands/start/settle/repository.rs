@@ -35,9 +35,10 @@ pub(super) async fn found(ctx: &Context, launch: &mut Launch) -> Result<Option<R
         None => linked_repository(ctx, launch, &mut repos).await?,
     };
     if let Some(id) = named {
-        launch.repository = Some(id.to_string());
-        if matches!(launch.target, Some(StartTarget::Repository(_))) {
-            launch.target = None;
+        // It keeps the place it was named in, which refusals name.
+        match &mut launch.target {
+            Some(StartTarget::Repository(named)) => *named = id.to_string(),
+            _ => launch.repository = Some(id.to_string()),
         }
         return Ok(repos.into_iter().find(|repo| repo.id == id));
     }
@@ -69,6 +70,24 @@ pub(super) async fn settled(
         return Ok((found, settings));
     }
     if found.is_some() || configured.is_none() || !ui::can_pick(ctx) {
+        return Ok((found, settings));
+    }
+    let repo = pick(ctx, launch).await?;
+    let target = ConfigTarget::Repository(repo.id.clone().into());
+    let settings = DaemonReads(ctx).settings(target).await?;
+    Ok((Some(repo), settings))
+}
+
+/// The repository `launch` goes in and its settings once its arguments
+/// alone call for one, whatever its mode: the `found` one with its
+/// `settings`, else one a terminal picks, which `launch` then names, with
+/// its own.
+pub(super) async fn required(
+    ctx: &Context,
+    launch: &mut Launch,
+    (found, settings): (Option<Repository>, Effective),
+) -> Result<(Option<Repository>, Effective)> {
+    if found.is_some() || !mode::requires_repository(launch)? || !ui::can_pick(ctx) {
         return Ok((found, settings));
     }
     let repo = pick(ctx, launch).await?;

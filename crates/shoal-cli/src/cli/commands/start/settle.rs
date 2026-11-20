@@ -51,7 +51,7 @@ pub(in crate::cli::commands) async fn settle(
             mode::ensure_fits(&launch, &mode, &settings)?;
             repository::settled(ctx, &mut launch, &mode, (found, settings)).await?
         }
-        None => (found, settings),
+        None => repository::required(ctx, &mut launch, (found, settings)).await?,
     };
     pickers::check_agent(&launch, &settings)?;
     let checked = check::check(ctx, &launch, options).await?;
