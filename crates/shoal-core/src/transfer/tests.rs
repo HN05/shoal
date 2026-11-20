@@ -8,23 +8,42 @@ use shoal_ids::agent_session_ids::AgentSessionId;
 
 #[test]
 fn import_refuses_other_files_and_versions() {
-    assert!(Import::read(&mut &b"not an export\n"[..]).is_err());
+    assert!(read_package(b"not an export\n").is_err());
     let bytes = format!(
         "{FORMAT} 0.0.1\n{}\n",
         manifest_json(&manifest_with_sessions())
     );
-    let refused = Import::read(&mut bytes.as_bytes()).err().expect("refused");
+    let refused = read_package(bytes.as_bytes()).err().expect("refused");
     assert!(
         format!("{refused:#}").contains("Shoal 0.0.1"),
         "{refused:#}"
     );
     // A format number of an earlier package names no release.
     let bytes = format!("{FORMAT} 9\n{{}}\n");
-    let refused = Import::read(&mut bytes.as_bytes()).err().expect("refused");
+    let refused = read_package(bytes.as_bytes()).err().expect("refused");
     assert!(
         format!("{refused:#}").contains("an earlier Shoal"),
         "{refused:#}"
     );
+}
+
+/// A package read back whole, with the directory its parts are in.
+struct Read {
+    manifest: Manifest,
+    parts: Parts,
+    _directory: tempfile::TempDir,
+}
+
+/// Read the package `bytes` as an import does.
+fn read_package(mut bytes: &[u8]) -> Result<Read> {
+    let directory = tempfile::tempdir()?;
+    let manifest = read_manifest(&mut bytes)?;
+    let parts = Parts::read(&mut bytes, &manifest, directory.path())?;
+    Ok(Read {
+        manifest,
+        parts,
+        _directory: directory,
+    })
 }
 
 /// The header of a package this Shoal writes.
@@ -47,7 +66,7 @@ fn a_workspace_package_keeps_its_branch_or_starting_commit() {
         });
     for manifest in [manifest, at_commit] {
         let bytes = export_bytes(&header(), &manifest, &[]);
-        let import = Import::read(&mut &bytes[..]).unwrap();
+        let import = read_package(&bytes).unwrap();
         let kept = import.manifest.space.record.kept_workspace().unwrap();
         assert_eq!(
             kept.head,
@@ -89,8 +108,8 @@ fn a_chat_package_holds_its_removal_record_and_continues_its_session() {
         carried: Vec::new(),
     };
     let bytes = export_bytes(&header(), &manifest, &["abc"]);
-    let import = Import::read(&mut &bytes[..]).unwrap();
-    assert!(import.bundles.is_empty());
+    let import = read_package(&bytes).unwrap();
+    assert!(import.parts.bundles.is_empty());
     // The record comes back whole, under its ID and below its parent, with
     // its links' relations, for the import to restore.
     let packaged = &import.manifest.space.record;
@@ -138,8 +157,9 @@ fn import_reads_session_files_and_refuses_paths_outside_their_directory() {
     let mut manifest = manifest_with_sessions();
     manifest.session_files = vec![session_file("p/s1.jsonl", 3), session_file("p/s1/a", 2)];
     let bytes = export_bytes(&header(), &manifest, &["abc", "de"]);
-    let import = Import::read(&mut &bytes[..]).unwrap();
+    let import = read_package(&bytes).unwrap();
     let read: Vec<_> = import
+        .parts
         .sessions
         .iter()
         .map(|imported| {
@@ -155,11 +175,11 @@ fn import_reads_session_files_and_refuses_paths_outside_their_directory() {
         ]
     );
     let short = export_bytes(&header(), &manifest, &["abc", "d"]);
-    assert!(Import::read(&mut &short[..]).is_err());
+    assert!(read_package(&short).is_err());
     for path in ["../escape", "/absolute"] {
         manifest.session_files = vec![session_file(path, 1)];
         let bytes = export_bytes(&header(), &manifest, &["x"]);
-        assert!(Import::read(&mut &bytes[..]).is_err(), "{path}");
+        assert!(read_package(&bytes).is_err(), "{path}");
     }
 }
 
@@ -184,9 +204,9 @@ fn import_reads_the_bundle_of_each_packaged_workspace_after_the_session_files() 
         .collect();
     let bytes = export_bytes(&header(), &manifest, &["abc", "de", "fghi"]);
 
-    let import = Import::read(&mut &bytes[..]).unwrap();
+    let import = read_package(&bytes).unwrap();
 
-    let bundles: Vec<(&str, String)> = (import.bundles.iter())
+    let bundles: Vec<(&str, String)> = (import.parts.bundles.iter())
         .map(|(id, bundle)| (id.as_str(), fs::read_to_string(bundle.path()).unwrap()))
         .collect();
     let own = manifest.space.record.space_id.as_str();
@@ -194,7 +214,7 @@ fn import_reads_the_bundle_of_each_packaged_workspace_after_the_session_files() 
     expected.sort();
     assert_eq!(bundles, expected);
     let trailing = export_bytes(&header(), &manifest, &["abc", "de", "fghi", "j"]);
-    assert!(Import::read(&mut &trailing[..]).is_err());
+    assert!(read_package(&trailing).is_err());
 }
 
 /// An export's manifest with one stopped agent and a last session, both with

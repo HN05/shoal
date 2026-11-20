@@ -7,7 +7,7 @@ use crate::transfer::PackagedSpaceExt;
 use shoal_protocol::transcripts::CarriedSessionFile;
 use std::{
     collections::{BTreeMap, BTreeSet},
-    io::{BufReader, IsTerminal},
+    io::{BufRead, BufReader, IsTerminal},
     path::{Path, PathBuf},
 };
 
@@ -26,7 +26,7 @@ use crate::{
     },
     model::RestoredSpace,
     refusal::{Reason, Refusal},
-    transfer::{Import, ImportedSessionFile, Manifest, PackagedSpace, Sessions, SpaceImport},
+    transfer::{ImportedSessionFile, Manifest, PackagedSpace, Parts, Sessions, SpaceImport},
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::space_ids::SpaceId;
@@ -89,6 +89,8 @@ struct Package {
     carried: Vec<CarriedImport>,
     files: Vec<ImportedSessionFile>,
     bundles: BTreeMap<SpaceId, tempfile::NamedTempFile>,
+    /// Where the session files and bundles are, while the package lives.
+    _directory: tempfile::TempDir,
 }
 
 impl Package {
@@ -96,11 +98,11 @@ impl Package {
     /// the one `options` names, unless it holds a chat without a
     /// repository, keeping the sessions `options` says.
     fn read(file: &Path, options: &ImportOptions) -> Result<Self> {
-        let Import {
-            manifest,
+        let (manifest, parts, directory) = read_import(file)?;
+        let Parts {
             sessions: files,
             bundles,
-        } = read_import(file)?;
+        } = parts;
         if let Some(copied) = manifest.copy {
             ensure!(
                 options.sessions != Some(true),
@@ -136,6 +138,7 @@ impl Package {
             carried,
             files,
             bundles,
+            _directory: directory,
         })
     }
 
@@ -339,17 +342,24 @@ fn sessions_here(manifest: &Manifest, sessions: Option<bool>) -> Sessions {
 }
 
 /// Read the export in `file`, or on standard input for `-`, which must
-/// not be a terminal, since no one types an archive.
-fn read_import(file: &Path) -> Result<Import> {
-    if file.as_os_str() == STANDARD_STREAM {
+/// not be a terminal, since no one types an archive, with its parts in a
+/// new temporary directory.
+fn read_import(file: &Path) -> Result<(Manifest, Parts, tempfile::TempDir)> {
+    let mut input: Box<dyn BufRead> = if file.as_os_str() == STANDARD_STREAM {
         ensure!(
             !std::io::stdin().is_terminal(),
             "--from - reads a package piped in; name its file instead"
         );
-        return Import::read(&mut std::io::stdin().lock());
-    }
-    let input = std::fs::File::open(file).with_context(|| format!("open {}", file.display()))?;
-    Import::read(&mut BufReader::new(input))
+        Box::new(std::io::stdin().lock())
+    } else {
+        let input =
+            std::fs::File::open(file).with_context(|| format!("open {}", file.display()))?;
+        Box::new(BufReader::new(input))
+    };
+    let directory = tempfile::tempdir()?;
+    let manifest = crate::transfer::read_manifest(&mut input)?;
+    let parts = Parts::read(&mut input, &manifest, directory.path())?;
+    Ok((manifest, parts, directory))
 }
 
 #[cfg(test)]

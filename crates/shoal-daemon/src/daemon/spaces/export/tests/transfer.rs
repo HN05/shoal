@@ -4,6 +4,7 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_refs::BranchName;
 use std::{fs, path::Path, sync::Arc};
 
+use super::Import;
 use crate::{
     daemon::{
         manager::Manager,

@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, fs};
 
+use super::Import;
 use super::transfer::{exporter, importer};
 use crate::{
     daemon::{
@@ -8,7 +9,7 @@ use crate::{
     },
     model::{Repository, RestoredSpace, Workspace},
     removal::{InspectionPolicy, UnsavedWork},
-    transfer::{Carrying, Import, ManifestExt, PackagedSpaceExt, SpaceImport},
+    transfer::{Carrying, ManifestExt, PackagedSpaceExt, SpaceImport},
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;

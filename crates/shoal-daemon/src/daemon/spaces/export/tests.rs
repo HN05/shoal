@@ -1,4 +1,6 @@
-use std::{fs, os::unix::process::CommandExt, path::Path, sync::Arc};
+use std::{collections::BTreeMap, fs, os::unix::process::CommandExt, path::Path, sync::Arc};
+
+use anyhow::Result;
 
 use crate::{
     daemon::{
@@ -8,13 +10,40 @@ use crate::{
     model::RemovedSpace,
     process::identity,
     removal::{InspectionPolicy, UnsavedWork},
-    transfer::{Carrying, ExportedSpace, Import, ManifestExt, PackagedSpaceExt, SpaceImport},
+    transfer::{
+        Carrying, ExportedSpace, ImportedSessionFile, Manifest, ManifestExt, PackagedSpaceExt,
+        Parts, SpaceImport,
+    },
 };
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 mod moving;
 mod subtree;
 mod transfer;
+
+/// A package read back as an import reads it, with the directory its parts
+/// are in.
+pub(super) struct Import {
+    pub(super) manifest: Manifest,
+    pub(super) sessions: Vec<ImportedSessionFile>,
+    pub(super) bundles: BTreeMap<SpaceId, tempfile::NamedTempFile>,
+    _directory: tempfile::TempDir,
+}
+
+impl Import {
+    pub(super) fn read(input: &mut &[u8]) -> Result<Self> {
+        let directory = tempfile::tempdir()?;
+        let manifest = crate::transfer::read_manifest(input)?;
+        let Parts { sessions, bundles } = Parts::read(input, &manifest, directory.path())?;
+        Ok(Self {
+            manifest,
+            sessions,
+            bundles,
+            _directory: directory,
+        })
+    }
+}
 
 /// A manager with a chat `name` about a registered repository, whose
 /// agent's process this test reaps once a signal ends it.

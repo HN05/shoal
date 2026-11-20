@@ -1,6 +1,7 @@
 use shoal_ids::execution_ids::ExecutionId;
 use std::fs;
 
+use super::Import;
 use super::transfer::{exporter, import, importer, packaged_workspace};
 use crate::refusal::Reason;
 use crate::{
@@ -12,7 +13,7 @@ use crate::{
     model::Workspace,
     process::identity,
     removal::UnsavedWork,
-    transfer::{Carrying, ExportedSpace, Import, ManifestExt, SpaceImport},
+    transfer::{Carrying, ExportedSpace, ManifestExt, SpaceImport},
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_ids::space_ids::SpaceId;

@@ -439,11 +439,26 @@ pub fn directory(path: &Path) -> &Path {
     }
 }
 
-/// A package read back: its manifest, and its session files and the bundle
-/// of each workspace's checkpoint, by the workspace's ID, in temporary
-/// files.
-pub struct Import {
-    pub manifest: Manifest,
+/// The header and manifest that begin a package, refusing one another
+/// version of Shoal wrote.
+pub fn read_manifest(input: &mut impl BufRead) -> Result<Manifest> {
+    let mut header = String::new();
+    input.read_line(&mut header)?;
+    let version = header
+        .trim_end()
+        .strip_prefix(FORMAT)
+        .and_then(|version| version.strip_prefix(' '))
+        .context("not a Shoal export")?;
+    ensure!(version == VERSION, "{}", other_version(version));
+    let mut line = String::new();
+    input.read_line(&mut line)?;
+    serde_json::from_str(&line).context("read the export's manifest")
+}
+
+/// The parts that follow a package's manifest: its session files and the
+/// bundle of each workspace's checkpoint, by the workspace's ID, in
+/// temporary files.
+pub struct Parts {
     pub sessions: Vec<ImportedSessionFile>,
     pub bundles: BTreeMap<SpaceId, tempfile::NamedTempFile>,
 }
@@ -464,29 +479,19 @@ impl ImportedSessionFile {
     }
 }
 
-impl Import {
-    pub fn read(input: &mut impl BufRead) -> Result<Self> {
-        let mut header = String::new();
-        input.read_line(&mut header)?;
-        let version = header
-            .trim_end()
-            .strip_prefix(FORMAT)
-            .and_then(|version| version.strip_prefix(' '))
-            .context("not a Shoal export")?;
-        ensure!(version == VERSION, "{}", other_version(version));
-        let mut line = String::new();
-        input.read_line(&mut line)?;
-        let manifest: Manifest =
-            serde_json::from_str(&line).context("read the export's manifest")?;
+impl Parts {
+    /// Read the parts `manifest` lists from `input` into new files in
+    /// `directory`, refusing a package with data after its last part.
+    pub fn read(input: &mut impl BufRead, manifest: &Manifest, directory: &Path) -> Result<Self> {
         let sessions = manifest
             .session_files
             .iter()
-            .map(|file| ImportedSessionFile::read(input, file.clone()))
+            .map(|file| ImportedSessionFile::read(input, file.clone(), directory))
             .collect::<Result<_>>()?;
         let mut bundles = BTreeMap::new();
         for packaged in manifest.packaged() {
             if let Some(size) = packaged.bundle {
-                let bundle = read_part(input, size, "a bundle")?;
+                let bundle = read_part(input, size, "a bundle", directory)?;
                 bundles.insert(packaged.record.space_id.clone(), bundle);
             }
         }
@@ -495,18 +500,14 @@ impl Import {
             input.read(&mut rest)? == 0,
             "the export has data after its last part"
         );
-        Ok(Self {
-            manifest,
-            sessions,
-            bundles,
-        })
+        Ok(Self { sessions, bundles })
     }
 }
 
 impl ImportedSessionFile {
-    /// Read the contents of `file` from `input`, refusing a path that would
-    /// leave the agent's session directory.
-    fn read(input: &mut impl BufRead, file: SessionFile) -> Result<Self> {
+    /// Read the contents of `file` from `input` into `directory`, refusing
+    /// a path that would leave the agent's session directory.
+    fn read(input: &mut impl BufRead, file: SessionFile, directory: &Path) -> Result<Self> {
         ensure!(
             file.path
                 .components()
@@ -514,15 +515,20 @@ impl ImportedSessionFile {
             "the export names the session file {}, outside the agent's session directory",
             file.path.display()
         );
-        let contents = read_part(input, file.size, "a session file")?;
+        let contents = read_part(input, file.size, "a session file", directory)?;
         Ok(Self { file, contents })
     }
 }
 
 /// The next `size` bytes of `input`, the contents of `part`, in a
-/// temporary file.
-fn read_part(input: &mut impl BufRead, size: u64, part: &str) -> Result<tempfile::NamedTempFile> {
-    let mut contents = tempfile::NamedTempFile::new()?;
+/// temporary file in `directory`.
+fn read_part(
+    input: &mut impl BufRead,
+    size: u64,
+    part: &str,
+    directory: &Path,
+) -> Result<tempfile::NamedTempFile> {
+    let mut contents = tempfile::NamedTempFile::new_in(directory)?;
     let copied = std::io::copy(&mut input.take(size), &mut contents)?;
     ensure!(copied == size, "the export ends inside {part}");
     contents.flush()?;
