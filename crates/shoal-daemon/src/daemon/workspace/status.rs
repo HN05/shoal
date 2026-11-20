@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use shoal_links::space::LinkSpace;
 use shoal_protocol::status::{DiffSummary, Inspection, WorktreeStatus};
 
 use super::super::manager::Manager;
@@ -96,7 +97,7 @@ impl Manager {
     /// item.
     pub(crate) async fn select_items(
         &self,
-        space: &crate::daemon::links::space::LinkSpace,
+        space: &LinkSpace,
         selection: &link::Selection,
         elsewhere: bool,
     ) -> Result<Selected> {

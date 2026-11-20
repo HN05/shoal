@@ -1,8 +1,9 @@
 //! Issues and PRs the daemon reads for `shoal view` and apps, as the forge
 //! reports them now, with the logs of failed checks.
 use anyhow::Result;
+use shoal_links::space::LinkSpace;
 
-use super::{place::Place, space::LinkSpace, target::ForgeTarget};
+use super::{place::Place, target::ForgeTarget};
 use crate::{
     daemon::{manager::Manager, scope::Caller},
     forge::{

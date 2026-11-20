@@ -5,6 +5,7 @@
 //! lookup, which each background poll of the space runs for
 //! [`LOOKUP_WINDOW`], linking every run it finds as related, so the space's
 //! watches report how they end.
+use shoal_links::space::LinkSpace;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -17,7 +18,7 @@ use super::{
     items::{linked_items, observed_item, opened_open_prs},
 };
 use crate::{
-    daemon::{events, links::space::LinkSpace, log, manager::Manager},
+    daemon::{events, log, manager::Manager},
     forge::{
         ForgeRepo,
         capability::Capability,

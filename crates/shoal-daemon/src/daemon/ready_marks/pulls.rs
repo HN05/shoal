@@ -1,13 +1,14 @@
 //! Which linked PRs a ready mark may cover: open ones, whose head on the
 //! forge a workspace's PR must share with its HEAD.
 use crate::forge::items::reference::ItemRef;
+use shoal_links::space::LinkSpace;
 
 use anyhow::{Context, Result};
 use shoal_refs::CommitId;
 
 use super::super::manager::Manager;
 use crate::{
-    daemon::links::{space::LinkSpace, wait::linked_items},
+    daemon::links::wait::linked_items,
     forge::items::{item::unmarkable_reason, link::ItemKind},
     model::SkippedPr,
 };

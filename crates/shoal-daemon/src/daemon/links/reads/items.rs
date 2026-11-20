@@ -2,6 +2,7 @@
 //! kind a bare number is, an issue's details and blockers, and a PR's head,
 //! reviewers and review threads.
 use anyhow::{Context, Result};
+use shoal_links::space::LinkSpace;
 use shoal_protocol::progress::Blocker;
 
 use crate::{
@@ -9,7 +10,6 @@ use crate::{
         links::{
             actions::NOTHING_LINKED,
             place::{Access, Place},
-            space::LinkSpace,
             target::ForgeTarget,
         },
         manager::Manager,

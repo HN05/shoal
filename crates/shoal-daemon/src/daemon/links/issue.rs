@@ -1,6 +1,7 @@
 //! Persist issue associations.
 use crate::refusal::{Reason, Refusal};
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::space::LinkSpace;
 use shoal_protocol::space_names::SpaceSelector;
 use std::path::Path;
 
@@ -15,7 +16,6 @@ pub(crate) use crate::model::{Assigner, IssueAssignee};
 use crate::{
     daemon::{
         events::{self, EventKind},
-        links::space::LinkSpace,
         manager::Manager,
     },
     forge::{

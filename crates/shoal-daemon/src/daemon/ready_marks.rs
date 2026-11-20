@@ -4,6 +4,7 @@
 use crate::config::hooks::HookCommand;
 use crate::forge::items::reference::ItemRef;
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::space::LinkSpace;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -13,11 +14,7 @@ use super::{gates::GuardMode, manager::Manager};
 use crate::{
     config::Effective,
     daemon::{
-        links::{
-            pr::current_head,
-            space::{LinkSpace, require_ready_space},
-            wait::linked_items,
-        },
+        links::{pr::current_head, space::require_ready_space, wait::linked_items},
         notifications::AlertKind,
         scope::Caller,
     },

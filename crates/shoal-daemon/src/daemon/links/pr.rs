@@ -4,6 +4,7 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension};
 use shoal_ids::space_ids::SpaceId;
 use shoal_links::pr::{titles, watched_urls};
+use shoal_links::space::LinkSpace;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::CommitId;
 
@@ -12,7 +13,7 @@ use crate::{
         events::{self, EventKind},
         forge_hosts::ForgeHosts,
         gates::PrGuard,
-        links::space::{LinkSpace, require_ready_space},
+        links::space::require_ready_space,
         manager::Manager,
         spaces::removal_notices::Cleanup,
     },

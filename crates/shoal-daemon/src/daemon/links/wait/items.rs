@@ -2,14 +2,12 @@
 //! the item an explicit selection names.
 use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
+use shoal_links::space::LinkSpace;
 
 use super::cursor::cursor_record;
 use crate::{
     daemon::{
-        links::{
-            pr::{Registration, RegistrationKind},
-            space::LinkSpace,
-        },
+        links::pr::{Registration, RegistrationKind},
         manager::Manager,
     },
     forge::items::{

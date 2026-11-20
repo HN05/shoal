@@ -3,10 +3,11 @@
 //! a repository, and whether it reads or changes what it acts on there.
 use anyhow::Result;
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_links::space::LinkSpace;
 use std::path::Path;
 
 use crate::{
-    daemon::{links::space::LinkSpace, manager::Manager},
+    daemon::manager::Manager,
     forge::ForgeRepo,
     model::{Repository, Workspace},
     protocol::ItemContext,

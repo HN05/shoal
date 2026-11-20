@@ -4,9 +4,10 @@
 use anyhow::{Result, bail};
 use rusqlite::Connection;
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::space::LinkSpace;
 
 use crate::{
-    daemon::{links::space::LinkSpace, manager::Manager},
+    daemon::manager::Manager,
     forge::items::{item::ItemState, link::ItemKind, reference::ItemRef},
     model::{MergePath, Relation},
 };

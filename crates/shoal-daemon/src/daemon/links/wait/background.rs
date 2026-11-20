@@ -4,6 +4,7 @@
 use anyhow::Result;
 use futures_util::{StreamExt, stream};
 use rusqlite::{OptionalExtension, params};
+use shoal_links::space::LinkSpace;
 
 use super::{
     branch_report::{BranchReport, branch_report},
@@ -12,10 +13,7 @@ use super::{
     start::PollStart,
 };
 use crate::{
-    daemon::{
-        links::space::{LinkSpace, require_ready_space},
-        manager::Manager,
-    },
+    daemon::{links::space::require_ready_space, manager::Manager},
     forge::{
         items::{
             link::{LinkKind, Selection},

@@ -6,9 +6,10 @@
 use anyhow::Result;
 use rusqlite::{Connection, params};
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::space::LinkSpace;
 
 use crate::{
-    daemon::{links::space::LinkSpace, manager::Manager, notifications::AlertKind},
+    daemon::{manager::Manager, notifications::AlertKind},
     execution::recovery,
     forge::items::reference::ItemRef,
     model::{Assigner, Space},

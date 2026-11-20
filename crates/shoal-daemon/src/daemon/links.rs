@@ -32,12 +32,13 @@ use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::space::LinkSpace;
 use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
     daemon::{
         events::{self, EventKind},
-        links::{pr::Action, space::LinkSpace},
+        links::pr::Action,
         manager::Manager,
         ready_marks,
         scope::Caller,

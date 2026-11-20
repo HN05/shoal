@@ -5,6 +5,7 @@
 //! change, without a notification.
 use crate::forge::items::reference::ItemRef;
 use shoal_ids::space_ids::SpaceId;
+use shoal_links::space::LinkSpace;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex, PoisonError},
@@ -17,11 +18,7 @@ use tokio::{sync::Notify, time::Instant};
 
 use super::{mark_published, section, stored};
 use crate::{
-    daemon::{
-        links::{space::LinkSpace, wait::linked_items},
-        log,
-        manager::Manager,
-    },
+    daemon::{links::wait::linked_items, log, manager::Manager},
     forge::items::link::ItemKind,
     model::Relation,
 };

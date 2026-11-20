@@ -1,13 +1,11 @@
 //! Failed Actions logs resolved from a PR's current check, using the agent
 //! account of the workspace or registered checkout.
 use anyhow::{Context as _, Result, bail};
+use shoal_links::space::LinkSpace;
 
 use crate::{
     daemon::{
-        links::{
-            place::{Access, Place},
-            space::LinkSpace,
-        },
+        links::place::{Access, Place},
         manager::Manager,
         scope::Caller,
     },

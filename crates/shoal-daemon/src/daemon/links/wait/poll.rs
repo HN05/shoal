@@ -1,6 +1,7 @@
 //! A watch's polling of the forge for the activity of the items it
 //! follows, and the reads of item activity the background poll shares.
 use crate::forge::items::reference::ItemRef;
+use shoal_links::space::LinkSpace;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -15,7 +16,7 @@ use super::{
     start::PollStart,
 };
 use crate::{
-    daemon::{links::space::LinkSpace, manager::Manager, notifications::AlertKind},
+    daemon::{manager::Manager, notifications::AlertKind},
     forge::{
         items::link::{LinkKind, Selection},
         updates::Update,

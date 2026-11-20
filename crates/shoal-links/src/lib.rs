@@ -5,6 +5,7 @@ pub mod issue;
 pub mod linked;
 mod memories;
 pub mod pr;
+pub mod space;
 pub mod wait;
 
 use std::sync::Arc;
