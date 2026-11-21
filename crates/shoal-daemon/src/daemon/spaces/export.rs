@@ -79,7 +79,7 @@ impl Manager {
         file: std::path::PathBuf,
         carrying: &Carrying,
     ) -> Result<ExportedSpace> {
-        crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
+        shoal_daemon_base::writable::ensure_writable(crate::transfer::directory(&file)).await?;
         let prepared = self.prepare_kept_record(selector, carrying).await?;
         self.write_prepared(prepared, file).await
     }

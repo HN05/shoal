@@ -96,7 +96,8 @@ elsewhere never changes what an old migration does. Over the store,
 sends a request, the approval requests it makes, the global config it runs
 under, the gates that order conflicting changes, the journal of events, the
 alert record and the user's alerts, the numbers of threads and approval requests,
-and the checks of file access that can stall. What these read of the rest of
+the checks of file access that can stall and of directories the daemon writes,
+and the proof of the directories Shoal owns. What these read of the rest of
 the daemon, such as a space's coordinator or a repository's retention, is an
 interface the base declares and the daemon implements, and the daemon's
 `Manager` holds the base's types as fields. Over the base, each subsystem of

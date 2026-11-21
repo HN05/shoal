@@ -1,11 +1,5 @@
 //! Verify the recorded Git worktree before execution, recovery, or removal.
-use super::super::{
-    manager::Manager,
-    workspace::{
-        identity::{clear_owner, mark_owner, marked_owner, verify_owner},
-        paths::matches_recorded_worktree_path,
-    },
-};
+use super::super::manager::Manager;
 use crate::refusal::{Reason, Refusal};
 use crate::{
     fsutil::off_runtime,
@@ -14,6 +8,9 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 use rusqlite::params;
+use shoal_daemon_base::ownership::{
+    clear_owner, mark_owner, marked_owner, paths::matches_recorded_worktree_path, verify_owner,
+};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;

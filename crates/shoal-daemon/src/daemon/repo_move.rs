@@ -6,10 +6,6 @@ use super::{
     manager::Manager,
     registry,
     spotlight::{self, Layout},
-    workspace::{
-        identity::{directory_identity, has_directory_identity},
-        paths::{is_real_directory, real_directory_identity},
-    },
 };
 use crate::{
     daemon::{log, store},
@@ -21,6 +17,10 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
+use shoal_daemon_base::ownership::{
+    directory_identity, has_directory_identity,
+    paths::{is_real_directory, real_directory_identity},
+};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use std::{

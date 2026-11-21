@@ -1,8 +1,5 @@
 //! Validate explicit worktree locations before claiming ownership.
-use super::super::{
-    manager::Manager,
-    workspace::paths::{canonical_with_missing_tail, contains_protected_directory},
-};
+use super::super::manager::Manager;
 use crate::{
     daemon::store,
     git,
@@ -10,6 +7,9 @@ use crate::{
     shoal_dirs::{Contents, ShoalDir},
 };
 use anyhow::{Result, ensure};
+use shoal_daemon_base::ownership::paths::{
+    canonical_with_missing_tail, contains_protected_directory,
+};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -35,7 +35,7 @@ impl Manager {
             }
         };
         ensure_unused(&path)?;
-        crate::daemon::access::ensure_writable(&path).await?;
+        shoal_daemon_base::writable::ensure_writable(&path).await?;
         Ok(path)
     }
 

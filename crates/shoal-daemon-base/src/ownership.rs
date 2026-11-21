@@ -11,13 +11,15 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+pub mod paths;
+
 /// Names the owning workspace inside a worktree's Git admin directory. Git keeps
 /// unknown files there across moves and discards them with the worktree, so the
 /// marker survives device renumbering, restores and copies but not re-creation.
-pub(super) const OWNER_MARKER: &str = "shoal-workspace";
+pub const OWNER_MARKER: &str = "shoal-workspace";
 
 /// The workspace ID recorded in an admin directory, if Shoal marked it.
-pub(in crate::daemon) fn marked_owner(git_dir: &Path) -> Result<Option<String>> {
+pub fn marked_owner(git_dir: &Path) -> Result<Option<String>> {
     match fs::read_to_string(git_dir.join(OWNER_MARKER)) {
         Ok(owner) => Ok(Some(owner.trim_end().to_owned())),
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
@@ -27,14 +29,14 @@ pub(in crate::daemon) fn marked_owner(git_dir: &Path) -> Result<Option<String>> 
 
 /// Mark the admin directory as `owner`'s: a workspace's ID, or the seed
 /// build's owner.
-pub(in crate::daemon) fn mark_owner(git_dir: &Path, owner: &str) -> Result<()> {
+pub fn mark_owner(git_dir: &Path, owner: &str) -> Result<()> {
     // Rename into place so a crash never leaves a truncated marker.
     let partial = git_dir.join(format!("{OWNER_MARKER}.partial"));
     fs::write(&partial, format!("{owner}\n")).context("write Git worktree owner marker")?;
     fs::rename(&partial, git_dir.join(OWNER_MARKER)).context("write Git worktree owner marker")
 }
 
-pub(super) fn clear_owner(git_dir: &Path) -> Result<()> {
+pub fn clear_owner(git_dir: &Path) -> Result<()> {
     match fs::remove_file(git_dir.join(OWNER_MARKER)) {
         Err(error) if error.kind() != ErrorKind::NotFound => {
             Err(error).context("remove Git worktree owner marker")
@@ -44,7 +46,7 @@ pub(super) fn clear_owner(git_dir: &Path) -> Result<()> {
 }
 
 /// Prove an admin directory belongs to a workspace by its marker.
-pub(super) fn verify_owner(git_dir: &Path, workspace_id: &SpaceId) -> Result<()> {
+pub fn verify_owner(git_dir: &Path, workspace_id: &SpaceId) -> Result<()> {
     let owner = marked_owner(git_dir)?.context(
         "Git worktree ownership is unverified; check the worktree, then reclaim it with shoal adopt <its path>",
     )?;
@@ -55,13 +57,13 @@ pub(super) fn verify_owner(git_dir: &Path, workspace_id: &SpaceId) -> Result<()>
     Ok(())
 }
 
-pub(in crate::daemon) fn directory_identity(path: &Path) -> Result<String> {
+pub fn directory_identity(path: &Path) -> Result<String> {
     let (metadata, birth) = directory_metadata(path)?;
     Ok(format_identity(metadata.dev(), metadata.ino(), birth))
 }
 
 /// Whether a directory still has a recorded identity.
-pub(in crate::daemon) fn has_directory_identity(path: &Path, recorded: &str) -> Result<bool> {
+pub fn has_directory_identity(path: &Path, recorded: &str) -> Result<bool> {
     Ok(directory_identity(path)? == recorded)
 }
 

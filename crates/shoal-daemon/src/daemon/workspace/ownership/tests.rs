@@ -1,11 +1,9 @@
 use super::*;
 use crate::{
-    daemon::{
-        test_support::{manager, repository},
-        workspace::identity::OWNER_MARKER,
-    },
+    daemon::test_support::{manager, repository},
     state::WorkspaceState,
 };
+use shoal_daemon_base::ownership::OWNER_MARKER;
 
 fn workspace() -> Workspace {
     Workspace::new_record(

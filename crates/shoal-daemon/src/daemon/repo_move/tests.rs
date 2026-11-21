@@ -1,7 +1,7 @@
 use super::*;
 use crate::daemon::{
     executions::ExecutionKind, links::proposals::tests as proposals, test_support,
-    workspace::identity, workspace_files::Attacher,
+    workspace_files::Attacher,
 };
 use crate::removal::{InspectionPolicy, UnsavedWork};
 use crate::time::UnixTime;
@@ -332,7 +332,7 @@ async fn a_replaced_worktree_keeps_the_move_unfinished() -> Result<()> {
     manager.record_move(&repo.id, &source, &destination).await?;
     fs::rename(&source, &destination)?;
     let admin = destination.join(".checkout/.git/worktrees/feature");
-    identity::mark_owner(&admin, "another")?;
+    shoal_daemon_base::ownership::mark_owner(&admin, "another")?;
 
     assert!(manager.finish_repository_moves().await.is_err());
     assert!(manager.ensure_repository_available(&repo.id).await.is_err());

@@ -98,10 +98,10 @@ async fn checkout(repo: &crate::model::Repository) -> Check {
 /// Whether the daemon can create files in `root_dir`, where new repositories
 /// and their workspaces go, resolved as registration resolves it.
 async fn root_dir(root: Result<PathBuf>) -> Check {
-    let root =
-        root.and_then(|root| crate::daemon::workspace::paths::canonical_with_missing_tail(&root));
+    let root = root
+        .and_then(|root| shoal_daemon_base::ownership::paths::canonical_with_missing_tail(&root));
     let checked = match root {
-        Ok(root) => crate::daemon::access::ensure_writable(&root)
+        Ok(root) => shoal_daemon_base::writable::ensure_writable(&root)
             .await
             .map(|()| root),
         Err(error) => Err(error),

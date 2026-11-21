@@ -3,8 +3,8 @@
 //! starting with `.`, so the root's contents live in `<parent>/.<name>.noindex`
 //! and the configured root is a symlink to it, keeping its path the same on
 //! every system.
-use super::workspace::paths::canonical_with_missing_tail;
 use anyhow::{Context, Result, ensure};
+use shoal_daemon_base::ownership::paths::canonical_with_missing_tail;
 use std::{
     ffi::OsString,
     fs, io,

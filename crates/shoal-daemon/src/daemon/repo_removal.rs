@@ -1,15 +1,5 @@
 //! Explicit repository deletion, retaining ownership and progress for retries.
-use super::{
-    agent_trust::TrustChange,
-    manager::Manager,
-    workspace::{
-        identity::has_directory_identity,
-        paths::{
-            contains_protected_directory, is_real_directory, matches_recorded_worktree_path,
-            real_directory_identity,
-        },
-    },
-};
+use super::{agent_trust::TrustChange, manager::Manager};
 use crate::{
     daemon::{
         leases::DaemonRecords,
@@ -25,6 +15,13 @@ use crate::{
 };
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, params};
+use shoal_daemon_base::ownership::{
+    has_directory_identity,
+    paths::{
+        contains_protected_directory, is_real_directory, matches_recorded_worktree_path,
+        real_directory_identity,
+    },
+};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use std::{fs, path::Path};
 

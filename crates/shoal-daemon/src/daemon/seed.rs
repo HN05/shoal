@@ -24,7 +24,6 @@ use crate::{
         log,
         manager::Manager,
         notifications::AlertKind,
-        workspace::identity,
     },
     fsutil::{
         off_runtime,
@@ -516,7 +515,10 @@ async fn check_out_seed(repo: &Repository, layout: &Layout, tip: &CommitId) -> R
         return git::seed::check_out(&worktree, tip.as_str()).await;
     }
     git::seed::add_worktree(&repo.path, &worktree, tip.as_str(), &layout.lock_reason()).await?;
-    identity::mark_owner(&git::git_dir(&worktree).await?, &layout.worktree_owner())
+    shoal_daemon_base::ownership::mark_owner(
+        &git::git_dir(&worktree).await?,
+        &layout.worktree_owner(),
+    )
 }
 
 /// Refuse to change or delete a `.seed/worktree` unless it is the worktree
@@ -549,7 +551,7 @@ pub(super) async fn is_seed_worktree(repo: &Repository, layout: &Layout) -> Resu
     {
         return Ok(false);
     }
-    let owner = identity::marked_owner(&dirs.git_dir)?;
+    let owner = shoal_daemon_base::ownership::marked_owner(&dirs.git_dir)?;
     Ok(owner == Some(layout.worktree_owner()))
 }
 

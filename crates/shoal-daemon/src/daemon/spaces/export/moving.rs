@@ -58,7 +58,7 @@ impl Manager {
         let resumed = self.resumed_move(&space, &packing).await?;
         let destination = &packing.destination;
         let file = self.move_package(&space.id, destination)?;
-        crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
+        shoal_daemon_base::writable::ensure_writable(crate::transfer::directory(&file)).await?;
         let mut record = match resumed {
             Some(record) => record,
             None => self.record_space_move(&space, &packing).await?,

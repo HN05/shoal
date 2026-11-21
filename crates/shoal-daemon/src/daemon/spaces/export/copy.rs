@@ -30,7 +30,7 @@ impl Manager {
         file: std::path::PathBuf,
         carrying: &Carrying,
     ) -> Result<crate::transfer::ExportedSpace> {
-        crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
+        shoal_daemon_base::writable::ensure_writable(crate::transfer::directory(&file)).await?;
         let space = self.running_space(selector).await?;
         let copied = self.prepare_copy(space, checkpoint, carrying).await?;
         self.write_prepared(copied, file).await

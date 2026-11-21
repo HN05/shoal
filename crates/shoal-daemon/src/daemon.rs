@@ -5,7 +5,6 @@ pub(crate) use shoal_daemon_base::{
 };
 pub(crate) use shoal_leases::{allocation, containers, resources};
 mod absorb;
-pub mod access;
 pub mod agent_messages;
 pub(crate) mod agent_queue;
 pub(crate) mod agent_state;

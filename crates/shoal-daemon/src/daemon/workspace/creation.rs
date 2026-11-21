@@ -4,7 +4,7 @@
 use super::super::{
     manager::Manager,
     restore, tree,
-    workspace::{NewWorktreeOptions, branches, identity, ownership::claims_git_dir, stack},
+    workspace::{NewWorktreeOptions, branches, ownership::claims_git_dir, stack},
 };
 use crate::{
     config::Config,
@@ -350,7 +350,10 @@ impl Manager {
             "a workspace records the plan of its worktree exactly while it is pending"
         );
         let marker = match record.checkout.git_dir().map(std::path::Path::to_owned) {
-            Some(git_dir) => off_runtime::run(move || identity::marked_owner(&git_dir)).await?,
+            Some(git_dir) => {
+                off_runtime::run(move || shoal_daemon_base::ownership::marked_owner(&git_dir))
+                    .await?
+            }
             None => None,
         };
         let removing = self.space_removals.clone();

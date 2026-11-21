@@ -3,7 +3,9 @@
 //! govern, the global config it runs under, the gates that order
 //! conflicting changes, the journal of events, the notifications for the
 //! user, the numbers of threads and approval requests, how long what they
-//! record stays, and the checks of file access that can stall.
+//! record stays, the checks of file access that can stall and of
+//! directories the daemon writes, and the proof of the directories Shoal
+//! owns.
 use shoal_core::{config, git, refusal};
 use shoal_forge_types as forge;
 use shoal_protocol::{model, protocol, state, time};
@@ -20,5 +22,7 @@ pub mod gates;
 pub mod item_numbers;
 pub mod log;
 pub mod notifications;
+pub mod ownership;
 pub mod permitted_actions;
 pub mod retention;
+pub mod writable;

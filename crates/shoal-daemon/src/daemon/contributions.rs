@@ -5,9 +5,8 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, params};
 use shoal_ids::repository_ids::RepositoryId;
 
-use super::{
-    leases::DaemonRecords, manager::Manager, resources, workspace::paths::real_directory_identity,
-};
+use super::{leases::DaemonRecords, manager::Manager, resources};
+use shoal_daemon_base::ownership::paths::real_directory_identity;
 
 pub(crate) mod holds;
 use crate::{

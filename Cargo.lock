@@ -2580,6 +2580,7 @@ dependencies = [
  "futures-util",
  "libc",
  "rusqlite",
+ "rustix",
  "serde",
  "serde_json",
  "sha2",

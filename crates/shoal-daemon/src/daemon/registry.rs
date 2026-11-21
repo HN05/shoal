@@ -389,9 +389,9 @@ async fn requested_clone_path(
         return Ok(None);
     };
     if let Some(parent) = path.parent() {
-        crate::daemon::access::ensure_writable(parent).await?;
+        shoal_daemon_base::writable::ensure_writable(parent).await?;
     }
-    let path = super::workspace::paths::canonical_with_missing_tail(path)?;
+    let path = shoal_daemon_base::ownership::paths::canonical_with_missing_tail(path)?;
     outside_local_configs(&path, repositories)?;
     Ok(Some(path))
 }
@@ -513,7 +513,7 @@ pub(super) async fn plan_root(
     let plan = spotlight::plan(&root.path, root.layout)?;
     for location in plan.locations()? {
         ensure_outside(&location, state, recorded, checkout)?;
-        crate::daemon::access::ensure_writable(&location).await?;
+        shoal_daemon_base::writable::ensure_writable(&location).await?;
     }
     Ok(plan)
 }
