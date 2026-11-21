@@ -59,6 +59,9 @@ impl Runs for GitHub {
             state: actions::state(value)?,
             result: actions::result(value),
             waiting: value["conclusion"] == "action_required",
+            finish: value["run_attempt"]
+                .as_u64()
+                .map(|attempt| attempt.to_string()),
         })
     }
 

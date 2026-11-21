@@ -92,6 +92,11 @@ pub struct Snapshot {
     /// A failed run's failed jobs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) failed_jobs: Vec<FailedJob>,
+    /// What tells a run's latest finish from an earlier attempt's, where
+    /// the forge says, as [`Run::finish`](shoal_forge_types::ci::run_action::Run::finish)
+    /// holds it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) finish: Option<String>,
     pub(crate) errors: BTreeMap<String, String>,
     /// The failure last reported of each source that failed within the
     /// report interval, or fails with that error still.
@@ -254,7 +259,7 @@ impl Snapshot {
     /// when it reports a change from `self`'s.
     fn state_change(&self, next: &Self, url: &str) -> Option<(UpdateKind, String)> {
         use SnapshotState::*;
-        if next.state == self.state {
+        if next.state == self.state && !self.finished_again(next) {
             return None;
         }
         let change = match (next.kind, next.state?) {
@@ -276,6 +281,15 @@ impl Snapshot {
             _ => return None,
         };
         Some(change)
+    }
+
+    /// Whether `next` shows a later attempt of the finished run `self`
+    /// finished too, which a rerun between two reads leaves in one state.
+    fn finished_again(&self, next: &Self) -> bool {
+        self.run_finished()
+            && next.run_finished()
+            && self.finish.is_some()
+            && next.finish != self.finish
     }
 
     /// Whether the snapshot shows a finished run.

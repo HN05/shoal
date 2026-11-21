@@ -41,6 +41,10 @@ pub struct Run {
     /// The forge holds the run until a maintainer approves it.
     #[serde(skip)]
     pub waiting: bool,
+    /// What tells the latest attempt's finish from an earlier one's, where
+    /// the forge says: when it stopped, or the attempt's number.
+    #[serde(skip)]
+    pub finish: Option<String>,
 }
 
 impl Run {

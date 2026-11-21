@@ -69,6 +69,7 @@ impl Runs for GitLab {
             state: status.into(),
             result: status.result(),
             waiting: false,
+            finish: text(&value["finished_at"]),
         })
     }
 

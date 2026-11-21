@@ -16,6 +16,7 @@ fn run(id: u64, state: JobState) -> Run {
         state,
         result: (state == JobState::Finished).then_some(CheckState::Success),
         waiting: false,
+        finish: None,
     }
 }
 

@@ -48,6 +48,7 @@ fn a_stopped_run_takes_the_result_its_jobs_show() {
             state: JobState::Failed,
             result: Some(reported),
             waiting: false,
+            finish: None,
         };
         RunView::new(run, jobs).run.result
     };

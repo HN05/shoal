@@ -47,7 +47,7 @@ pub struct ShownRun {
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum RunRead {
-    Read(RunView),
+    Read(Box<RunView>),
     Failed { url: String, errors: Vec<String> },
 }
 

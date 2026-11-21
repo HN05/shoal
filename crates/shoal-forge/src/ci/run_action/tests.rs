@@ -20,6 +20,7 @@ fn run(id: u64) -> Run {
         state: JobState::Finished,
         result: Some(CheckState::Success),
         waiting: false,
+        finish: None,
     }
 }
 
@@ -106,6 +107,7 @@ fn runs_read_their_branch_workflow_commit_and_state_from_the_forge() -> Result<(
             state: JobState::Failed,
             result: Some(CheckState::Failure),
             waiting: false,
+            finish: None,
         }
     );
     // A tag pipeline ran on no branch.
@@ -139,6 +141,7 @@ fn runs_read_their_branch_workflow_commit_and_state_from_the_forge() -> Result<(
             state: JobState::Finished,
             result: Some(CheckState::Success),
             waiting: false,
+            finish: None,
         }
     );
     assert!(

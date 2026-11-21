@@ -4738,11 +4738,11 @@ fn forgejo_ci_runs_link_the_run_they_start() {
 #[test]
 fn linked_runs_are_viewed_and_watched_for_each_finish() {
     let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
-    let respond = |status: &str| {
+    let respond_at = |status: &str, stopped: &str| {
         fixture.respond(json!({
             "GET repos/team/project/actions/runs?run_number=2765": {"body": {"workflow_runs": [
                 {"id": 9331, "index_in_repo": 2765, "prettyref": "main",
-                    "workflow_id": "flaky.yml", "status": status}
+                    "workflow_id": "flaky.yml", "status": status, "stopped": stopped}
             ]}},
             "GET repos/team/project/actions/runs/9331/jobs": {"body": [
                 {"id": 18345, "name": "test", "run_id": 9331, "status": status}
@@ -4751,6 +4751,7 @@ fn linked_runs_are_viewed_and_watched_for_each_finish() {
                 {"body": "⭐ Run Tests\nboom\n⚙️ [runner]: exitcode '1': failure\n"},
         }))
     };
+    let respond = |status: &str| respond_at(status, "2026-11-21T23:08:00+01:00");
     respond("running");
     let url = format!("{}/actions/runs/2765", fixture.web);
     // Assigned items drive completion, so a run is only opened or related.
@@ -4806,7 +4807,8 @@ fn linked_runs_are_viewed_and_watched_for_each_finish() {
     );
     let message = update["message"].as_str().unwrap_or_default();
     assert!(message.contains("Tests"), "{finished}");
-    // The finished run stays watched for a later attempt.
+    // The finished run stays watched for a later attempt, which a rerun
+    // between two reads leaves failed with a later stop.
     let rerun = fixture.ok(&[
         "watch",
         "ci",
@@ -4816,6 +4818,20 @@ fn linked_runs_are_viewed_and_watched_for_each_finish() {
         "1",
     ]);
     assert_eq!(rerun["updates"], json!([]), "{rerun}");
+    respond_at("failure", "2026-11-21T23:28:04+01:00");
+    let rerun = fixture.ok(&[
+        "watch",
+        "ci",
+        "--space",
+        &fixture.id("topic"),
+        "--timeout",
+        "600",
+    ]);
+    assert_eq!(
+        (&rerun["updates"][0]["url"], &rerun["updates"][0]["kind"]),
+        (&json!(url), &json!("ci_completed")),
+        "{rerun}"
+    );
     let viewed = fixture.ok(&["view", "ci", "--space", &fixture.id("topic")]);
     assert_eq!(viewed[0]["state"], "failed", "{viewed}");
     let output = fixture.run(&["ready", "ci", "--space", &fixture.id("topic")]);

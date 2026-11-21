@@ -679,6 +679,20 @@ fn a_run_reports_once_when_it_finishes_with_its_failed_steps() {
 }
 
 #[test]
+fn a_finished_run_reports_another_finish_only_where_the_forge_tells_them_apart() {
+    let url = "https://forge.example/team/repo/actions/runs/2765";
+    let finished = |finish: Option<&str>| Snapshot {
+        finish: finish.map(Into::into),
+        ..Snapshot::of(SnapshotKind::Run, Some(SnapshotState::Failed))
+    };
+    let first = finished(Some("1"));
+    assert_eq!(first.changes(&finished(Some("2")), url).len(), 1);
+    assert!(first.changes(&finished(Some("1")), url).is_empty());
+    // A run read before its forge said may not have finished again.
+    assert!(finished(None).changes(&first, url).is_empty());
+}
+
+#[test]
 fn a_run_with_many_failed_jobs_reports_a_bounded_update() {
     let url = "https://forge.example/team/repo/actions/runs/2765";
     let mut failed = Snapshot::of(SnapshotKind::Run, Some(SnapshotState::Failed));

@@ -149,6 +149,7 @@ impl ForgeRepo {
             false => run.state.into(),
         };
         let mut snapshot = Snapshot::of(SnapshotKind::Run, Some(state));
+        snapshot.finish = run.finish.clone();
         if state == SnapshotState::Failed {
             let jobs = self.jobs_of(account, &run).await?;
             snapshot.state = Some(stopped_run_state(&jobs).into());

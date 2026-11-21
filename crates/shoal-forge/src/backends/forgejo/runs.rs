@@ -64,6 +64,8 @@ impl Runs for Forgejo {
             state: actions::state(&value["status"])?,
             result: actions::result(&value["status"]),
             waiting: value["need_approval"] == true,
+            // A rerun starts the run's times over.
+            finish: text(&value["stopped"]),
         })
     }
 

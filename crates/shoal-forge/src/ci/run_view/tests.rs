@@ -83,6 +83,7 @@ fn the_newest_finished_run_skips_unfinished_and_held_runs() {
         state,
         result: (state == JobState::Finished).then_some(CheckState::Success),
         waiting,
+        finish: None,
     };
     let runs = vec![
         run(4, JobState::Running, false),
@@ -124,6 +125,7 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
         state: JobState::Failed,
         result: Some(CheckState::Failure),
         waiting: false,
+        finish: None,
     };
     let jobs = github.kind().run_jobs(
         &run,
@@ -234,6 +236,7 @@ fn jobs_are_selected_by_id_or_by_a_name_no_other_job_has() -> Result<()> {
         state: JobState::Failed,
         result: Some(CheckState::Failure),
         waiting: false,
+        finish: None,
     };
     let job = |id, name: &str| RunJob {
         id,
@@ -324,6 +327,37 @@ async fn a_run_whose_jobs_were_cancelled_reports_it_and_keeps_their_logs() -> Re
         .run_job_log(&account, &run, &JobRef::Name("rust".into()))
         .await?;
     assert!(log.text.contains("context canceled"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_rerun_that_finishes_between_two_reads_reports_its_finish() -> Result<()> {
+    use crate::test_support::{Server, agent_on, repo_on};
+    use shoal_forge_types::{backends::ForgeKind, updates::UpdateKind};
+    let read = |stopped: &'static str| async move {
+        let server = Server::start(move |request| {
+            if request.line != "GET /api/v1/repos/team/repo/actions/runs?run_number=7" {
+                return (404, Vec::new(), Vec::new());
+            }
+            let body = json!({"workflow_runs": [
+                {"id": 30, "index_in_repo": 7, "status": "success", "prettyref": "main",
+                    "workflow_id": "ci.yml", "commit_sha": "abc", "stopped": stopped}
+            ]});
+            (200, Vec::new(), body.to_string().into())
+        });
+        let forgejo = repo_on(&server, ForgeKind::Forgejo, "team/repo");
+        let run = ItemRef::numbered(&forgejo, LinkKind::Ci, 7)?;
+        forgejo
+            .run_activity(&agent_on(&server, "agent"), &run)
+            .await
+    };
+    let first = read("2026-11-21T23:08:00+01:00").await?;
+    let url = "https://forge.example/team/repo/actions/runs/7";
+    assert!(first.changes(&first, url).is_empty());
+    let rerun = read("2026-11-21T23:28:04+01:00").await?;
+    let updates = first.changes(&rerun, url);
+    assert_eq!(updates.len(), 1, "{updates:?}");
+    assert_eq!(updates[0].kind, UpdateKind::CiCompleted);
     Ok(())
 }
 

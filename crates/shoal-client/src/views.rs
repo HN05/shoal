@@ -74,7 +74,7 @@ async fn read_runs(
         let run = ItemInput::Url(item.url.clone());
         let read = read_run(daemon, target, &run).await;
         let read = read
-            .map(RunRead::Read)
+            .map(|view| RunRead::Read(Box::new(view)))
             .unwrap_or_else(|error| RunRead::Failed {
                 url: item.url.to_string(),
                 errors: vec![format!("{error:#}")],
