@@ -291,6 +291,24 @@ fn a_start_on_another_machine_copies_a_workspace_s_unsaved_files_there() {
 }
 
 #[test]
+fn a_start_on_another_machine_copies_a_workspace_without_unsaved_files() {
+    let machines = machines();
+    let args = [
+        "start",
+        "--machine",
+        "laptop",
+        "--copy",
+        &machines.coordinator,
+    ];
+    let rest = ["--agent", "pi", "--wait", "--json"];
+    let started = machines.hub.run(&[&args[..], &rest[..]].concat());
+    assert!(started.status.success(), "{}", printed(&started));
+    let mut shown = serde_json::Deserializer::from_slice(&started.stdout).into_iter::<Value>();
+    let copy = shown.next().unwrap().unwrap();
+    assert_eq!(copy["state"], "ready", "{}", printed(&started));
+}
+
+#[test]
 fn a_space_copies_to_another_machine_only_what_it_copies_here() {
     let machines = machines();
     let token = scope_of(&machines.hub, &machines.coordinator);

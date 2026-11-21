@@ -352,13 +352,16 @@ impl Manager {
         })?;
         let (mut base_branch, mut commit) = (None, None);
         let carrying = (machine, &repository, origin.as_str());
+        // A copy without unsaved files keeps them in its HEAD, its base.
+        let unsaved = (launch.carried_copy.as_ref())
+            .filter(|copy| launch.base.as_deref() != Some(copy.files.as_str()));
+        if let Some(copy) = unsaved {
+            self.carry_files(carrying, &copy.files, caller).await?;
+        }
         if let Some(base) = &launch.base {
             let (found, carried) = self.clone_base(carrying, base, caller).await?;
             (launch.base, base_branch) = (Some(found.base), Some(found.branch));
             commit = carried;
-        }
-        if let Some(copy) = &launch.carried_copy {
-            self.carry_files(carrying, &copy.files, caller).await?;
         }
         unname_repository(launch);
         Ok(Carried {

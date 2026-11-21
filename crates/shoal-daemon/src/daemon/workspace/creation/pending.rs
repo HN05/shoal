@@ -491,9 +491,10 @@ pub(crate) fn build_pending_in(
 }
 
 /// The unsaved files the commit `files` keeps, which a new branch at
-/// `base` starts with; a commit without a base it names is refused.
+/// `base` starts with, none where it is that base; a commit without a base
+/// it names is refused.
 fn carried_files(base: Option<&str>, files: Option<CommitId>) -> Result<Option<RestoredFiles>> {
-    let Some(snapshot) = files else {
+    let Some(snapshot) = files.filter(|files| base != Some(files.as_str())) else {
         return Ok(None);
     };
     let base = base.context("a new branch that starts with carried files names its base")?;
