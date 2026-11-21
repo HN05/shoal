@@ -77,6 +77,8 @@ impl Hub {
                 }
             };
             if !self.member.has_availability(Availability::Intermittent) {
+                // Nothing is held back while no package is sent.
+                due = None;
                 continue;
             }
             let found = match self
