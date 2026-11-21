@@ -100,7 +100,7 @@ impl Manager {
     ) -> Result<Sent> {
         // Its sender's reach was checked, and it may be a space of another
         // machine that forwarded the alert here.
-        if let Located::Elsewhere { space, machine } = self.locate_space(None, selector).await? {
+        if let Located::Elsewhere { space, machine } = self.space_anywhere(selector).await? {
             let alert = AlertElsewhere {
                 space: &space.space.id,
                 machine: &machine,

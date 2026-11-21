@@ -92,7 +92,10 @@ impl Manager {
 
     /// The space `selector` names: one here, else one another joined
     /// machine runs, as the hub lists it. One neither has is refused as
-    /// this machine refuses it, naming it as absent.
+    /// this machine refuses it, naming it as absent. The daemon's own
+    /// operations reach a space through it once the caller's reach was
+    /// checked; a request's own target is found with
+    /// [`Self::locate_space`], among the spaces its caller sees.
     pub(crate) async fn space_anywhere(&self, selector: &SpaceSelector) -> Result<Located> {
         let missing = match self.space(selector).await {
             Ok(space) => return Ok(Located::Here(Box::new(space))),

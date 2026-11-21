@@ -156,7 +156,7 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
     ) -> Result<(Recipient, Option<String>)> {
-        Ok(match self.locate_space(None, selector).await? {
+        Ok(match self.space_anywhere(selector).await? {
             Located::Here(space) => (recipient(&space), None),
             Located::Elsewhere { space, machine } => {
                 let space = Recipient {
