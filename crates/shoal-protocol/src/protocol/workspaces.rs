@@ -384,14 +384,15 @@ impl WorkspaceMethod {
     /// diff's answer coming as that machine writes it and an attachment's
     /// connection carrying bytes both ways; a creation, a listing, a copy
     /// written where the caller runs, and what the caller's execution,
-    /// terminal or setup reads stay with the caller.
+    /// terminal or setup reads stay with the caller: a workspace's diff
+    /// base, which the caller runs Git in, and the places and sessions it
+    /// looks for in its own terminal hosts and files.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::ReopenWorkspace { .. }
             | Self::RenameBranch { .. }
             | Self::ConvertToChat { .. }
             | Self::RenameSpace { .. }
-            | Self::SpacePlaces { .. }
             | Self::SetBaseWorkspace { .. }
             | Self::InspectWorkspace { .. }
             | Self::FastForwardWorkspace { .. }
@@ -399,8 +400,6 @@ impl WorkspaceMethod {
             | Self::LaunchPermissions { .. }
             | Self::SpaceStatus { .. }
             | Self::TrackedConfig { .. }
-            | Self::SpaceSessions { .. }
-            | Self::DiffBase { .. }
             | Self::Conflicts { .. }
             | Self::PreviewMerge { .. }
             | Self::LayeredConfig { .. }
@@ -427,6 +426,9 @@ impl WorkspaceMethod {
             | Self::OwnedPlaces
             | Self::CloseOwnedPlace { .. }
             | Self::PlaceOwnership { .. }
+            | Self::SpacePlaces { .. }
+            | Self::SpaceSessions { .. }
+            | Self::DiffBase { .. }
             | Self::CreatePendingWorktree { .. }
             | Self::WorkspaceHook { .. }
             | Self::WatchSpaceEvents { .. } => Forwarding::Never,
