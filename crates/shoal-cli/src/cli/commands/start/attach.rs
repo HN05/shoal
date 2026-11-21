@@ -15,7 +15,7 @@ use crate::{
         context::Context,
         terminal,
     },
-    client::output::workspaces::StartedBeside,
+    client::output::spaces::StartedBeside,
     config::Effective,
     model::{QueueEntry, Space},
     start_plan::{PlaceHandoff, PlacePlan},

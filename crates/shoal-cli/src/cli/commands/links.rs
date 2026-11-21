@@ -4,7 +4,7 @@ use anyhow::{Result, bail, ensure};
 
 use super::spaces;
 use crate::client::assignments;
-use crate::client::output::workspaces::Registered;
+use crate::client::output::items::Registered;
 use crate::{
     cli::{
         args::items::{ItemArgs, RelationArgs},

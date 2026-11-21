@@ -4,7 +4,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::ByKind;
 
 use crate::client::assignments;
-use crate::client::output::workspaces::Withdrawn;
+use crate::client::output::spaces::Withdrawn;
 use crate::{
     cli::{
         context::Context,

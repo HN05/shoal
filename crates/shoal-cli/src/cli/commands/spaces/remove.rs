@@ -2,7 +2,7 @@
 use anyhow::{Result, ensure};
 
 use super::super::removal::{ensure_batch_removable, leaving};
-use crate::client::output::workspaces::{BackgroundRemoval, Removals, Removed};
+use crate::client::output::removal::{BackgroundRemoval, Removals, Removed};
 use crate::{
     cli::{args::lifecycle::RmArgs, commands::queued_agents, context::Context, output::Style, ui},
     removal::{RemovalCheck, RemovalResult, SpaceRemovalCheck, UnsavedWork},

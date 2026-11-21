@@ -7,7 +7,7 @@ use crate::cli::{
     output::Style,
     ui::{self, Fallback},
 };
-use crate::client::output::workspaces::Revoked;
+use crate::client::output::spaces::Revoked;
 use shoal_protocol::{scope_tokens::ScopeToken, space_names::SpaceSelector};
 
 pub(super) async fn run(

@@ -10,7 +10,7 @@ use crate::cli::{
     output::{self, Palette},
     ui,
 };
-use crate::client::output::workspaces::ListedSpace;
+use crate::client::output::spaces::ListedSpace;
 use crate::model::{Chat, SpaceKind, Workspace};
 
 /// `shoal list --print`: the spaces and queued agents `filter` keeps, or
