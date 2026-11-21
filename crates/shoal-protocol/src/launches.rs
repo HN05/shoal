@@ -58,10 +58,10 @@ pub struct Launch {
     /// The checkpoint of the copied workspace whose files it copies instead.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checkpoint: Option<CheckpointNumber>,
-    /// The commit keeping the unsaved files of a copy that another joined
-    /// machine carried here, which the new branch at `base` starts with.
+    /// The copy that another joined machine carried here, which the new
+    /// branch at `base` starts with.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub carried_files: Option<shoal_refs::CommitId>,
+    pub carried_copy: Option<CarriedCopy>,
     /// Skip a new workspace's setup.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub skip_setup: bool,
@@ -170,6 +170,17 @@ pub struct Carried {
     /// reads a launch's modes under where it has none of the repository.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tracked_config: Option<String>,
+}
+
+/// A copy that another joined machine carried here for a launch.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CarriedCopy {
+    /// The commit on the launch's base keeping the copied files, which its
+    /// new branch starts with unsaved.
+    pub files: shoal_refs::CommitId,
+    /// The branch the copy takes where the launch names none, named after
+    /// the copied one's and suffixed where it is taken, as a local copy's.
+    pub name: String,
 }
 
 /// What a setup launch sets up, which decides the space its agent starts in.

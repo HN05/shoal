@@ -110,6 +110,11 @@ impl Manager {
             ensure_takes_existing(launch, &creation, &workspace)?;
             return Ok(Settling::Existing(Box::new(workspace)));
         }
+        // A carried copy without a name of its own takes one after the
+        // copied branch, suffixed where it is taken, as a local copy does.
+        if let Some(copy) = &launch.carried_copy {
+            creation.branch.get_or_insert_with(|| copy.name.clone());
+        }
         let issue = match &target.issue {
             Some(issue) => {
                 let read = self.launch_issue(issue, (&target.repo.id, false), caller);
@@ -184,7 +189,7 @@ fn named_creation(launch: &Launch, copy: Option<crate::start_plan::CopyCreation>
             disposable: launch.disposable,
         },
         copy,
-        files: launch.carried_files.clone(),
+        files: (launch.carried_copy.as_ref()).map(|copy| copy.files.clone()),
         ..Creation::default()
     }
 }

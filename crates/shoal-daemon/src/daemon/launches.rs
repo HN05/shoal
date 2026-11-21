@@ -130,7 +130,7 @@ fn carried_commits(launch: &Launch) -> Option<(String, Vec<shoal_refs::CommitId>
     let base = carried.commit.clone();
     let commits = base
         .into_iter()
-        .chain(launch.carried_files.clone())
+        .chain(launch.carried_copy.as_ref().map(|copy| copy.files.clone()))
         .collect();
     Some((origin, commits))
 }

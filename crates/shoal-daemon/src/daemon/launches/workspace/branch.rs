@@ -46,7 +46,7 @@ impl Manager {
         }
         if remote.is_some() || taken.contains(&name.as_str().into()) {
             ensure!(
-                creation.copy.is_none(),
+                creation.copy.is_none() && creation.files.is_none(),
                 "a copy starts a new branch, and branch {name} exists; name another"
             );
             creation.existing = Some(name);

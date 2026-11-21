@@ -11,7 +11,7 @@
 use anyhow::{Context as _, Result, bail, ensure};
 use shoal_protocol::config::modes::ModeShapes;
 use shoal_protocol::hub::Member;
-use shoal_protocol::launches::{Carried, Launch, StartTarget};
+use shoal_protocol::launches::{Carried, CarriedCopy, Launch, StartTarget};
 use shoal_protocol::protocol::{LaunchMethod, Launched, Operation, WorkspaceMethod};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::CommitId;
@@ -51,8 +51,8 @@ impl Manager {
     }
 
     /// Turn the copy `launch` asks for `caller` into what another machine
-    /// starts it from: a new branch, the one it names or one named after
-    /// the copied workspace's, at that workspace's HEAD as its base, with a
+    /// starts it from: a new branch, the one it names or else one named
+    /// after the copied workspace's, at that workspace's HEAD as its base, with a
     /// commit that keeps the files the copy starts with, which go there
     /// with the base's history.
     async fn copy_as_carried(&self, launch: &mut Launch, caller: Option<&Caller>) -> Result<()> {
@@ -62,9 +62,9 @@ impl Manager {
         let (head, files) = self.copy_snapshot(&copied.creation.source).await?;
         (launch.copy, launch.checkpoint) = (None, None);
         launch.repository = Some(copied.repository.to_string());
-        launch.branch.get_or_insert(copied.creation.name);
         launch.base = Some(head.to_string());
-        launch.carried_files = Some(files);
+        let name = copied.creation.name;
+        launch.carried_copy = Some(CarriedCopy { files, name });
         Ok(())
     }
 
@@ -352,8 +352,8 @@ impl Manager {
             (launch.base, base_branch) = (Some(found.base), Some(found.branch));
             commit = carried;
         }
-        if let Some(files) = &launch.carried_files {
-            self.carry_files(carrying, files, caller).await?;
+        if let Some(copy) = &launch.carried_copy {
+            self.carry_files(carrying, &copy.files, caller).await?;
         }
         unname_repository(launch);
         Ok(Carried {

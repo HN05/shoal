@@ -276,6 +276,18 @@ fn a_start_on_another_machine_copies_a_workspace_s_unsaved_files_there() {
     let unsaved = git(path, &["status", "--porcelain"]);
     assert!(unsaved.contains(" M committed.txt"), "{unsaved}");
     assert!(unsaved.contains("?? untracked.txt"), "{unsaved}");
+    // A second copy there takes a branch of its own, with the files too.
+    let again = machines.hub.run(&[&args[..], &rest[..]].concat());
+    assert!(again.status.success(), "{}", printed(&again));
+    let mut shown = serde_json::Deserializer::from_slice(&again.stdout).into_iter::<Value>();
+    let second = shown.next().unwrap().unwrap();
+    assert_ne!(second["branch"], copy["branch"], "{}", printed(&again));
+    let path = Path::new(second["path"].as_str().unwrap());
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), head);
+    assert_eq!(
+        fs::read_to_string(path.join("untracked.txt")).unwrap(),
+        "new\n"
+    );
 }
 
 #[test]
