@@ -51,26 +51,18 @@ impl Manager {
         selectors: &[SpaceSelector],
         below: bool,
     ) -> Result<Vec<Located>> {
-        let mut queue = VecDeque::new();
+        let mut roots = Vec::new();
         for selector in selectors {
-            queue.push_back(self.locate_space(caller, selector).await?);
+            roots.push(self.locate_space(caller, selector).await?);
         }
         if !below {
-            return Ok(queue.into());
+            return Ok(roots);
         }
         let tree = Tree {
             here: self.visible_spaces(caller).await?,
             view: self.view_below(caller).await,
         };
-        let mut seen = HashSet::new();
-        let mut found = Vec::new();
-        while let Some(next) = queue.pop_front() {
-            if seen.insert(next.id().clone()) {
-                queue.extend(tree.children(next.id()));
-                found.push(next);
-            }
-        }
-        Ok(found)
+        Ok(tree.walk(roots))
     }
 
     /// The space of this machine `selector` names, among those `caller`
@@ -106,6 +98,21 @@ struct Tree {
 }
 
 impl Tree {
+    /// `roots` with the spaces below each, each once and after the space
+    /// above it, crossing between machines as often as the tree does.
+    fn walk(&self, roots: Vec<Located>) -> Vec<Located> {
+        let mut queue = VecDeque::from(roots);
+        let mut seen = HashSet::new();
+        let mut found = Vec::new();
+        while let Some(next) = queue.pop_front() {
+            if seen.insert(next.id().clone()) {
+                queue.extend(self.children(next.id()));
+                found.push(next);
+            }
+        }
+        found
+    }
+
     /// The spaces right below the space `id`, on every machine.
     fn children(&self, id: &SpaceId) -> Vec<Located> {
         let here = (self.here.iter())

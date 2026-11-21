@@ -55,3 +55,50 @@ async fn a_stop_s_selection_takes_the_spaces_below_after_the_one_above_only_when
     let tree = manager.locate_tree(None, &selected, true).await.unwrap();
     assert_eq!(ids(tree), [top.id.clone(), child.id.clone()]);
 }
+
+/// A space another machine, the laptop, lists below `parent`.
+fn listed(id: &str, parent: Option<&str>) -> serde_json::Value {
+    serde_json::json!({
+        "machine": "laptop", "id": id, "number": 1, "name": id, "kind": "chat",
+        "status": "working", "parent": parent, "reported_at": 0,
+    })
+}
+
+#[tokio::test]
+async fn a_walk_down_the_tree_crosses_between_machines_as_the_tree_does() {
+    let daemon = TestDaemon::start().await;
+    // This machine's space below the laptop's child, as the hub lists it.
+    let here = daemon.workspace("grandchild").await;
+    let view: shoal_protocol::hub::directory::HubView = serde_json::from_value(serde_json::json!({
+        "machine": "desk",
+        "machines": [],
+        "spaces": [listed("top", None), listed("child", Some("top")), listed("aside", None)],
+        "below_elsewhere": [[here.id, "child"]],
+    }))
+    .unwrap();
+    let top = view.directory.spaces[0].clone();
+    let tree = super::Tree {
+        here: vec![shoal_protocol::model::Space::from(here.clone())],
+        view: Some(view),
+    };
+    let root = Located::Elsewhere {
+        space: Box::new(top),
+        machine: shoal_protocol::hub::Machine {
+            id: "laptop".into(),
+            name: "laptop".to_owned(),
+        },
+        online: false,
+    };
+    let found: Vec<String> = (tree.walk(vec![root]).iter())
+        .map(|located| match located {
+            Located::Here(space) => format!("here {}", space.id),
+            Located::Elsewhere { space, .. } => format!("elsewhere {}", space.space.id),
+        })
+        .collect();
+    let expected = [
+        "elsewhere top".to_owned(),
+        "elsewhere child".to_owned(),
+        format!("here {}", here.id),
+    ];
+    assert_eq!(found, expected);
+}
