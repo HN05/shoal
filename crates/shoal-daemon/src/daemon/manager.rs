@@ -15,7 +15,6 @@ pub struct Manager {
     /// closed, or its ownership moves to another workspace.
     pub(crate) place_ownership: tokio::sync::Mutex<()>,
     pub gates: Arc<super::gates::Gates>,
-    /// The reads of items for watches, and those watches started from.
     pub(super) cleanup_health: super::cleanup::CleanupHealth,
     /// How the loop that puts idle agents to sleep is doing.
     pub(super) idle_sleep_health: super::cleanup::CleanupHealth,
