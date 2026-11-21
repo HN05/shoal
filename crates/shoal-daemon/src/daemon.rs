@@ -44,7 +44,6 @@ mod execution_recovery;
 pub(crate) mod executions;
 mod exit_wait;
 pub(crate) mod fake_workers;
-mod file_copies;
 pub(crate) mod forge_hosts;
 pub(crate) mod gate;
 mod git_logins;

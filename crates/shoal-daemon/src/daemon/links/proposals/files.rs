@@ -14,7 +14,6 @@ use std::{
 use crate::{
     daemon::{
         approvals::{ApprovalRequest, DecisionStatus},
-        file_copies::keep_copies,
         log,
         manager::Manager,
     },
@@ -22,6 +21,7 @@ use crate::{
     model::Repository,
     shoal_dirs::{Contents, ShoalDir},
 };
+use shoal_daemon_base::file_copies::keep_copies;
 use shoal_forge::items::attach;
 
 impl Manager {

@@ -5,21 +5,21 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
 
-use crate::forge::items::attach::Attachment;
+use shoal_forge_types::items::attach::Attachment;
 
 /// Copies [`keep_copies`] made or reused.
-pub(crate) struct Copies {
-    pub(crate) attachments: Vec<Attachment>,
+pub struct Copies {
+    pub attachments: Vec<Attachment>,
     /// The directory holding them when this call made it, so a caller that
     /// cannot use them may delete it; copies reused from earlier stay.
-    pub(crate) created: Option<PathBuf>,
+    pub created: Option<PathBuf>,
 }
 
 /// The copies of `attachments` below `root`, in a directory named by the
 /// owner, text and files that attach them. An existing directory is reused
 /// unchanged; a new one is filled under a temporary name first, so a partial
 /// copy is never reused.
-pub(crate) fn keep_copies(
+pub fn keep_copies(
     root: &Path,
     owner: &SpaceId,
     body: &str,
@@ -58,7 +58,7 @@ pub(crate) fn keep_copies(
 /// The directory of copies [`keep_copies`] would reuse for these
 /// attachments below `root` when it exists but lacks a copy, as after someone
 /// deleted one.
-pub(crate) fn incomplete_copies(
+pub fn incomplete_copies(
     root: &Path,
     owner: &SpaceId,
     body: &str,

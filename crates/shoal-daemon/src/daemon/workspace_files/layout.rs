@@ -12,11 +12,11 @@ use anyhow::{Context, Result, ensure};
 
 use super::NewFile;
 use crate::{
-    daemon::file_copies::{incomplete_copies, keep_copies},
     forge::items::attach::Attachment,
     model::Repository,
     shoal_dirs::{Contents, ShoalDir, remove_dir, remove_if_empty},
 };
+use shoal_daemon_base::file_copies::{incomplete_copies, keep_copies};
 
 /// The directory below a repository's attached files that keeps what
 /// workspaces handed back, which no workspace ID names.

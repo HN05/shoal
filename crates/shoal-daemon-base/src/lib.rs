@@ -15,6 +15,7 @@ pub mod callers;
 pub mod config_state;
 pub mod events;
 pub mod file_access;
+pub mod file_copies;
 pub mod gates;
 pub mod item_numbers;
 pub mod log;
