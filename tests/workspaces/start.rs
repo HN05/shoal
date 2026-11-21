@@ -1729,6 +1729,65 @@ fn launch_profiles_run_with_their_base_integration_and_own_environment() {
 }
 
 #[test]
+fn a_chat_runs_and_trusts_with_its_repositorys_env_without_a_worktrees() {
+    let fixture = Fixture::new();
+    let home = fixture.root.path();
+    commit_resource_config(
+        &fixture.repo,
+        &format!(
+            "[env]\nCLAUDE_CONFIG_DIR = '{}/claude-{{repo}}'\nSESSION = '{{workspace}}'\n",
+            home.display()
+        ),
+    );
+    fixture.ok(&[
+        "repo",
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--name",
+        "configured",
+    ]);
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    let checkout = fs::canonicalize(repository["path"].as_str().unwrap()).unwrap();
+    install_test_script(
+        home.join("bin/claude"),
+        "#!/bin/sh\nenv > \"$HOME/claude-env\"\n",
+    );
+
+    let (output, transcript) = fixture.interactive_command(
+        fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .args(["start", "--mode", "chat", "--agent", "claude", "--here"]),
+        "\n",
+    );
+
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
+    let env = fs::read_to_string(home.join("claude-env")).unwrap();
+    let config_dir = home.join("claude-configured");
+    assert!(
+        env.lines()
+            .any(|line| line == format!("CLAUDE_CONFIG_DIR={}", config_dir.display())),
+        "{env}"
+    );
+    assert!(
+        !env.lines().any(|line| line.starts_with("SESSION=")),
+        "{env}"
+    );
+    let root: Value =
+        serde_json::from_str(&fs::read_to_string(config_dir.join(".claude.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        root["projects"][checkout.to_str().unwrap()]["hasTrustDialogAccepted"],
+        true
+    );
+    assert!(!home.join(".claude.json").exists());
+}
+
+#[test]
 fn claude_launch_trusts_checkout_and_shared_repository_directory() {
     let fixture = Fixture::new();
     let home = fixture.root.path();

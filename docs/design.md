@@ -2824,17 +2824,17 @@ which Claude Code keys every worktree's trust by, and its shared Shoal workspace
 directory, or an explicitly placed workspace outside it, in their user config before
 launch, creating the file if needed; Happy
 launches and Claude and Codex app handoffs do so too. The user config is the one the agent
-reads: a tracked agent's follows the workspace's `[env]`, while the app and chats
-run with Shoal's environment. Agent guidance and templates become native
+reads: a tracked agent's follows its space's `[env]`, while the app runs with
+Shoal's environment. Agent guidance and templates become native
 CLI instructions or a first-message prefix for Happy Codex; desktop handoffs carry no instructions.
 Agents always start as CLI agents; only `shoal open --app` hands a space to
 a desktop app, in the directory its agent works in. The Claude app opens through the `claude://` link that `claude --desktop`
 opens, since that command refuses a CLI signed in through an API token or gateway.
 Successful repository removal drops those trust fields for the removed workspace
-directory and worktrees, in Shoal's user config and in each one its workspaces'
+directory and worktrees, in Shoal's user config and in each one its spaces'
 `[env]` gave a tracked agent, while preserving other project settings. The daemon
-keeps each location from when the CLI trusts a workspace there, since a renamed or
-removed workspace, or a changed `[env]`, no longer resolves to it. The CLI reads
+keeps each location from when the CLI trusts a space there, since a renamed or
+removed space, or a changed `[env]`, no longer resolves to it. The CLI reads
 the locations once removal has succeeded, when no agent can add one, and the
 daemon forgets them after cleanup.
 

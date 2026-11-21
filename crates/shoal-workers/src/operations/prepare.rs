@@ -169,7 +169,8 @@ async fn run_post_setup_hook(
     )
     .await?;
     if let Some(command) = command {
-        let configured_env = crate::settings::configured_environment(paths, workspace).await?;
+        let space = crate::model::Space::from(workspace.clone());
+        let configured_env = crate::settings::configured_environment(paths, &space).await?;
         hooks::run_until(
             Hook::PostSetup,
             workspace,

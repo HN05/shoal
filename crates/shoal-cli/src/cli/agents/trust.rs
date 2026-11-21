@@ -16,7 +16,7 @@ use crate::{
     },
     cli::{agents::environment, context::Context},
     env,
-    model::{ChatHome, Repository, Workspace},
+    model::{Chat, ChatHome, Repository, Space, Workspace},
 };
 use shoal_protocol::transcripts::AgentEnvironment;
 
@@ -48,7 +48,7 @@ pub(super) async fn tracked(
     workspace: &Workspace,
     profile: &crate::ai::Environment,
 ) {
-    let mut configured = environment::agent_environment(ctx, workspace).await;
+    let mut configured = environment::agent_environment(ctx, &Space::from(workspace.clone())).await;
     profile.layer(&mut configured, &ctx.paths.home);
     keep_config_location(file, ctx, Holder::Workspace(workspace), &configured).await;
     let environment = AgentEnvironment::new(&ctx.paths.home, &configured);
@@ -66,8 +66,8 @@ pub(super) async fn space(
 ) {
     match (space, space.home()) {
         (HomeRecords::Workspace(workspace), _) => tracked(file, ctx, workspace, profile).await,
-        (HomeRecords::Chat { repository, .. }, Ok(AgentHome::Chat { home, .. })) => {
-            chat(file, ctx, repository.as_ref(), home, profile).await;
+        (HomeRecords::Chat { repository, .. }, Ok(AgentHome::Chat { chat, home, .. })) => {
+            self::chat(file, ctx, (chat, repository.as_ref()), home, profile).await;
         }
         // A chat without a home runs nowhere to trust.
         (HomeRecords::Chat { .. }, _) => {}
@@ -112,18 +112,18 @@ async fn keep_config_location(
     }
 }
 
-/// Trust the directory of a chat at `home`, which runs with this process's
-/// environment changed by `profile`, as workspace launches trust theirs;
+/// Trust the directory of `chat` of `repository` at `home`, which runs with
+/// its `[env]` changed by `profile`, as workspace launches trust theirs;
 /// repository removal clears the entries. The `root_dir` of a chat without
 /// a repository stays trusted.
 pub(super) async fn chat(
     file: &TrustFile,
     ctx: &Context,
-    repository: Option<&Repository>,
+    (chat, repository): (&Chat, Option<&Repository>),
     home: ChatHome<'_>,
     profile: &crate::ai::Environment,
 ) {
-    let mut configured = BTreeMap::new();
+    let mut configured = environment::agent_environment(ctx, &Space::from(chat.clone())).await;
     profile.layer(&mut configured, &ctx.paths.home);
     if let Some(repository) = repository {
         keep_config_location(file, ctx, Holder::Repository(repository), &configured).await;

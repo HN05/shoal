@@ -14,7 +14,7 @@ use crate::{
     agent::Agent,
     cli::{agents::environment, context::Context},
     config::Effective,
-    model::{Chat, RemovedSpace, Workspace},
+    model::{Chat, RemovedSpace, Space, Workspace},
     protocol::ConfigTarget,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -63,29 +63,24 @@ pub(in crate::cli) async fn install_session_files(
     if files.is_empty() {
         return true;
     }
-    let (target, workspace) = match home {
-        SessionHome::Workspace(workspace) => (
-            ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
-            Some(workspace),
-        ),
-        SessionHome::Chat(chat) => (ConfigTarget::chat(chat), None),
+    let space = match home {
+        SessionHome::Workspace(workspace) => Space::from(workspace.clone()),
+        SessionHome::Chat(chat) => Space::from(chat.clone()),
     };
-    let workspace_environment = match workspace {
-        Some(workspace) => environment::agent_environment(ctx, workspace).await,
-        None => BTreeMap::new(),
-    };
-    place_session_files(ctx, (target, &workspace_environment), files, existing).await
+    let space_environment = environment::agent_environment(ctx, &space).await;
+    let target = ConfigTarget::space(&space);
+    place_session_files(ctx, (target, &space_environment), files, existing).await
 }
 
 /// Put `files` where the agents look for them under the settings of
-/// `target` with a workspace's `[env]`, `workspace_environment`, as
+/// `target` with its space's `[env]`, `space_environment`, as
 /// [`place`] does with the files there as `existing` says. A development
 /// build leaves them to the installed Shoal. Failures only warn; that
 /// agent's start from the session then fails to find it. Returns whether
 /// every file is in place.
 pub(in crate::cli) async fn place_session_files(
     ctx: &Context,
-    (target, workspace_environment): (ConfigTarget, &BTreeMap<String, OsString>),
+    (target, space_environment): (ConfigTarget, &BTreeMap<String, OsString>),
     files: &[CarriedSessionFile],
     existing: Existing,
 ) -> bool {
@@ -103,9 +98,9 @@ pub(in crate::cli) async fn place_session_files(
     let mut placed_all = true;
     for imported in files {
         let agent = &imported.file.agent;
-        let directory = directories.entry(agent.clone()).or_insert_with(|| {
-            session_dir(&settings, workspace_environment, &ctx.paths.home, agent)
-        });
+        let directory = directories
+            .entry(agent.clone())
+            .or_insert_with(|| session_dir(&settings, space_environment, &ctx.paths.home, agent));
         let placed = match directory {
             Ok(Some(directory)) => place(directory, imported, existing),
             Ok(None) => Err(anyhow::anyhow!("{agent} keeps no session files")),
@@ -182,7 +177,7 @@ pub(in crate::cli) async fn install_kept_session_files(
 
 /// Copy the files of `session`, which agent `name` under `settings` starts
 /// from a fork of in `space`, where its tool looks for them under the
-/// workspace's `[env]`, from where it keeps them without it, as for a
+/// space's `[env]`, from where it keeps them without it, as for a
 /// session another machine carried here. A failure only warns; the fork
 /// then starts from what that directory has.
 pub(in crate::cli) async fn find_forked_session(
@@ -197,15 +192,17 @@ pub(in crate::cli) async fn find_forked_session(
     let Some(store) = transcripts::store(settings.integration(name)) else {
         return;
     };
-    let workspace_environment = match space {
+    let space_environment = match space {
         crate::agents::HomeRecords::Workspace(workspace) => {
-            environment::agent_environment(ctx, workspace).await
+            environment::agent_environment(ctx, &Space::from(workspace.clone())).await
         }
-        crate::agents::HomeRecords::Chat { .. } => return,
+        crate::agents::HomeRecords::Chat { chat, .. } => {
+            environment::agent_environment(ctx, &Space::from(chat.clone())).await
+        }
     };
     let home = &ctx.paths.home;
     let directories = (
-        session_dir(settings, &workspace_environment, home, name),
+        session_dir(settings, &space_environment, home, name),
         session_dir(settings, &BTreeMap::new(), home, name),
     );
     let (Ok(Some(directory)), Ok(Some(default))) = directories else {
@@ -246,15 +243,15 @@ fn copy_session(
 }
 
 /// The directory agent `name`, as `settings` describes it, keeps its
-/// sessions' files in when it runs with the workspace's `[env]`,
-/// `workspace_environment`, under `home`.
+/// sessions' files in when it runs with its space's `[env]`,
+/// `space_environment`, under `home`.
 fn session_dir(
     settings: &Effective,
-    workspace_environment: &BTreeMap<String, OsString>,
+    space_environment: &BTreeMap<String, OsString>,
     home: &Path,
     name: &Agent,
 ) -> Result<Option<PathBuf>> {
-    let mut configured = workspace_environment.clone();
+    let mut configured = space_environment.clone();
     settings
         .launch(name)
         .environment
