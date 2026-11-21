@@ -178,7 +178,7 @@ async fn a_poll_that_began_before_a_restart_is_dropped_when_it_finishes() {
     // A poll reads the issue with one comment, then a restart reads it with
     // two, all within one second, before the poll records its read.
     let all = Selection::default();
-    let early = manager.poll_start();
+    let early = manager.links.poll_start();
     let stale = manager
         .item_activity(vec![issue.clone()], &all)
         .await
@@ -323,7 +323,7 @@ async fn poll(
     let all = Selection::default();
     let read = manager.item_activity(vec![issue.clone()], &all).await;
     let report = BranchReport::Conflicts;
-    let start = manager.poll_start_at(observed_at);
+    let start = manager.links.poll_start_at(observed_at);
     let recorded = manager.record_observed(id, read.unwrap(), &all, report, start);
     recorded.await.unwrap()
 }

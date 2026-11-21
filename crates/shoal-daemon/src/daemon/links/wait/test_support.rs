@@ -56,7 +56,7 @@ pub(crate) async fn comment_on_watched_pr(manager: &Manager, id: &SpaceId) {
     register_watch(manager, id, &pr).await;
     let observed = vec![(pr, snapshot("Please rebase"))];
     manager
-        .queue_background_updates(id, observed, manager.poll_start())
+        .queue_background_updates(id, observed, manager.links.poll_start())
         .await
         .unwrap();
 }

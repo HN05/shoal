@@ -5,12 +5,12 @@ use rusqlite::OptionalExtension;
 use shoal_links::wait::followed::followed_items;
 use shoal_links::wait::merge_lookups::{MergeTarget, follow_reported_merge};
 use shoal_links::wait::selection::NO_LINKED_ITEMS;
+use shoal_links::wait::starts::PollStart;
 
 use super::{
     branch_report::{BranchReport, branch_report, watches_branch},
     cursor::{cursor_record, save_cursor_record},
     items::links_kind,
-    start::PollStart,
 };
 use crate::{
     daemon::{links::space::require_ready_space, manager::Manager},
@@ -41,7 +41,7 @@ impl Manager {
         let changing = self.assignees_changing(&observations);
         let merges = self.merge_target(id, &observations).await?;
         let urls = observations.iter().map(|(url, _)| url);
-        let stale = self.watch_starts.stale(id, urls, start.read());
+        let stale = self.links.watch_starts().stale(id, urls, start.read());
         let poll = Poll {
             selection: selection.clone(),
             report,

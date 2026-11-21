@@ -4,13 +4,7 @@
 //! history, which `shoal view` shows.
 use shoal_links::wait::followed::followed_items;
 use shoal_links::wait::merge_lookups::{MergeTarget, follow_reported_merge};
-use std::{
-    collections::HashMap,
-    sync::{
-        Mutex,
-        atomic::{AtomicU64, Ordering},
-    },
-};
+use shoal_links::wait::starts::PollStart;
 
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
@@ -26,71 +20,6 @@ use crate::{
     time::UnixTime,
 };
 use shoal_forge::updates::Snapshot;
-
-/// When a poll of item activity began: its time, which the space's own
-/// changes are compared with, and its place among the daemon's reads,
-/// which tells it from a watch's start read made in the same second.
-#[derive(Clone, Copy)]
-pub(crate) struct PollStart {
-    pub(super) at: UnixTime,
-    read: u64,
-}
-
-impl PollStart {
-    /// Its place among the daemon's reads.
-    pub(super) fn read(self) -> u64 {
-        self.read
-    }
-}
-
-/// The daemon's reads of items for watches, numbered in the order they
-/// began, and the read each watch last started from. A read in flight
-/// ends with the daemon, so none of this outlives it.
-#[derive(Default)]
-pub(crate) struct WatchStarts {
-    reads: AtomicU64,
-    started: Mutex<HashMap<(SpaceId, String), u64>>,
-}
-
-impl WatchStarts {
-    /// The number of a read beginning now.
-    fn begin(&self) -> u64 {
-        self.reads.fetch_add(1, Ordering::SeqCst)
-    }
-
-    /// Note that the watches of the space `id` of `urls` started from `read`.
-    fn started(&self, id: &SpaceId, urls: Vec<String>, read: u64) {
-        let mut started = self
-            .started
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        for url in urls {
-            started.insert((id.to_owned(), url), read);
-        }
-    }
-
-    /// Which of `urls` the space `id` started watching from a read that
-    /// began after `read`, so a poll that began at `read` may show them
-    /// before it.
-    pub(super) fn stale<'a>(
-        &self,
-        id: &SpaceId,
-        urls: impl Iterator<Item = &'a String>,
-        read: u64,
-    ) -> Vec<String> {
-        let started = self
-            .started
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        urls.filter(|url| {
-            started
-                .get(&(id.to_owned(), (*url).clone()))
-                .is_some_and(|start| *start > read)
-        })
-        .cloned()
-        .collect()
-    }
-}
 
 /// A read of a space's items, made for their watches to start from.
 pub(crate) struct StartRead {
@@ -108,19 +37,6 @@ pub(super) enum Start {
 }
 
 impl Manager {
-    /// The start of a poll of item activity beginning now.
-    pub(super) fn poll_start(&self) -> PollStart {
-        self.poll_start_at(UnixTime::now())
-    }
-
-    /// The start of a poll beginning now as if at `at`.
-    pub(super) fn poll_start_at(&self, at: UnixTime) -> PollStart {
-        PollStart {
-            at,
-            read: self.watch_starts.begin(),
-        }
-    }
-
     /// Start the watches of `items`, which the space `id` just linked, from
     /// a read of each, unless one already read its item, for a caller
     /// holding the space's PR gate. An item the forge does not read in full
@@ -168,7 +84,7 @@ impl Manager {
     /// A read of `items` made now, leaving out those the forge does not read
     /// in full.
     async fn read_for_start(&self, items: Vec<ItemRef>) -> StartRead {
-        let start = self.poll_start();
+        let start = self.links.poll_start();
         let reads = self.complete_reads(items).await;
         StartRead { start, reads }
     }
@@ -205,7 +121,7 @@ impl Manager {
             self.signals.item_updates_queued();
         }
         let urls = started.into_iter().map(|(url, _)| url).collect();
-        self.watch_starts.started(id, urls, began.read());
+        self.links.watch_starts().started(id, urls, began.read());
         Ok(())
     }
 }

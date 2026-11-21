@@ -7,11 +7,9 @@ use rusqlite::{OptionalExtension, params};
 use shoal_links::space::LinkSpace;
 use shoal_links::wait::followed::{opened_open_prs, polled_items};
 use shoal_links::wait::merge_lookups::{MergeTarget, follow_merge};
+use shoal_links::wait::starts::PollStart;
 
-use super::{
-    branch_report::{BranchReport, branch_report},
-    start::PollStart,
-};
+use super::branch_report::{BranchReport, branch_report};
 use crate::{
     daemon::{links::space::require_ready_space, manager::Manager},
     forge::{
@@ -85,7 +83,7 @@ impl Manager {
         if items.is_empty() && opened.is_empty() {
             return Ok(());
         }
-        let start = self.poll_start();
+        let start = self.links.poll_start();
         let report = branch_report(&items);
         let items = self.items_to_look_up(space, items).await?;
         let items = [items, opened].concat();

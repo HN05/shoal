@@ -5,6 +5,7 @@ use shoal_links::space::LinkSpace;
 use shoal_links::wait::UpdatesExt;
 use shoal_links::wait::followed::activity_ended;
 use shoal_links::wait::framing::own_batch;
+use shoal_links::wait::starts::PollStart;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -14,7 +15,6 @@ use super::{
     Updates,
     branch_report::{BranchReport, branch_conflicts, branch_report, watches_branch},
     delivery::receiving,
-    start::PollStart,
 };
 use crate::{
     daemon::{manager::Manager, notifications::AlertKind},
@@ -103,7 +103,7 @@ impl Manager {
             return Ok(pending);
         }
         drop(guard);
-        let start = self.poll_start();
+        let start = self.links.poll_start();
         let items = self.items_to_look_up(&space, items).await?;
         let items = self.item_activity(items, selection).await;
         let mut observations = Vec::new();

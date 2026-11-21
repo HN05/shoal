@@ -36,6 +36,7 @@ pub struct Links {
     records: Arc<dyn daemon::Records>,
     memories: memories::ForgeMemories,
     waits: wait::ActiveWaits,
+    watch_starts: wait::starts::WatchStarts,
 }
 
 impl Links {
@@ -56,6 +57,7 @@ impl Links {
             records,
             memories: Default::default(),
             waits: Default::default(),
+            watch_starts: Default::default(),
         }
     }
 

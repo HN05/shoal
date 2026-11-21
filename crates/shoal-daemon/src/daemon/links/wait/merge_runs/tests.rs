@@ -115,7 +115,7 @@ impl Following {
                 observations,
                 &Selection::default(),
                 BranchReport::Conflicts,
-                self.manager.poll_start(),
+                self.manager.links.poll_start(),
             )
             .await
             .unwrap()
@@ -135,7 +135,7 @@ impl Following {
     /// selects, returning the updates it holds.
     async fn start(&self, snapshot: Snapshot, start: Start) -> Vec<crate::forge::updates::Update> {
         let read = StartRead {
-            start: self.manager.poll_start(),
+            start: self.manager.links.poll_start(),
             reads: vec![(self.pr.clone(), snapshot)],
         };
         let id = &self.workspace.id;

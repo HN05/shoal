@@ -4,7 +4,6 @@
 
 pub(super) use self::activity::record_received_change;
 pub(super) use self::items::links_kind;
-pub(crate) use self::start::WatchStarts;
 use shoal_links::wait::{branch_report, cursor};
 
 pub(crate) use shoal_protocol::links::Updates;
