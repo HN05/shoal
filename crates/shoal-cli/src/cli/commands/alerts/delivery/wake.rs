@@ -6,11 +6,11 @@ use anyhow::{Context as _, Result};
 
 use super::Inbox;
 use crate::{
-    cli::{
-        context::Context,
-        installed::{arguments, replace_option, with_flag, without_option},
+    cli::context::Context,
+    installed::{
+        Executable,
+        arguments::{arguments, replace_option, with_flag, without_option},
     },
-    installed::Executable,
     protocol::WakeEnd,
 };
 use shoal_protocol::{links::Updates, space_names::SpaceSelector};

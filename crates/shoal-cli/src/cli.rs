@@ -9,7 +9,6 @@ mod desktop;
 pub(crate) mod entry;
 mod everywhere;
 mod help;
-pub(crate) mod installed;
 pub mod internal;
 pub mod list_status;
 pub mod output;

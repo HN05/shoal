@@ -3,20 +3,20 @@
 use std::ffi::OsString;
 
 /// This command's arguments.
-pub(crate) fn arguments() -> Vec<OsString> {
+pub fn arguments() -> Vec<OsString> {
     std::env::args_os().skip(1).collect()
 }
 
 /// This command's arguments, with `option` set to any `value` in place of the
 /// one it was given.
-pub(crate) fn arguments_with(option: &str, value: Option<impl ToString>) -> Vec<OsString> {
+pub fn arguments_with(option: &str, value: Option<impl ToString>) -> Vec<OsString> {
     match value {
         Some(value) => replace_option(arguments(), option, &value.to_string()),
         None => arguments(),
     }
 }
 
-pub(crate) fn replace_option(
+pub fn replace_option(
     arguments: impl IntoIterator<Item = OsString>,
     option: &str,
     value: &str,
@@ -28,7 +28,7 @@ pub(crate) fn replace_option(
 
 /// `arguments` without `option` and the value it was given, where `option`
 /// is a long (`--space`) or short (`-s`) spelling.
-pub(crate) fn without_option(
+pub fn without_option(
     arguments: impl IntoIterator<Item = OsString>,
     option: &str,
 ) -> Vec<OsString> {
@@ -54,7 +54,7 @@ pub(crate) fn without_option(
 }
 
 /// `arguments` with `flag` added unless they already have it.
-pub(crate) fn with_flag(mut arguments: Vec<OsString>, flag: &str) -> Vec<OsString> {
+pub fn with_flag(mut arguments: Vec<OsString>, flag: &str) -> Vec<OsString> {
     if !arguments.iter().any(|argument| argument == flag) {
         arguments.push(flag.into());
     }

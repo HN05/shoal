@@ -10,7 +10,7 @@ use shoal_ids::space_ids::SpaceId;
 
 use crate::client::output::agents::{Agent, Continued, Interrupted};
 use crate::{
-    cli::{agents, context::Context, terminal, ui},
+    cli::{agents, context::Context, ui},
     model::{RunningAgent, Space},
     protocol::ConfigTarget,
     sessions::Origin,
@@ -231,7 +231,7 @@ impl Target {
     /// Submit the prompt that continues the agent's interrupted turn.
     async fn continue_turn(&self, ctx: &Context) -> Result<()> {
         self.report_typing(ctx).await?;
-        crate::terminal::submit_prompt(&self.place, terminal::CONTINUE_PROMPT).await
+        crate::terminal::submit_prompt(&self.place, crate::terminal::CONTINUE_PROMPT).await
     }
 }
 

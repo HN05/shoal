@@ -8,7 +8,6 @@ mod demos;
 mod here;
 mod launch;
 mod naming;
-mod prompts;
 
 pub(in crate::cli) use add_place::{Place, follows_caller, host_space, open_shell, place_worker};
 pub(in crate::cli) use closing::watch as watch_place;
@@ -19,4 +18,3 @@ pub(in crate::cli) use here::{
 };
 pub(in crate::cli) use launch::{AgentSpace, Placement, opens_beside, run_agent, start_place};
 pub(in crate::cli) use naming::{Renamed, relabel_space};
-pub(in crate::cli) use prompts::{CONTINUE_PROMPT, submitted_by_shoal};

@@ -1,5 +1,7 @@
 //! Hand long-running commands to the installed release after an upgrade
 //! changes the daemon protocol.
+pub mod arguments;
+
 use std::{ffi::OsString, path::PathBuf};
 
 use crate::fsutil::FileIdentity;

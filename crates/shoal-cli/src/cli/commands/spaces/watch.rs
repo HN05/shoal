@@ -67,7 +67,7 @@ pub(in crate::cli::commands) async fn watch_items(
 /// an earlier release handed over names its workspace the earlier way, which
 /// the space replaces.
 fn resume_watch_arguments(space: &SpaceSelector, deadline: Option<Instant>) -> Vec<OsString> {
-    use crate::cli::installed::{arguments, replace_option, with_flag, without_option};
+    use crate::installed::arguments::{arguments, replace_option, with_flag, without_option};
     let resumed = without_option(arguments(), "--workspace");
     let resumed = without_option(resumed, "-s");
     let mut resumed = replace_option(resumed, "--space", &space.to_string());

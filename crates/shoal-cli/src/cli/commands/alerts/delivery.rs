@@ -7,7 +7,6 @@ use anyhow::{Context as _, Result, bail};
 use crate::{
     cli::{
         context::Context,
-        terminal,
         ui::{self, Fallback},
     },
     client::agent_updates,
@@ -56,7 +55,7 @@ fn user_prompt(input: &str) -> Option<String> {
         return None;
     }
     let prompt = input["prompt"].as_str()?;
-    (!terminal::submitted_by_shoal(prompt)).then(|| prompt.to_owned())
+    (!crate::terminal::submitted_by_shoal(prompt)).then(|| prompt.to_owned())
 }
 
 /// Tell the daemon that the user replied `prompt` in the agent's

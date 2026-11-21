@@ -1,8 +1,8 @@
 //! `shoal internal events`: the integration stream that never consumes user notifications.
 use crate::{
-    cli::{context::Context, installed::arguments_with},
+    cli::context::Context,
     client::events::Events,
-    installed::Executable,
+    installed::{Executable, arguments::arguments_with},
 };
 use anyhow::Result;
 use shoal_protocol::events::{EventCursor, EventItem};

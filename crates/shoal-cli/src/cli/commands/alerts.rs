@@ -14,12 +14,11 @@ use crate::{
         args::coordination::AlertListArgs,
         client,
         context::Context,
-        installed::arguments_with,
         output::{Palette, Style},
         ui::{self, Fallback},
     },
     client::alerts::{self, Watch},
-    installed::Executable,
+    installed::{Executable, arguments::arguments_with},
 };
 use shoal_protocol::{
     alerts::{Alert, Sender},

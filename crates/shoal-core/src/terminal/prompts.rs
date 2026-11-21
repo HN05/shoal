@@ -12,6 +12,19 @@ use crate::{config::Effective, sessions::Origin};
 /// which the prompt's hook supplies.
 pub const WAKE_PROMPT: &str = "Shoal: new alerts or activity on this workspace's issues and PRs.";
 
+/// What `shoal resume` submits to an agent whose turn an interrupt ended.
+pub const CONTINUE_PROMPT: &str = "Continue where you left off.";
+
+/// Whether Shoal, rather than the user, submitted `prompt`: one of its
+/// prompts, which a draft the user left in the input precedes when Shoal
+/// types it there.
+pub fn submitted_by_shoal(prompt: &str) -> bool {
+    let prompt = prompt.trim_end();
+    [WAKE_PROMPT, CONTINUE_PROMPT]
+        .iter()
+        .any(|shoal| prompt.ends_with(shoal))
+}
+
 /// Submit `text` as a prompt in `place`, as if pasted and sent: bracketed
 /// paste keeps it one prompt, and Enter in the same write submits it rather
 /// than ending the paste.

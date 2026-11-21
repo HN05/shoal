@@ -6,11 +6,10 @@ use crate::client::reviews;
 use crate::{
     cli::{
         context::Context,
-        installed::arguments,
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    installed::Executable,
+    installed::{Executable, arguments::arguments},
     reviews::{Posted, Review, ReviewId, ReviewState, ReviewTarget, Severity},
 };
 use shoal_protocol::{space_names::SpaceSelector, threads::Thread};

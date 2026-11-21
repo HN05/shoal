@@ -20,8 +20,8 @@ use std::{
 use anyhow::{Context as _, Result};
 
 use crate::{
-    cli::{context::Context, installed},
-    daemon_owner, env,
+    cli::context::Context,
+    daemon_owner, env, installed,
     paths::Paths,
     sessions::{HostName, Origin, PlaceClose, PlaceOwnership},
     state::AgentState,
@@ -116,7 +116,7 @@ pub async fn watch(
         match workspace_lifecycle(ctx, &place.workspace).await {
             Ok(lifecycle) => Ok(Some(lifecycle)),
             Err(error) if error.is::<shoal_protocol::connection::ProtocolMismatch>() => {
-                match executable.take_over(installed::arguments) {
+                match executable.take_over(installed::arguments::arguments) {
                     Some(failure) => Err(failure),
                     None => Ok(None),
                 }

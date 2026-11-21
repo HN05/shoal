@@ -14,11 +14,13 @@ use crate::{
     cli::{
         args::threads::PostArgs,
         context::Context,
-        installed::{arguments, replace_option},
         ui::{self, Fallback},
     },
     client::threads,
-    installed::Executable,
+    installed::{
+        Executable,
+        arguments::{arguments, replace_option},
+    },
 };
 
 /// A post `shoal send` makes in a thread.
