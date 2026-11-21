@@ -42,9 +42,9 @@ struct Held {
 }
 
 impl Hub {
-    /// Alert the user to each intermittent machine that dropped without a
-    /// word while its spaces had something to do, once per drop, while this
-    /// daemon is the hub, until it stops.
+    /// Alert the user to each intermittent machine that dropped while its
+    /// spaces had something to do, once per drop, while this daemon is the
+    /// hub, until it stops.
     pub(crate) async fn keep_alerting_drops(&self, daemon: &dyn Daemon) {
         let mut every = tokio::time::interval(LOOK_EVERY);
         every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
