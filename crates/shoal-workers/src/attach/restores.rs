@@ -30,17 +30,19 @@ impl<A: Attaching> Steps<'_, A> {
     }
 
     /// Start the queued restore of an agent of the space `space`, as
-    /// [`Self::resume_stopped`] does, or wait for the agent a launch starts
-    /// there, as one a start that attaches to it at once asked to start
-    /// now; `false` when neither waits in the queue.
+    /// [`Self::resume_stopped`] does; `false` when none waits in the queue.
     pub async fn resume_space(&self, space: &SpaceId) -> Result<bool> {
+        self.resume_queued(|entry| entry.kind == QueueKind::Restore && entry.space() == Some(space))
+            .await
+    }
+
+    /// Wait until the agent a launch is starting in the space `space` runs
+    /// in its session, as one a start that attaches to it at once asked to
+    /// start now; `false` when no launch is starting there.
+    pub(super) async fn await_starting_launch(&self, space: &SpaceId) -> Result<bool> {
         self.resume_queued(|entry| {
-            let starts = match entry.kind {
-                QueueKind::Restore => true,
-                QueueKind::Launch => entry.state == QueueState::Starting,
-                QueueKind::Job => false,
-            };
-            starts && entry.space() == Some(space)
+            let starting = entry.kind == QueueKind::Launch && entry.state == QueueState::Starting;
+            starting && entry.space() == Some(space)
         })
         .await
     }

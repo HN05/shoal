@@ -74,13 +74,20 @@ impl<A: Attaching> Steps<'_, A> {
 
     /// Wake `target`'s agent at once, whatever the agent limits and the
     /// queue's rank: start the restore that waits for it, as for an agent
-    /// that sleeps, or when `stopped` too resume its stopped agent now.
-    /// Whether it woke one.
+    /// that sleeps, or when it has no session, which `stopped` says, wait
+    /// for the agent a launch is starting there, else resume its stopped
+    /// agent now. Whether it woke one.
     async fn wake(&self, target: &Target, stopped: bool) -> Result<bool> {
         if self.resume_space(target.id()).await? {
             return Ok(true);
         }
-        if !stopped || !self.has_stopped_work(target).await? {
+        if !stopped {
+            return Ok(false);
+        }
+        if self.await_starting_launch(target.id()).await? {
+            return Ok(true);
+        }
+        if !self.has_stopped_work(target).await? {
             return Ok(false);
         }
         self.resume_now(target).await?;
