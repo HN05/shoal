@@ -26,7 +26,6 @@ use shoal_protocol::{
     space_names::SpaceSelector,
 };
 
-pub(super) mod delivery;
 mod menu;
 
 /// Whose alerts a listing shows, and whether showing them marks them read,
@@ -80,7 +79,7 @@ async fn listing(ctx: &Context, args: &AlertListArgs) -> Result<Listing> {
     }
     let to = match in_own_space() {
         true => AlertsFor::Space {
-            space: delivery::own_space(ctx).await?,
+            space: own_space(ctx).await?,
         },
         false => AlertsFor::User,
     };
@@ -96,13 +95,20 @@ pub(in crate::cli::commands) fn in_own_space() -> bool {
     crate::env::is_scoped() || crate::env::own_chat().is_some()
 }
 
+/// The space of the caller's own agent, whose alerts it reads: its chat's
+/// when it runs under one outside any workspace scope, otherwise its
+/// workspace's.
+pub(in crate::cli::commands) async fn own_space(ctx: &Context) -> Result<SpaceSelector> {
+    ui::select_space(ctx, None, Fallback::OwnSpace).await
+}
+
 /// The space this process sends and withdraws alerts as, which the daemon
 /// takes from a scoped caller's scope; none for the user, whom a process
 /// that cleared its scope token may not act as.
 pub(super) async fn sending_space(ctx: &Context) -> Result<Option<SpaceSelector>> {
     refuse_workspace_processes(ctx)?;
     match in_own_space() {
-        true => Ok(Some(delivery::own_space(ctx).await?)),
+        true => Ok(Some(own_space(ctx).await?)),
         false => Ok(None),
     }
 }

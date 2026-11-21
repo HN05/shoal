@@ -85,7 +85,9 @@ pub(in crate::cli::commands) async fn run(
         CoordinationCommand::Alert {
             command: AlertCommand::Clear,
         } => alerts::clear(&ctx).await,
-        CoordinationCommand::Messages { hook: _ } => alerts::delivery::deliver(&ctx).await,
+        CoordinationCommand::Messages { hook: _ } => {
+            shoal_workers::agent_hooks::delivery::deliver(&ctx.paths).await
+        }
         CoordinationCommand::Alerts {
             keep_unread,
             resume,

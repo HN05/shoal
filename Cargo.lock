@@ -2892,6 +2892,7 @@ version = "0.20.3"
 dependencies = [
  "anyhow",
  "base64",
+ "futures-util",
  "libc",
  "serde",
  "serde_json",

@@ -49,7 +49,7 @@ fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
 async fn acting_space(ctx: &Context) -> Result<Option<SpaceSelector>> {
     refuse_workspace_processes(ctx)?;
     match super::alerts::in_own_space() {
-        true => Ok(Some(super::alerts::delivery::own_space(ctx).await?)),
+        true => Ok(Some(super::alerts::own_space(ctx).await?)),
         false => Ok(None),
     }
 }

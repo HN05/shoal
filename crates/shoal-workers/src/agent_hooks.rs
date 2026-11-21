@@ -3,6 +3,7 @@
 //! stdin, reports it for the agent's space, and prints what the agent reads
 //! as context.
 pub mod changes;
+pub mod delivery;
 mod input;
 pub mod plan;
 pub mod subagents;

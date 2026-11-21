@@ -6,7 +6,7 @@ use shoal_workers::agent_hooks;
 use crate::{
     cli::{
         args::internal::InternalCommand,
-        commands::{alerts, approvals, demo, environment, events, menu, sessions, worktree_hooks},
+        commands::{approvals, demo, environment, events, menu, sessions, worktree_hooks},
         context::Context,
         terminal,
     },
@@ -49,8 +49,8 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             space,
             handed_over,
             resume,
-        } => alerts::delivery::wake(&ctx, agent, space.or(handed_over), resume).await,
-        InternalCommand::Deliver => alerts::delivery::deliver(&ctx).await,
+        } => agent_hooks::delivery::wake(&ctx.paths, agent, space.or(handed_over), resume).await,
+        InternalCommand::Deliver => agent_hooks::delivery::deliver(&ctx.paths).await,
         InternalCommand::SubagentStart => agent_hooks::subagents::start(&ctx.paths).await,
         InternalCommand::Subagent { integration, space } => {
             agent_hooks::subagents::report(&ctx.paths, space, integration).await

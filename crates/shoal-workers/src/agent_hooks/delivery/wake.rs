@@ -6,7 +6,7 @@ use anyhow::{Context as _, Result};
 
 use super::Inbox;
 use crate::{
-    cli::context::Context,
+    client::connection::CommandPaths,
     installed::{
         Executable,
         arguments::{arguments, replace_option, with_flag, without_option},
@@ -22,8 +22,8 @@ use shoal_protocol::{links::Updates, space_names::SpaceSelector};
 /// the agent's process, or a signal ends it with 0 and leaves the agent
 /// idle, and the daemon logs why. `space` and `resumed` continue the wait of
 /// the hook an upgrade replaced.
-pub(in crate::cli::commands) async fn wake(
-    ctx: &Context,
+pub async fn wake(
+    paths: &CommandPaths,
     agent: u32,
     space: Option<SpaceSelector>,
     resumed: bool,
@@ -34,7 +34,7 @@ pub(in crate::cli::commands) async fn wake(
         restarted: resumed,
     };
     let outcome = tokio::select! {
-        next = retry_next_updates(ctx, &mut wait) => Ok(next),
+        next = retry_next_updates(paths, &mut wait) => Ok(next),
         ended = agent_exit(agent) => Err(ended),
         ended = ending_signal() => Err(ended),
     };
@@ -43,24 +43,24 @@ pub(in crate::cli::commands) async fn wake(
         Ok(None) => return Ok(0),
         Ok(Some(next)) => next,
         Err(ended) => {
-            report_end(ctx, &wait, ended).await;
+            report_end(paths, &wait, ended).await;
             return Ok(0);
         }
     };
-    if !woken_turn_starts(ctx, &inbox).await {
-        report_end(ctx, &wait, WakeEnd::Stopped).await;
+    if !woken_turn_starts(paths, &inbox).await {
+        report_end(paths, &wait, WakeEnd::Stopped).await;
         return Ok(0);
     }
-    deliver(ctx, &inbox, &updates).await?;
+    deliver(paths, &inbox, &updates).await?;
     Ok(2)
 }
 
 /// Print `updates` for Claude Code, which starts the agent's turn with them
 /// once the hook exits 2, and acknowledge them.
-async fn deliver(ctx: &Context, inbox: &Inbox, updates: &Updates) -> Result<()> {
+async fn deliver(paths: &CommandPaths, inbox: &Inbox, updates: &Updates) -> Result<()> {
     eprintln!("{}", inbox.hook_context(updates));
     std::io::Write::flush(&mut std::io::stderr())?;
-    if let Err(error) = inbox.acknowledge(ctx, updates).await {
+    if let Err(error) = inbox.acknowledge(paths, updates).await {
         eprintln!("shoal: these updates may be delivered again: {error:#}");
     }
     Ok(())
@@ -69,17 +69,17 @@ async fn deliver(ctx: &Context, inbox: &Inbox, updates: &Updates) -> Result<()> 
 /// Tell the daemon why the hook ends without starting the agent's turn, so
 /// a missed wake can be traced, for the inbox the wait found or was named,
 /// else the current one. Only Claude Code's debug output shows a failure.
-async fn report_end(ctx: &Context, wait: &WakeWait, ended: WakeEnd) {
+async fn report_end(paths: &CommandPaths, wait: &WakeWait, ended: WakeEnd) {
     let report = async {
         let space = match &wait.inbox {
             Some(inbox) => inbox.space.clone(),
             None => {
-                Inbox::waited_for(ctx, wait.space.as_ref(), false)
+                Inbox::waited_for(paths, wait.space.as_ref(), false)
                     .await?
                     .space
             }
         };
-        crate::client::agents::report_wake_end(&ctx.paths, space, ended).await
+        crate::client::agents::report_wake_end(paths, space, ended).await
     };
     let limit = crate::agents::hooks::MESSAGE_DAEMON_LIMIT;
     let reported = tokio::time::timeout(limit, report)
@@ -125,8 +125,8 @@ async fn ending_signal() -> WakeEnd {
 /// not when a stop of the agent came first, which leaves them unread for its
 /// restore. A failed report still delivers, since without the turn the agent
 /// would stay idle.
-async fn woken_turn_starts(ctx: &Context, inbox: &Inbox) -> bool {
-    crate::client::agents::start_woken_turn(&ctx.paths, inbox.space.clone())
+async fn woken_turn_starts(paths: &CommandPaths, inbox: &Inbox) -> bool {
+    crate::client::agents::start_woken_turn(paths, inbox.space.clone())
         .await
         .unwrap_or_else(|error| {
             eprintln!("shoal: the woken turn was not reported: {error:#}");
@@ -169,12 +169,12 @@ const WAKE_RETRY_MAX: std::time::Duration = std::time::Duration::from_secs(60);
 /// the first failure is reported: whatever the hook prints reaches the agent
 /// with the updates that wake it, and a lasting failure would repeat there
 /// once per retry.
-async fn retry_next_updates(ctx: &Context, wait: &mut WakeWait) -> Option<(Inbox, Updates)> {
+async fn retry_next_updates(paths: &CommandPaths, wait: &mut WakeWait) -> Option<(Inbox, Updates)> {
     let executable = Executable::current();
     let mut delay = WAKE_RETRY_INITIAL;
     let mut reported = false;
     loop {
-        match wait.next(ctx).await {
+        match wait.next(paths).await {
             Ok(next) => return next,
             Err(error) => {
                 let error = executable.resume_or(error, || wait.resume_arguments(arguments()));
@@ -202,15 +202,17 @@ struct WakeWait {
 impl WakeWait {
     /// The inbox's next messages or item activity, or `None` when a newer
     /// delivery takes them.
-    async fn next(&mut self, ctx: &Context) -> Result<Option<(Inbox, Updates)>> {
+    async fn next(&mut self, paths: &CommandPaths) -> Result<Option<(Inbox, Updates)>> {
         let inbox = match &self.inbox {
             Some(inbox) => inbox,
             None => {
-                let inbox = Inbox::waited_for(ctx, self.space.as_ref(), self.restarted).await?;
+                let inbox = Inbox::waited_for(paths, self.space.as_ref(), self.restarted).await?;
                 self.inbox.insert(inbox)
             }
         };
-        let updates = inbox.next(ctx, std::mem::take(&mut self.restarted)).await?;
+        let updates = inbox
+            .next(paths, std::mem::take(&mut self.restarted))
+            .await?;
         if updates.updates.is_empty() && updates.alerts.is_empty() {
             return Ok(None);
         }

@@ -39,7 +39,7 @@ fn attached_files_follow_the_message_text() {
 }
 
 #[test]
-fn hook_output_names_the_event_it_answers() {
+fn hook_context_lists_alerts_and_item_activity() {
     let updates = Updates {
         updates: vec![Update {
             url: "https://forge.example/team/repo/pulls/7".into(),
@@ -65,14 +65,6 @@ fn hook_output_names_the_event_it_answers() {
     ] {
         assert!(context.contains(part), "{part:?} in {context}");
     }
-    let output: serde_json::Value = serde_json::from_str(&hook_output(
-        r#"{"hook_event_name":"PostToolUse","tool_name":"Bash"}"#,
-        &context,
-    ))
-    .unwrap();
-    assert_eq!(output["hookSpecificOutput"]["hookEventName"], "PostToolUse");
-    assert_eq!(output["hookSpecificOutput"]["additionalContext"], context);
-    assert_eq!(hook_output("", &context), context);
 }
 
 #[test]
