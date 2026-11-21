@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use anyhow::{Result, ensure};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::hub::{Member, directory::Listed};
+use shoal_protocol::model::Located;
 
 use super::target::Target;
 use crate::client::output::agents::Skipped;
@@ -15,9 +16,6 @@ use crate::{
     sessions::Origin,
     time::UnixTime,
 };
-use shoal_protocol::space_names::SpaceSelector;
-
-mod machines;
 
 /// The spaces whose agents a command asks the daemon to restart, and those
 /// it leaves out.
@@ -66,20 +64,19 @@ pub(super) async fn spaces(
     targets: SpaceTargets,
     machines: &[String],
 ) -> Result<Chosen> {
-    if !machines.is_empty() {
-        return machines::on(ctx, machines).await;
-    }
-    let spaces = crate::client::spaces::list(&ctx.paths).await?;
-    match targets.all {
-        true => Ok(Chosen {
+    if targets.all && machines.is_empty() {
+        let spaces = crate::client::spaces::list(&ctx.paths).await?;
+        return Ok(Chosen {
             here: reached(ctx, spaces),
             elsewhere: Vec::new(),
-        }),
-        false => {
-            let selected = ui::select_spaces(ctx, targets.space, false).await?;
-            in_order(ctx, &spaces, selected).await
-        }
+        });
     }
+    let selected = match machines.is_empty() {
+        true => ui::select_spaces(ctx, targets.space, false).await?,
+        false => Vec::new(),
+    };
+    let located = crate::client::spaces::select(&ctx.paths, selected, machines.to_vec(), false);
+    Ok(Chosen::of(located.await?))
 }
 
 /// The spaces of `spaces` that `--all` selects: every one the caller's
@@ -188,25 +185,6 @@ pub(super) fn ensure_below(spaces: &[Target]) -> Result<()> {
     Ok(())
 }
 
-/// The spaces `selected` names, in its order among those of each machine,
-/// each once: among `spaces`, else among the other machines' the hub
-/// lists. A selector no space has is inspected, which names why the daemon
-/// does not know it.
-async fn in_order(ctx: &Context, spaces: &Spaces, selected: Vec<SpaceSelector>) -> Result<Chosen> {
-    let mut chosen = Chosen::default();
-    for selector in selected {
-        if let Some(space) = spaces.find(&selector) {
-            chosen.add_here(space);
-        } else if let Some(found) = machines::named_elsewhere(ctx, &selector).await? {
-            chosen.add_elsewhere(found);
-        } else {
-            let inspection = crate::client::workspaces::inspect(&ctx.paths, selector).await?;
-            chosen.add_here(inspection.workspace.into());
-        }
-    }
-    Ok(chosen)
-}
-
 impl Chosen {
     /// The chosen spaces as targets, this machine's first.
     pub(super) fn into_targets(self) -> Vec<Target> {
@@ -217,19 +195,17 @@ impl Chosen {
             .collect()
     }
 
-    /// Add `space` of this machine, unless chosen already.
-    fn add_here(&mut self, space: Space) {
-        if self.here.iter().all(|chosen| chosen.id != space.id) {
-            self.here.push(space);
+    /// The spaces `located`, which the daemon selected each once, by the
+    /// machine each runs on.
+    fn of(located: Vec<Located>) -> Self {
+        let mut chosen = Self::default();
+        for located in located {
+            match located {
+                Located::Here(space) => chosen.here.push(*space),
+                Located::Elsewhere { space, machine } => chosen.elsewhere.push((*space, *machine)),
+            }
         }
-    }
-
-    /// Add another machine's space `listed`, unless chosen already.
-    fn add_elsewhere(&mut self, (listed, machine): (Listed, Member)) {
-        let known = (self.elsewhere.iter()).any(|(chosen, _)| chosen.space.id == listed.space.id);
-        if !known {
-            self.elsewhere.push((listed, machine));
-        }
+        chosen
     }
 }
 

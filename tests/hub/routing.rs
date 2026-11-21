@@ -187,6 +187,18 @@ fn a_restart_and_its_cancel_go_to_the_machine_of_the_space() {
 }
 
 #[test]
+fn a_restart_selects_another_machine_s_spaces_by_its_name_through_the_daemon() {
+    let (hub, _laptop, _there) = laptop_space();
+    // Named twice, the laptop is selected once; no agent runs there.
+    let restarted = hub.ok(&["restart", "--machine", "laptop", "--machine", "laptop"]);
+    assert_eq!(restarted["restarted"], json!([]), "{restarted}");
+    let refused = hub.run(&["restart", "--machine", "nowhere"]);
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    let error = String::from_utf8_lossy(&refused.stderr);
+    assert!(error.contains("nowhere"), "{error}");
+}
+
+#[test]
 fn a_restart_names_the_machine_of_the_space_and_fails_at_once_while_it_is_offline() {
     let (hub, laptop, there) = laptop_space();
     let restarted = hub.ok(&["restart", &there]);
