@@ -31,6 +31,15 @@ pub fn edit(
     check: impl FnOnce(&str) -> Result<()>,
 ) -> Result<(PathBuf, Option<PathBuf>)> {
     let _lock = lock(&path)?;
+    edit_held(path, changes, check)
+}
+
+/// [`edit`] while the caller holds `path`'s edit lock.
+fn edit_held(
+    path: PathBuf,
+    changes: &[Change],
+    check: impl FnOnce(&str) -> Result<()>,
+) -> Result<(PathBuf, Option<PathBuf>)> {
     let text = fsutil::read_optional(&path)
         .with_context(|| format!("read {}", path.display()))?
         .unwrap_or_default();
@@ -50,6 +59,13 @@ pub(crate) fn lock(path: &Path) -> Result<fs::File> {
         .open(path.with_extension("toml.lock"))?;
     fs2::FileExt::lock_exclusive(&file)?;
     Ok(file)
+}
+
+/// Hold the edit locks of the global config and the shared config while
+/// the returned files live. Every holder of both takes the global file's
+/// first, so none waits on another that waits for it.
+fn lock_global_files(paths: &Paths) -> Result<(fs::File, fs::File)> {
+    Ok((lock(&Config::path(paths))?, lock(&Shared::path(paths))?))
 }
 
 /// Replace `path` with `text`, keeping the previous file as `<path>.backup`.
@@ -176,8 +192,11 @@ impl ConfigExt for Config {
     }
 
     fn edit(paths: &Paths, changes: &[edit::Change]) -> Result<(PathBuf, Option<PathBuf>)> {
+        // Each file's edits check it against the other, which no edit may
+        // change meanwhile.
+        let _locks = lock_global_files(paths)?;
         let shared = Shared::load(paths)?;
-        edit(Self::path(paths), changes, |edited| {
+        edit_held(Self::path(paths), changes, |edited| {
             Self::parse_over(edited, &shared, paths)
                 .map(drop)
                 .context("invalid edited config")
@@ -185,11 +204,12 @@ impl ConfigExt for Config {
     }
 
     fn edit_shared(paths: &Paths, changes: &[edit::Change]) -> Result<(PathBuf, Option<PathBuf>)> {
+        let _locks = lock_global_files(paths)?;
         let own = Self::path(paths);
         let own = fsutil::read_optional(&own)
             .with_context(|| format!("read {}", own.display()))?
             .unwrap_or_default();
-        edit(Shared::path(paths), changes, |edited| {
+        edit_held(Shared::path(paths), changes, |edited| {
             let shared = Shared::parse(edited, paths).context("invalid edited shared config")?;
             Self::parse_over(&own, &shared, paths)
                 .map(drop)
@@ -199,21 +219,15 @@ impl ConfigExt for Config {
 
     fn install_named(paths: &Paths, name: &str) -> Result<(PathBuf, Option<PathBuf>)> {
         let text = packaged(name)?;
+        let _locks = lock_global_files(paths)?;
         Self::parse_over(text, &Shared::load(paths)?, paths)
             .with_context(|| format!("validate packaged config {name}"))?;
-        let path = Self::path(paths);
-        let _lock = lock(&path)?;
-        replace(path, text)
+        replace(Self::path(paths), text)
     }
 
     fn load_settled(paths: &Paths) -> Result<Self> {
-        let path = Self::path(paths);
-        let writable = refuse_user_config(&path).is_ok();
-        // Each edit holds one file's lock, so taking both never waits on a
-        // holder that waits for the other.
-        let _locks = writable
-            .then(|| Ok::<_, anyhow::Error>((lock(&path)?, lock(&Shared::path(paths))?)))
-            .transpose()?;
+        let writable = refuse_user_config(&Self::path(paths)).is_ok();
+        let _locks = writable.then(|| lock_global_files(paths)).transpose()?;
         Self::load(paths)
     }
 }
