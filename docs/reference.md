@@ -1090,7 +1090,7 @@ and a duplicate shows as a conflict once both machines report it.
 
 `shoal restore <space>` of a space whose `intermittent` machine is offline,
 by its number or ID, takes the space over from the package the hub keeps of
-it: it fetches the package and imports it under the space's ID as
+it, for an agent as its `admin` permission allows, as `restore --from` is: it fetches the package and imports it under the space's ID as
 `shoal restore --from` does, so its claim makes the space this machine's,
 and queues its agents' restores, which continue their sessions. It warns
 when the machine had changes the package lacks, naming how old the oldest

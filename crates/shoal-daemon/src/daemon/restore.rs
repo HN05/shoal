@@ -13,6 +13,7 @@ use anyhow::{Context, Result, bail};
 use super::manager::Manager;
 use crate::daemon::scope::Caller;
 use crate::model::{OpenedWorkspace, RemovedSpace, RestoredChat, RestoredSpace, RestoredWorkspace};
+use shoal_protocol::protocol::RemovalMethod;
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::threads::CloseCause;
@@ -21,13 +22,21 @@ impl Manager {
     /// Open the removed space `selector` names again, as
     /// [`Self::reopen_space`] does, unless the hub lists it on another
     /// machine: one whose machine is offline it takes over from the hub's
-    /// package of it, and any other it refuses.
+    /// package of it, for a scoped `caller` as its `admin` permission
+    /// allows, and any other it refuses.
     pub async fn restore_space(
         &self,
         selector: &SpaceSelector,
         caller: Option<&Caller>,
     ) -> Result<RestoredSpace> {
         if let Some(takeover) = self.takeover(selector).await? {
+            // It moves the space here, as an import does.
+            if let Some(caller) = caller {
+                let request = RemovalMethod::RestoreSpace {
+                    space: selector.clone(),
+                };
+                self.administer(caller, &request, None).await?;
+            }
             return self.take_over_from_package(takeover, caller).await;
         }
         if let Some(id) = selector.given_id() {

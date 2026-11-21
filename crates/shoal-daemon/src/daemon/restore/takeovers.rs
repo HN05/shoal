@@ -9,7 +9,7 @@ use shoal_protocol::{hub::packages::KeptPackage, space_names::SpaceSelector};
 
 use super::{Claim, PackageInput};
 use crate::{
-    daemon::{manager::Manager, scope::Caller},
+    daemon::{log, manager::Manager, scope::Caller},
     model::{RemovedSpace, RestoredSpace},
     time::UnixTime,
     transfer::{PackageImport, PackageSource},
@@ -30,14 +30,29 @@ pub(super) struct Takeover {
 impl Manager {
     /// The space `selector` names on another joined machine that is
     /// offline, with the package the hub keeps of it; none for a space this
-    /// machine has a record of, one whose machine is connected, and one no
-    /// package keeps.
+    /// machine has a record of, one whose machine is connected, one no
+    /// package keeps, and while the hub cannot be asked, as a restore goes
+    /// on then.
     pub(super) async fn takeover(&self, selector: &SpaceSelector) -> Result<Option<Takeover>> {
         if let Some(id) = selector.given_id()
             && self.removed_here(id).await?
         {
             return Ok(None);
         }
+        match self.offline_package(selector).await {
+            Ok(takeover) => Ok(takeover),
+            Err(error) => {
+                log!(
+                    "hub: could not ask whether the hub keeps a package of space {selector}: {error:#}"
+                );
+                Ok(None)
+            }
+        }
+    }
+
+    /// The space `selector` names on another joined machine that is
+    /// offline, with the package the hub keeps of it, as the hub answers.
+    async fn offline_package(&self, selector: &SpaceSelector) -> Result<Option<Takeover>> {
         let Some((machine, listed)) = self.hub.machine_of(self, selector).await? else {
             return Ok(None);
         };
