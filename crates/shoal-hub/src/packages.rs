@@ -7,3 +7,6 @@ mod keeping;
 mod sending;
 
 pub(crate) use keeping::{Kept, Sent};
+
+#[cfg(test)]
+mod tests;
