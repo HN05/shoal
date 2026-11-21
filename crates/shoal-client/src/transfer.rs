@@ -87,6 +87,16 @@ pub async fn read_held_package(
         protocol::Body::HeldPackage(size) => size,
         body => return Err(body.unexpected("HeldPackage")),
     };
+    receive_package(&mut stream, size, into).await
+}
+
+/// Write the `size` bytes of a package `stream` carries into `into`,
+/// refusing a stream that ends before them.
+async fn receive_package(
+    stream: &mut (impl AsyncRead + Unpin),
+    size: u64,
+    into: &mut impl std::io::Write,
+) -> Result<()> {
     let mut buffer = vec![0; 64 * 1024];
     let mut left = size;
     while left > 0 {
