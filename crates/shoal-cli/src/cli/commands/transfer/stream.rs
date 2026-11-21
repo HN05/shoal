@@ -51,7 +51,7 @@ impl Streaming {
         };
         copy_to_stdout(&self.package)?;
         if !order.keep {
-            end_here(ctx, moved).await?;
+            end_moved_space(ctx, moved).await?;
         }
 
         self.lock.release();
@@ -72,7 +72,7 @@ fn copy_to_stdout(path: &Path) -> Result<()> {
 
 /// End the `moved` space where it runs, whose package its reader took,
 /// unless it was a removed space here, whose record moved.
-async fn end_here(ctx: &Context, moved: &SpaceMoved) -> Result<()> {
+async fn end_moved_space(ctx: &Context, moved: &SpaceMoved) -> Result<()> {
     let selector = SpaceSelector::id(&moved.id);
     let removed = crate::client::removal::removed_space(&ctx.paths, selector.clone());
     if removed.await.is_ok() {
