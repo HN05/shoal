@@ -265,7 +265,9 @@ pub(super) async fn handle(
             Body::Spaces(manager.find_visible_spaces(&target, caller).await?)
         }
         WorkspaceMethod::DiffBase { workspace } => {
-            Body::DiffBase(manager.diff_base(&workspace).await?)
+            let mut base = manager.diff_base(&workspace).await?;
+            base.machine = super::forwarded::answering_machine(manager, scope).await?;
+            Body::DiffBase(base)
         }
         WorkspaceMethod::Conflicts { workspace, target } => {
             Body::Conflicts(manager.check_conflicts(&workspace, target).await?)

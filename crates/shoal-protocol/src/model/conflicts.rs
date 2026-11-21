@@ -11,6 +11,10 @@ pub struct DiffBase {
     pub commit: CommitId,
     /// The worktree, verified as the workspace's.
     pub path: PathBuf,
+    /// The other joined machine that runs the workspace and answered for
+    /// it, whose Git shows its diff, since the worktree is there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<crate::hub::Machine>,
 }
 
 /// Whether a workspace's committed HEAD merges cleanly into a target.

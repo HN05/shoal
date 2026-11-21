@@ -45,6 +45,7 @@ impl Manager {
             workspace_id: workspace.id,
             commit,
             path: workspace.part.path,
+            machine: None,
         })
     }
 }
