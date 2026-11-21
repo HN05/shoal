@@ -187,11 +187,19 @@ fn a_restart_and_its_cancel_go_to_the_machine_of_the_space() {
 }
 
 #[test]
-fn a_restart_selects_another_machine_s_spaces_by_its_name_through_the_daemon() {
-    let (hub, _laptop, _there) = laptop_space();
-    // Named twice, the laptop is selected once; no agent runs there.
-    let restarted = hub.ok(&["restart", "--machine", "laptop", "--machine", "laptop"]);
-    assert_eq!(restarted["restarted"], json!([]), "{restarted}");
+fn a_selection_by_machine_takes_another_machine_s_spaces_once_through_the_daemon() {
+    let (hub, _laptop, there) = laptop_space();
+    // Named twice, the laptop's space is selected once.
+    let method =
+        json!({"select_spaces": {"spaces": [], "machines": ["laptop", "laptop"], "below": false}});
+    let selected = request(&hub, method);
+    let spaces = selected["data"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{selected}"));
+    let ids: Vec<&str> = (spaces.iter())
+        .filter_map(|located| located["elsewhere"]["space"]["id"].as_str())
+        .collect();
+    assert_eq!(ids, [there.as_str()], "{selected}");
     let refused = hub.run(&["restart", "--machine", "nowhere"]);
     assert!(!refused.status.success(), "{}", printed(&refused));
     let error = String::from_utf8_lossy(&refused.stderr);
