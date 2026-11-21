@@ -25,8 +25,9 @@ use crate::{
 
 impl Links {
     /// Record `change`, which the space `id` made, on its cursor and on
-    /// those of the spaces below it whose activity its agent receives, as
-    /// [`record_received_change`] does, within the caller's transaction.
+    /// those of the spaces below it whose activity its agent receives and
+    /// that follow the item, within the caller's transaction, so none of
+    /// its deliveries reports the change back.
     pub fn record_received_change(
         &self,
         db: &rusqlite::Connection,
@@ -230,7 +231,7 @@ fn record_received_change(
 
 /// Whether the workspace, or a child workspace whose activity its agent
 /// receives, links an item of `kind`; every workspace has items of no kind.
-pub fn links_kind(
+pub(crate) fn links_kind(
     records: &dyn Records,
     db: &rusqlite::Connection,
     id: &SpaceId,
