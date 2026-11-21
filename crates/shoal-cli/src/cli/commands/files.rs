@@ -5,7 +5,7 @@ use anyhow::{Result, ensure};
 use shoal_protocol::model::ByKind;
 
 use crate::cli::{
-    args::WorkspaceScope,
+    args::SpaceFilter,
     context::Context,
     output::{Palette, Style},
     ui::{self, Fallback},
@@ -77,13 +77,13 @@ pub(super) async fn add(
     Ok(0)
 }
 
-/// Delete the files of the workspace or chat `scope` selects, only those
+/// Delete the files of the workspace or chat `filter` selects, only those
 /// with one of `names` and the records `ids` when there are any, or of every
 /// workspace without a running agent or command. Asks first for every
 /// workspace, or one where an agent or command runs, unless `yes`.
 pub(super) async fn remove(
     ctx: &Context,
-    scope: WorkspaceScope,
+    filter: SpaceFilter,
     names: Vec<String>,
     ids: Vec<i64>,
     yes: bool,
@@ -91,9 +91,9 @@ pub(super) async fn remove(
     // Names and records belong to one workspace or chat, so they offer no
     // choice of every workspace.
     let space = if names.is_empty() && ids.is_empty() {
-        ui::select_space_filter(ctx, scope).await?
+        ui::select_space_filter(ctx, filter).await?
     } else {
-        Some(ui::select_space(ctx, scope.workspace, Fallback::CurrentDirectory).await?)
+        Some(ui::select_space(ctx, filter.space, Fallback::CurrentDirectory).await?)
     };
     if let Some(space) = &space {
         check_selected(ctx, space, &names, &ids).await?;

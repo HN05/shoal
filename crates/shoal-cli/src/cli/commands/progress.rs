@@ -116,7 +116,7 @@ pub(super) async fn report_plan(
     let Some(change) = change.and_then(single_lines) else {
         return Ok(0);
     };
-    let space = ui::select_space(ctx, space, Fallback::OwnWorkspace).await?;
+    let space = ui::select_space(ctx, space, Fallback::OwnSpace).await?;
     progress::set(&ctx.paths, space, change).await?;
     Ok(0)
 }

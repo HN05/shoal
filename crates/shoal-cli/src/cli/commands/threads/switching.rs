@@ -31,7 +31,7 @@ pub(in crate::cli::commands) async fn switch(
     switch: Switch,
     space: Option<SpaceSelector>,
 ) -> Result<i32> {
-    let space = ui::select_space(ctx, space, Fallback::OwnWorkspace).await?;
+    let space = ui::select_space(ctx, space, Fallback::OwnSpace).await?;
     let to = match switch {
         Switch::To(thread) => Some(thread),
         Switch::Show => picked(ctx, &space).await?.map(Some),

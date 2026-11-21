@@ -63,7 +63,7 @@ fn user_prompt(input: &str) -> Option<String> {
 /// conversation, which answers the posts the space's agents made there.
 async fn report_reply(ctx: &Context, prompt: String, deadline: tokio::time::Instant) -> Result<()> {
     let reply = async {
-        let inbox = Inbox::current(ctx, Fallback::OwnWorkspace).await?;
+        let inbox = Inbox::current(ctx, Fallback::OwnSpace).await?;
         crate::client::threads::replied_in_chat(&ctx.paths, inbox.space, Some(prompt)).await
     };
     tokio::time::timeout_at(deadline, reply)
@@ -87,7 +87,7 @@ async fn deliver_to_hook(ctx: &Context, input: &str, deadline: tokio::time::Inst
 }
 
 async fn hook_updates(ctx: &Context) -> Result<(Inbox, Updates)> {
-    let inbox = Inbox::current(ctx, Fallback::OwnWorkspace).await?;
+    let inbox = Inbox::current(ctx, Fallback::OwnSpace).await?;
     let updates = inbox.updates(ctx).await?;
     Ok((inbox, updates))
 }
@@ -96,7 +96,7 @@ async fn hook_updates(ctx: &Context) -> Result<(Inbox, Updates)> {
 /// when it runs under one outside any workspace scope, otherwise its
 /// workspace's.
 pub(in crate::cli::commands) async fn own_space(ctx: &Context) -> Result<SpaceSelector> {
-    Ok(Inbox::current(ctx, Fallback::OwnWorkspace).await?.space)
+    Ok(Inbox::current(ctx, Fallback::OwnSpace).await?.space)
 }
 
 /// Where an agent's alerts arrive: its chat's, when it runs under one
@@ -121,7 +121,7 @@ impl Inbox {
         let find = || async move {
             match space {
                 Some(space) => Self::named(ctx, space).await,
-                None => Self::current(ctx, Fallback::OwnWorkspace).await,
+                None => Self::current(ctx, Fallback::OwnSpace).await,
             }
         };
         if restarted {

@@ -109,7 +109,7 @@ async fn send(
     report: Report,
     made: SystemTime,
 ) -> Result<AgentStatus> {
-    let space = ui::select_space(ctx, space, Fallback::OwnWorkspace).await?;
+    let space = ui::select_space(ctx, space, Fallback::OwnSpace).await?;
     let made = Some(made);
     match report {
         Report::State {

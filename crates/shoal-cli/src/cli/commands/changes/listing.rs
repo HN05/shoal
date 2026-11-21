@@ -27,7 +27,7 @@ pub(in crate::cli::commands) async fn list(
 ) -> Result<i32> {
     let space = match thread {
         Some(_) => None,
-        None => Some(ui::select_space(ctx, space, Fallback::OwnWorkspace).await?),
+        None => Some(ui::select_space(ctx, space, Fallback::OwnSpace).await?),
     };
     let filter = ChangeFilter {
         space,
@@ -89,9 +89,7 @@ pub(in crate::cli::commands) async fn own_space(
         .any(|number| matches!(number, ChangeNumber::Own(_)));
     match (space, bare) {
         (Some(space), _) => Ok(Some(space)),
-        (None, true) => Ok(Some(
-            ui::select_space(ctx, None, Fallback::OwnWorkspace).await?,
-        )),
+        (None, true) => Ok(Some(ui::select_space(ctx, None, Fallback::OwnSpace).await?)),
         (None, false) => Ok(None),
     }
 }

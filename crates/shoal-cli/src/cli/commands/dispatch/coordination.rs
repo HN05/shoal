@@ -105,11 +105,8 @@ pub(in crate::cli::commands) async fn run(
                 }),
             ..
         } => {
-            let scope = crate::cli::args::WorkspaceScope {
-                workspace: space,
-                all,
-            };
-            files::remove(&ctx, scope, names, vec![], confirmation.yes).await
+            let filter = crate::cli::args::SpaceFilter { space, all };
+            files::remove(&ctx, filter, names, vec![], confirmation.yes).await
         }
         CoordinationCommand::Files {
             command: None,

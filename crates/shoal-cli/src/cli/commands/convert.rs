@@ -91,7 +91,7 @@ pub(super) async fn to_chat(
 /// space, or the user's current workspace, else a picker.
 fn own_space() -> Fallback {
     match crate::env::is_scoped() {
-        true => Fallback::OwnWorkspace,
+        true => Fallback::OwnSpace,
         false => Fallback::CurrentDirectory,
     }
 }

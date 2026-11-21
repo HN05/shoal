@@ -4,7 +4,7 @@ use shoal_ids::execution_ids::ExecutionId;
 
 use super::acquisition::{Finish, obtain};
 use crate::cli::{
-    args::WorkspaceScope,
+    args::SpaceFilter,
     context::{Context, optional},
     output::{Palette, Style},
     ui,
@@ -76,11 +76,11 @@ pub(super) fn render_catalog(catalog: &SimulatorCatalog, palette: Palette) {
 
 pub(super) async fn history(
     ctx: &Context,
-    scope: WorkspaceScope,
+    filter: SpaceFilter,
     limit: u32,
     before: Option<i64>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace_filter(ctx, scope).await?;
+    let workspace = ui::select_workspace_filter(ctx, filter).await?;
     let entries = leases::simulator_history(&ctx.paths, workspace.clone(), limit, before).await?;
     ctx.show(&entries, |entries| {
         for entry in entries {
@@ -111,8 +111,8 @@ pub(super) async fn acquire(
     )
 }
 
-pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
-    let workspace = ui::select_workspace_filter(ctx, scope).await?;
+pub(super) async fn overview(ctx: &Context, filter: SpaceFilter) -> Result<i32> {
+    let workspace = ui::select_workspace_filter(ctx, filter).await?;
     let overview = leases::simulators(&ctx.paths, workspace.clone()).await?;
     ctx.show(&overview, |overview| {
         render_overview(overview, Palette::stdout(ctx.json))

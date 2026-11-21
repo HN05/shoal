@@ -17,7 +17,7 @@ use super::{
 use crate::client::output::resume::ResumableSpace;
 use crate::{
     cli::{
-        args::WorkspaceScope,
+        args::SpaceFilter,
         context::Context,
         list_status::{ListStatus, ListStatusStyle},
         output::Palette,
@@ -213,7 +213,7 @@ pub async fn select_space(
     fallback: Fallback,
 ) -> Result<SpaceSelector> {
     match current_chat(&explicit) {
-        Some(chat) if matches!(fallback, Fallback::OwnWorkspace) => Ok(SpaceSelector::Id(chat)),
+        Some(chat) if matches!(fallback, Fallback::OwnSpace) => Ok(SpaceSelector::Id(chat)),
         Some(chat) => current_workspace_or_chat(ctx, chat, Workspaces::Below).await,
         None => select_other_space(ctx, explicit, fallback).await,
     }
@@ -317,17 +317,17 @@ pub fn current_chat(explicit: &Option<SpaceSelector>) -> Option<SpaceId> {
 /// when `--all` was passed or picked.
 pub async fn select_space_filter(
     ctx: &Context,
-    scope: WorkspaceScope,
+    filter: SpaceFilter,
 ) -> Result<Option<SpaceSelector>> {
-    if scope.all {
+    if filter.all {
         return Ok(None);
     }
-    if current_chat(&scope.workspace).is_some() {
-        let space = select_space(ctx, scope.workspace, Fallback::CurrentDirectory).await?;
+    if current_chat(&filter.space).is_some() {
+        let space = select_space(ctx, filter.space, Fallback::CurrentDirectory).await?;
         return Ok(Some(space));
     }
     Ok(
-        match resolve_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await? {
+        match resolve_workspace(ctx, filter.space, Fallback::CurrentDirectory).await? {
             Resolution::Named(selector) => Some(selector),
             Resolution::Current(id) => Some(SpaceSelector::Id(id)),
             Resolution::Picker(workspaces) => {

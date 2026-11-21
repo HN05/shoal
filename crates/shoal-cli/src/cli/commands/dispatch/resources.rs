@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::cli::{
     args::{
-        WorkspaceScope,
+        SpaceFilter,
         resources::{HistoryKind, ResourcesCommand},
     },
     commands::{catalog, leases, simulators},
@@ -14,11 +14,8 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ResourcesComman
         ResourcesCommand::Acquire { kind, space } => leases::acquire(&ctx, kind, space).await,
         ResourcesCommand::Release { kind, space } => leases::release(&ctx, kind, space).await,
         ResourcesCommand::Leases { kind, space, all } => {
-            let scope = WorkspaceScope {
-                workspace: space,
-                all,
-            };
-            leases::show(&ctx, kind, scope).await
+            let filter = SpaceFilter { space, all };
+            leases::show(&ctx, kind, filter).await
         }
         ResourcesCommand::Catalog { kind, workspace } => catalog::show(&ctx, kind, workspace).await,
         ResourcesCommand::History { kind } => match kind {
@@ -27,7 +24,13 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ResourcesComman
                 all,
                 limit,
                 before,
-            } => simulators::history(&ctx, WorkspaceScope { workspace, all }, limit, before).await,
+            } => {
+                let filter = SpaceFilter {
+                    space: workspace,
+                    all,
+                };
+                simulators::history(&ctx, filter, limit, before).await
+            }
         },
     }
 }

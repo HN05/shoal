@@ -6,7 +6,7 @@ use super::{
     workspace_overviews,
 };
 use crate::cli::{
-    args::WorkspaceScope,
+    args::SpaceFilter,
     context::{Context, optional},
     output::{Palette, Style},
     ui,
@@ -188,12 +188,8 @@ pub(super) async fn pick_pool(
     ui::pick(ctx, "Resource> ", entries)
 }
 
-pub(super) async fn overview(
-    ctx: &Context,
-    scope: WorkspaceScope,
-    members: Members,
-) -> Result<i32> {
-    let Some(workspace) = ui::select_workspace_filter(ctx, scope).await? else {
+pub(super) async fn overview(ctx: &Context, filter: SpaceFilter, members: Members) -> Result<i32> {
+    let Some(workspace) = ui::select_workspace_filter(ctx, filter).await? else {
         return workspace_overviews(
             ctx,
             async |workspace| {

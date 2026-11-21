@@ -51,7 +51,7 @@ pub(super) async fn report(
     let Some(change) = change else {
         return Ok(0);
     };
-    let space = ui::select_space(ctx, space, Fallback::OwnWorkspace).await?;
+    let space = ui::select_space(ctx, space, Fallback::OwnSpace).await?;
     crate::client::agents::report_subagent(&ctx.paths, space, change).await?;
     Ok(0)
 }
@@ -78,7 +78,7 @@ async fn brief(ctx: &Context, input: &str) -> Result<String> {
 
 /// The workspace the agent's scope belongs to.
 async fn own_workspace<'a>(ctx: &Context, workspaces: &'a [Workspace]) -> Result<&'a Workspace> {
-    let own = ui::select_workspace(ctx, None, Fallback::OwnWorkspace).await?;
+    let own = ui::select_workspace(ctx, None, Fallback::OwnSpace).await?;
     workspaces
         .iter()
         .find(|workspace| own.selects(&workspace.id, workspace.number))

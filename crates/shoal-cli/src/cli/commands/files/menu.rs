@@ -5,7 +5,7 @@ use anyhow::{Context as _, Result, ensure};
 
 use super::{add, cells, remove};
 use crate::cli::{
-    args::WorkspaceScope,
+    args::SpaceFilter,
     context::Context,
     output::Palette,
     ui::{self, Key, KeyBindings, WidthLimit},
@@ -52,11 +52,11 @@ pub(super) async fn choose(
         FileAction::Open => open(ctx, picked_file(files, &picked.id)?),
         FileAction::Delete => {
             let file = picked_file(files, &picked.id)?;
-            let scope = WorkspaceScope {
-                workspace: Some(space),
+            let filter = SpaceFilter {
+                space: Some(space),
                 all: false,
             };
-            remove(ctx, scope, vec![], vec![file.id], false).await
+            remove(ctx, filter, vec![], vec![file.id], false).await
         }
     }
 }

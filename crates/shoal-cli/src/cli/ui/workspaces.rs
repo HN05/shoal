@@ -11,7 +11,7 @@ use super::{
 };
 use crate::{
     cli::{
-        args::WorkspaceScope,
+        args::SpaceFilter,
         availability::{self, Availability, Fit},
         context::Context,
         list_status::ListStatus,
@@ -32,10 +32,11 @@ pub enum Fallback {
     CurrentDirectory,
     /// Use only the current workspace; never open a picker.
     CurrentDirectoryOnly,
-    /// Use the workspace the caller's scope belongs to, else the current
-    /// workspace; never open a picker. Agent hooks report for the agent's own
-    /// workspace wherever its shell has moved, such as into a child workspace.
-    OwnWorkspace,
+    /// Use the space the caller's scope belongs to, a workspace or a chat,
+    /// else the current workspace; never open a picker. Agent hooks report
+    /// for the agent's own space wherever its shell has moved, such as into
+    /// a child workspace.
+    OwnSpace,
 }
 
 #[derive(Debug)]
@@ -96,13 +97,13 @@ pub async fn explicit_workspace(ctx: &Context, selector: SpaceSelector) -> Resul
 /// every workspace after the individual ones.
 pub async fn select_workspace_filter(
     ctx: &Context,
-    scope: WorkspaceScope,
+    filter: SpaceFilter,
 ) -> Result<Option<SpaceSelector>> {
-    if scope.all {
+    if filter.all {
         return Ok(None);
     }
     Ok(
-        match resolve_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await? {
+        match resolve_workspace(ctx, filter.space, Fallback::CurrentDirectory).await? {
             Resolution::Named(selector) => Some(selector),
             Resolution::Current(id) => Some(SpaceSelector::Id(id)),
             Resolution::Picker(workspaces) => {
@@ -153,7 +154,7 @@ pub(super) async fn resolve_workspace(
         .into_workspaces();
     let scoping = Scoping::of_workspace();
     let order = match fallback {
-        Fallback::OwnWorkspace => ScopeOrder::BeforeDirectory,
+        Fallback::OwnSpace => ScopeOrder::BeforeDirectory,
         Fallback::CurrentDirectory | Fallback::CurrentDirectoryOnly => ScopeOrder::AfterDirectory,
     };
     let cwd = if order.reads_directory(scoping) {
@@ -171,7 +172,7 @@ pub(super) async fn resolve_workspace(
     );
     if matches!(
         fallback,
-        Fallback::CurrentDirectoryOnly | Fallback::OwnWorkspace
+        Fallback::CurrentDirectoryOnly | Fallback::OwnSpace
     ) {
         return Err(NoCurrentWorkspace.into());
     }

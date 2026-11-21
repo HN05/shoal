@@ -12,7 +12,7 @@ use crate::client::output::leases::{Held, Leases, Releases};
 use crate::{
     cli::{
         args::{
-            WorkspaceScope,
+            SpaceFilter,
             resources::{AcquireKind, LeaseKind, LeaseOptions, PoolSelection, ReleaseKind},
         },
         context::Context,
@@ -330,17 +330,17 @@ async fn release_one(ctx: &Context, workspace: &SpaceSelector, held: &Held) -> R
 pub(super) async fn show(
     ctx: &Context,
     kind: Option<LeaseKind>,
-    scope: WorkspaceScope,
+    filter: SpaceFilter,
 ) -> Result<i32> {
     match kind {
-        Some(LeaseKind::Hold) => super::holds::list(ctx, scope).await,
-        Some(LeaseKind::Port) => ports::overview(ctx, scope).await,
-        Some(LeaseKind::Sim) => simulators::overview(ctx, scope).await,
-        Some(LeaseKind::Containers) => containers::overview(ctx, scope).await,
-        Some(LeaseKind::Resource) => resources::overview(ctx, scope, Members::Locks).await,
-        Some(LeaseKind::Repo) => resources::overview(ctx, scope, Members::Repositories).await,
+        Some(LeaseKind::Hold) => super::holds::list(ctx, filter).await,
+        Some(LeaseKind::Port) => ports::overview(ctx, filter).await,
+        Some(LeaseKind::Sim) => simulators::overview(ctx, filter).await,
+        Some(LeaseKind::Containers) => containers::overview(ctx, filter).await,
+        Some(LeaseKind::Resource) => resources::overview(ctx, filter, Members::Locks).await,
+        Some(LeaseKind::Repo) => resources::overview(ctx, filter, Members::Repositories).await,
         None => {
-            let Some(workspace) = ui::select_workspace_filter(ctx, scope).await? else {
+            let Some(workspace) = ui::select_workspace_filter(ctx, filter).await? else {
                 return workspace_overviews(
                     ctx,
                     async |workspace| fetch_leases(ctx, &SpaceSelector::id(&workspace.id)).await,

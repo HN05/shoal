@@ -6,7 +6,7 @@ use crate::client::leases;
 use crate::client::output::acquisition::Released;
 use crate::{
     cli::{
-        args::WorkspaceScope,
+        args::SpaceFilter,
         context::{Context, optional},
         output::{Palette, Style},
         ui,
@@ -54,10 +54,10 @@ pub(super) async fn release(
     Ok(0)
 }
 
-/// The holds of the space `scope` selects, or of every space, the
+/// The holds of the space `filter` selects, or of every space, the
 /// workspaces then the chats.
-pub(super) async fn list(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
-    let Some(space) = ui::select_space_filter(ctx, scope).await? else {
+pub(super) async fn list(ctx: &Context, filter: SpaceFilter) -> Result<i32> {
+    let Some(space) = ui::select_space_filter(ctx, filter).await? else {
         let spaces = crate::client::spaces::list(&ctx.paths).await?;
         ctx.show(&spaces.0, |spaces| {
             for space in spaces {

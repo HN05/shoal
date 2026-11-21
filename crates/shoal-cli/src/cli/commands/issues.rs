@@ -197,7 +197,7 @@ impl Issue {
 /// the repository's registered checkout.
 pub(in crate::cli) async fn read_context(ctx: &Context, repo: &Repository) -> Result<ItemContext> {
     let own = match Scoping::of_workspace() {
-        Scoping::Scoped => Some(ui::select_workspace(ctx, None, ui::Fallback::OwnWorkspace).await?),
+        Scoping::Scoped => Some(ui::select_workspace(ctx, None, ui::Fallback::OwnSpace).await?),
         Scoping::Unscoped => crate::env::own_space().map(SpaceSelector::Id),
     };
     if let Some(space) = own

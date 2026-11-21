@@ -34,12 +34,11 @@ pub struct ConfirmationArgs {
     pub yes: bool,
 }
 
-// The workspace a listing covers, from its command's `--workspace` and
-// `--all`.
+// The space a listing covers, from its command's `--space` and `--all`.
 #[derive(Debug, Default)]
-pub struct WorkspaceScope {
-    pub workspace: Option<SpaceSelector>,
-    /// All workspaces.
+pub struct SpaceFilter {
+    pub space: Option<SpaceSelector>,
+    /// Every space.
     pub all: bool,
 }
 
