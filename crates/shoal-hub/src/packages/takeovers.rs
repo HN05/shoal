@@ -161,18 +161,17 @@ pub(crate) fn record_takeover(
     claimer: &MemberId,
     connected: &HashSet<MemberId>,
 ) -> Result<()> {
-    let Some((owner, built_at)) = owners_package(tx, id)? else {
+    let Some((owner, _)) = owners_package(tx, id)? else {
         return Ok(());
     };
     if &owner == claimer || connected.contains(&owner) {
         return Ok(());
     }
     tx.execute(
-        "INSERT INTO hub_takeovers(space_id, member_id, built_at, taken_at)
-         VALUES (?1,?2,?3,?4)
+        "INSERT INTO hub_takeovers(space_id, member_id, taken_at) VALUES (?1,?2,?3)
          ON CONFLICT(space_id) DO UPDATE SET member_id=excluded.member_id,
-            built_at=excluded.built_at, taken_at=excluded.taken_at",
-        params![id, owner, built_at, UnixTime::now()],
+            taken_at=excluded.taken_at",
+        params![id, owner, UnixTime::now()],
     )?;
     Ok(())
 }

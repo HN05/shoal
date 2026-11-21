@@ -219,6 +219,11 @@ pub trait Packages: Send + Sync {
     /// Write a package of `space`, which keeps running here, under its own
     /// ID, to the new file `file`.
     fn write_package<'a>(&'a self, space: &'a Space, file: &'a Path) -> BoxFuture<'a, Result<()>>;
+
+    /// End `space` here, which another machine took over from the hub's
+    /// package of it while this one was offline, keeping its work in its
+    /// removal record and its branch, and leaving the spaces below it.
+    fn retire_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<()>>;
 }
 
 /// Everything the hub needs of the daemon, which each of its operations

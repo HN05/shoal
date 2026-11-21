@@ -161,7 +161,10 @@ pub(super) fn ensure_files_kept(removed: &RemovedSpace) -> Result<()> {
 /// imported: its unsaved files, including those the agents wrote as they
 /// stopped after the caller's check, and the commits of its detached HEAD,
 /// taking only the spaces below that `children` names.
-fn checkpointed_work(checkpoint: &Checkpoint, children: Option<&[SpaceId]>) -> UnsavedWork {
+pub(super) fn checkpointed_work(
+    checkpoint: &Checkpoint,
+    children: Option<&[SpaceId]>,
+) -> UnsavedWork {
     UnsavedWork::Confirmed {
         files: checkpoint.commit != checkpoint.head,
         detached_head: checkpoint.branch.is_none().then(|| checkpoint.head.clone()),

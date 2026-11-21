@@ -27,6 +27,7 @@ mod kept;
 mod moving;
 pub(crate) use moving::MovePacking;
 mod records;
+mod retiring;
 mod staying;
 mod worktree;
 

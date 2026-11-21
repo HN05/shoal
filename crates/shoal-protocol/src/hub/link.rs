@@ -352,6 +352,10 @@ pub enum Call {
     /// on the stream `stream` the caller opened while the space's machine
     /// stays offline. Answered with [`Reply::Streaming`].
     Fetch { space: SpaceId, stream: u64 },
+    /// The hub's call to a machine whose link opened, naming the spaces
+    /// other machines took over from it meanwhile, which it ends here.
+    /// Answered with [`Reply::Retired`].
+    Retire { spaces: Vec<SpaceId> },
     /// The directory of every machine's spaces. Answered with
     /// [`Reply::Directory`].
     Directory,
@@ -446,6 +450,8 @@ pub enum Reply {
     Claimed(Option<SpaceNumber>),
     Settled(bool),
     Kept(Option<Box<super::packages::KeptPackage>>),
+    /// The spaces the machine no longer has, as it ended them.
+    Retired(Vec<SpaceId>),
     Answered(Answered),
     /// The answer goes on the stream the call named.
     Streaming,

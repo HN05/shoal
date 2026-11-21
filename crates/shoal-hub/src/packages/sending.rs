@@ -263,6 +263,12 @@ fn look(recorded: &Recorded, state: String, now: UnixTime) -> Look {
     }
 }
 
+/// The state the last package of the space `id` that reached the hub
+/// holds, none before one did.
+pub(super) fn sent_state(tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<String>> {
+    Ok(load(tx, id)?.sent)
+}
+
 /// What this machine recorded of the packages of the space `id`.
 fn load(tx: &Transaction<'_>, id: &SpaceId) -> Result<Recorded> {
     let recorded = tx

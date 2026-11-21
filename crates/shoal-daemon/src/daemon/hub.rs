@@ -257,6 +257,10 @@ impl Packages for Manager {
             Ok(())
         })
     }
+
+    fn retire_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<()>> {
+        Box::pin(Manager::retire_space(self, space))
+    }
 }
 
 pub(crate) struct HubRecords;

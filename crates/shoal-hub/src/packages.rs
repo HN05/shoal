@@ -4,6 +4,7 @@
 //! of its link; the hub keeps one per space, in place of the one before,
 //! until the space ends on that machine.
 mod keeping;
+mod retiring;
 mod sending;
 pub(crate) mod takeovers;
 

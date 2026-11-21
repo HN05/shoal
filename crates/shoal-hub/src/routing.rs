@@ -203,6 +203,7 @@ impl Hub {
                 self.member.told(availability);
                 Ok(Reply::Delivered)
             }
+            Call::Retire { spaces } => Ok(Reply::Retired(self.retire(daemon, spaces).await)),
             _ => bail!("a machine answers only what the hub passes it from other machines"),
         }
     }

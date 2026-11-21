@@ -984,7 +984,6 @@ CREATE TABLE hub_package_states (
 CREATE TABLE hub_takeovers (
     space_id TEXT PRIMARY KEY,
     member_id TEXT NOT NULL REFERENCES hub_members(id),
-    built_at INTEGER NOT NULL,
     taken_at INTEGER NOT NULL
 );
 

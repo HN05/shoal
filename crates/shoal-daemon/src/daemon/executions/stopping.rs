@@ -176,6 +176,16 @@ impl StopRequest {
         }
     }
 
+    /// The stop of a space's agents before its removal here, since another
+    /// machine took the space over while this one was offline, which saves
+    /// their sessions in its removal record.
+    pub(crate) fn taken_over() -> Self {
+        Self {
+            reason: "another machine took its space over".into(),
+            save: Save::Everything,
+        }
+    }
+
     pub fn repair() -> Self {
         Self {
             reason: "stopped to repair the workspace".into(),

@@ -180,8 +180,11 @@ impl Hub {
             Call::Serve { .. }
             | Call::ServeStream { .. }
             | Call::Expired { .. }
-            | Call::Availability { .. } => {
-                anyhow::bail!("only the hub passes requests, expiries and availability to machines")
+            | Call::Availability { .. }
+            | Call::Retire { .. } => {
+                anyhow::bail!(
+                    "only the hub passes requests, expiries, availability and retirements to machines"
+                )
             }
         })
     }

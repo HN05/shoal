@@ -249,6 +249,10 @@ impl Packages for StandIn {
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { bail!("the stand-in daemon has no spaces to package") })
     }
+
+    fn retire_space<'a>(&'a self, _: &'a Space) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { bail!("the stand-in daemon has no spaces to retire") })
+    }
 }
 
 impl Coordinators for StandIn {

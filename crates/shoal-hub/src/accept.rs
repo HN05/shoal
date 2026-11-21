@@ -421,6 +421,7 @@ impl Hub {
             member.id.clone(),
             calls.clone(),
         ));
+        tokio::spawn((self.clone()).retire_taken_over(member.id.clone(), calls.clone()));
         let answer = |call| {
             let (hub, daemon, member, calls) =
                 (self.clone(), daemon.clone(), member.clone(), calls.clone());

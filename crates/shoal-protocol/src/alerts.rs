@@ -158,6 +158,9 @@ states!(AlertKind {
     /// The hub refused an intermittent machine's package of a space, as
     /// while its disk is low.
     HubPackageRefused => "hub_package_refused",
+    /// A space another machine took over changed here after the package
+    /// the takeover went by, and this machine removed its copy.
+    SpaceDiverged => "space_diverged",
 });
 
 states!(Sender {
