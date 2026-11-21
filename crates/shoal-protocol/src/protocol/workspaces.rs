@@ -99,6 +99,11 @@ pub enum WorkspaceMethod {
     FindSpaces {
         target: crate::model::SpaceTarget,
     },
+    /// Where the space `space` names runs: here, or on the other joined
+    /// machine the hub lists it on, among the spaces the caller sees.
+    LocateSpace {
+        space: SpaceSelector,
+    },
     /// Give the workspace or chat `space` the name `name`; the reply also
     /// names it as it was before.
     RenameSpace {
@@ -416,6 +421,7 @@ impl WorkspaceMethod {
             | Self::UntrackedWorktrees
             | Self::ListSpaces
             | Self::FindSpaces { .. }
+            | Self::LocateSpace { .. }
             | Self::VerifyWorkspace { .. }
             | Self::HeldPermissions { .. }
             | Self::IssueScope { .. }
@@ -470,6 +476,8 @@ impl WorkspaceMethod {
                 target: ConfigTarget::Space(space),
             } => Some(Target::Space(space)),
             Self::SpaceLog { space, .. } => space.as_ref().map(Target::Space),
+            // A location is this machine's view of where a space runs.
+            Self::LocateSpace { .. } => None,
             // A creation names the space it goes below, which a start below
             // another machine's space takes where the caller runs.
             Self::OpenBranch { .. }
