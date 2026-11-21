@@ -38,6 +38,13 @@ pub enum UntrackedProcesses {
 pub enum RemovalMethod {
     /// The workspaces and chats `stop --all` stops.
     StopTargets,
+    /// The spaces a stop of `spaces` takes, with those below each on every
+    /// machine when `below`, each once and above those below it, and where
+    /// each runs.
+    StopSelection {
+        spaces: Vec<SpaceSelector>,
+        below: bool,
+    },
     /// Stop the agents and commands of the workspace or chat `space`,
     /// saving them for `shoal resume`.
     StopSpace {
@@ -194,6 +201,7 @@ impl RemovalMethod {
             | Self::StartRemoval { .. } => Forwarding::Online,
             Self::ReceiveMove { .. } => Forwarding::Duplex,
             Self::StopTargets
+            | Self::StopSelection { .. }
             | Self::AbsorbSpace(_)
             | Self::Cleanup { .. }
             | Self::RemovedSpaces
@@ -232,8 +240,10 @@ impl RemovalMethod {
             | Self::RestoreSpace { .. }
             | Self::DropRestoredSessions { .. }
             | Self::ExportRemovedSpace { .. } => None,
-            // The hub sends it to the machine a move goes to.
+            // The hub sends it to the machine a move goes to; a selection
+            // is this machine's view of the spaces it takes.
             Self::ReceiveMove { .. }
+            | Self::StopSelection { .. }
             | Self::StopTargets
             | Self::Cleanup { .. }
             | Self::RemovedSpaces

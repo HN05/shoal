@@ -18,6 +18,8 @@ pub enum Located {
     Elsewhere {
         space: Box<crate::hub::directory::Listed>,
         machine: crate::hub::Machine,
+        /// That machine's link to the hub is open now.
+        online: bool,
     },
 }
 

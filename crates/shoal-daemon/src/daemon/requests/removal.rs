@@ -39,6 +39,7 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         | RemovalMethod::ReceiveMove { .. } => true,
         RemovalMethod::Cleanup { dry_run, .. } => !dry_run,
         RemovalMethod::StopTargets
+        | RemovalMethod::StopSelection { .. }
         | RemovalMethod::CheckStop { .. }
         | RemovalMethod::StopProcesses { .. }
         | RemovalMethod::CheckRemoval { .. }
@@ -71,6 +72,9 @@ pub(super) async fn handle(
         }
         RemovalMethod::RemovedSpace { space } => {
             Body::RemovedSpaces(vec![manager.restorable_space(&space).await?])
+        }
+        RemovalMethod::StopSelection { spaces, below } => {
+            Body::LocatedSpaces(manager.locate_tree(caller, &spaces, below).await?)
         }
         RemovalMethod::StopTargets => {
             let targets = manager.stop_targets(QueuedLaunches::Cancel).await?;
@@ -342,8 +346,10 @@ impl Scoped for RemovalMethod {
                     .await
                     .map(Some)
             }
-            // Its answer confines the spaces to those below the caller's.
-            RemovalMethod::StopTargets => Ok(None),
+            // Its answer confines the spaces to those below the caller's,
+            // and a selection to those the caller sees, each of which its
+            // stop checks again.
+            RemovalMethod::StopTargets | RemovalMethod::StopSelection { .. } => Ok(None),
             RemovalMethod::StopSpace { space, .. } => manager
                 .workspace_below(
                     caller,

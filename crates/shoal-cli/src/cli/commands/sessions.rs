@@ -175,7 +175,7 @@ async fn resolve(ctx: &Context, name: Option<SpaceSelector>) -> Result<Chosen> {
         return previous(ctx).await;
     }
     if let Some(selector) = &name
-        && let Located::Elsewhere { space, machine } =
+        && let Located::Elsewhere { space, machine, .. } =
             crate::client::workspaces::locate(&ctx.paths, selector.clone()).await?
     {
         return Ok(chosen_elsewhere(space.space.id, machine.name));
@@ -261,7 +261,9 @@ async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Chosen> {
         .into_workspaces();
     let id = ui::pick_space(ctx, workspaces, &chats, Offered::Spaces, "workspace").await?;
     match crate::client::workspaces::locate(&ctx.paths, SpaceSelector::id(&id)).await? {
-        Located::Elsewhere { space, machine } => Ok(chosen_elsewhere(space.space.id, machine.name)),
+        Located::Elsewhere { space, machine, .. } => {
+            Ok(chosen_elsewhere(space.space.id, machine.name))
+        }
         Located::Here(_) => Ok(Chosen::Here(Target::among(&ctx.paths, chats, id).await?)),
     }
 }

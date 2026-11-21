@@ -82,6 +82,7 @@ const REQUESTS: &[&str] = &[
     r#"{"space_log":{"space":"fix","filter":"entries","limit":50}}"#,
     // Removal and restore.
     r#""stop_targets""#,
+    r#"{"stop_selection":{"spaces":["3"],"below":true}}"#,
     r#"{"stop_space":{"space":"fix","acknowledge_unproven":false,"launches":"cancel","processes":{"stop":{"requester":42}}}}"#,
     r#"{"check_stop":{"space":"fix"}}"#,
     r#"{"stop_processes":{"space":"fix","selection":"leftovers","requester":42}}"#,

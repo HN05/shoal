@@ -5,7 +5,7 @@ use anyhow::Result;
 use crate::connection::{Daemon, request};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
-    model::{Space, StoppedSpace},
+    model::{Located, Space, StoppedSpace},
     processes::{Selection, Stopped},
     protocol::{QueuedLaunches, RemovalMethod, UntrackedProcesses},
 };
@@ -14,6 +14,17 @@ use shoal_protocol::{
 /// and the running chats.
 pub async fn targets(daemon: &impl Daemon) -> Result<Vec<Space>> {
     request(daemon, RemovalMethod::StopTargets).await
+}
+
+/// The spaces a stop of `spaces` takes, with those below each on every
+/// machine when `below`, each after the space above it and with where it
+/// runs.
+pub async fn selection(
+    daemon: &impl Daemon,
+    spaces: Vec<SpaceSelector>,
+    below: bool,
+) -> Result<Vec<Located>> {
+    request(daemon, RemovalMethod::StopSelection { spaces, below }).await
 }
 
 /// Refuse a stop of the workspace or chat `space` the caller may not make.
