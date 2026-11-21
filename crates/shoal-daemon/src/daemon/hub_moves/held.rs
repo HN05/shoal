@@ -129,3 +129,6 @@ async fn copy_package(mut file: File, stream: &mut UnixStream) -> Result<()> {
 
 /// How much of a package one read takes.
 const CHUNK: usize = 64 * 1024;
+
+#[cfg(test)]
+mod tests;
