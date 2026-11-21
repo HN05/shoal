@@ -481,8 +481,6 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
     let output = fixture.run(&["--json", "repo", "move", "~/moved", "--yes"]);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "{stderr}");
-    // The repository stays registered, so its agents' configs stay known.
-    assert!(!stderr.contains("warning"), "{stderr}");
     let moved: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(moved.as_array().unwrap().len(), 1, "{moved}");
     assert!(agent.wait_with_output().unwrap().status.success());
@@ -1255,62 +1253,6 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
         .unwrap()
             > 0
     );
-}
-
-#[test]
-fn repository_removal_cleans_more_agent_configs_than_fit_in_a_frame() {
-    let fixture = Fixture::new();
-    let home = fixture.root.path();
-    let repository = fixture.ok(&[
-        "repo",
-        "add",
-        fixture.repo.to_str().unwrap(),
-        "--name",
-        "many",
-    ]);
-    let checkout = fs::canonicalize(&fixture.repo).unwrap();
-    // Far more than one 64 KiB protocol frame of kept locations.
-    let mut db = rusqlite::Connection::open(home.join("state/state.db")).unwrap();
-    db.busy_timeout(Duration::from_secs(60)).unwrap();
-    let tx = db.transaction().unwrap();
-    for index in 0..2000 {
-        let environment = serde_json::json!({
-            "CLAUDE_CONFIG_DIR": home.join(format!("claude-{index:04}")),
-        });
-        tx.execute(
-            "INSERT INTO repository_agent_environments(repository_id,environment) VALUES (?1,?2)",
-            rusqlite::params![repository["id"].as_str().unwrap(), environment.to_string()],
-        )
-        .unwrap();
-    }
-    tx.commit().unwrap();
-    let config = home.join("claude-1999/.claude.json");
-    fs::create_dir_all(config.parent().unwrap()).unwrap();
-    fs::write(
-        &config,
-        serde_json::json!({"projects": {
-            checkout.to_str().unwrap(): {"hasTrustDialogAccepted": true},
-            "/keep": {"hasTrustDialogAccepted": true}
-        }})
-        .to_string(),
-    )
-    .unwrap();
-
-    fixture.ok(&["repo", "rm", "many", "--yes"]);
-    let root: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
-    assert_eq!(
-        root["projects"],
-        serde_json::json!({"/keep": {"hasTrustDialogAccepted": true}})
-    );
-    // Cleaned, so the daemon forgets them.
-    let kept: i64 = db
-        .query_row(
-            "SELECT COUNT(*) FROM repository_agent_environments",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    assert_eq!(kept, 0);
 }
 
 #[test]

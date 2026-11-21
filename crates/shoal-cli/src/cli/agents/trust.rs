@@ -1,16 +1,13 @@
 //! The trust entries a CLI launch adds for the directories its agent works
-//! in, in the config files [`TrustFile`] edits, and those a repository's
-//! removal or move cleans up.
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-};
+//! in, in the config files [`TrustFile`] edits, and where the daemon keeps
+//! that its agents keep their configs for a repository's removal or move.
+use std::path::{Path, PathBuf};
 
 use anyhow::Context as _;
 
 use crate::{
     agents::{
-        AgentHome, HomeRecords, forget_repository_trust,
+        AgentHome, HomeRecords,
         trust::{TrustFile, repository_trust_paths},
     },
     cli::{agents::environment, context::Context},
@@ -164,78 +161,6 @@ async fn workspace_trust_paths(ctx: &Context, workspace: &Workspace, tool: &str)
             eprintln!("warning: could not resolve repository trust paths for {tool}: {error:#}");
             vec![workspace.path.clone()]
         }
-    }
-}
-
-/// Remove every integration's trust entries for a repository after its
-/// deletion succeeds, as [`cleanup_moved_trust`] does, then have the daemon
-/// forget where its agents kept their configs. Cleanup is best effort and
-/// never fails the removal.
-pub(in crate::cli) async fn cleanup_repository_trust(
-    ctx: &Context,
-    repository: &Repository,
-    workspace_paths: &[PathBuf],
-) {
-    if cleanup_trust(ctx, repository, workspace_paths).await {
-        forget_agent_environments(ctx, repository).await;
-    }
-}
-
-/// Remove every integration's trust entries for the paths a repository had
-/// before it moved, `repository` as recorded then, both where agents running
-/// with this process's environment keep them and where the daemon kept that
-/// its agents ran with. Failures only warn.
-pub(in crate::cli) async fn cleanup_moved_trust(
-    ctx: &Context,
-    repository: &Repository,
-    workspace_paths: &[PathBuf],
-) {
-    cleanup_trust(ctx, repository, workspace_paths).await;
-}
-
-/// Remove the trust entries [`cleanup_moved_trust`] removes, warning about
-/// each failure; whether the daemon said where its agents kept their
-/// configs.
-async fn cleanup_trust(
-    ctx: &Context,
-    repository: &Repository,
-    workspace_paths: &[PathBuf],
-) -> bool {
-    let agent_environments = agent_environments(ctx, repository).await;
-    let warnings = forget_repository_trust(
-        &ctx.paths.home,
-        repository,
-        workspace_paths,
-        agent_environments.as_deref().unwrap_or_default(),
-    );
-    warn(warnings);
-    agent_environments.is_some()
-}
-
-/// Where the removed repository's tracked agents kept their configuration;
-/// `None` with a warning when the daemon cannot say.
-async fn agent_environments(
-    ctx: &Context,
-    repository: &Repository,
-) -> Option<Vec<BTreeMap<String, String>>> {
-    crate::client::repositories::agent_environments(&ctx.paths, repository.id.clone())
-        .await
-        .inspect_err(|error| {
-            eprintln!(
-                "warning: could not clean trust entries where [env] put agent configs: {error:#}"
-            );
-        })
-        .ok()
-}
-
-/// Have the daemon forget the removed repository's agent configs once their
-/// trust entries are clean. Failure only warns.
-async fn forget_agent_environments(ctx: &Context, repository: &Repository) {
-    let forgotten =
-        crate::client::repositories::forget_agent_environments(&ctx.paths, repository.id.clone())
-            .await;
-    if let Err(error) = forgotten {
-        eprintln!("warning: the daemon keeps the removed repository's agent configs: {error:#}");
     }
 }
 

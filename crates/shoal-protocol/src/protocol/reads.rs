@@ -83,7 +83,6 @@ impl Operation {
                     RepositoryMethod::ListRepositories
                         | RepositoryMethod::ListBranches { .. }
                         | RepositoryMethod::KeptBranches { .. }
-                        | RepositoryMethod::AgentEnvironments { .. }
                 )
                 | Self::Resource(
                     ResourceMethod::ResourceOverview { .. }

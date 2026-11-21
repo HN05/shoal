@@ -71,16 +71,6 @@ pub enum RepositoryMethod {
     DeleteKeptBranches {
         branches: Vec<crate::model::BranchTarget>,
     },
-    /// Where the tracked agents of the repository with this ID kept their
-    /// configuration, also once it is removed; in pages.
-    AgentEnvironments {
-        repository_id: RepositoryId,
-    },
-    /// Forget [`Self::AgentEnvironments`] once a removed repository's trust
-    /// entries there are clean.
-    ForgetAgentEnvironments {
-        repository_id: RepositoryId,
-    },
     /// [`WorkspaceMethod::KeepAgentEnvironment`] for a chat in the repository's
     /// checkout, which belongs to no workspace.
     KeepRepositoryAgentEnvironment {
@@ -137,8 +127,6 @@ impl RepositoryMethod {
             | Self::ListBranches { .. }
             | Self::KeptBranches { .. }
             | Self::DeleteKeptBranches { .. }
-            | Self::AgentEnvironments { .. }
-            | Self::ForgetAgentEnvironments { .. }
             | Self::KeepRepositoryAgentEnvironment { .. } => Forwarding::Never,
         }
     }
@@ -161,8 +149,6 @@ impl RepositoryMethod {
             | Self::ListBranches { .. }
             | Self::KeptBranches { .. }
             | Self::DeleteKeptBranches { .. }
-            | Self::AgentEnvironments { .. }
-            | Self::ForgetAgentEnvironments { .. }
             | Self::KeepRepositoryAgentEnvironment { .. } => None,
         }
     }

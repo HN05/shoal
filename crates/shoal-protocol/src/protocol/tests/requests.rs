@@ -28,8 +28,6 @@ const REQUESTS: &[&str] = &[
     r#"{"list_branches":{"repository":"app"}}"#,
     r#"{"kept_branches":{"repository":"app"}}"#,
     r#"{"delete_kept_branches":{"branches":[{"repository_id":"r1","branch":"fix","head":"abc"}]}}"#,
-    r#"{"agent_environments":{"repository_id":"r1"}}"#,
-    r#"{"forget_agent_environments":{"repository_id":"r1"}}"#,
     r#"{"keep_repository_agent_environment":{"repository":"app","environment":{"CODEX_HOME":"/codex"}}}"#,
     // Workspaces.
     r#"{"open_branch":{"path":null,"repository":"app","branch":"fix","git_profile":null,"base":"main","parent":null}}"#,

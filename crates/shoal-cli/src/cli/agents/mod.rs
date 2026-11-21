@@ -34,7 +34,6 @@ use shoal_protocol::space_names::SpaceSelector;
 pub(in crate::cli) use crate::agents::{installed, names};
 pub(in crate::cli) use desktop::{app, ensure_opens, hand_off};
 pub(in crate::cli) use sessions::{SessionHome, install_kept_session_files, place_forked_sessions};
-pub(in crate::cli) use trust::{cleanup_moved_trust, cleanup_repository_trust};
 
 /// One launch of an agent in a space, a ready workspace or a chat; settings
 /// are never cached across launches.
@@ -414,21 +413,6 @@ pub(in crate::cli) async fn trust_resumed(
         .filter(|last| last.session.is_some())
         .map(|last| last.agent.clone());
     trust_for(ctx, workspace, stopped.chain(last).collect()).await;
-}
-
-/// Trust the path of `workspace`, which moved, for each agent it saves for
-/// `shoal resume`, which restores them there without trusting it.
-pub(in crate::cli) async fn trust_saved(ctx: &Context, workspace: &Workspace) {
-    match crate::client::saved::read(&ctx.paths, SpaceSelector::id(&workspace.id)).await {
-        Ok(saved) => {
-            let agents = saved.agent_names().flatten().cloned().collect();
-            trust_for(ctx, workspace, agents).await;
-        }
-        Err(error) => eprintln!(
-            "warning: cannot trust {} for its agents: {error:#}",
-            workspace.path.display()
-        ),
-    }
 }
 
 /// Trust the path of `workspace` for each of `agents` as a tracked launch

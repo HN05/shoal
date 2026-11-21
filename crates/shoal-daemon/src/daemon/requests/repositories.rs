@@ -24,10 +24,6 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        RepositoryMethod::AgentEnvironments { repository_id } => {
-            let listed = manager.agent_environments(&repository_id).await;
-            return Ok(Answer::pages(listed, Body::AgentEnvironments));
-        }
         RepositoryMethod::ListRepositories => {
             Body::Repositories(manager.visible_repositories(caller).await?)
         }
@@ -107,10 +103,6 @@ pub(super) async fn handle(
                 .await?;
             Body::Ok
         }
-        RepositoryMethod::ForgetAgentEnvironments { repository_id } => {
-            manager.forget_agent_environments(&repository_id).await?;
-            Body::Ok
-        }
     }))
 }
 
@@ -138,9 +130,7 @@ async fn administered_repository(
             *repository = (&id).into();
             Some(id)
         }
-        RepositoryMethod::AgentEnvironments { repository_id }
-        | RepositoryMethod::ForgetAgentEnvironments { repository_id }
-        | RepositoryMethod::KeepRepositoryAgentEnvironment {
+        RepositoryMethod::KeepRepositoryAgentEnvironment {
             repository: repository_id,
             ..
         } => Some(own(&(&*repository_id).into()).await?),

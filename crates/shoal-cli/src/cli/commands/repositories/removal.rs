@@ -1,10 +1,10 @@
-//! Confirm and remove repositories, then clean agent trust.
+//! Confirm and remove repositories.
 use anyhow::{Result, ensure};
 
 use super::selection::chosen;
 use crate::{
-    cli::{agents, context::Context, ui},
-    model::{Repository, RepositoryRemoval},
+    cli::{context::Context, ui},
+    model::Repository,
     repository,
 };
 
@@ -15,17 +15,14 @@ pub(super) async fn remove(
 ) -> Result<i32> {
     let repository = chosen(ctx, repository).await?;
     let repositories = crate::client::repositories::list(&ctx.paths).await?;
-    let cleanup_repository = repository::select(&repositories, &repository)
-        .await?
-        .clone();
-    let repository = confirm_target(ctx, repository, &cleanup_repository, confirmed)?;
+    let target = repository::select(&repositories, &repository).await?;
+    let repository = confirm_target(ctx, repository, target, confirmed)?;
     let result = ctx
         .progress(
             "Removing repository",
             crate::client::repositories::remove(&ctx.paths, repository),
         )
         .await?;
-    cleanup_trust(ctx, &cleanup_repository, &result).await;
     ctx.emit(
         &format!(
             "Deleted {} and {} Shoal workspaces",
@@ -61,10 +58,4 @@ fn confirm_target(
     );
     // A rename while the prompt is open must not redirect deletion.
     Ok(target.id.clone().into())
-}
-
-async fn cleanup_trust(ctx: &Context, repository: &Repository, result: &RepositoryRemoval) {
-    if result.repository_id == repository.id {
-        agents::cleanup_repository_trust(ctx, repository, &result.workspace_paths).await;
-    }
 }

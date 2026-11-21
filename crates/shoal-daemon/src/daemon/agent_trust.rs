@@ -208,7 +208,7 @@ impl Manager {
 
     /// Forget what [`Self::keep_agent_environment`] kept for the removed
     /// repository with `id`, which no agent can add to again.
-    pub async fn forget_agent_environments(&self, id: &RepositoryId) -> Result<()> {
+    async fn forget_agent_environments(&self, id: &RepositoryId) -> Result<()> {
         let id = id.to_owned();
         self.store
             .write(move |tx| {
