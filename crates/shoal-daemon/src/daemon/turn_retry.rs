@@ -2,9 +2,9 @@
 //! failed turns, with `retry` on, is asked to continue once the failure has
 //! had time to pass, or once the reset its upstream named has passed, and
 //! again after each turn that still fails, until one succeeds. The retry is
-//! persisted, so it outlasts a daemon restart, and knows no agent: any
-//! report of a failed turn schedules one, or tells of a turn Shoal does not
-//! retry.
+//! persisted, so it outlasts a daemon restart and the agent's sleep, whose
+//! restore its message starts, and knows no agent: any report of a failed
+//! turn schedules one, or tells of a turn Shoal does not retry.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use std::{sync::Arc, time::Duration};
@@ -19,7 +19,7 @@ use super::manager::Manager;
 use crate::{
     daemon::{agent_messages, log, store},
     model::Space,
-    state::{AgentState, TurnFailure},
+    state::{AgentState, QueueKind, TurnFailure},
     time::UnixTime,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -239,7 +239,8 @@ pub(crate) fn cancel(db: &Connection, space_id: &SpaceId) -> Result<()> {
 }
 
 /// A due retry, with whether it may be delivered: the reporting execution
-/// still runs the idle agent and the assignment is not finished.
+/// still runs the idle agent, or a restore of it waits in the queue, which
+/// the message wakes, and the assignment is not finished.
 struct Due {
     failure: TurnFailure,
     attempt: u32,
@@ -259,13 +260,15 @@ fn due(db: &Connection, space_id: &SpaceId, now: UnixTime) -> Result<Option<Due>
     Ok(db
         .query_row(
             "SELECT r.failure,r.attempt,
-                s.state IS 'idle' AND s.execution_id IS r.execution_id
+                (s.state IS 'idle' AND s.execution_id IS r.execution_id
+                    OR EXISTS (SELECT 1 FROM agent_queue q
+                        WHERE q.kind=?3 AND q.execution_id=r.execution_id))
                 AND NOT EXISTS (SELECT 1 FROM space_completion c
                     WHERE c.space_id=r.space_id)
              FROM space_turn_retries r
              LEFT JOIN space_agent_state s ON s.space_id=r.space_id
              WHERE r.space_id=?1 AND r.delivered=0 AND r.due_at<=?2",
-            params![space_id, now],
+            params![space_id, now, QueueKind::Restore],
             |row| {
                 Ok(Due {
                     failure: row.get(0)?,
@@ -411,6 +414,14 @@ impl Manager {
             self.signals.wake_turn_retry();
         }
         Ok(())
+    }
+
+    /// Whether a retry not yet delivered waits for the agent of the space
+    /// `id`.
+    pub(crate) async fn turn_retry_waits(&self, id: &SpaceId) -> Result<bool> {
+        let id = id.to_owned();
+        let retry = self.store.read(move |tx| get(tx, &id)).await?;
+        Ok(retry.is_some_and(|retry| !retry.delivered))
     }
 
     /// Whether the AI tool `agent` names has `retry` on in `space`.

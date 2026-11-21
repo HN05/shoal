@@ -2151,7 +2151,8 @@ Code, through its `StopFailure` hook, and any agent whose turn its
 for each later attempt up to an hour for rate or usage limits, or a quarter hour
 for overloaded APIs and server errors. Each wait varies randomly by ±20%.
 It then sends the idle agent an [alert](#alerts) to continue its
-unfinished work, which reaches it in a new turn of the same conversation. A new
+unfinished work, which reaches it in a new turn of the same conversation, and
+restores an agent Shoal put to sleep meanwhile. A new
 turn before then cancels the retry, and the agent's exit, completion or the
 space's removal drops it, a workspace's or a chat's. Attempts follow one another, with no cap, until a
 turn ends normally, so an outage of any length or a daily or weekly usage limit
@@ -6543,7 +6544,7 @@ default branch as removal decides, or with its changes on the branch the
 workspace builds on: its base workspace's branch, otherwise the local branch
 it was created from; no fetch.
 A restore of an idle agent waiting for an update, without a
-[timer](#idle-wakes) that will wake it, blocks nothing: removal cancels
+[timer](#idle-wakes) or a [turn retry](#agents) that will wake it, blocks nothing: removal cancels
 it and keeps the agent stopped, so `shoal restore` brings it back with its
 space.
 Sweeps run about every 30 seconds; a failed step does not skip the others, and
