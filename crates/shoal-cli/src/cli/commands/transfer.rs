@@ -10,12 +10,12 @@ mod targets;
 
 use anyhow::{Result, ensure};
 
-use super::operations::Lines;
 use crate::cli::{args::transfer::MoveArgs, context::Context, ui};
 use crate::client::operations::{Following, MoveStarted};
 use crate::protocol::operations::{Ended, Failure, OperationRef};
 use crate::transfer::{Consent, DeferredMove, MoveDestination, MoveOrder, MoveReport};
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_workers::following::Lines;
 
 /// The file name that reads or writes the standard streams.
 pub(super) const STANDARD_STREAM: &str = "-";

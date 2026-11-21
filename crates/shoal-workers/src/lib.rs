@@ -5,12 +5,14 @@
 
 pub mod attach;
 pub mod execution;
+pub mod following;
 pub mod git_credential;
 pub mod homes;
 pub mod moves;
 pub mod opened_pull;
 pub mod operations;
 pub mod places;
+pub mod preparation;
 pub mod proxy;
 pub mod push_gate;
 pub mod queued_launches;

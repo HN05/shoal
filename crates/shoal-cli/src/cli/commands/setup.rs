@@ -1,5 +1,6 @@
 //! Workspace setup: starting it, handling its failure and starting the post-setup hook.
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, ensure};
+use shoal_workers::preparation as unattended;
 
 use super::recovery::{issues, reconcile};
 use crate::{
@@ -222,24 +223,17 @@ async fn handle_setup_failure(
     failure: Failure,
     retry: Option<Preparation>,
 ) -> Result<Option<SetUp>> {
+    if !ctx.interactive() {
+        return Err(unattended::unsettled(workspace, failure));
+    }
     let ran = !matches!(failure, Failure::SetupNotStarted { .. });
     let error = format!("{:#}", crate::operations::error(failure));
-    let (name, number) = (&workspace.name, workspace.number);
+    let name = &workspace.name;
     let failed = if ran {
         "Setup failed"
     } else {
         "Setup did not start"
     };
-    if !ctx.interactive() {
-        match ran {
-            true => bail!(
-                "setup failed for {name}: {error}; workspace retained. Retry with `shoal setup {number}`, skip it with `shoal setup {number} --skip`, or delete with `shoal rm {number} --yes`"
-            ),
-            false => bail!(
-                "setup of {name} did not start: {error}; workspace retained. Retry with `shoal setup {number}`"
-            ),
-        }
-    }
     eprintln!(
         "{} for {name}: {error}",
         Palette::stderr(ctx.json).paint(Style::Error, failed)
@@ -291,15 +285,7 @@ fn report_setup_verification_failure(
     workspace: &Workspace,
     code: i32,
 ) -> Result<Option<SetUp>> {
-    let (name, number) = (&workspace.name, workspace.number);
-    let reason = workspace
-        .error
-        .as_deref()
-        .unwrap_or("process state is unknown");
-    let message = format!(
-        "Setup verification incomplete for {name} (command exit {code}): {reason}\nWorkspace retained at {}. Stop its processes with `shoal stop {number}`, then retry setup with `shoal setup {number}` or skip it with `shoal setup {number} --skip`.",
-        workspace.path.display()
-    );
+    let message = unattended::unverified(workspace, code);
     ensure!(ctx.interactive(), "{message}");
     eprintln!(
         "{}",
