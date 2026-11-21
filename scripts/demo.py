@@ -22,6 +22,12 @@ REPOSITORY = "acme-app"
 WORKSPACES = ("fix-login", "new-onboarding", "refactor-api")
 
 
+def create(sandbox, repo, branch):
+    """Create a workspace on `branch` and return its number, which selects it."""
+    created = sandbox.run(["--json", "create", str(repo), "--branch", branch])
+    return str(json.loads(created.stdout)["number"])
+
+
 def in_workspace(sandbox, workspace, args, check=True):
     """Run `shoal args` as a process of `workspace`, as its agent would."""
     return sandbox.run(["run", "--workspace", workspace, "--", "shoal", *args], check)
@@ -42,21 +48,20 @@ def fill(sandbox):
     """A repository with workspaces, and something in the inbox of each kind."""
     repo = repository(sandbox.env)
     sandbox.run(["repo", "add", str(repo)])
-    for workspace in WORKSPACES:
-        sandbox.run(["start", str(repo), "--branch", workspace])
-    opened = in_workspace(sandbox, "fix-login",
+    login, onboarding, api = (create(sandbox, repo, branch) for branch in WORKSPACES)
+    opened = in_workspace(sandbox, login,
                           ["--json", "thread", "open", "Session cache database"])
     thread = json.loads(opened.stdout)["number"]
-    in_workspace(sandbox, "fix-login",
+    in_workspace(sandbox, login,
                  ["send", thread, "Which database should the session cache use?",
                   "--recommend", "SQLite", "--reason", "No server to run",
                   "--choice", "SQLite", "--choice", "Postgres"])
-    in_workspace(sandbox, "fix-login", ["send", "Login fix pushed; checks are running"])
+    in_workspace(sandbox, login, ["send", "Login fix pushed; checks are running"])
     # Pending approval exits 2 by design.
-    in_workspace(sandbox, "new-onboarding",
+    in_workspace(sandbox, onboarding,
                  ["acquire", "port", "web", "--reason", "Preview the onboarding flow"],
                  check=False)
-    in_workspace(sandbox, "refactor-api", ["ready"])
+    in_workspace(sandbox, api, ["ready"])
 
 
 def shell(env):
