@@ -73,6 +73,8 @@ pub struct Reviews {
     /// The posts the reviewer ran for, which it runs for once, whatever
     /// came of it, until a newer post waits.
     answered: Mutex<std::collections::HashSet<daemon::AwaitedPost>>,
+    /// The answers being made, which removal stops.
+    answering: Mutex<HashMap<daemon::AwaitedPost, answer::AnswerRun>>,
     gate: gate::Gatekeeper,
 }
 
@@ -96,6 +98,7 @@ impl Reviews {
             ended: watch::channel(0).0,
             runs: oneshot::Runs::default(),
             answered: Mutex::default(),
+            answering: Mutex::default(),
             gate: gate::Gatekeeper::default(),
         }
     }

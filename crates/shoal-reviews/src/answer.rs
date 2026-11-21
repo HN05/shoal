@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::threads::Thread;
 use tokio::sync::watch;
 
@@ -43,21 +44,33 @@ impl Reviews {
 
     /// Have the reviewer answer the post `awaited`, and post the answer, or
     /// why there is none, in its thread, running once for it whatever comes
-    /// of it, as a thread too long for another post stays waiting.
+    /// of it, as a thread too long for another post stays waiting. Its end
+    /// wakes what waits for the place its run held.
     pub(crate) async fn answer(&self, daemon: &dyn Daemon, awaited: AwaitedPost) {
         self.answered.lock().unwrap().insert(awaited);
-        let thread = awaited.thread;
-        let text = match self.answer_once(daemon, awaited).await {
-            Ok(Some(text)) => text,
-            Ok(None) => return,
-            Err(error) => {
-                log!("answering thread {thread}: {error:#}");
-                format!("The reviewer could not answer: {error:#}")
-            }
-        };
-        if let Err(error) = daemon.answer_finding(thread, text).await {
-            log!("answering thread {thread}: {error:#}");
-        }
+        let answered = self.answer_once(daemon, awaited).await;
+        self.answering.lock().unwrap().remove(&awaited);
+        self.ended.send_modify(|ended| *ended += 1);
+        post_answer(daemon, awaited.thread, answered).await;
+    }
+
+    /// Stop the answers being made for the spaces `stopped` selects, as
+    /// the removal of their workspace or repository does; the posts whose
+    /// answers it stopped.
+    pub(crate) fn stop_answers(&self, stopped: impl Fn(&AnswerRun) -> bool) -> Vec<AwaitedPost> {
+        let answering = self.answering.lock().unwrap();
+        let stopping = answering.iter().filter(|(_, run)| stopped(run));
+        (stopping.map(|(post, run)| {
+            run.cancel.send_replace(true);
+            *post
+        }))
+        .collect()
+    }
+
+    /// Whether an answer to one of `posts` is still being made.
+    pub(crate) fn answering_any(&self, posts: &[AwaitedPost]) -> bool {
+        let answering = self.answering.lock().unwrap();
+        posts.iter().any(|post| answering.contains_key(post))
     }
 
     /// The answer to the post `awaited`, or why the reviewer gave none;
@@ -75,6 +88,12 @@ impl Reviews {
         let workspace = daemon.workspace_by_id(&review.workspace_id).await?;
         let (cancel, mut cancelled) = watch::channel(false);
         let cancel = Arc::new(cancel);
+        let run = AnswerRun {
+            workspace: workspace.id.clone(),
+            repository: workspace.repository().clone(),
+            cancel: cancel.clone(),
+        };
+        self.answering.lock().unwrap().insert(awaited, run);
         let admitted = self.await_admission(daemon, review.id, &workspace, &cancel, &mut cancelled);
         let Some(admission) = admitted.await? else {
             return Ok(None);
@@ -191,6 +210,30 @@ impl Reviews {
             })
             .await?;
         Ok(threads.into_iter().next())
+    }
+}
+
+/// An answer being made: the workspace and repository it reads, and what
+/// stops it.
+pub(crate) struct AnswerRun {
+    pub(crate) workspace: SpaceId,
+    pub(crate) repository: RepositoryId,
+    cancel: Arc<watch::Sender<bool>>,
+}
+
+/// Post in the finding's thread `thread` what `answered` gives: the
+/// reviewer's answer, or why it gave none.
+async fn post_answer(daemon: &dyn Daemon, thread: i64, answered: Result<Option<String>>) {
+    let text = match answered {
+        Ok(Some(text)) => text,
+        Ok(None) => return,
+        Err(error) => {
+            log!("answering thread {thread}: {error:#}");
+            format!("The reviewer could not answer: {error:#}")
+        }
+    };
+    if let Err(error) = daemon.answer_finding(thread, text).await {
+        log!("answering thread {thread}: {error:#}");
     }
 }
 

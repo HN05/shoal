@@ -116,9 +116,10 @@ impl Reviews {
         Ok(())
     }
 
-    /// Cancel the reviews of the repository's workspaces and wait until their
-    /// runs have ended and removed their checkouts, which are worktrees of
-    /// the repository its removal would otherwise refuse.
+    /// Cancel the reviews of the repository's workspaces and the answers
+    /// made for them, and wait until their runs have ended and removed their
+    /// checkouts, which are worktrees of the repository its removal would
+    /// otherwise refuse.
     pub async fn stop_in_repository(&self, daemon: &dyn Daemon, repository_id: &RepositoryId) {
         let (id, records) = (repository_id.to_owned(), self.records.clone());
         let active = (self.store).run(move |db| store::active_in(db, &*records, &id));
@@ -135,9 +136,10 @@ impl Reviews {
                 log!("stopping review {id}: {error:#}");
             }
         }
+        let answers = self.stop_answers(|run| run.repository == *repository_id);
         let running = || {
             let cancels = self.cancels.lock().unwrap();
-            active.iter().any(|id| cancels.contains_key(id))
+            active.iter().any(|id| cancels.contains_key(id)) || self.answering_any(&answers)
         };
         while running() {
             if ended.changed().await.is_err() {
@@ -146,9 +148,10 @@ impl Reviews {
         }
     }
 
-    /// Stop the workspace's running review, as its removal does; the removal
-    /// then deletes its reviews.
+    /// Stop the workspace's running review and the answers made for it, as
+    /// its removal does; the removal then deletes its reviews.
     pub async fn stop_in_workspace(&self, daemon: &dyn Daemon, workspace_id: &SpaceId) {
+        self.stop_answers(|run| run.workspace == *workspace_id);
         let id = workspace_id.to_owned();
         let active = self.store.run(move |db| store::active(db, &id)).await;
         match active {

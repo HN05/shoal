@@ -497,6 +497,31 @@ async fn the_reviewer_answers_a_post_in_its_finding_s_thread() {
 }
 
 #[tokio::test]
+async fn removing_the_workspace_stops_an_answer_being_made() {
+    // Asked to answer, it runs until it is stopped; else it reviews.
+    let script = format!(
+        "case \"$1\" in *'reply in `answer`'*) {};;\n*) cat '{{review}}';; esac",
+        until_tests_end()
+    );
+    let fixture = fixture(&[("fake", &script)], "agent = 'fake'").await;
+    let thread = fixture.review().await.threads.remove(0);
+    fixture.records.post_as_holder(thread.number, "Really?");
+    fixture.reviews.answer_posts();
+    // Its checkout exists only once the answer is under way.
+    while !fixture.run().join("checkout").exists() {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    let mut ended = fixture.reviews.ends();
+    let (reviews, daemon) = (&fixture.reviews, &*fixture.daemon);
+    reviews
+        .stop_in_workspace(daemon, &fixture.workspace.id)
+        .await;
+    ended.changed().await.unwrap();
+    assert!(fixture.daemon.answered.borrow().is_empty());
+    assert!(!fixture.run().exists());
+}
+
+#[tokio::test]
 async fn an_answer_that_cannot_be_posted_is_not_asked_for_again() {
     let script = "case \"$1\" in *'reply in `answer`'*) echo '{\"answer\":\"Yes.\"}';;\n\
         *) cat '{review}';; esac";
