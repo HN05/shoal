@@ -2,6 +2,7 @@
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{cli::context::Context, model::Space};
+use shoal_protocol::model::Located;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The spaces, workspaces or chats, that `selectors` name, each once, and
@@ -79,4 +80,29 @@ pub(super) async fn check_targets(
         refusals.join("\n  ")
     );
     Ok(())
+}
+
+/// The spaces of this machine among `located`.
+pub(super) fn here(located: &[Located]) -> Vec<Space> {
+    (located.iter())
+        .filter_map(|located| match located {
+            Located::Here(space) => Some((**space).clone()),
+            Located::Elsewhere { .. } => None,
+        })
+        .collect()
+}
+
+/// What a stop of `located` checks before it stops any: each space here,
+/// and those elsewhere on connected machines, since a stop for an offline
+/// one waits for it unchecked.
+pub(super) fn checked(located: &[Located]) -> Vec<(String, SpaceSelector)> {
+    (located.iter())
+        .filter_map(|located| match located {
+            Located::Here(space) => Some((space.name.to_string(), SpaceSelector::id(&space.id))),
+            Located::Elsewhere { space, online, .. } => (*online).then(|| {
+                let space = &space.space;
+                (space.name.to_string(), SpaceSelector::id(&space.id))
+            }),
+        })
+        .collect()
 }

@@ -51,9 +51,9 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
     let located = crate::client::stopping::selection(&ctx.paths, selected, !skip_children);
     let located = located.await?;
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
-        ensure_below(&elsewhere::here(&located))?;
+        ensure_below(&targets::here(&located))?;
     }
-    let checked = elsewhere::checked(&located);
+    let checked = targets::checked(&located);
     if checked.len() > 1 {
         targets::check_targets(ctx, checked).await?;
     }
