@@ -777,3 +777,80 @@ async fn a_chats_failed_turn_waits_past_its_reset_until_the_chat_is_done() {
         .unwrap();
     assert_eq!(pending().await.unwrap(), None);
 }
+
+/// Disk space left out of a restore's wait, as the restores of agents
+/// asleep while the user is away leave it in their own tests.
+const DISK_OFF: &str = "[machine.overload.disk]\nenabled = false\n";
+
+/// End the execution `id`, as once its wrapper leaves without restoring it.
+async fn end_execution(manager: &Manager, id: &ExecutionId) {
+    let id = id.clone();
+    (manager.store)
+        .run(move |db| {
+            db.execute("DELETE FROM executions WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
+
+/// An agent put to sleep while its turn retry waits for a usage limit's
+/// reset is restored to continue once the reset passes, its retry kept
+/// through the end of its execution.
+#[tokio::test]
+async fn an_agent_asleep_while_its_usage_limit_stands_is_restored_once_it_resets() {
+    let (_temp, manager, workspace, execution, connection) = agent(DISK_OFF).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    let reset = now() + secs(5 * 60 * 60);
+    (manager.report_upstream_reset(&selector, execution.clone(), Some(reset)))
+        .await
+        .unwrap();
+    fail(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::RateLimited,
+    )
+    .await;
+    manager.stop_idle_agents(now() + secs(60)).await.unwrap();
+    assert!(*connection.borrow(), "the idle agent sleeps");
+    manager.queue_agent_restore(&execution).await.unwrap();
+    end_execution(&manager, &execution).await;
+    let idle = manager.idle_restores(&workspace.id).await.unwrap();
+    assert!(idle.is_empty(), "its retry keeps the workspace: {idle:?}");
+
+    manager.deliver_turn_retries_at(reset).await.unwrap();
+    assert!(messages(&manager, &workspace).await.is_empty());
+    manager.dispatch_queue().await.unwrap();
+    let state = |entries: Vec<crate::model::QueueEntry>| {
+        let [entry] = entries.try_into().unwrap();
+        entry.state
+    };
+    let asleep = state(manager.queue_entries().await.unwrap());
+    assert_eq!(asleep, crate::state::QueueState::Queued);
+
+    let after = manager.deliver_turn_retries_at(reset + RESET_MARGIN);
+    assert_eq!(after.await.unwrap(), None);
+    assert_eq!(
+        messages(&manager, &workspace).await,
+        [continuation(TurnFailure::RateLimited, 1)]
+    );
+    manager.dispatch_queue().await.unwrap();
+    let restored = state(manager.queue_entries().await.unwrap());
+    assert_eq!(restored, crate::state::QueueState::Starting);
+}
+
+/// An execution that ends with no restore of it waiting drops its retry.
+#[tokio::test]
+async fn an_ended_execution_without_a_restore_drops_its_retry() {
+    let (_temp, manager, workspace, execution, _connection) = agent("").await;
+    fail(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::Overloaded,
+    )
+    .await;
+    end_execution(&manager, &execution).await;
+    assert_eq!(retry(&manager, &workspace).await, None);
+}

@@ -129,9 +129,9 @@ impl Manager {
     /// The executions of the workspace whose agent, stopped between turns
     /// with every process, waits in the queue for an update, for its
     /// waiting wrapper or for the daemon to start it, while none is recorded
-    /// for it and no timer will wake it. Disk space may still hold back one
-    /// that is, which has work all the same. An agent stopped because its
-    /// space is blocked is not idle.
+    /// for it and neither a timer nor a turn retry will wake it. Disk space
+    /// may still hold back one that is, which has work all the same. An
+    /// agent stopped because its space is blocked is not idle.
     pub(crate) async fn idle_restores(
         &self,
         workspace_id: &SpaceId,
@@ -151,7 +151,8 @@ impl Manager {
             .collect();
         if !idle.is_empty()
             && (self.agent_updates_recorded(workspace_id).await?
-                || self.wake_timer_set(workspace_id).await?)
+                || self.wake_timer_set(workspace_id).await?
+                || self.turn_retry_waits(workspace_id).await?)
         {
             idle.clear();
         }
