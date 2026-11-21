@@ -118,6 +118,13 @@ impl CodeRef {
     }
 }
 
+/// `bytes` as text a reference keeps versions of: UTF-8 without NUL, of
+/// at most [`MAX_VERSIONED_LEN`] bytes.
+pub fn kept_text(bytes: Vec<u8>) -> Option<String> {
+    let text = String::from_utf8(bytes).ok()?;
+    (text.len() <= MAX_VERSIONED_LEN && !text.contains('\0')).then_some(text)
+}
+
 /// The lines `lines` of `text`, as long as [`MAX_SNIPPET_LEN`] allows,
 /// whole lines only, marked where cut.
 pub fn snippet(text: &str, lines: Lines) -> String {
