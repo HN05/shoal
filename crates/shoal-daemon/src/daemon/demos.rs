@@ -271,6 +271,7 @@ fn list(db: &Connection, workspace: Option<&SpaceId>) -> Result<Vec<Running>> {
             url: launch.url(),
             viewer: None,
             launch,
+            machine: None,
         })
     })
     .collect()

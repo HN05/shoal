@@ -9,7 +9,7 @@ use super::super::{
     scope::{Caller, Scoped},
 };
 use crate::protocol::{Body, DemoMethod};
-use shoal_protocol::{scope_tokens::ScopeToken, space_names::SpaceSelector};
+use shoal_protocol::{demos::Running, scope_tokens::ScopeToken, space_names::SpaceSelector};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -19,7 +19,7 @@ pub(super) async fn handle(
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
         DemoMethod::ListDemos { workspace } => {
-            Body::Demos(manager.demos(workspace.as_ref()).await?)
+            Body::Demos(listed(manager, workspace.as_ref(), scope).await?)
         }
         DemoMethod::DemoProgress { workspace, launch } => {
             Body::DemoProgress(manager.demo_progress(&workspace, &launch).await?)
@@ -57,4 +57,19 @@ impl Scoped for DemoMethod {
             | DemoMethod::OpenDemoStream { workspace, .. } => Some(workspace),
         })
     }
+}
+
+/// The running demos of `workspace`, or of every workspace, each naming
+/// this machine when another machine asked for them.
+async fn listed(
+    manager: &Manager,
+    workspace: Option<&SpaceSelector>,
+    scope: Option<&ScopeToken>,
+) -> Result<Vec<Running>> {
+    let mut demos = manager.demos(workspace).await?;
+    let machine = super::forwarded::answering_machine(manager, scope).await?;
+    for demo in &mut demos {
+        demo.machine.clone_from(&machine);
+    }
+    Ok(demos)
 }

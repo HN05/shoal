@@ -104,6 +104,7 @@ fn a_listed_simulator_demo_keeps_its_viewer_and_its_command_apart() {
         url: None,
         viewer: launch.viewer(Some(49400)),
         launch,
+        machine: None,
     };
     let json = serde_json::to_string(&running).unwrap();
     let read: Running = serde_json::from_str(&json).unwrap();

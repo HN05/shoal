@@ -44,6 +44,7 @@ fn listings_show_running_demos_then_the_configured_ones_not_running() {
             url: None,
             viewer: None,
             launch,
+            machine: None,
         }],
     };
     let rows = listing_rows(&listing, Palette::stdout(true));

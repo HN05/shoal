@@ -137,6 +137,10 @@ pub struct Running {
     pub viewer: Option<Viewer>,
     #[serde(flatten)]
     pub launch: Launch,
+    /// The other joined machine that runs it and answered for it, from
+    /// which a demo opens here through the hub.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<crate::hub::Machine>,
 }
 
 /// A simulator demo's viewer as listings show it.

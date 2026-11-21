@@ -9,16 +9,12 @@ use super::{
     presets,
 };
 use crate::cli::{
-    commands::{
-        machines,
-        viewer::{self, Viewed},
-    },
+    commands::viewer::{self, Viewed},
     context::Context,
     output::Palette,
     terminal, ui,
 };
 use shoal_protocol::demos::{Kind, Running};
-use shoal_protocol::hub::directory::{HubView, Listed};
 use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn open(
@@ -26,36 +22,23 @@ pub(super) async fn open(
     name: Option<String>,
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
-    if let Some(selector) = &workspace
-        && let Some(elsewhere) = machines::space_elsewhere(ctx, selector).await?
-    {
-        return open_elsewhere(ctx, name, elsewhere).await;
-    }
-    ensure!(ctx.on_terminal(), "opening a demo requires a terminal");
     let workspace = scope(ctx, workspace).await?;
     let demos = running(ctx, workspace.as_ref()).await?;
     let demo = match name {
         Some(name) => find(demos, &name, workspace.as_ref())?,
         None => pick(ctx, demos)?,
     };
+    if let Some(machine) = demo.machine.clone() {
+        return open_elsewhere(ctx, demo, &machine.name).await;
+    }
+    ensure!(ctx.on_terminal(), "opening a demo requires a terminal");
     open_running(ctx, &demo).await?;
     Ok(0)
 }
 
-/// Open the demo `name`, or a picked one, of `space`, which another
-/// machine `view` lists runs.
-async fn open_elsewhere(
-    ctx: &Context,
-    name: Option<String>,
-    (space, view): (Listed, HubView),
-) -> Result<i32> {
-    let machine = view.machine_name(&space);
-    let selector = SpaceSelector::id(&space.space.id);
-    let demos = crate::demos::running(&ctx.paths, Some(selector)).await?;
-    let demo = match name {
-        Some(name) => find(demos, &name, None)?,
-        None => pick(ctx, demos)?,
-    };
+/// Open `demo`, which another joined machine, `machine`, runs: a terminal
+/// demo in this terminal, any other forwarded from a port here.
+async fn open_elsewhere(ctx: &Context, demo: Running, machine: &str) -> Result<i32> {
     match demo.kind {
         Kind::Terminal => show_elsewhere(ctx, demo, machine).await,
         Kind::Server | Kind::Web | Kind::Simulator => forward(ctx, demo, machine).await,
