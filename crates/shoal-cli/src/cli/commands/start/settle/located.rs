@@ -3,7 +3,7 @@
 //! forks, its task, and the terminal it is made in.
 use std::ffi::OsString;
 
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use shoal_ids::{agent_session_ids::AgentSessionId, space_ids::SpaceId};
 use shoal_protocol::launches::Launch;
 use shoal_protocol::space_names::SpaceSelector;
@@ -70,18 +70,8 @@ pub(in crate::cli::commands) fn launch_args(args: Vec<OsString>) -> Result<Vec<S
 /// The ID of the space `selector` names, by number or ID: one of this
 /// machine, else one the hub lists on another joined machine.
 async fn space_id(ctx: &Context, selector: &SpaceSelector) -> Result<SpaceId> {
-    let space = crate::client::spaces::list(&ctx.paths)
-        .await?
-        .find(selector);
-    if let Some(space) = space {
-        return Ok(space.id);
-    }
-    let elsewhere = crate::cli::commands::machines::space_elsewhere(ctx, selector).await?;
-    Ok(elsewhere
-        .with_context(|| format!("no space {selector}"))?
-        .0
-        .space
-        .id)
+    let located = crate::client::workspaces::locate(&ctx.paths, selector.clone()).await?;
+    Ok(located.id().clone())
 }
 
 /// `launch` started from a fork of the session of the agent `--fork`
