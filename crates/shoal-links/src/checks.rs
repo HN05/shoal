@@ -1,41 +1,47 @@
 //! Failed Actions logs resolved from a PR's current check, using the agent
 //! account of the workspace or registered checkout.
 use anyhow::{Context as _, Result, bail};
-use shoal_links::place::{Access, Place};
-use shoal_links::space::LinkSpace;
-use shoal_links::target::NOTHING_LINKED;
-
-use crate::{
-    daemon::{manager::Manager, scope::Caller},
-    forge::{
-        ForgeRepo,
-        capability::Capability,
-        ci::checks::CheckLog,
-        items::{
-            link::{LinkKind, Selection},
-            reference::ItemRef,
-        },
-        updates::Update,
-    },
-    protocol::RepoTarget,
-};
+use shoal_daemon_base::callers::Caller;
 use shoal_forge::{
     capability::CapabilityRequests,
     ci::checks::{CheckRequests, failed_log_summary, validate_check_name},
 };
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_forge_types::{
+    ForgeRepo,
+    capability::Capability,
+    ci::checks::CheckLog,
+    items::{
+        link::{LinkKind, Selection},
+        reference::ItemRef,
+    },
+    updates::Update,
+};
+use shoal_protocol::{
+    protocol::{MAX_FRAME, RepoTarget},
+    space_names::SpaceSelector,
+};
 
-impl Manager {
+use crate::{
+    Links,
+    daemon::Daemon,
+    place::{Access, Place},
+    space::LinkSpace,
+    target::NOTHING_LINKED,
+    wait::followed::followed_items,
+};
+
+impl Links {
     /// Log failures stay on their CI update and never hide other activity;
     /// a check without a CI job gets no pointer to a log it does not have.
-    pub(crate) async fn summarize_failed_checks(
+    pub async fn summarize_failed_checks(
         &self,
+        daemon: &dyn Daemon,
         space: &SpaceSelector,
         updates: &mut [Update],
     ) {
         // Logs are read in the space's own context: a chat reads them from
         // its repository's checkout.
-        let Ok(space) = self.links.link_space(self, space).await else {
+        let Ok(space) = self.link_space(daemon, space).await else {
             return;
         };
         let target = RepoTarget::from(space.item_context());
@@ -47,7 +53,7 @@ impl Manager {
                 continue;
             };
             if !check.result.failed()
-                || !self
+                || !daemon
                     .item_forge(&pull)
                     .await
                     .is_ok_and(|forge| forge.supports(Capability::ReadJobLogs))
@@ -58,7 +64,7 @@ impl Manager {
                 kind: Some(LinkKind::Pr),
                 input: Some(pull.into()),
             };
-            let log = self.check_log(&target, &selection, &check.name, None).await;
+            let log = (self.check_log(daemon, &target, &selection, &check.name, None)).await;
             let Some(summary) = failed_log_summary(log) else {
                 continue;
             };
@@ -69,9 +75,7 @@ impl Manager {
                 check.name.replace('\'', "'\\''")
             );
             let previous = std::mem::replace(&mut updates[index].message, message);
-            if serde_json::to_vec(updates).map_or(true, |bytes| {
-                bytes.len() >= crate::protocol::MAX_FRAME - 1024
-            }) {
+            if serde_json::to_vec(updates).map_or(true, |bytes| bytes.len() >= MAX_FRAME - 1024) {
                 updates[index].message = previous;
             }
         }
@@ -83,23 +87,21 @@ impl Manager {
     /// elsewhere.
     pub async fn check_log(
         &self,
+        daemon: &dyn Daemon,
         target: &RepoTarget,
         selection: &Selection,
         name: &str,
         caller: Option<&Caller>,
     ) -> Result<CheckLog> {
         validate_check_name(name)?;
-        let target = (self
-            .links
-            .selection_target(self, target, selection, true, caller))
-        .await?;
+        let target = (self.selection_target(daemon, target, selection, true, caller)).await?;
         let account = match target.own {
-            true => self.links.agent_account(),
-            false => self.links.elsewhere_account(Access::Read, caller),
+            true => self.agent_account(),
+            false => self.elsewhere_account(Access::Read, caller),
         };
         let space = target.own_place().and_then(Place::space);
         let forge = target.forge()?;
-        let pull = self.check_log_pr(space, forge, selection).await?;
+        let pull = self.check_log_pr(daemon, space, forge, selection).await?;
         forge.failed_check_log(&account, &pull, name).await
     }
 
@@ -107,6 +109,7 @@ impl Manager {
     /// space may be its linked PR.
     async fn check_log_pr(
         &self,
+        daemon: &dyn Daemon,
         space: Option<&LinkSpace>,
         forge: &ForgeRepo,
         selection: &Selection,
@@ -123,13 +126,7 @@ impl Manager {
             input: selection.input.clone(),
         };
         // Of the linked PRs, only an assigned one is read without a number.
-        let prs = (self.links.selection_items(
-            self,
-            space,
-            &selection,
-            shoal_links::wait::followed::followed_items,
-        ))
-        .await?;
+        let prs = (self.selection_items(daemon, space, &selection, followed_items)).await?;
         match prs.as_slice() {
             [pull] if pull.kind() == LinkKind::Pr => Ok(pull.clone()),
             _ => bail!(ONE_PR),

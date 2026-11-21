@@ -1,6 +1,7 @@
 //! The issues, PRs and CI runs the daemon's spaces link. [`Links`] holds
 //! what links keep in memory and offers their operations.
 mod accounts;
+mod checks;
 pub mod daemon;
 pub mod forges;
 pub mod issue;

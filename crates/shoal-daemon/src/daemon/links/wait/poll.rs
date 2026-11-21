@@ -89,7 +89,8 @@ impl Manager {
         let mut pending = self.links.fit_response(batch, 0).await?;
         if !pending.is_empty() {
             drop(guard);
-            self.summarize_failed_checks(&SpaceSelector::id(id), &mut pending)
+            (self.links)
+                .summarize_failed_checks(self, &SpaceSelector::id(id), &mut pending)
                 .await;
             return Ok(pending);
         }
@@ -107,7 +108,8 @@ impl Manager {
                 let mut updates = self
                     .deliver_observed(id, observations, selection, report, start)
                     .await?;
-                self.summarize_failed_checks(&SpaceSelector::id(id), &mut updates)
+                (self.links)
+                    .summarize_failed_checks(self, &SpaceSelector::id(id), &mut updates)
                     .await;
                 Ok(updates)
             }

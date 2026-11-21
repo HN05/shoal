@@ -31,8 +31,8 @@ pub(super) async fn handle(
             selection,
             check,
         } => Body::CheckLog(
-            manager
-                .check_log(&target, &selection, &check, caller)
+            (manager.links)
+                .check_log(&**manager, &target, &selection, &check, caller)
                 .await?,
         ),
         CiMethod::CiAction {

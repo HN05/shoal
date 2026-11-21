@@ -1,4 +1,5 @@
-use crate::forge::ci::checks::{CheckLog, JOB_URL_BYTES, TAIL_BYTES};
+use shoal_forge_types::ci::checks::{CheckLog, JOB_URL_BYTES, TAIL_BYTES};
+use shoal_protocol::protocol::MAX_FRAME;
 
 #[test]
 fn the_longest_log_tail_fits_one_protocol_frame_even_when_escaped() {
@@ -10,5 +11,5 @@ fn the_longest_log_tail_fits_one_protocol_frame_even_when_escaped() {
         truncated: true,
         failed_step: Some("\0".repeat(256)),
     };
-    assert!(serde_json::to_vec(&log).unwrap().len() < crate::protocol::MAX_FRAME);
+    assert!(serde_json::to_vec(&log).unwrap().len() < MAX_FRAME);
 }

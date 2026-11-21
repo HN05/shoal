@@ -2,7 +2,6 @@
 //! it moves into `shoal-links`, and whether a space takes link changes.
 mod actions;
 pub(in crate::daemon) mod branches;
-mod checks;
 mod ci;
 mod forges;
 pub mod issue;
