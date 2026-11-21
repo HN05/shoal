@@ -112,6 +112,9 @@ impl Operation {
                 )
                 | Self::Workspace(
                     WorkspaceMethod::ListSpaces
+                        | WorkspaceMethod::ListSpacesEverywhere { .. }
+                        | WorkspaceMethod::LocateSpace { .. }
+                        | WorkspaceMethod::SelectSpaces { .. }
                         | WorkspaceMethod::UntrackedWorktrees
                         | WorkspaceMethod::FindSpaces { .. }
                         | WorkspaceMethod::InspectWorkspace { .. }
