@@ -198,14 +198,15 @@ fn named_creation(launch: &Launch, copy: Option<crate::start_plan::CopyCreation>
 /// with an issue of its own when `issue` and below a parent it names when
 /// `parent`, which a start into the workspace that has its branch refuses.
 fn new_space_flag(creation: &Creation, issue: bool, parent: bool) -> Option<&'static str> {
+    // A copy carried from another machine names its base itself.
     let new_space = [
+        ("--copy", creation.copy.is_some() || creation.files.is_some()),
         ("--issue", issue),
         ("--name", creation.options.name.is_some()),
         ("--parent", parent),
         ("--base", creation.base.is_some()),
         ("--path", creation.path.is_some()),
         ("--git-profile", creation.git_profile.is_some()),
-        ("--copy", creation.copy.is_some()),
         ("--skip-setup", creation.options.skip_setup),
         ("--disposable", creation.options.disposable),
         // `shoal priority` sets an existing workspace's.
