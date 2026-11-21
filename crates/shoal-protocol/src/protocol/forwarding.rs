@@ -148,6 +148,14 @@ impl Operation {
         }
     }
 
+    /// Whether the request can act on a space another joined machine runs:
+    /// it forwards, and attaches no file by its path here, which that
+    /// machine cannot read.
+    pub fn reaches_other_machines(&self) -> bool {
+        let attaches = serde_json::to_value(self).is_ok_and(|method| attaches_files(&method));
+        self.forwarding() != Forwarding::Never && !attaches
+    }
+
     /// Where the request runs when the space it acts on is another
     /// machine's, decided for every request by what it needs.
     pub fn forwarding(&self) -> Forwarding {
@@ -239,6 +247,21 @@ impl Operation {
             Self::Hub(method) => method.target(),
             Self::App(method) => method.target(),
         }
+    }
+}
+
+/// Whether the request `method`, as JSON, attaches files by their path on
+/// this machine, anywhere in it, as a message's do and an issue's or
+/// comment's within its content.
+pub fn attaches_files(method: &serde_json::Value) -> bool {
+    match method {
+        serde_json::Value::Object(fields) => fields.iter().any(|(key, value)| {
+            let files =
+                key == "attachments" && value.as_array().is_some_and(|files| !files.is_empty());
+            files || attaches_files(value)
+        }),
+        serde_json::Value::Array(items) => items.iter().any(attaches_files),
+        _ => false,
     }
 }
 

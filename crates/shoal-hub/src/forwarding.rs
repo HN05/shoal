@@ -18,7 +18,7 @@ use shoal_protocol::{
         link::{Call, Reply},
         routing::{Delivery, Forwarded, Vouched, VouchedSpace},
     },
-    protocol::{Body, Forwarding, Operation, Response},
+    protocol::{Body, Forwarding, Operation, Response, attaches_files},
     space_names::SpaceSelector,
     status::ReportedStatus,
 };
@@ -507,21 +507,6 @@ pub fn files_stay_here(elsewhere: &str) -> anyhow::Error {
         "{elsewhere}, which cannot read files attached here; send it without them, or from that machine"
     );
     Refusal::new(Reason::NotReady, message).into()
-}
-
-/// Whether the request `method` attaches files by their path on this
-/// machine, anywhere in it, as a message's do and an issue's or comment's
-/// within its content.
-fn attaches_files(method: &serde_json::Value) -> bool {
-    match method {
-        serde_json::Value::Object(fields) => fields.iter().any(|(key, value)| {
-            let files =
-                key == "attachments" && value.as_array().is_some_and(|files| !files.is_empty());
-            files || attaches_files(value)
-        }),
-        serde_json::Value::Array(items) => items.iter().any(attaches_files),
-        _ => false,
-    }
 }
 
 #[cfg(test)]

@@ -66,7 +66,7 @@ pub use demos::DemoMethod;
 pub use diffs::DiffMethod;
 pub use executions::{ExecutionMethod, SessionSignal};
 pub use files::FileMethod;
-pub use forwarding::{Forwarding, Target};
+pub use forwarding::{Forwarding, Target, attaches_files};
 pub use frames::{
     FrameTooLarge, MAX_FRAME, Responses, frame_pages, read, read_buffered, read_response,
     text_pieces, write,
