@@ -83,3 +83,22 @@ fn a_copy_never_replaces_a_session_file_here() {
         "c\n"
     );
 }
+
+#[test]
+fn a_fork_finds_a_session_placed_where_its_tool_keeps_them_by_default() {
+    let (default, directory) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let store = transcripts::store(shoal_protocol::integrations::IntegrationKind::Claude).unwrap();
+    let carried = default.path().join("p/s1.jsonl");
+    fs::create_dir_all(carried.parent().unwrap()).unwrap();
+    fs::write(&carried, "carried\n").unwrap();
+    let (name, session) = (&"claude".into(), &"s1".into());
+    let directories = (default.path(), directory.path());
+    copy_session(store, directories, (name, session)).unwrap();
+    let copied = directory.path().join("p/s1.jsonl");
+    assert_eq!(fs::read_to_string(&copied).unwrap(), "carried\n");
+    // A session the directory has stays as it is.
+    fs::write(&copied, "here\n").unwrap();
+    fs::write(&carried, "carried again\n").unwrap();
+    copy_session(store, directories, (name, session)).unwrap();
+    assert_eq!(fs::read_to_string(&copied).unwrap(), "here\n");
+}

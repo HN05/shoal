@@ -180,6 +180,75 @@ pub(in crate::cli) async fn install_kept_session_files(
     }
 }
 
+/// Copy the files of `session`, which agent `name` under `settings` starts
+/// from a fork of in `space`, where its tool looks for them under the
+/// workspace's `[env]`, from where it keeps them without it, as for a
+/// session another machine carried here, when only that one has them. A
+/// failure only warns; the fork then finds no session.
+pub(in crate::cli) async fn find_forked_session(
+    ctx: &Context,
+    space: &crate::agents::HomeRecords,
+    (settings, name): (&Effective, &Agent),
+    session: &shoal_ids::agent_session_ids::AgentSessionId,
+) {
+    if !crate::build::changes_user_files() {
+        return;
+    }
+    let Some(store) = transcripts::store(settings.integration(name)) else {
+        return;
+    };
+    let workspace_environment = match space {
+        crate::agents::HomeRecords::Workspace(workspace) => {
+            workspaces::agent_environment(ctx, workspace).await
+        }
+        crate::agents::HomeRecords::Chat { .. } => return,
+    };
+    let home = &ctx.paths.home;
+    let directories = (
+        session_dir(settings, &workspace_environment, home, name),
+        session_dir(settings, &BTreeMap::new(), home, name),
+    );
+    let (Ok(Some(directory)), Ok(Some(default))) = directories else {
+        return;
+    };
+    if let Err(error) = copy_session(store, (&default, &directory), (name, session)) {
+        eprintln!("warning: cannot find {name} session {session} where the fork looks: {error:#}");
+    }
+}
+
+/// Copy the files of `session` of agent `name` that `store` keeps in
+/// `default` into `directory`, unless that is where they are or it has
+/// some of them already.
+fn copy_session(
+    store: &dyn transcripts::Store,
+    (default, directory): (&Path, &Path),
+    (name, session): (&Agent, &shoal_ids::agent_session_ids::AgentSessionId),
+) -> Result<()> {
+    if default == directory
+        || !store
+            .session_files(directory, session.as_str())?
+            .files
+            .is_empty()
+    {
+        return Ok(());
+    }
+    for path in store.session_files(default, session.as_str())?.files {
+        let file = transcripts::SessionFile {
+            agent: name.clone(),
+            session: session.clone(),
+            size: 0,
+            path,
+        };
+        let contents = default.join(&file.path);
+        place(
+            directory,
+            &CarriedSessionFile { file, contents },
+            Existing::Kept,
+        )?;
+    }
+    Ok(())
+}
+
 /// The directory agent `name`, as `settings` describes it, keeps its
 /// sessions' files in when it runs with the workspace's `[env]`,
 /// `workspace_environment`, under `home`.

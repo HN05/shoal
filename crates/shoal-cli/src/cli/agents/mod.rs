@@ -191,7 +191,10 @@ pub(in crate::cli) async fn launch_agent(
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     let integration = agent_integration(&settings, &agent);
     let fork = match &options.fork {
-        Some(session) => fork_args(&settings, &agent, session, home.path())?,
+        Some(session) => {
+            sessions::find_forked_session(ctx, &space, (&settings, &agent), session).await;
+            fork_args(&settings, &agent, session, home.path())?
+        }
         None => Vec::new(),
     };
     let takes_instructions = match integration.detached() {
