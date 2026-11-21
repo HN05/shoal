@@ -1681,3 +1681,9 @@ CREATE TRIGGER space_turn_retry_execution_ended AFTER DELETE ON executions BEGIN
     DELETE FROM space_turn_retries WHERE execution_id=OLD.id
         AND NOT EXISTS (SELECT 1 FROM agent_queue WHERE execution_id=OLD.id);
 END;
+
+CREATE TRIGGER space_turn_retry_restore_ended AFTER DELETE ON agent_queue
+WHEN OLD.execution_id IS NOT NULL BEGIN
+    DELETE FROM space_turn_retries WHERE execution_id=OLD.execution_id AND delivered=0
+        AND NOT EXISTS (SELECT 1 FROM executions WHERE id=OLD.execution_id);
+END;

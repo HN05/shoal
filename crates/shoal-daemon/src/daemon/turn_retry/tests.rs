@@ -907,3 +907,28 @@ async fn an_ended_execution_without_a_restore_drops_its_retry() {
     end_execution(&manager, &execution).await;
     assert_eq!(retry(&manager, &workspace).await, None);
 }
+
+/// A restore that leaves the queue after its execution ended, such as one
+/// discarded or failed, drops the retry it has not delivered, which nothing
+/// could deliver any longer.
+#[tokio::test]
+async fn a_restore_that_leaves_the_queue_after_its_execution_drops_its_retry() {
+    let (_temp, manager, workspace, execution, connection) = agent(DISK_OFF).await;
+    fail(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::RateLimited,
+    )
+    .await;
+    manager.stop_idle_agents(now() + secs(60)).await.unwrap();
+    assert!(*connection.borrow(), "the idle agent sleeps");
+    manager.queue_agent_restore(&execution).await.unwrap();
+    end_execution(&manager, &execution).await;
+    assert!(retry(&manager, &workspace).await.is_some());
+
+    manager.remove_restore(&execution).await;
+    assert_eq!(retry(&manager, &workspace).await, None);
+    let waits = manager.waiting_turn_retry(&workspace.id).await.unwrap();
+    assert_eq!(waits, None);
+}

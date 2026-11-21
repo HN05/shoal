@@ -1,7 +1,10 @@
 -- A turn retry outlasts the execution it names while a restore of that
 -- execution waits in the queue, so an agent Shoal put to sleep with a retry
 -- pending is restored to continue once the retry is due. Without such a
--- restore, the execution's end still drops it.
+-- restore, the execution's end still drops it, and a restore that leaves
+-- the queue after its execution ended drops one it has not delivered. A
+-- delivered retry stays until the turn it started ends, which a restore
+-- the daemon starts runs in a new execution.
 CREATE TABLE space_turn_retries_kept (
     space_id TEXT PRIMARY KEY,
     execution_id TEXT NOT NULL,
@@ -23,4 +26,10 @@ CREATE INDEX space_turn_retries_execution ON space_turn_retries(execution_id);
 CREATE TRIGGER space_turn_retry_execution_ended AFTER DELETE ON executions BEGIN
     DELETE FROM space_turn_retries WHERE execution_id=OLD.id
         AND NOT EXISTS (SELECT 1 FROM agent_queue WHERE execution_id=OLD.id);
+END;
+
+CREATE TRIGGER space_turn_retry_restore_ended AFTER DELETE ON agent_queue
+WHEN OLD.execution_id IS NOT NULL BEGIN
+    DELETE FROM space_turn_retries WHERE execution_id=OLD.execution_id AND delivered=0
+        AND NOT EXISTS (SELECT 1 FROM executions WHERE id=OLD.execution_id);
 END;
