@@ -130,11 +130,25 @@ impl Manager {
     }
 
     /// The spaces `launch`, which goes to another machine, names by ID, and
-    /// for `caller` the space it goes below, its own when it names none.
+    /// for `caller` the space it goes below, its own when it names none,
+    /// once the hub lists that space for the other machine to find.
     async fn forwarded_spaces(&self, launch: &mut Launch, caller: Option<&Caller>) -> Result<()> {
         self.select_launch_spaces(launch).await?;
         if let Some(caller) = caller {
             self.parent_below(caller, &mut launch.parent).await?;
+        }
+        self.parent_listed(launch.parent.as_ref()).await
+    }
+
+    /// Wait until the hub lists `parent`, the space a launch on another
+    /// machine goes below, where this machine has it: one created here just
+    /// before is listed only once this machine's report of it settles.
+    async fn parent_listed(&self, parent: Option<&SpaceSelector>) -> Result<()> {
+        let Some(id) = parent.and_then(SpaceSelector::given_id) else {
+            return Ok(());
+        };
+        if self.holds_space(&SpaceSelector::id(id)).await? {
+            self.hub.listed(id).await;
         }
         Ok(())
     }
