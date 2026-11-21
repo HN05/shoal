@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::Lifetime;
+use super::{Forwarding, Lifetime};
 use crate::reviews::{FindingId, Outcome, ReviewId, ReviewTarget};
 use crate::space_names::SpaceSelector;
 
@@ -82,3 +82,20 @@ impl ReviewMethod {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ReviewPiece(pub String);
+
+impl ReviewMethod {
+    /// A review runs on its workspace's machine, which keeps its findings,
+    /// and a wait's answer comes as that machine writes it.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::RunReview { .. }
+            | Self::CancelReview { .. }
+            | Self::ListReviews { .. }
+            | Self::ShowReview { .. }
+            | Self::ReplyToFinding { .. }
+            | Self::CheckPrGate { .. }
+            | Self::ResolveFinding { .. } => Forwarding::Online,
+            Self::AwaitReview { .. } => Forwarding::Streamed,
+        }
+    }
+}

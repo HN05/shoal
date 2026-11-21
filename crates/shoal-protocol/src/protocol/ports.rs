@@ -1,3 +1,4 @@
+use super::Forwarding;
 use crate::model::PortRequest;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
@@ -25,4 +26,15 @@ pub enum PortMethod {
     PortCatalog {
         workspace: SpaceSelector,
     },
+}
+
+impl PortMethod {
+    /// A port is a lease taken for the caller; what is reserved and
+    /// configured is state.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::PortOverview { .. } | Self::PortCatalog { .. } => Forwarding::Online,
+            Self::PortAcquire { .. } | Self::PortRelease { .. } => Forwarding::Never,
+        }
+    }
 }

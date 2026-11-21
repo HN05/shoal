@@ -3,7 +3,7 @@ use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use serde::{Deserialize, Serialize};
 use shoal_ids::repository_ids::RepositoryId;
 
-use super::Lifetime;
+use super::{Forwarding, Lifetime};
 use crate::forge::download::Download;
 use crate::forge::numbers::CommentId;
 use crate::space_names::SpaceSelector;
@@ -321,6 +321,42 @@ impl ItemMethod {
         match self {
             Self::PrWait { .. } | Self::WatchItems { .. } => Lifetime::Resumed,
             _ => Lifetime::Reply,
+        }
+    }
+}
+
+impl ItemMethod {
+    /// Each reads or changes the space's links or asks the forge of its
+    /// repository, and a wait's answer comes as its space's machine writes
+    /// it; a moved space's links are relinked where it arrives.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::LinkItem { .. }
+            | Self::UnlinkItems { .. }
+            | Self::SetPr { .. }
+            | Self::OpenPull { .. }
+            | Self::RevertPull { .. }
+            | Self::MergedPull { .. }
+            | Self::OpenIssue { .. }
+            | Self::MergeWarning { .. }
+            | Self::MergePath { .. }
+            | Self::ItemAction { .. }
+            | Self::ListItems { .. }
+            | Self::Labels { .. }
+            | Self::Reviewers { .. }
+            | Self::ViewItems { .. }
+            | Self::ForgeApi { .. }
+            | Self::ForgeDownload { .. }
+            | Self::Capabilities { .. }
+            | Self::Reactions { .. }
+            | Self::ReviewThread { .. }
+            | Self::NumberKind { .. }
+            | Self::IssueDetails { .. }
+            | Self::IssueBlockers { .. }
+            | Self::PullRequest { .. }
+            | Self::SelectItems { .. } => Forwarding::Online,
+            Self::PrWait { .. } | Self::WatchItems { .. } => Forwarding::Streamed,
+            Self::RelinkSpace { .. } => Forwarding::Never,
         }
     }
 }

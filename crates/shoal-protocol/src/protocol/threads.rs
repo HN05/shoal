@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::Lifetime;
+use super::{Forwarding, Lifetime};
 use crate::code::NewCodeRef;
 use crate::item_numbers::ItemNumber;
 use crate::space_names::SpaceSelector;
@@ -121,6 +121,27 @@ impl ThreadMethod {
         match self {
             Self::AwaitPost { .. } => Lifetime::Resumed,
             _ => Lifetime::Reply,
+        }
+    }
+}
+
+impl ThreadMethod {
+    /// A post goes to the machine the thread is numbered on, waiting for it
+    /// while it is offline, and a wait's answer comes as that machine
+    /// writes it; what the caller's agent posts in its own conversation is
+    /// its hooks' report.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::Post { .. } => Forwarding::Queued,
+            Self::OpenThread { .. }
+            | Self::ForwardThread { .. }
+            | Self::ResolveThread { .. }
+            | Self::ListThreads { .. }
+            | Self::ShowThread { .. }
+            | Self::LinkThread { .. }
+            | Self::UnlinkThread { .. } => Forwarding::Online,
+            Self::AwaitPost { .. } => Forwarding::Streamed,
+            Self::PostInChat { .. } | Self::RepliedInChat { .. } => Forwarding::Never,
         }
     }
 }

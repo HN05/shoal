@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{ConfigTarget, Lifetime};
+use super::{ConfigTarget, Forwarding, Lifetime};
 use crate::apps::{
     AppName,
     store::{AppScope, EntryKey, KeyPrefix, Revision, Write},
@@ -81,6 +81,21 @@ impl AppMethod {
             | Self::ReadAppEntry { .. }
             | Self::ListAppEntries { .. }
             | Self::DeleteAppEntry { .. } => Lifetime::Reply,
+        }
+    }
+}
+
+impl AppMethod {
+    /// An app's entries go where the app store keeps them, which is no
+    /// space's machine.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::ReadAppConfig { .. }
+            | Self::ReadAppEntry { .. }
+            | Self::ListAppEntries { .. }
+            | Self::WriteAppEntry { .. }
+            | Self::DeleteAppEntry { .. }
+            | Self::WatchAppEntries { .. } => Forwarding::Never,
         }
     }
 }

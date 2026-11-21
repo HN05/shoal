@@ -1,3 +1,4 @@
+use super::Forwarding;
 use crate::recovery::ReconcileOptions;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
@@ -39,4 +40,19 @@ pub enum RecoveryMethod {
         workspace: Option<SpaceSelector>,
         options: ReconcileOptions,
     },
+}
+
+impl RecoveryMethod {
+    /// Each reads or changes what the workspace keeps; a summary of every
+    /// space is a listing of the caller's machine.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::Checkpoint { .. }
+            | Self::Checkpoints { .. }
+            | Self::RestoreCheckpoint { .. }
+            | Self::Saved { .. }
+            | Self::Reconcile { .. } => Forwarding::Online,
+            Self::SavedSummaries => Forwarding::Never,
+        }
+    }
 }

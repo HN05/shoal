@@ -82,9 +82,8 @@ impl Hub {
 
 impl Hub {
     /// Answer `request`, which another machine forwarded, as this daemon
-    /// answers its own callers, refusing one that only the space's own
-    /// machine runs, since it needs files or processes the caller's has
-    /// not.
+    /// answers its own callers, refusing one that needs the caller's own
+    /// machine.
     pub async fn serve_forwarded(
         &self,
         daemon: &dyn Daemon,

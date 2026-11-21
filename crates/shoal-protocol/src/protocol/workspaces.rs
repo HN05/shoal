@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use shoal_refs::{BranchName, CommitId};
 
-use super::ConfigTarget;
 use super::Lifetime;
+use super::{ConfigTarget, Forwarding};
 use crate::config::hooks::HookKind;
 use crate::forge::numbers::PullNumber;
 use crate::space_names::SpaceSelector;
@@ -375,6 +375,61 @@ impl WorkspaceMethod {
             | Self::AttachSession { .. }
             | Self::Diff { .. } => Lifetime::Open,
             _ => Lifetime::Reply,
+        }
+    }
+}
+
+impl WorkspaceMethod {
+    /// A request about a space's state goes to its machine, a follow's or a
+    /// diff's answer coming as that machine writes it and an attachment's
+    /// connection carrying bytes both ways; a creation, a listing, a copy
+    /// written where the caller runs, and what the caller's execution,
+    /// terminal or setup reads stay with the caller.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::ReopenWorkspace { .. }
+            | Self::RenameBranch { .. }
+            | Self::ConvertToChat { .. }
+            | Self::RenameSpace { .. }
+            | Self::SpacePlaces { .. }
+            | Self::SetBaseWorkspace { .. }
+            | Self::InspectWorkspace { .. }
+            | Self::FastForwardWorkspace { .. }
+            | Self::RefreshWorkspace { .. }
+            | Self::LaunchPermissions { .. }
+            | Self::SpaceStatus { .. }
+            | Self::TrackedConfig { .. }
+            | Self::SpaceSessions { .. }
+            | Self::DiffBase { .. }
+            | Self::Conflicts { .. }
+            | Self::PreviewMerge { .. }
+            | Self::LayeredConfig { .. }
+            | Self::SpaceLog { .. } => Forwarding::Online,
+            Self::FollowSession { .. } | Self::Diff { .. } => Forwarding::Streamed,
+            Self::AttachSession { .. } => Forwarding::Duplex,
+            Self::OpenBranch { .. }
+            | Self::CreateWorkspace { .. }
+            | Self::CreateChild { .. }
+            | Self::CreateCommitWorkspace { .. }
+            | Self::OpenPullHead { .. }
+            | Self::AdoptWorkspace { .. }
+            | Self::UntrackedWorktrees
+            | Self::ListSpaces
+            | Self::FindSpaces { .. }
+            | Self::VerifyWorkspace { .. }
+            | Self::HeldPermissions { .. }
+            | Self::IssueScope { .. }
+            | Self::RevokeScope { .. }
+            | Self::SpaceEnvironment { .. }
+            | Self::CopySpace { .. }
+            | Self::KeepAgentEnvironment { .. }
+            | Self::RecordOwnedPlace { .. }
+            | Self::OwnedPlaces
+            | Self::CloseOwnedPlace { .. }
+            | Self::PlaceOwnership { .. }
+            | Self::CreatePendingWorktree { .. }
+            | Self::WorkspaceHook { .. }
+            | Self::WatchSpaceEvents { .. } => Forwarding::Never,
         }
     }
 }

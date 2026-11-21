@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use shoal_ids::execution_ids::ExecutionId;
 
-use super::{Lifetime, operations::StartedWorkspace};
+use super::{Forwarding, Lifetime, operations::StartedWorkspace};
 use crate::{
     agents::Delivery,
     launches::Launch,
@@ -154,6 +154,23 @@ impl From<StartedWorkspace> for Launched {
             warnings,
             start: Started::Preparing { operation, reused },
             machine: None,
+        }
+    }
+}
+
+impl LaunchMethod {
+    /// A start in an existing space, and what settles it, goes to that
+    /// space's machine; a creation, and the repository a start below
+    /// another machine's space takes, stay with the caller, and a session
+    /// another machine carries comes on a duplex stream, as commits do.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::Launch { .. }
+            | Self::CheckLaunch { .. }
+            | Self::LaunchModes { .. }
+            | Self::LabelledMode { .. } => Forwarding::Online,
+            Self::ReceiveSession { .. } => Forwarding::Duplex,
+            Self::CheckCreation { .. } | Self::TakeParentRepository { .. } => Forwarding::Never,
         }
     }
 }

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::operations::OperationKind;
+use super::{Forwarding, operations::OperationKind};
 use crate::space_names::SpaceName;
 use crate::state::WorkspaceState;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
@@ -117,6 +117,15 @@ impl Exited {
         match self.stopped_work && self.spaces.is_empty() {
             true => None,
             false => Some(self.spaces),
+        }
+    }
+}
+
+impl DaemonMethod {
+    /// Each is about the caller's machine's daemon.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::Status | Self::ReloadConfig => Forwarding::Never,
         }
     }
 }

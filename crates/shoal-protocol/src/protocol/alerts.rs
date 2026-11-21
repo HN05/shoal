@@ -1,7 +1,7 @@
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
-use super::Lifetime;
+use super::{Forwarding, Lifetime};
 
 /// Requests about alerts: one-way notices to the user or a space's agent.
 #[derive(Debug, Serialize, Deserialize)]
@@ -94,4 +94,22 @@ pub enum AlertTarget {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         repository: Option<crate::repository::Selector>,
     },
+}
+
+impl AlertMethod {
+    /// Where the request runs when its space is another machine's: a
+    /// message or a withdrawal goes to the recipient's machine, and a
+    /// message waits for it while it is offline; the user's alerts,
+    /// numbered records and the caller's own agent's turn are this
+    /// machine's own.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::SendAlert { .. } => Forwarding::Queued,
+            Self::ListAlerts { .. } | Self::WithdrawAlert { .. } => Forwarding::Online,
+            Self::AlertInChat { .. }
+            | Self::MarkAlertsRead { .. }
+            | Self::ClearAlerts
+            | Self::WatchAlerts { .. } => Forwarding::Never,
+        }
+    }
 }

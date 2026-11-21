@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use super::Forwarding;
 use crate::item_numbers::ItemNumber;
 use crate::space_names::SpaceSelector;
 
@@ -72,4 +73,23 @@ pub enum ApprovalMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         failure: Option<String>,
     },
+}
+
+impl ApprovalMethod {
+    /// Where the request runs when its space is another machine's: a
+    /// decision goes there, waiting for it while it is offline, and the
+    /// rest read or change the requests; an action's authorization and a
+    /// push's end are the caller's own.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::DecideApproval { .. } => Forwarding::Queued,
+            Self::ListApprovals { .. }
+            | Self::ShowApproval { .. }
+            | Self::EscalateApproval { .. }
+            | Self::WithdrawApproval { .. }
+            | Self::BranchPush { .. }
+            | Self::RequestPush { .. } => Forwarding::Online,
+            Self::AuthorizeAction { .. } | Self::FinishPush { .. } => Forwarding::Never,
+        }
+    }
 }

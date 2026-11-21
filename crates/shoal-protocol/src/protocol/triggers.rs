@@ -1,4 +1,4 @@
-use super::ItemContext;
+use super::{Forwarding, ItemContext};
 use crate::triggers::WebhookRequest;
 use serde::{Deserialize, Serialize};
 
@@ -26,4 +26,16 @@ pub enum TriggerMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request: Option<WebhookRequest>,
     },
+}
+
+impl TriggerMethod {
+    /// A trigger fires on the machine of the space whose repository it is
+    /// in.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::ListTriggers { .. } | Self::PauseTrigger { .. } | Self::RunTrigger { .. } => {
+                Forwarding::Online
+            }
+        }
+    }
 }

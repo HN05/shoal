@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::{CreationOptions, ErrorCode, Lifetime, PullHead};
+use super::{CreationOptions, ErrorCode, Forwarding, Lifetime, PullHead};
 use crate::space_names::SpaceSelector;
 use crate::{
     agent::ModelChoice,
@@ -688,6 +688,24 @@ impl Failure {
             Self::Refused { code, .. } => code.clone(),
             Self::Unconfirmed { .. } => ErrorCode::Unconfirmed,
             Self::Approval { .. } | Self::Failed { .. } => ErrorCode::OperationFailed,
+        }
+    }
+}
+
+impl OperationMethod {
+    /// A conversion goes to the chat's machine, and a move to that of its
+    /// spaces, as an operation the caller names with its space goes to that
+    /// space's, whose events come on a stream; the rest create spaces where
+    /// the caller runs or report the caller's own operations.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::ConvertToWorkspace { .. } | Self::CancelOperation { .. } => Forwarding::Online,
+            Self::StartMove { .. } | Self::FollowOperation { .. } => Forwarding::Streamed,
+            Self::StartOperation { .. }
+            | Self::StartWorkspace { .. }
+            | Self::StartCreation { .. }
+            | Self::StartChild { .. }
+            | Self::ReportProgress { .. } => Forwarding::Never,
         }
     }
 }

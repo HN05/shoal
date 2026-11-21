@@ -1,3 +1,4 @@
+use super::Forwarding;
 use serde::{Deserialize, Serialize};
 
 /// Requests about CI checks and workflow runs of the target repository: that
@@ -78,4 +79,21 @@ pub enum CiMethod {
         branch: Option<String>,
         inputs: std::collections::BTreeMap<String, String>,
     },
+}
+
+impl CiMethod {
+    /// Each asks the forge of the space's repository.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::CheckLog { .. }
+            | Self::CiAction { .. }
+            | Self::CiRunAction { .. }
+            | Self::ViewCiRun { .. }
+            | Self::CiRunJobs { .. }
+            | Self::CiRunJobLog { .. }
+            | Self::ListCiRuns { .. }
+            | Self::ApproveCiRuns { .. }
+            | Self::StartCiRun { .. } => Forwarding::Online,
+        }
+    }
 }

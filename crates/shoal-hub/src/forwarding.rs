@@ -4,8 +4,7 @@
 //! space's process, whose scope the owning machine checks, and reads the
 //! answer of one that goes on, as a follow's, from a stream as it comes,
 //! writing on it too what the caller sends the other way, as to a demo. A
-//! request that needs the space's files or processes is refused, naming the
-//! machine.
+//! request that needs the caller's machine is refused, naming the space's.
 use crate::log;
 use shoal_daemon_base::callers::Caller;
 use std::sync::Arc;
@@ -133,7 +132,7 @@ impl Hub {
             .filter(|_| request.forwarding != Forwarding::Never)
         else {
             let message = format!(
-                "space {space} runs on machine {}, and this command needs its files or processes; run it there",
+                "space {space} runs on machine {}, and this command acts only on the machine it runs on; run it there",
                 machine.name
             );
             return Err(Refusal::new(Reason::NotReady, message).into());

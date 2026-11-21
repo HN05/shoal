@@ -1,3 +1,4 @@
+use super::Forwarding;
 use crate::removal::UnsavedWork;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
@@ -176,4 +177,37 @@ pub enum RemovalMethod {
         resume: bool,
         from: String,
     },
+}
+
+impl RemovalMethod {
+    /// A stop goes to the space's machine, waiting for it while it is
+    /// offline, and a removal there too; an absorb needs both worktrees,
+    /// and a restore, a move's steps, an export and the caller's cleanup
+    /// run where the caller does.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::StopSpace { .. } => Forwarding::Queued,
+            Self::CheckStop { .. }
+            | Self::StopProcesses { .. }
+            | Self::CheckRemoval { .. }
+            | Self::RemoveSpace { .. }
+            | Self::StartRemoval { .. } => Forwarding::Online,
+            Self::ReceiveMove { .. } => Forwarding::Duplex,
+            Self::StopTargets
+            | Self::AbsorbSpace(_)
+            | Self::Cleanup { .. }
+            | Self::RemovedSpaces
+            | Self::RemovedSpace { .. }
+            | Self::RestoreSpace { .. }
+            | Self::DropRestoredSessions { .. }
+            | Self::ExportRemovedSpace { .. }
+            | Self::ExportMovingSpace { .. }
+            | Self::EndMovedSpace { .. }
+            | Self::AbandonMove { .. }
+            | Self::ImportPackage(_)
+            | Self::DeliverMove { .. }
+            | Self::DeliverCopy { .. }
+            | Self::SettleMove { .. } => Forwarding::Never,
+        }
+    }
 }

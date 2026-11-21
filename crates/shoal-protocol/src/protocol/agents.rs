@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::execution_ids::ExecutionId;
 
-use super::Lifetime;
+use super::{Forwarding, Lifetime};
 
 /// Requests between a workspace's agents and the daemon: their state, messages and updates.
 #[derive(Debug, Serialize, Deserialize)]
@@ -254,6 +254,43 @@ impl AgentMethod {
             // A restart waits for requests of the wrapper it restores.
             Self::RestartAgent { .. } => Lifetime::Open,
             _ => Lifetime::Reply,
+        }
+    }
+}
+
+impl AgentMethod {
+    /// Where the request runs when its space is another machine's: its
+    /// agent's hooks and wrapper report from the machine the agent runs on,
+    /// and the rest read or change Shoal's state.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::SetProgress { .. }
+            | Self::Progress { .. }
+            | Self::Sleep { .. }
+            | Self::SpaceAgents { .. }
+            | Self::InterruptTurn { .. }
+            | Self::RestartAgent { .. }
+            | Self::CancelRestart { .. } => Forwarding::Online,
+            // A fork starts from the session files where the caller runs.
+            Self::AgentSession { .. }
+            | Self::SetAgentState { .. }
+            | Self::StartWokenTurn { .. }
+            | Self::ReportTurnFailure { .. }
+            | Self::ReportSubagent { .. }
+            | Self::ReportSubagentRequest { .. }
+            | Self::ReportWakeEnd { .. }
+            | Self::ReportProxyRetry { .. }
+            | Self::ReportUpstreamReset { .. }
+            | Self::ReportUpstreamLimit { .. }
+            | Self::ReportInput { .. }
+            | Self::ReportTyping { .. }
+            | Self::ReportAttach { .. }
+            | Self::AwaitAgentWake { .. }
+            | Self::AgentUpdates { .. }
+            | Self::WaitAgentUpdates { .. }
+            | Self::UpdatesWaiting { .. }
+            | Self::GitCredential { .. }
+            | Self::AcknowledgePrUpdates { .. } => Forwarding::Never,
         }
     }
 }

@@ -197,9 +197,16 @@ fn a_restart_names_the_machine_of_the_space_and_fails_at_once_while_it_is_offlin
 }
 
 #[test]
-fn a_command_that_needs_the_space_s_files_names_its_machine() {
-    let (hub, _laptop, there) = laptop_space();
-    let output = hub.run(&["files", &there]);
+fn a_space_s_files_list_from_its_machine_and_attaching_one_from_here_names_it() {
+    let (hub, laptop, there) = laptop_space();
+    let note = laptop.root.path().join("note.md");
+    std::fs::write(&note, "kept on the laptop").unwrap();
+    let added = laptop.ok(&["files", "add", note.to_str().unwrap(), "--space", &there]);
+    assert_eq!(hub.ok(&["files", &there]), added);
+    // Attaching reads the file where the command runs.
+    let here = hub.root.path().join("here.md");
+    std::fs::write(&here, "kept on the hub").unwrap();
+    let output = hub.run(&["files", "add", here.to_str().unwrap(), "--space", &there]);
     assert!(!output.status.success(), "{}", printed(&output));
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(error.contains("laptop"), "{error}");

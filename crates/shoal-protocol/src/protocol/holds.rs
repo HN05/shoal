@@ -1,3 +1,4 @@
+use super::Forwarding;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
@@ -21,4 +22,15 @@ pub enum HoldMethod {
     HoldList {
         space: SpaceSelector,
     },
+}
+
+impl HoldMethod {
+    /// Each reads or changes the space's holds.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::HoldAcquire { .. } | Self::HoldRelease { .. } | Self::HoldList { .. } => {
+                Forwarding::Online
+            }
+        }
+    }
 }

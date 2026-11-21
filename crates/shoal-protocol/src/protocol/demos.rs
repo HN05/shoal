@@ -1,7 +1,7 @@
 use crate::{attaching::Terminal, space_names::SpaceSelector};
 use serde::{Deserialize, Serialize};
 
-use super::Lifetime;
+use super::{Forwarding, Lifetime};
 
 /// Requests about workspaces' running demos.
 #[derive(Debug, Serialize, Deserialize)]
@@ -39,6 +39,19 @@ impl DemoMethod {
         match self {
             Self::OpenDemoStream { .. } => Lifetime::Open,
             _ => Lifetime::Reply,
+        }
+    }
+}
+
+impl DemoMethod {
+    /// A demo runs on its workspace's machine, whose stream carries its
+    /// bytes both ways; a start's progress is that of a start the caller
+    /// made.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::ListDemos { .. } | Self::StopDemos { .. } => Forwarding::Online,
+            Self::OpenDemoStream { .. } => Forwarding::Duplex,
+            Self::DemoProgress { .. } => Forwarding::Never,
         }
     }
 }

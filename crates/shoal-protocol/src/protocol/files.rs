@@ -1,3 +1,4 @@
+use super::Forwarding;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
@@ -28,4 +29,15 @@ pub enum FileMethod {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         ids: Vec<i64>,
     },
+}
+
+impl FileMethod {
+    /// Attaching reads the files where the caller runs; the rest read or
+    /// delete the space's records.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::ListFiles { .. } | Self::RemoveFiles { .. } => Forwarding::Online,
+            Self::AddFiles { .. } => Forwarding::Never,
+        }
+    }
 }

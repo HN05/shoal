@@ -1,3 +1,4 @@
+use super::Forwarding;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 use shoal_ids::execution_ids::ExecutionId;
@@ -48,4 +49,18 @@ pub enum AssignmentMethod {
 pub struct SavedAgent {
     pub workspace: SpaceSelector,
     pub execution: ExecutionId,
+}
+
+impl AssignmentMethod {
+    /// Each changes the state of the space it names.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::MarkDone { .. }
+            | Self::UndoDone { .. }
+            | Self::MarkReady { .. }
+            | Self::ClearReady { .. }
+            | Self::DiscardStoppedAgent { .. }
+            | Self::ChangeStoppedPermissions { .. } => Forwarding::Online,
+        }
+    }
 }

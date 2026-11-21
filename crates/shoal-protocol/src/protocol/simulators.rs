@@ -1,3 +1,4 @@
+use super::Forwarding;
 use crate::sim::SimRequest;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
@@ -33,4 +34,18 @@ pub enum SimulatorMethod {
         limit: u32,
         before: Option<i64>,
     },
+}
+
+impl SimulatorMethod {
+    /// A simulator is a lease taken for the caller; what is leased,
+    /// configured and recorded is state.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::SimCatalog { .. }
+            | Self::SimOverview { .. }
+            | Self::SimList { .. }
+            | Self::SimHistory { .. } => Forwarding::Online,
+            Self::SimAcquire { .. } | Self::SimRelease { .. } => Forwarding::Never,
+        }
+    }
 }

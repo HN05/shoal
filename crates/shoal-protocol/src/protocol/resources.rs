@@ -1,3 +1,4 @@
+use super::Forwarding;
 use crate::resources::ResourceRequest;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
@@ -25,4 +26,15 @@ pub enum ResourceMethod {
     ResourceCatalog {
         workspace: SpaceSelector,
     },
+}
+
+impl ResourceMethod {
+    /// A permit is a lease taken for the caller; what is leased and
+    /// configured is state.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::ResourceOverview { .. } | Self::ResourceCatalog { .. } => Forwarding::Online,
+            Self::ResourceAcquire { .. } | Self::ResourceRelease { .. } => Forwarding::Never,
+        }
+    }
 }

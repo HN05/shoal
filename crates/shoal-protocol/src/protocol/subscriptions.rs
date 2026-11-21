@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::Lifetime;
+use super::{Forwarding, Lifetime};
 use crate::subscriptions::records::Topic;
 
 /// Requests that follow records as they change.
@@ -24,6 +24,15 @@ impl SubscriptionMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::Subscribe { .. } => Lifetime::Open,
+        }
+    }
+}
+
+impl SubscriptionMethod {
+    /// Events are the caller's machine's.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::Subscribe { .. } => Forwarding::Never,
         }
     }
 }

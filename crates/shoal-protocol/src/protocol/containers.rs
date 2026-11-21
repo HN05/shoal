@@ -1,3 +1,4 @@
+use super::Forwarding;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
@@ -31,4 +32,19 @@ pub enum ContainerMethod {
     ContainerAgentStart {
         workspace: SpaceSelector,
     },
+}
+
+impl ContainerMethod {
+    /// Containers are a lease taken for the caller, and their setup the
+    /// workspace's own; what the repository configures and what runs are
+    /// state.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::ContainerCatalog { .. } | Self::ContainerOverview { .. } => Forwarding::Online,
+            Self::ContainerAcquire { .. }
+            | Self::ContainerRelease { .. }
+            | Self::ContainerSetUp { .. }
+            | Self::ContainerAgentStart { .. } => Forwarding::Never,
+        }
+    }
 }

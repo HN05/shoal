@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use shoal_ids::repository_ids::RepositoryId;
 
-use super::Lifetime;
+use super::{Forwarding, Lifetime};
 
 /// Requests about registered repositories, their configuration and their branches.
 #[derive(Debug, Serialize, Deserialize)]
@@ -111,6 +111,35 @@ impl RepositoryMethod {
             // It takes the bundle the caller writes.
             Self::ReceiveCommits { .. } => Lifetime::Open,
             _ => Lifetime::Reply,
+        }
+    }
+}
+
+impl RepositoryMethod {
+    /// Each is about the caller's machine's registrations, except commits
+    /// another machine carries, which the hub sends to the machine that
+    /// takes them.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::ReceiveCommits { .. } => Forwarding::Duplex,
+            Self::ListRepositories
+            | Self::RegisterRepository { .. }
+            | Self::RegisterContribution { .. }
+            | Self::HoldContribution { .. }
+            | Self::RenameRepository { .. }
+            | Self::LocalConfigPath { .. }
+            | Self::EditLocalConfig { .. }
+            | Self::RemoveRepository { .. }
+            | Self::PlanRepositoryMoves { .. }
+            | Self::MoveRepositories { .. }
+            | Self::SyncRepository { .. }
+            | Self::FailingSyncs
+            | Self::ListBranches { .. }
+            | Self::KeptBranches { .. }
+            | Self::DeleteKeptBranches { .. }
+            | Self::AgentEnvironments { .. }
+            | Self::ForgetAgentEnvironments { .. }
+            | Self::KeepRepositoryAgentEnvironment { .. } => Forwarding::Never,
         }
     }
 }

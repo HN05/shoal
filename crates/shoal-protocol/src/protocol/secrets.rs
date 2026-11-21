@@ -1,3 +1,4 @@
+use super::Forwarding;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
@@ -23,4 +24,15 @@ pub enum SecretMethod {
     SecretCatalog {
         workspace: SpaceSelector,
     },
+}
+
+impl SecretMethod {
+    /// A secret's grant is a lease taken for the caller; what is
+    /// configured is state.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::SecretCatalog { .. } => Forwarding::Online,
+            Self::SecretAcquire { .. } | Self::SecretRelease { .. } => Forwarding::Never,
+        }
+    }
 }

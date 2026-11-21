@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::queue_entry_ids::QueueEntryId;
 
-use super::Lifetime;
+use super::{Forwarding, Lifetime};
 
 /// Requests about the agent queue under `max_heavy_agents`.
 #[derive(Debug, Serialize, Deserialize)]
@@ -129,6 +129,29 @@ impl QueueMethod {
         match self {
             Self::QueueHold { .. } => Lifetime::Resumed,
             _ => Lifetime::Reply,
+        }
+    }
+}
+
+impl QueueMethod {
+    /// A space's priority and a stopped agent's restore change its state;
+    /// an entry, named by an ID only its machine knows, and a start the
+    /// caller makes are the caller's machine's.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::SetPriority { .. } | Self::QueueRestore { .. } => Forwarding::Online,
+            Self::QueueAgent { .. }
+            | Self::ListQueue
+            | Self::QueuedPlan { .. }
+            | Self::OpenStart { .. }
+            | Self::QueueRemove { .. }
+            | Self::QueueStart { .. }
+            | Self::QueueClaim { .. }
+            | Self::StartedLaunch { .. }
+            | Self::QueueHold { .. }
+            | Self::QueueAttach { .. }
+            | Self::QueueFail { .. }
+            | Self::QueueRetry { .. } => Forwarding::Never,
         }
     }
 }

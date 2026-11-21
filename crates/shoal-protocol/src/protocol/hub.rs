@@ -2,6 +2,7 @@
 //! machine's daemon passes to it over its link.
 use serde::{Deserialize, Serialize};
 
+use super::Forwarding;
 use crate::hub::pairing::PairingCode;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -44,4 +45,19 @@ pub enum JoinVia {
     /// A command whose standard input and output relay the hub daemon's
     /// socket.
     Command(Vec<String>),
+}
+
+impl HubMethod {
+    /// Each is about the caller's machine's membership.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::PairHub
+            | Self::JoinHub { .. }
+            | Self::LeaveHub
+            | Self::HubMembers
+            | Self::UpdateHub
+            | Self::RevokeHubMember { .. }
+            | Self::HubDirectory => Forwarding::Never,
+        }
+    }
 }

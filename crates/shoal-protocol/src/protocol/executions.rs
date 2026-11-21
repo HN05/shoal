@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::Lifetime;
+use super::{Forwarding, Lifetime};
 use crate::space_names::SpaceSelector;
 use crate::{executions::ExecutionKind, processes::Identity};
 
@@ -99,6 +99,19 @@ impl ExecutionMethod {
             | Self::CheckUnmerge
             | Self::ListAgents
             | Self::SessionSignalled { .. } => Lifetime::Reply,
+        }
+    }
+}
+
+impl ExecutionMethod {
+    /// Each is the caller's own execution.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::Execute { .. }
+            | Self::CheckMerge
+            | Self::CheckUnmerge
+            | Self::ListAgents
+            | Self::SessionSignalled { .. } => Forwarding::Never,
         }
     }
 }

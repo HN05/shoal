@@ -1,3 +1,4 @@
+use super::Forwarding;
 use serde::{Deserialize, Serialize};
 use shoal_refs::BranchName;
 
@@ -27,4 +28,13 @@ pub enum BranchMethod {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         force: bool,
     },
+}
+
+impl BranchMethod {
+    /// Each asks the forge of the space's repository.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::ListForgeBranches { .. } | Self::DeleteForgeBranches { .. } => Forwarding::Online,
+        }
+    }
 }
