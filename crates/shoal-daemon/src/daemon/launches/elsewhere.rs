@@ -52,13 +52,18 @@ impl Manager {
 
     /// Turn the copy `launch` asks for `caller` into what another machine
     /// starts it from: a new branch, the one it names or else one named
-    /// after the copied workspace's, at that workspace's HEAD as its base, with a
-    /// commit that keeps the files the copy starts with, which go there
-    /// with the base's history.
+    /// after the copied workspace's, at that workspace's HEAD as its base,
+    /// with a commit that keeps the files the copy starts with, which go
+    /// there with the base's history. A scoped caller copies only what it
+    /// copies here.
     async fn copy_as_carried(&self, launch: &mut Launch, caller: Option<&Caller>) -> Result<()> {
-        let Some(copied) = self.launch_copy(launch, caller).await? else {
+        let Some(mut copied) = self.launch_copy(launch, caller).await? else {
             return Ok(());
         };
+        if let Some(caller) = caller {
+            self.copy_within(caller, &mut copied.creation.source)
+                .await?;
+        }
         let (head, files) = self.copy_snapshot(&copied.creation.source).await?;
         (launch.copy, launch.checkpoint) = (None, None);
         launch.repository = Some(copied.repository.to_string());

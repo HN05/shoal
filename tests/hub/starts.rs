@@ -291,6 +291,26 @@ fn a_start_on_another_machine_copies_a_workspace_s_unsaved_files_there() {
 }
 
 #[test]
+fn a_space_copies_to_another_machine_only_what_it_copies_here() {
+    let machines = machines();
+    let token = scope_of(&machines.hub, &machines.coordinator);
+    let mut create = machines.hub.command();
+    create.env("SHOAL_SCOPE_TOKEN", &token);
+    let created = machines
+        .hub
+        .output(create.args(["create", "--branch", "kid", "--json"]));
+    assert!(created.status.success(), "{}", printed(&created));
+    let kid = machines.hub.id("kid");
+    machines.hub.ok(&["rm", &kid, "--yes", "--wait"]);
+    // A space's process copies no removed workspace here, nor there.
+    let started = start_in_coordinator(&machines, &["--copy", &kid, "--checkpoint", "1"]);
+    assert!(!started.status.success(), "{}", printed(&started));
+    let listed = machines.laptop.ok(&["list"]);
+    let there = (listed.as_array().unwrap().iter()).any(|space| space["machine"].is_null());
+    assert!(!there, "{listed}");
+}
+
+#[test]
 fn a_space_starts_a_child_chat_on_another_machine() {
     let machines = machines();
     let repo = machines.hub.repo.to_str().unwrap().to_owned();
