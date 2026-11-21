@@ -37,6 +37,16 @@ pub enum Start {
 }
 
 impl Links {
+    /// The URLs of the `observations` whose assignees Shoal is changing
+    /// on its own.
+    pub fn assignees_changing(&self, observations: &[(String, Snapshot)]) -> Vec<String> {
+        (observations.iter())
+            .map(|(url, _)| url)
+            .filter(|url| self.gates.issue_assignees_changing(url))
+            .cloned()
+            .collect()
+    }
+
     /// Start the watches of `items`, which the space `id` just linked, from
     /// a read of each, unless one already read its item, for a caller
     /// holding the space's PR gate. An item the forge does not read in full
@@ -86,7 +96,7 @@ impl Links {
     async fn read_followed(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<StartRead> {
         let owned = id.to_owned();
         let items = (self.store)
-            .run(move |db| followed_items(db, &owned, None))
+            .read(move |db| followed_items(db, &owned, None))
             .await?;
         Ok(self.read_for_start(daemon, items).await)
     }

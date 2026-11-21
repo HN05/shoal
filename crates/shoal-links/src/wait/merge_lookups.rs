@@ -84,16 +84,6 @@ pub struct MergeLookup {
 }
 
 impl Links {
-    /// The URLs of the `observations` whose assignees Shoal is changing
-    /// on its own.
-    pub fn assignees_changing(&self, observations: &[(String, Snapshot)]) -> Vec<String> {
-        (observations.iter())
-            .map(|(url, _)| url)
-            .filter(|url| self.gates.issue_assignees_changing(url))
-            .cloned()
-            .collect()
-    }
-
     /// Where the merges among `observations` of the space `id`'s items are
     /// followed, when one shows a PR merged and its repository follows
     /// merge runs. A failure to tell fails the recording of the
