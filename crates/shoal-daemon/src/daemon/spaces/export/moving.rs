@@ -78,10 +78,7 @@ impl Manager {
             | MoveDestination::Client { .. }
             | MoveDestination::Held => MovePhase::Delivering,
         };
-        let advanced = record.clone();
-        (self.store)
-            .write(move |tx| records::advance(tx, &advanced))
-            .await?;
+        self.advance_move(&record).await?;
         if *destination == MoveDestination::Held {
             self.hold_for_reader(&record.space).await?;
         }
@@ -100,10 +97,7 @@ impl Manager {
         let space = self.space(selector).await?;
         let mut record = self.recorded_move(&space.id).await?;
         record.phase = MovePhase::Delivered;
-        let delivered = record.clone();
-        (self.store)
-            .write(move |tx| records::advance(tx, &delivered))
-            .await?;
+        self.advance_move(&record).await?;
         let ended = self.end_delivered(&space, &record).await;
         self.forget_move(&record).await;
         ended
