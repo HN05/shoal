@@ -2,8 +2,10 @@
 //! update restores it: a heavy agent once it has waited for the user as
 //! long as their engagement with it says, one that makes room for queued
 //! work, and any whose space is blocked, once its turn ends, so that its
-//! restore waits until nothing blocks the space. Stopping and restoring an
-//! agent costs no more prompt cache than keeping it running would save.
+//! restore waits until nothing blocks the space. An agent whose turn retry
+//! waits sleeps for the limit or failure it waits out, which its retry's
+//! message ends. Stopping and restoring an agent costs no more prompt cache
+//! than keeping it running would save.
 use crate::daemon::agents::ProtectionExt;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
@@ -48,8 +50,8 @@ impl Chosen {
 impl Manager {
     /// Put to sleep, at `now`, each idle agent whose space is blocked; each
     /// heavy one whose wait for the user has passed; and those that make
-    /// room for queued work. A failure in one space does not skip the
-    /// others.
+    /// room for queued work, each for its pending turn retry where it has
+    /// one. A failure in one space does not skip the others.
     pub async fn stop_idle_agents(&self, now: UnixTime) -> Result<()> {
         // The process scan that tells agents with work in flight waits until
         // some agent would stop.
@@ -70,6 +72,8 @@ impl Manager {
             Ok(room) => chosen.extend(room),
             Err(error) => crate::daemon::log!("no room made for queued work: {error:#}"),
         }
+        self.sleep_for_waiting_retries(&candidates, &mut chosen)
+            .await;
         if !chosen.is_empty() {
             let turns = self.agent_turns().await?;
             self.stop_idle(turns, chosen).await;
@@ -121,6 +125,33 @@ impl Manager {
             turn: candidate.turn,
             interacted_at: candidate.interacted_at,
         }))
+    }
+
+    /// Have each of the `chosen` agents whose turn retry waits sleep for
+    /// the limit or failure the retry waits out, so its stop names it and
+    /// what wakes it, unless its space is blocked, whose clearing restores
+    /// it. A retry that cannot be read leaves the stop as it was.
+    async fn sleep_for_waiting_retries(
+        &self,
+        candidates: &[Candidate],
+        chosen: &mut HashMap<ExecutionId, Chosen>,
+    ) {
+        for candidate in candidates {
+            let Some(stop) = chosen.get_mut(&candidate.execution) else {
+                continue;
+            };
+            if stop.protection.is_blocked() {
+                continue;
+            }
+            match self.waiting_turn_retry(&candidate.workspace_id).await {
+                Ok(Some(failure)) => stop.protection = Protection::retrying(failure),
+                Ok(None) => {}
+                Err(error) => {
+                    let space = &candidate.workspace;
+                    crate::daemon::log!("turn retry of {space} unread for its stop: {error:#}");
+                }
+            }
+        }
     }
 
     /// Stop the `chosen` agents that are still idle in the turn they were

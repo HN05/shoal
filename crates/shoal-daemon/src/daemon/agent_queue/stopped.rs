@@ -330,13 +330,14 @@ fn resolved_restores(
 
 /// Why the agent whose stop saved `record` is asleep and what wakes it, for
 /// a restore Shoal queues on its own: once nothing blocks its space for an
-/// agent stopped because it was blocked, else once an update arrives for
-/// one stopped between turns, else once the queue starts it.
+/// agent stopped because it was blocked, else, for one stopped between
+/// turns, once what its reason waits for comes, else once the queue starts
+/// it.
 fn asleep(record: &recovery::Record) -> Asleep {
     let reason = record.stop_reason.as_deref();
-    let wakes_when = match reason == Some(agents::BLOCKED_REASON) {
-        true => agents::WAKES_UNBLOCKED,
-        false if record.between_turns() => agents::WAKES_ON_UPDATE,
+    let between_turns = record.between_turns() || reason == Some(agents::BLOCKED_REASON);
+    let wakes_when = match between_turns {
+        true => agents::wakes_between_turns(reason.unwrap_or_default()),
         false => WAKES_IN_QUEUE,
     };
     Asleep {

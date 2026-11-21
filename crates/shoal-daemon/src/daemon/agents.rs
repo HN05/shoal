@@ -29,7 +29,7 @@ use crate::{
     agent::ModelChoice,
     daemon::notifications::AlertKind,
     protocol::timing,
-    state::{AgentState, WorkspaceState},
+    state::{AgentState, TurnFailure, WorkspaceState},
 };
 
 mod forks;
@@ -71,8 +71,12 @@ pub(crate) trait ProtectionExt {
     /// waits until nothing blocks the space.
     fn blocked() -> Self;
 
-    /// Whether Shoal stopped the agent between turns, idle or blocked, not
-    /// for load.
+    /// An idle agent whose turn retry waits for `failure` to pass, which
+    /// Shoal puts to sleep until the retry's message restores it.
+    fn retrying(failure: TurnFailure) -> Self;
+
+    /// Whether Shoal stopped the agent between turns, idle, blocked or
+    /// waiting to retry its turn, not for load.
     fn is_idle(&self) -> bool;
 
     /// Whether Shoal stopped the agent for its blocked space.
@@ -130,8 +134,26 @@ impl ProtectionExt for Protection {
         }
     }
 
+    fn retrying(failure: TurnFailure) -> Self {
+        let reason = match failure {
+            TurnFailure::RateLimited => LIMITED_REASON,
+            _ => FAILED_TURN_REASON,
+        };
+        Self {
+            reason: reason.into(),
+            resumes_when: wakes_between_turns(reason).into(),
+        }
+    }
+
     fn is_idle(&self) -> bool {
-        [AWAY_REASON, ROOM_REASON, BLOCKED_REASON].contains(&self.reason.as_str())
+        [
+            AWAY_REASON,
+            ROOM_REASON,
+            BLOCKED_REASON,
+            LIMITED_REASON,
+            FAILED_TURN_REASON,
+        ]
+        .contains(&self.reason.as_str())
     }
 
     fn is_blocked(&self) -> bool {
@@ -160,12 +182,36 @@ const ROOM_REASON: &str = "making room for queued work";
 /// which its recovery record keeps.
 pub(crate) const BLOCKED_REASON: &str = "its space is blocked";
 
+/// The stop reason of an idle agent whose turn a rate or usage limit
+/// ended, which waits for its turn retry.
+const LIMITED_REASON: &str = "its rate or usage limit is reached";
+
+/// The stop reason of an idle agent whose turn another API error ended,
+/// which waits for its turn retry.
+const FAILED_TURN_REASON: &str = "its last turn failed with an API error";
+
 /// What wakes an agent stopped between turns, which has nothing to do until
 /// then.
 pub(crate) const WAKES_ON_UPDATE: &str = "an update arrives for it";
 
 /// What wakes an agent stopped because its space is blocked.
 pub(crate) const WAKES_UNBLOCKED: &str = "nothing blocks its space";
+
+/// What wakes an agent stopped while a rate or usage limit stands.
+const WAKES_LIMIT_RESET: &str = "the limit resets and Shoal retries its turn";
+
+/// What wakes an agent stopped while its failed turn waits for a retry.
+const WAKES_TURN_RETRY: &str = "Shoal retries its turn";
+
+/// What wakes an agent Shoal stopped between turns for `reason`.
+pub(crate) fn wakes_between_turns(reason: &str) -> &'static str {
+    match reason {
+        BLOCKED_REASON => WAKES_UNBLOCKED,
+        LIMITED_REASON => WAKES_LIMIT_RESET,
+        FAILED_TURN_REASON => WAKES_TURN_RETRY,
+        _ => WAKES_ON_UPDATE,
+    }
+}
 
 /// The agent a request comes from.
 pub(crate) struct CallerAgent {
@@ -1248,13 +1294,13 @@ pub struct StoppedAgent {
 }
 
 /// The `protection` an agent stopped in `turn` restores after: one stopped
-/// between turns has nothing to do until an update arrives for it, unless
-/// it stopped because its space is blocked.
+/// between turns waits for what [`wakes_between_turns`] names for its
+/// reason, having nothing to do until then.
 fn restored_after(protection: &Protection, turn: Option<AgentState>) -> Protection {
     match turn {
-        Some(AgentState::Idle) if !protection.is_blocked() => Protection {
+        Some(AgentState::Idle) => Protection {
             reason: protection.reason.clone(),
-            resumes_when: WAKES_ON_UPDATE.into(),
+            resumes_when: wakes_between_turns(&protection.reason).into(),
         },
         _ => protection.clone(),
     }

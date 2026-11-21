@@ -8,6 +8,7 @@ use anyhow::Context;
 use super::*;
 use crate::{
     daemon::{
+        agents::{Protection, ProtectionExt},
         notifications::AlertKind,
         test_support::{global_config, manager, repository},
         workspace_files::Attacher,
@@ -795,8 +796,8 @@ async fn end_execution(manager: &Manager, id: &ExecutionId) {
 }
 
 /// An agent put to sleep while its turn retry waits for a usage limit's
-/// reset is restored to continue once the reset passes, its retry kept
-/// through the end of its execution.
+/// reset sleeps for the limit and is restored to continue once the reset
+/// passes, its retry kept through the end of its execution.
 #[tokio::test]
 async fn an_agent_asleep_while_its_usage_limit_stands_is_restored_once_it_resets() {
     let (_temp, manager, workspace, execution, connection) = agent(DISK_OFF).await;
@@ -815,6 +816,17 @@ async fn an_agent_asleep_while_its_usage_limit_stands_is_restored_once_it_resets
     manager.stop_idle_agents(now() + secs(60)).await.unwrap();
     assert!(*connection.borrow(), "the idle agent sleeps");
     manager.queue_agent_restore(&execution).await.unwrap();
+    let id = workspace.id.clone();
+    let asleep = (manager.store)
+        .read(move |tx| crate::daemon::agent_queue::asleep::current(tx, &id))
+        .await
+        .unwrap()
+        .unwrap();
+    let limited = Protection::retrying(TurnFailure::RateLimited);
+    assert_eq!(
+        (asleep.reason, asleep.wakes_when),
+        (limited.reason, limited.resumes_when)
+    );
     end_execution(&manager, &execution).await;
     let idle = manager.idle_restores(&workspace.id).await.unwrap();
     assert!(idle.is_empty(), "its retry keeps the workspace: {idle:?}");
