@@ -1084,8 +1084,31 @@ first machine's space ends, the copy takes its place. An import, as of
 `shoal move`, claims the ID first, so the machine it moves to takes the ID over
 and the one it moves from keeps a copy without a conflict until it ends the
 space there. `shoal restore` of a space another machine runs is refused, naming
-`shoal move` and a copy; while the hub cannot be asked, the restore goes on,
-and a duplicate shows as a conflict once both machines report it. A revoked
+`shoal move` and a copy, while that machine is connected or the hub keeps no
+package of the space; while the hub cannot be asked, the restore goes on,
+and a duplicate shows as a conflict once both machines report it.
+
+`shoal restore <space>` of a space whose `intermittent` machine is offline,
+by its number or ID, takes the space over from the package the hub keeps of
+it: it fetches the package and imports it under the space's ID as
+`shoal restore --from` does, so its claim makes the space this machine's,
+and queues its agents' restores, which continue their sessions. It warns
+when the machine had changes the package lacks, naming how old the oldest
+is. When that machine's link opens again, the hub names the spaces taken
+over meanwhile, and the machine stops their agents and removes each through
+the removal path, keeping a checkpoint, its agents' sessions in its removal
+record and its branch, and leaving the spaces below it, whose parent now
+runs on the other machine. A copy that changed after the hub's package also
+raises a `space_diverged` alert naming the removed space's ID and
+`shoal start --copy <id>`, which opens that work as a copy.
+
+The hub never takes a space over on its own: a machine that is awake but
+lost only the hub keeps working. Once an `intermittent` machine has been
+unreachable for 30 minutes, the hub records one `machine_unreachable` alert
+for that drop, naming its spaces that had something to do (an agent working
+when its link dropped, a queued agent, or an event the hub holds for one
+since), how far behind the hub's package of each is, and the
+`shoal restore` that takes it over. A revoked
 machine's spaces leave the hub's lists.
 
 A command for a space another machine of the hub owns works from any of

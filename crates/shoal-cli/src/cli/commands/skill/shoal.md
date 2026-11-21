@@ -730,6 +730,9 @@ Shoal also takes one when an agent exits or is stopped. `restore <id>`
 reopens a removed workspace or chat and resumes its agents, below the space it
 was below, and `--no-resume` leaves them for `shoal resume`; a space that is
 not removed is refused. An agent restores one whose parent its scope reaches.
+`restore <space>` of a space whose `intermittent` machine is offline takes it
+over here under its ID from the package the hub keeps of it, warning of the
+changes the package lacks; that machine removes its copy once it returns.
 `restore --from` opens the spaces `shoal move` wrote to a file. `cleanup`, `move`, except to a
 joined machine but a `--keep` copy of your own space there, and `restore --from` are as the space's `admin` permission allows; `restore --checkpoint` lists a workspace's checkpoints,
 and with a number returns to one after keeping the current state in a new

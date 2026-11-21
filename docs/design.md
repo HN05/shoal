@@ -192,7 +192,15 @@ that reported it: another machine's copy is left out, routed nothing, and
 alerts the user, and takes the ID once the first's space ends, while an
 import claims the ID, so a move hands it over without a conflict; a restore
 asks the hub first and refuses a space another
-machine runs, going on while the hub cannot be asked. Space numbers form
+machine runs, going on while the hub cannot be asked, unless that machine
+is offline and the hub keeps a package of the space: the restore then takes
+the space over, importing the package under the space's ID, whose claim
+makes the space its machine's, and the machine it was taken from retires its
+copy through the removal path once its link opens, alerting the user when
+its copy changed after the package. Silence alone never starts a second
+copy: a machine that lost only the hub keeps working, so the hub only
+alerts the user once an intermittent machine has been unreachable for 30
+minutes while its spaces had something to do. Space numbers form
 one sequence across the hub's machines, which the hub holds: it answers
 each report with a few spares it keeps for that machine, which numbers a
 new space from them without waiting for the hub, and once none is left, as
