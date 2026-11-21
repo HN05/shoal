@@ -345,7 +345,11 @@ space without an agent goes as messages its machine's background poll
 sends while the hub lists an agent above, each fitting a share of the
 coordinator's unread messages, and stays on the space's cursor until the
 hub takes it, and approval requests
-take deciders on the machines above after the local ones. The hub holds
+take deciders on the machines above after the local ones. What reaches a
+space on another machine, an alert, a thread's post or a request's
+message, carries the text its agent would read here, which the sending
+machine builds, and a thread names such a space by the number and name
+the hub listed when the thread named it. The hub holds
 what can wait for an offline machine, messages, answers, decisions, stops,
 events and the removal someone asked for of a space below one they remove,
 which keeps that space until it goes, in order until it connects, for seven days, after which the
