@@ -1,7 +1,7 @@
 //! What `shoal send --in-chat` tells the agent it marked: where its turn's
 //! final message goes once the turn ends, and the mark it replaced.
 use anyhow::Result;
-use shoal_protocol::chat_marks::{ChatMark, ChatMarked, MarkedRecipients};
+use shoal_protocol::chat_marks::{ChatMark, ChatMarked};
 
 use crate::cli::context::Context;
 
@@ -13,7 +13,7 @@ pub(in crate::cli) fn show(ctx: &Context, marked: &ChatMarked) -> Result<i32> {
         ),
         ChatMark::Alert { to } => format!(
             "Write your alert as your final message and end your turn; it goes to {} once the turn ends.",
-            recipients(to)
+            to.describe()
         ),
     };
     match &marked.replaced {
@@ -21,25 +21,10 @@ pub(in crate::cli) fn show(ctx: &Context, marked: &ChatMarked) -> Result<i32> {
             message.push_str(&format!(" This replaces your post for thread {thread}."))
         }
         Some(ChatMark::Alert { to }) => {
-            message.push_str(&format!(" This replaces your alert to {}.", recipients(to)))
+            message.push_str(&format!(" This replaces your alert to {}.", to.describe()))
         }
         None => {}
     }
     ctx.emit(&message, marked)?;
     Ok(0)
-}
-
-/// Whom `to` names, as text that follows "to".
-fn recipients(to: &MarkedRecipients) -> String {
-    match to {
-        MarkedRecipients::User => "the user".into(),
-        MarkedRecipients::Coordinator { space } | MarkedRecipients::Space { space } => {
-            format!("the agent of {}", space.label())
-        }
-        MarkedRecipients::Above => "the coordinating agent on another machine".into(),
-        MarkedRecipients::All { repository: None } => "every agent your scope reaches".into(),
-        MarkedRecipients::All {
-            repository: Some(repository),
-        } => format!("every agent of {repository} your scope reaches"),
-    }
 }

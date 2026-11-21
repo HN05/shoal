@@ -1,7 +1,7 @@
 //! Telling an agent that its turn's final message went unsent, though the
 //! command that marked the turn said it would go: the user's prompt
 //! answered the turn, or sending it failed when the turn ended.
-use shoal_protocol::chat_marks::{ChatMark, MarkedRecipients};
+use shoal_protocol::chat_marks::ChatMark;
 
 use crate::{
     daemon::{agent_messages::Delivery, alerts::AlertKind, manager::Manager},
@@ -12,17 +12,7 @@ use crate::{
 fn destination(mark: &ChatMark) -> String {
     match mark {
         ChatMark::Post { thread } => format!("a post in thread {thread}"),
-        ChatMark::Alert { to } => {
-            let to = match to {
-                MarkedRecipients::User => "the user".to_owned(),
-                MarkedRecipients::Coordinator { space } | MarkedRecipients::Space { space } => {
-                    format!("the agent of {}", space.label())
-                }
-                MarkedRecipients::Above => "your coordinator".to_owned(),
-                MarkedRecipients::All { .. } => "the agents below".to_owned(),
-            };
-            format!("an alert to {to}")
-        }
+        ChatMark::Alert { to } => format!("an alert to {}", to.describe()),
     }
 }
 

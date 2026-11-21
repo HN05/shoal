@@ -36,6 +36,23 @@ pub enum MarkedRecipients {
     },
 }
 
+impl MarkedRecipients {
+    /// Whom they are, as text that follows "to".
+    pub fn describe(&self) -> String {
+        match self {
+            Self::User => "the user".into(),
+            Self::Coordinator { space } | Self::Space { space } => {
+                format!("the agent of {}", space.label())
+            }
+            Self::Above => "the coordinating agent on another machine".into(),
+            Self::All { repository: None } => "every agent your scope reaches".into(),
+            Self::All {
+                repository: Some(repository),
+            } => format!("every agent of {repository} your scope reaches"),
+        }
+    }
+}
+
 /// A turn's new mark, with the one it replaced in the same turn.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChatMarked {

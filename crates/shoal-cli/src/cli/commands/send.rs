@@ -8,7 +8,7 @@
 //! is the text, sent once the turn ends.
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::cli::args::threads::PostArgs;
 use crate::{
@@ -131,6 +131,12 @@ pub(super) async fn send_in_chat(
     attach: Vec<String>,
 ) -> Result<i32> {
     super::alerts::refuse_workspace_processes(ctx)?;
+    // Only an agent's turn has a final message, so the user's terminal is
+    // refused before it picks a recipient.
+    ensure!(
+        crate::env::is_scoped(),
+        "only an agent Shoal runs sends its turn's final message; give the text to shoal send instead"
+    );
     let attachments = attachments(&attach)?;
     shoal_protocol::files::check_sent(&attachments)?;
     let to = target(ctx, recipients).await?;
