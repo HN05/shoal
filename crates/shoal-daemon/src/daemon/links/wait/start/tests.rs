@@ -180,7 +180,8 @@ async fn a_poll_that_began_before_a_restart_is_dropped_when_it_finishes() {
     let all = Selection::default();
     let early = manager.links.poll_start();
     let stale = manager
-        .item_activity(vec![issue.clone()], &all)
+        .links
+        .item_activity(&*manager, vec![issue.clone()], &all)
         .await
         .unwrap();
     comments.store(2, Ordering::SeqCst);
@@ -321,7 +322,10 @@ async fn poll(
     observed_at: UnixTime,
 ) -> Vec<crate::forge::updates::Update> {
     let all = Selection::default();
-    let read = manager.item_activity(vec![issue.clone()], &all).await;
+    let read = manager
+        .links
+        .item_activity(manager, vec![issue.clone()], &all)
+        .await;
     let report = BranchReport::Conflicts;
     let start = manager.links.poll_start_at(observed_at);
     let recorded = manager.record_observed(id, read.unwrap(), &all, report, start);

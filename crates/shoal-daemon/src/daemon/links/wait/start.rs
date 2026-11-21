@@ -85,7 +85,7 @@ impl Manager {
     /// in full.
     async fn read_for_start(&self, items: Vec<ItemRef>) -> StartRead {
         let start = self.links.poll_start();
-        let reads = self.complete_reads(items).await;
+        let reads = self.links.complete_reads(self, items).await;
         StartRead { start, reads }
     }
 

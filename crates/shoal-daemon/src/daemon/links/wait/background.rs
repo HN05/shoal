@@ -45,7 +45,7 @@ impl Manager {
                 continue;
             };
             // The limit is the forge's, not the space's; a later poll retries.
-            if self.notify_rate_limit(&error).await {
+            if self.links.notify_rate_limit(&error).await {
                 continue;
             }
             failure.get_or_insert_with(|| {
@@ -87,7 +87,10 @@ impl Manager {
         let report = branch_report(&items);
         let items = self.items_to_look_up(space, items).await?;
         let items = [items, opened].concat();
-        let activity = self.item_activity(items, &Selection::default()).await;
+        let activity = self
+            .links
+            .item_activity(self, items, &Selection::default())
+            .await;
         let mut observations = Vec::new();
         observations.extend(self.background_branch_observation(space, report).await);
         // A failed item lookup must not hold back the branch's changes.

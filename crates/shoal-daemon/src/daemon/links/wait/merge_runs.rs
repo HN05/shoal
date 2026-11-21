@@ -199,7 +199,10 @@ impl Manager {
         if prs.is_empty() {
             return Ok(false);
         }
-        let reads = self.item_activity(prs, &Selection::default()).await?;
+        let reads = self
+            .links
+            .item_activity(self, prs, &Selection::default())
+            .await?;
         let merged = |read: &Snapshot| read.state() == Some(SnapshotState::Merged);
         Ok(reads.iter().any(|(_, read)| merged(read)))
     }

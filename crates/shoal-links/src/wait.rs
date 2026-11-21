@@ -8,6 +8,7 @@ pub mod cursor;
 pub mod followed;
 pub mod framing;
 pub mod merge_lookups;
+pub mod reads;
 pub mod selection;
 pub mod starts;
 mod waits;
