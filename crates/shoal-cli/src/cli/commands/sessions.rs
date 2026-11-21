@@ -27,7 +27,8 @@ use crate::{
     terminal::Session,
 };
 use shoal_protocol::{
-    hub::directory::{HubView, Listed, Offered},
+    hub::directory::{HubView, Offered},
+    model::Located,
     space_names::SpaceSelector,
 };
 
@@ -43,9 +44,8 @@ pub(super) async fn attach(
     ensure!(ctx.on_terminal(), "attach requires a terminal");
     let target = match resolve(ctx, target).await? {
         Chosen::Here(target) => target,
-        Chosen::Elsewhere(found) => {
-            let (remote, view) = *found;
-            return attach_elsewhere(ctx, &remote, &view, session).await;
+        Chosen::Elsewhere { space, machine } => {
+            return view_elsewhere(ctx, space, &machine, session).await;
         }
     };
     let id = SpaceSelector::id(target.id());
@@ -56,19 +56,6 @@ pub(super) async fn attach(
         recent::record_attach(ctx, &id).await;
     }
     Ok(0)
-}
-
-/// Attach to `remote`, a space of another machine `view` lists, through
-/// that machine, and remember it for `attach -` once its session was shown
-/// and still runs there.
-async fn attach_elsewhere(
-    ctx: &Context,
-    remote: &Listed,
-    view: &HubView,
-    session: Option<String>,
-) -> Result<i32> {
-    let machine = view.machine_name(remote);
-    view_elsewhere(ctx, remote.space.id.clone(), machine, session).await
 }
 
 /// Attach to a session of `space`, which another joined machine, `machine`,
@@ -170,8 +157,11 @@ fn attachable(spaces: Spaces) -> Spaces {
 /// The space an attach shows, on this machine or another joined one.
 enum Chosen {
     Here(Target),
-    /// Another machine's space, with the hub's view that lists it.
-    Elsewhere(Box<(Listed, HubView)>),
+    /// Another machine's space, with that machine's name.
+    Elsewhere {
+        space: SpaceId,
+        machine: String,
+    },
 }
 
 /// The space `name` selects, on this machine or another joined one, where
@@ -185,11 +175,17 @@ async fn resolve(ctx: &Context, name: Option<SpaceSelector>) -> Result<Chosen> {
         return previous(ctx).await;
     }
     if let Some(selector) = &name
-        && let Some(found) = super::machines::space_elsewhere(ctx, selector).await?
+        && let Located::Elsewhere { space, machine } =
+            crate::client::workspaces::locate(&ctx.paths, selector.clone()).await?
     {
-        return Ok(Chosen::Elsewhere(Box::new(found)));
+        return Ok(chosen_elsewhere(space.space.id, machine.name));
     }
     resolve_here(ctx, name).await
+}
+
+/// Another machine's space `space`, which the machine named `machine` runs.
+fn chosen_elsewhere(space: SpaceId, machine: String) -> Chosen {
+    Chosen::Elsewhere { space, machine }
 }
 
 /// The space whose session this terminal last left running, other than
@@ -199,9 +195,15 @@ async fn previous(ctx: &Context) -> Result<Chosen> {
     let view = hub_view::view(ctx).await;
     let elsewhere = view.as_ref().map(HubView::attachable).unwrap_or_default();
     let id = recent::previous_among(ctx, &attachable(spaces.clone()), &elsewhere)?;
-    let listed = view.as_ref().and_then(|view| view.listed(&id)).cloned();
-    match listed.zip(view) {
-        Some(found) => Ok(Chosen::Elsewhere(Box::new(found))),
+    let listed = (view.as_ref()).and_then(|view| {
+        let listed = view.listed(&id)?;
+        Some(chosen_elsewhere(
+            id.clone(),
+            view.machine_name(listed).to_owned(),
+        ))
+    });
+    match listed {
+        Some(chosen) => Ok(chosen),
         None => Ok(Chosen::Here(
             Target::among(&ctx.paths, spaces.into_chats(), id).await?,
         )),
@@ -258,9 +260,9 @@ async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Chosen> {
         .await?
         .into_workspaces();
     let id = ui::pick_space(ctx, workspaces, &chats, Offered::Spaces, "workspace").await?;
-    match super::machines::space_elsewhere(ctx, &SpaceSelector::id(&id)).await? {
-        Some(found) => Ok(Chosen::Elsewhere(Box::new(found))),
-        None => Ok(Chosen::Here(Target::among(&ctx.paths, chats, id).await?)),
+    match crate::client::workspaces::locate(&ctx.paths, SpaceSelector::id(&id)).await? {
+        Located::Elsewhere { space, machine } => Ok(chosen_elsewhere(space.space.id, machine.name)),
+        Located::Here(_) => Ok(Chosen::Here(Target::among(&ctx.paths, chats, id).await?)),
     }
 }
 
