@@ -49,9 +49,24 @@ pub(crate) struct SpaceImport {
     /// has here, which stay its parent and the workspace a chat ran in
     /// though they open only after this import.
     pub(crate) recorded: BTreeSet<SpaceId>,
-    /// The ticket of the move through the hub that brings it, which its
-    /// claim carries; none for a copy, which takes an ID of its own.
-    pub(crate) ticket: Option<MoveTicket>,
+    /// How it claims its space at the hub.
+    pub(crate) claim: Claim,
+}
+
+/// How an import claims at the hub the space it records here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Claim {
+    /// As any import does, so this machine's report of the space takes its
+    /// ID over without a conflict; a hub that cannot be asked takes none,
+    /// and a copy, which takes an ID of its own, claims nothing it had.
+    Plain,
+    /// For the move through the hub that brings it, which the hub refuses
+    /// once the move's source settled the move without it.
+    Move(MoveTicket),
+    /// For the takeover of a space whose machine is offline, from the
+    /// package the hub keeps of it, which the hub refuses once that machine
+    /// is connected again.
+    Takeover,
 }
 
 impl Manager {
@@ -76,23 +91,28 @@ impl Manager {
     /// default branch, and its agents' session files, and claim it at the
     /// hub, so it takes the ID over from the machine it moves from; with
     /// the warnings of what it changed. An error leaves no record. The
-    /// claim of a move through the hub makes the space this machine's, so
-    /// one the hub refused forgets the record, and an import whose claim
-    /// stood, or may have, keeps the record for `shoal restore`.
+    /// claim of a move through the hub, or of a takeover, makes the space
+    /// this machine's, so one the hub refused forgets the record, and an
+    /// import whose claim stood, or may have, keeps the record for
+    /// `shoal restore`.
     pub(crate) async fn record_import(
         &self,
         import: SpaceImport,
     ) -> Result<(RemovedSpace, Vec<String>)> {
         let id = import.space.space_id.clone();
-        let ticket = import.ticket.clone();
+        let claim = import.claim.clone();
         let recorded = (self.record_package(import).await)
             .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
-        let Some(ticket) = ticket else {
-            // The machine it moves from keeps it until this import is done.
-            self.hub.claim_space(self, &id).await;
-            return Ok(recorded);
+        let claimed = match &claim {
+            Claim::Plain => {
+                // The machine it moves from keeps it until this import is done.
+                self.hub.claim_space(self, &id).await;
+                return Ok(recorded);
+            }
+            Claim::Move(ticket) => self.hub.claim_moved(self, &id, ticket).await,
+            Claim::Takeover => self.hub.claim_taken_over(self, &id).await,
         };
-        match self.hub.claim_moved(self, &id, &ticket).await {
+        match claimed {
             Ok(()) => Ok(recorded),
             Err(ClaimFailure::Refused(error)) => {
                 self.forget_unclaimed(&id).await;

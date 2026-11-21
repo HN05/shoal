@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, ensure};
 
-use super::imports::SpaceImport;
+use super::imports::{Claim, SpaceImport};
 use crate::daemon::{manager::Manager, scope::Caller};
 use crate::{
     model::RemovedSpace,
@@ -20,7 +20,6 @@ use crate::{
     },
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
-use shoal_ids::move_tickets::MoveTicket;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::transcripts::CarriedSessionFile;
 
@@ -54,7 +53,23 @@ impl Manager {
         input: PackageInput,
         caller: Option<&Caller>,
     ) -> Result<ImportedPackage> {
-        let package = (self.read_package(import, input, caller).await)
+        let claim = match &import.ticket {
+            Some(ticket) => Claim::Move(ticket.clone()),
+            None => Claim::Plain,
+        };
+        self.import_claiming(import, input, caller, claim).await
+    }
+
+    /// Import the package `input` holds as [`Self::import_package`] does,
+    /// its spaces claimed at the hub as `claim` says.
+    pub(crate) async fn import_claiming(
+        &self,
+        import: &PackageImport,
+        input: PackageInput,
+        caller: Option<&Caller>,
+        claim: Claim,
+    ) -> Result<ImportedPackage> {
+        let package = (self.read_package(import, input, caller, claim).await)
             .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
         let Package {
             own,
@@ -78,6 +93,7 @@ impl Manager {
         import: &PackageImport,
         input: PackageInput,
         caller: Option<&Caller>,
+        claim: Claim,
     ) -> Result<Package> {
         let (manifest, input) = input.read_manifest().await?;
         let warnings = copy_warnings(&manifest, import.sessions)?;
@@ -87,7 +103,7 @@ impl Manager {
         let directory = self.unpacking_directory(destinations.own()).await?;
         let parts = input.read_parts(&manifest, directory).await?;
         self.ensure_none_here(&manifest).await?;
-        let kept = (import.sessions, import.ticket.as_ref());
+        let kept = (import.sessions, claim);
         let (own, carried) = space_imports(&manifest, kept, &destinations, &parts.parts);
         Ok(Package {
             own,
@@ -201,20 +217,29 @@ fn copy_warnings(manifest: &Manifest, sessions: Option<bool>) -> Result<Vec<Stri
 /// The imports of the spaces of `manifest`, its own and those it carries,
 /// whose agents keep their sessions on this machine as `sessions` says,
 /// into the repositories `destinations` names, with the bundles and session
-/// files `parts` hold for them, claimed with the `ticket` of the move
-/// through the hub that brings them, unless they are copies.
+/// files `parts` hold for them, claimed at the hub as `claim` says, unless
+/// they are copies.
 fn space_imports(
     manifest: &Manifest,
-    (sessions, ticket): (Option<bool>, Option<&MoveTicket>),
+    (sessions, claim): (Option<bool>, Claim),
     destinations: &Destinations,
     parts: &Parts,
 ) -> (SpaceImport, Vec<SpaceImport>) {
     let machine = crate::process::machine::id();
     let machine = machine.as_deref();
     // A copy takes IDs of its own, which no other machine has.
-    let ticket = ticket.filter(|_| manifest.copy.is_none());
+    let claim = match manifest.copy {
+        Some(_) => Claim::Plain,
+        None => claim,
+    };
     let import_of = |packaged: &PackagedSpace, kept: Sessions| {
-        space_import(manifest, destinations, parts, packaged, (kept, ticket))
+        space_import(
+            manifest,
+            destinations,
+            parts,
+            packaged,
+            (kept, claim.clone()),
+        )
     };
     let own = import_of(&manifest.space, manifest.sessions_on(machine, sessions));
     let carried = (manifest.carried.iter())
@@ -228,13 +253,13 @@ fn space_imports(
 
 /// The import of the space `packaged` of `manifest`, whose agents keep
 /// `sessions`, into the repository `destinations` names for it, with the
-/// bundle and session files `parts` hold for it, claimed with `ticket`.
+/// bundle and session files `parts` hold for it, claimed as `claim` says.
 fn space_import(
     manifest: &Manifest,
     destinations: &Destinations,
     parts: &Parts,
     packaged: &PackagedSpace,
-    (sessions, ticket): (Sessions, Option<&MoveTicket>),
+    (sessions, claim): (Sessions, Claim),
 ) -> SpaceImport {
     let space = packaged.record_with(sessions);
     let id = &space.space_id;
@@ -247,7 +272,7 @@ fn space_import(
         copy: manifest.copy.is_some(),
         copies: BTreeMap::new(),
         recorded: BTreeSet::new(),
-        ticket: ticket.cloned(),
+        claim,
     }
 }
 

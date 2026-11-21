@@ -444,7 +444,7 @@ async fn an_import_that_records_nothing_says_so() {
         session_files: Vec::new(),
         copies: Default::default(),
         recorded: Default::default(),
-        ticket: None,
+        claim: crate::daemon::restore::Claim::Plain,
     };
     let error = importing.import_space(import).await.unwrap_err();
     assert_eq!(Reason::of(&error), Some(Reason::NotImported));

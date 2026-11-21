@@ -365,13 +365,17 @@ pub enum Call {
     /// A machine's claim of the space `space`, which it imports as another
     /// machine moves it here: its report of the space takes the ID over.
     /// One that carries the `ticket` of a move through the hub is refused
-    /// once that move's source settled it unclaimed. Answered with
-    /// [`Reply::Claimed`] and the number the space keeps, if the hub lists
-    /// it.
+    /// once that move's source settled it unclaimed, and one that takes the
+    /// space over, as `takeover` says, from the package the hub keeps of it
+    /// is refused once the space's machine is connected again. Answered
+    /// with [`Reply::Claimed`] and the number the space keeps, if the hub
+    /// lists it.
     Claim {
         space: SpaceId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ticket: Option<MoveTicket>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        takeover: bool,
     },
     /// The source's settling of its move `ticket` of the space `space` to
     /// the machine `machine`, once it cannot learn from that machine

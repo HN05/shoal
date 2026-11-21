@@ -14,7 +14,9 @@ async fn a_retired_takeover_goes_with_the_machine_s_package_and_the_others_wait(
     let desk = MemberId::from("desk".to_owned());
     for space in ["plan", "fix"] {
         let space = SpaceId::from(space.to_owned());
-        hub.record_space_claim(&desk, &space, None).await.unwrap();
+        hub.record_space_claim(&desk, &space, (None, true))
+            .await
+            .unwrap();
     }
     let laptop = MemberId::from("laptop".to_owned());
     let retired = vec![SpaceId::from("plan".to_owned())];

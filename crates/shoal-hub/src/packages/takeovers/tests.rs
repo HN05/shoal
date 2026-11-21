@@ -15,7 +15,7 @@ async fn takeovers(hub: &Hub) -> Vec<(String, String)> {
 }
 
 #[tokio::test]
-async fn another_machine_s_claim_takes_over_a_space_from_its_offline_machine_s_package() {
+async fn a_takeover_s_claim_needs_another_machine_s_package_while_it_is_offline() {
     let root = tempfile::tempdir().unwrap();
     let hub = hub(&root, "", &["laptop", "desk"]).await;
     report(&hub, "laptop", &["plan", "fix"]).await;
@@ -24,13 +24,42 @@ async fn another_machine_s_claim_takes_over_a_space_from_its_offline_machine_s_p
         MemberId::from("desk".to_owned()),
         MemberId::from("laptop".to_owned()),
     );
-    for (claimer, space) in [(&desk, "plan"), (&desk, "fix"), (&laptop, "plan")] {
-        let space = SpaceId::from(space.to_owned());
-        hub.record_space_claim(claimer, &space, None).await.unwrap();
-    }
-    // A space without a package, and the machine's own claim, take nothing
-    // over.
+    let claim = |claimer: &MemberId, space: &str, takeover: bool| {
+        let (hub, claimer, space) = (hub.clone(), claimer.clone(), space.to_owned());
+        async move {
+            let space = SpaceId::from(space);
+            (hub.record_space_claim(&claimer, &space, (None, takeover))
+                .await)
+                .is_ok()
+        }
+    };
+    // Without a package, or of the machine's own space, a takeover is
+    // refused; a plain claim takes nothing over.
+    assert!(!claim(&desk, "fix", true).await);
+    assert!(!claim(&laptop, "plan", true).await);
+    assert!(claim(&desk, "plan", false).await);
+    assert!(takeovers(&hub).await.is_empty());
+    assert!(claim(&desk, "plan", true).await);
     assert_eq!(takeovers(&hub).await, [("plan".into(), "laptop".into())]);
+}
+
+#[tokio::test]
+async fn a_takeover_is_refused_once_the_space_s_machine_is_connected_again() {
+    let root = tempfile::tempdir().unwrap();
+    let hub = hub(&root, "", &["laptop", "desk"]).await;
+    report(&hub, "laptop", &["plan"]).await;
+    send(&hub, "laptop", "plan", b"plan").await.unwrap();
+    let laptop = MemberId::from("laptop".to_owned());
+    let connected = HashSet::from([laptop]);
+    let taken = hub.store.write(move |tx| {
+        let (plan, desk) = (
+            SpaceId::from("plan".to_owned()),
+            MemberId::from("desk".to_owned()),
+        );
+        record_takeover(tx, &plan, &desk, &connected)
+    });
+    assert!(taken.await.is_err());
+    assert!(takeovers(&hub).await.is_empty());
 }
 
 #[tokio::test]

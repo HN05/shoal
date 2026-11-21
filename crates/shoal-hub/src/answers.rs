@@ -103,10 +103,14 @@ impl Hub {
                         .await?,
                 )
             }
-            Call::Claim { space, ticket } => {
+            Call::Claim {
+                space,
+                ticket,
+                takeover,
+            } => {
                 ensure_machine(member)?;
-                let ticket = ticket.as_ref();
-                Reply::Claimed(self.record_space_claim(&member.id, &space, ticket).await?)
+                let claim = (ticket.as_ref(), takeover);
+                Reply::Claimed(self.record_space_claim(&member.id, &space, claim).await?)
             }
             Call::Settle {
                 space,

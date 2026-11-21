@@ -76,7 +76,7 @@ impl Hub {
         if !self.is_hub(daemon) && self.store.read(membership::load).await?.is_none() {
             return Ok(());
         }
-        if let Some(number) = self.claim_at_hub(daemon, id, None).await? {
+        if let Some(number) = self.claim_at_hub(daemon, id, (None, false)).await? {
             self.keep_imported_number(id, number).await?;
         }
         Ok(())
@@ -94,7 +94,33 @@ impl Hub {
         id: &SpaceId,
         ticket: &MoveTicket,
     ) -> Result<(), ClaimFailure> {
-        let claimed = self.claim_at_hub(daemon, id, Some(ticket)).await;
+        let claimed = self.claim_at_hub(daemon, id, (Some(ticket), false)).await;
+        self.keep_claimed_number(id, claimed).await
+    }
+
+    /// Claim the space `id` at the hub for this machine's takeover of it
+    /// from the package the hub keeps of it, which this machine imports,
+    /// and keep the number the hub keeps for it, without which the claim
+    /// stands too. The hub refuses it while it cannot be asked, or once
+    /// the space's machine is connected again, so the import records
+    /// nothing and the space stays there; a claim whose answer never came
+    /// may stand.
+    pub async fn claim_taken_over(
+        &self,
+        daemon: &dyn Daemon,
+        id: &SpaceId,
+    ) -> Result<(), ClaimFailure> {
+        let claimed = self.claim_at_hub(daemon, id, (None, true)).await;
+        self.keep_claimed_number(id, claimed).await
+    }
+
+    /// Keep the number the hub keeps for the space `id` once `claimed`
+    /// stood, failing as the claim did.
+    async fn keep_claimed_number(
+        &self,
+        id: &SpaceId,
+        claimed: Result<Option<SpaceNumber>>,
+    ) -> Result<(), ClaimFailure> {
         if let Some(number) = claimed.map_err(ClaimFailure::of)?
             && let Err(error) = self.keep_imported_number(id, number).await
         {
@@ -103,21 +129,22 @@ impl Hub {
         Ok(())
     }
 
-    /// Claim the space `id` at the hub, with `ticket`, and the number the
-    /// hub keeps for it, if any.
+    /// Claim the space `id` at the hub, with `ticket`, or for a `takeover`
+    /// of it, and the number the hub keeps for it, if any.
     async fn claim_at_hub(
         &self,
         daemon: &dyn Daemon,
         id: &SpaceId,
-        ticket: Option<&MoveTicket>,
+        (ticket, takeover): (Option<&MoveTicket>, bool),
     ) -> Result<Option<SpaceNumber>> {
         if self.is_hub(daemon) {
             let own = self.own_member().await?;
-            return self.record_space_claim(&own, id, ticket).await;
+            return self.record_space_claim(&own, id, (ticket, takeover)).await;
         }
         let call = Call::Claim {
             space: id.clone(),
             ticket: ticket.cloned(),
+            takeover,
         };
         match self.through_hub(call).await? {
             Reply::Claimed(number) => Ok(number),

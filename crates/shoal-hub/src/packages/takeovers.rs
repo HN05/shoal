@@ -10,7 +10,7 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_core::fsutil::off_runtime;
 use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
@@ -149,8 +149,9 @@ fn owners_package(tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<(MemberId
 }
 
 /// Record that `claimer`'s claim of the space `id` takes it over from the
-/// package the hub keeps of it, when the machine the directory lists it
-/// under, which sent that package, is not among the `connected` ones.
+/// package the hub keeps of it, refused unless the machine the directory
+/// lists it under, which sent that package, is another than `claimer` and
+/// not among the `connected` ones.
 pub(crate) fn record_takeover(
     tx: &Transaction<'_>,
     id: &SpaceId,
@@ -158,11 +159,13 @@ pub(crate) fn record_takeover(
     connected: &HashSet<MemberId>,
 ) -> Result<()> {
     let Some((owner, _)) = owners_package(tx, id)? else {
-        return Ok(());
+        bail!("the hub keeps no package of space {id} to take it over from");
     };
-    if &owner == claimer || connected.contains(&owner) {
-        return Ok(());
-    }
+    ensure!(&owner != claimer, "space {id} is already this machine's");
+    ensure!(
+        !connected.contains(&owner),
+        "the machine of space {id} is connected again, so the space stays there; shoal move {id} --machine moves it"
+    );
     tx.execute(
         "INSERT INTO hub_takeovers(space_id, member_id, taken_at) VALUES (?1,?2,?3)
          ON CONFLICT(space_id) DO UPDATE SET member_id=excluded.member_id,

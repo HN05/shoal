@@ -7,7 +7,7 @@ use shoal_daemon_base::log::elapsed;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{hub::packages::KeptPackage, space_names::SpaceSelector};
 
-use super::PackageInput;
+use super::{Claim, PackageInput};
 use crate::{
     daemon::{manager::Manager, scope::Caller},
     model::{RemovedSpace, RestoredSpace},
@@ -87,7 +87,8 @@ impl Manager {
             sessions: None,
             ticket: None,
         };
-        let imported = (self.import_package(&import, PackageInput::File(file), caller)).await?;
+        let input = PackageInput::File(file);
+        let imported = (self.import_claiming(&import, input, caller, Claim::Takeover)).await?;
         let mut restored = imported.restored;
         let lacks = lacking(&takeover.machine, takeover.unsent_since, UnixTime::now());
         restored.warnings_mut().extend(lacks);
