@@ -7,6 +7,8 @@
 //! package lacks.
 use std::{collections::HashMap, convert::Infallible, time::Duration};
 
+use tokio::time::Instant;
+
 use anyhow::Result;
 use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_ids::space_ids::SpaceId;
@@ -60,7 +62,7 @@ impl Hub {
         loop {
             let held = async {
                 match due {
-                    Some(due) => tokio::time::sleep(due).await,
+                    Some(due) => tokio::time::sleep_until(due).await,
                     None => std::future::pending().await,
                 }
             };
@@ -77,7 +79,7 @@ impl Hub {
             if !self.member.has_availability(Availability::Intermittent) {
                 continue;
             }
-            due = match self
+            let found = match self
                 .spaces_to_package(daemon, every_space, &mut turns)
                 .await
             {
@@ -87,6 +89,8 @@ impl Hub {
                     None
                 }
             };
+            let found = found.map(|wait| Instant::now() + wait);
+            due = next_due(due, found, every_space);
         }
     }
 
@@ -238,6 +242,18 @@ impl Hub {
             return Ok(HashMap::new());
         }
         self.store.read(unsent).await
+    }
+}
+
+/// When to look at every space again for the packages held back since
+/// their spaces sent one lately: when the pass that looked at every space
+/// `found` it, or else the earlier of that and when it was `due` before,
+/// since a pass over the spaces whose turns ended looks at only those.
+fn next_due(due: Option<Instant>, found: Option<Instant>, every_space: bool) -> Option<Instant> {
+    match (every_space, due, found) {
+        (true, _, found) => found,
+        (false, Some(due), Some(found)) => Some(due.min(found)),
+        (false, due, found) => due.or(found),
     }
 }
 

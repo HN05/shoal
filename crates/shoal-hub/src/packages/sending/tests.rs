@@ -80,3 +80,15 @@ async fn only_an_intermittent_machine_reports_since_when_a_package_lacks_changes
     let unsent = hub.unsent_changes().await.unwrap();
     assert_eq!(unsent.get(&id), Some(&now));
 }
+
+#[test]
+fn a_pass_over_ended_turns_keeps_an_earlier_held_back_send() {
+    let now = Instant::now();
+    let (soon, later) = (now + Duration::from_secs(60), now + SEND_EVERY);
+    assert_eq!(next_due(Some(soon), None, false), Some(soon));
+    assert_eq!(next_due(Some(later), Some(soon), false), Some(soon));
+    assert_eq!(next_due(Some(soon), Some(later), false), Some(soon));
+    // A pass over every space finds every send held back.
+    assert_eq!(next_due(Some(soon), Some(later), true), Some(later));
+    assert_eq!(next_due(Some(soon), None, true), None);
+}
