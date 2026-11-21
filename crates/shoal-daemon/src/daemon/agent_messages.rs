@@ -26,12 +26,6 @@ mod store;
 pub(crate) use settle::SettleClock;
 pub(crate) use store::{ensure_holders_fit, every_unread, hand_to_user};
 
-/// Unread alerts one space may hold, and the bytes they may take as its
-/// agent receives them, which leaves room in one response for the item
-/// activity and leftovers delivered with them.
-pub(crate) const MAX_UNREAD: i64 = 50;
-pub(crate) const MAX_UNREAD_BYTES: usize = 40 * 1024;
-
 /// How a queued alert reaches an idle agent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Delivery {

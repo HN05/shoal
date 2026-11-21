@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
-use super::{Copied, Delivery, MAX_UNREAD, MAX_UNREAD_BYTES, Queued};
+use super::{Copied, Delivery, Queued};
 use crate::{
     daemon::{
         alerts::{self, About, Alert, COLUMNS, FROM, NewAlert},
@@ -14,7 +14,7 @@ use crate::{
     },
     state::WorkspaceState,
 };
-use shoal_daemon_base::alerts::Unread;
+use shoal_daemon_base::alerts::{MAX_UNREAD, MAX_UNREAD_BYTES, Unread};
 use shoal_ids::space_ids::SpaceId;
 
 /// Queue `alert` for the agent of the space `space_id` in the caller's

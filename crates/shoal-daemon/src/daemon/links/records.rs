@@ -46,6 +46,14 @@ impl Records for LinkRecords {
         tree::receiving_paths(db, id, &TrackedAgents::of(agents))
     }
 
+    fn delegated_elsewhere(
+        &self,
+        db: &Connection,
+        agents: &[SpaceId],
+    ) -> Result<Vec<(SpaceId, Vec<SpaceRef>)>> {
+        tree::delegated_elsewhere(db, &TrackedAgents::of(agents))
+    }
+
     fn checked_branch(&self, db: &Connection, id: &SpaceId) -> Result<Option<String>> {
         checked_branch(db, id)
     }

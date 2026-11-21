@@ -550,7 +550,7 @@ async fn poll_item_activity(manager: Arc<Manager>) {
         if let Err(error) = blockers {
             log!("blockers: {error:#}");
         }
-        if let Err(error) = manager.pass_up_delegated_activity().await {
+        if let Err(error) = manager.links.pass_up_delegated_activity(&*manager).await {
             log!("item activity for coordinators elsewhere: {error:#}");
         }
     }

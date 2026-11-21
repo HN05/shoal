@@ -19,6 +19,12 @@ pub struct Unread {
     pub wakes: bool,
 }
 
+/// Unread alerts one space may hold, and the bytes they may take as its
+/// agent receives them, which leaves room in one response for the item
+/// activity and leftovers delivered with them.
+pub const MAX_UNREAD: i64 = 50;
+pub const MAX_UNREAD_BYTES: usize = 40 * 1024;
+
 /// Read alerts kept before older ones are pruned; unread ones stay.
 pub const RETAINED: usize = 500;
 

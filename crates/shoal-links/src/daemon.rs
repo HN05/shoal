@@ -1,7 +1,7 @@
 //! What links need of the rest of the daemon, which implements it: the
 //! registered repositories and the spaces requests come from, the watches
-//! of their linked items, the messages agents receive beside them, which
-//! forge
+//! of their linked items, the messages agents receive beside them, the
+//! hub their activity goes up through, which forge
 //! each host serves, the permission a scoped caller acts with, the
 //! coordinators alerts about a space reach, and the spaces' state links
 //! check in their own transactions.
@@ -164,6 +164,26 @@ pub trait Messages: Send + Sync {
     fn watch_messages(&self) -> watch::Receiver<u64>;
 }
 
+/// The hub, through which the item activity of this machine's spaces goes
+/// up to their coordinators on other machines.
+pub trait Elsewhere: Send + Sync {
+    /// Whether this machine is the hub or reaches it now.
+    fn reaches_hub(&self) -> bool;
+
+    /// Whether a space above `below`, a space directly below one on
+    /// another machine, has an agent there.
+    fn coordinator_elsewhere<'a>(&'a self, below: &'a SpaceId) -> BoxFuture<'a, bool>;
+
+    /// Pass `message`, the item activity of `space`, up to the space
+    /// `above` on another machine, returning once the hub took it.
+    fn pass_up_activity<'a>(
+        &'a self,
+        above: SpaceId,
+        space: &'a SpaceRef,
+        message: String,
+    ) -> BoxFuture<'a, Result<()>>;
+}
+
 /// What the daemon records of a space's agent, which settling the agent
 /// account on its issues reads.
 pub struct SpaceAgent {
@@ -204,10 +224,13 @@ pub trait Forges: Send + Sync {
 
 /// Everything links need of the daemon, which each of their operations
 /// that reaches beyond them takes.
-pub trait Daemon: Spaces + Watches + Messages + Runs + Forges + Permissions + Coordinators {}
+pub trait Daemon:
+    Spaces + Watches + Messages + Elsewhere + Runs + Forges + Permissions + Coordinators
+{
+}
 
 impl<T> Daemon for T where
-    T: Spaces + Watches + Messages + Runs + Forges + Permissions + Coordinators
+    T: Spaces + Watches + Messages + Elsewhere + Runs + Forges + Permissions + Coordinators
 {
 }
 
@@ -243,6 +266,17 @@ pub trait Records: Send + Sync {
         id: &SpaceId,
         agents: &[SpaceId],
     ) -> Result<Vec<Vec<SpaceId>>>;
+
+    /// This machine's spaces whose activity goes to a coordinator on
+    /// another machine, by the space above them there: each space without
+    /// an agent whose parent runs elsewhere, then those below it whose
+    /// activity it would receive, where `agents` are the spaces whose agent
+    /// the daemon tracks.
+    fn delegated_elsewhere(
+        &self,
+        db: &Connection,
+        agents: &[SpaceId],
+    ) -> Result<Vec<(SpaceId, Vec<SpaceRef>)>>;
 
     /// The branch of the workspace `id` while its conflicts are checked:
     /// none for a chat, a workspace at a commit and one whose assignment is

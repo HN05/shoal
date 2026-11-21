@@ -1,8 +1,8 @@
 use anyhow::Result;
 use serde_json::json;
 
+use super::super::test_support::register_watch;
 use super::super::tests::{CHILD_PR, GRANDCHILD_PR};
-use super::{super::test_support::register_watch, EVENT_LIMIT};
 use crate::{
     daemon::{
         manager::Manager,
@@ -14,6 +14,7 @@ use crate::{
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_links::wait::changes::queue_update;
+use shoal_links::wait::elsewhere::EVENT_LIMIT;
 use shoal_protocol::{
     hub::{link::Call, routing::Told},
     space_names::SpaceSelector,
@@ -115,7 +116,7 @@ async fn the_hub_holds_the_activity_of_spaces_below_an_offline_coordinator() -> 
     queue_comment(&manager, &child.id, &CHILD_PR, "looks good".into()).await;
     queue_comment(&manager, &grandchild.id, &GRANDCHILD_PR, "one nit".into()).await;
 
-    manager.pass_up_delegated_activity().await?;
+    manager.links.pass_up_delegated_activity(&*manager).await?;
 
     let told = held(&manager).await;
     assert_eq!(about(&told), [child.id.clone(), grandchild.id.clone()]);
@@ -125,7 +126,7 @@ async fn the_hub_holds_the_activity_of_spaces_below_an_offline_coordinator() -> 
     }
     // Taken by the hub, they leave the cursors, so the next sweep sends
     // them no more.
-    manager.pass_up_delegated_activity().await?;
+    manager.links.pass_up_delegated_activity(&*manager).await?;
     assert_eq!(held(&manager).await.len(), 2);
     Ok(())
 }
@@ -138,7 +139,7 @@ async fn activity_too_large_for_one_event_goes_in_several() -> Result<()> {
     queue_comment(&manager, &child.id, &CHILD_PR, long).await;
     queue_comment(&manager, &child.id, &CHILD_PR, "short".into()).await;
 
-    manager.pass_up_delegated_activity().await?;
+    manager.links.pass_up_delegated_activity(&*manager).await?;
     let first = held(&manager).await;
     assert_eq!(first.len(), 1);
     assert!(
@@ -147,7 +148,7 @@ async fn activity_too_large_for_one_event_goes_in_several() -> Result<()> {
         first[0].message.len()
     );
 
-    manager.pass_up_delegated_activity().await?;
+    manager.links.pass_up_delegated_activity(&*manager).await?;
     let told = held(&manager).await;
     assert_eq!(told.len(), 2);
     assert!(told[1].message.ends_with("short"), "{}", told[1].message);
@@ -163,7 +164,7 @@ async fn a_space_with_its_own_agent_keeps_its_activity() -> Result<()> {
     (manager.set_agent_state(&selector, AgentState::Working, None, None)).await?;
     queue_comment(&manager, &child.id, &CHILD_PR, "theirs".into()).await;
 
-    manager.pass_up_delegated_activity().await?;
+    manager.links.pass_up_delegated_activity(&*manager).await?;
 
     assert_eq!(about(&held(&manager).await), [child.id]);
     Ok(())
@@ -187,7 +188,7 @@ async fn activity_stays_on_the_cursor_while_the_hub_cannot_be_reached() -> Resul
         .await?;
     queue_comment(&manager, &child.id, &CHILD_PR, "while away".into()).await;
 
-    manager.pass_up_delegated_activity().await?;
+    manager.links.pass_up_delegated_activity(&*manager).await?;
 
     let outbox = (manager.store)
         .run(|db| {

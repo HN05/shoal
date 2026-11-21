@@ -304,7 +304,7 @@ async fn a_finished_assignment_cancels_its_retry() {
 async fn a_full_message_queue_defers_only_its_own_retry() {
     let (_temp, manager, full, full_execution, _full) = agent(RETRY_ON).await;
     let (open, open_execution, _open) = another_agent(&manager, "open").await;
-    for n in 0..crate::daemon::agent_messages::MAX_UNREAD {
+    for n in 0..shoal_daemon_base::alerts::MAX_UNREAD {
         manager
             .send_space_message(
                 None,

@@ -524,7 +524,7 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
         let request = crate::start_plan::queued_agent_request(workspace, launch, None).unwrap();
         manager.queue_add(request).await.unwrap();
     }
-    for n in 0..super::MAX_UNREAD {
+    for n in 0..shoal_daemon_base::alerts::MAX_UNREAD {
         manager
             .queue_agent_message(
                 &full.id,
@@ -659,7 +659,7 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
 async fn a_refused_message_leaves_no_copies() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager, "receiver").await;
-    for n in 0..super::MAX_UNREAD {
+    for n in 0..shoal_daemon_base::alerts::MAX_UNREAD {
         manager
             .send_space_message(
                 None,
@@ -869,7 +869,7 @@ async fn assert_fits_one_delivery(manager: &Manager, workspace: &crate::model::W
     let unread = manager.unread_messages(&workspace.id).await.unwrap().alerts;
     let delivered = serde_json::to_vec(&unread).unwrap();
     assert!(
-        delivered.len() <= super::MAX_UNREAD_BYTES,
+        delivered.len() <= shoal_daemon_base::alerts::MAX_UNREAD_BYTES,
         "{} alerts take {} bytes",
         unread.len(),
         delivered.len()
@@ -1001,7 +1001,10 @@ async fn a_backlog_beyond_the_limit_reaches_its_agent_over_several_deliveries() 
             break;
         }
         let bytes = serde_json::to_vec(&unread).unwrap().len();
-        assert!(bytes <= super::MAX_UNREAD_BYTES, "{bytes} bytes");
+        assert!(
+            bytes <= shoal_daemon_base::alerts::MAX_UNREAD_BYTES,
+            "{bytes} bytes"
+        );
         let ids: Vec<i64> = unread.iter().map(|alert| alert.id).collect();
         (manager.mark_agent_messages_delivered(&to, ids.clone()))
             .await

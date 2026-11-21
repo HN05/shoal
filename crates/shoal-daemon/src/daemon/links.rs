@@ -3,6 +3,7 @@
 mod actions;
 pub(in crate::daemon) mod branches;
 mod ci;
+mod elsewhere;
 mod forges;
 pub mod issue;
 mod listing;

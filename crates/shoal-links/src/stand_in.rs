@@ -21,14 +21,14 @@ use shoal_forge_types::{
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    model::{ConflictCheck, LinkedItem, Repository, Selected, Space, Workspace},
+    model::{ConflictCheck, LinkedItem, Repository, Selected, Space, SpaceRef, Workspace},
     processes::Leftover,
     space_names::SpaceSelector,
 };
 use tokio::sync::watch;
 
 use crate::{
-    daemon::{Forges, Messages, Permissions, Runs, SpaceAgent, Spaces, Watches},
+    daemon::{Elsewhere, Forges, Messages, Permissions, Runs, SpaceAgent, Spaces, Watches},
     space::LinkSpace,
 };
 
@@ -170,6 +170,25 @@ impl Messages for StandIn {
 
     fn watch_messages(&self) -> watch::Receiver<u64> {
         watch::channel(0).1
+    }
+}
+
+impl Elsewhere for StandIn {
+    fn reaches_hub(&self) -> bool {
+        false
+    }
+
+    fn coordinator_elsewhere<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, bool> {
+        Box::pin(async { false })
+    }
+
+    fn pass_up_activity<'a>(
+        &'a self,
+        _: SpaceId,
+        _: &'a SpaceRef,
+        _: String,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { bail!(NOT_HERE) })
     }
 }
 
