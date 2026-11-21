@@ -939,9 +939,9 @@ directory, `{workspace_path}`, `{path}`, the directory the space works in,
 `{repo}`, `{branch}`, reserved `{port.NAME}` and
 [`{cache.NAME}`](#shared-caches) once; unknown fields stay literal, inserted
 values are not expanded, and neither are inherited variables or shell
-expressions. A variable that names a field the space lacks stays unset: a chat
-has no workspace, worktree path, branch or ports, and one without a repository
-no `{repo}` or caches either. Names are ASCII identifiers, and `SHOAL_*` names are
+expressions. A chat leaves unset a variable that names `{workspace}`,
+`{workspace_path}`, `{branch}` or a port, which only a workspace has, and a chat
+without a repository one that names `{repo}` or a cache too. Names are ASCII identifiers, and `SHOAL_*` names are
 reserved; values are strings without NUL, and an empty string sets an empty
 value. Reserved port exports take precedence. See
 [scoped workspace commands](../../../../../../docs/reference.md#scoped-workspace-commands).

@@ -3857,9 +3857,10 @@ definitions stay global; global pools span repositories, repository pools span
 that repository's worktrees.
 The repository `[env]` table layers by variable name and is rendered once when a
 space's execution or hook starts. It accepts workspace, path, repository, branch,
-reserved-port and cache fields; a variable naming one the space lacks, such as a
-chat's `{workspace}`, stays unset rather than keep the placeholder, which would
-give every chat the same value. Values are literal strings after substitution,
+reserved-port and cache fields; a chat leaves unset a variable naming a field only
+a workspace has, such as `{workspace}`, or for a chat without a repository
+`{repo}` or a cache, rather than keep the placeholder, which would give every
+chat the same value. Values are literal strings after substitution,
 and `SHOAL_*` names remain owned by Shoal.
 
 Ports are cooperative TCP reservations: probe, record, export to later
