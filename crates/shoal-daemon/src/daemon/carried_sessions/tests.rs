@@ -60,3 +60,16 @@ fn files_that_arrive_shorter_or_longer_than_listed_are_refused() {
         assert!(split_files(&joined, listed, &received).is_err(), "{size}");
     }
 }
+
+#[test]
+fn a_file_that_would_leave_the_session_directory_is_refused() {
+    let root = tempfile::tempdir().unwrap();
+    let joined = root.path().join("joined");
+    std::fs::write(&joined, "").unwrap();
+    for path in ["../.ssh/authorized_keys", "/etc/passwd", ""] {
+        let received = root.path().join("received");
+        std::fs::create_dir_all(&received).unwrap();
+        let listed = vec![file(path)];
+        assert!(split_files(&joined, listed, &received).is_err(), "{path}");
+    }
+}

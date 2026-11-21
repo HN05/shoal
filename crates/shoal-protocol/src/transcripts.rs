@@ -31,6 +31,17 @@ pub struct SessionFile {
     pub size: u64,
 }
 
+impl SessionFile {
+    /// Whether its path stays in the directory the agent keeps its
+    /// sessions in: relative, with nothing but names, so a file another
+    /// machine carries is never written elsewhere.
+    pub fn stays_in_session_directory(&self) -> bool {
+        let mut components = self.path.components().peekable();
+        components.peek().is_some()
+            && components.all(|component| matches!(component, Component::Normal(_)))
+    }
+}
+
 /// A session file with its contents at `contents`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CarriedSessionFile {

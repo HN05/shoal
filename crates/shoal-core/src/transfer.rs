@@ -14,7 +14,7 @@ use shoal_protocol::transcripts::SessionFile;
 use std::{
     collections::{BTreeMap, BTreeSet},
     io::{BufRead, Read, Write},
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Result, ensure};
@@ -528,9 +528,7 @@ impl ImportedSessionFile {
     /// a path that would leave the agent's session directory.
     fn read(input: &mut impl BufRead, file: SessionFile, directory: &Path) -> Result<Self> {
         ensure!(
-            file.path
-                .components()
-                .all(|component| matches!(component, Component::Normal(_))),
+            file.stays_in_session_directory(),
             "the export names the session file {}, outside the agent's session directory",
             file.path.display()
         );

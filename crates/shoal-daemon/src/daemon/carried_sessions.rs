@@ -234,6 +234,12 @@ fn split_files(
     let mut input = std::fs::File::open(joined)?;
     let mut carried = Vec::new();
     for (index, file) in files.into_iter().enumerate() {
+        if !file.stays_in_session_directory() {
+            return Err(std::io::Error::other(format!(
+                "the start names the session file {}, outside the agent's session directory",
+                file.path.display()
+            )));
+        }
         let contents = directory.join(index.to_string());
         let mut part = std::io::Read::take(&mut input, file.size);
         let copied = std::io::copy(&mut part, &mut std::fs::File::create_new(&contents)?)?;
