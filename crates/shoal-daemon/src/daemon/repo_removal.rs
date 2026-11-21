@@ -181,9 +181,14 @@ impl Manager {
         delete_checkout(repo.path.clone()).await?;
         delete_local_config(repo.workspaces_dir.clone()).await?;
         delete_empty_workspaces_dir(repo.workspaces_dir.clone()).await?;
-        self.unregister_repository(&repo.id).await?;
+        // Before the registration goes, so a removal that stops meanwhile
+        // cleans the entries when it is retried.
         let trust = TrustChange::Removed(workspace_paths.clone());
-        self.update_agent_trust(&repo, trust).await;
+        let cleaned = self.update_agent_trust(&repo, trust).await;
+        self.unregister_repository(&repo.id).await?;
+        if cleaned {
+            self.forget_agent_environments_logged(&repo).await;
+        }
         Ok(RepositoryRemoval {
             removed: true,
             repository_id: repo.id,

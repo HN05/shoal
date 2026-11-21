@@ -61,12 +61,17 @@ impl TrustChange {
 impl Manager {
     /// Make `change` to the agents' trust entries for `repository`'s
     /// directories, in the tools' default configs and in those its agents
-    /// ran with, which a removal then forgets. Failures go to the log and
-    /// in an alert to the user, never to the caller; a development build
-    /// leaves the user's own files to the installed Shoal.
-    pub(super) async fn update_agent_trust(&self, repository: &Repository, change: TrustChange) {
+    /// ran with; whether it read those, which a removal then forgets.
+    /// Failures go to the log and in an alert to the user, never to the
+    /// caller; a development build leaves the user's own files to the
+    /// installed Shoal.
+    pub(super) async fn update_agent_trust(
+        &self,
+        repository: &Repository,
+        change: TrustChange,
+    ) -> bool {
         if !crate::build::changes_files_under(&self.paths.home) {
-            return;
+            return false;
         }
         let environments = self.agent_environments(&repository.id).await;
         let mut warnings = Vec::new();
@@ -78,10 +83,8 @@ impl Manager {
         let kept = environments.as_ref().map(Vec::clone).unwrap_or_default();
         let kept = self.editable_locations(kept);
         warnings.extend(self.edit_trust(repository, &change, kept).await);
-        if matches!(change, TrustChange::Removed(_)) && environments.is_ok() {
-            self.forget_agent_environments_logged(repository).await;
-        }
         self.report_trust_left(repository, &change, warnings).await;
+        environments.is_ok()
     }
 
     /// The kept agent config locations this build may edit: all of them
@@ -144,9 +147,10 @@ impl Manager {
         self.notify(None, AlertKind::TrustLeft, message).await;
     }
 
-    /// [`Self::forget_agent_environments`], logging a failure, which only
-    /// keeps rows no agent adds to again.
-    async fn forget_agent_environments_logged(&self, repository: &Repository) {
+    /// [`Self::forget_agent_environments`] for the unregistered
+    /// `repository`, logging a failure, which only keeps rows no agent adds
+    /// to again.
+    pub(super) async fn forget_agent_environments_logged(&self, repository: &Repository) {
         if let Err(error) = self.forget_agent_environments(&repository.id).await {
             let name = repository.display_name();
             log!("repository {name}: its agents' config locations stay recorded: {error:#}");
