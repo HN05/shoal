@@ -338,3 +338,6 @@ pub async fn current_head(workspace: &Workspace) -> Result<CommitId> {
     }
     Ok(head)
 }
+
+#[cfg(test)]
+mod tests;
