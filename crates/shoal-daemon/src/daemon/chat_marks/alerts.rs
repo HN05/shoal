@@ -188,7 +188,7 @@ impl Manager {
         let MarkedAlert {
             mut to,
             attachments,
-            ..
+            recipients,
         } = alert;
         self.scope_alert_target(&caller, &mut to).await?;
         let text = alert_text(&to, message.as_deref());
@@ -197,6 +197,13 @@ impl Manager {
             Err(error) if error.is::<Queued>() => return Ok(()),
             sent => sent?,
         };
+        // Another machine's alerts, which its IDs name, are not this one's.
+        if let MarkedRecipients::Space {
+            machine: Some(_), ..
+        } = recipients
+        {
+            return Ok(());
+        }
         self.store
             .write(move |tx| mark_in_chat(tx, &sent.alerts))
             .await
