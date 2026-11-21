@@ -149,6 +149,14 @@ impl Manager {
         self.store.read(records::all).await
     }
 
+    /// Record that the move of `record`'s space reached its phase.
+    pub(crate) async fn advance_move(&self, record: &MoveRecord) -> Result<()> {
+        let advanced = record.clone();
+        (self.store)
+            .write(move |tx| records::advance(tx, &advanced))
+            .await
+    }
+
     /// The spaces whose move holds its package for the joined machine that
     /// started it, which that machine may still read and end.
     pub(crate) async fn held_for_reader(&self) -> Result<HashSet<SpaceId>> {

@@ -286,3 +286,18 @@ fn a_move_to_standard_output_of_another_machine_s_space_writes_it_there() {
     fs::write(&file, &moved.stdout).unwrap();
     restores(&desk, &file, &work);
 }
+
+#[test]
+fn a_file_the_command_cannot_create_refuses_another_machine_s_move_before_it_starts() {
+    let (hub, laptop, _, laptop_id, _) = machines("");
+    let work = laptop_work(&hub, &laptop, &laptop_id);
+    let missing = hub.root.path().join("missing/work.shoal");
+
+    let refused = hub.run(&["move", &work, "-o", missing.to_str().unwrap()]);
+
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    // No move of it is left recorded there, which another would wait for.
+    let file = hub.root.path().join("work.shoal");
+    let moved = hub.ok(&["move", &work, "-o", file.to_str().unwrap()]);
+    assert_eq!(moved["failed"], json!([]), "{moved}");
+}

@@ -49,8 +49,9 @@ async fn here(paths: &CommandPaths, id: &SpaceId) -> Result<bool> {
 }
 
 /// Run `order` for its space on the machine that runs it, holding its
-/// package there, then write the package where `order` names, ending the
-/// space there once a file holds it.
+/// package there, then write the package to the file `order` names, which
+/// is refused before anything ends there when it cannot be created, ending
+/// the space there once a file holds it.
 pub(super) async fn run(
     paths: &CommandPaths,
     order: &MoveOrder,
@@ -60,17 +61,21 @@ pub(super) async fn run(
         !order.keep,
         "a copy of another machine's space goes to a joined machine, not a file; copy it with --machine, or from that machine"
     );
+    let reserved = Reserved::new(&order.destination)?;
     let held = MoveOrder {
         destination: MoveDestination::Held,
         ..order.clone()
     };
-    let mut report = pack_there(paths, held).await?;
+    let mut report = match pack_there(paths, held).await {
+        Ok(report) => report,
+        Err(error) => return Err(reserved.discard(error)),
+    };
     let Some(packed) = report.moved.pop() else {
+        reserved.remove();
         return Ok(report);
     };
     steps.reached(Step::MoveDelivering).await;
-    let file = package_file(&order.destination)?;
-    let moved = deliver(paths, order, packed, file).await?;
+    let moved = deliver(paths, order, packed, reserved).await?;
     if let Some(done) = super::packages::done(order, &moved) {
         super::say(&done);
     }
@@ -79,7 +84,7 @@ pub(super) async fn run(
 }
 
 /// Start the move `held` on the machine of its space and follow it to its
-/// end there, passing on what it prints and the consent it asks for.
+/// end there, passing on the consent it asks for.
 async fn pack_there(paths: &CommandPaths, held: MoveOrder) -> Result<MoveReport> {
     let mut following = match Following::start_move(paths, held, BTreeMap::new()).await? {
         MoveStarted::Following(_, following) => following,
@@ -96,25 +101,47 @@ async fn pack_there(paths: &CommandPaths, held: MoveOrder) -> Result<MoveReport>
     }
 }
 
-/// The file `destination` names, which takes one space.
-fn package_file(destination: &MoveDestination) -> Result<PathBuf> {
-    match destination {
-        MoveDestination::File { path } | MoveDestination::Client { path } => Ok(path.clone()),
-        _ => bail!("only a move to a file reads its package from another machine"),
+/// The new file a move's package goes to, created before anything ends.
+struct Reserved {
+    path: PathBuf,
+    file: std::fs::File,
+}
+
+impl Reserved {
+    /// The new file `destination` names, which takes one space.
+    fn new(destination: &MoveDestination) -> Result<Self> {
+        let path = match destination {
+            MoveDestination::File { path } | MoveDestination::Client { path } => path.clone(),
+            _ => bail!("only a move to a file reads its package from another machine"),
+        };
+        let file = std::fs::File::create_new(&path)
+            .with_context(|| format!("create {}; choose another file", path.display()))?;
+        Ok(Self { path, file })
+    }
+
+    /// Delete the file, which takes no package.
+    fn remove(self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+
+    /// [`Self::remove`] the file, which takes no package for `error`.
+    fn discard(self, error: anyhow::Error) -> anyhow::Error {
+        self.remove();
+        error
     }
 }
 
-/// Write the package of `packed`, which its machine holds, to `file`, and
-/// end the space there when `order` moves it to a file this command keeps
-/// no hold of.
+/// Write the package of `packed`, which its machine holds, into `reserved`,
+/// and end the space there when `order` moves it to a file this command
+/// keeps no hold of.
 async fn deliver(
     paths: &CommandPaths,
     order: &MoveOrder,
     mut packed: SpaceMoved,
-    file: PathBuf,
+    reserved: Reserved,
 ) -> Result<SpaceMoved> {
     let selector = SpaceSelector::id(&packed.id);
-    write_package(paths, selector.clone(), &file).await?;
+    let file = take_package(paths, selector.clone(), reserved).await?;
     if let MoveDestination::File { .. } = order.destination {
         let ending = crate::client::transfer::end_moved(paths, selector).await;
         packed.removal = Some(ending.with_context(|| both_places(&file, &packed.id))?);
@@ -123,17 +150,23 @@ async fn deliver(
     Ok(packed)
 }
 
-/// Write the package the machine of the space `space` holds to the new
-/// file `file`, which goes again when the package does not arrive whole.
-async fn write_package(paths: &CommandPaths, space: SpaceSelector, file: &Path) -> Result<()> {
-    let mut writing =
-        std::fs::File::create_new(file).with_context(|| format!("create {}", file.display()))?;
-    let read = crate::client::transfer::read_held_package(paths, space, &mut writing).await;
-    if let Err(error) = read {
-        let _ = std::fs::remove_file(file);
-        return Err(error.context("its package did not arrive, so it stays where it runs"));
+/// Write the package the machine of the space `space` holds into
+/// `reserved`; one that does not arrive whole leaves no file, and gives the
+/// move back there, where the space stays with its agents' restores queued.
+async fn take_package(
+    paths: &CommandPaths,
+    space: SpaceSelector,
+    mut reserved: Reserved,
+) -> Result<PathBuf> {
+    let read = crate::client::transfer::read_held_package(paths, space.clone(), &mut reserved.file);
+    let Err(error) = read.await else {
+        return Ok(reserved.path);
+    };
+    if let Err(released) = crate::client::transfer::release_held_move(paths, space).await {
+        super::warn(&format!("warning: {released:#}"));
     }
-    Ok(())
+    let error = error.context("its package did not arrive, so it stays where it runs");
+    Err(reserved.discard(error))
 }
 
 /// What a move of the space `id`, whose package went to `file`, says when

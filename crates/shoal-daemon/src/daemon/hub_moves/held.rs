@@ -1,7 +1,8 @@
 //! The package a move holds for the joined machine that started it, as
 //! `shoal move -o` does for a space of this machine from another one: that
 //! machine reads it over a stream of the hub's links, writes it where its
-//! caller named and then ends the space here.
+//! caller named and then ends the space here, or gives it back when it
+//! could not, and the space stays here.
 use std::{fs::File, io::Read as _, sync::Arc};
 
 use anyhow::{Context as _, Result, bail};
@@ -13,7 +14,8 @@ use tokio::{io::AsyncWriteExt as _, net::UnixStream};
 
 use crate::{
     daemon::{answer::OperationGuard, hub::sending::blocking, manager::Manager},
-    transfer::{MoveDestination, MoveLock, MoveRecord, package_name},
+    protocol::operations::OperationSpec,
+    transfer::{MoveDestination, MoveLock, MovePhase, MoveRecord, package_name},
 };
 
 /// A package a move holds, open, with its size, under the move's lock,
@@ -39,6 +41,26 @@ impl Manager {
         })
         .await?;
         Ok(HeldPackage { file, size, lock })
+    }
+
+    /// Give back the move of the space `selector` names, whose package the
+    /// joined machine that started it could not take: nothing of it left
+    /// here, so Shoal finishes it as one that packed only, and the space
+    /// stays here with its agents' restores queued.
+    pub(crate) async fn release_held_move(&self, selector: &SpaceSelector) -> Result<()> {
+        let mut record = self.held_move(selector).await?;
+        let lock = MoveLock::try_take(&self.paths, &record.space)?
+            .context("its package is being read; Shoal finishes the move once it is")?;
+        record.phase = MovePhase::Packing;
+        self.advance_move(&record).await?;
+        lock.release();
+        let space = record.space.clone();
+        let spec = OperationSpec::FinishMove {
+            record: Box::new(record),
+        };
+        self.spawn_operation(space, spec, None, None)
+            .await
+            .map(drop)
     }
 
     /// The recorded move of the space `selector` names that holds its

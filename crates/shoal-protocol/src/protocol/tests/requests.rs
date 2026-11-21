@@ -104,6 +104,7 @@ const REQUESTS: &[&str] = &[
     r#"{"deliver_copy":{"space":"fix","destination":{"machine":"desk","resume":true}}}"#,
     r#"{"settle_move":{"space":"fix"}}"#,
     r#"{"read_held_package":{"space":"fix"}}"#,
+    r#"{"release_held_move":{"space":"fix"}}"#,
     r#"{"receive_move":{"ticket":"t1","resume":false,"from":"laptop"}}"#,
     r#"{"import_package":{"package":{"file":"/work/fix.shoal"},"repository":"app","sessions":true}}"#,
     r#"{"checkpoint":{"workspace":"fix","name":"before rebase"}}"#,

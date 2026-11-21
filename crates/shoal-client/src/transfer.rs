@@ -104,6 +104,13 @@ pub async fn read_held_package(
     Ok(())
 }
 
+/// Give back the recorded move of `space` that holds its package for this
+/// machine, which could not take it, so `space` stays where it runs with
+/// its agents' restores queued there.
+pub async fn release_held_move(daemon: &impl Daemon, space: SpaceSelector) -> Result<()> {
+    request(daemon, RemovalMethod::ReleaseHeldMove { space }).await
+}
+
 /// Deliver the package of the recorded move of `space` to the joined
 /// machine it goes to, returning how the import there went; an error leaves
 /// it unknown whether that machine claimed the space.
