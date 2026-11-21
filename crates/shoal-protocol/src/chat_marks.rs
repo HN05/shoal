@@ -26,8 +26,13 @@ pub enum MarkedRecipients {
     Coordinator { space: Recipient },
     /// The coordinator on another machine.
     Above,
-    /// The agent of this space below.
-    Space { space: Recipient },
+    /// The agent of this space below, on the machine of the hub so named
+    /// when it is not this one.
+    Space {
+        space: Recipient,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        machine: Option<String>,
+    },
     /// Every agent the sender's scope reaches but its own, of this
     /// repository when it names one.
     All {
@@ -41,9 +46,15 @@ impl MarkedRecipients {
     pub fn describe(&self) -> String {
         match self {
             Self::User => "the user".into(),
-            Self::Coordinator { space } | Self::Space { space } => {
-                format!("the agent of {}", space.label())
-            }
+            Self::Coordinator { space }
+            | Self::Space {
+                space,
+                machine: None,
+            } => format!("the agent of {}", space.label()),
+            Self::Space {
+                space,
+                machine: Some(machine),
+            } => format!("the agent of {} on {machine}", space.label()),
             Self::Above => "the coordinating agent on another machine".into(),
             Self::All { repository: None } => "every agent your scope reaches".into(),
             Self::All {

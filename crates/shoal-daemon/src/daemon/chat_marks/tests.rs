@@ -382,12 +382,15 @@ async fn a_marked_alert_reaches_a_space_below_on_another_machine_through_the_hub
     };
     let marked = tree.parent.mark_alert(manager, to, Vec::new()).await;
     let ChatMark::Alert {
-        to: MarkedRecipients::Space { space },
+        to: MarkedRecipients::Space { space, machine },
     } = marked.mark
     else {
         panic!("{marked:?}");
     };
-    assert_eq!(space.id.as_str(), "away");
+    assert_eq!(
+        (space.id.as_str(), machine.as_deref()),
+        ("away", Some("desk"))
+    );
     tree.parent.end_turn(manager, "Rebase onto main").await;
     let held = held_calls(manager).await;
     let [call] = held.as_slice() else {

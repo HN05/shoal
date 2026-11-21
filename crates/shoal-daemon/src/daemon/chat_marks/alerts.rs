@@ -120,11 +120,11 @@ impl Manager {
         Ok(match to {
             AlertTarget::Up => (AlertTarget::Up, self.recipient_up(space).await?),
             AlertTarget::Space { space } => {
-                let space = self.located_recipient(&space).await?;
+                let (space, machine) = self.located_recipient(&space).await?;
                 let to = AlertTarget::Space {
                     space: SpaceSelector::id(&space.id),
                 };
-                (to, MarkedRecipients::Space { space })
+                (to, MarkedRecipients::Space { space, machine })
             }
             AlertTarget::All { repository } => {
                 let name = match &repository {
@@ -137,20 +137,26 @@ impl Manager {
         })
     }
 
-    /// Whom an alert sent up from `space` reaches now.
-    /// The space `selector` names, here or on another machine, as an
-    /// alert names its recipient.
-    async fn located_recipient(&self, selector: &SpaceSelector) -> Result<Recipient> {
+    /// The space `selector` names, as an alert names its recipient, with
+    /// the name of its machine when that is another one.
+    async fn located_recipient(
+        &self,
+        selector: &SpaceSelector,
+    ) -> Result<(Recipient, Option<String>)> {
         Ok(match self.locate_space(None, selector).await? {
-            Located::Here(space) => recipient(&space),
-            Located::Elsewhere { space, .. } => Recipient {
-                number: space.space.number,
-                id: space.space.id,
-                name: space.space.name,
-            },
+            Located::Here(space) => (recipient(&space), None),
+            Located::Elsewhere { space, machine } => {
+                let space = Recipient {
+                    number: space.space.number,
+                    id: space.space.id,
+                    name: space.space.name,
+                };
+                (space, Some(machine.name))
+            }
         })
     }
 
+    /// Whom an alert sent up from `space` reaches now.
     async fn recipient_up(&self, space: &Space) -> Result<MarkedRecipients> {
         Ok(match self.route_up(&space.id, Source::Agent).await? {
             Recipients::User => MarkedRecipients::User,
