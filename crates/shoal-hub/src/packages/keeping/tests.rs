@@ -61,3 +61,21 @@ async fn a_hub_whose_disk_is_low_refuses_packages_and_alerts_once() {
     assert_eq!(refused, 1);
     assert_eq!(kept(&hub, "plan"), None);
 }
+
+#[tokio::test]
+async fn a_package_goes_once_another_machine_takes_its_space_s_id_over() {
+    let root = tempfile::tempdir().unwrap();
+    let hub = hub(&root, "", &["laptop", "desk"]).await;
+    report(&hub, "laptop", &["plan"]).await;
+    send(&hub, "laptop", "plan", b"plan").await.unwrap();
+    let (desk, plan) = (
+        MemberId::from("desk".to_owned()),
+        SpaceId::from("plan".to_owned()),
+    );
+    hub.record_space_claim(&desk, &plan, (None, false))
+        .await
+        .unwrap();
+    // Its arrival there, as a move's, makes the space desk's.
+    report(&hub, "desk", &["plan"]).await;
+    assert_eq!(kept(&hub, "plan"), None);
+}

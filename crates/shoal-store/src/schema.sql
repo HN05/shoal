@@ -1548,6 +1548,12 @@ CREATE TRIGGER hub_packages_ended AFTER DELETE ON hub_spaces BEGIN
         WHERE space_id=OLD.space_id AND member_id=OLD.member_id;
 END;
 
+CREATE TRIGGER hub_packages_handed_over AFTER UPDATE OF member_id ON hub_spaces
+    WHEN OLD.member_id <> NEW.member_id BEGIN
+    DELETE FROM hub_packages
+        WHERE space_id=OLD.space_id AND member_id=OLD.member_id;
+END;
+
 CREATE TRIGGER hub_package_states_removed AFTER DELETE ON spaces BEGIN
     DELETE FROM hub_package_states WHERE space_id=OLD.id;
 END;

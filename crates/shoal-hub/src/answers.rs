@@ -16,7 +16,7 @@ use tokio::sync::OwnedRwLockReadGuard;
 
 use super::{
     directory, members,
-    packages::{Sent, takeovers},
+    packages::{self, Sent, takeovers},
     session::Calls,
 };
 use crate::{
@@ -261,6 +261,7 @@ impl Hub {
                 directory::forget(tx, &member.id)?;
                 super::queue::forget(tx, &member.id)?;
                 takeovers::forget(tx, &member.id)?;
+                packages::forget(tx, &member.id)?;
                 Ok(member)
             })
             .await?;
@@ -281,7 +282,8 @@ impl Hub {
                 members::revoke(tx, &member)?;
                 directory::forget(tx, &member)?;
                 super::queue::forget(tx, &member)?;
-                takeovers::forget(tx, &member)
+                takeovers::forget(tx, &member)?;
+                packages::forget(tx, &member)
             })
             .await?;
         self.delete_ended_packages().await;

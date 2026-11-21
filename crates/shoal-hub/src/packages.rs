@@ -9,7 +9,7 @@ mod retiring;
 mod sending;
 pub(crate) mod takeovers;
 
-pub(crate) use keeping::{Kept, Sent};
+pub(crate) use keeping::{Kept, Sent, forget};
 
 #[cfg(test)]
 mod tests;

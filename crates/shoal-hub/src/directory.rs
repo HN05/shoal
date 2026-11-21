@@ -37,10 +37,6 @@ impl Hub {
         reserved: Vec<SpaceNumber>,
     ) -> Result<Numbering> {
         let member = member.clone();
-        let ends = match &report {
-            Report::Whole(_) => true,
-            Report::Changes { removed, .. } => !removed.is_empty(),
-        };
         let (conflicts, numbering) = (self.store)
             .write(move |tx| {
                 numbers::reserve_held(tx, &member, &reserved)?;
@@ -49,9 +45,9 @@ impl Hub {
                 Ok((conflicts, numbers::kept_for(tx, &member)?))
             })
             .await?;
-        if ends {
-            self.delete_ended_packages().await;
-        }
+        // A space that ended, or whose ID another machine took over, takes
+        // its package with it.
+        self.delete_ended_packages().await;
         self.alert_conflicts(daemon, conflicts).await?;
         Ok(numbering)
     }

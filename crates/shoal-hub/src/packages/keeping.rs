@@ -221,6 +221,12 @@ fn record(
     Ok(())
 }
 
+/// Forget every package `member` sent, as once the hub revoked it.
+pub(crate) fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
+    tx.execute("DELETE FROM hub_packages WHERE member_id=?1", [member])?;
+    Ok(())
+}
+
 /// The spaces the hub keeps a package of.
 fn kept_spaces(tx: &Transaction<'_>) -> Result<HashSet<String>> {
     let mut statement = tx.prepare("SELECT space_id FROM hub_packages")?;

@@ -2,5 +2,6 @@
 -- hub_packages.sql.
 DROP TRIGGER hub_package_states_removed;
 DROP TABLE hub_package_states;
+DROP TRIGGER hub_packages_handed_over;
 DROP TRIGGER hub_packages_ended;
 DROP TABLE hub_packages;

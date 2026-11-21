@@ -18,6 +18,14 @@ CREATE TRIGGER hub_packages_ended AFTER DELETE ON hub_spaces BEGIN
         WHERE space_id=OLD.space_id AND member_id=OLD.member_id;
 END;
 
+-- Nor does a machine keep a package of a space whose ID another machine
+-- took over, as by a move or a takeover.
+CREATE TRIGGER hub_packages_handed_over AFTER UPDATE OF member_id ON hub_spaces
+    WHEN OLD.member_id <> NEW.member_id BEGIN
+    DELETE FROM hub_packages
+        WHERE space_id=OLD.space_id AND member_id=OLD.member_id;
+END;
+
 -- What a machine sent the hub of each of its spaces: the state the last
 -- package that arrived holds, none before one did, when it last tried to
 -- send one, and since when the space has changes the hub's package lacks,
