@@ -96,9 +96,12 @@ fn a_fork_finds_a_session_placed_where_its_tool_keeps_them_by_default() {
     copy_session(store, directories, (name, session)).unwrap();
     let copied = directory.path().join("p/s1.jsonl");
     assert_eq!(fs::read_to_string(&copied).unwrap(), "carried\n");
-    // A session the directory has stays as it is.
-    fs::write(&copied, "here\n").unwrap();
-    fs::write(&carried, "carried again\n").unwrap();
+    // The session carried again replaces the copy it continues.
+    fs::write(&carried, "carried\nlater\n").unwrap();
     copy_session(store, directories, (name, session)).unwrap();
+    assert_eq!(fs::read_to_string(&copied).unwrap(), "carried\nlater\n");
+    // A copy that went its own way stays.
+    fs::write(&copied, "here\n").unwrap();
+    assert!(copy_session(store, directories, (name, session)).is_err());
     assert_eq!(fs::read_to_string(&copied).unwrap(), "here\n");
 }

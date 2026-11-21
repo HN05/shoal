@@ -145,9 +145,9 @@ pub(in crate::cli) async fn place_forked_sessions(
         Some(repository) => ConfigTarget::Repository(repository.into()),
         None => ConfigTarget::Global,
     };
-    let placed = (target, &BTreeMap::new());
+    let under = (target, &BTreeMap::new());
     Ok(
-        match place_session_files(ctx, placed, &files, Existing::Continued).await {
+        match place_session_files(ctx, under, &files, Existing::Continued).await {
             true => 0,
             false => 1,
         },
@@ -183,8 +183,8 @@ pub(in crate::cli) async fn install_kept_session_files(
 /// Copy the files of `session`, which agent `name` under `settings` starts
 /// from a fork of in `space`, where its tool looks for them under the
 /// workspace's `[env]`, from where it keeps them without it, as for a
-/// session another machine carried here, when only that one has them. A
-/// failure only warns; the fork then finds no session.
+/// session another machine carried here. A failure only warns; the fork
+/// then starts from what that directory has.
 pub(in crate::cli) async fn find_forked_session(
     ctx: &Context,
     space: &crate::agents::HomeRecords,
@@ -217,19 +217,15 @@ pub(in crate::cli) async fn find_forked_session(
 }
 
 /// Copy the files of `session` of agent `name` that `store` keeps in
-/// `default` into `directory`, unless that is where they are or it has
-/// some of them already.
+/// `default` into `directory`, unless that is where they are, replacing a
+/// copy there that they continue, as after the session was carried again,
+/// and keeping one that went its own way.
 fn copy_session(
     store: &dyn transcripts::Store,
     (default, directory): (&Path, &Path),
     (name, session): (&Agent, &shoal_ids::agent_session_ids::AgentSessionId),
 ) -> Result<()> {
-    if default == directory
-        || !store
-            .session_files(directory, session.as_str())?
-            .files
-            .is_empty()
-    {
+    if default == directory {
         return Ok(());
     }
     for path in store.session_files(default, session.as_str())?.files {
@@ -243,7 +239,7 @@ fn copy_session(
         place(
             directory,
             &CarriedSessionFile { file, contents },
-            Existing::Kept,
+            Existing::Continued,
         )?;
     }
     Ok(())
