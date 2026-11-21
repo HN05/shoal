@@ -6,10 +6,12 @@ use shoal_protocol::{
     threads::{Finding, Post, Side, Thread},
 };
 
-use crate::cli::{
-    commands::alerts::hanging_indent,
-    output::{Palette, Style},
-    ui::{self, Cell},
+use crate::{
+    cli::{
+        output::{Palette, Style},
+        ui::{self, Cell},
+    },
+    client::output::alerts::hanging_indent,
 };
 
 /// Where `thread` stands: whose turn it is, and whether its holder's agent

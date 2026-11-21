@@ -9,7 +9,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    client::agent_updates,
+    client::{agent_updates, output::alerts},
 };
 use shoal_protocol::links::Updates;
 use shoal_protocol::space_names::SpaceSelector;
@@ -199,7 +199,7 @@ fn hook_context(heading: &str, space: &str, updates: &Updates) -> String {
             updates
                 .alerts
                 .iter()
-                .map(|alert| format!("- {}", super::hanging_indent(&super::shown(alert), "  "))),
+                .map(|alert| format!("- {}", alerts::hanging_indent(&alerts::shown(alert), "  "))),
         );
     }
     if !updates.updates.is_empty() {

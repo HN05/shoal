@@ -4,8 +4,8 @@ use std::{ffi::OsString, time::Duration};
 use anyhow::Result;
 use tokio::time::Instant;
 
-use crate::cli::{commands::alerts, context::Context};
 use crate::client::items;
+use crate::{cli::context::Context, client::output::alerts};
 use shoal_protocol::space_names::SpaceSelector;
 
 pub(in crate::cli::commands) async fn watch_items(

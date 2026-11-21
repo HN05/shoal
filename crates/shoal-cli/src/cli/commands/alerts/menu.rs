@@ -2,11 +2,14 @@
 //! where a key binding chooses what to do with it.
 use anyhow::{Context as _, Result};
 
-use super::{cells, shown, withdraw};
-use crate::cli::{
-    context::Context,
-    output::Palette,
-    ui::{self, Key, KeyBindings, WidthLimit},
+use super::{cells, withdraw};
+use crate::{
+    cli::{
+        context::Context,
+        output::Palette,
+        ui::{self, Key, KeyBindings, WidthLimit},
+    },
+    client::output::alerts::shown,
 };
 use shoal_protocol::{alerts::Alert, space_names::SpaceSelector};
 

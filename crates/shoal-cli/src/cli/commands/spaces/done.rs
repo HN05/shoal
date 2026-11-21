@@ -3,15 +3,12 @@ use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::ByKind;
 
-use crate::client::assignments;
-use crate::client::output::spaces::Withdrawn;
-use crate::{
-    cli::{
-        context::Context,
-        ui::{self, Fallback},
-    },
-    model::Completion,
+use crate::cli::{
+    context::Context,
+    ui::{self, Fallback},
 };
+use crate::client::assignments;
+use crate::client::output::spaces::{self, Withdrawn};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The space `space` names, else the current chat or workspace, else a
@@ -65,23 +62,8 @@ pub(in crate::cli::commands) async fn done(
                 .to_owned()
         }
         Selected::Chat(_) => "Chat marked done; no cleanup requested.".to_owned(),
-        Selected::Workspace(_) => done_message(&completion),
+        Selected::Workspace(_) => spaces::workspace_done(&completion),
     };
     ctx.emit(&message, &completion)?;
     Ok(0)
-}
-
-fn done_message(completion: &Completion) -> String {
-    let marked = if completion.integrated {
-        "Assignment marked done; integrated elsewhere"
-    } else {
-        "Assignment marked done"
-    };
-    if completion.cleanup {
-        format!(
-            "{marked}; cleanup requested. Tracked commands may stop and the workspace may be removed."
-        )
-    } else {
-        format!("{marked}; no cleanup requested.")
-    }
 }

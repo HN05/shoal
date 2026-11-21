@@ -128,11 +128,7 @@ impl Context {
 
     /// Print a human-readable line, or `value` as one JSON line with `--json`.
     pub fn emit(&self, message: &str, value: impl Output) -> Result<()> {
-        if self.json {
-            outln!("{}", output::json(&value)?);
-        } else {
-            outln!("{message}");
-        }
+        outln!("{}", output::line(self.json, message, &value)?);
         Ok(())
     }
 

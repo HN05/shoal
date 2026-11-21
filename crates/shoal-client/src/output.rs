@@ -5,6 +5,7 @@ use serde::{Serialize, de::DeserializeOwned};
 
 pub mod acquisition;
 pub mod agents;
+pub mod alerts;
 pub mod batch;
 pub mod catalog;
 pub mod cleanup;
@@ -86,6 +87,19 @@ pub fn json<T: Output + ?Sized>(value: &T) -> serde_json::Result<String> {
         );
     }
     Ok(text)
+}
+
+/// What a command prints for `value`: it as JSON when `json`, otherwise
+/// `message`.
+pub fn line<T: Output + ?Sized>(
+    json: bool,
+    message: &str,
+    value: &T,
+) -> serde_json::Result<String> {
+    match json {
+        true => self::json(value),
+        false => Ok(message.to_owned()),
+    }
 }
 
 outputs!(

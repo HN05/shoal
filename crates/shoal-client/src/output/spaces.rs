@@ -19,6 +19,22 @@ pub enum ListedSpace {
     Here(Space),
 }
 
+/// What recording a workspace's work as done says it did.
+pub fn workspace_done(completion: &Completion) -> String {
+    let marked = if completion.integrated {
+        "Assignment marked done; integrated elsewhere"
+    } else {
+        "Assignment marked done"
+    };
+    if completion.cleanup {
+        format!(
+            "{marked}; cleanup requested. Tracked commands may stop and the workspace may be removed."
+        )
+    } else {
+        format!("{marked}; no cleanup requested.")
+    }
+}
+
 /// A recorded completion, withdrawn.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Withdrawn {
