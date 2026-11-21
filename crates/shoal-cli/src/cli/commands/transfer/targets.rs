@@ -5,6 +5,7 @@ use anyhow::{Context as _, Result, ensure};
 use crate::cli::{args::transfer::MoveArgs, context::Context, ui};
 use crate::model::Space;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::protocol::{ErrorCode, RemoteError};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The spaces `args` selects, by ID, refusing one that selects no space, or
@@ -41,13 +42,16 @@ async fn live_or_removed(ctx: &Context, selector: &SpaceSelector, files: bool) -
     let located = crate::client::workspaces::locate(&ctx.paths, selector.clone()).await;
     let missing = match located {
         Ok(located) => return Ok(located.id().clone()),
-        Err(missing) => missing,
+        Err(error) if files && names_no_space(&error) => error,
+        Err(error) => return Err(error),
     };
-    ensure!(files, missing);
     let removed = crate::client::removal::removed_space(&ctx.paths, selector.clone());
-    Ok((removed.await)
-        .with_context(|| format!("no space {selector}"))?
-        .space_id)
+    Ok((removed.await).context(missing)?.space_id)
+}
+
+/// Whether `error` is the daemon's refusal for a space no machine has.
+fn names_no_space(error: &anyhow::Error) -> bool {
+    (error.downcast_ref::<RemoteError>()).is_some_and(|remote| remote.code == ErrorCode::NotFound)
 }
 
 /// The IDs of the current space or those the user picks.
