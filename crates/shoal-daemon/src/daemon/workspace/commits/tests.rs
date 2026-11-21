@@ -49,7 +49,8 @@ async fn a_workspace_at_a_commit_has_no_branch_and_is_named_after_its_start() {
     commit(&checkout, "later");
     let main = git(&checkout, &["rev-parse", "HEAD"]).trim().to_owned();
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
 
@@ -132,7 +133,8 @@ async fn a_tag_only_origin_has_is_fetched_with_its_tags() {
     git(&origin, &["tag", "release"]);
     let released = git(&origin, &["rev-parse", "HEAD"]).trim().to_owned();
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = create(
@@ -174,7 +176,8 @@ async fn a_pr_head_is_fetched_from_the_ref_its_forge_serves() {
     git(&origin, &["update-ref", "refs/pull/812/head", &fork]);
     git(&origin, &["reset", "-q", "--hard", "HEAD~1"]);
     let repo = manager
-        .register_repository(
+        .repositories
+        .register(
             temp.path().join("clone").to_str().unwrap().into(),
             None,
             None,
@@ -207,7 +210,8 @@ async fn a_child_at_its_parents_branch_starts_at_the_parents_commit_without_stac
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -239,7 +243,8 @@ async fn workspace_processes_create_workspaces_at_a_commit_only_below_their_own(
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let create_branch =
@@ -298,7 +303,8 @@ async fn its_starting_commit_counts_as_kept_and_later_commits_do_not() {
     let local = git(&checkout, &["rev-parse", "HEAD"]).trim().to_owned();
     git(&checkout, &["checkout", "-q", "main"]);
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = create(&manager, &repo.id, None, CommitStart::Revision(Some(local)))
@@ -337,7 +343,8 @@ async fn a_removed_workspace_at_a_commit_is_restored_without_a_branch() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = create(&manager, &repo.id, None, CommitStart::Revision(None))
@@ -396,7 +403,8 @@ async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work(
         head
     };
     let repo = manager
-        .register_repository(
+        .repositories
+        .register(
             temp.path().join("clone").to_str().unwrap().into(),
             None,
             None,
@@ -475,7 +483,8 @@ async fn a_workspace_at_a_commit_goes_below_the_chat_or_workspace_it_names() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = manager
@@ -522,7 +531,8 @@ async fn removing_one_switched_onto_a_branch_leaves_that_branch() {
     commit(&checkout, "topic");
     git(&checkout, &["switch", "-q", "main"]);
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = create(
@@ -570,7 +580,8 @@ async fn reopening_a_prs_workspace_records_the_prs_base() {
     let head = git(&origin, &["rev-parse", "HEAD"]).trim().to_owned();
     git(&origin, &["update-ref", "refs/pull/5/head", &head]);
     let repo = manager
-        .register_repository(
+        .repositories
+        .register(
             temp.path().join("clone").to_str().unwrap().into(),
             None,
             None,
@@ -630,7 +641,8 @@ async fn a_restored_prs_workspace_drops_a_base_that_is_gone() {
         &["update-ref", "refs/remotes/origin/release", "main"],
     );
     let repo = manager
-        .register_repository(clone.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(clone.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let opened = manager
@@ -687,7 +699,8 @@ async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
     let head = git(&origin, &["rev-parse", "HEAD"]).trim().to_owned();
     git(&origin, &["update-ref", "refs/pull/4/head", &head]);
     let repo = manager
-        .register_repository(
+        .repositories
+        .register(
             temp.path().join("clone").to_str().unwrap().into(),
             None,
             None,
@@ -758,7 +771,8 @@ async fn a_workspace_at_a_commit_takes_no_part_in_a_stack() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let branch = manager
@@ -797,11 +811,13 @@ async fn a_parent_of_another_repository_is_refused_before_any_fetch() {
     // A tag only origin has would make resolving it fetch the other clone.
     git(&origin, &["tag", "remote-only"]);
     let own = manager
-        .register_repository(own.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(own.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let other_repo = manager
-        .register_repository(other.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(other.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -827,7 +843,8 @@ async fn a_chat_opens_no_workspace_at_a_commit_in_another_repository() {
         let checkout = repository(temp.path(), name);
         repos.push(
             manager
-                .register_repository(checkout.to_str().unwrap().into(), None, None)
+                .repositories
+                .register(checkout.to_str().unwrap().into(), None, None)
                 .await
                 .unwrap(),
         );

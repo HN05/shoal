@@ -14,7 +14,11 @@ async fn machine(manager: &Manager, temp: &tempfile::TempDir) -> Repository {
     ));
     let path = repository(temp.path(), "repo");
     let path = path.to_str().unwrap().into();
-    manager.register_repository(path, None, None).await.unwrap()
+    manager
+        .repositories
+        .register(path, None, None)
+        .await
+        .unwrap()
 }
 
 /// The launch of a chat about `repo` by the agent `claude`.

@@ -94,7 +94,7 @@ impl Manager {
         sender: Option<&SpaceId>,
     ) -> Result<Vec<(Space, Reader)>> {
         let repository = match repository {
-            Some(repository) => Some(self.repository(repository.clone()).await?.id),
+            Some(repository) => Some(self.repositories.repository(repository.clone()).await?.id),
             None => None,
         };
         let mut spaces = self.spaces_within(below).await?;

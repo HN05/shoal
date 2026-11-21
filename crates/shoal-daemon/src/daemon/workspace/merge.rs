@@ -154,7 +154,7 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         let (method, message) = self.merge_method(&workspace, options).await?;
         self.ensure_merges_locally(&workspace).await?;
-        let repo = self.repository(workspace.repository()).await?;
+        let repo = self.repositories.repository(workspace.repository()).await?;
         ensure!(
             off_runtime::is_dir(&workspace.path).await?,
             "workspace directory is missing: {}",

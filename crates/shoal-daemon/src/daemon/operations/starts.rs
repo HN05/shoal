@@ -271,7 +271,7 @@ impl Manager {
         let Some(issue) = issue else {
             return Ok(None);
         };
-        let checkout = self.repository(repository.clone()).await?.path;
+        let checkout = self.repositories.repository(repository.clone()).await?.path;
         Ok(Some(
             self.links
                 .read_open_issue(self, &checkout, issue)

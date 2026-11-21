@@ -97,7 +97,7 @@ impl Manager {
             Some(id) => {
                 let gate = self.gates.lock_message_files(id).await;
                 (
-                    ShoalDir::of(&self.repository(id).await?, Contents::Imports),
+                    ShoalDir::of(&self.repositories.repository(id).await?, Contents::Imports),
                     gate,
                 )
             }
@@ -135,7 +135,7 @@ impl Manager {
     pub(crate) async fn remove_interrupted_imports(&self) -> Result<()> {
         let root_dir = self.config().root_dir(&self.paths)?;
         let mut directories = vec![self.outside_imports(&root_dir)];
-        for repo in self.repositories().await? {
+        for repo in self.repositories.list().await? {
             directories.push(ShoalDir::of(&repo, Contents::Imports));
         }
         blocking(move || directories.iter().try_for_each(ShoalDir::remove)).await

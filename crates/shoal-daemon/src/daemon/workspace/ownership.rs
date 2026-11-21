@@ -86,7 +86,7 @@ impl Manager {
         selector: &SpaceSelector,
     ) -> Result<crate::model::OpenedWorkspace> {
         let workspace = self.workspace(selector).await?;
-        let (_repo, _guard) = self.lock_repository(workspace.repository()).await?;
+        let (_repo, _guard) = self.repositories.lock(workspace.repository()).await?;
         // The workspace may have gone while waiting for the repository.
         let workspace = self.workspace_by_id(&workspace.id).await?;
         self.reopen_owned_workspace(&workspace, workspace.branch().map(BranchName::as_str))
@@ -388,7 +388,7 @@ impl Manager {
     /// The shared Git directory of the repository of `workspace`, read
     /// when first needed.
     pub(crate) async fn common_dir(&self, workspace: &Workspace) -> Result<CommonDir> {
-        let repo = self.repository(workspace.repository()).await?;
+        let repo = self.repositories.repository(workspace.repository()).await?;
         Ok(CommonDir::of(&repo.path))
     }
 
@@ -456,7 +456,7 @@ impl Manager {
 
     /// Whether Git still lists the (possibly missing) worktree at its recorded path.
     pub(crate) async fn is_registered_worktree(&self, workspace: &Workspace) -> Result<bool> {
-        let repo = self.repository(workspace.repository()).await?;
+        let repo = self.repositories.repository(workspace.repository()).await?;
         let trees = git::worktrees(&repo.path, git::run).await?;
         let recorded = workspace.path.clone();
         off_runtime::run(move || {

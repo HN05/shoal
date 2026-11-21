@@ -6,7 +6,8 @@ async fn a_scoped_caller_gives_at_most_its_own_spaces_priority() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let top = chat(&manager, "top", "chat", Some(&repo), None).await;
@@ -85,7 +86,8 @@ async fn a_started_or_split_workspace_records_the_priority_it_is_given() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let options = CreationOptions {
@@ -146,7 +148,8 @@ async fn a_scoped_caller_that_names_no_priority_gives_its_own_when_lower() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let top = chat(&manager, "top", "chat", Some(&repo), None).await;
@@ -174,7 +177,8 @@ async fn a_reopened_workspace_keeps_its_priority_unless_one_is_asked_for() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -243,7 +247,8 @@ async fn a_workspace_at_a_commit_records_the_priority_it_is_given() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let options = CreationOptions {

@@ -46,7 +46,8 @@ async fn restart_waits_for_background_work_and_executions_that_cannot_reattach()
 async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {
     let path = repository(root, "repo");
     manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap()
 }

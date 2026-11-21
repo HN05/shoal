@@ -38,7 +38,8 @@ async fn agent(manager: &Manager, workspace: &Workspace, name: &str) -> Executio
 async fn workspace(manager: &Manager, root: &std::path::Path, name: &str) -> Workspace {
     let checkout = repository(root, &format!("{name}-repo"));
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     manager
@@ -223,7 +224,8 @@ async fn a_chats_interrupted_agent_is_due_its_wrappers_wake_for_a_message() {
 async fn chat(manager: &std::sync::Arc<Manager>, root: &std::path::Path) -> Chat {
     let checkout = repository(root, "chat-repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     manager

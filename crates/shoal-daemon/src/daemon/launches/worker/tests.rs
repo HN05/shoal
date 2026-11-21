@@ -21,7 +21,11 @@ async fn stopped_workspace(
     ));
     let path = repository(temp.path(), "repo");
     let path = path.to_str().unwrap().into();
-    let repo = manager.register_repository(path, None, None).await.unwrap();
+    let repo = manager
+        .repositories
+        .register(path, None, None)
+        .await
+        .unwrap();
     let workspace = manager.create_workspace(&repo.id, "work".into(), None, None, None);
     let workspace = workspace.await.unwrap();
     let record = recovery::save_record(

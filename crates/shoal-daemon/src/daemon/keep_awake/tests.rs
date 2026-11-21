@@ -24,7 +24,8 @@ async fn watch_pr(manager: &Manager, workspace: &crate::model::Workspace) {
 async fn workspace(manager: &Manager, temp: &tempfile::TempDir) -> crate::model::Workspace {
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     manager
@@ -181,7 +182,8 @@ async fn a_chats_agent_has_work_as_a_workspaces_does() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = manager

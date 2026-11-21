@@ -17,7 +17,8 @@ async fn a_scoped_chat_lists_items_as_the_agent_account() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = manager

@@ -49,7 +49,8 @@ async fn following(watch: bool, runs: Value) -> Following {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let server = Server::start(move |request| {

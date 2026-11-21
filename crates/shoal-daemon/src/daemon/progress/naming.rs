@@ -101,6 +101,7 @@ impl Manager {
         let repository = (space.repository_id.as_ref())
             .context("a space without a repository names an issue by its URL")?;
         let repository = self
+            .repositories
             .repository(&crate::repository::Selector::from(repository))
             .await?;
         let forge: ForgeRepo = shoal_links::forges::of_checkout(self, &repository).await?;

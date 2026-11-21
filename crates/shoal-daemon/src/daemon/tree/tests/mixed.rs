@@ -104,7 +104,8 @@ async fn a_chat_below_a_workspace_decides_and_coordinates_for_the_spaces_below_i
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (root, chat, worker, process) = mixed_tree(&manager, &repo.id).await;
@@ -187,7 +188,8 @@ async fn removing_a_workspace_removes_a_chat_below_it_and_what_is_below_that() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (root, chat, worker, process) = mixed_tree(&manager, &repo.id).await;
@@ -220,7 +222,8 @@ async fn a_space_never_takes_one_above_it_as_its_child() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (root, chat, _, _process) = mixed_tree(&manager, &repo.id).await;
@@ -244,7 +247,8 @@ async fn a_chat_opens_workspaces_only_in_its_own_repository() {
         let checkout = repository(temp.path(), name);
         repos.push(
             manager
-                .register_repository(checkout.to_str().unwrap().into(), None, None)
+                .repositories
+                .register(checkout.to_str().unwrap().into(), None, None)
                 .await
                 .unwrap(),
         );
@@ -302,7 +306,8 @@ async fn removing_a_workspace_removes_the_chats_in_it_first() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let host = manager
@@ -382,7 +387,8 @@ async fn a_chat_never_takes_a_workspace_it_runs_in_or_one_above_it() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let host = manager
@@ -435,7 +441,8 @@ async fn a_scoped_chat_starts_chats_only_in_the_worktrees_of_its_tree() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (root, chat, worker, _process) = mixed_tree(&manager, &repo.id).await;
@@ -478,7 +485,8 @@ async fn a_scoped_process_restarts_only_the_chats_below_its_space() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (root, chat, worker, _process) = mixed_tree(&manager, &repo.id).await;

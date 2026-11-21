@@ -60,7 +60,8 @@ async fn fixture_deciding_by(gate: &str) -> Fixture {
     configure(&manager, &config).await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -355,7 +356,7 @@ async fn a_gate_run_in_the_repository_directory_holds_back_its_removal() {
     let fixture = fixture().await;
     let manager = &fixture.manager;
     let repository = fixture.workspace.repository().clone();
-    let registered = manager.repository(&repository).await.unwrap();
+    let registered = manager.repositories.repository(&repository).await.unwrap();
     let runs = crate::shoal_dirs::ShoalDir::of(&registered, crate::shoal_dirs::Contents::GateRuns);
     runs.create().unwrap();
     let run = runs.root().join("request");

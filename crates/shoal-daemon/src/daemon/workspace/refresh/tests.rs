@@ -37,7 +37,8 @@ impl Fixture {
 
     async fn registered(root: tempfile::TempDir, manager: Arc<Manager>, checkout: &Path) -> Self {
         let repo = manager
-            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .repositories
+            .register(checkout.to_str().unwrap().into(), None, None)
             .await
             .unwrap();
         Self {

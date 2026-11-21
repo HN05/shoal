@@ -36,20 +36,6 @@ struct Progress {
 }
 
 impl Manager {
-    pub(crate) async fn ensure_repository_available(&self, id: &RepositoryId) -> Result<()> {
-        let id = id.to_owned();
-        self.store
-            .run(move |db| {
-                ensure!(
-                    !store::repository_removing(db, &id)?,
-                    "repository {id} is being removed, or its removal is incomplete; retry shoal repo rm {id} --yes"
-                );
-                store::ensure_repository_not_moving(db, &id)?;
-                Ok(())
-            })
-            .await
-    }
-
     pub async fn remove_repository(
         &self,
         selector: impl Into<crate::repository::Selector>,
@@ -62,7 +48,7 @@ impl Manager {
             // Registration cannot adopt or allocate a path during removal. The Git
             // gate also serializes with workspace creation, branch refresh, and reconciliation.
             let _registry = self.gates.lock_registry().await;
-            let repo = self.repository(selector).await?;
+            let repo = self.repositories.repository(selector).await?;
             let seed = self.pause_seed_build(&repo.id).await;
             self.reviews.stop_in_repository(self, &repo.id).await;
             let _fetch = self.gates.lock_fetch(&repo.id).await;
@@ -84,7 +70,7 @@ impl Manager {
         // The hand-overs first, as [`Self::remove_repository`] takes them.
         let removal = async {
             let _registry = self.gates.lock_registry().await;
-            let repo = self.repository(id).await?;
+            let repo = self.repositories.repository(id).await?;
             let seed = self.pause_seed_build(&repo.id).await;
             self.reviews.stop_in_repository(self, &repo.id).await;
             let _fetch = self.gates.lock_fetch(&repo.id).await;
@@ -348,7 +334,7 @@ impl Manager {
     ) -> Result<()> {
         // Removal deletes the checkout and the local config's directory.
         let local = repo.workspaces_dir.join(crate::config::repo::LOCAL_DIR);
-        let other_repositories = self.repositories().await?;
+        let other_repositories = self.repositories.list().await?;
         let other_workspaces = self.list_workspaces().await?;
         for deleted in [&repo.path, &local] {
             ensure!(

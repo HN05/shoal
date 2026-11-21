@@ -10,7 +10,8 @@ async fn long_file_listings_go_in_pages() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -64,7 +65,8 @@ async fn deleting_by_name_needs_a_workspace() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -110,7 +112,8 @@ async fn a_chats_agent_lists_and_deletes_its_own_chats_files() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;

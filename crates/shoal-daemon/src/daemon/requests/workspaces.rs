@@ -262,7 +262,7 @@ async fn administer<'a>(
         WorkspaceMethod::AdoptWorkspace { repository, .. } => {
             const REFUSAL: &str = "scoped processes adopt worktrees only in their own repository";
             *repository = manager.own_repository(caller, repository, REFUSAL).await?;
-            Some(manager.repository(&*repository).await?.id)
+            Some(manager.repositories.repository(&*repository).await?.id)
         }
         _ => None,
     };

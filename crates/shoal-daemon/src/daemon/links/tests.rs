@@ -15,7 +15,8 @@ async fn workspace_with_origin() -> (tempfile::TempDir, std::sync::Arc<Manager>,
     let path = repository(root.path(), "repo");
     git(&path, &["config", "protocol.allow", "never"]);
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -354,7 +355,8 @@ async fn forge_workspace(host: &str) -> (tempfile::TempDir, std::sync::Arc<Manag
     .await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

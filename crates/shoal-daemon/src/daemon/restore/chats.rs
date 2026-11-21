@@ -53,7 +53,7 @@ impl Manager {
             });
         }
         if let Some(repository) = &removed.repository_id {
-            let path = self.repository(repository).await?.path;
+            let path = self.repositories.repository(repository).await?.path;
             return Ok(Workdir::Checkout { path });
         }
         let root_dir = (kept.root_dir.clone())

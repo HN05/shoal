@@ -80,7 +80,10 @@ async fn a_machine_that_leaves_its_hub_numbers_on_its_own() -> Result<()> {
 async fn a_renumbered_space_takes_its_threads_and_their_waits_along() -> Result<()> {
     let (root, manager) = test_support::manager().await;
     let path = test_support::repository(root.path(), "repo");
-    let repo = (manager.register_repository(path.to_str().unwrap().into(), None, None)).await?;
+    let repo = (manager
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None))
+    .await?;
     let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
     let (asker, other) = (create("asker").await?, create("other").await?);
     let selector = SpaceSelector::id(&asker.id);

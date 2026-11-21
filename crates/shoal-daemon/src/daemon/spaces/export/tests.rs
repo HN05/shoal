@@ -59,7 +59,8 @@ async fn chat_running(name: &str, script: &str) -> (tempfile::TempDir, Arc<Manag
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = manager
@@ -234,7 +235,8 @@ async fn a_disposable_workspace_is_refused_before_its_removal() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
     let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let new = crate::daemon::workspace::NewWorkspace {
@@ -263,7 +265,8 @@ async fn a_chat_in_a_workspace_moves_naming_the_workspace() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -365,7 +368,8 @@ async fn a_chat_that_starts_after_the_export_checked_keeps_everything() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -483,7 +487,8 @@ async fn removed_chat(
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = crate::daemon::test_support::chat(&manager, name, mode, Some(&repo), None).await;

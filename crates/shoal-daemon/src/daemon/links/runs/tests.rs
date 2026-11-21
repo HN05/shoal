@@ -16,7 +16,8 @@ async fn only_a_chat_without_a_repository_watches_runs_beyond_its_own_repository
     let manager = std::sync::Arc::new(manager);
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

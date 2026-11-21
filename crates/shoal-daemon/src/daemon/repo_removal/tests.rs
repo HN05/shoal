@@ -9,7 +9,8 @@ async fn removal_waits_for_queued_workspace_creation() {
     let (root, manager) = test_support::manager().await;
     let checkout = test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
 
@@ -51,7 +52,7 @@ async fn removal_waits_for_queued_workspace_creation() {
     let removal = removing.await.unwrap();
     assert_eq!(removal.workspaces_removed, 1);
     assert!(!workspace.path.exists());
-    assert!(manager.repositories().await.unwrap().is_empty());
+    assert!(manager.repositories.list().await.unwrap().is_empty());
     assert!(manager.list_workspaces().await.unwrap().is_empty());
     assert!(!repo.path.exists());
     assert!(!repo.workspaces_dir.exists());
@@ -62,7 +63,8 @@ async fn removal_takes_a_workspace_its_preparation_has_yet_to_create() {
     let (root, manager) = test_support::manager().await;
     let checkout = test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let new = crate::daemon::workspace::NewWorkspace {
@@ -90,7 +92,8 @@ async fn removal_takes_a_child_being_prepared_below_a_parent_listed_first() {
     let (root, manager) = test_support::manager().await;
     let checkout = test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -120,7 +123,8 @@ async fn removal_takes_a_child_being_prepared_below_a_chat_in_a_workspace_listed
     let (root, manager) = test_support::manager().await;
     let checkout = test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let top = manager
@@ -166,7 +170,8 @@ async fn removal_takes_a_chat_in_the_checkout_with_the_workspace_below_it() {
     let (root, manager) = test_support::manager().await;
     let checkout = test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = manager
@@ -199,7 +204,8 @@ async fn removal_refuses_a_checkout_whose_config_sets_bare() -> Result<()> {
     let (root, manager) = test_support::manager().await;
     let checkout = test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_string_lossy().into_owned().into(), None, None)
+        .repositories
+        .register(checkout.to_string_lossy().into_owned().into(), None, None)
         .await?;
     test_support::git(&repo.path, &["config", "core.bare", "true"]);
 
@@ -273,7 +279,8 @@ async fn removal_refuses_a_repository_inside_its_local_config_directory() {
     let (root, manager) = test_support::manager().await;
     let checkout = test_support::repository(root.path(), "parent");
     let parent = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let local = manager.local_config_path(&parent.id).await.unwrap();
@@ -282,7 +289,8 @@ async fn removal_refuses_a_repository_inside_its_local_config_directory() {
     // Registration refuses this place; an earlier version recorded it.
     let elsewhere = test_support::repository(root.path(), "nested");
     let registered = manager
-        .register_repository(elsewhere.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(elsewhere.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let nested = directory.join("nested");
@@ -300,7 +308,8 @@ async fn removal_refuses_a_checkout_holding_another_repositorys_directory() {
     let checkout = test_support::repository(root.path(), "project");
     let elsewhere = test_support::repository(root.path(), "elsewhere");
     let other = manager
-        .register_repository(elsewhere.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(elsewhere.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     // An earlier root_dir placed the other repository's directory here.
@@ -322,7 +331,8 @@ async fn removal_refuses_a_checkout_holding_another_repositorys_directory() {
         .await
         .unwrap();
     let project = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     assert!(manager.remove_repository(&project.id).await.is_err());

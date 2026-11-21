@@ -38,7 +38,8 @@ async fn idle_workers<const N: usize>(
 ) -> (Repository, [Workspace; N]) {
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let mut created = Vec::new();
@@ -164,7 +165,8 @@ async fn a_chat_sleeps_whatever_its_mode() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     configure(&manager, "[modes.plan]\nidle_wake_minutes = 30\n").await;

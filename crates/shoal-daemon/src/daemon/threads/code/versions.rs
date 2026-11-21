@@ -19,7 +19,7 @@ impl Manager {
         spaces: impl IntoIterator<Item = SpaceId>,
     ) {
         let kept = async {
-            let repo = self.repository(repository).await?;
+            let repo = self.repositories.repository(repository).await?;
             let _refs = self.gates.lock_checkpoints().await;
             for space in spaces {
                 self.keep_versions_of(&repo, &space).await?;

@@ -186,7 +186,7 @@ impl Manager {
         repository: &crate::repository::Selector,
         blockers: Vec<Blocker>,
     ) -> Result<()> {
-        let repository = self.repository(repository).await?.id;
+        let repository = self.repositories.repository(repository).await?.id;
         self.store
             .run(move |db| ensure_spaces_exist(db, &repository, &blockers))
             .await

@@ -5,7 +5,8 @@ async fn workspaces_stay_out_of_the_directories_shoal_keeps() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let directory = repo.workspaces_dir.clone();

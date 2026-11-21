@@ -66,7 +66,7 @@ impl Manager {
             })
             .await;
         }
-        match self.repository(workspace.repository()).await {
+        match self.repositories.repository(workspace.repository()).await {
             Ok(repo) => {
                 if let Some(cache) = xcode_cache(&repo, settings) {
                     self.prune_checkouts(&repo, cache).await;

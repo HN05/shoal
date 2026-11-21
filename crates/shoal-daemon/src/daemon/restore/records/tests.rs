@@ -8,7 +8,8 @@ async fn a_removed_chat_keeps_a_record_of_how_and_where_it_ran() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -54,7 +55,8 @@ async fn a_converted_workspace_keeps_its_record_beside_the_chat_it_became() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -125,7 +127,8 @@ async fn a_chat_a_conversion_removed_restores_in_the_workspace_restored_beside()
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

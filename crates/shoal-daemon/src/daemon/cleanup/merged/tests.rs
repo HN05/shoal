@@ -39,7 +39,8 @@ impl Fixture {
         let (root, manager) = manager().await;
         let checkout = repository(root.path(), "repo");
         let repo = manager
-            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .repositories
+            .register(checkout.to_str().unwrap().into(), None, None)
             .await
             .unwrap();
         (manager.write_local_config(&repo.id, Some(config.into())))
@@ -630,7 +631,8 @@ async fn merged_cleanup_removes_a_chat_stopped_for_its_idle_period() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     (manager.write_local_config(&repo.id, Some(ENABLED.into())))

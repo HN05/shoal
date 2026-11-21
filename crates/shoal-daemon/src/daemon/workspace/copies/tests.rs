@@ -27,7 +27,8 @@ impl Fixture {
         git(&checkout, &["add", "."]);
         git(&checkout, &["commit", "-m", "files"]);
         let repo = manager
-            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .repositories
+            .register(checkout.to_str().unwrap().into(), None, None)
             .await
             .unwrap();
         let source = manager

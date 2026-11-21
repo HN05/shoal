@@ -170,7 +170,7 @@ impl Manager {
             .filter_map(|record| record.repository_id.as_ref())
         {
             if !repos.iter().any(|repo| &repo.id == id) {
-                repos.push(self.repository(id).await?);
+                repos.push(self.repositories.repository(id).await?);
             }
         }
         Ok(repos)

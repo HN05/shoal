@@ -25,9 +25,11 @@ fn order(spaces: &[&SpaceId], keep: bool) -> MoveOrder {
 async fn a_move_waits_for_the_turn_of_the_agent_it_would_stop() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
-    let repo = (manager.register_repository(path.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let worker = (manager.create_workspace(&repo.id, "worker".into(), None, None, None))
         .await
         .unwrap();

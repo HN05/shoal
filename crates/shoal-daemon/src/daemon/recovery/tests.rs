@@ -11,7 +11,8 @@ async fn recovery_reads_only_its_executions_without_inspection_details() -> Resu
         let (_root, manager) = manager().await;
         let path = repository(_root.path(), "repo");
         let repo = manager
-            .register_repository(path.to_string_lossy().into_owned().into(), None, None)
+            .repositories
+            .register(path.to_string_lossy().into_owned().into(), None, None)
             .await?;
         let workspace = manager
             .create_workspace(&repo.id, "recovery".into(), None, None, None)
@@ -71,7 +72,8 @@ async fn failed_repair_restores_the_state_it_reserved_from() -> Result<()> {
     let (_root, manager) = manager().await;
     let path = repository(_root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_string_lossy().into_owned().into(), None, None)
+        .repositories
+        .register(path.to_string_lossy().into_owned().into(), None, None)
         .await?;
     let workspace = manager
         .create_workspace(&repo.id, "original".into(), None, None, None)

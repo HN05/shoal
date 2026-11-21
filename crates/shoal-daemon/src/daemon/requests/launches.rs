@@ -47,7 +47,8 @@ pub(super) async fn handle(
             let repository = match origin {
                 Some(origin) => Some(
                     manager
-                        .register_repository(origin.into(), None, None)
+                        .repositories
+                        .register(origin.into(), None, None)
                         .await?,
                 ),
                 None => None,

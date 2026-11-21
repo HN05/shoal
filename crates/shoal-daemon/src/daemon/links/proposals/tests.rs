@@ -23,7 +23,8 @@ async fn with_workspace() -> (tempfile::TempDir, Arc<Manager>, Repository, Works
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -153,7 +154,8 @@ async fn a_decision_refuses_a_proposal_changed_while_it_waited() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -199,7 +201,8 @@ async fn a_duplicate_decision_refuses_a_number_reused_while_it_waited() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let mut requests = Vec::new();
@@ -248,7 +251,8 @@ async fn a_proposal_keeps_its_number_and_reserves_its_removed_space() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
@@ -284,7 +288,8 @@ async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -349,7 +354,8 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let config = "[permissions]\nissue_open = 'propose'\n";
@@ -611,7 +617,8 @@ async fn approving_again_refuses_an_item_posted_before_the_origin_moved() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

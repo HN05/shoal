@@ -18,9 +18,11 @@ const LABELLED: &str = "[modes.plan]\nlabel = \"needs-plan\"\n\
 async fn labelled_forge() -> (tempfile::TempDir, std::sync::Arc<Manager>, Server, String) {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
-    let repository = (manager.register_repository(path.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repository = (manager
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let server = Server::start(|request| {
         let (number, labels) = match request.line.as_str() {
             "GET /api/v1/repos/team/repo/issues/7" => (7, vec!["needs-plan", "type/bug"]),

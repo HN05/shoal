@@ -15,11 +15,11 @@ use crate::{
 
 impl Repositories for Manager {
     fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>> {
-        Box::pin(Manager::repositories(self))
+        Box::pin(self.repositories.list())
     }
 
     fn repository<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Repository>> {
-        Box::pin(Manager::repository(self, id))
+        Box::pin(self.repositories.repository(id))
     }
 
     fn repository_layers<'a>(
@@ -49,7 +49,7 @@ impl Repositories for Manager {
         &'a self,
         id: &'a RepositoryId,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(Manager::ensure_repository_available(self, id))
+        Box::pin(self.repositories.ensure_available(id))
     }
 
     fn acts_on_global_config(&self) -> bool {
@@ -73,7 +73,7 @@ impl Manager {
                     repository: Some(repository),
                     ..
                 },
-            ) => Some(Manager::repository(self, repository).await?.id),
+            ) => Some(self.repositories.repository(repository).await?.id),
             Some(ItemContext::Space {
                 space,
                 repository: None,

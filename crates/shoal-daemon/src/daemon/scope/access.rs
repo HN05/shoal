@@ -82,7 +82,7 @@ impl Manager {
         &self,
         caller: Option<&Caller>,
     ) -> Result<Vec<Repository>> {
-        let mut repositories = self.repositories().await?;
+        let mut repositories = self.repositories.list().await?;
         if let Some(caller) = caller
             && let Some(own) = self.caller_repository(caller).await?
         {
@@ -440,7 +440,7 @@ impl Manager {
         repository: &Selector,
         refusal: &str,
     ) -> Result<Selector> {
-        let selected = self.repository(repository).await?.id;
+        let selected = self.repositories.repository(repository).await?.id;
         let own = self.caller_repository(caller).await?;
         ensure!(own.is_none_or(|own| own == selected), "{refusal}");
         Ok(selected.into())

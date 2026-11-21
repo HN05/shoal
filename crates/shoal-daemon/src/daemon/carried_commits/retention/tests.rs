@@ -32,7 +32,7 @@ fn carry(path: &Path, commit: &CommitId) {
 
 async fn register(manager: &Manager, path: &Path) -> Repository {
     let source = path.to_str().unwrap().into();
-    (manager.register_repository(source, None, None))
+    (manager.repositories.register(source, None, None))
         .await
         .unwrap()
 }

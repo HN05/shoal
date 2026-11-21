@@ -12,7 +12,11 @@ async fn machine(manager: &Manager, temp: &tempfile::TempDir) -> crate::model::R
     ));
     let path = repository(temp.path(), "repo");
     let path = path.to_str().unwrap().into();
-    manager.register_repository(path, None, None).await.unwrap()
+    manager
+        .repositories
+        .register(path, None, None)
+        .await
+        .unwrap()
 }
 
 /// A creation in `repo` on `branch`.

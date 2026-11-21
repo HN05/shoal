@@ -37,7 +37,8 @@ async fn checkout(root: &Path, manager: &Manager, name: &str) -> (PathBuf, Repos
     let author = root.join(format!("{name}-author"));
     git(root, &["clone", origin, author.to_str().unwrap()]);
     let repo_id = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap()
         .id;

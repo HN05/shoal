@@ -54,7 +54,8 @@ async fn served(forge: &Server) -> Served {
     configure(&manager, &config).await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

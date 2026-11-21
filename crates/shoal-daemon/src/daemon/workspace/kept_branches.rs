@@ -73,7 +73,7 @@ impl Manager {
         else {
             return Ok(());
         };
-        let repo = self.repository(workspace.repository()).await?;
+        let repo = self.repositories.repository(workspace.repository()).await?;
         let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
             .await
             .ok();
@@ -115,7 +115,7 @@ impl Manager {
         repository_id: &RepositoryId,
         heads: &[git::RemoteHead],
     ) -> Result<()> {
-        let repo = self.repository(repository_id).await?;
+        let repo = self.repositories.repository(repository_id).await?;
         // Creation opens branches under the same gate.
         let _git = self.gates.lock_git(&repo.id).await;
         // An unresolved default branch could be any of them.
@@ -145,7 +145,7 @@ impl Manager {
     /// The kept branches, only those of the repository `repository` selects.
     pub async fn list_kept_branches(&self, repository: Option<&str>) -> Result<Vec<KeptBranch>> {
         let only = match repository {
-            Some(selector) => Some(self.repository(selector).await?.id),
+            Some(selector) => Some(self.repositories.repository(selector).await?.id),
             None => None,
         };
         let mut listed = Vec::new();
@@ -153,7 +153,7 @@ impl Manager {
             if only.as_ref().is_some_and(|only| *only != repository_id) {
                 continue;
             }
-            let repo = self.repository(&repository_id).await?;
+            let repo = self.repositories.repository(&repository_id).await?;
             let _git = self.gates.lock_git(&repo.id).await;
             let default = git::default_branch::locate(&repo.path, DefaultBranchLookup::Cached)
                 .await
@@ -189,7 +189,7 @@ impl Manager {
         let mut gates = Vec::new();
         let mut chosen = Vec::new();
         for repository_id in &repository_ids {
-            let repo = self.repository(repository_id).await?;
+            let repo = self.repositories.repository(repository_id).await?;
             gates.push(self.gates.lock_git(&repo.id).await);
             // An unresolved default branch could be any of them.
             let default = git::default_branch::locate(&repo.path, DefaultBranchLookup::Cached)

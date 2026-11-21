@@ -109,7 +109,7 @@ impl Manager {
         issue: Option<&ItemInput>,
         caller: Option<&Caller>,
     ) -> Result<RepositoryId> {
-        let repos = self.repositories().await?;
+        let repos = self.repositories.list().await?;
         if let Some(named) = named {
             let selector = crate::repository::named_in(named, launch.directory.as_deref())?;
             return Ok(crate::repository::select(&repos, selector)

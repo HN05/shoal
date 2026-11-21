@@ -32,7 +32,8 @@ async fn a_scoped_repository_setup_asks_the_admin_permission() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let starter = chat(&manager, "starter", "chat", Some(&repo), None).await;
@@ -59,7 +60,8 @@ async fn a_scoped_config_setup_asks_the_admin_permission() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let starter = chat(&manager, "starter", "chat", Some(&repo), None).await;

@@ -10,7 +10,8 @@ async fn reverts_keep_the_reverted_base_and_skip_workspaces_being_removed() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -61,7 +62,8 @@ async fn a_chat_reverts_from_its_repositorys_checkout() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = manager

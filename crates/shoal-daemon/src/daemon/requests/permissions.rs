@@ -34,7 +34,7 @@ pub(super) async fn handle(
         PermissionMethod::HeldPermissions { repository } => {
             let caller = caller.context("the user holds every permission")?;
             let repository = match repository {
-                Some(repository) => Some(manager.repository(repository).await?.id),
+                Some(repository) => Some(manager.repositories.repository(repository).await?.id),
                 None => None,
             };
             let held = manager.caller_permissions(caller, repository.as_ref());

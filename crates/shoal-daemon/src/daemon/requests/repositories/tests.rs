@@ -21,5 +21,5 @@ async fn a_scoped_process_here_carries_no_commits() {
         branch: "main".into(),
     };
     assert!(method.scope(&manager, &caller).await.is_err());
-    assert!(manager.repositories().await.unwrap().is_empty());
+    assert!(manager.repositories.list().await.unwrap().is_empty());
 }

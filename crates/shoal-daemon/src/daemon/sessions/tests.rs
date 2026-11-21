@@ -150,7 +150,8 @@ async fn fixture_for(
         .session_hosts = vec![host.clone()];
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_string_lossy().into_owned().into(), None, None)
+        .repositories
+        .register(checkout.to_string_lossy().into_owned().into(), None, None)
         .await?;
     let workspace = manager
         .create_workspace(&repo.id, "removed".into(), None, None, None)
@@ -961,7 +962,10 @@ async fn a_chat_that_fails_to_start_leaves_its_place_as_it_found_it() -> Result<
     host.add("taken", workspace.id.as_str())?;
     host.add("opened", workspace.id.as_str())?;
     // A temporary directory Shoal does not own keeps chats from starting.
-    let directory = (manager.repository(workspace.repository()).await?)
+    let directory = (manager
+        .repositories
+        .repository(workspace.repository())
+        .await?)
         .workspaces_dir
         .join(".tmp");
     if directory.exists() {

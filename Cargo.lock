@@ -2557,6 +2557,7 @@ dependencies = [
  "shoal-links",
  "shoal-protocol",
  "shoal-refs",
+ "shoal-repositories",
  "shoal-reviews",
  "shoal-runner",
  "shoal-schedule",
@@ -2771,6 +2772,25 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "shoal-repositories"
+version = "0.20.3"
+dependencies = [
+ "anyhow",
+ "futures-util",
+ "rusqlite",
+ "shoal-core",
+ "shoal-daemon-base",
+ "shoal-forge",
+ "shoal-forge-types",
+ "shoal-ids",
+ "shoal-protocol",
+ "shoal-store",
+ "tempfile",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

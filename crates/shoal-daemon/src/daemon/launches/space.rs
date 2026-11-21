@@ -205,7 +205,7 @@ impl Manager {
             Err(error) => return Err(error),
         };
         crate::daemon::log!("issue {input} read without its title: {error:#}");
-        let checkout = self.repository(repository.clone()).await?.path;
+        let checkout = self.repositories.repository(repository.clone()).await?.path;
         let (_, url) = self.links.issue_forge(self, &checkout, input).await?;
         Ok(StartIssue {
             url,

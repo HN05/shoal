@@ -6,7 +6,8 @@ async fn a_name_is_cleaned_up_kept_on_the_record_and_returned_with_the_previous_
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -55,7 +56,8 @@ async fn a_request_cannot_create_a_space_under_a_name_no_one_could_set() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     // Requests read names verbatim, as stored records do.

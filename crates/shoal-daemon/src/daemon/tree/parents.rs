@@ -125,7 +125,7 @@ impl Manager {
             return Ok(());
         };
         let repository = match repository {
-            Some(repository) => Some(self.repository(repository.clone()).await?.id),
+            Some(repository) => Some(self.repositories.repository(repository.clone()).await?.id),
             None => None,
         };
         if self.find_space(&parent).await?.is_none() && self.hub.runs_elsewhere(self, &parent).await

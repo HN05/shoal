@@ -34,7 +34,7 @@ impl Manager {
         &self,
         workspace: &Workspace,
     ) -> Result<Option<LeftFiles>> {
-        let repo = self.repository(workspace.repository()).await?;
+        let repo = self.repositories.repository(workspace.repository()).await?;
         if !self.disowned(workspace, &repo.path).await? {
             return Ok(None);
         }

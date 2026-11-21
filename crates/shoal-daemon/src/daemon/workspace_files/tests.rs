@@ -27,7 +27,8 @@ fn permissions_bind() -> bool {
 async fn workspace(temp: &tempfile::TempDir, manager: &Manager) -> Workspace {
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     manager
@@ -1071,7 +1072,11 @@ async fn files_that_fail_to_go_with_their_repository_stay_recorded() {
     // The copy's directory refuses to give it up.
     let directory = added[0].path.parent().unwrap().to_owned();
     std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o500)).unwrap();
-    let repo = manager.repository(workspace.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(workspace.repository())
+        .await
+        .unwrap();
     let deleted = manager.delete_repository_files(&repo).await;
     std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700)).unwrap();
     assert!(deleted.is_err(), "the copy could not be deleted");

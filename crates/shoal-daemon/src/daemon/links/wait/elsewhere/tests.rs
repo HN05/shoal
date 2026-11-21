@@ -29,9 +29,11 @@ const KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 async fn below_elsewhere(manager: &Manager, root: &std::path::Path) -> (Workspace, Workspace) {
     configure(manager, "[machine.hub]\nenabled = true\n").await;
     let checkout = repository(root, "repo");
-    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let child = (manager.create_workspace(&repo.id, "child".into(), None, None, None))
         .await
         .unwrap();

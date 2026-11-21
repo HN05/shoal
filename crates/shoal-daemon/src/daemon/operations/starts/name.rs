@@ -48,7 +48,7 @@ impl Manager {
             _ => preparing.pr.as_ref()?,
         };
         let read = async {
-            let checkout = self.repository(repository.clone()).await?.path;
+            let checkout = self.repositories.repository(repository.clone()).await?.path;
             self.links.read_pull_title(self, &checkout, input).await
         };
         match read.await {

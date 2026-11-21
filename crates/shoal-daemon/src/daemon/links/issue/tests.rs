@@ -12,7 +12,8 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
     let path = repository(root.path(), "repo");
     git(&path, &["config", "protocol.allow", "never"]);
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

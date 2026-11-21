@@ -93,7 +93,8 @@ pub async fn fixture() -> (
     configure_fixture(&manager, "[cleanup]\ngrace_minutes = 0").await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

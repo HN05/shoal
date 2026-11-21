@@ -156,7 +156,7 @@ impl Manager {
     pub(crate) async fn release_unclaimed_carried(&self) -> Result<()> {
         let mut repositories = match self.carried_holds.swept.swap(true, Ordering::Relaxed) {
             true => self.carried_holds.give_up_lapsed(),
-            false => (self.repositories().await?.into_iter())
+            false => (self.repositories.list().await?.into_iter())
                 .map(|repository| repository.id)
                 .collect(),
         };
@@ -182,7 +182,7 @@ impl Manager {
 
     async fn release_unneeded(&self, id: &RepositoryId) -> Result<()> {
         let _releasing = self.carried_holds.releasing.lock().await;
-        let repositories = self.repositories().await?;
+        let repositories = self.repositories.list().await?;
         let Some(repository) = repositories.iter().find(|repository| repository.id == *id) else {
             return Ok(());
         };

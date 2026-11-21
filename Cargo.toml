@@ -34,6 +34,7 @@ shoal-links = { path = "crates/shoal-links" }
 shoal-protocol = { path = "crates/shoal-protocol" }
 shoal-proxy = { path = "crates/shoal-proxy" }
 shoal-refs = { path = "crates/shoal-refs" }
+shoal-repositories = { path = "crates/shoal-repositories" }
 shoal-reviews = { path = "crates/shoal-reviews" }
 shoal-runner = { path = "crates/shoal-runner" }
 shoal-schedule = { path = "crates/shoal-schedule" }

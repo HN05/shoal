@@ -59,7 +59,8 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -182,7 +183,8 @@ async fn a_merge_naming_no_method_takes_the_configured_one() {
     std::fs::write(path.join(".shoal.toml"), "[merge]\nmethod = \"rebase\"\n").unwrap();
     commit(&path, ".shoal.toml");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     configure(&manager, "[merge]\nmethod = \"squash\"\n").await;

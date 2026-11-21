@@ -129,7 +129,8 @@ async fn agent_messages_end_a_watch_before_item_activity() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -190,7 +191,8 @@ async fn background_activity_uses_its_own_baseline_and_publishes_events() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -252,7 +254,8 @@ async fn a_linked_item_takes_the_title_the_forge_reports() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -302,7 +305,8 @@ async fn a_failed_first_background_read_leaves_the_baseline_to_the_next() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -339,7 +343,8 @@ async fn background_activity_queues_for_the_agents_hooks() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -408,7 +413,8 @@ async fn a_chats_hooks_receive_the_activity_on_its_items() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = manager
@@ -480,7 +486,8 @@ async fn a_chat_receives_the_activity_of_the_workspaces_below_it_without_an_agen
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = manager
@@ -565,7 +572,8 @@ async fn a_chat_without_a_repository_waits_for_the_activity_below_it() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let manager = std::sync::Arc::new(manager);
@@ -613,7 +621,8 @@ async fn a_chat_without_a_repository_waits_for_the_activity_below_it() {
 async fn chat_above_linked_workspace(manager: &Arc<Manager>, root: &std::path::Path) -> SpaceId {
     let repo_path = repository(root, "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat =
@@ -723,7 +732,8 @@ async fn chat_beside_served_repository(
     let origin = format!("http://{host}/team/repo");
     crate::daemon::test_support::git(&path, &["remote", "add", "origin", &origin]);
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat =
@@ -811,7 +821,8 @@ async fn hook_delivery_does_not_wait_for_the_pr_gate() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -872,7 +883,8 @@ async fn hook_delivery_waits_only_for_the_workspaces_it_reads() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -929,7 +941,8 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -1120,7 +1133,8 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -1246,7 +1260,8 @@ async fn hook_responses_fit_messages_and_updates_together() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -1302,7 +1317,8 @@ async fn a_delivery_too_large_for_one_response_arrives_in_parts() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -1372,7 +1388,8 @@ async fn deliveries_left_out_of_a_response_stay_pending_whole() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -1435,7 +1452,8 @@ async fn agent_wakes_are_due_while_an_idle_agent_has_updates() {
     let manager = Arc::new(manager);
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -1491,7 +1509,8 @@ async fn a_hooked_agent_is_due_a_wake_once_no_wait_has_run_for_a_while() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -1569,7 +1588,8 @@ async fn an_idle_agent_wakes_once_for_a_heads_passing_checks() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -1624,7 +1644,8 @@ async fn passes_held_past_one_response_are_delivered_in_parts() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -1689,7 +1710,8 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -1765,7 +1787,8 @@ async fn edits_are_reported_except_the_workspaces_own() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -1944,7 +1967,8 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -2067,7 +2091,8 @@ async fn background_activity_does_not_repeat_an_unchanged_baseline_failure() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -2111,7 +2136,8 @@ async fn polls_stop_looking_up_items_whose_activity_ended() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -2202,7 +2228,8 @@ async fn messages_for_the_next_turn_come_with_the_next_updates() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -2247,7 +2274,8 @@ async fn messages_queued_during_a_wait_come_with_its_updates() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -2322,7 +2350,8 @@ async fn recorded_updates_count_while_the_pr_gate_is_held() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -2354,7 +2383,8 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -2528,7 +2558,8 @@ async fn acknowledgement_keeps_queued_updates_and_those_a_newer_wait_needs() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -2592,7 +2623,8 @@ async fn cursors_survive_restart_are_workspace_owned_and_clear_on_unwatch() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -2750,7 +2782,8 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -2880,7 +2913,8 @@ async fn sensitive_files_changed_on_both_sides_are_reported_beside_a_linked_pr()
     .unwrap();
     crate::daemon::test_support::commit(&repo_path, ".shoal.toml");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let mut workspaces = Vec::new();
@@ -2957,7 +2991,8 @@ async fn a_stalled_worktree_fails_the_background_branch_check_at_once() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -3005,7 +3040,8 @@ async fn a_done_workspace_records_no_branch_check() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -3064,7 +3100,8 @@ async fn branch_conflicts_with_a_target_that_has_heads_changes_are_not_reported(
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -3112,7 +3149,8 @@ async fn branch_conflicts_of_work_integrated_elsewhere_are_not_reported() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -3182,7 +3220,8 @@ async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -3254,7 +3293,8 @@ async fn a_watch_reports_each_attempt_of_a_linked_run() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -3302,7 +3342,8 @@ async fn a_watch_reports_each_attempt_of_a_linked_run() {
 async fn settling_workspace(root: &tempfile::TempDir, manager: &Manager) -> Workspace {
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     manager
@@ -3389,7 +3430,8 @@ async fn a_held_gate_delays_a_wake_but_keeps_an_issued_one_due() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -3434,7 +3476,8 @@ async fn a_merge_a_background_poll_sees_asks_for_a_sync() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -3465,7 +3508,8 @@ async fn the_background_poll_reads_spaces_together() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     // Once linked, each workspace's issue is answered only once both are
@@ -3534,7 +3578,8 @@ async fn a_stopped_chat_is_polled_as_a_workspace_is() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo_path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = manager

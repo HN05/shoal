@@ -3,7 +3,8 @@ async fn records_report_only_running_executions() {
     let (root, manager) = crate::daemon::test_support::manager().await;
     let path = crate::daemon::test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

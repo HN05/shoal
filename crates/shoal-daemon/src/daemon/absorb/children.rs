@@ -153,7 +153,7 @@ impl Manager {
                 new_base: Some(id),
             },
             None => {
-                let repo = self.repository(base.repository()).await?;
+                let repo = self.repositories.repository(base.repository()).await?;
                 let default = default_branch::resolve(&repo.path, DefaultBranchLookup::Cached);
                 RestackParts {
                     head,

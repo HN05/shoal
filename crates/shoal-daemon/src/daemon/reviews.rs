@@ -63,15 +63,15 @@ impl Spaces for Manager {
 
 impl Repositories for Manager {
     fn repository<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Repository>> {
-        Box::pin(Manager::repository(self, id))
+        Box::pin(self.repositories.repository(id))
     }
 
     fn select_repository(&self, selector: Selector) -> BoxFuture<'_, Result<Repository>> {
-        Box::pin(Manager::repository(self, selector))
+        Box::pin(self.repositories.repository(selector))
     }
 
     fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>> {
-        Box::pin(Manager::repositories(self))
+        Box::pin(self.repositories.list())
     }
 
     fn false_positives_path<'a>(

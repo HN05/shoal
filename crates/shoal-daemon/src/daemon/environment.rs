@@ -184,7 +184,7 @@ impl Manager {
         }
         checks.push(root_dir(self.config().root_dir(&self.paths)).await);
         checks.push(global_config_check(&self.paths));
-        match self.repositories().await {
+        match self.repositories.list().await {
             Ok(repositories) => {
                 for repo in repositories {
                     checks.push(checkout(&repo).await);

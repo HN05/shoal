@@ -81,12 +81,12 @@ mod quarantine;
 pub(crate) mod queued_starts;
 pub(crate) mod ready_marks;
 pub mod recovery;
-mod registry;
 mod relayed;
 mod releases;
 mod repo_configuration;
 mod repo_move;
 mod repo_removal;
+mod repositories;
 mod requests;
 mod restart_recovery;
 pub(crate) mod restarts;
@@ -103,7 +103,6 @@ mod signals;
 pub(crate) mod space_processes;
 mod space_removal;
 pub(crate) mod spaces;
-pub(crate) mod spotlight;
 mod startup;
 mod startup_audit;
 pub(crate) mod stopped_work;
@@ -218,8 +217,12 @@ pub async fn run(
         exit,
         capacity: Arc::new(connections::Capacity::for_descriptors(descriptors)),
     };
-    let resumes_until = tokio::time::Instant::now() + contributions::holds::RESUME_WINDOW;
-    manager.contribution_holds.await_resumes(resumes_until);
+    let resumes_until =
+        tokio::time::Instant::now() + shoal_repositories::contributions::holds::RESUME_WINDOW;
+    manager
+        .repositories
+        .contribution_holds()
+        .await_resumes(resumes_until);
     let mut background = JoinSet::new();
     spawn_supervised(&mut background, &manager, "auto cleanup", cleanup::run);
     spawn_supervised(

@@ -49,7 +49,8 @@ async fn agent(config: &str) -> Running {
     manager.publish_config(global_config(config));
     let checkout = repository(temp.path(), "repo");
     manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (workspace, execution, connection) = another_agent(&manager, "agent").await;
@@ -62,7 +63,7 @@ async fn another_agent(
     manager: &Manager,
     name: &str,
 ) -> (Workspace, ExecutionId, tokio::sync::watch::Receiver<bool>) {
-    let repo = manager.repositories().await.unwrap().remove(0);
+    let repo = manager.repositories.list().await.unwrap().remove(0);
     let workspace = manager
         .create_workspace(&repo.id, name.into(), None, None, None)
         .await

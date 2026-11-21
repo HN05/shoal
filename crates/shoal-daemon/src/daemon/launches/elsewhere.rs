@@ -196,7 +196,7 @@ impl Manager {
         let Some(origin) = carried.origin else {
             return Ok(None);
         };
-        let repositories = self.repositories().await?;
+        let repositories = self.repositories.list().await?;
         let key = shoal_protocol::repository::url_key(&origin);
         let Some(repository) = crate::repository::with_origin(&repositories, &key).await else {
             return Ok(carried.tracked_config);
@@ -218,7 +218,7 @@ impl Manager {
             "--here runs an agent in the caller's terminal, which another machine has none of"
         );
         if let Some(origin) = carried.origin {
-            let repository = (self.register_repository(origin.into(), None, None)).await?;
+            let repository = (self.repositories.register(origin.into(), None, None)).await?;
             if let Some(branch) = &carried.base_branch {
                 crate::git::clone_base::fetch_branch(&repository.path, branch).await?;
             }
@@ -260,7 +260,7 @@ impl Manager {
         let url = url.with_context(|| {
             format!("the machine of space {parent} reports no URL to clone its repository from")
         })?;
-        let repository = (self.register_repository(url.into(), None, None)).await?;
+        let repository = (self.repositories.register(url.into(), None, None)).await?;
         launch.repository = Some(repository.id.to_string());
         Ok(())
     }
@@ -450,7 +450,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<Option<Repository>> {
         if let Some(named) = named_repository(launch) {
-            let repositories = self.repositories().await?;
+            let repositories = self.repositories.list().await?;
             let directory = launch.directory.as_deref();
             let selector = crate::repository::named_in(named.to_owned(), directory)?;
             let repository = crate::repository::select(&repositories, selector).await?;

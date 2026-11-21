@@ -53,7 +53,8 @@ async fn new_workspaces_start_from_the_default_branch_build() {
         commit(&checkout, file);
     }
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     manager.refresh_seeds().await;
@@ -126,7 +127,8 @@ async fn a_failed_build_is_reported_once_per_commit() {
         commit(&checkout, file);
     }
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let layout = Layout::of(&repo);
@@ -194,7 +196,8 @@ async fn a_preset_builds_and_keeps_its_tool_outputs() {
         commit(&checkout, file);
     }
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     manager.refresh_seeds().await;
@@ -259,7 +262,8 @@ async fn fake_tools(
     .unwrap();
     commit(&checkout, ".shoal.toml");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     (checkout, repo)
@@ -347,7 +351,8 @@ async fn seeded(manager: &Manager, root: &Path, script: &str) -> (PathBuf, Repos
         commit(&checkout, file);
     }
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     (checkout, repo)

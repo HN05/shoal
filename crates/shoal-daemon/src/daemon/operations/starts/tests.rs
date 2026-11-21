@@ -33,7 +33,8 @@ const HANG: Duration = Duration::from_secs(60);
 async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {
     let path = repository(root, "repo");
     manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap()
 }
@@ -155,9 +156,11 @@ async fn a_start_at_a_prs_head_leaves_its_worktree_to_its_preparation() {
     );
     let head = git(&origin, &["rev-parse", "HEAD"]).trim().to_owned();
     git(&origin, &["update-ref", "refs/pull/9/head", &head]);
-    let repository = (manager.register_repository(clone.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repository = (manager
+        .repositories
+        .register(clone.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let opening = Opening {
         start: WorkspaceStart::PullHead {
             url: "https://forge.example/team/repo/pulls/9".parse().unwrap(),
@@ -432,7 +435,8 @@ async fn a_retry_configures_the_worktree_an_earlier_creation_left() {
         &[(".shoal.toml", "git_profile = 'work'\n")],
     );
     let repository = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let started = start(&manager, &repository, "child", "HEAD").await;

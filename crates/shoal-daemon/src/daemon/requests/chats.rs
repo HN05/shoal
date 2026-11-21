@@ -20,7 +20,7 @@ pub(super) async fn handle(
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
         ChatMethod::ChatRoot => Body::ChatRoot(crate::protocol::ChatRoot {
-            path: manager.prepare_chat_root().await?,
+            path: manager.repositories.prepare_chat_root().await?,
         }),
     }))
 }

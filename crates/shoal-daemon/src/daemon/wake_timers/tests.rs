@@ -15,7 +15,8 @@ const MINUTE: Duration = Duration::from_secs(60);
 async fn registered(manager: &Manager, temp: &tempfile::TempDir) -> Repository {
     let checkout = repository(temp.path(), "repo");
     manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap()
 }

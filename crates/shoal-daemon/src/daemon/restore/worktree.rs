@@ -124,7 +124,7 @@ impl Manager {
         branch: BranchName,
         warnings: &mut Vec<String>,
     ) -> Result<BranchName> {
-        let (repo, _guard) = self.lock_repository(removed.repository()?).await?;
+        let (repo, _guard) = self.repositories.lock(removed.repository()?).await?;
         let checkpoint = &removed.kept_workspace()?.checkpoint;
         if self.ready_branch(&repo, &branch, checkpoint).await? {
             return Ok(branch);
@@ -182,7 +182,7 @@ impl Manager {
     /// The recorded base, so diffs and the stack link come back: its ref
     /// while it exists, otherwise its commit; `None` when neither remains.
     async fn restore_base(&self, removed: &RemovedSpace) -> Result<Option<String>> {
-        let repo = self.repository(removed.repository()?).await?;
+        let repo = self.repositories.repository(removed.repository()?).await?;
         let Some(base) = &removed.kept_workspace()?.base else {
             return Ok(None);
         };

@@ -29,7 +29,7 @@ impl Manager {
     ) -> Result<Checkpoint> {
         let workspace = self.workspace(selector).await?;
         // A repository move holds this gate; the workspace may have moved.
-        let (_repo, _git) = self.lock_repository(workspace.repository()).await?;
+        let (_repo, _git) = self.repositories.lock(workspace.repository()).await?;
         let workspace = self.workspace_by_id(&workspace.id).await?;
         crate::daemon::target_checks::checkpointed(workspace.state).require()?;
         if let Some(name) = &name {
@@ -51,7 +51,7 @@ impl Manager {
             return;
         };
         // A repository move holds this gate; the workspace may have moved.
-        let Ok((_repo, _git)) = self.lock_repository(workspace.repository()).await else {
+        let Ok((_repo, _git)) = self.repositories.lock(workspace.repository()).await else {
             return;
         };
         let Ok(workspace) = self.workspace_by_id(workspace_id).await else {
@@ -163,7 +163,7 @@ impl Manager {
         checkpoint: &Checkpoint,
     ) -> Result<bool> {
         // A repository move holds this gate; the workspace may have moved.
-        let (repo, _git) = self.lock_repository(workspace.repository()).await?;
+        let (repo, _git) = self.repositories.lock(workspace.repository()).await?;
         let workspace = self.workspace_by_id(&workspace.id).await?;
         self.verify_worktree(&workspace).await?;
         let now = self
@@ -177,7 +177,10 @@ impl Manager {
     /// ref left by a failed record goes with the next expiry pass, which the
     /// checkpoint mutex keeps from running in between.
     async fn save_checkpoint(&self, mut checkpoint: Checkpoint) -> Result<Checkpoint> {
-        let repo = self.repository(&checkpoint.repository_id).await?;
+        let repo = self
+            .repositories
+            .repository(&checkpoint.repository_id)
+            .await?;
         let _refs = self.gates.lock_checkpoints().await;
         let reference = git::checkpoint::reference(&checkpoint.commit);
         git::checkpoint::save(&repo.path, &reference, &checkpoint.commit).await?;
@@ -200,7 +203,7 @@ impl Manager {
         let Some(mut latest) = self.store.run(move |db| latest(db, &id)).await? else {
             return Ok(None);
         };
-        let repo = self.repository(workspace.repository()).await?;
+        let repo = self.repositories.repository(workspace.repository()).await?;
         if !keeps_same(&repo.path, &latest, next).await? {
             return Ok(None);
         }
@@ -433,7 +436,7 @@ impl Manager {
         if let Err(error) = self.store.run(|db| delete_expired_removals(db)).await {
             failed.push(format!("{error:#}"));
         }
-        for repo in self.repositories().await? {
+        for repo in self.repositories.list().await? {
             if let Err(error) = self.expire_repository_checkpoints(&repo).await {
                 failed.push(format!("{}: {error:#}", repo.path.display()));
             }
@@ -459,10 +462,10 @@ impl Manager {
         let Some(_git) = self.gates.try_lock_git(&repo.id) else {
             return Ok(());
         };
-        if self.ensure_repository_available(&repo.id).await.is_err() {
+        if self.repositories.ensure_available(&repo.id).await.is_err() {
             return Ok(());
         }
-        let repo = &self.repository(&repo.id).await?;
+        let repo = &self.repositories.repository(&repo.id).await?;
         let retention = self
             .repository_settings(&repo.id)
             .await?

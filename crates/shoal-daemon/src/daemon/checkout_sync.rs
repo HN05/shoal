@@ -126,7 +126,7 @@ impl Manager {
         &self,
         selector: &crate::repository::Selector,
     ) -> Result<SyncedRepository> {
-        let repo = self.repository(selector).await?;
+        let repo = self.repositories.repository(selector).await?;
         match self.sync(&repo.id).await {
             Synced::Unfetched(error) => Err(error),
             Synced::Fetched(synced) => synced,
@@ -172,7 +172,7 @@ impl Manager {
     /// The registered repositories whose syncs have failed long enough to
     /// need the user.
     pub async fn failing_syncs(&self) -> Result<Vec<CheckoutSync>> {
-        let repositories = self.repositories().await?;
+        let repositories = self.repositories.list().await?;
         let now = Instant::now();
         let syncs = self.syncs.lock();
         Ok(repositories
@@ -208,7 +208,7 @@ impl Manager {
         let _git = self.gates.lock_git(repository_id).await;
         let synced = async {
             // A move may have finished while the fetch ran.
-            let repo = self.repository(repository_id).await?;
+            let repo = self.repositories.repository(repository_id).await?;
             self.fast_forward_default(&repo, &default).await
         };
         Synced::Fetched(synced.await)
@@ -216,13 +216,13 @@ impl Manager {
 
     /// Fetch the repository's default-branch remotes; returns the default branch.
     async fn fetch_repository(&self, repository_id: &RepositoryId) -> Result<BranchName> {
-        let repo = self.repository(repository_id).await?;
+        let repo = self.repositories.repository(repository_id).await?;
         self.fetch_default_remotes(&repo).await
     }
 
     /// Every registered repository, forgetting the syncs of those removed.
     async fn registered_repository_ids(&self) -> Vec<RepositoryId> {
-        match self.repositories().await {
+        match self.repositories.list().await {
             Ok(repositories) => {
                 let ids: Vec<RepositoryId> = repositories.into_iter().map(|repo| repo.id).collect();
                 self.syncs.retain(&ids);
@@ -250,7 +250,7 @@ impl Manager {
         for (repository_id, error) in self.syncs.unnotified() {
             let (Some(sync), Ok(repo)) = (
                 self.checkout_sync(&repository_id),
-                self.repository(&repository_id).await,
+                self.repositories.repository(&repository_id).await,
             ) else {
                 continue;
             };

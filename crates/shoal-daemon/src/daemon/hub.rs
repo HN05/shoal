@@ -108,7 +108,7 @@ impl Spaces for Manager {
     }
 
     fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>> {
-        Box::pin(Manager::repositories(self))
+        Box::pin(self.repositories.list())
     }
 
     fn acts_on_global_config(&self) -> bool {

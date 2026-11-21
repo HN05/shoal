@@ -13,7 +13,7 @@ use std::{
 
 /// How preparing `root_dir` treats it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Layout {
+pub enum Layout {
     /// An existing root as it is, a missing one in the default layout.
     AsFound,
     /// The configured directory itself, replacing a link to the excluded
@@ -28,8 +28,8 @@ impl Layout {
     /// What a new root gets and `repo move` applies unless told otherwise:
     /// excluded on macOS, where development builds leave the user's root to
     /// the installed Shoal.
-    pub(crate) fn default_layout() -> Self {
-        if cfg!(target_os = "macos") && crate::build::changes_user_files() {
+    pub fn default_layout() -> Self {
+        if cfg!(target_os = "macos") && shoal_core::build::changes_user_files() {
             Self::Excluded
         } else {
             Self::Regular
@@ -38,7 +38,7 @@ impl Layout {
 
     /// What `repo move` applies: a regular directory when `regular_dir`
     /// asks for one, otherwise the default.
-    pub(crate) fn migration(regular_dir: bool) -> Self {
+    pub fn migration(regular_dir: bool) -> Self {
         if regular_dir {
             Self::Regular
         } else {
@@ -50,7 +50,7 @@ impl Layout {
 /// What preparing a root changes, worked out before anything changes so that
 /// every location can be checked first.
 #[derive(Debug, PartialEq, Eq)]
-pub(super) struct Plan {
+pub struct Plan {
     /// Holds repository directories.
     directory: PathBuf,
     /// The root that becomes a link to `directory` once it is empty.
@@ -70,7 +70,7 @@ impl Plan {
 
     /// The canonical directory that holds repository directories once the
     /// plan is applied.
-    pub(super) fn destination(&self) -> Result<PathBuf> {
+    pub fn destination(&self) -> Result<PathBuf> {
         if self.unlink {
             // Resolving the link would name the directory it replaces.
             return Ok(self.directory.clone());
@@ -79,7 +79,7 @@ impl Plan {
     }
 
     /// Every location the plan creates or changes, as named and as resolved.
-    pub(super) fn locations(&self) -> Result<Vec<PathBuf>> {
+    pub(crate) fn locations(&self) -> Result<Vec<PathBuf>> {
         let mut locations = Vec::new();
         for location in std::iter::once(&self.directory).chain(&self.link) {
             locations.push(canonical_with_missing_tail(location)?);
@@ -91,7 +91,7 @@ impl Plan {
     /// Refuse a root that would still hold files once the directories
     /// `moving` leave it, since it could not become the link. `moving` may
     /// name the root through a link, as the configured `root_dir` does.
-    pub(super) fn ensure_linkable(&self, moving: &[&Path]) -> Result<()> {
+    pub fn ensure_linkable(&self, moving: &[&Path]) -> Result<()> {
         let Some(root) = &self.link else {
             return Ok(());
         };
@@ -115,7 +115,7 @@ impl Plan {
 
     /// Make the changes, linking the root only once it is empty: what it holds
     /// moves with `shoal repo move`, which links it afterwards.
-    pub(super) fn apply(&self) -> Result<()> {
+    pub fn apply(&self) -> Result<()> {
         if self.unlink {
             fs::remove_file(&self.directory)
                 .with_context(|| format!("remove the link {}", self.directory.display()))?;
@@ -134,7 +134,7 @@ impl Plan {
 }
 
 /// Plan the absolute root `root` in `layout`.
-pub(super) fn plan(root: &Path, layout: Layout) -> Result<Plan> {
+pub(crate) fn plan(root: &Path, layout: Layout) -> Result<Plan> {
     let root = &with_canonical_parent(root)?;
     let resolved = canonical_with_missing_tail(root)?;
     let layout = match layout {

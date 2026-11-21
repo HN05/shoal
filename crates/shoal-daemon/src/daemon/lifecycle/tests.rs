@@ -31,7 +31,8 @@ pub(super) async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -86,7 +87,8 @@ pub(super) async fn fixture_with_hook(
     git(&path, &["add", ".gitignore"]);
     crate::daemon::test_support::commit(&path, ".shoal.toml");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -616,7 +618,11 @@ async fn removal_keeps_files_it_promised_to_restore_when_the_checkpoint_cannot()
 #[tokio::test]
 async fn removal_of_a_detached_head_without_unpushed_commits_keeps_the_branch() {
     let (_root, manager, workspace) = fixture().await;
-    let repo = manager.repository(workspace.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(workspace.repository())
+        .await
+        .unwrap();
     let head = git(&workspace.path, &["rev-parse", "HEAD"]);
     git(&workspace.path, &["switch", "--detach"]);
 
@@ -1041,7 +1047,11 @@ async fn removal_stops_processes_its_post_remove_hook_leaves() {
 #[tokio::test]
 async fn removal_deletes_a_branch_a_remote_has_and_keeps_unpushed_work() {
     let (root, manager, unpushed) = fixture().await;
-    let repo = manager.repository(unpushed.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(unpushed.repository())
+        .await
+        .unwrap();
     let pushed = manager
         .create_workspace(&repo.id, "pushed".into(), None, None, None)
         .await
@@ -1090,7 +1100,11 @@ async fn removal_deletes_a_branch_a_remote_has_and_keeps_unpushed_work() {
 #[tokio::test]
 async fn branch_removal_uses_the_inspected_default_branch() {
     let (_root, manager, workspace) = fixture().await;
-    let repo = manager.repository(workspace.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(workspace.repository())
+        .await
+        .unwrap();
     for (inspected_default, later_default, delete) in [
         (
             "main",
@@ -1160,7 +1174,8 @@ async fn automatic_removal_keeps_branch_when_default_branch_is_unknown() {
         &["worktree", "add", worktree.to_str().unwrap(), "main"],
     );
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -1318,7 +1333,8 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let top = manager
@@ -1431,7 +1447,8 @@ async fn idle_cleanup_takes_a_disposable_workspace_whatever_it_holds() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let new = |disposable| super::super::workspace::NewWorkspace {
@@ -1472,7 +1489,8 @@ async fn a_disposable_workspace_deletes_only_its_own_new_branch() {
     let path = repository(root.path(), "repo");
     git(&path, &["branch", "kept"]);
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let disposable = || super::super::workspace::NewWorkspace {
@@ -1532,7 +1550,8 @@ async fn workspace_of_kind(disposable: bool) -> (tempfile::TempDir, Arc<Manager>
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let new = super::super::workspace::NewWorkspace {
@@ -1627,7 +1646,11 @@ async fn remove_kept_leftover(manager: &Manager, workspace: &Workspace) {
     assert!(!workspace.path.exists());
     let removed = manager.removed_space(&selector).await.unwrap();
     let commit = &removed.workspace().unwrap().checkpoint.commit;
-    let repo = manager.repository(workspace.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(workspace.repository())
+        .await
+        .unwrap();
     let kept = git(&repo.path, &["show", &format!("{commit}:notes.md")]);
     assert_eq!(kept, "notes\n");
 }

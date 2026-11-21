@@ -26,7 +26,7 @@ impl Manager {
         caller_execution: Option<&ExecutionId>,
     ) -> Result<Workspace> {
         let (initial, _completion) = self.lock_pr_gate(selector).await?;
-        let (repo, _git) = self.lock_repository(initial.repository()).await?;
+        let (repo, _git) = self.repositories.lock(initial.repository()).await?;
         let workspace = self.workspace_by_id(&initial.id).await?;
         let _resources = self.gates.resource_guard(
             &workspace.id,

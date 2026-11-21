@@ -30,7 +30,8 @@ async fn workspace(manager: &Manager, repository: &Repository, name: &str) -> Wo
 async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {
     let path = repository(root, "repo");
     manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap()
 }

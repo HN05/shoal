@@ -152,7 +152,7 @@ impl Manager {
             .await?)
             .check;
         if include_changes && check.dirty {
-            let repo = self.repository(workspace.repository()).await?;
+            let repo = self.repositories.repository(workspace.repository()).await?;
             removal::load_changed_files(&mut check, &repo.path).await?;
             check.unsaved_files_archived = self
                 .checkpoint_keeps_unsaved_files(&check.workspace, CheckpointCause::Removal)
@@ -392,7 +392,7 @@ impl Manager {
         check: Option<&Inspection>,
     ) -> Result<WorktreeRemoval> {
         let workspace = &worktree.workspace;
-        let repo = self.repository(workspace.repository()).await?;
+        let repo = self.repositories.repository(workspace.repository()).await?;
         let removed = match check {
             Some(check) => {
                 self.delete_checkpointed_worktree(&repo.path, workspace, removal, check)
@@ -469,7 +469,11 @@ impl Manager {
         match self.removal_hook(workspace, HookKind::PostRemove).await? {
             Some(command) => Ok(Some(PostRemoveHook {
                 command,
-                checkout: self.repository(workspace.repository()).await?.path,
+                checkout: self
+                    .repositories
+                    .repository(workspace.repository())
+                    .await?
+                    .path,
                 env: self.removed_workspace_environment(workspace).await?,
             })),
             None => Ok(None),

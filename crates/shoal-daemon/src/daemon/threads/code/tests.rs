@@ -58,7 +58,7 @@ async fn a_post_s_code_reaches_the_other_side_at_its_lines_with_its_snippet() {
 
     // The space's ref keeps the version the reference points at.
     let repository = tree.child.repository_id.clone().unwrap();
-    let repo = manager.repository(&repository).await.unwrap();
+    let repo = manager.repositories.repository(&repository).await.unwrap();
     let reference = git::code_versions::reference(tree.child.id.as_str());
     let kept = git::code_versions::kept(&repo.path, &reference)
         .await
@@ -165,7 +165,7 @@ async fn expiry_lets_go_of_the_versions_of_threads_that_went() {
     .await
     .unwrap();
     let repository = tree.child.repository_id.clone().unwrap();
-    let repo = manager.repository(&repository).await.unwrap();
+    let repo = manager.repositories.repository(&repository).await.unwrap();
     let reference = git::code_versions::reference(tree.child.id.as_str());
 
     let id = thread.id;

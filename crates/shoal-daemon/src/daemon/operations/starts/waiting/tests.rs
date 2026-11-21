@@ -19,7 +19,8 @@ use shoal_protocol::{assignments::Done, space_names::SpaceSelector};
 async fn register(manager: &Manager, temp: &tempfile::TempDir, name: &str) -> Repository {
     let checkout = repository(temp.path(), name);
     manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap()
 }

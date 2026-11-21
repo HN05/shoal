@@ -42,6 +42,7 @@ shoal-leases.workspace = true
 shoal-links.workspace = true
 shoal-protocol = { workspace = true, features = ["rusqlite"] }
 shoal-refs = { workspace = true, features = ["rusqlite"] }
+shoal-repositories.workspace = true
 shoal-reviews.workspace = true
 shoal-runner.workspace = true
 shoal-schedule = { workspace = true, features = ["rusqlite"] }

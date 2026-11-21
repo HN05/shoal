@@ -21,7 +21,8 @@ async fn workspace(
 ) -> crate::model::Workspace {
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     manager
@@ -251,7 +252,11 @@ async fn a_message_to_one_space_says_when_its_agent_reads_it() {
     let request = crate::start_plan::queued_agent_request(&queued, launch, None).unwrap();
     manager.queue_add(request).await.unwrap();
     let without = create("without").await.unwrap();
-    let repo = manager.repository(running.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(running.repository())
+        .await
+        .unwrap();
     let chat =
         crate::daemon::test_support::chat(&manager, "planning", "chat", Some(&repo), None).await;
     let send = |id: &SpaceId| {
@@ -312,7 +317,8 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
         .unwrap();
     let elsewhere = repository(temp.path(), "elsewhere");
     let elsewhere = manager
-        .register_repository(elsewhere.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(elsewhere.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let outside = manager
@@ -625,7 +631,11 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
     };
     assert_eq!(std::fs::read_to_string(copy).unwrap(), "panic");
     assert_eq!(copy.file_name(), file.file_name());
-    let repo = manager.repository(workspace.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(workspace.repository())
+        .await
+        .unwrap();
     let workspaces_dir = repo.workspaces_dir.as_path();
     assert!(copy.starts_with(workspaces_dir.join(".attachments").join(&workspace.id)));
 
@@ -683,7 +693,11 @@ async fn a_refused_message_leaves_no_copies() {
             .await
             .is_err()
     );
-    let repo = manager.repository(workspace.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(workspace.repository())
+        .await
+        .unwrap();
     let attachments = repo.workspaces_dir.join(".attachments");
     assert!(!attachments.join(&workspace.id).exists());
 }
@@ -728,7 +742,11 @@ async fn an_attached_send_waits_for_the_files_gate() {
             .unwrap()
             .is_empty()
     );
-    let repo = manager.repository(workspace.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(workspace.repository())
+        .await
+        .unwrap();
     let attachments = repo.workspaces_dir.join(".attachments");
     assert!(!attachments.join(&workspace.id).exists());
     drop(held);
@@ -787,7 +805,11 @@ async fn a_send_waiting_through_removal_leaves_no_files() {
     drop(held);
     assert!(removal.await.unwrap().unwrap().removed);
     assert!(send.await.unwrap().is_err());
-    let repo = manager.repository(workspace.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(workspace.repository())
+        .await
+        .unwrap();
     let attachments = repo.workspaces_dir.join(".attachments");
     assert!(!attachments.join(&workspace.id).exists());
 }

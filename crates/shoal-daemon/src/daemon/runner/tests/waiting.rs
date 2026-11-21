@@ -78,7 +78,8 @@ async fn waiting_jobs_join_the_queue_linked_to_their_workspace_until_the_forge_d
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let listed = Arc::new(Mutex::new(vec![job("b", 9, 2), job("a", 4, 1)]));
@@ -175,7 +176,8 @@ async fn a_job_ranks_with_its_workspace_ahead_of_that_workspaces_restore() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let topic = manager
@@ -257,7 +259,8 @@ async fn a_waiting_job_serves_the_workspace_that_links_its_pr_after_it_queued() 
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let server = forgejo(Arc::new(Mutex::new(vec![job("a", 4, 1)])));

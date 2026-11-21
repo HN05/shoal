@@ -8,7 +8,6 @@ use shoal_ids::repository_ids::RepositoryId;
 use super::{leases::DaemonRecords, manager::Manager, resources};
 use shoal_daemon_base::ownership::paths::real_directory_identity;
 
-pub(crate) mod holds;
 use crate::{
     daemon::{notifications::AlertKind, store},
     git,
@@ -21,7 +20,7 @@ impl Manager {
     /// grace period. A failure in one does not skip the others.
     pub(crate) async fn sweep_contributions(&self) -> Result<()> {
         let mut failed = Vec::new();
-        for repo in self.repositories().await? {
+        for repo in self.repositories.list().await? {
             if repo.contribution
                 && let Err(error) = self.sweep_contribution(&repo).await
             {
@@ -76,7 +75,7 @@ impl Manager {
     }
 
     async fn contribution_in_use(&self, id: &RepositoryId) -> Result<bool> {
-        if self.contribution_holds.held(id) {
+        if self.repositories.contribution_holds().held(id) {
             return Ok(true);
         }
         let id = id.to_owned();
@@ -88,7 +87,7 @@ impl Manager {
     /// afterwards; `false` when something is left. The caller holds the
     /// registry gate, under which a running `shoal contribute` holds it.
     pub(super) async fn begin_contribution_removal(&self, repo: &Repository) -> Result<bool> {
-        if self.contribution_holds.held(&repo.id) {
+        if self.repositories.contribution_holds().held(&repo.id) {
             return Ok(false);
         }
         let id = repo.id.clone();

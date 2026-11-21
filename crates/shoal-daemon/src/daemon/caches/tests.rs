@@ -13,14 +13,15 @@ async fn caches_empty_only_while_nothing_uses_them() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
         .create_workspace(&repo.id, "agent".into(), None, None, None)
         .await
         .unwrap();
-    let repo = manager.repository(&repo.id).await.unwrap();
+    let repo = manager.repositories.repository(&repo.id).await.unwrap();
     assert_eq!(manager.empty_caches(&repo, false).await.unwrap(), None);
 
     let configured = BTreeMap::from([(
@@ -85,14 +86,15 @@ async fn executions_do_not_start_without_their_caches() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
         .create_workspace(&repo.id, "agent".into(), None, None, None)
         .await
         .unwrap();
-    let repo = manager.repository(&repo.id).await.unwrap();
+    let repo = manager.repositories.repository(&repo.id).await.unwrap();
     std::fs::write(
         workspace.path.join(".shoal.toml"),
         "[caches.go]\nscope = 'shared'\n",
@@ -131,14 +133,15 @@ async fn hooks_the_cli_runs_find_their_caches_prepared() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
         .create_workspace(&repo.id, "agent".into(), None, None, None)
         .await
         .unwrap();
-    let repo = manager.repository(&repo.id).await.unwrap();
+    let repo = manager.repositories.repository(&repo.id).await.unwrap();
     std::fs::write(
         workspace.path.join(".shoal.toml"),
         "hooks.post_setup = 'attach.sh'\n[caches.go]\nscope = 'shared'\n",

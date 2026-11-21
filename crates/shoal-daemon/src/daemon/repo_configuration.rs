@@ -29,7 +29,7 @@ impl Manager {
         &self,
         selector: impl Into<crate::repository::Selector>,
     ) -> Result<PathBuf> {
-        let repo = self.repository(selector).await?;
+        let repo = self.repositories.repository(selector).await?;
         self.local_config_outside_checkouts(&repo.workspaces_dir)
             .await
     }
@@ -43,8 +43,8 @@ impl Manager {
         changes: Vec<config::edit::Change>,
     ) -> Result<LocalConfigEdit> {
         let _registry = self.gates.lock_registry().await;
-        let repo = self.repository(selector).await?;
-        self.ensure_repository_available(&repo.id).await?;
+        let repo = self.repositories.repository(selector).await?;
+        self.repositories.ensure_available(&repo.id).await?;
         let path = (self.local_config_outside_checkouts(&repo.workspaces_dir)).await?;
         let (config, backup) = tokio::task::spawn_blocking(move || {
             crate::config_file::edit(path, &changes, |edited| {
@@ -82,7 +82,7 @@ impl Manager {
         let Some(command) = kind.command(&settings) else {
             return Ok(None);
         };
-        let repository = self.repository(workspace.repository()).await?;
+        let repository = self.repositories.repository(workspace.repository()).await?;
         // The caller renders the hook's [env], whose caches only the daemon
         // creates, with the temporary directory, which is gone after removal.
         crate::caches::directories(&repository, &settings.caches)?;
@@ -167,7 +167,7 @@ impl Manager {
         &self,
         repository: &RepositoryId,
     ) -> Result<BTreeSet<String>> {
-        let checkout = self.repository(repository).await?;
+        let checkout = self.repositories.repository(repository).await?;
         let (file, _) = self.worktree_file(&checkout.path).await?;
         Ok((file.triggers.values())
             .filter_map(|trigger| trigger.signing_secret().map(str::to_owned))
@@ -264,7 +264,7 @@ impl Manager {
     /// The layers of the repository `selector` names, with the file in its
     /// registered checkout.
     async fn checkout_layers(&self, selector: crate::repository::Selector) -> Result<ConfigLayers> {
-        let repo = self.repository(&selector).await?;
+        let repo = self.repositories.repository(&selector).await?;
         let file = self.worktree_file(&repo.path).await?;
         self.config_layers(&repo.id, file).await
     }
@@ -282,7 +282,8 @@ impl Manager {
         let space = self.space(selector).await?;
         let id =
             (space.repository_id).with_context(|| format!("{} has no repository", space.name))?;
-        self.tracked_config(&self.repository(&id).await?).await
+        self.tracked_config(&self.repositories.repository(&id).await?)
+            .await
     }
 
     /// The settings of a repository this machine has none of, whose
@@ -328,7 +329,7 @@ impl Manager {
         &self,
         repository_id: &RepositoryId,
     ) -> Result<Option<PathBuf>> {
-        let repository = self.repository(repository_id).await?;
+        let repository = self.repositories.repository(repository_id).await?;
         let directory = &repository.workspaces_dir;
         Ok((self.local_config_occupant(directory).await?)
             .is_none()
@@ -342,8 +343,8 @@ impl Manager {
         &self,
         repository_id: &RepositoryId,
     ) -> Result<PathBuf> {
-        let repository = self.repository(repository_id).await?;
-        self.ensure_repository_available(&repository.id).await?;
+        let repository = self.repositories.repository(repository_id).await?;
+        self.repositories.ensure_available(&repository.id).await?;
         let directory = &repository.workspaces_dir;
         self.local_config_outside_checkouts(directory).await?;
         Ok(config::repo::false_positives_path(directory))
@@ -368,7 +369,7 @@ impl Manager {
         repository_id: &RepositoryId,
         (worktree_file, worktree_template_files): (RepoConfig, config::modes::Files),
     ) -> Result<ConfigLayers> {
-        let repository = self.repository(repository_id).await?;
+        let repository = self.repositories.repository(repository_id).await?;
         // Registration and workspace creation keep checkouts out of the
         // local config's directory, so one there predates the local config,
         // which therefore has nothing to hold, and edits refuse.
@@ -470,7 +471,7 @@ impl Manager {
         with_tmp_dir: bool,
     ) -> Result<BTreeMap<String, std::ffi::OsString>> {
         let repository = match repository {
-            Some(id) => Some(self.repository(id).await?),
+            Some(id) => Some(self.repositories.repository(id).await?),
             None => None,
         };
         let id = space.id.clone();

@@ -9,7 +9,8 @@ async fn conflicts_compare_committed_head_with_the_default_or_named_branch() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo_id = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap()
         .id;
@@ -100,7 +101,8 @@ async fn sensitive_paths_changed_on_both_sides_are_listed_until_the_target_has_h
     fs::write(repo.join(".shoal.toml"), listed).unwrap();
     commit(&repo, ".shoal.toml");
     let repo_id = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap()
         .id;

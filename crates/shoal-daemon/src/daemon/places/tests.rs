@@ -16,7 +16,8 @@ async fn an_execution_reports_where_it_runs() -> Result<()> {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_string_lossy().into_owned().into(), None, None)
+        .repositories
+        .register(checkout.to_string_lossy().into_owned().into(), None, None)
         .await?;
     let workspace = manager
         .create_workspace(&repo.id, "placed".into(), None, None, None)
@@ -53,7 +54,8 @@ async fn a_later_instance_under_a_reused_id_takes_its_record() -> Result<()> {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_string_lossy().into_owned().into(), None, None)
+        .repositories
+        .register(checkout.to_string_lossy().into_owned().into(), None, None)
         .await?;
     let mut workspaces = Vec::new();
     for name in ["first", "second", "third"] {
@@ -96,7 +98,8 @@ async fn closing_an_earlier_instance_keeps_the_record_that_replaced_it() -> Resu
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_string_lossy().into_owned().into(), None, None)
+        .repositories
+        .register(checkout.to_string_lossy().into_owned().into(), None, None)
         .await?;
     let mut workspaces = Vec::new();
     for name in ["first", "second"] {
@@ -138,7 +141,8 @@ async fn a_place_closes_with_the_workspace_its_record_names() -> Result<()> {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_string_lossy().into_owned().into(), None, None)
+        .repositories
+        .register(checkout.to_string_lossy().into_owned().into(), None, None)
         .await?;
     let tabbed = manager
         .create_workspace(&repo.id, "tabbed".into(), None, None, None)

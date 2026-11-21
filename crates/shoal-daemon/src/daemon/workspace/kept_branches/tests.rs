@@ -32,7 +32,8 @@ async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Repository, PathBuf) {
     git(&path, &["push", "-q", "-u", "origin", "main"]);
     git(&path, &["remote", "set-head", "origin", "main"]);
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let other = root.path().join("other");

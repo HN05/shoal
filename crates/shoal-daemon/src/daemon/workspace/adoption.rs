@@ -24,7 +24,7 @@ impl Manager {
         path: &Path,
         copy: bool,
     ) -> Result<Workspace> {
-        let (repo, git) = self.lock_repository(repository).await?;
+        let (repo, git) = self.repositories.lock(repository).await?;
         let path = self.workspace_location(&repo, path).await?;
         let trees = git::worktrees(&repo.path, git::run).await?;
         let tree = trees

@@ -257,7 +257,7 @@ async fn delete_xcode_leftovers(
     available: impl Fn(&Path) -> io::Result<u64>,
 ) -> Result<()> {
     let mut deleted = false;
-    for repo in manager.repositories().await? {
+    for repo in manager.repositories.list().await? {
         deleted |= manager
             .delete_xcode_leftovers(&repo, |path| filesystem.holds(path))
             .await;
@@ -322,7 +322,7 @@ async fn empty_caches(
     filesystem: &mut Filesystem,
     available: impl Fn(&Path) -> io::Result<u64>,
 ) -> Result<()> {
-    for repo in manager.repositories().await? {
+    for repo in manager.repositories.list().await? {
         if filesystem.free >= settings.cleanup_free_bytes() {
             break;
         }

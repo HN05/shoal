@@ -35,7 +35,8 @@ fn launch(name: &str) -> Launch {
 async fn workspaces(manager: &Manager, root: &std::path::Path) -> (Workspace, Workspace) {
     let checkout = repository(root, "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let first = manager

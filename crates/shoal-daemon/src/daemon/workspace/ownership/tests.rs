@@ -50,7 +50,8 @@ async fn a_marker_read_that_waits_in_open_leaves_the_runtime_thread_free() -> Re
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_string_lossy().into_owned().into(), None, None)
+        .repositories
+        .register(checkout.to_string_lossy().into_owned().into(), None, None)
         .await?;
     let workspace = manager
         .create_workspace(&repo.id, "stalled".into(), None, None, None)
@@ -118,7 +119,8 @@ async fn cut_short(name: &str) -> Result<(tempfile::TempDir, std::sync::Arc<Mana
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_string_lossy().into_owned().into(), None, None)
+        .repositories
+        .register(checkout.to_string_lossy().into_owned().into(), None, None)
         .await?;
     let workspace = manager
         .create_workspace(&repo.id, name.into(), None, None, None)
@@ -178,7 +180,10 @@ async fn removal_takes_the_worktree_a_cut_short_creation_left() -> Result<()> {
 async fn a_retried_creation_adds_again_what_a_cut_short_add_left() -> Result<()> {
     let (_temp, manager, workspace) = cut_short("topic").await?;
     // Git keeps an add's admin directory locked until its checkout ends.
-    let repo = manager.repository(workspace.repository()).await?;
+    let repo = manager
+        .repositories
+        .repository(workspace.repository())
+        .await?;
     crate::daemon::test_support::git(
         &repo.path,
         &["worktree", "lock", workspace.path.to_str().unwrap()],

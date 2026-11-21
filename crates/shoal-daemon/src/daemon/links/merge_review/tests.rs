@@ -40,10 +40,12 @@ impl Fixture {
     async fn serving(holds: &str, head_branch: &str, head_repository: &str) -> Self {
         let (root, manager) = manager().await;
         let repo = repository(root.path(), "repo");
-        let repo_id = (manager.register_repository(repo.to_str().unwrap().into(), None, None))
-            .await
-            .unwrap()
-            .id;
+        let repo_id = (manager
+            .repositories
+            .register(repo.to_str().unwrap().into(), None, None))
+        .await
+        .unwrap()
+        .id;
         let workspace = (manager.create_workspace(&repo_id, "topic".into(), None, None, None))
             .await
             .unwrap();

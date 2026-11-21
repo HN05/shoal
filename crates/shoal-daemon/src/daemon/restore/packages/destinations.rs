@@ -48,7 +48,7 @@ impl Manager {
         let mut destinations = Destinations::default();
         if let Some(there) = &manifest.space.record.repository_id {
             let here = match repository {
-                Some(named) => self.repository(named).await?.id,
+                Some(named) => self.repositories.repository(named).await?.id,
                 None => self.own_destination(manifest, caller).await?,
             };
             destinations.own = Some(here.clone());
@@ -94,13 +94,13 @@ impl Manager {
         if let Some(caller) = caller {
             const REFUSAL: &str = "scoped processes import only into their own repository";
             let own = self.own_repository(caller, &selector, REFUSAL).await?;
-            return Ok(self.repository(&own).await?.id);
+            return Ok(self.repositories.repository(&own).await?.id);
         }
-        match self.repository(selector).await {
+        match self.repositories.repository(selector).await {
             Ok(repository) => Ok(repository.id),
             Err(error) if NotRegistered::refused(&error) => {
                 let source = clone_source(origin).into();
-                let cloned = self.register_repository(source, None, None).await?;
+                let cloned = self.repositories.register(source, None, None).await?;
                 Ok(cloned.id)
             }
             Err(error) => Err(error),

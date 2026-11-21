@@ -170,7 +170,7 @@ impl Manager {
                     None => "pass <repository>",
                 };
                 match state.parent.clone().here()? {
-                    Some(repository) => self.repository(repository).await?,
+                    Some(repository) => self.repositories.repository(repository).await?,
                     None => self.current_repository(launch, state, hint).await?,
                 }
             }
@@ -218,7 +218,7 @@ impl Manager {
         let (repos, workspaces) = (&state.repositories, &state.workspaces);
         let id = (crate::launches::shape::directory_repository(launch, repos, workspaces).await?)
             .with_context(|| format!("no current registered repository; {hint}"))?;
-        self.repository(id).await
+        self.repositories.repository(id).await
     }
 
     /// Complete `creation` for the PR `pull` names in `repo`, which

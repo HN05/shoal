@@ -7,7 +7,8 @@ async fn recheck_readies_only_workspaces_the_audit_failed_once_they_verify() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let mut workspaces = Vec::new();
@@ -55,7 +56,8 @@ async fn the_audit_fails_workspaces_whose_file_access_stalls_until_a_recheck_fin
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

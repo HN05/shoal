@@ -10,7 +10,8 @@ use shoal_protocol::space_names::SpaceSelector;
 async fn idle_agent(manager: &Manager, root: &tempfile::TempDir) -> StartedExecution {
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

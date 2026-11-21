@@ -492,7 +492,7 @@ async fn administer<'a>(
         Some(repository) => {
             const REFUSAL: &str = "scoped processes import only into their own repository";
             *repository = manager.own_repository(caller, repository, REFUSAL).await?;
-            Some(manager.repository(&*repository).await?.id)
+            Some(manager.repositories.repository(&*repository).await?.id)
         }
         None => None,
     };

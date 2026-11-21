@@ -29,7 +29,8 @@ pub(crate) async fn fixture() -> Fixture {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -443,7 +444,12 @@ async fn a_change_s_lines_follow_its_code_and_its_version_stays_kept() {
         .unwrap();
     assert_eq!(lines(changes), "lib.rs:4");
     let repository = fixture.workspace.repository_id.clone().unwrap();
-    let repo = fixture.manager.repository(&repository).await.unwrap();
+    let repo = fixture
+        .manager
+        .repositories
+        .repository(&repository)
+        .await
+        .unwrap();
     let reference = crate::git::code_versions::reference(fixture.workspace.id.as_str());
     let kept = crate::git::code_versions::kept(&repo.path, &reference)
         .await

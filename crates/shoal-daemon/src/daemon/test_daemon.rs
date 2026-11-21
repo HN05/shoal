@@ -36,7 +36,8 @@ impl TestDaemon {
         let path = repository(root.path(), "repo");
         git(&path, &["config", "protocol.allow", "never"]);
         let repository = manager
-            .register_repository(path.to_str().unwrap().into(), None, None)
+            .repositories
+            .register(path.to_str().unwrap().into(), None, None)
             .await
             .unwrap();
         git(

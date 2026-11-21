@@ -100,7 +100,7 @@ impl Manager {
         // process reaches only its own repository.
         self.ensure_parent_repository(&repository, new.parent.as_ref())
             .await?;
-        let (repo, git) = self.lock_repository(repository).await?;
+        let (repo, git) = self.repositories.lock(repository).await?;
         self.create_at_start(&repo, start, new, git).await
     }
 
@@ -119,7 +119,7 @@ impl Manager {
     ) -> Result<OpenedWorkspace> {
         self.ensure_parent_repository(&repository, new.parent.as_ref())
             .await?;
-        let (repo, git) = self.lock_repository(repository).await?;
+        let (repo, git) = self.repositories.lock(repository).await?;
         if let Some(workspace) = self.pull_workspace(&repo.id, &url, head.number).await? {
             (self.ensure_takes_over(&workspace, caller)).await?;
             self.move_to_pull_head(&repo, &workspace, &head).await?;
@@ -200,7 +200,7 @@ impl Manager {
         commit: &CommitId,
         reference: Option<&str>,
     ) -> Result<RecordedJobWorkspace> {
-        let (repo, git) = self.lock_repository(repository_id).await?;
+        let (repo, git) = self.repositories.lock(repository_id).await?;
         fetch_job_commit(&repo, commit, reference).await?;
         let at = StartingCommit {
             commit: commit.to_owned(),
@@ -329,7 +329,7 @@ impl Manager {
         reference: Option<&str>,
     ) -> Result<()> {
         let workspace = self.workspace_by_id(id).await?;
-        let (repo, _guard) = self.lock_repository(workspace.repository()).await?;
+        let (repo, _guard) = self.repositories.lock(workspace.repository()).await?;
         let reserved = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Updating)
             .await?;
@@ -409,7 +409,7 @@ impl Manager {
         new: NewRecord,
         at: StartingCommit,
     ) -> Result<Workspace> {
-        let (repo, git) = self.lock_repository(removed.repository()?).await?;
+        let (repo, git) = self.repositories.lock(removed.repository()?).await?;
         let base = removed.kept_workspace()?.base.as_ref();
         let diff_ref = base.and_then(|base| base.reference.as_deref());
         let diff_ref = surviving_ref(&repo, diff_ref).await?;

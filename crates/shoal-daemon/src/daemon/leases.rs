@@ -82,7 +82,7 @@ impl Settings for Manager {
     }
 
     fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>> {
-        Box::pin(Manager::repositories(self))
+        Box::pin(self.repositories.list())
     }
 }
 

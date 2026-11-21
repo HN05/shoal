@@ -18,7 +18,8 @@ async fn chat_and_worker(
 ) -> (Chat, Workspace) {
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let worker = manager
@@ -424,7 +425,8 @@ async fn a_removed_workspace_gives_the_user_the_events_it_had_not_received() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -636,7 +638,11 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
 
     // The worker's repository directory moves, as a chat of another
     // repository may coordinate it.
-    let repo = manager.repository(worker.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(worker.repository())
+        .await
+        .unwrap();
     let source = repo.workspaces_dir;
     let destination = temp.path().join("moved");
     std::fs::rename(&source, &destination).unwrap();

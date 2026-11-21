@@ -115,7 +115,7 @@ impl Manager {
     /// moves again or the daemon restarts; one whose soft steps alone failed
     /// built a current snapshot.
     pub async fn refresh_seeds(&self) {
-        let repositories = match self.repositories().await {
+        let repositories = match self.repositories.list().await {
             Ok(repositories) => repositories,
             Err(error) => return log!("seed refresh: {error:#}"),
         };
@@ -184,7 +184,7 @@ impl Manager {
         }
         let _seed = self.stop_seed_build(&repo.id).await;
         let _git = self.gates.lock_git(&repo.id).await;
-        self.ensure_repository_available(&repo.id).await?;
+        self.repositories.ensure_available(&repo.id).await?;
         self.remove_seed(repo).await?;
         self.seeds.record_result(&repo.id, None);
         Ok(())
@@ -203,12 +203,12 @@ impl Manager {
         let tip = &build.0;
         let slot = self.seeds.slot(&repo.id);
         let _build = slot.gate.lock().await;
-        if self.repository(&repo.id).await.is_err() {
+        if self.repositories.repository(&repo.id).await.is_err() {
             return Ok(Vec::new());
         }
         {
             let _git = self.gates.lock_git(&repo.id).await;
-            self.ensure_repository_available(&repo.id).await?;
+            self.repositories.ensure_available(&repo.id).await?;
             check_out_seed(repo, layout, tip).await?;
         }
         // Under the gate, which keeps cache emptying out until the build ends.
@@ -263,7 +263,7 @@ impl Manager {
         let slot = self.seeds.slot(&repo.id);
         let _snapshot = slot.snapshot.write().await;
         let _git = self.gates.lock_git(&repo.id).await;
-        self.ensure_repository_available(&repo.id).await?;
+        self.repositories.ensure_available(&repo.id).await?;
         let worktree = layout.worktree();
         ensure!(
             git::seed::head(&worktree).await? == *tip,
@@ -282,7 +282,7 @@ impl Manager {
     /// Give each repository's current snapshot a spare clone of its outputs,
     /// which the next new workspace takes instead of cloning them.
     pub async fn refill_spares(&self) {
-        let repositories = match self.repositories().await {
+        let repositories = match self.repositories.list().await {
             Ok(repositories) => repositories,
             Err(error) => return log!("seed spares: {error:#}"),
         };
@@ -301,7 +301,7 @@ impl Manager {
         let slot = self.seeds.slot(id);
         let _snapshot = slot.snapshot.read().await;
         // Read under the lock: a move or removal of the repository holds it.
-        let Ok(repo) = self.repository(id).await else {
+        let Ok(repo) = self.repositories.repository(id).await else {
             return Ok(());
         };
         let layout = Layout::of(&repo);

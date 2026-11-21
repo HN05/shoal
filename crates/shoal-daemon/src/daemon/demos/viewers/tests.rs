@@ -74,7 +74,8 @@ async fn started(
 async fn workspace(manager: &Manager, root: &std::path::Path) -> crate::model::Workspace {
     let checkout = repository(root, "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     manager

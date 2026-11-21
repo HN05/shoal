@@ -50,7 +50,7 @@ impl Manager {
         base: Option<String>,
         options: CreationOptions,
     ) -> Result<Workspace> {
-        let (repo, git) = self.lock_repository(repository).await?;
+        let (repo, git) = self.repositories.lock(repository).await?;
         git::check_branch_name(&branch)?;
         let source = self.converted_source(&repo, &branch, base).await?;
         // An existing branch goes under its local name, without its remote,

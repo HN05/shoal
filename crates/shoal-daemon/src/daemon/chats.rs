@@ -141,7 +141,7 @@ impl Manager {
         };
         let repository = match (&workspace, repository) {
             (Some(workspace), _) => workspace.repository_id.clone(),
-            (None, Some(repository)) => Some(self.repository(repository).await?.id),
+            (None, Some(repository)) => Some(self.repositories.repository(repository).await?.id),
             (None, None) => None,
         };
         self.record_new_chat(repository, workspace.as_ref(), new)
@@ -254,7 +254,7 @@ impl Manager {
     ) -> Result<Chat> {
         let home = match &chat.repository_id {
             Some(id) => ChatHome {
-                repository: Some(self.repository(id).await?),
+                repository: Some(self.repositories.repository(id).await?),
                 root_dir: None,
                 _registry: None,
             },
@@ -308,7 +308,7 @@ impl Manager {
     async fn reserve_chat_home(&self, repository: Option<RepositoryId>) -> Result<ChatHome<'_>> {
         Ok(match repository {
             Some(id) => ChatHome {
-                repository: Some(self.repository(&id).await?),
+                repository: Some(self.repositories.repository(&id).await?),
                 root_dir: None,
                 _registry: None,
             },
@@ -455,7 +455,7 @@ impl Manager {
     /// without a repository.
     pub(crate) async fn chat_repository(&self, chat: &Chat) -> Result<Option<Repository>> {
         match &chat.repository_id {
-            Some(id) => Ok(Some(self.repository(id).await?)),
+            Some(id) => Ok(Some(self.repositories.repository(id).await?)),
             None => Ok(None),
         }
     }

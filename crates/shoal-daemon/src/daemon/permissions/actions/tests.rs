@@ -37,9 +37,11 @@ fn undecided(result: anyhow::Result<()>) -> Box<crate::daemon::approvals::Approv
 async fn the_permission_takes_refuses_or_proposes_the_action() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
-    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let config = "[modes.plan.permissions]\ndaemon = 'direct'\n\
                   [modes.chat.permissions]\ndaemon = 'propose'\n";
     (manager.write_local_config(&repo.id, Some(config.into())))
@@ -97,9 +99,11 @@ async fn the_permission_takes_refuses_or_proposes_the_action() {
 async fn a_parent_without_the_key_at_direct_cannot_approve() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
-    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let config = "[permissions]\ndaemon = 'propose'\n";
     (manager.write_local_config(&repo.id, Some(config.into())))
         .await
@@ -127,9 +131,11 @@ async fn a_parent_without_the_key_at_direct_cannot_approve() {
 async fn an_approved_command_takes_its_permission_s_actions_without_asking_again() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
-    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let config = "[permissions]\ndaemon = 'propose'\n";
     (manager.write_local_config(&repo.id, Some(config.into())))
         .await
@@ -191,9 +197,11 @@ async fn releasing_the_user_s_hold_follows_the_user_holds_permission() {
 
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
-    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let master = chat(&manager, "master", "orchestrate", None, None).await;
     let worker = crate::daemon::test_support::workspace_below(
         &manager,
@@ -321,9 +329,11 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
 async fn a_chat_without_a_repository_takes_an_action_as_its_repository_allows() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
-    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let config = "[modes.orchestrate.permissions]\nlimits = 'deny'\n";
     (manager.write_local_config(&repo.id, Some(config.into())))
         .await
@@ -343,9 +353,11 @@ async fn a_chat_without_a_repository_takes_an_action_as_its_repository_allows() 
 async fn a_decider_without_a_repository_decides_as_the_action_s_repository_allows() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
-    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let config = "[modes.orchestrate.permissions]\nadmin = 'propose'\n";
     (manager.write_local_config(&repo.id, Some(config.into())))
         .await
@@ -380,9 +392,11 @@ async fn an_approval_to_release_a_hold_covers_only_the_space_it_names() {
 
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
-    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let lead = chat(&manager, "lead", "chat", Some(&repo), None).await;
     let mut held = Vec::new();
     for _ in 0..2 {

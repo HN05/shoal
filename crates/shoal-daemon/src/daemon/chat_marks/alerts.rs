@@ -172,7 +172,7 @@ impl Manager {
 
     /// The name of the repository `selector` names, as text shows it.
     async fn repository_name(&self, selector: &Selector) -> Result<String> {
-        let repository = self.repository(selector.clone()).await?;
+        let repository = self.repositories.repository(selector.clone()).await?;
         Ok(repository.display_name().to_owned())
     }
 

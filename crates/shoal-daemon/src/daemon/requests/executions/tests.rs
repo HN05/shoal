@@ -38,7 +38,9 @@ async fn a_restore_the_user_runs_here_engages_them() {
     let (temp, manager) = manager().await;
     manager.publish_config(global_config("[agents.claude]\ncommand = ['sh']\n"));
     let path = repository(temp.path(), "repo");
-    let repo = manager.register_repository(path.to_str().unwrap().into(), None, None);
+    let repo = manager
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None);
     let repo = repo.await.unwrap();
     let focused = chat(&manager, "focused", "chat", Some(&repo), None).await;
     let other = chat(&manager, "other", "chat", Some(&repo), None).await;

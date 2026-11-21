@@ -6,7 +6,8 @@ async fn status_counts_only_the_spaces_own_unread_notifications() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
     let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let mut workspaces = Vec::new();
@@ -73,7 +74,8 @@ async fn status_counts_the_threads_the_space_opened_that_wait() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
     let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     manager

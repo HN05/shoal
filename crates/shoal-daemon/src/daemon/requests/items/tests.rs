@@ -11,7 +11,8 @@ async fn item_waits_close_unanswered_while_an_update_restarts_the_daemon() {
     let (root, manager) = crate::daemon::test_support::manager().await;
     let path = crate::daemon::test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -110,7 +111,8 @@ async fn agents_approve_prs_as_the_review_account_as_pr_review_allows() {
     let origin = format!("http://{host}/team/repo");
     test_support::git(&path, &["remote", "add", "origin", &origin]);
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let forge =

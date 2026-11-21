@@ -12,7 +12,8 @@ use crate::{
 async fn idle_agent(manager: &Manager, root: &std::path::Path) -> (Workspace, ExecutionId) {
     let repo = repository(root, "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

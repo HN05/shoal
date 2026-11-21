@@ -17,7 +17,8 @@ async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -145,7 +146,11 @@ async fn completion_retains_dirty_unpushed_and_newer_work() {
     reopened.sweep_completed().await.unwrap();
     assert!(!workspace.path.exists());
     // A branch whose commits a remote has goes with the workspace.
-    let repo = reopened.repository(workspace.repository()).await.unwrap();
+    let repo = reopened
+        .repositories
+        .repository(workspace.repository())
+        .await
+        .unwrap();
     assert_eq!(git(&repo.path, &["branch", "--list", "finished"]), "");
     reopened.store.shutdown().await;
 }
@@ -522,7 +527,11 @@ async fn completion_cleans_up_commits_the_start_branch_took_unchanged() {
     manager.sweep_completed().await.unwrap();
     assert!(!workspace.path.exists());
     // Neither a remote nor the default branch has its commits.
-    let repo = manager.repository(workspace.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(workspace.repository())
+        .await
+        .unwrap();
     assert_ne!(git(&repo.path, &["branch", "--list", "part"]), "");
 }
 
@@ -564,7 +573,11 @@ async fn completion_retains_commits_the_start_branch_took_adapted() {
     );
     manager.sweep_completed().await.unwrap();
     assert!(!workspace.path.exists());
-    let repo = manager.repository(workspace.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(workspace.repository())
+        .await
+        .unwrap();
     assert_ne!(git(&repo.path, &["branch", "--list", "part"]), "");
 }
 
@@ -737,7 +750,11 @@ async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
         assert!(!gone.path.exists(), "{}", gone.name);
     }
     // Its commit stays on the kept branch, its unsaved file in a checkpoint.
-    let repo = manager.repository(parent.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(parent.repository())
+        .await
+        .unwrap();
     assert_eq!(
         git(&repo.path, &["branch", "--list", "dirty"]).trim(),
         "dirty"
@@ -940,7 +957,8 @@ async fn a_worker_opened_outside_its_done_chat_after_the_sweep_chose_it_stays() 
     let (temp, manager) = crate::daemon::test_support::manager().await;
     let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = manager
@@ -989,7 +1007,8 @@ async fn a_removal_under_a_done_chat_keeps_the_chats_workspaces_below_it() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
     let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = manager

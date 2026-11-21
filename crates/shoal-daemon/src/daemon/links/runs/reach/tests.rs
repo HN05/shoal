@@ -11,9 +11,11 @@ use crate::daemon::{
 async fn a_scope_reaches_the_default_branch_and_its_workspaces_branches() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
-    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
     let worker = create("worker").await.unwrap();
     let other = create("other").await.unwrap();

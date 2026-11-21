@@ -12,7 +12,8 @@ async fn repository_with_local_directory() -> (
     let (root, manager) = test_support::manager().await;
     let checkout = test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let local = manager.local_config_path(&repo.id).await.unwrap();
@@ -99,7 +100,8 @@ async fn a_workspace_in_a_stalled_directory_refuses_its_layers_without_reading_t
     let (root, manager) = test_support::manager().await;
     let checkout = test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -161,7 +163,8 @@ async fn a_worktree_file_the_format_rejects_is_ignored_and_reported_once_per_err
     let (root, manager) = test_support::manager().await;
     let checkout = test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     manager
@@ -208,7 +211,8 @@ async fn a_lease_is_kept_while_the_file_that_may_name_its_hooks_is_rejected() {
     test_support::configure(&manager, "[resources.lock]\n").await;
     let checkout = test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -259,7 +263,8 @@ async fn a_chats_layers_are_its_repositorys() {
     let (root, manager) = test_support::manager().await;
     let checkout = test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -305,9 +310,11 @@ async fn repository_with_local_config(
 ) {
     let (root, manager) = test_support::manager().await;
     let checkout = test_support::repository(root.path(), "repo");
-    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     (manager.write_local_config(&repo.id, Some(local.into())))
         .await
         .unwrap();

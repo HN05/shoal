@@ -177,7 +177,7 @@ impl Manager {
         repository_id: &RepositoryId,
         environment: BTreeMap<String, String>,
     ) -> Result<()> {
-        let repository = self.repository(repository_id).await?;
+        let repository = self.repositories.repository(repository_id).await?;
         self.keep_environment(&repository.id, environment).await
     }
 

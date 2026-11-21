@@ -182,7 +182,7 @@ impl Manager {
     ) -> Result<Workspace> {
         self.ensure_parent_repository(&repository, new.parent.as_ref())
             .await?;
-        let (repo, git) = self.lock_repository(repository).await?;
+        let (repo, git) = self.repositories.lock(repository).await?;
         let check = if new.pending {
             FilesCheck::AtCreation
         } else {

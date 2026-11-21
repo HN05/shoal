@@ -48,7 +48,8 @@ pub(super) async fn exporter() -> (
     git(&path, &["push", "-q", "-u", "origin", "main"]);
     git(&path, &["remote", "set-head", "origin", "main"]);
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     (root, manager, repo, origin)
@@ -62,7 +63,8 @@ pub(super) async fn importer(origin: &Path) -> (tempfile::TempDir, Arc<Manager>,
         &["clone", "-q", origin.to_str().unwrap(), "repo"],
     );
     let repo = manager
-        .register_repository(
+        .repositories
+        .register(
             root.path().join("repo").to_str().unwrap().into(),
             None,
             None,
@@ -338,6 +340,7 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
     );
     // The repository's directory keeps them, beside its workspaces.
     let sessions = importing
+        .repositories
         .repository(&target_repo.id)
         .await
         .unwrap()

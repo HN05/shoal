@@ -107,7 +107,8 @@ async fn an_idle_agent_the_user_is_away_from_sleeps_seconds_after_its_turn() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "idle", IDLE).await;
@@ -138,7 +139,8 @@ async fn other_agents_keep_running() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let mut executions = Vec::new();
@@ -171,7 +173,8 @@ async fn a_turn_that_starts_between_the_choice_and_the_stop_keeps_the_agent() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "idle", IDLE).await;
@@ -201,7 +204,8 @@ async fn an_interaction_between_the_choice_and_the_stop_keeps_the_agent() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "idle", IDLE).await;
@@ -237,7 +241,8 @@ async fn an_idle_agent_with_a_running_subagent_stops_once_the_subagent_stops() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "held", IDLE).await;
@@ -266,7 +271,8 @@ async fn a_subagent_that_starts_between_the_choice_and_the_stop_keeps_the_agent(
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "held", IDLE).await;
@@ -286,7 +292,8 @@ async fn a_wake_after_an_idle_stop_leaves_its_update_for_the_restore() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "held", IDLE).await;
@@ -308,7 +315,8 @@ async fn a_wake_after_a_recorded_stop_records_no_turn() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "held", IDLE).await;
@@ -335,7 +343,8 @@ async fn an_idle_stop_after_a_wake_keeps_the_agent() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "held", IDLE).await;
@@ -368,7 +377,8 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let working = Setup {
@@ -500,7 +510,8 @@ async fn idle_chat(
 ) {
     let repo = repository(root, "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     manager
@@ -614,7 +625,8 @@ async fn an_engaged_user_keeps_the_agent_until_they_stop_replying() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "engaged", IDLE).await;
@@ -646,7 +658,8 @@ async fn sleep_can_be_disabled() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     (manager.write_local_config(&repo.id, Some("[sleep]\nenabled = false\n".into())))
@@ -668,7 +681,8 @@ async fn an_asleep_agents_timer_keeps_its_workspace_and_restores_it() {
     ));
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "sleeps", IDLE).await;
@@ -702,7 +716,8 @@ async fn a_light_agent_that_sleeps_keeps_running() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let config = "[modes.triage]\nweight = 'light'\n";
@@ -732,7 +747,8 @@ async fn warm_agent_sleeps(schedule: &str) -> bool {
     manager.publish_config(crate::test_support::global_config(&config));
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "warm", IDLE).await;
@@ -764,7 +780,8 @@ async fn an_agent_the_user_is_away_from_sleeps_to_make_room_for_queued_work() {
     ));
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     // Sleep is off, so only making room puts agents to sleep.
@@ -819,7 +836,8 @@ async fn an_agent_with_a_working_agent_below_it_does_not_sleep_for_room() {
     ));
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     (manager.write_local_config(&repo.id, Some("[sleep]\nenabled = false\n".into())))
@@ -853,7 +871,8 @@ async fn no_agent_sleeps_for_a_slot_the_machine_does_not_have() {
     ));
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     (manager.write_local_config(&repo.id, Some("[sleep]\nenabled = false\n".into())))
@@ -900,7 +919,8 @@ async fn a_pr_comment_restores_an_agent_asleep_while_away_through_its_wrapper() 
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (workspace, execution) = asleep_while_away(&manager, &repo.id, "away").await;
@@ -926,7 +946,8 @@ async fn a_pr_comment_restores_an_agent_asleep_while_away_whose_wrapper_is_gone(
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let (workspace, execution) = asleep_while_away(&manager, &repo.id, "away").await;

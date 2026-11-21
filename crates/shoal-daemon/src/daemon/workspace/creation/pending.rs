@@ -205,7 +205,7 @@ impl Manager {
         workspace: &SpaceSelector,
     ) -> Result<Workspace> {
         let workspace = self.workspace(workspace).await?;
-        let (repo, git) = self.lock_repository(workspace.repository()).await?;
+        let (repo, git) = self.repositories.lock(workspace.repository()).await?;
         // Read again under the Git gate, which a removal takes first.
         let workspace = self.workspace_by_id(&workspace.id).await?;
         self.create_recorded_worktree(&repo, &workspace, git).await

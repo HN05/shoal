@@ -21,9 +21,11 @@ fn caller(space: &shoal_ids::space_ids::SpaceId) -> Caller {
 async fn a_space_updates_the_hub_as_its_daemon_permission_allows() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
-    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let config = "[modes.plan.permissions]\ndaemon = 'direct'\n";
     (manager.write_local_config(&repo.id, Some(config.into())))
         .await

@@ -387,7 +387,8 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
     let (root, manager) = crate::daemon::test_support::manager().await;
     let path = crate::daemon::test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -481,7 +482,8 @@ async fn a_chat_withdraws_only_its_own_requests() {
     let (root, manager) = crate::daemon::test_support::manager().await;
     let path = crate::daemon::test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = manager
@@ -517,7 +519,8 @@ async fn a_withdrawn_request_is_never_announced_afterwards() {
     let (root, manager) = crate::daemon::test_support::manager().await;
     let path = crate::daemon::test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -978,7 +981,8 @@ async fn a_parent_approves_a_merge_with_its_own_merge_permission_at_its_commit()
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let config = "[modes.chat.permissions]\nmerge = 'direct'\n";

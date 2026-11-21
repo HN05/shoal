@@ -13,7 +13,8 @@ use shoal_protocol::space_names::SpaceSelector;
 async fn split_child(manager: &Manager, root: &std::path::Path) -> (Workspace, Workspace) {
     let checkout = repository(root, "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -156,7 +157,8 @@ async fn idle_cleanup_keeps_a_child_without_an_agent_while_its_chat_runs() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     // Not this test's own process, whose children the other tests start.
@@ -192,7 +194,8 @@ async fn idle_cleanup_keeps_a_child_while_its_chat_becomes_a_workspace() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat =
@@ -237,7 +240,8 @@ async fn idle_cleanup_keeps_a_stopped_chat_while_its_coordinator_runs() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager

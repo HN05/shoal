@@ -10,7 +10,8 @@ async fn a_chat_launch_queues_its_agent_with_its_prompt() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     manager.publish_config(global_config("[agents.claude]\ncommand = ['sh']\n"));
@@ -51,7 +52,8 @@ async fn a_chat_run_here_leaves_its_starting_agent_to_its_caller() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     manager.publish_config(global_config("[agents.claude]\ncommand = ['sh']\n"));
@@ -95,7 +97,11 @@ pub(super) async fn offline_machine(
     let remote = ["remote", "add", "origin", "https://github.com/team/repo"];
     crate::daemon::test_support::git(&path, &remote);
     let path = path.to_str().unwrap().into();
-    manager.register_repository(path, None, None).await.unwrap()
+    manager
+        .repositories
+        .register(path, None, None)
+        .await
+        .unwrap()
 }
 
 /// A chat a launch names on an issue it names by number, which it cannot
@@ -176,7 +182,11 @@ async fn a_chat_on_an_issue_nothing_can_resolve_is_refused() {
     manager.publish_config(global_config("[agents.claude]\ncommand = ['sh']\n"));
     let checkout = repository(temp.path(), "repo");
     let path = checkout.to_str().unwrap().into();
-    let repo = manager.register_repository(path, None, None).await.unwrap();
+    let repo = manager
+        .repositories
+        .register(path, None, None)
+        .await
+        .unwrap();
     let launch = Launch {
         target: Some(StartTarget::Repository(repo.id.to_string())),
         mode: Some("chat".into()),

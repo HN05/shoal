@@ -72,7 +72,8 @@ async fn deleted_parent_sweep_releases_leases_and_keeps_a_branch_with_work() {
         fs::write(checkout.join(".shoal.toml"), "[resources.lock]\n").unwrap();
         crate::daemon::test_support::commit(&checkout, ".shoal.toml");
         let repo = manager
-            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .repositories
+            .register(checkout.to_str().unwrap().into(), None, None)
             .await
             .unwrap();
         let workspace = manager
@@ -172,7 +173,8 @@ async fn failed_step_does_not_skip_later_steps() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let done = manager
@@ -231,7 +233,8 @@ async fn invalid_pr_record_does_not_block_other_workspace_cleanup() {
     let (temp, manager) = manager().await;
     let repository_dir = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(repository_dir.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repository_dir.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     // Names put the invalid record first in the sweep.
@@ -322,7 +325,8 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -412,7 +416,8 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
     )
     .await;
     let repo = manager
-        .register_repository(repository_dir.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repository_dir.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -607,7 +612,8 @@ async fn requested_cleanup_removes_candidates_without_idle_delay() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     // The request applies where idle cleanup is disabled.
@@ -726,7 +732,8 @@ async fn a_cleanup_request_takes_one_of_two_same_named_spaces() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let mut workspaces = Vec::new();
@@ -765,7 +772,8 @@ async fn holds_block_idle_sweeps_and_release_restores_eligibility() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -850,7 +858,8 @@ async fn ignored_changes_during_idle_delay_restart_timer_at_expiry() {
     fs::write(checkout.join(".gitignore"), "ignored/\n").unwrap();
     commit(&checkout, ".gitignore");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -888,7 +897,8 @@ async fn git_state_is_inspected_when_the_idle_timer_starts_and_expires() {
     fs::write(checkout.join("second"), "second\n").unwrap();
     commit(&checkout, "second");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -921,7 +931,8 @@ async fn a_process_in_the_worktree_stops_a_running_idle_timer() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -955,7 +966,8 @@ async fn a_sweep_skips_workspaces_where_file_access_stalled_and_cleans_up_the_ot
     for name in ["answers", "stalled"] {
         let checkout = repository(temp.path(), name);
         let repo = manager
-            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .repositories
+            .register(checkout.to_str().unwrap().into(), None, None)
             .await
             .unwrap();
         let create = |kind: &str| {
@@ -1044,7 +1056,8 @@ async fn a_sweep_rechecks_a_stalled_worktree_deleted_since_and_forgets_it() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -1080,7 +1093,8 @@ async fn completion_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     // The parent's explicit path puts it in another directory than its child.
@@ -1142,7 +1156,8 @@ async fn split_across_directories(
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -1261,7 +1276,8 @@ async fn pr_cleanup_passes_over_a_stacked_workspace_it_removed_earlier() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     manager
@@ -1302,7 +1318,8 @@ async fn chat_with_workspace(
 ) -> (crate::model::Chat, Workspace) {
     let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = manager
@@ -1620,7 +1637,8 @@ async fn a_chat_in_a_workspace_keeps_it_while_it_runs_and_from_idle_cleanup_whil
     let (temp, manager) = crate::daemon::test_support::manager().await;
     let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -1665,7 +1683,8 @@ async fn requested_cleanup_removes_a_merged_workspace_whose_config_the_format_re
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -1701,7 +1720,8 @@ async fn a_failed_branch_observation_is_the_workspace_s_failure() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

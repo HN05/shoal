@@ -1,12 +1,6 @@
 //! Moving repository directories into a new `root_dir`. Intent is recorded
 //! before anything moves, so an interrupted move finishes or rolls back.
-use super::{
-    agent_trust::TrustChange,
-    gates::GuardMode,
-    manager::Manager,
-    registry,
-    spotlight::{self, Layout},
-};
+use super::{agent_trust::TrustChange, gates::GuardMode, manager::Manager};
 use crate::{
     daemon::{log, store},
     fsutil::{self, off_runtime},
@@ -23,6 +17,7 @@ use shoal_daemon_base::ownership::{
 };
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_repositories::spotlight::{self, Layout};
 use std::{
     collections::BTreeMap,
     fs,
@@ -68,7 +63,7 @@ impl Manager {
         layout: Layout,
     ) -> Result<RepositoryMoves> {
         let _registry = self.gates.lock_registry().await;
-        let mut target = self.configured_root()?;
+        let mut target = self.repositories.configured_root()?;
         target.layout = layout;
         if let Some(root) = root {
             target.path = root.to_owned();
@@ -101,7 +96,7 @@ impl Manager {
     /// must be idle; all are checked before the first moves.
     pub(crate) async fn move_repositories(&self, layout: Layout) -> Result<Vec<MovedRepository>> {
         let _registry = self.gates.lock_registry().await;
-        let mut target = self.configured_root()?;
+        let mut target = self.repositories.configured_root()?;
         target.layout = layout;
         let (plan, moving) = self.movable_repositories(&target, Running::Refused).await?;
         let root = plan.destination()?;
@@ -113,7 +108,7 @@ impl Manager {
         }
         let _files = self.gates.lock_outside_message_files().await;
         (self.move_outside_chats(chats, &target.path, &root)).await?;
-        self.root_plan(&target, &self.repositories().await?)
+        self.root_plan(&target, &self.repositories.list().await?)
             .await?
             .apply()?;
         Ok(moved)
@@ -126,11 +121,11 @@ impl Manager {
     /// the registry gate.
     async fn movable_repositories(
         &self,
-        target: &registry::ConfiguredRoot,
+        target: &shoal_repositories::root::ConfiguredRoot,
         running: Running,
     ) -> Result<(spotlight::Plan, Vec<Repository>)> {
         self.finish_repository_moves().await?;
-        let repositories = self.repositories().await?;
+        let repositories = self.repositories.list().await?;
         let plan = self.root_plan(target, &repositories).await?;
         let root = plan.destination()?;
         let moving: Vec<_> = repositories
@@ -195,15 +190,15 @@ impl Manager {
     /// placed elsewhere.
     async fn root_plan(
         &self,
-        target: &registry::ConfiguredRoot,
+        target: &shoal_repositories::root::ConfiguredRoot,
         repositories: &[Repository],
     ) -> Result<spotlight::Plan> {
         let workspaces = self.list_workspaces().await?;
-        let recorded = registry::Recorded {
+        let recorded = shoal_repositories::root::Recorded {
             repositories,
             workspaces: &workspaces,
         };
-        registry::plan_root(
+        shoal_repositories::root::plan_root(
             target,
             &fs::canonicalize(&self.paths.state)?,
             &recorded,
@@ -215,7 +210,7 @@ impl Manager {
     /// Refuse a repository whose directory is missing or in use, or whose
     /// workspaces are busy or not verifiably its own.
     async fn check_movable(&self, repo: &Repository, running: Running) -> Result<()> {
-        self.ensure_repository_available(&repo.id).await?;
+        self.repositories.ensure_available(&repo.id).await?;
         let directory = &repo.workspaces_dir;
         ensure!(
             directory.is_dir() && !directory.is_symlink(),
@@ -273,7 +268,7 @@ impl Manager {
             "{} contains Shoal's state directory",
             directory.display()
         );
-        for other in self.repositories().await? {
+        for other in self.repositories.list().await? {
             if other.id == repo.id {
                 continue;
             }
@@ -305,7 +300,7 @@ impl Manager {
         let _files = self.gates.lock_message_files(&repo.id).await;
         // Nor may a proposal copy files into it meanwhile.
         let _proposals = self.gates.lock_proposal_files().await;
-        let repo = self.repository(&repo.id).await?;
+        let repo = self.repositories.repository(&repo.id).await?;
         self.check_movable(&repo, Running::Refused).await?;
         let workspaces = self.repository_workspaces(&repo.id).await?;
         let _resources = self.exclude_resource_hooks(&workspaces).await?;
@@ -320,7 +315,7 @@ impl Manager {
         moved?;
         finished?;
         Ok(MovedRepository {
-            repository: self.repository(&repo.id).await?,
+            repository: self.repositories.repository(&repo.id).await?,
             from: source,
             workspace_paths: workspaces.into_iter().map(|w| w.part.path).collect(),
         })
@@ -367,7 +362,12 @@ impl Manager {
             .into_iter()
             .map(|workspace| workspace.part.path)
             .collect();
-        registry::reserve_directory(root, name, &self.repositories().await?, &workspaces)
+        shoal_repositories::root::reserve_directory(
+            root,
+            name,
+            &self.repositories.list().await?,
+            &workspaces,
+        )
     }
 
     async fn repository_executions(&self, repository_id: &RepositoryId) -> Result<Vec<Execution>> {
@@ -547,7 +547,7 @@ impl Manager {
     /// took to the paths they have now; repeating it changes nothing.
     async fn move_agent_trust(&self, intent: &Intent) {
         let records = async {
-            let repo = self.repository(&intent.repository_id).await?;
+            let repo = self.repositories.repository(&intent.repository_id).await?;
             let workspaces = self.repository_workspaces(&repo.id).await?;
             anyhow::Ok((repo, workspaces))
         };
@@ -568,7 +568,7 @@ impl Manager {
     /// including the seed's, then verify each workspace still owns its
     /// worktree before recording its admin directory.
     async fn reconnect_worktrees(&self, id: &RepositoryId) -> Result<()> {
-        let repo = self.repository(id).await?;
+        let repo = self.repositories.repository(id).await?;
         let mut present = Vec::new();
         for workspace in self.repository_workspaces(id).await? {
             if off_runtime::exists(&workspace.path).await? {

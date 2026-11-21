@@ -538,7 +538,7 @@ impl Targets {
     /// selection gives is among them.
     async fn of(manager: &Manager, selection: &Selection) -> Result<Self> {
         let repository = match &selection.repository {
-            Some(selector) => Some(manager.repository(selector).await?.id),
+            Some(selector) => Some(manager.repositories.repository(selector).await?.id),
             None => None,
         };
         let within = |id: &RepositoryId| repository.as_ref().is_none_or(|only| only == id);
@@ -552,7 +552,8 @@ impl Targets {
                 .filter(|space| space_within(space))
                 .collect(),
             repositories: manager
-                .repositories()
+                .repositories
+                .list()
                 .await?
                 .into_iter()
                 .filter(|repo| within(&repo.id))

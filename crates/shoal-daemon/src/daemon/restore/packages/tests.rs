@@ -35,9 +35,11 @@ async fn exported_worker_with(
     git(&path, &["remote", "add", "origin", &url]);
     git(&path, &["push", "-q", "-u", "origin", "main"]);
     git(&path, &["remote", "set-head", "origin", "main"]);
-    let repo = (manager.register_repository(path.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let worker = (manager.create_workspace(&repo.id, "worker".into(), None, None, None))
         .await
         .unwrap();
@@ -64,7 +66,13 @@ async fn an_import_clones_the_repository_it_lacks_from_its_origin() {
 
     let imported = import_file(&importing, None, &bytes).await.unwrap();
 
-    let [cloned] = importing.repositories().await.unwrap().try_into().unwrap();
+    let [cloned] = importing
+        .repositories
+        .list()
+        .await
+        .unwrap()
+        .try_into()
+        .unwrap();
     assert_eq!(cloned.source, url);
     let selector = SpaceSelector::id(imported.restored.id());
     let opened = importing.space(&selector).await.unwrap();
@@ -78,7 +86,13 @@ async fn an_import_clones_an_origin_named_by_its_path() {
 
     import_file(&importing, None, &bytes).await.unwrap();
 
-    let [cloned] = importing.repositories().await.unwrap().try_into().unwrap();
+    let [cloned] = importing
+        .repositories
+        .list()
+        .await
+        .unwrap()
+        .try_into()
+        .unwrap();
     assert_eq!(cloned.source, format!("file://{path}"));
     assert_ne!(cloned.path, path);
 }
@@ -92,7 +106,7 @@ async fn an_import_whose_clone_fails_records_nothing() {
     let refused = import_file(&importing, None, &bytes).await.unwrap_err();
 
     assert_eq!(Reason::of(&refused), Some(Reason::NotImported));
-    assert!(importing.repositories().await.unwrap().is_empty());
+    assert!(importing.repositories.list().await.unwrap().is_empty());
     assert!(importing.removed_spaces().await.unwrap().is_empty());
 }
 
@@ -129,7 +143,13 @@ async fn a_package_cut_short_records_nothing_and_keeps_none_of_it() {
     assert_eq!(Reason::of(&refused), Some(Reason::NotImported));
     assert!(format!("{refused:#}").contains("ends inside a bundle"));
     assert!(importing.removed_spaces().await.unwrap().is_empty());
-    let [cloned] = importing.repositories().await.unwrap().try_into().unwrap();
+    let [cloned] = importing
+        .repositories
+        .list()
+        .await
+        .unwrap()
+        .try_into()
+        .unwrap();
     let imports = ShoalDir::of(&cloned, Contents::Imports);
     let left: Vec<_> = (fs::read_dir(imports.root()).unwrap())
         .map(|entry| entry.unwrap().file_name())
@@ -149,7 +169,9 @@ async fn with_origin(manager: &Manager, root: &Path, name: &str) -> (Repository,
     git(&path, &["remote", "add", "origin", &url]);
     git(&path, &["push", "-q", "-u", "origin", "main"]);
     git(&path, &["remote", "set-head", "origin", "main"]);
-    let registered = manager.register_repository(path.to_str().unwrap().into(), None, None);
+    let registered = manager
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None);
     (registered.await.unwrap(), url)
 }
 
@@ -172,14 +194,18 @@ async fn a_scoped_import_records_no_space_outside_its_own_repository() {
     moving.await.unwrap();
     let (target, importing) = manager().await;
     let own = repository(target.path(), "own");
-    let own = (importing.register_repository(own.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let own = (importing
+        .repositories
+        .register(own.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     git(target.path(), &["clone", "-q", &url, "other"]);
     let clone = target.path().join("other");
-    (importing.register_repository(clone.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    (importing
+        .repositories
+        .register(clone.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let here = (importing.create_workspace(&own.id, "here".into(), None, None, None))
         .await
         .unwrap();

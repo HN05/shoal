@@ -6,7 +6,8 @@ async fn a_workspace_environment_requires_a_ready_verified_worktree_and_carries_
     let (root, manager) = test_support::manager().await;
     let repo = test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

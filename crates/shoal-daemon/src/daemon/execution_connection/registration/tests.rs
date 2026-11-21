@@ -38,7 +38,8 @@ async fn a_setup_its_wrapper_never_received_fails_as_not_started() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -91,7 +92,8 @@ async fn chat_fixture() -> (tempfile::TempDir, Arc<Manager>, crate::model::Chat)
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = manager

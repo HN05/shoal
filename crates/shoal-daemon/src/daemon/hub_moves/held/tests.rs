@@ -13,9 +13,11 @@ use crate::{
 async fn a_held_move_waits_for_its_reader_once_packed_until_its_time_is_up() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
-    let repo = (manager.register_repository(path.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let work = (manager.create_workspace(&repo.id, "work".into(), None, None, None))
         .await
         .unwrap();

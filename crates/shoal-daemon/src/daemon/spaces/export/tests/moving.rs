@@ -351,7 +351,7 @@ async fn a_moving_chat_stops_the_chats_below_it_and_takes_them_at_its_end() {
     let (root, manager, _pid) = super::chat("lead").await;
     let lead = manager.chats().await.unwrap().remove(0);
     crate::daemon::test_support::report_session(&manager, &lead.id, "s1").await;
-    let repo = manager.repositories().await.unwrap().remove(0);
+    let repo = manager.repositories.list().await.unwrap().remove(0);
     let child = test_support::chat(&manager, "child", "chat", Some(&repo), Some(&lead.id)).await;
     let mut process = test_support::agent_process(&manager, &child.id).await;
     let selector = SpaceSelector::id(&lead.id);

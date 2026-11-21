@@ -87,7 +87,7 @@ impl Manager {
                 );
                 self.verify_worktree(&workspace).await?;
                 let settings = self.workspace_settings(&workspace).await?;
-                let repository = self.repository(workspace.repository()).await?;
+                let repository = self.repositories.repository(workspace.repository()).await?;
                 Home::Workspace {
                     workspace,
                     repository,

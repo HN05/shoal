@@ -92,6 +92,7 @@ async fn chat_restore_child() {
     let (_root, manager, workspace, serving) = fixture().await;
     let paths = CommandPaths::from(manager.paths.clone());
     let checkout = manager
+        .repositories
         .repository(workspace.repository())
         .await
         .unwrap()

@@ -27,7 +27,8 @@ async fn contribution(manager: &Arc<Manager>, root: &std::path::Path) -> Reposit
     );
     let checkout = std::fs::canonicalize(clone).unwrap();
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let id = repo.id.clone();
@@ -39,11 +40,11 @@ async fn contribution(manager: &Arc<Manager>, root: &std::path::Path) -> Reposit
         })
         .await
         .unwrap();
-    manager.repository(&repo.id).await.unwrap()
+    manager.repositories.repository(&repo.id).await.unwrap()
 }
 
 async fn registered(manager: &Manager, repo: &Repository) -> bool {
-    let repos = manager.repositories().await.unwrap();
+    let repos = manager.repositories.list().await.unwrap();
     repos.iter().any(|other| other.id == repo.id)
 }
 
@@ -79,7 +80,8 @@ async fn a_borrowed_contribution_stays_available() {
     let repo = contribution(&manager, root.path()).await;
     let other = repository(root.path(), "other");
     let other = manager
-        .register_repository(other.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(other.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let borrower = manager
@@ -108,7 +110,11 @@ async fn a_borrowed_contribution_stays_available() {
     manager.sweep_contributions().await.unwrap();
     assert!(registered(&manager, &repo).await);
     // No removal began, so new work in it is still accepted.
-    manager.ensure_repository_available(&repo.id).await.unwrap();
+    manager
+        .repositories
+        .ensure_available(&repo.id)
+        .await
+        .unwrap();
     manager
         .store
         .run(|db| {
@@ -305,7 +311,7 @@ async fn a_restarted_daemon_keeps_contributions_while_their_holds_resume() {
     let (root, manager) = manager().await;
     let repo = contribution(&manager, root.path()).await;
     let started = tokio::time::Instant::now();
-    let holds = &manager.contribution_holds;
+    let holds = manager.repositories.contribution_holds();
     holds.await_resumes(started + std::time::Duration::from_secs(3600));
     manager.sweep_contributions().await.unwrap();
     assert!(registered(&manager, &repo).await);

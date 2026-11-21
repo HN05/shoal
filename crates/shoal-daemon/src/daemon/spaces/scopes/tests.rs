@@ -9,7 +9,8 @@ async fn issued_scopes_are_persistent_independent_and_untracked() {
     let (root, manager) = test_support::manager().await;
     let repo = test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -86,7 +87,8 @@ async fn a_chat_issues_tokens_apart_from_its_agents_which_none_revokes() {
     let (root, manager) = test_support::manager().await;
     let repo = test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;

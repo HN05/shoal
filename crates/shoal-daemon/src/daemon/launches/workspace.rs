@@ -166,7 +166,10 @@ impl Manager {
         let Some(copied) = self.launch_copy(launch, caller).await? else {
             return Ok((named_creation(launch, None), None));
         };
-        let repository = self.repository(copied.repository.clone()).await?;
+        let repository = self
+            .repositories
+            .repository(copied.repository.clone())
+            .await?;
         Ok((
             named_creation(launch, Some(copied.creation)),
             Some(repository),

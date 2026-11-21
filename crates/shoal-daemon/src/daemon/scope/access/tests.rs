@@ -73,9 +73,11 @@ async fn reached(manager: &Manager, caller: &Caller) -> Vec<String> {
 async fn a_scope_reaches_jobs_and_launches_through_their_spaces() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
-    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let worker = (manager.create_workspace(&repo.id, "worker".into(), None, None, None))
         .await
         .unwrap();
@@ -105,9 +107,11 @@ async fn a_scope_reaches_jobs_and_launches_through_their_spaces() {
 async fn a_scope_stops_every_space_it_reaches_but_its_own() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
-    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
     let worker = create("worker").await.unwrap();
     let other = create("other").await.unwrap();

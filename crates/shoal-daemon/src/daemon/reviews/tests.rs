@@ -51,7 +51,8 @@ async fn fixture_with(reviewers: &[(&str, &str)], review: &str, settings: &str) 
     configure(&manager, &config).await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -190,6 +191,7 @@ async fn a_replaced_checkout_is_not_reviewed() {
     let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
     let repository = fixture
         .manager
+        .repositories
         .repository(fixture.workspace.repository())
         .await
         .unwrap();
@@ -722,7 +724,8 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
     let path = repository(root.path(), "repo");
     crate::daemon::test_support::git(&path, &["update-ref", "refs/remotes/origin/main", "main"]);
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

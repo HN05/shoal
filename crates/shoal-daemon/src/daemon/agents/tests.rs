@@ -19,7 +19,8 @@ async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -104,7 +105,8 @@ async fn a_chats_agent_exit_hook_runs_where_it_works_and_skips_a_removal() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let exits = root.path().join("exits");
@@ -164,7 +166,8 @@ async fn agent_exit_wakes_cleanup_for_completed_workspace() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -213,7 +216,8 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -301,7 +305,8 @@ async fn inspection_and_agent_list_report_an_agent_awaiting_its_restore() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -354,7 +359,8 @@ async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
     let (_root, manager) = manager().await;
     let repo = repository(_root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -456,7 +462,8 @@ async fn overload_stops_idle_agents_lowest_rank_first_before_working_ones() {
     let (_root, manager) = manager().await;
     let repo = repository(_root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let mut agents = Vec::new();
@@ -545,7 +552,8 @@ async fn overload_stops_the_agent_the_user_interacted_with_longest_ago_first() {
     let (_root, manager) = manager().await;
     let repo = repository(_root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let mut executions = Vec::new();
@@ -611,7 +619,8 @@ async fn a_turn_reported_after_protection_read_the_turns_counts_as_working() {
     let (_root, manager) = manager().await;
     let repo = repository(_root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -660,7 +669,8 @@ async fn an_agent_records_its_mode_with_its_execution_workspace_and_last_session
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -733,7 +743,8 @@ async fn chat_agent(
 ) -> crate::daemon::executions::StartedExecution {
     let repo = repository(root, "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     (manager.write_local_config(&repo.id, Some("[modes.pair]\nkind = 'chat'\n".into())))
@@ -835,7 +846,8 @@ async fn coordinator_and_child(
 ) -> (Workspace, Workspace) {
     let repo = repository(root, "repo");
     let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager

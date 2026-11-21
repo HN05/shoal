@@ -73,7 +73,7 @@ impl Manager {
         if let Some(copied) = &workspace.copied_from {
             return self.copy_target(workspace, copied, caller).await;
         }
-        let repo = self.repository(workspace.repository()).await?;
+        let repo = self.repositories.repository(workspace.repository()).await?;
         match &workspace.head {
             Head::Branch(branch) => branch_target(&repo, workspace, branch).await,
             Head::Commit(at) => match &at.made_for {

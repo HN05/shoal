@@ -392,7 +392,7 @@ impl Manager {
     /// The homes of attached files: every repository's directory, and each
     /// `root_dir` that keeps files of chats without a repository.
     pub(crate) async fn files_homes(&self) -> Result<Vec<HomeKey>> {
-        let repositories = self.repositories().await?.into_iter();
+        let repositories = self.repositories.list().await?.into_iter();
         let roots = self.store.run(|db| records::roots(db)).await?;
         Ok((repositories.map(HomeKey::Repository))
             .chain(roots.into_iter().map(|root| HomeKey::Root(root.into())))
@@ -497,7 +497,7 @@ impl Manager {
         root_dir: Option<&std::path::Path>,
     ) -> Result<HomeKey> {
         Ok(match (repository, root_dir) {
-            (Some(id), _) => HomeKey::Repository(self.repository(id).await?),
+            (Some(id), _) => HomeKey::Repository(self.repositories.repository(id).await?),
             (None, Some(root_dir)) => HomeKey::Root(root_dir.to_owned()),
             (None, None) => HomeKey::Root(self.config().root_dir(&self.paths)?),
         })
@@ -515,7 +515,9 @@ impl Manager {
             HomeKey::Root(_) => self.gates.lock_outside_message_files().await,
         };
         let home = match key {
-            HomeKey::Repository(repo) => FilesHome::Repository(self.repository(&repo.id).await?),
+            HomeKey::Repository(repo) => {
+                FilesHome::Repository(self.repositories.repository(&repo.id).await?)
+            }
             HomeKey::Root(root_dir) => FilesHome::Outside(self.outside_files_layout(root_dir)),
         };
         Ok((home, guard))

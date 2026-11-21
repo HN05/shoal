@@ -90,7 +90,7 @@ impl Manager {
             !path.starts_with(fs::canonicalize(&self.paths.state)?),
             "workspace path is inside Shoal state"
         );
-        for other in self.repositories().await? {
+        for other in self.repositories.list().await? {
             ensure!(
                 !overlaps(&path, &other.path),
                 "workspace path overlaps repository checkout {}",

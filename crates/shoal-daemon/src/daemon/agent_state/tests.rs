@@ -31,7 +31,8 @@ async fn state_events(manager: &Manager) -> Vec<Option<AgentState>> {
 async fn workspace(manager: &Manager, temp: &tempfile::TempDir) -> crate::model::Workspace {
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     manager
@@ -529,7 +530,8 @@ async fn a_chat_stopped_or_removed_before_the_write_takes_no_report() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = manager

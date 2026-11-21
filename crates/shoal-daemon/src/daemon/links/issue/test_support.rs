@@ -57,7 +57,8 @@ impl Fixture {
         let (root, manager) = manager().await;
         let path = repository(root.path(), "repo");
         let repository = manager
-            .register_repository(path.to_str().unwrap().into(), None, None)
+            .repositories
+            .register(path.to_str().unwrap().into(), None, None)
             .await
             .unwrap();
         let mut workspaces = Vec::new();

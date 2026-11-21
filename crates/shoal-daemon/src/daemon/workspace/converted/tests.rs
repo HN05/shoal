@@ -15,7 +15,8 @@ use std::path::Path;
 async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {
     let path = repository(root, "repo");
     manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap()
 }
@@ -375,5 +376,5 @@ async fn a_conversion_during_the_repositorys_removal_waits_for_it() {
         .expect("the conversion waits on the removal")
         .unwrap()
         .ok();
-    assert!(manager.repository(&repo.id).await.is_err());
+    assert!(manager.repositories.repository(&repo.id).await.is_err());
 }

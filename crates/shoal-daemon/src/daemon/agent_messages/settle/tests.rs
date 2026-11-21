@@ -54,7 +54,8 @@ fn a_steady_run_settles_at_most_six_windows_after_its_first_message() {
 async fn settling_workspace(temp: &tempfile::TempDir, manager: &Manager, settle: u64) -> Workspace {
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let config = format!("[alerts]\nsettle_seconds = {settle}\n");

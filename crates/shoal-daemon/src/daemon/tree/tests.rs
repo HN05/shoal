@@ -41,7 +41,8 @@ async fn splitting_records_the_parent_and_removal_takes_the_subtree_first() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let root = manager
@@ -152,7 +153,8 @@ async fn a_child_that_cannot_go_retains_its_parent() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -191,7 +193,8 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
@@ -276,7 +279,8 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
@@ -407,7 +411,8 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
@@ -536,7 +541,8 @@ async fn workspace_processes_list_their_subtree_with_their_own_workspace_first()
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
@@ -580,7 +586,8 @@ async fn children_never_keep_their_parent_and_go_with_it() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -652,7 +659,8 @@ async fn a_parent_must_be_a_space_of_the_same_repository() {
         let checkout = repository(temp.path(), name);
         repos.push(
             manager
-                .register_repository(checkout.to_str().unwrap().into(), None, None)
+                .repositories
+                .register(checkout.to_str().unwrap().into(), None, None)
                 .await
                 .unwrap(),
         );
@@ -675,7 +683,8 @@ async fn a_parent_reserved_for_removal_refuses_splits() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -717,7 +726,8 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
     crate::daemon::test_support::configure(&manager, "[resources.lock]\ncapacity = 2\n").await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -825,7 +835,8 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -949,7 +960,8 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
@@ -1052,7 +1064,8 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -1134,7 +1147,8 @@ async fn an_agent_waiting_for_its_restore_keeps_its_workspaces_activity() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -1192,7 +1206,8 @@ async fn a_launch_reopens_only_its_recorded_workspace() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -1240,7 +1255,8 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let root = manager
@@ -1464,7 +1480,8 @@ async fn a_request_passed_up_to_a_full_inbox_reports_the_user_deciding() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let root = manager
@@ -1550,7 +1567,8 @@ async fn a_request_withdrawn_once_given_back_notifies_nobody() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let worker = manager
@@ -1610,7 +1628,8 @@ async fn a_stopped_chat_leaves_its_workspaces_requests_to_the_user() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = manager
@@ -1677,7 +1696,8 @@ async fn a_chat_whose_agent_stops_gives_the_requests_it_decides_back_to_the_user
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = manager
@@ -1760,7 +1780,8 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let chat = manager
@@ -1892,7 +1913,8 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -2078,7 +2100,8 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -2216,7 +2239,8 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -2346,7 +2370,8 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -2543,7 +2568,8 @@ async fn a_removal_takes_only_the_children_it_was_confirmed_with() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -2618,7 +2644,8 @@ async fn a_workspace_keeps_the_parent_its_creation_recorded_on_another_machine()
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

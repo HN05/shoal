@@ -39,7 +39,8 @@ async fn tree() -> Tree {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager
@@ -319,7 +320,11 @@ async fn refusals_fire_before_anything_changes() {
     let leaf = manager.workspace_by_id(&leaf.id).await.unwrap();
     assert_eq!(leaf.parent.map(|above| above.id), Some(worker.id.clone()));
 
-    let repo = manager.repository(worker.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(worker.repository())
+        .await
+        .unwrap();
     let chat = chat(&manager, "coordinator", "chat", Some(&repo), None).await;
     let code = Absorb {
         into: Some(SpaceSelector::id(&chat.id)),
@@ -473,7 +478,11 @@ async fn a_forced_absorb_leaves_a_detached_workspaces_commits_to_its_removal() {
         .unwrap();
     fs::write(detached.path.join("probe"), "probe\n").unwrap();
     commit(&detached.path, "probe");
-    let repo = manager.repository(parent.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(parent.repository())
+        .await
+        .unwrap();
     let chat = chat(&manager, "coordinator", "chat", Some(&repo), None).await;
     let request = Absorb {
         into: Some(SpaceSelector::id(&chat.id)),
@@ -505,7 +514,11 @@ async fn the_chats_in_the_absorbed_worktree_go_with_the_spaces_below_them() {
         )
         .await
         .unwrap();
-    let repo = manager.repository(worker.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(worker.repository())
+        .await
+        .unwrap();
     let below = chat(
         &manager,
         "helper",
@@ -591,7 +604,11 @@ async fn a_space_below_a_chat_in_the_absorbed_worktree_cannot_take_the_work() {
         )
         .await
         .unwrap();
-    let repo = manager.repository(worker.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(worker.repository())
+        .await
+        .unwrap();
     let below = chat(
         &manager,
         "helper",

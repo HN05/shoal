@@ -86,7 +86,7 @@ impl Manager {
         base: Option<String>,
         new: NewWorkspace<'_>,
     ) -> Result<Workspace> {
-        let (repo, git) = self.lock_repository(repository).await?;
+        let (repo, git) = self.repositories.lock(repository).await?;
         git::check_branch_name(&name)?;
         let branch = self.available_branch(&repo, &name).await?;
         ensure!(
@@ -115,8 +115,8 @@ impl Manager {
         existing: Option<&str>,
         options: NewWorktreeOptions<'_>,
     ) -> Result<()> {
-        let repo = self.repository(repository).await?;
-        self.ensure_repository_available(&repo.id).await?;
+        let repo = self.repositories.repository(repository).await?;
+        self.repositories.ensure_available(&repo.id).await?;
         ensure_disposable_new(options.disposable, existing)?;
         let (name, opened) = match (branch, existing) {
             (Some(name), _) => {

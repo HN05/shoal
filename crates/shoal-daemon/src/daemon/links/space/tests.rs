@@ -23,7 +23,8 @@ async fn repositories(
         let checkout = repository(temp.path(), name);
         repos.push(
             manager
-                .register_repository(checkout.to_str().unwrap().into(), None, None)
+                .repositories
+                .register(checkout.to_str().unwrap().into(), None, None)
                 .await
                 .unwrap(),
         );

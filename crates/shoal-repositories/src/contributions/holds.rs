@@ -10,24 +10,24 @@ use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 use tokio::time::Instant;
 
-use super::super::manager::Manager;
+use crate::Repositories;
 
 /// How long after the daemon starts every contribution counts as held, so
 /// the clients whose holds a restart closed hold them again first.
-pub(crate) const RESUME_WINDOW: Duration = Duration::from_secs(60);
+pub const RESUME_WINDOW: Duration = Duration::from_secs(60);
 
 type Counts = Arc<Mutex<HashMap<RepositoryId, usize>>>;
 
 /// The open holds on each contribution.
 #[derive(Default)]
-pub(crate) struct ContributionHolds {
+pub struct ContributionHolds {
     counts: Counts,
     /// Until when every contribution counts as held.
     resumes_until: Mutex<Option<Instant>>,
 }
 
 /// Keeps a contribution from cleanup while it lives.
-pub(crate) struct ContributionHold {
+pub struct ContributionHold {
     counts: Counts,
     repository: RepositoryId,
 }
@@ -45,11 +45,11 @@ impl ContributionHolds {
 
     /// Count every contribution as held until `until`, while the holds a
     /// restart closed are resumed.
-    pub(crate) fn await_resumes(&self, until: Instant) {
+    pub fn await_resumes(&self, until: Instant) {
         *self.resumes_until.lock().unwrap() = Some(until);
     }
 
-    pub(super) fn held(&self, id: &RepositoryId) -> bool {
+    pub fn held(&self, id: &RepositoryId) -> bool {
         let resuming = self.resumes_until.lock().unwrap();
         resuming.is_some_and(|until| Instant::now() < until)
             || self.counts.lock().unwrap().contains_key(id)
@@ -68,12 +68,17 @@ impl Drop for ContributionHold {
     }
 }
 
-impl Manager {
+impl Repositories {
     /// Hold the registered repository `id` again, as its registration did
     /// before the daemon restarted.
-    pub(crate) async fn hold_contribution(&self, id: &RepositoryId) -> Result<ContributionHold> {
+    pub async fn hold_contribution(&self, id: &RepositoryId) -> Result<ContributionHold> {
         let _registry = self.gates.lock_registry().await;
         let repo = self.repository(id).await?;
         Ok(self.contribution_holds.hold(&repo.id))
+    }
+
+    /// The holds on the contributions.
+    pub fn contribution_holds(&self) -> &ContributionHolds {
+        &self.contribution_holds
     }
 }

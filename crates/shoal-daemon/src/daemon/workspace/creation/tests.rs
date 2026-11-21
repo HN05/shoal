@@ -19,7 +19,8 @@ async fn existing_base_falls_back_only_when_the_default_ref_is_missing() {
     );
     let topic = crate::daemon::test_support::git(&path, &["rev-parse", "topic"]);
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     assert_eq!(
@@ -52,7 +53,8 @@ async fn a_creation_that_fails_after_its_branch_stays_retryable() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let blocked = block_worktrees(&path);
@@ -81,7 +83,8 @@ async fn a_failed_outside_copy_is_retried_from_its_source() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let source = root.path().join("outside");
@@ -123,7 +126,8 @@ async fn a_retried_outside_copy_keeps_what_the_earlier_try_left() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let source = root.path().join("outside");
@@ -160,7 +164,8 @@ async fn a_retried_copy_refuses_the_branch_an_earlier_try_made_where_the_source_
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let source = root.path().join("outside");
@@ -200,7 +205,8 @@ async fn a_retried_outside_copy_refuses_a_source_that_moved_past_its_worktree() 
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let source = root.path().join("outside");

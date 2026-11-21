@@ -31,7 +31,7 @@ impl Manager {
     /// The layout that keeps the temporary directory of `space`.
     pub(crate) async fn space_tmp_layout(&self, space: &Space) -> Result<Option<Layout>> {
         let repository = match space.repository_id.as_ref() {
-            Some(id) => Some(self.repository(id).await?),
+            Some(id) => Some(self.repositories.repository(id).await?),
             None => None,
         };
         Ok(self.tmp_layout(repository.as_ref(), space.workdir.root_dir()))
@@ -51,7 +51,7 @@ impl Manager {
     /// does not skip the others.
     pub(crate) async fn sweep_tmp_dirs(&self) -> Result<()> {
         let mut failed = Vec::new();
-        for repo in self.repositories().await? {
+        for repo in self.repositories.list().await? {
             if let Err(error) = self
                 .sweep_layout_tmp_dirs(Some(Layout::of(&repo)), Some(&repo.id))
                 .await

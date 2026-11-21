@@ -30,7 +30,8 @@ impl Fixture {
         let (root, manager) = manager().await;
         let repo = repository(root.path(), "repo with ' quotes & $literal");
         let repo_id = manager
-            .register_repository(repo.to_str().unwrap().into(), None, None)
+            .repositories
+            .register(repo.to_str().unwrap().into(), None, None)
             .await
             .unwrap()
             .id;
@@ -1433,7 +1434,7 @@ async fn incomplete_removal_allows_refresh_recovery_and_diagnosis() {
         })
         .await
         .unwrap();
-    f.manager.lock_repository(&f.repo_id).await.unwrap_err();
+    f.manager.repositories.lock(&f.repo_id).await.unwrap_err();
     f.manager
         .sync_repository(&f.repo_id.clone().into())
         .await

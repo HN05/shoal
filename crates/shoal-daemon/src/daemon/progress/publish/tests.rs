@@ -122,7 +122,8 @@ impl Assigned {
         let (temp, manager) = manager().await;
         let checkout = repository(temp.path(), "repo");
         let repo = manager
-            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .repositories
+            .register(checkout.to_str().unwrap().into(), None, None)
             .await
             .unwrap();
         let workspace = manager
@@ -306,7 +307,8 @@ async fn a_pr_that_cannot_be_edited_leaves_the_others_updated_and_the_change_pen
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

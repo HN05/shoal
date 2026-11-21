@@ -31,7 +31,8 @@ impl Fixture {
         git(&repo, &["fetch", "origin"]);
         git(&repo, &["branch", "--set-upstream-to=origin/main", "main"]);
         let id = manager
-            .register_repository(repo.to_str().unwrap().into(), None, None)
+            .repositories
+            .register(repo.to_str().unwrap().into(), None, None)
             .await
             .unwrap()
             .id;

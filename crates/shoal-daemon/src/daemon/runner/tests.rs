@@ -71,7 +71,8 @@ pub(super) async fn fixture(jobs: Vec<Value>, settings: &str) -> Fixture {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let head = git(&path, &["rev-parse", "HEAD"]).trim().to_owned();
@@ -237,7 +238,8 @@ pub(super) async fn github_fixture() -> GitHubFixture {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let head = git(&path, &["rev-parse", "HEAD"]).trim().to_owned();
@@ -517,7 +519,12 @@ async fn a_job_whose_checkout_fails_is_passed_over_and_its_workspace_removed() {
     let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
     // The commit is there, but its tree cannot be read.
-    let checkout = manager.repository(&fixture.repository).await.unwrap().path;
+    let checkout = manager
+        .repositories
+        .repository(&fixture.repository)
+        .await
+        .unwrap()
+        .path;
     let tree = git(&checkout, &["rev-parse", "HEAD^{tree}"]);
     let objects = git(&checkout, &["rev-parse", "--git-path", "objects"]);
     let (fan_out, rest) = tree.trim().split_at(2);
@@ -817,7 +824,8 @@ async fn every_space_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
     .await;
     let manager = &fixture.manager;
     let repository = manager
-        .repositories()
+        .repositories
+        .list()
         .await
         .unwrap()
         .into_iter()
@@ -1603,7 +1611,12 @@ async fn a_jobs_workspace_a_restart_caught_before_its_checkout_is_removed() {
 /// Add the worktree of `workspace` as Git does before Shoal records it.
 async fn add_worktree(fixture: &Fixture, workspace: &Workspace) {
     let manager = &fixture.manager;
-    let checkout = manager.repository(&fixture.repository).await.unwrap().path;
+    let checkout = manager
+        .repositories
+        .repository(&fixture.repository)
+        .await
+        .unwrap()
+        .path;
     let path = workspace.path.to_str().unwrap();
     git(
         &checkout,
@@ -1648,7 +1661,12 @@ async fn workspace_whose_removal_stopped_after_its_admin_directory_went(
     std::fs::create_dir(workspace.path.join("target")).unwrap();
     std::fs::write(workspace.path.join("target/built"), "").unwrap();
     std::fs::remove_file(workspace.path.join(".git")).unwrap();
-    let checkout = manager.repository(&fixture.repository).await.unwrap().path;
+    let checkout = manager
+        .repositories
+        .repository(&fixture.repository)
+        .await
+        .unwrap()
+        .path;
     git(&checkout, &["worktree", "prune"]);
     let error = format!("{STOPPED_REMOVAL} when its work ended early");
     (manager.set_state(&workspace.id, WorkspaceState::Failed, Some(error)))
@@ -1827,9 +1845,11 @@ async fn a_runner_gone_while_the_daemon_was_away_gives_its_job_up_once_nothing_o
 async fn removing_a_repository_deletes_its_runner_on_the_forge() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
-    let repo = (manager.register_repository(path.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let deleted = Arc::new(Mutex::new(Vec::new()));
     let seen = deleted.clone();
     let server = Server::start(move |request| {

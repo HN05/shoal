@@ -279,7 +279,7 @@ impl Manager {
     /// Whether `workspace` has commits the default branch lacks, or
     /// uncommitted or untracked files.
     async fn has_code(&self, workspace: &Workspace) -> Result<bool> {
-        let repo = self.repository(workspace.repository()).await?;
+        let repo = self.repositories.repository(workspace.repository()).await?;
         let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await?;
         let path = &workspace.path;
         let commits = git::status::commits_between(path, &git::local_ref(&default), "HEAD").await?;

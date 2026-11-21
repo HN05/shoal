@@ -10,7 +10,11 @@ async fn registered(manager: &Manager, temp: &tempfile::TempDir) -> crate::model
     manager.publish_config(global_config("[agents.claude]\ncommand = ['sh']\n"));
     let path = repository(temp.path(), "repo");
     let path = path.to_str().unwrap().into();
-    manager.register_repository(path, None, None).await.unwrap()
+    manager
+        .repositories
+        .register(path, None, None)
+        .await
+        .unwrap()
 }
 
 /// A check of a launch whose mode a terminal has yet to pick refuses what

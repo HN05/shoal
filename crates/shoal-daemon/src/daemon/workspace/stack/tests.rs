@@ -22,7 +22,8 @@ async fn creation_infers_the_base_and_removal_moves_stacked_workspaces_down() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let create = |name: &str, base: Option<&str>| {
@@ -121,7 +122,8 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
         let checkout = repository(temp.path(), name);
         repos.push(
             manager
-                .register_repository(checkout.to_str().unwrap().into(), None, None)
+                .repositories
+                .register(checkout.to_str().unwrap().into(), None, None)
                 .await
                 .unwrap(),
         );

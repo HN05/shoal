@@ -17,7 +17,8 @@ use shoal_protocol::space_names::SpaceSelector;
 async fn tree(manager: &Manager, root_dir: &std::path::Path) -> [Workspace; 3] {
     let checkout = repository(root_dir, "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let root = manager

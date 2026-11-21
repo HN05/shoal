@@ -15,7 +15,8 @@ async fn cleanup_skips_a_busy_repository_and_recorded_worktrees() {
     .await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let mut worktrees = Vec::new();
@@ -83,7 +84,8 @@ async fn removal_prunes_package_checkouts_nothing_pins() {
     fs::write(checkout.join(xcode::PINS), "main").unwrap();
     commit(&checkout, xcode::PINS);
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     for name in ["pinned", "removed"] {
@@ -139,7 +141,8 @@ async fn removal_deletes_the_workspaces_derived_data_under_the_xcode_preset() {
     .await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let location = derived_data::location(&manager.paths.home).unwrap();

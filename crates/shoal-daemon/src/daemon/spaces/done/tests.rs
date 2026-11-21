@@ -74,7 +74,11 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
 #[tokio::test]
 async fn completion_persists_and_cleanup_overrides_the_repository_default() {
     let (_root, manager, workspace) = fixture().await;
-    let repo = manager.repository(workspace.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(workspace.repository())
+        .await
+        .unwrap();
     assert!(
         manager
             .mark_space_done(
@@ -431,7 +435,8 @@ async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -445,7 +450,8 @@ async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
 async fn chat_in_repository(manager: &std::sync::Arc<Manager>, root: &std::path::Path) -> Chat {
     let checkout = repository(root, "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     manager

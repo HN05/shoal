@@ -52,7 +52,7 @@ impl Manager {
     /// ownership is changing.
     pub async fn untracked_worktrees(&self) -> Result<Vec<UntrackedWorktree>> {
         let mut untracked = Vec::new();
-        for repo in self.repositories().await? {
+        for repo in self.repositories.list().await? {
             let Some(_guard) = self.gates.try_lock_git(&repo.id) else {
                 continue;
             };

@@ -22,7 +22,8 @@ async fn cloned() -> Result<(
     let (temp, manager) = test_support::manager().await;
     let origin = test_support::repository(temp.path(), "origin");
     let repo = manager
-        .register_repository(format!("file://{}", origin.display()).into(), None, None)
+        .repositories
+        .register(format!("file://{}", origin.display()).into(), None, None)
         .await?;
     let workspace = manager
         .create_workspace(&repo.id, "feature".into(), None, None, None)
@@ -138,7 +139,10 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
     fs::write(destination.join("partial"), "")?;
     manager.finish_repository_moves().await?;
     assert!(!destination.exists());
-    assert_eq!(manager.repository(&repo.id).await?.path, repo.path);
+    assert_eq!(
+        manager.repositories.repository(&repo.id).await?.path,
+        repo.path
+    );
     assert_eq!(
         manager.workspace_by_id(&workspace.id).await?.state,
         WorkspaceState::Ready
@@ -195,7 +199,7 @@ async fn a_copied_move_reconnects_worktrees_before_deleting_the_original() -> Re
         git::head_branch(&workspace.path).await?,
         Some("feature".into())
     );
-    let checkout = manager.repository(&repo.id).await?.path;
+    let checkout = manager.repositories.repository(&repo.id).await?.path;
     let trees = git::worktrees(&checkout, git::run).await?;
     assert!(
         trees
@@ -264,13 +268,19 @@ fn the_destination_avoids_a_missing_checkout_recorded_inside_it() -> Result<()> 
         workspaces_dir: root.join("elsewhere"),
         contribution: false,
     };
-    let reserved =
-        registry::reserve_directory(&root, "project", std::slice::from_ref(&clone), &[])?;
+    let reserved = shoal_repositories::root::reserve_directory(
+        &root,
+        "project",
+        std::slice::from_ref(&clone),
+        &[],
+    )?;
     assert_eq!(reserved, root.join("project-2"));
 
     // A root inside a recorded directory has no free name at all.
     let nested = root.join("elsewhere/nested");
-    assert!(registry::reserve_directory(&nested, "project", &[clone], &[]).is_err());
+    assert!(
+        shoal_repositories::root::reserve_directory(&nested, "project", &[clone], &[]).is_err()
+    );
     Ok(())
 }
 
@@ -305,7 +315,8 @@ async fn a_move_destination_and_workspace_paths_exclude_each_other() -> Result<(
     manager.record_move(&repo.id, &source, &destination).await?;
     let other = test_support::repository(temp.path(), "other");
     let other = manager
-        .register_repository(other.to_str().context("path")?.into(), None, None)
+        .repositories
+        .register(other.to_str().context("path")?.into(), None, None)
         .await?;
     let intruder = destination.join("intruder");
     let placed = manager
@@ -335,7 +346,13 @@ async fn a_replaced_worktree_keeps_the_move_unfinished() -> Result<()> {
     shoal_daemon_base::ownership::mark_owner(&admin, "another")?;
 
     assert!(manager.finish_repository_moves().await.is_err());
-    assert!(manager.ensure_repository_available(&repo.id).await.is_err());
+    assert!(
+        manager
+            .repositories
+            .ensure_available(&repo.id)
+            .await
+            .is_err()
+    );
     assert_eq!(
         manager.workspace_by_id(&workspace.id).await?.state,
         WorkspaceState::Reconciling
@@ -350,7 +367,8 @@ async fn a_checkout_placed_in_its_directory_moves_with_its_source() -> Result<()
     fs::create_dir_all(&directory)?;
     let checkout = test_support::repository(&directory, "checkout");
     let repo = manager
-        .register_repository(checkout.to_str().context("path")?.into(), None, None)
+        .repositories
+        .register(checkout.to_str().context("path")?.into(), None, None)
         .await?;
     assert_eq!(repo.workspaces_dir, fs::canonicalize(&directory)?);
     let root = fs::canonicalize(temp.path())?.join("new");
@@ -359,13 +377,14 @@ async fn a_checkout_placed_in_its_directory_moves_with_its_source() -> Result<()
     // Another checkout registered inside the directory keeps it in place.
     let other = test_support::repository(&directory, "other");
     let other = manager
-        .register_repository(other.to_str().context("path")?.into(), None, None)
+        .repositories
+        .register(other.to_str().context("path")?.into(), None, None)
         .await?;
     assert!(manager.move_repositories(Layout::Regular).await.is_err());
     manager.remove_repository(&other.id).await?;
 
     manager.move_repositories(Layout::Regular).await?;
-    let moved = manager.repository(&repo.id).await?;
+    let moved = manager.repositories.repository(&repo.id).await?;
     let expected = root.join("project/checkout");
     assert_eq!(moved.path, expected);
     assert_eq!(Path::new(&moved.source), expected);
@@ -377,7 +396,8 @@ async fn an_excluded_move_empties_the_indexed_root_and_links_it() -> Result<()> 
     let (temp, manager) = test_support::indexed_manager().await;
     let origin = test_support::repository(temp.path(), "origin");
     let repo = manager
-        .register_repository(format!("file://{}", origin.display()).into(), None, None)
+        .repositories
+        .register(format!("file://{}", origin.display()).into(), None, None)
         .await?;
     let workspace = manager
         .create_workspace(&repo.id, "feature".into(), None, None, None)
@@ -422,7 +442,8 @@ async fn an_excluded_move_refuses_to_link_a_recorded_workspace_path() -> Result<
     let (temp, manager) = test_support::indexed_manager().await;
     let origin = test_support::repository(temp.path(), "origin");
     let repo = manager
-        .register_repository(format!("file://{}", origin.display()).into(), None, None)
+        .repositories
+        .register(format!("file://{}", origin.display()).into(), None, None)
         .await?;
     let placed = fs::canonicalize(temp.path())?.join("placed");
     manager
@@ -779,7 +800,8 @@ async fn with_master() -> Result<(tempfile::TempDir, Arc<Manager>, crate::model:
     let (temp, manager) = test_support::indexed_manager().await;
     let origin = test_support::repository(temp.path(), "origin");
     let repo = manager
-        .register_repository(format!("file://{}", origin.display()).into(), None, None)
+        .repositories
+        .register(format!("file://{}", origin.display()).into(), None, None)
         .await?;
     let root = (repo.workspaces_dir.parent())
         .context("no root")?

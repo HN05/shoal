@@ -14,7 +14,9 @@ async fn the_users_restore_of_a_failed_launch_engages_them() {
     let (temp, manager) = manager().await;
     manager.publish_config(global_config("[machine]\nmax_heavy_agents = 1\n"));
     let path = repository(temp.path(), "repo");
-    let repo = manager.register_repository(path.to_str().unwrap().into(), None, None);
+    let repo = manager
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None);
     let repo = repo.await.unwrap();
     let workspace = manager.create_workspace(&repo.id, "work".into(), None, None, None);
     let workspace = workspace.await.unwrap();

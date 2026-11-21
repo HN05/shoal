@@ -23,9 +23,11 @@ fn caller(space: &SpaceId) -> Caller {
 async fn a_scoped_removal_takes_the_user_s_holds_as_user_holds_allows() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
-    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     let master = chat(&manager, "master", "orchestrate", None, None).await;
     let notes = chat(&manager, "notes", "chat", Some(&repo), Some(&master.id)).await;
     let worker = workspace_below(&manager, &repo, "worker", &master.id, None).await;

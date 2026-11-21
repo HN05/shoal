@@ -23,7 +23,7 @@ impl Manager {
             None => SpaceRepository::Without,
         };
         Ok(LaunchState {
-            repositories: self.repositories().await?,
+            repositories: self.repositories.list().await?,
             workspaces: self.launch_workspaces(caller).await?,
             parent,
         })

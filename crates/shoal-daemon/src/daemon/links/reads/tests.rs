@@ -10,7 +10,8 @@ async fn a_stopped_chat_reads_in_its_repositorys_checkout() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let origin = "https://github.com/team/repo";
@@ -34,7 +35,8 @@ async fn a_checkout_without_an_origin_selects_an_item_by_its_url() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let url = "https://github.com/team/other/issues/7";
@@ -65,7 +67,8 @@ async fn a_view_of_nothing_needs_no_forge_behind_a_local_origin() {
     let bare = root.path().join("origin.git");
     git(root.path(), &["init", "--bare", bare.to_str().unwrap()]);
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

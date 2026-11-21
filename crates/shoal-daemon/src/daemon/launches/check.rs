@@ -177,7 +177,7 @@ impl Manager {
         };
         if let Some(named) = (launch.repository.clone()).or(positional) {
             let selector = crate::repository::named_in(named, launch.directory.as_deref())?;
-            let repos = self.repositories().await?;
+            let repos = self.repositories.list().await?;
             return Ok(Some(
                 crate::repository::select(&repos, selector)
                     .await?

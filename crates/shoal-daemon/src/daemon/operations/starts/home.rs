@@ -84,7 +84,9 @@ impl Manager {
             Home::Checkout(repository) | Home::Child(repository, _) => Some(repository.clone()),
             Home::Worktree(workspace) => self.chat_workspace(workspace).await?.repository_id,
             Home::Root => None,
-            Home::Opening(repository, _) => Some(self.repository(repository.clone()).await?.id),
+            Home::Opening(repository, _) => {
+                Some(self.repositories.repository(repository.clone()).await?.id)
+            }
         })
     }
 
@@ -131,7 +133,7 @@ impl Manager {
                 ChatHome::Workspace(&workspace).chat_name(mode)
             }
             Home::Checkout(repository) => {
-                let repository = self.repository(repository.clone()).await?;
+                let repository = self.repositories.repository(repository.clone()).await?;
                 ChatHome::Checkout(&repository).chat_name(mode)
             }
             Home::Root => {
@@ -316,7 +318,7 @@ impl Manager {
                     !placed && parent.is_none(),
                     "an existing workspace takes no base, path, Git profile or parent"
                 );
-                let repository = self.repository(repository).await?;
+                let repository = self.repositories.repository(repository).await?;
                 let workspace = self.workspace(&workspace).await?;
                 ensure!(
                     workspace.repository() == &repository.id,

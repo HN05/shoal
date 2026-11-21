@@ -14,11 +14,11 @@ use super::super::{
 };
 use crate::{
     config::permissions::PermissionKey,
-    daemon::spotlight::Layout,
     protocol::{Body, RepositoryMethod},
 };
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_repositories::spotlight::Layout;
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -30,7 +30,7 @@ pub(super) async fn handle(
             Body::Repositories(manager.visible_repositories(caller).await?)
         }
         RepositoryMethod::RegisterRepository { source, name, path } => {
-            Body::Repository(manager.register_repository(source, name, path).await?)
+            Body::Repository(manager.repositories.register(source, name, path).await?)
         }
         RepositoryMethod::RegisterContribution { source, name } => {
             let manager = manager.clone();
@@ -44,7 +44,7 @@ pub(super) async fn handle(
             branch,
         } => {
             let source = origin.clone().into();
-            let repository = (manager.register_repository(source, None, None)).await?;
+            let repository = (manager.repositories.register(source, None, None)).await?;
             let manager = manager.clone();
             let carried = (repository, origin, commit, branch);
             return Ok(Answer::connection(move |stream, request_id, guard| {
@@ -58,7 +58,7 @@ pub(super) async fn handle(
             }));
         }
         RepositoryMethod::RenameRepository { repository, name } => {
-            Body::Repository(manager.rename_repository(&repository, name).await?)
+            Body::Repository(manager.repositories.rename(&repository, name).await?)
         }
         RepositoryMethod::LocalConfigPath { repository } => {
             Body::LocalConfigPath(manager.local_config_path(&repository).await?)
@@ -120,7 +120,7 @@ async fn administered_repository(
     const REFUSAL: &str = "scoped processes administer only their own repository";
     let own = async |named: &crate::repository::Selector| {
         let selected = manager.own_repository(caller, named, REFUSAL).await?;
-        Ok::<_, anyhow::Error>(manager.repository(&selected).await?.id)
+        Ok::<_, anyhow::Error>(manager.repositories.repository(&selected).await?.id)
     };
     Ok(match method {
         RepositoryMethod::RenameRepository { repository, .. }

@@ -7,9 +7,10 @@ use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 use tokio::net::UnixStream;
 
+use shoal_repositories::contributions::holds::ContributionHold;
+
 use super::{
     answer::{self, OperationGuard},
-    contributions::holds::ContributionHold,
     manager::Manager,
 };
 use crate::protocol::{self, Body, Response};
@@ -22,7 +23,10 @@ pub(super) async fn register(
     (source, name): (String, Option<String>),
     guard: OperationGuard,
 ) -> Result<()> {
-    let registered = manager.register_contribution(source, name).await;
+    let registered = manager
+        .repositories
+        .register_contribution(&*manager, source, name)
+        .await;
     let held = registered.map(|(repo, hold)| (Body::Repository(repo), hold));
     keep(stream, request_id, held, guard).await
 }
@@ -35,7 +39,7 @@ pub(super) async fn hold(
     repository: RepositoryId,
     guard: OperationGuard,
 ) -> Result<()> {
-    let held = manager.hold_contribution(&repository).await;
+    let held = manager.repositories.hold_contribution(&repository).await;
     keep(stream, request_id, held.map(|hold| (Body::Ok, hold)), guard).await
 }
 

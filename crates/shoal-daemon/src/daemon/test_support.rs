@@ -314,7 +314,7 @@ impl Manager {
     /// Move the repository's checkout to `path` and record it there, as an
     /// earlier version may have registered it.
     pub async fn move_checkout(&self, id: &RepositoryId, path: &Path) -> anyhow::Result<()> {
-        let repo = self.repository(id).await?;
+        let repo = self.repositories.repository(id).await?;
         fs::rename(&repo.path, path)?;
         let (id, path) = (repo.id, path.to_path_buf());
         self.store

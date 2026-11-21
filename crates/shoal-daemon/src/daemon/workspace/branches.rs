@@ -193,7 +193,7 @@ impl Manager {
 
     /// The branches every remote of the repository advertises now.
     pub async fn remote_heads(&self, repository_id: &RepositoryId) -> Result<Vec<git::RemoteHead>> {
-        let repo = self.repository(repository_id).await?;
+        let repo = self.repositories.repository(repository_id).await?;
         let mut heads = Vec::new();
         for remote in &git::remote_names(&repo.path).await? {
             heads.extend(
@@ -209,7 +209,7 @@ impl Manager {
     /// workspace's HEAD changes, whatever commits carry them.
     pub(crate) async fn default_branch_has_head(&self, workspace: &Workspace) -> Result<bool> {
         self.fetch_default_branch(workspace.repository()).await?;
-        let repo = self.repository(workspace.repository()).await?;
+        let repo = self.repositories.repository(workspace.repository()).await?;
         let default = git::default_branch::locate(&repo.path, DefaultBranchLookup::Cached).await?;
         git::status::default_branch_retains_head(&workspace.path, &default).await
     }
@@ -378,8 +378,8 @@ impl Manager {
         &self,
         repository: impl Into<crate::repository::Selector>,
     ) -> Result<Vec<Branch>> {
-        let repo = self.repository(repository).await?;
-        self.ensure_repository_available(&repo.id).await?;
+        let repo = self.repositories.repository(repository).await?;
+        self.repositories.ensure_available(&repo.id).await?;
         git::existing_branch::list(&repo.path).await
     }
 
@@ -424,7 +424,7 @@ impl Manager {
         new: super::NewWorkspace<'_>,
         restores: Option<shoal_ids::checkpoint_numbers::CheckpointNumber>,
     ) -> Result<OpenedWorkspace> {
-        let (repo, git) = self.lock_repository(repository).await?;
+        let (repo, git) = self.repositories.lock(repository).await?;
         let options = NewWorktreeOptions {
             git_profile: new.git_profile,
             path: new.path.as_deref(),

@@ -35,7 +35,7 @@ impl Manager {
             return Ok(None);
         };
         let mut found = Vec::new();
-        for repository in self.repositories().await? {
+        for repository in self.repositories.list().await? {
             if self.answers_to(&repository, named).await? {
                 found.push(repository);
             }

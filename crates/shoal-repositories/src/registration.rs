@@ -1,84 +1,66 @@
-//! Repository registration and lookup; independent of worktree lifecycle.
-use super::{manager::Manager, spotlight};
-use crate::{
-    daemon::store,
-    git,
-    model::{Repository, Workspace},
-    repository, validate,
-};
-use anyhow::{Context, Result, bail, ensure};
-use rusqlite::params;
-use shoal_forge::repo::fork::ForkRequests;
+//! Registering a repository: a local checkout in place, or a clone of a URL
+//! into a directory of its own, perhaps as a contribution.
 use std::{
     fs,
     path::{Path, PathBuf},
 };
+
+use anyhow::{Context, Result, bail, ensure};
+use rusqlite::params;
+use shoal_core::{config, git, repository};
+use shoal_forge::repo::fork::ForkRequests;
+use shoal_protocol::{model::Repository, validate};
+use shoal_store as store;
 use uuid::Uuid;
+
+use crate::{
+    Repositories,
+    contributions::holds::ContributionHold,
+    daemon::Daemon,
+    root::{ConfiguredRoot, Recorded, prepare_root, reserve_directory},
+};
 
 /// Directory name of a URL clone inside its repository directory. Derived
 /// workspace names never contain `.`, so no workspace can collide with it.
-pub const CHECKOUT_DIR: &str = ".checkout";
+const CHECKOUT_DIR: &str = ".checkout";
 
 /// What a registration is for.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Registration {
+#[derive(Clone, Copy)]
+enum Registration<'a> {
     Regular,
-    /// Removed once nothing of it is left.
-    Contribution,
+    /// Removed once nothing of it is left, forking on the forge `daemon`
+    /// reaches.
+    Contribution(&'a dyn Daemon),
 }
 
-impl Manager {
-    pub async fn repositories(&self) -> Result<Vec<Repository>> {
-        self.store
-            .run(|db| {
-                Ok(db
-                    .prepare(&format!(
-                        "SELECT {} FROM repositories ORDER BY last_used DESC",
-                        store::REPOSITORY_COLUMNS
-                    ))?
-                    .query_map([], store::repository)?
-                    .collect::<rusqlite::Result<Vec<_>>>()?)
-            })
-            .await
-    }
-
+impl Repositories {
     /// Register a local checkout in place, or clone a URL. Re-registering a
     /// known source returns (and optionally renames) the existing record.
-    pub async fn register_repository(
+    pub async fn register(
         &self,
         source: repository::Selector,
         name: Option<String>,
         clone_path: Option<PathBuf>,
     ) -> Result<Repository> {
-        self.register(source, name, clone_path, Registration::Regular)
-            .await
+        let _guard = self.gates.lock_registry().await;
+        (self.register_locked(source, name, clone_path, Registration::Regular)).await
     }
 
     /// `shoal contribute`: clone a repository URL as a contribution, which
     /// pushes to the user's fork when the user cannot push to the repository.
     /// An existing registration is returned as it is. The hold keeps it
     /// from cleanup from the moment it is registered.
-    pub(crate) async fn register_contribution(
+    pub async fn register_contribution(
         &self,
+        daemon: &dyn Daemon,
         source: String,
         name: Option<String>,
-    ) -> Result<(Repository, super::contributions::holds::ContributionHold)> {
+    ) -> Result<(Repository, ContributionHold)> {
         let _guard = self.gates.lock_registry().await;
-        let registration = Registration::Contribution;
+        let registration = Registration::Contribution(daemon);
         let repo = (self.register_locked(source.into(), name, None, registration)).await?;
         let hold = self.contribution_holds.hold(&repo.id);
         Ok((repo, hold))
-    }
-
-    async fn register(
-        &self,
-        source: repository::Selector,
-        name: Option<String>,
-        clone_path: Option<PathBuf>,
-        registration: Registration,
-    ) -> Result<Repository> {
-        let _guard = self.gates.lock_registry().await;
-        (self.register_locked(source, name, clone_path, registration)).await
     }
 
     /// [`Self::register`] under the registry gate the caller holds.
@@ -87,12 +69,12 @@ impl Manager {
         source: repository::Selector,
         name: Option<String>,
         clone_path: Option<PathBuf>,
-        registration: Registration,
+        registration: Registration<'_>,
     ) -> Result<Repository> {
         if let Some(name) = &name {
             validate::name("repository", name)?;
         }
-        let repositories = self.repositories().await?;
+        let repositories = self.list().await?;
         let origins = repository::Origins::default();
         let source = match repository::select_with(&repositories, &source, &origins).await {
             Ok(existing)
@@ -123,7 +105,7 @@ impl Manager {
         if let Some(existing) = find_existing(&repositories, &source, &origins).await? {
             check_clone_path(existing, clone_path.as_deref())?;
             return match name {
-                Some(name) => self.rename_repository(&existing.id, name).await,
+                Some(name) => self.rename(&existing.id, name).await,
                 None => Ok(existing.clone()),
             };
         }
@@ -132,12 +114,11 @@ impl Manager {
         let directory_name = name
             .clone()
             .unwrap_or_else(|| repository::directory_name(&source));
-        let contribution = registration == Registration::Contribution;
-        let fork = match registration {
-            Registration::Regular => None,
-            Registration::Contribution => self.contribution_fork(&source).await?,
+        let (contribution, fork) = match registration {
+            Registration::Regular => (false, None),
+            Registration::Contribution(daemon) => (true, contribution_fork(daemon, &source).await?),
         };
-        let workspaces = self.list_workspaces().await?;
+        let workspaces = self.workspaces().await?;
         let recorded = Recorded {
             repositories: &repositories,
             workspaces: &workspaces,
@@ -161,31 +142,15 @@ impl Manager {
             .await?
         };
         let repo = self
-            .insert_repository(path, source, workspaces_dir, contribution)
+            .insert(path, source, workspaces_dir, contribution)
             .await?;
         match name {
-            Some(name) => self.rename_repository(&repo.id, name).await,
+            Some(name) => self.rename(&repo.id, name).await,
             None => Ok(repo),
         }
     }
 
-    /// The URL of the user's fork of `source` to push to, created when the
-    /// user cannot push to `source` itself.
-    async fn contribution_fork(&self, source: &str) -> Result<Option<String>> {
-        ensure!(
-            !Path::new(source).exists(),
-            "a contribution clones a repository URL; {source} is a local path"
-        );
-        let forge = self.forge(source).await?;
-        let account = self.links.user_account();
-        if forge.pushable(&account).await? {
-            return Ok(None);
-        }
-        let fork = forge.fork(&account).await?;
-        fork.remote_like(source).map(Some)
-    }
-
-    async fn insert_repository(
+    async fn insert(
         &self,
         path: PathBuf,
         source: String,
@@ -215,50 +180,22 @@ impl Manager {
             })
             .await
     }
+}
 
-    pub async fn rename_repository(
-        &self,
-        selector: impl Into<crate::repository::Selector>,
-        name: String,
-    ) -> Result<Repository> {
-        validate::name("repository", &name)?;
-        let repo = self.repository(selector).await?;
-        self.store
-            .run(move |db| {
-                ensure!(
-                    !store::exists(
-                        db,
-                        "SELECT 1 FROM repositories WHERE name=?1 AND id<>?2",
-                        params![name, repo.id]
-                    )?,
-                    "repository name is already in use"
-                );
-                db.execute(
-                    "UPDATE repositories SET name=?2 WHERE id=?1",
-                    params![repo.id, name],
-                )?;
-                Ok(db.query_row(
-                    &format!(
-                        "SELECT {} FROM repositories WHERE id=?1",
-                        store::REPOSITORY_COLUMNS
-                    ),
-                    [repo.id],
-                    store::repository,
-                )?)
-            })
-            .await
+/// The URL of the user's fork of `source` to push to, created when the
+/// user cannot push to `source` itself.
+async fn contribution_fork(daemon: &dyn Daemon, source: &str) -> Result<Option<String>> {
+    ensure!(
+        !Path::new(source).exists(),
+        "a contribution clones a repository URL; {source} is a local path"
+    );
+    let forge = daemon.forge(source).await?;
+    let account = daemon.user_account();
+    if forge.pushable(&account).await? {
+        return Ok(None);
     }
-
-    /// Resolve an ID, path, source URL, explicit name, derived name, or
-    /// equivalent remote to a registered repository.
-    pub async fn repository(
-        &self,
-        selector: impl Into<crate::repository::Selector>,
-    ) -> Result<Repository> {
-        Ok(repository::select(&self.repositories().await?, selector)
-            .await?
-            .clone())
-    }
+    let fork = forge.fork(&account).await?;
+    fork.remote_like(source).map(Some)
 }
 
 /// A registration with the same source string or the same remote identity,
@@ -292,7 +229,7 @@ async fn local_checkout_location(
     // or the checkout sits where `<x>`'s local config belongs.
     let placed = path
         .parent()
-        .filter(|_| path.file_name() != Some(std::ffi::OsStr::new(crate::config::repo::LOCAL_DIR)))
+        .filter(|_| path.file_name() != Some(std::ffi::OsStr::new(config::repo::LOCAL_DIR)))
         .filter(|parent| parent.parent() == Some(root.as_path()))
         .filter(|parent| !parent.join(".git").exists())
         .filter(|parent| {
@@ -315,7 +252,7 @@ fn outside_local_configs(path: &Path, repositories: &[Repository]) -> Result<()>
         .iter()
         .map(|repo| repo.workspaces_dir.as_path())
     {
-        let local = directory.join(crate::config::repo::LOCAL_DIR);
+        let local = directory.join(config::repo::LOCAL_DIR);
         ensure!(
             !path.starts_with(&local),
             "{} is where another repository's local config belongs; register a checkout elsewhere",
@@ -325,8 +262,6 @@ fn outside_local_configs(path: &Path, repositories: &[Repository]) -> Result<()>
     Ok(())
 }
 
-/// Reserve a repository directory, clone into it, and release the reservation
-/// when any part of the clone attempt fails.
 /// The URL a registration clones, the fork it pushes to, and an exact
 /// directory requested for the clone.
 struct Cloning<'a> {
@@ -335,6 +270,8 @@ struct Cloning<'a> {
     path: Option<PathBuf>,
 }
 
+/// Reserve a repository directory, clone into it, and release the reservation
+/// when any part of the clone attempt fails.
 async fn clone_into_reserved_directory(
     cloning: Cloning<'_>,
     root: &ConfiguredRoot,
@@ -406,7 +343,7 @@ fn reserve_clone_directory(
     requested: Option<&Path>,
 ) -> Result<PathBuf> {
     let workspaces_dir = reserve_directory(root, name, repositories, &[])?;
-    let local = workspaces_dir.join(crate::config::repo::LOCAL_DIR);
+    let local = workspaces_dir.join(config::repo::LOCAL_DIR);
     if let Some(path) = requested.filter(|path| path.starts_with(&local)) {
         // The reservation belongs exclusively to this attempt.
         let _ = fs::remove_dir(&workspaces_dir);
@@ -442,174 +379,6 @@ fn create_clone_directory(path: PathBuf) -> Result<PathBuf> {
         )
     })?;
     Ok(path)
-}
-
-impl Manager {
-    /// The configured `root_dir`, where a chat without a repository runs,
-    /// prepared as registering a repository prepares it, so a root the
-    /// chat creates first takes the layout registration would give it.
-    pub(crate) async fn prepare_chat_root(&self) -> Result<PathBuf> {
-        let _registry = self.gates.lock_registry().await;
-        let repositories = self.repositories().await?;
-        let workspaces = self.list_workspaces().await?;
-        let recorded = Recorded {
-            repositories: &repositories,
-            workspaces: &workspaces,
-        };
-        let root = self.configured_root()?;
-        let state = fs::canonicalize(&self.paths.state)?;
-        prepare_root(&root, &state, &recorded, None).await?;
-        Ok(root.path)
-    }
-}
-
-/// The configured `root_dir` and how preparing it treats it.
-pub(super) struct ConfiguredRoot {
-    pub(super) path: PathBuf,
-    pub(super) layout: spotlight::Layout,
-}
-
-impl Manager {
-    /// The configured `root_dir`, taken as registration finds it.
-    pub(super) fn configured_root(&self) -> Result<ConfiguredRoot> {
-        Ok(ConfiguredRoot {
-            path: self.config().root_dir(&self.paths)?,
-            layout: spotlight::Layout::AsFound,
-        })
-    }
-}
-
-/// What Shoal records, which a root must stay out of.
-pub(super) struct Recorded<'a> {
-    pub(super) repositories: &'a [Repository],
-    pub(super) workspaces: &'a [Workspace],
-}
-
-/// The canonical, existing directory that holds repository directories: the
-/// `root_dir`, or where its layout keeps them. Worktrees must stay out of
-/// Shoal's state, every checkout, including the one `checkout` registers,
-/// every repository directory and every workspace, and the daemon must be
-/// able to write there, so a root it cannot write or that is or resolves
-/// inside one of them is refused before anything is created or linked.
-pub(super) async fn prepare_root(
-    root: &ConfiguredRoot,
-    state: &Path,
-    recorded: &Recorded<'_>,
-    checkout: Option<&Path>,
-) -> Result<PathBuf> {
-    let plan = plan_root(root, state, recorded, checkout).await?;
-    plan.apply()?;
-    plan.destination()
-}
-
-/// What [`prepare_root`] would change, refused as it would refuse, without
-/// changing anything.
-pub(super) async fn plan_root(
-    root: &ConfiguredRoot,
-    state: &Path,
-    recorded: &Recorded<'_>,
-    checkout: Option<&Path>,
-) -> Result<spotlight::Plan> {
-    let plan = spotlight::plan(&root.path, root.layout)?;
-    for location in plan.locations()? {
-        ensure_outside(&location, state, recorded, checkout)?;
-        shoal_daemon_base::writable::ensure_writable(&location).await?;
-    }
-    Ok(plan)
-}
-
-/// Refuse a root `location` inside Shoal's state, a checkout, a repository
-/// directory or a workspace.
-fn ensure_outside(
-    location: &Path,
-    state: &Path,
-    recorded: &Recorded<'_>,
-    checkout: Option<&Path>,
-) -> Result<()> {
-    let repositories = recorded.repositories;
-    ensure!(
-        !location.starts_with(state),
-        "root_dir {} is inside Shoal's state directory",
-        location.display()
-    );
-    let checkouts = repositories.iter().map(|repo| repo.path.as_path());
-    for checkout in checkouts.chain(checkout) {
-        ensure!(
-            !location.starts_with(checkout),
-            "root_dir {} is inside the repository checkout {}",
-            location.display(),
-            checkout.display()
-        );
-    }
-    for directory in repositories
-        .iter()
-        .map(|repo| repo.workspaces_dir.as_path())
-    {
-        ensure!(
-            !location.starts_with(directory),
-            "root_dir {} is inside the repository directory {}",
-            location.display(),
-            directory.display()
-        );
-    }
-    if let Some(workspace) = recorded
-        .workspaces
-        .iter()
-        .find(|workspace| location.starts_with(&workspace.path))
-    {
-        bail!(
-            "root_dir {} is inside the workspace {}",
-            location.display(),
-            workspace.name
-        );
-    }
-    Ok(())
-}
-
-/// Reserve `<root>/<name>` (suffixed `-2`, `-3`, ... when occupied or recorded)
-/// by creating it, so concurrent daemons cannot share one directory. A
-/// candidate that is, holds or lies in a recorded checkout, repository
-/// directory or one of `workspaces` is taken, even when that is gone.
-pub(super) fn reserve_directory(
-    root: &Path,
-    name: &str,
-    repositories: &[Repository],
-    workspaces: &[PathBuf],
-) -> Result<PathBuf> {
-    let recorded = || {
-        repositories
-            .iter()
-            .flat_map(|repo| [&repo.path, &repo.workspaces_dir])
-            .chain(workspaces)
-    };
-    // Every candidate would lie in it, whatever the suffix.
-    if let Some(owner) = recorded().find(|owned| root.starts_with(owned)) {
-        bail!(
-            "root_dir {} is inside {}, which Shoal already records",
-            root.display(),
-            owner.display()
-        );
-    }
-    for suffix in 1_u64.. {
-        let path = root.join(if suffix == 1 {
-            name.to_owned()
-        } else {
-            format!("{name}-{suffix}")
-        });
-        // A missing directory still owns its recorded path.
-        if recorded().any(|owned| owned.starts_with(&path) || path.starts_with(owned)) {
-            continue;
-        }
-        match fs::create_dir(&path) {
-            Ok(()) => return Ok(path),
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(error) => {
-                return Err(error)
-                    .with_context(|| format!("reserve repository directory {}", path.display()));
-            }
-        }
-    }
-    bail!("repository directory suffixes exhausted")
 }
 
 fn check_clone_path(repo: &Repository, requested: Option<&Path>) -> Result<()> {

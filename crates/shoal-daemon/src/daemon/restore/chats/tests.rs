@@ -10,7 +10,8 @@ async fn with_workspace() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -31,7 +32,11 @@ async fn restore_chat(manager: &Manager, id: &shoal_ids::space_ids::SpaceId) -> 
 #[tokio::test]
 async fn a_removed_chat_comes_back_under_its_id_below_its_parent() {
     let (_root, manager, parent) = with_workspace().await;
-    let repo = manager.repository(parent.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(parent.repository())
+        .await
+        .unwrap();
     let removed = chat(&manager, "notes", "plan", Some(&repo), Some(&parent.id)).await;
     let selector = SpaceSelector::id(&removed.id);
     manager
@@ -65,7 +70,11 @@ async fn a_removed_chat_comes_back_under_its_id_below_its_parent() {
 #[tokio::test]
 async fn a_removed_chat_keeps_its_running_agent_with_its_session() {
     let (_root, manager, parent) = with_workspace().await;
-    let repo = manager.repository(parent.repository()).await.unwrap();
+    let repo = manager
+        .repositories
+        .repository(parent.repository())
+        .await
+        .unwrap();
     let removed = chat(&manager, "notes", "plan", Some(&repo), None).await;
     crate::daemon::test_support::report_session(&manager, &removed.id, "s1").await;
     let selector = SpaceSelector::id(&removed.id);

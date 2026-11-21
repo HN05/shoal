@@ -5,7 +5,8 @@ async fn a_removal_that_leaves_trust_entries_alerts_the_user() {
     let (root, manager) = test_support::manager().await;
     let path = test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.display().to_string().into(), None, None)
+        .repositories
+        .register(path.display().to_string().into(), None, None)
         .await
         .unwrap();
     // A config Shoal cannot read keeps the entries it holds.
@@ -25,7 +26,8 @@ async fn a_development_build_leaves_kept_locations_outside_its_home() {
     let (root, manager) = test_support::manager().await;
     let path = test_support::repository(root.path(), "repo");
     let repo = manager
-        .register_repository(path.display().to_string().into(), None, None)
+        .repositories
+        .register(path.display().to_string().into(), None, None)
         .await
         .unwrap();
     let outside = tempfile::tempdir_in("/tmp").unwrap();

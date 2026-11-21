@@ -24,7 +24,8 @@ async fn read_only_scope_reads_without_changing() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repository = manager
-        .register_repository(path.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager

@@ -3,10 +3,9 @@ use crate::config_file::ConfigExt;
 use crate::paths::StateFiles;
 use shoal_ids::execution_ids::ExecutionId;
 
-use crate::{config::Config, daemon::store::Store, model::Repository, paths::Paths};
+use crate::{config::Config, daemon::store::Store, paths::Paths};
 use anyhow::Result;
 use std::sync::Arc;
-use tokio::sync::OwnedMutexGuard;
 
 pub struct Manager {
     pub store: Store,
@@ -35,8 +34,6 @@ pub struct Manager {
     /// The busy CPU the overload monitor reads for job admission.
     pub(crate) busy_cpu: super::busy_cpu::BusyCpu,
     pub agent_queue: super::agent_queue::AgentQueue,
-    /// The contributions a running `shoal contribute` keeps from cleanup.
-    pub(crate) contribution_holds: super::contributions::holds::ContributionHolds,
     pub(crate) operations: Arc<crate::daemon::operations::Operations>,
     /// The scope tokens approved commands take their permission's actions
     /// with.
@@ -65,6 +62,8 @@ pub struct Manager {
     /// them goes by, which keep the workspaces below them meanwhile.
     pub(crate) completed_owners: crate::daemon::spaces::Removing,
     pub(crate) seeds: super::seed::Seeds,
+    /// The registered repositories.
+    pub repositories: Arc<shoal_repositories::Repositories>,
     /// The issues, PRs and CI runs the spaces link.
     pub links: Arc<shoal_links::Links>,
     /// The local reviews of workspaces.
@@ -135,6 +134,13 @@ impl Manager {
             file_access.clone(),
             Arc::new(super::links::records::LinkRecords),
         ));
+        let repositories = Arc::new(shoal_repositories::Repositories::new(
+            store.clone(),
+            gates.clone(),
+            config_state.clone(),
+            paths.clone(),
+            Arc::new(super::repositories::RepositoryRecords),
+        ));
         let reviews = Arc::new(shoal_reviews::Reviews::new(
             store.clone(),
             gates.clone(),
@@ -167,7 +173,6 @@ impl Manager {
             overload_recovery: Default::default(),
             busy_cpu: Default::default(),
             agent_queue: Default::default(),
-            contribution_holds: Default::default(),
             operations: Default::default(),
             grants: Default::default(),
             shutdown_stopped: Default::default(),
@@ -181,6 +186,7 @@ impl Manager {
             space_removals: Default::default(),
             completed_owners: Default::default(),
             seeds: Default::default(),
+            repositories,
             links,
             reviews,
             proxy_retries: Default::default(),
@@ -230,18 +236,6 @@ impl Manager {
         let config = tokio::task::spawn_blocking(move || Config::load_settled(&paths)).await??;
         self.publish_config(config);
         Ok(())
-    }
-
-    pub(crate) async fn lock_repository(
-        &self,
-        selector: impl Into<crate::repository::Selector>,
-    ) -> Result<(Repository, OwnedMutexGuard<()>)> {
-        let repo = self.repository(selector).await?;
-        let guard = self.gates.lock_git(&repo.id).await;
-        // Removal may have completed or failed while this request waited.
-        let repo = self.repository(&repo.id).await?;
-        self.ensure_repository_available(&repo.id).await?;
-        Ok((repo, guard))
     }
 }
 

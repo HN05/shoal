@@ -145,7 +145,7 @@ impl Manager {
         self.ensure_not_here(&import.space.space_id, import.copy)
             .await?;
         let repo = match &import.repository {
-            Some(selector) => Some(self.repository(selector).await?),
+            Some(selector) => Some(self.repositories.repository(selector).await?),
             None => None,
         };
         let mut warnings = Vec::new();
@@ -158,7 +158,7 @@ impl Manager {
         let removed = (self.recorded_here(here, prerequisite, space, &mut warnings)).await?;
         // A repository move holds this gate; the checkout may have moved.
         let locked = match &repo {
-            Some(repo) => Some(self.lock_repository(&repo.id).await?),
+            Some(repo) => Some(self.repositories.lock(&repo.id).await?),
             None => None,
         };
         let repo = locked.as_ref().map(|(repo, _git)| repo);
@@ -341,7 +341,7 @@ impl Manager {
             (RemovedKind::Workspace(_), None) => bail!("a workspace belongs to a repository"),
             (RemovedKind::Chat { chat }, Some(_)) => chat.root_dir = None,
             (RemovedKind::Chat { chat }, None) => {
-                chat.root_dir = Some(self.prepare_chat_root().await?);
+                chat.root_dir = Some(self.repositories.prepare_chat_root().await?);
             }
         }
         Ok(removed)

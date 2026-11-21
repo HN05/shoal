@@ -25,9 +25,11 @@ const HOURLY: &str = "[triggers.check]\non = 'timer'\nevery = '1h'\nmode = 'chat
 async fn with_triggers(triggers: &str) -> (tempfile::TempDir, Arc<Manager>, Repository) {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
-    let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
-        .await
-        .unwrap();
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
     (manager.write_local_config(&repo.id, Some(triggers.into())))
         .await
         .unwrap();

@@ -26,7 +26,7 @@ use shoal_refs::BranchName;
 
 impl Spaces for Manager {
     fn repository<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Repository>> {
-        Box::pin(Manager::repository(self, id))
+        Box::pin(self.repositories.repository(id))
     }
 
     fn space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>> {
@@ -142,7 +142,7 @@ impl Spaces for Manager {
     }
 
     fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>> {
-        Box::pin(Manager::repositories(self))
+        Box::pin(self.repositories.list())
     }
 
     fn branch_owner<'a>(

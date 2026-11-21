@@ -72,7 +72,7 @@ impl Manager {
         target: Target,
         caller: Option<&Caller>,
     ) -> Result<Refreshed> {
-        let (repo, _git) = self.lock_repository(workspace.repository()).await?;
+        let (repo, _git) = self.repositories.lock(workspace.repository()).await?;
         let reserved = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Updating)
             .await?;

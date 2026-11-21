@@ -17,7 +17,8 @@ async fn cleanup_deletes_xcode_data_of_removed_workspaces_first() {
     .await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let live = manager
@@ -69,7 +70,8 @@ async fn cleanup_removes_candidates_until_enough_space_is_free() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     for name in ["first", "second", "third"] {
@@ -204,7 +206,8 @@ async fn cleanup_empties_unused_caches_after_removing_workspaces() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let held = manager
@@ -220,7 +223,7 @@ async fn cleanup_empties_unused_caches_after_removing_workspaces() {
         )
         .await
         .unwrap();
-    let repo = manager.repository(&repo.id).await.unwrap();
+    let repo = manager.repositories.repository(&repo.id).await.unwrap();
     let caches = std::collections::BTreeMap::from([(
         "go".to_owned(),
         crate::config::repo::Cache {
@@ -251,7 +254,8 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let audit = manager
@@ -307,7 +311,8 @@ async fn cleanup_reads_space_again_after_purging_leftover_caches() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let held = manager
@@ -323,7 +328,7 @@ async fn cleanup_reads_space_again_after_purging_leftover_caches() {
         )
         .await
         .unwrap();
-    let repo = manager.repository(&repo.id).await.unwrap();
+    let repo = manager.repositories.repository(&repo.id).await.unwrap();
     let caches = std::collections::BTreeMap::from([(
         "go".to_owned(),
         crate::config::repo::Cache {
@@ -358,7 +363,8 @@ async fn failed_cleanup_still_stops_executions_on_critical_space() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let busy = manager
@@ -439,7 +445,8 @@ async fn low_space_warns_running_agents_before_cleanup_starts() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

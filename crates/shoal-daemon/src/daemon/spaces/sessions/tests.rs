@@ -57,7 +57,8 @@ async fn a_workspace_lists_each_reported_session_once_the_running_ones_first() -
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().context("path")?.into(), None, None)
+        .repositories
+        .register(checkout.to_str().context("path")?.into(), None, None)
         .await?;
     let workspace = manager
         .create_workspace(&repo.id, "work".into(), None, None, None)
@@ -116,7 +117,8 @@ async fn a_chat_lists_the_session_its_hooks_reported() -> Result<()> {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().context("path")?.into(), None, None)
+        .repositories
+        .register(checkout.to_str().context("path")?.into(), None, None)
         .await?;
     manager
         .start_chat(

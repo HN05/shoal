@@ -26,7 +26,8 @@ async fn repositories(
         let checkout = repository(temp.path(), name);
         repos.push(
             manager
-                .register_repository(checkout.to_str().unwrap().into(), None, None)
+                .repositories
+                .register(checkout.to_str().unwrap().into(), None, None)
                 .await
                 .unwrap(),
         );
@@ -137,7 +138,7 @@ async fn a_chat_without_a_repository_keeps_its_temporary_directory_in_root_dir()
 #[tokio::test]
 async fn a_chat_without_a_repository_prepares_root_dir_as_registration_does() {
     let (temp, manager) = manager().await;
-    let root = manager.prepare_chat_root().await.unwrap();
+    let root = manager.repositories.prepare_chat_root().await.unwrap();
     assert!(root.is_dir(), "{}", root.display());
     // A repository registered afterwards keeps its directory there.
     let repos = repositories(&temp, &manager, &["repo"]).await;

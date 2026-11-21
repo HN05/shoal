@@ -71,7 +71,7 @@ impl Manager {
         let Code::Merge { target, into } = &parties.code else {
             return Ok(());
         };
-        let (_repo, _git) = self.lock_repository(target.repository()).await?;
+        let (_repo, _git) = self.repositories.lock(target.repository()).await?;
         let sides = self.sides(target, into, request).await?;
         fold::check(sides.fold()).await
     }
@@ -83,7 +83,7 @@ impl Manager {
         let Code::Merge { target, into } = &parties.code else {
             return Ok(Folded::default());
         };
-        let (_repo, _git) = self.lock_repository(target.repository()).await?;
+        let (_repo, _git) = self.repositories.lock(target.repository()).await?;
         let state = self.reserve_lifecycle(&into.id, WorkspaceState::Updating);
         let state = state.await?;
         let folded = self.fold_reserved(target, into, request).await;
@@ -135,7 +135,11 @@ impl Manager {
                 .then(|| format!("Absorb {} from branch '{branch}'", target.name))
         });
         Ok(Sides {
-            repo: self.repository(target.repository()).await?.path,
+            repo: self
+                .repositories
+                .repository(target.repository())
+                .await?
+                .path,
             head: current_head(target).await?,
             method,
             message,

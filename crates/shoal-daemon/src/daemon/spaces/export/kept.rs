@@ -57,7 +57,7 @@ impl Manager {
             last_sessions: Vec::new(),
         };
         let repos = match &space.repository_id {
-            Some(id) => vec![self.repository(id).await?],
+            Some(id) => vec![self.repositories.repository(id).await?],
             None => Vec::new(),
         };
         let (environments, _) = self.package_environments(&repos).await;

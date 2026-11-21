@@ -124,7 +124,8 @@ async fn a_subscription_sends_its_snapshot_then_each_kind_of_change() {
     let manager = &daemon.manager;
     let other = shoal_core::test_support::repository(&manager.paths.home, "other");
     manager
-        .register_repository(other.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(other.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     until(&mut subscription, changed(RecordKind::Repository)).await;
@@ -464,7 +465,8 @@ async fn a_scoped_subscription_covers_its_tree_without_notifications() {
     let elsewhere = shoal_core::test_support::repository(&daemon.manager.paths.home, "elsewhere");
     daemon
         .manager
-        .register_repository(elsewhere.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(elsewhere.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let mut subscription = subscribe(daemon.scoped(&own).await, Topic::ALL).await;

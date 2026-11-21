@@ -14,7 +14,8 @@ use shoal_protocol::space_names::SpaceSelector;
 async fn tree(temp: &tempfile::TempDir, manager: &Manager) -> (Workspace, Workspace, Workspace) {
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let parent = manager

@@ -17,7 +17,11 @@ pub(super) async fn offline_machine(
     let remote = ["remote", "add", "origin", "https://github.com/team/repo"];
     crate::daemon::test_support::git(&path, &remote);
     let path = path.to_str().unwrap().into();
-    manager.register_repository(path, None, None).await.unwrap()
+    manager
+        .repositories
+        .register(path, None, None)
+        .await
+        .unwrap()
 }
 
 /// The launch of a workspace named `fix` in `repo` on issue 316, which
