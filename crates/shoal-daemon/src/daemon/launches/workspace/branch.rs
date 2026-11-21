@@ -10,7 +10,6 @@ use crate::{
     launches::workspace,
     model::{Repository, Workspace},
     start_plan::Creation,
-    state::WorkspaceState,
 };
 
 /// Open the pushed `branch` a branch link names.
@@ -166,13 +165,7 @@ async fn issue_creation(
 
 /// Refuse to reopen `workspace` unless it is ready.
 fn ensure_reopens(workspace: &Workspace) -> Result<()> {
-    ensure!(
-        workspace.state == WorkspaceState::Ready,
-        "workspace {} is {}; inspect or set it up before reopening",
-        workspace.name,
-        workspace.state
-    );
-    Ok(())
+    crate::daemon::target_checks::ready(workspace, workspace.state).require()
 }
 
 #[cfg(test)]

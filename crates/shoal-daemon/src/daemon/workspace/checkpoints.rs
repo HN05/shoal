@@ -31,14 +31,7 @@ impl Manager {
         // A repository move holds this gate; the workspace may have moved.
         let (_repo, _git) = self.lock_repository(workspace.repository()).await?;
         let workspace = self.workspace_by_id(&workspace.id).await?;
-        ensure!(
-            matches!(
-                workspace.state,
-                WorkspaceState::Ready | WorkspaceState::Stopping | WorkspaceState::Failed
-            ),
-            "workspace is {}; take a checkpoint once that operation finishes",
-            workspace.state
-        );
+        crate::daemon::target_checks::checkpointed(workspace.state).require()?;
         if let Some(name) = &name {
             ensure!(
                 name.chars().count() <= NAME_LIMIT,

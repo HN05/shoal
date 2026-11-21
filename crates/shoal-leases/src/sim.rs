@@ -20,9 +20,8 @@ use simctl::Inventory;
 
 use crate::{
     Leases, allocation::Allocation, callers::Caller, daemon::Daemon, model::Workspace, queue,
-    state::WorkspaceState, time::UnixTime, validate,
+    state::WorkspaceState, store, time::UnixTime, validate,
 };
-use shoal_core::refusal::{Reason, Refusal};
 use shoal_daemon_base::approval_requests::ApprovalRequestExt;
 use shoal_protocol::approvals;
 use shoal_protocol::{
@@ -312,10 +311,7 @@ impl Leases {
             !request.clean || request.reason.is_some(),
             "--clean requires --reason explaining why a clean device is necessary"
         );
-        ensure!(
-            workspace.state == WorkspaceState::Ready,
-            "workspace is not ready"
-        );
+        store::ensure_ready(&workspace)?;
         daemon.touch(&workspace.id).await;
         let config = self.config.current();
         let limits = &config.machine.simulators;
@@ -581,10 +577,7 @@ impl Leases {
     ) -> Result<()> {
         let guard = self.gates.lock_simulators().await;
         let workspace = daemon.workspace(selector).await?;
-        ensure!(
-            workspace.state == WorkspaceState::Ready,
-            Refusal::new(Reason::NotReady, "workspace is not ready")
-        );
+        store::ensure_ready(&workspace)?;
         if holder.is_none() {
             daemon.touch(&workspace.id).await;
         }

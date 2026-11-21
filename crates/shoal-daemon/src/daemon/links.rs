@@ -23,7 +23,7 @@ pub(crate) mod space;
 mod spaces;
 pub mod wait;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension};
 use shoal_ids::space_ids::SpaceId;
 
@@ -36,12 +36,7 @@ pub(crate) fn ensure_accepts_links(db: &Connection, id: &SpaceId) -> Result<()> 
     if space::is_chat(db, id)? {
         return Ok(());
     }
-    let state = state(db, id)?;
-    ensure!(
-        state.accepts_links(),
-        "workspace cannot change links while {state}"
-    );
-    Ok(())
+    crate::daemon::target_checks::linking(state(db, id)?).require()
 }
 
 /// Whether the workspace still exists and its state takes link changes now,

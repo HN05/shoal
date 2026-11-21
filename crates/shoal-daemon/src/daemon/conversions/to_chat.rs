@@ -7,10 +7,9 @@ use shoal_protocol::model::ByKind;
 use super::record::ConvertedChat;
 use crate::{
     config::modes::ModeName,
-    daemon::manager::Manager,
+    daemon::{manager::Manager, target_checks},
     model::{CheckpointCause, HoldPlacer, Workspace},
     removal::InspectionPolicy,
-    state::WorkspaceState,
 };
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
@@ -116,12 +115,7 @@ impl Manager {
         };
         self.ensure_not_converting(&workspace.id, &workspace.name)
             .await?;
-        ensure!(
-            workspace.state == WorkspaceState::Ready,
-            "workspace {} is {}",
-            workspace.name,
-            workspace.state
-        );
+        target_checks::ready(&workspace, workspace.state).require()?;
         ensure!(
             !(workspace.holds.iter()).any(|hold| hold.placed_by == HoldPlacer::User),
             "the user holds workspace {}; release the hold first",

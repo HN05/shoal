@@ -35,11 +35,7 @@ impl Manager {
         state: WorkspaceState,
         branch: &BranchName,
     ) -> Result<bool> {
-        ensure!(
-            state == WorkspaceState::Ready,
-            "workspace {} is {state}; inspect or set it up before updating it",
-            workspace.name
-        );
+        crate::daemon::target_checks::ready(workspace, state).require()?;
         let recorded = workspace.require_branch("fast-forwarding")?;
         ensure!(
             recorded == branch,

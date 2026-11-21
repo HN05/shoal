@@ -190,41 +190,19 @@ pub(crate) fn ready<P>(workspace: &Space<P>, state: WorkspaceState) -> Verdict {
 }
 
 /// Accept `workspace` in `state` where it is ready, or failed with an
-/// interrupted operation for the request to finish.
-fn settled<P>(workspace: &Space<P>, state: WorkspaceState) -> Verdict {
+/// interrupted operation for the request to finish, which a handler that
+/// read its state again under a lock asks too.
+pub(crate) fn settled<P>(workspace: &Space<P>, state: WorkspaceState) -> Verdict {
     match state {
         WorkspaceState::Ready | WorkspaceState::Failed => Verdict::Accepted,
         state => Verdict::Refused(not_ready(workspace, state)),
     }
 }
 
-/// The refusal of `workspace`, in `state`, by a request that needs it in
-/// another, naming what to do about it.
+/// The refusal of `workspace`, in `state`, by a request that needs it
+/// ready, as the store's recheck in a transaction words it.
 fn not_ready<P>(workspace: &Space<P>, state: WorkspaceState) -> anyhow::Error {
-    let number = workspace.number;
-    let remedy = match state {
-        WorkspaceState::Failed => {
-            format!("shoal status {number} shows why, and shoal setup {number} retries its setup")
-        }
-        WorkspaceState::Preparing => {
-            format!(
-                "run the command again once it is ready; shoal status {number} shows how far it got"
-            )
-        }
-        WorkspaceState::Removing => format!(
-            "shoal restore {} reopens it once it is removed",
-            workspace.id
-        ),
-        WorkspaceState::Ready
-        | WorkspaceState::Stopping
-        | WorkspaceState::Reconciling
-        | WorkspaceState::Restoring
-        | WorkspaceState::Updating => {
-            "run the command again once that operation finishes".to_owned()
-        }
-    };
-    let message = format!("workspace {workspace} is {state}; {remedy}");
-    Refusal::new(Reason::NotReady, message).into()
+    shoal_store::not_ready(workspace.number, &workspace.id, &workspace.name, state)
 }
 
 /// A ready workspace, or any chat.
@@ -243,8 +221,9 @@ fn linking_space(space: &Space) -> Verdict {
     }
 }
 
-/// Accept a workspace in `state` where it takes link changes.
-fn linking(state: WorkspaceState) -> Verdict {
+/// Accept a workspace in `state` where it takes link changes, which a
+/// link change asks again in the transaction that records it.
+pub(crate) fn linking(state: WorkspaceState) -> Verdict {
     match state.accepts_links() {
         true => Verdict::Accepted,
         false => Verdict::Refused(anyhow::anyhow!(

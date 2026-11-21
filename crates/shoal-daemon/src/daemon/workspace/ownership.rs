@@ -11,7 +11,6 @@ use crate::{
     fsutil::off_runtime,
     git,
     model::{Checkout, Workspace},
-    state::WorkspaceState,
 };
 use anyhow::{Context, Result, ensure};
 use rusqlite::params;
@@ -118,12 +117,7 @@ impl Manager {
         workspace: &Workspace,
         expected_branch: Option<&str>,
     ) -> Result<()> {
-        ensure!(
-            workspace.state == WorkspaceState::Ready,
-            "workspace {} is {}; inspect or set it up before reopening",
-            workspace.name,
-            workspace.state
-        );
+        crate::daemon::target_checks::ready(workspace, workspace.state).require()?;
         self.verify_checkout(workspace, expected_branch).await
     }
 

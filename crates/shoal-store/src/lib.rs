@@ -327,16 +327,60 @@ pub fn repository_spaces(db: &Connection, repository_id: &RepositoryId) -> Resul
 
 /// Fail unless the workspace is ready; resources may only change then.
 pub fn require_ready(db: &Connection, workspace_id: &SpaceId) -> Result<()> {
-    let ready: bool = db.query_row(
-        "SELECT state=?2 FROM workspaces WHERE id=?1",
-        rusqlite::params![workspace_id, WorkspaceState::Ready],
-        |row| row.get(0),
-    )?;
-    ensure!(
-        ready,
-        Refusal::new(Reason::NotReady, "workspace is not ready")
-    );
-    Ok(())
+    let (number, name, state): (shoal_ids::space_ids::SpaceNumber, SpaceName, WorkspaceState) = db
+        .query_row(
+            "SELECT s.number, s.name, w.state FROM workspaces w JOIN spaces s ON s.id=w.id
+             WHERE w.id=?1",
+            [workspace_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+    match state {
+        WorkspaceState::Ready => Ok(()),
+        state => Err(not_ready(number, workspace_id, &name, state)),
+    }
+}
+
+/// Fail unless `workspace`, as read before a change, is ready.
+pub fn ensure_ready(workspace: &model::Workspace) -> Result<()> {
+    match workspace.state {
+        WorkspaceState::Ready => Ok(()),
+        state => Err(not_ready(
+            workspace.number,
+            &workspace.id,
+            &workspace.name,
+            state,
+        )),
+    }
+}
+
+/// The refusal of the workspace numbered `number`, `id`, named `name`, in
+/// `state`, by a request that needs it ready, naming what to do about it.
+/// The daemon's check of a request's workspace and each recheck in a
+/// transaction refuse with it alike.
+pub fn not_ready(
+    number: shoal_ids::space_ids::SpaceNumber,
+    id: &SpaceId,
+    name: &SpaceName,
+    state: WorkspaceState,
+) -> anyhow::Error {
+    let remedy = match state {
+        WorkspaceState::Failed => {
+            format!("shoal status {number} shows why, and shoal setup {number} retries its setup")
+        }
+        WorkspaceState::Preparing => format!(
+            "run the command again once it is ready; shoal status {number} shows how far it got"
+        ),
+        WorkspaceState::Removing => format!("shoal restore {id} reopens it once it is removed"),
+        WorkspaceState::Ready
+        | WorkspaceState::Stopping
+        | WorkspaceState::Reconciling
+        | WorkspaceState::Restoring
+        | WorkspaceState::Updating => {
+            "run the command again once that operation finishes".to_owned()
+        }
+    };
+    let message = format!("workspace {number} ({name}) is {state}; {remedy}");
+    Refusal::new(Reason::NotReady, message).into()
 }
 
 /// Whether any workspace of the repository has a tracked execution.

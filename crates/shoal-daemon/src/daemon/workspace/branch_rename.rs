@@ -2,7 +2,7 @@
 //! with Git without replaying a ref mutation.
 mod intent;
 
-use super::super::manager::Manager;
+use super::super::{manager::Manager, target_checks};
 use crate::refusal::{Reason, Refusal};
 use crate::{
     daemon::store,
@@ -85,10 +85,7 @@ impl Manager {
         workspace: &Workspace,
         checkout: &std::path::Path,
     ) -> Result<()> {
-        ensure!(
-            workspace.state == crate::state::WorkspaceState::Ready,
-            Refusal::new(Reason::NotReady, "workspace is not ready")
-        );
+        target_checks::ready(workspace, workspace.state).require()?;
         self.verify_worktree(workspace).await?;
         let recorded = workspace.require_branch("renaming a branch")?;
         let actual = git::head_branch(&workspace.path).await?;
@@ -164,7 +161,7 @@ impl Manager {
         if self.rename_intent(&workspace.id).await?.is_none() {
             return Ok(workspace);
         }
-        self.reserve_rename_repair(&workspace.id, caller_execution)
+        self.reserve_rename_repair(&workspace, caller_execution)
             .await?;
         let finished = self.finish_workspace_rename(&workspace, false).await;
         let (state, error) = match &finished {
@@ -184,10 +181,10 @@ impl Manager {
     /// the resource guard its caller already holds.
     async fn reserve_rename_repair(
         &self,
-        id: &SpaceId,
+        workspace: &Workspace,
         caller_execution: Option<&ExecutionId>,
     ) -> Result<()> {
-        let id = id.to_owned();
+        let (id, workspace) = (workspace.id.clone(), workspace.clone());
         let caller_execution = caller_execution.cloned();
         self.store
             .write(move |tx| {
@@ -203,10 +200,7 @@ impl Manager {
                     tx.query_row("SELECT state FROM workspaces WHERE id=?1", [&id], |row| {
                         row.get(0)
                     })?;
-                ensure!(
-                    matches!(state, WorkspaceState::Ready | WorkspaceState::Failed),
-                    "workspace is {state}; wait for that operation to finish before renaming"
-                );
+                target_checks::settled(&workspace, state).require()?;
                 tx.execute(
                     "UPDATE workspaces SET state=?2 WHERE id=?1",
                     params![id, WorkspaceState::Reconciling],

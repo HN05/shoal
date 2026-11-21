@@ -155,11 +155,7 @@ impl Manager {
         state: WorkspaceState,
         own: Option<&ExecutionId>,
     ) -> Result<()> {
-        ensure!(
-            state == WorkspaceState::Ready,
-            "workspace {} is {state}; refresh it once it is ready",
-            workspace.name
-        );
+        crate::daemon::target_checks::ready(workspace, state).require()?;
         self.ensure_no_other_execution(workspace, own).await?;
         let git_dir = self.verified_git_dir(workspace).await?;
         ensure!(

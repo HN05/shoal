@@ -9,7 +9,7 @@ mod stats;
 
 use std::path::Path;
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, bail};
 use futures_util::{StreamExt, stream};
 use shoal_ids::space_ids::SpaceId;
 
@@ -26,9 +26,8 @@ use crate::{
     model::{PortSuggestion, Workspace},
     ports::{self, PortRequest},
     protocol::Body,
-    state::WorkspaceState,
+    store,
 };
-use shoal_core::refusal::{Reason, Refusal};
 use shoal_protocol::approvals::ApprovalRequest;
 use shoal_protocol::{
     acquirers::Acquirer,
@@ -166,7 +165,7 @@ impl Leases {
             .into_settings()
             .containers;
         let compose = configured_compose(workspace, settings.compose)?;
-        ensure_ready(workspace)?;
+        store::ensure_ready(workspace)?;
         if let Err(pending) = self
             .reserve_ports(daemon, workspace, settings.ports, caller)
             .await?
@@ -294,7 +293,7 @@ impl Leases {
         let id = daemon.workspace(selector).await?.id;
         let _gate = self.gates.lock_containers(&id).await;
         let workspace = daemon.workspace_by_id(&id).await?;
-        ensure_ready(&workspace)?;
+        store::ensure_ready(&workspace)?;
         if holder.is_none() {
             daemon.touch(&workspace.id).await;
         }
@@ -477,16 +476,6 @@ fn starting_project(
         },
         for_agent: starter.for_agent,
     }
-}
-
-/// Refuse a change to the containers of `workspace` while another lifecycle
-/// operation holds it, as a release waits for.
-fn ensure_ready(workspace: &Workspace) -> Result<()> {
-    ensure!(
-        workspace.state == WorkspaceState::Ready,
-        Refusal::new(Reason::NotReady, "workspace is not ready")
-    );
-    Ok(())
 }
 
 #[cfg(test)]
