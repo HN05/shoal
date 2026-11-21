@@ -416,15 +416,6 @@ CREATE TABLE space_issue (
     PRIMARY KEY(space_id,url)
 );
 
-CREATE TABLE space_turn_retries (
-    space_id TEXT PRIMARY KEY,
-    execution_id TEXT NOT NULL REFERENCES executions(id) ON DELETE CASCADE,
-    failure TEXT NOT NULL CHECK(failure IN ('rate_limited','overloaded','server_error')),
-    attempt INTEGER NOT NULL CHECK(attempt > 0),
-    due_at INTEGER NOT NULL,
-    delivered INTEGER NOT NULL CHECK(delivered IN (0,1))
-);
-
 CREATE TABLE space_pr_titles (
     space_id TEXT NOT NULL,
     url TEXT NOT NULL,
@@ -1069,6 +1060,15 @@ CREATE TABLE thread_post_changes (
     PRIMARY KEY(post_id, change_id)
 );
 
+CREATE TABLE "space_turn_retries" (
+    space_id TEXT PRIMARY KEY,
+    execution_id TEXT NOT NULL,
+    failure TEXT NOT NULL CHECK(failure IN ('rate_limited','overloaded','server_error')),
+    attempt INTEGER NOT NULL CHECK(attempt > 0),
+    due_at INTEGER NOT NULL,
+    delivered INTEGER NOT NULL CHECK(delivered IN (0,1))
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -1109,8 +1109,6 @@ CREATE INDEX agent_queue_blocker_targets ON agent_queue_blockers(kind, target);
 CREATE INDEX executions_space ON executions(space_id);
 
 CREATE INDEX agent_queue_space ON agent_queue(space_id);
-
-CREATE INDEX space_turn_retries_execution ON space_turn_retries(execution_id);
 
 CREATE INDEX gate_verdicts_action ON gate_verdicts(space_id, action);
 
@@ -1175,6 +1173,8 @@ CREATE INDEX space_changes_repository ON space_changes(repository_id);
 CREATE INDEX space_current_thread_thread ON space_current_thread(thread_id);
 
 CREATE INDEX thread_post_changes_change ON thread_post_changes(change_id);
+
+CREATE INDEX space_turn_retries_execution ON space_turn_retries(execution_id);
 
 CREATE VIEW space_refs AS
     SELECT spaces.id, CASE spaces.kind
@@ -1675,4 +1675,9 @@ CREATE TRIGGER space_changes_removal_forgotten AFTER DELETE ON removed_spaces BE
     DELETE FROM space_change_numbers WHERE space_id=OLD.space_id
         AND NOT EXISTS (SELECT 1 FROM spaces WHERE id=OLD.space_id)
         AND NOT EXISTS (SELECT 1 FROM space_changes WHERE space_id=OLD.space_id);
+END;
+
+CREATE TRIGGER space_turn_retry_execution_ended AFTER DELETE ON executions BEGIN
+    DELETE FROM space_turn_retries WHERE execution_id=OLD.id
+        AND NOT EXISTS (SELECT 1 FROM agent_queue WHERE execution_id=OLD.id);
 END;
