@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use crate::{
     daemon::{
         events::{EventItem, EventKind},
-        links::wait::{branch_report::BranchReport, test_support::register_watch},
+        links::wait::test_support::register_watch,
         manager::Manager,
         test_support::{configure, manager, repository},
         workspace_files::Attacher,
@@ -22,6 +22,7 @@ use crate::{
 };
 use shoal_forge::test_support::Server;
 use shoal_forge::updates::Snapshot;
+use shoal_links::wait::branch_report::BranchReport;
 use shoal_links::wait::merge_lookups::UNFOLLOWED_MERGE;
 use shoal_links::{
     space::LinkSpace,

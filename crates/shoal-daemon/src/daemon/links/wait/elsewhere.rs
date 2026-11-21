@@ -90,7 +90,10 @@ impl Manager {
     /// The updates queued for `space` that fit one event. The caller holds
     /// the space's PR gate.
     async fn activity_to_pass_up(&self, space: &SpaceRef) -> Result<Vec<Update>> {
-        let batch = (self.delegated_pending(std::slice::from_ref(space), None)).await?;
+        let batch = (self
+            .links
+            .delegated_pending(std::slice::from_ref(space), None))
+        .await?;
         if batch.is_empty() {
             return Ok(Vec::new());
         }

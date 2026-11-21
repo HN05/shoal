@@ -9,6 +9,7 @@ mod listing;
 mod merge_path;
 mod merge_review;
 mod merge_warning;
+mod messages;
 mod permissions;
 pub mod pr;
 pub mod proposals;

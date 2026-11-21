@@ -1,6 +1,7 @@
 //! What links need of the rest of the daemon, which implements it: the
 //! registered repositories and the spaces requests come from, the watches
-//! of their linked items, which forge
+//! of their linked items, the messages agents receive beside them, which
+//! forge
 //! each host serves, the permission a scoped caller acts with, the
 //! coordinators alerts about a space reach, and the spaces' state links
 //! check in their own transactions.
@@ -8,7 +9,12 @@ use anyhow::Result;
 use futures_util::future::BoxFuture;
 use rusqlite::Connection;
 use shoal_core::config::Effective;
-use shoal_daemon_base::{callers::Caller, notifications::Coordinators, permitted_actions::Action};
+use shoal_daemon_base::{
+    alerts::{Alert, Unread},
+    callers::Caller,
+    notifications::Coordinators,
+    permitted_actions::Action,
+};
 use shoal_forge_types::{
     ForgeRepo,
     items::{
@@ -19,8 +25,10 @@ use shoal_forge_types::{
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     model::{ConflictCheck, LinkedItem, Repository, Selected, Space, SpaceRef, Workspace},
+    processes::Leftover,
     space_names::SpaceSelector,
 };
+use tokio::sync::watch;
 
 use crate::space::LinkSpace;
 
@@ -116,6 +124,9 @@ pub trait Watches: Send + Sync {
     /// Wake the agents whose watches just queued updates.
     fn item_updates_queued(&self);
 
+    /// A receiver that changes whenever watches queue updates.
+    fn watch_item_updates(&self) -> watch::Receiver<u64>;
+
     /// Tell those waiting on agents that one's deliveries changed.
     fn agent_changed(&self);
 
@@ -124,6 +135,33 @@ pub trait Watches: Send + Sync {
 
     /// A poll saw a PR the space `id` links move into or out of draft.
     fn draft_changed(&self, id: &SpaceId);
+}
+
+/// What an agent receives beside its items' activity, which the daemon
+/// keeps: its messages and the leftover processes of its space.
+pub trait Messages: Send + Sync {
+    /// The unread messages of the space `id`, oldest first, and whether one
+    /// of them wakes an idle agent.
+    fn unread_messages<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Unread>>;
+
+    /// The unread messages of `space` that have settled: all of them, or
+    /// none while they wait for more.
+    fn deliverable_messages<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<Vec<Alert>>>;
+
+    /// The unread `messages` of `space` once they have settled, waiting for
+    /// them to.
+    fn settled_messages<'a>(
+        &'a self,
+        space: &'a Space,
+        messages: Vec<Alert>,
+    ) -> BoxFuture<'a, Result<Vec<Alert>>>;
+
+    /// The leftovers of the space `id` its agent has not been told about,
+    /// as many as one delivery names in `room` bytes.
+    fn undelivered_leftovers(&self, id: &SpaceId, room: usize) -> Result<Vec<Leftover>>;
+
+    /// A receiver that changes whenever a message is queued for an agent.
+    fn watch_messages(&self) -> watch::Receiver<u64>;
 }
 
 /// What the daemon records of a space's agent, which settling the agent
@@ -166,9 +204,12 @@ pub trait Forges: Send + Sync {
 
 /// Everything links need of the daemon, which each of their operations
 /// that reaches beyond them takes.
-pub trait Daemon: Spaces + Watches + Runs + Forges + Permissions + Coordinators {}
+pub trait Daemon: Spaces + Watches + Messages + Runs + Forges + Permissions + Coordinators {}
 
-impl<T> Daemon for T where T: Spaces + Watches + Runs + Forges + Permissions + Coordinators {}
+impl<T> Daemon for T where
+    T: Spaces + Watches + Messages + Runs + Forges + Permissions + Coordinators
+{
+}
 
 /// What links check of a space in their own transactions. Its methods run
 /// on the store's thread, so they are not futures.

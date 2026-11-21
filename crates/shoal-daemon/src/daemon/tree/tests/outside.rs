@@ -210,7 +210,8 @@ async fn activity_reaches_a_chat_without_a_repository_only_from_below_it() {
         .await
         .unwrap();
     let delivered = manager
-        .agent_updates(&SpaceSelector::id(&master.id))
+        .links
+        .agent_updates(&*manager, &SpaceSelector::id(&master.id))
         .await
         .unwrap();
     let last = delivered.alerts.last().map(|alert| alert.text());
@@ -225,7 +226,8 @@ async fn activity_reaches_a_chat_without_a_repository_only_from_below_it() {
         .await
         .unwrap();
     let again = manager
-        .agent_updates(&SpaceSelector::id(&master.id))
+        .links
+        .agent_updates(&*manager, &SpaceSelector::id(&master.id))
         .await
         .unwrap();
     assert!(again.alerts.is_empty(), "{again:?}");

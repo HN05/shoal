@@ -11,6 +11,14 @@ pub use shoal_protocol::alerts::{Alert, AlertKind, Recipient, Sender, Sent};
 
 use shoal_protocol::space_names::SpaceName;
 
+/// A space's unread alerts.
+#[derive(Debug, Default)]
+pub struct Unread {
+    pub alerts: Vec<Alert>,
+    /// Whether one of them starts an idle agent's next turn.
+    pub wakes: bool,
+}
+
 /// Read alerts kept before older ones are pruned; unread ones stay.
 pub const RETAINED: usize = 500;
 

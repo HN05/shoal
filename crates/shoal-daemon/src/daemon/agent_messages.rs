@@ -11,12 +11,13 @@ use rusqlite::Transaction;
 
 use crate::{
     daemon::{
-        alerts::{About, Alert, AlertKind, NewAlert, Sender},
+        alerts::{About, AlertKind, NewAlert, Sender},
         manager::Manager,
         workspace_files::{self, Attacher, NewFile, layout::Copy},
     },
     model::Space,
 };
+use shoal_daemon_base::alerts::Unread;
 use shoal_protocol::space_names::SpaceSelector;
 
 mod settle;
@@ -46,14 +47,6 @@ pub(crate) enum Delivery {
 pub(crate) struct Queued {
     pub id: i64,
     pub new: bool,
-}
-
-/// A space's unread alerts.
-#[derive(Debug, Default)]
-pub(crate) struct Unread {
-    pub alerts: Vec<Alert>,
-    /// Whether one of them starts an idle agent's next turn.
-    pub wakes: bool,
 }
 
 /// The copies a sent alert attaches, which the recipient's attached files
@@ -194,7 +187,10 @@ impl Manager {
     /// The unread messages of the space `selector` names, oldest first.
     /// They stay unread until delivered.
     #[cfg(test)]
-    pub async fn agent_messages(&self, selector: &SpaceSelector) -> Result<Vec<Alert>> {
+    pub async fn agent_messages(
+        &self,
+        selector: &SpaceSelector,
+    ) -> Result<Vec<super::alerts::Alert>> {
         let space = self.space(selector).await?;
         Ok(self.unread_messages(&space.id).await?.alerts)
     }

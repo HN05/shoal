@@ -190,7 +190,12 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
     let manager = std::sync::Arc::new(manager);
     let waiting = tokio::spawn({
         let (manager, chat) = (manager.clone(), chat.id.clone());
-        async move { manager.wait_space_updates(&SpaceSelector::id(&chat)).await }
+        async move {
+            manager
+                .links
+                .wait_space_updates(&**manager, &SpaceSelector::id(&chat))
+                .await
+        }
     });
     manager
         .send_alert(
@@ -227,14 +232,20 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
     // messages to the delivery.
     let waiting = tokio::spawn({
         let (manager, chat) = (manager.clone(), chat.id.clone());
-        async move { manager.wait_space_updates(&SpaceSelector::id(&chat)).await }
+        async move {
+            manager
+                .links
+                .wait_space_updates(&**manager, &SpaceSelector::id(&chat))
+                .await
+        }
     });
     while !manager.links.waits().is_waiting(&chat.id) {
         tokio::task::yield_now().await;
     }
     assert!(
         manager
-            .agent_updates(&SpaceSelector::id(&chat.id))
+            .links
+            .agent_updates(&**manager, &SpaceSelector::id(&chat.id))
             .await
             .unwrap()
             .alerts
@@ -253,7 +264,8 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
         .await
         .unwrap();
     let delivered = manager
-        .agent_updates(&SpaceSelector::id(&chat.id))
+        .links
+        .agent_updates(&**manager, &SpaceSelector::id(&chat.id))
         .await
         .unwrap();
     assert_eq!(
@@ -269,7 +281,12 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
     let manager = std::sync::Arc::new(manager);
     let waiting = tokio::spawn({
         let (manager, chat) = (manager.clone(), chat.id.clone());
-        async move { manager.wait_space_updates(&SpaceSelector::id(&chat)).await }
+        async move {
+            manager
+                .links
+                .wait_space_updates(&**manager, &SpaceSelector::id(&chat))
+                .await
+        }
     });
     manager
         .send_space_message(

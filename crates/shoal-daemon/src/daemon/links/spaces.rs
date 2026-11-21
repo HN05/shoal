@@ -109,6 +109,10 @@ impl Watches for Manager {
         self.signals.item_updates_queued();
     }
 
+    fn watch_item_updates(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.signals.watch_item_updates()
+    }
+
     fn agent_changed(&self) {
         self.signals.agent_changed();
     }

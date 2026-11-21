@@ -1,5 +1,6 @@
+use shoal_forge_types::updates::UpdateKind;
+
 use super::*;
-use crate::forge::updates::UpdateKind;
 
 #[test]
 fn a_rate_limited_poll_waits_for_the_limit_but_at_least_the_interval() {

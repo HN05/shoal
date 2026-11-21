@@ -144,7 +144,8 @@ async fn hooks_and_wake_prompts_deliver_a_run_once_it_settles() {
     )
     .await;
     let delivered = manager
-        .agent_updates(&SpaceSelector::id(&workspace.id))
+        .links
+        .agent_updates(&*manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert!(delivered.alerts.is_empty(), "{delivered:?}");
@@ -161,7 +162,8 @@ async fn hooks_and_wake_prompts_deliver_a_run_once_it_settles() {
     age_messages(&manager, &workspace, 60).await;
     wake_due(&manager, &workspace).await;
     let delivered = manager
-        .agent_updates(&SpaceSelector::id(&workspace.id))
+        .links
+        .agent_updates(&*manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     let messages = delivered.alerts.iter().map(|message| &message.message);
@@ -184,7 +186,9 @@ async fn a_wait_returns_a_run_once_it_settles() {
     .await;
     let selection = Selection::default();
     let selected = SpaceSelector::id(&workspace.id);
-    let wait = manager.wait_items(&selected, &selection, None, None);
+    let wait = manager
+        .links
+        .wait_items(&*manager, &selected, &selection, None, None);
     let updates = settle_while(&manager, wait).await.unwrap();
     assert_eq!(updates.alerts.len(), 2, "{updates:?}");
 }

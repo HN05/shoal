@@ -495,7 +495,14 @@ async fn item_updates(
     timeout_secs: Option<u64>,
 ) -> Result<Body> {
     let updates = manager
-        .wait_items(&workspace, &selection, repository.as_ref(), timeout_secs)
+        .links
+        .wait_items(
+            &*manager,
+            &workspace,
+            &selection,
+            repository.as_ref(),
+            timeout_secs,
+        )
         .await?;
     Ok(Body::PrUpdates(updates))
 }

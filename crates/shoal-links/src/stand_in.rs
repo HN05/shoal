@@ -7,7 +7,7 @@ use anyhow::{Result, bail};
 use futures_util::future::BoxFuture;
 use shoal_core::config::Effective;
 use shoal_daemon_base::{
-    alerts::{NewAlert, Sent},
+    alerts::{Alert, NewAlert, Sent, Unread},
     callers::Caller,
     notifications::{Coordinators, Source},
     permitted_actions::Action,
@@ -22,11 +22,13 @@ use shoal_forge_types::{
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     model::{ConflictCheck, LinkedItem, Repository, Selected, Space, Workspace},
+    processes::Leftover,
     space_names::SpaceSelector,
 };
+use tokio::sync::watch;
 
 use crate::{
-    daemon::{Forges, Permissions, Runs, SpaceAgent, Spaces, Watches},
+    daemon::{Forges, Messages, Permissions, Runs, SpaceAgent, Spaces, Watches},
     space::LinkSpace,
 };
 
@@ -134,11 +136,41 @@ impl Runs for StandIn {
 impl Watches for StandIn {
     fn item_updates_queued(&self) {}
 
+    fn watch_item_updates(&self) -> watch::Receiver<u64> {
+        watch::channel(0).1
+    }
+
     fn agent_changed(&self) {}
 
     fn item_merged(&self, _: &RepositoryId) {}
 
     fn draft_changed(&self, _: &SpaceId) {}
+}
+
+impl Messages for StandIn {
+    fn unread_messages<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<Unread>> {
+        Box::pin(async { Ok(Unread::default()) })
+    }
+
+    fn deliverable_messages<'a>(&'a self, _: &'a Space) -> BoxFuture<'a, Result<Vec<Alert>>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn settled_messages<'a>(
+        &'a self,
+        _: &'a Space,
+        messages: Vec<Alert>,
+    ) -> BoxFuture<'a, Result<Vec<Alert>>> {
+        Box::pin(async { Ok(messages) })
+    }
+
+    fn undelivered_leftovers(&self, _: &SpaceId, _: usize) -> Result<Vec<Leftover>> {
+        Ok(Vec::new())
+    }
+
+    fn watch_messages(&self) -> watch::Receiver<u64> {
+        watch::channel(0).1
+    }
 }
 
 impl Coordinators for StandIn {

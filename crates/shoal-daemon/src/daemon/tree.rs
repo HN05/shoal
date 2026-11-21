@@ -223,6 +223,7 @@ impl Manager {
 
     /// The spaces below `id` whose activity its agent receives: children
     /// without an agent of their own, and theirs in turn.
+    #[cfg(test)]
     pub(crate) async fn delegated_spaces(&self, id: &SpaceId) -> Result<Vec<SpaceRef>> {
         let id = id.to_owned();
         let agents = self.tracked_agents().await;

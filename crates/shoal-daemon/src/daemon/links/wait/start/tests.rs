@@ -7,10 +7,7 @@ use rusqlite::params;
 use serde_json::json;
 
 use crate::{
-    daemon::{
-        links::wait::branch_report::BranchReport,
-        test_support::{configure, git, manager, repository},
-    },
+    daemon::test_support::{configure, git, manager, repository},
     forge::{
         items::{link::Selection, reference::ItemRef},
         updates::UpdateKind,
@@ -18,6 +15,7 @@ use crate::{
     time::UnixTime,
 };
 use shoal_forge::test_support::Server;
+use shoal_links::wait::branch_report::BranchReport;
 
 /// A Forgejo serving issue 3 of `team/repo` with as many comments by `dev`
 /// as `comments` holds.

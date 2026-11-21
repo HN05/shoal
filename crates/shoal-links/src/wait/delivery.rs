@@ -1,31 +1,34 @@
 //! Waiting for a space's messages and item activity, and building what a
 //! watch or a hook delivers to its agent.
 use anyhow::{Result, ensure};
-use shoal_links::wait::followed::followed_items;
-use shoal_links::wait::framing::{Batch, RESPONSE_LIMIT, own_batch, with_unread_messages};
-use shoal_links::wait::{UpdatesExt, wake_log::WakeWaitLog};
-
-use super::{
-    Updates,
-    poll::{until, wait_for_updates, watch_deadline},
-};
-use crate::{
-    daemon::{alerts::Alert, manager::Manager},
-    forge::{
-        items::link::{LinkKind, Selection},
-        updates::Update,
-    },
-    model::{Space, SpaceRef},
+use shoal_forge_types::{
+    items::link::{LinkKind, Selection},
+    updates::Update,
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{
+    alerts::Alert,
+    links::Updates,
+    model::{Space, SpaceRef},
+    space_names::SpaceSelector,
+};
 
-impl Manager {
+use super::{
+    UpdatesExt,
+    followed::followed_items,
+    framing::{Batch, RESPONSE_LIMIT, own_batch, with_unread_messages},
+    poll::{until, wait_for_updates, watch_deadline},
+    wake_log::WakeWaitLog,
+};
+use crate::{Links, daemon::Daemon};
+
+impl Links {
     /// The next messages or activity of the items `selection` names of the
     /// space `selector` names, an item of the registered `repository` for
     /// a chat without a repository, within `seconds`, or without a limit.
     pub async fn wait_items(
         &self,
+        daemon: &dyn Daemon,
         selector: &SpaceSelector,
         selection: &Selection,
         repository: Option<&RepositoryId>,
@@ -42,41 +45,38 @@ impl Manager {
             "explicit items need a kind"
         );
         let deadline = watch_deadline(seconds);
-        let space = self.space(selector).await?;
-        let repository = self
-            .links
-            .watched_repository(self, &space, selection, repository)
-            .await?;
+        let space = daemon.space(selector).await?;
+        let repository = (self.watched_repository(daemon, &space, selection, repository)).await?;
         // The space's hooks deliver what a watch would, so the newest of them
         // takes it.
-        let wait = self.links.waits().start(&space.id);
+        let wait = self.waits().start(&space.id);
         // Subscribe before reading, so a message queued in between still wakes.
-        let mut queued = self.signals.watch_messages();
-        let mut background = self.signals.watch_item_updates();
-        let unread = self.unread_messages(&space.id).await?;
+        let mut queued = daemon.watch_messages();
+        let mut background = daemon.watch_item_updates();
+        let unread = daemon.unread_messages(&space.id).await?;
         let mut messages = unread.alerts;
         if !unread.wakes {
             // A cancelled poll leaves its deliveries pending for the newer wait.
             tokio::select! {
                 updates = wait_for_updates(deadline, &mut background, || {
-                    self.poll_space_activity(&space, selection, repository.as_ref())
+                    self.poll_space_activity(daemon, &space, selection, repository.as_ref())
                 }) => {
                     let updates = updates?;
                     // Including settled ones queued while the wait ran. A
                     // newer delivery may take them and the updates meanwhile.
-                    let unread = self.deliverable_messages(&space).await?;
+                    let unread = daemon.deliverable_messages(&space).await?;
                     if !wait.is_current() {
                         return Ok(Updates::superseded());
                     }
                     return with_unread_messages(updates, unread);
                 }
-                next = self.next_agent_messages(&space.id, &mut queued) => messages = next?,
+                next = next_agent_messages(daemon, &space.id, &mut queued) => messages = next?,
                 () = wait.superseded.notified() => return Ok(Updates::superseded()),
             }
         }
         // Messages still settling at the deadline wait for a later delivery.
         let messages = tokio::select! {
-            settled = self.settled_messages(&space, messages) => settled?,
+            settled = daemon.settled_messages(&space, messages) => settled?,
             () = wait.superseded.notified() => return Ok(Updates::superseded()),
             () = until(deadline) => return Ok(Updates::timed_out()),
         };
@@ -92,12 +92,16 @@ impl Manager {
     /// deadline finds them, unless a newer wait or delivery takes them
     /// first. The wake hook's wait, so the daemon logs how one ends without
     /// updates.
-    pub async fn wait_space_updates(&self, selector: &SpaceSelector) -> Result<Updates> {
-        let space = self.space(selector).await?;
+    pub async fn wait_space_updates(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+    ) -> Result<Updates> {
+        let space = daemon.space(selector).await?;
         let log = WakeWaitLog::start(&space.name);
         let selector = SpaceSelector::id(&space.id);
         let updates = self
-            .wait_items(&selector, &Selection::default(), None, None)
+            .wait_items(daemon, &selector, &Selection::default(), None, None)
             .await;
         log.answered(&updates);
         updates
@@ -110,19 +114,22 @@ impl Manager {
     /// Cleanup and item changes hold a space's PR gate across their forge
     /// requests and its removal, longer than an agent waits for its hook,
     /// so while one runs the updates wait for a later delivery.
-    pub async fn agent_updates(&self, selector: &SpaceSelector) -> Result<Updates> {
-        let space = self.space(selector).await?;
+    pub async fn agent_updates(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+    ) -> Result<Updates> {
+        let space = daemon.space(selector).await?;
         let id = space.id.clone();
-        let delivery = self.links.waits().start(&id);
-        let messages = self.deliverable_messages(&space).await?;
+        let delivery = self.waits().start(&id);
+        let messages = daemon.deliverable_messages(&space).await?;
         // The messages, then the leftovers, share the response with the
         // updates.
         let messages_size = serde_json::to_vec(&messages)?.len();
-        let leftovers = self
-            .leftovers
-            .undelivered(&id, RESPONSE_LIMIT.saturating_sub(messages_size))?;
+        let leftovers =
+            daemon.undelivered_leftovers(&id, RESPONSE_LIMIT.saturating_sub(messages_size))?;
         let reserved = messages_size + serde_json::to_vec(&leftovers)?.len();
-        let children = self.delegated_spaces(&id).await?;
+        let children = self.delegated_spaces(daemon, &id).await?;
         let updates = match self.gates.try_lock_prs(receiving(&id, &children)) {
             Some(_gate) => {
                 self.gated_agent_updates(&space, &children, None, reserved)
@@ -142,12 +149,35 @@ impl Manager {
         })
     }
 
+    /// Whether updates a hook would deliver are queued for the agent of
+    /// `space`. None count while cleanup or an item change holds the PR
+    /// gates of the spaces whose activity it receives, rather than waiting
+    /// for them for minutes.
+    pub async fn updates_deliverable(&self, daemon: &dyn Daemon, space: &Space) -> Result<bool> {
+        let children = self.delegated_spaces(daemon, &space.id).await?;
+        let Some(_gate) = self.gates.try_lock_prs(receiving(&space.id, &children)) else {
+            return Ok(false);
+        };
+        Ok(!self
+            .gated_agent_updates(space, &children, None, 0)
+            .await?
+            .is_empty())
+    }
+
+    /// Whether updates are queued for the agent of `space`, read without
+    /// the PR gates.
+    pub async fn updates_recorded(&self, daemon: &dyn Daemon, space: &Space) -> Result<bool> {
+        let children = self.delegated_spaces(daemon, &space.id).await?;
+        Ok(!self.queued_updates(space, None).await?.is_empty()
+            || !self.delegated_pending(&children, None).await?.is_empty())
+    }
+
     /// The updates queued for the agent of `space` that fit one response
     /// beside `reserved` bytes of its other content: those on its own
     /// cursor for its items of `kind`, or every kind and its branch, then
     /// those of the spaces below it it works on. The caller holds the PR
     /// gates of the space and its `children`.
-    pub(super) async fn gated_agent_updates(
+    async fn gated_agent_updates(
         &self,
         space: &Space,
         children: &[SpaceRef],
@@ -156,7 +186,7 @@ impl Manager {
     ) -> Result<Vec<Update>> {
         let mut batch = own_batch(&space.id, self.queued_updates(space, kind).await?);
         batch.extend(self.delegated_pending(children, kind).await?);
-        self.links.fit_response(batch, reserved).await
+        self.fit_response(batch, reserved).await
     }
 
     /// The updates of `kind`, or every kind, queued for the agent of
@@ -164,10 +194,11 @@ impl Manager {
     /// the space and the spaces below it whose activity it receives.
     pub(super) async fn queued_activity(
         &self,
+        daemon: &dyn Daemon,
         space: &Space,
         kind: Option<LinkKind>,
     ) -> Result<Vec<Update>> {
-        let children = self.delegated_spaces(&space.id).await?;
+        let children = self.delegated_spaces(daemon, &space.id).await?;
         let _gate = self.gates.lock_prs(receiving(&space.id, &children)).await;
         self.gated_agent_updates(space, &children, kind, 0).await
     }
@@ -175,7 +206,7 @@ impl Manager {
     /// The updates queued on the cursors of `children`, spaces below whose
     /// activity an agent receives, for their items of `kind`, or every kind
     /// and their branches, each naming its space.
-    pub(super) async fn delegated_pending(
+    pub async fn delegated_pending(
         &self,
         children: &[SpaceRef],
         kind: Option<LinkKind>,
@@ -195,7 +226,7 @@ impl Manager {
                         .map(ToString::to_string),
                 )
                 .collect::<Vec<_>>();
-            let pending = self.links.pending_activity(&child.id, &keys).await?;
+            let pending = self.pending_activity(&child.id, &keys).await?;
             updates.extend(pending.into_iter().map(|mut update| {
                 update.workspace = Some(child.name.to_string());
                 (child.id.clone(), update)
@@ -207,7 +238,7 @@ impl Manager {
     /// The updates queued on the cursor of `space` for a watch of `kind`:
     /// those of its items of that kind, or of every kind and its branch,
     /// when it has one.
-    pub(super) async fn queued_updates(
+    pub async fn queued_updates(
         &self,
         space: &Space,
         kind: Option<LinkKind>,
@@ -225,21 +256,35 @@ impl Manager {
             .map(|url| url.to_string())
             .chain(branch.map(String::from))
             .collect::<Vec<_>>();
-        self.links.pending_activity(&space.id, &keys).await
+        self.pending_activity(&space.id, &keys).await
     }
 
-    /// The unread messages once one that wakes an idle agent is queued.
-    pub(super) async fn next_agent_messages(
+    /// The spaces below `id` whose activity its agent receives: children
+    /// without an agent of their own, and theirs in turn.
+    pub(super) async fn delegated_spaces(
         &self,
+        daemon: &dyn Daemon,
         id: &SpaceId,
-        queued: &mut tokio::sync::watch::Receiver<u64>,
-    ) -> Result<Vec<Alert>> {
-        loop {
-            queued.changed().await?;
-            let unread = self.unread_messages(id).await?;
-            if unread.wakes {
-                return Ok(unread.alerts);
-            }
+    ) -> Result<Vec<SpaceRef>> {
+        let (id, records) = (id.to_owned(), self.records.clone());
+        let agents = daemon.tracked_agents().await;
+        (self.store)
+            .run(move |db| records.delegated(db, &id, &agents))
+            .await
+    }
+}
+
+/// The unread messages once one that wakes an idle agent is queued.
+pub async fn next_agent_messages(
+    daemon: &dyn Daemon,
+    id: &SpaceId,
+    queued: &mut tokio::sync::watch::Receiver<u64>,
+) -> Result<Vec<Alert>> {
+    loop {
+        queued.changed().await?;
+        let unread = daemon.unread_messages(id).await?;
+        if unread.wakes {
+            return Ok(unread.alerts);
         }
     }
 }

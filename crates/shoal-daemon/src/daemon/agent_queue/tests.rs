@@ -1349,7 +1349,9 @@ async fn a_restored_agent_ends_its_turn_and_an_update_reaches_it() {
     );
 
     crate::daemon::links::wait::test_support::comment_on_watched_pr(&manager, &loaded.id).await;
-    let woken = bounded(manager.wait_space_updates(&space)).await.unwrap();
+    let woken = bounded(manager.links.wait_space_updates(&*manager, &space))
+        .await
+        .unwrap();
     assert_eq!(woken.updates.len(), 1, "{woken:?}");
 }
 

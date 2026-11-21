@@ -45,7 +45,9 @@ pub(super) async fn handle(
         AgentMethod::WaitAgentUpdates { space } => {
             let manager = manager.clone();
             return Ok(Answer::wait(async move {
-                Ok(Body::PrUpdates(manager.wait_space_updates(&space).await?))
+                Ok(Body::PrUpdates(
+                    manager.links.wait_space_updates(&*manager, &space).await?,
+                ))
             }));
         }
         AgentMethod::AcknowledgePrUpdates {
@@ -199,7 +201,7 @@ pub(super) async fn handle(
             Body::GitCredential(manager.agent_git_credential(caller, &host).await?)
         }
         AgentMethod::AgentUpdates { space } => {
-            Body::PrUpdates(manager.agent_updates(&space).await?)
+            Body::PrUpdates(manager.links.agent_updates(&**manager, &space).await?)
         }
         AgentMethod::UpdatesWaiting { space } => Body::WaitingUpdates(WaitingUpdates {
             waiting: manager.updates_waiting(&space).await?,

@@ -4,13 +4,13 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use super::{delivery::receiving, poll::POLL_INTERVAL};
 use crate::{
     daemon::manager::Manager,
     model::{AgentStatus, Space},
     time::UnixTime,
 };
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
+use shoal_links::wait::poll::POLL_INTERVAL;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// How long no wait may run for an idle agent's updates before its wake hook
@@ -90,22 +90,7 @@ impl Manager {
         if self.unread_messages(&space.id).await?.wakes {
             return Ok(true);
         }
-        self.updates_deliverable(&space).await
-    }
-
-    /// Whether updates a hook would deliver are queued for the agent of
-    /// `space`. None count while cleanup or an item change holds the PR
-    /// gates of the spaces whose activity it receives, rather than waiting
-    /// for them for minutes.
-    async fn updates_deliverable(&self, space: &Space) -> Result<bool> {
-        let children = self.delegated_spaces(&space.id).await?;
-        let Some(_gate) = self.gates.try_lock_prs(receiving(&space.id, &children)) else {
-            return Ok(false);
-        };
-        Ok(!self
-            .gated_agent_updates(space, &children, None, 0)
-            .await?
-            .is_empty())
+        self.links.updates_deliverable(self, &space).await
     }
 
     /// Whether messages that wake an idle agent or queued updates are
@@ -117,15 +102,7 @@ impl Manager {
         if self.unread_messages(id).await?.wakes {
             return Ok(true);
         }
-        self.updates_recorded(&space).await
-    }
-
-    /// Whether updates are queued for the agent of `space`, read without
-    /// the PR gates.
-    async fn updates_recorded(&self, space: &Space) -> Result<bool> {
-        let children = self.delegated_spaces(&space.id).await?;
-        Ok(!self.queued_updates(space, None).await?.is_empty()
-            || !self.delegated_pending(&children, None).await?.is_empty())
+        self.links.updates_recorded(self, &space).await
     }
 
     /// Whether updates make a wake due for the agent of `space`. Only
@@ -134,8 +111,8 @@ impl Manager {
     /// meanwhile cannot end that wait and prompt it again.
     pub(super) async fn wake_updates_due(&self, space: &Space, phase: WakePhase) -> Result<bool> {
         match phase {
-            WakePhase::Arming => self.updates_deliverable(space).await,
-            WakePhase::Prompted => self.updates_recorded(space).await,
+            WakePhase::Arming => self.links.updates_deliverable(self, space).await,
+            WakePhase::Prompted => self.links.updates_recorded(self, space).await,
         }
     }
 
