@@ -14,6 +14,7 @@ pub(super) mod daemon;
 mod demos;
 mod executions;
 mod files;
+mod forwarded;
 mod holds;
 mod hub;
 mod items;
