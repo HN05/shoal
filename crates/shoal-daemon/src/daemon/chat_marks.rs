@@ -192,7 +192,7 @@ impl Manager {
             .await?;
         self.announce_threads(delivered).await;
         if let Some(Mark::Alert(alert)) = dropped {
-            self.tell_alert_dropped(&space, alert).await?;
+            self.tell_alert_dropped(&space, alert).await;
         }
         Ok(())
     }

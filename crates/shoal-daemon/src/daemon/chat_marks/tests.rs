@@ -219,7 +219,7 @@ async fn a_marked_alert_goes_up_as_one_line_with_the_files_as_the_turn_ends() {
     // The file goes as it is when the turn ends.
     std::fs::write(&file, "final").unwrap();
     (tree.parent)
-        .end_turn(&tree.manager, "Done:\n\n- all tests pass")
+        .end_turn(&tree.manager, "\u{1b}[1mDone\u{1b}[0m:\n\n- all tests pass")
         .await;
     // The mark lasts one turn.
     tree.parent.end_turn(&tree.manager, "Still here.").await;
@@ -227,7 +227,8 @@ async fn a_marked_alert_goes_up_as_one_line_with_the_files_as_the_turn_ends() {
     let [alert] = users.as_slice() else {
         panic!("{users:?}");
     };
-    assert_eq!(alert.message, "Done: - all tests pass");
+    // Control characters go, as a message to the user takes none.
+    assert_eq!(alert.message, "[1mDone [0m: - all tests pass");
     let attachments = alert.attachments();
     let [copy] = attachments.as_slice() else {
         panic!("{alert:?}");

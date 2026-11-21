@@ -42,24 +42,22 @@ pub(super) struct MarkedAlert {
 
 /// The text an alert to `to` carries for a turn's final `message`: one
 /// line up to the coordinator or the user, lines down to agents, each kept
-/// to the length and characters of such alerts.
+/// to the length and characters of such alerts, so it can always be sent.
 fn alert_text(to: &AlertTarget, message: Option<&str>) -> String {
-    let message = message.unwrap_or_default();
+    let text: String = (message.unwrap_or_default().chars())
+        .map(|c| match c {
+            '\n' | '\t' => c,
+            c if c.is_control() => ' ',
+            c => c,
+        })
+        .collect();
     let (text, max) = match to {
         AlertTarget::Up => (
-            message.split_whitespace().collect::<Vec<_>>().join(" "),
+            text.split_whitespace().collect::<Vec<_>>().join(" "),
             crate::validate::MAX_MESSAGE_LEN,
         ),
         AlertTarget::Space { .. } | AlertTarget::All { .. } => (
-            (message.chars())
-                .map(|c| match c {
-                    '\n' | '\t' => c,
-                    c if c.is_control() => ' ',
-                    c => c,
-                })
-                .collect::<String>()
-                .trim()
-                .to_owned(),
+            text.trim().to_owned(),
             crate::validate::MAX_AGENT_MESSAGE_LEN,
         ),
     };
@@ -159,8 +157,9 @@ impl Manager {
 
     /// Tell the agent of `space` that a prompt the user submitted answered
     /// its turn, leaving the alert it marked the turn to send, to whom
-    /// `alert` names, unsent; its next delivery shows the agent.
-    pub(super) async fn tell_alert_dropped(&self, space: &Space, alert: MarkedAlert) -> Result<()> {
+    /// `alert` names, unsent; its next delivery shows the agent. A failure
+    /// is logged, since the prompt it describes is recorded.
+    pub(super) async fn tell_alert_dropped(&self, space: &Space, alert: MarkedAlert) {
         let to = match alert.recipients {
             MarkedRecipients::User => "the user".to_owned(),
             MarkedRecipients::Coordinator { space } | MarkedRecipients::Space { space } => {
@@ -173,7 +172,10 @@ impl Manager {
             "The user's prompt answered your turn, so the alert to {to} that `shoal send --in-chat` marked it to send was not sent. Send it again if it still applies."
         );
         let kind = AlertKind::ChatAlertDropped;
-        (self.queue_agent_message_delivered(&space.id, kind, message, Delivery::NextTurn)).await
+        let told = self.queue_agent_message_delivered(&space.id, kind, message, Delivery::NextTurn);
+        if let Err(error) = told.await {
+            crate::daemon::log!("unsent alert of {} not told: {error:#}", space.name);
+        }
     }
 
     /// Send `message`, the final message of the turn `turn` of the agent
