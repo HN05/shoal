@@ -850,6 +850,47 @@ async fn an_agent_asleep_while_its_usage_limit_stands_is_restored_once_it_resets
     manager.dispatch_queue().await.unwrap();
     let restored = state(manager.queue_entries().await.unwrap());
     assert_eq!(restored, crate::state::QueueState::Starting);
+
+    // The restored agent's turn failing again backs off further.
+    let (restored, _restored_connection) = rerun(&manager, &workspace).await;
+    report(&manager, &workspace, restored.as_str(), AgentState::Working).await;
+    fail(
+        &manager,
+        &workspace,
+        restored.as_str(),
+        TurnFailure::RateLimited,
+    )
+    .await;
+    let again = retry(&manager, &workspace).await.unwrap();
+    assert_eq!((again.attempt, again.delivered), (2, false));
+}
+
+/// A new execution of the connected `claude` agent in `workspace`, as a
+/// restore runs it, and the receiver keeping its connection open.
+async fn rerun(
+    manager: &Manager,
+    workspace: &Workspace,
+) -> (ExecutionId, tokio::sync::watch::Receiver<bool>) {
+    let started = manager
+        .begin_execution(
+            workspace.id.as_str(),
+            None,
+            super::super::executions::ExecutionKind::Command,
+            None,
+        )
+        .await
+        .unwrap();
+    manager
+        .track_agent(
+            &started.plan.id,
+            &shoal_protocol::executions::TrackedAgent::named("claude"),
+            &workspace.id,
+            &workspace.name,
+            true,
+            Duration::ZERO,
+        )
+        .await;
+    (started.plan.id, started.stop)
 }
 
 /// An execution that ends with no restore of it waiting drops its retry.
