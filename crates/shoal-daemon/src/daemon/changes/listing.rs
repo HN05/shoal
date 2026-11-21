@@ -35,8 +35,8 @@ impl Manager {
         Ok(changes)
     }
 
-    /// The changes `filter` keeps for `caller`, with their lines, followed
-    /// to where their code is now.
+    /// The changes `filter` keeps for `caller`, with their lines up to a
+    /// page's share, followed to where their code is now.
     pub async fn change_diffs(
         &self,
         caller: Option<&Caller>,
@@ -44,7 +44,9 @@ impl Manager {
     ) -> Result<Vec<ChangeDiff>> {
         let source = self.change_source(caller, filter).await?;
         let read = (self.store).read(move |tx| source.read(tx, records::diff));
-        let mut diffs = read.await?;
+        let mut diffs: Vec<ChangeDiff> = (read.await?.into_iter())
+            .map(ChangeDiff::cut_to_page)
+            .collect();
         let followed = diffs
             .iter_mut()
             .map(|diff| &mut diff.change as &mut dyn Followed);

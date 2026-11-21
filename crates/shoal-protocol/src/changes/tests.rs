@@ -80,3 +80,27 @@ fn a_post_s_diff_stops_at_a_snippet_s_length_and_keeps_its_counts() {
     );
     assert!(patch.ends_with("…\n"), "{patch}");
 }
+
+#[test]
+fn a_reading_of_many_large_changes_comes_in_pages_that_each_fit_a_frame() {
+    let line = "x".repeat(200);
+    let diffs: Vec<ChangeDiff> = (0..400)
+        .map(|number| ChangeDiff {
+            change: Change {
+                number,
+                ..change("big.rs", ChangeKind::Text, 1000, 0)
+            },
+            before: 0,
+            removed_lines: Vec::new(),
+            added_lines: vec![line.clone(); 1000],
+            cut: false,
+        })
+        .map(ChangeDiff::cut_to_page)
+        .collect();
+    let pages = crate::protocol::Body::ChangeDiffs(diffs).pages().unwrap();
+    assert!(pages.len() > 1);
+    for page in &pages {
+        let json = serde_json::to_vec(page).unwrap();
+        assert!(json.len() <= crate::protocol::MAX_FRAME, "{}", json.len());
+    }
+}

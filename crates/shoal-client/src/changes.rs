@@ -18,12 +18,12 @@ pub async fn record(daemon: &impl Daemon, change: ToolChange) -> Result<Vec<Chan
 
 /// The changes `filter` keeps, in the order they were made.
 pub async fn list(daemon: &impl Daemon, filter: ChangeFilter) -> Result<Vec<Change>> {
-    request(daemon, ChangeMethod::ListChanges { filter }).await
+    pages(daemon, ChangeMethod::ListChanges { filter }).await
 }
 
 /// The changes `filter` keeps, with the lines each removed and added.
 pub async fn diffs(daemon: &impl Daemon, filter: ChangeFilter) -> Result<Vec<ChangeDiff>> {
-    request(daemon, ChangeMethod::ChangeDiffs { filter }).await
+    pages(daemon, ChangeMethod::ChangeDiffs { filter }).await
 }
 
 /// Say the changes `changes`, bare numbers of `space` or else the caller's

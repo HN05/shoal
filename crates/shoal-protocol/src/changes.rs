@@ -124,6 +124,10 @@ impl Change {
     }
 }
 
+/// Most bytes a change's lines take in a reading of changes, as JSON
+/// writes them, which keeps each change to one page of it.
+pub const MAX_DIFF_LEN: usize = 32 * 1024;
+
 /// A change with the lines it removed and added, which a diff shows.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChangeDiff {
@@ -161,12 +165,25 @@ impl ChangeDiff {
 
     /// It with whole lines only up to [`MAX_SNIPPET_LEN`] bytes, removed
     /// ones first, as a post carries it; `diff --thread` shows the rest.
-    pub fn cut_to_snippet(mut self) -> Self {
-        let mut left = crate::code::MAX_SNIPPET_LEN;
+    pub fn cut_to_snippet(self) -> Self {
+        self.cut_to(crate::code::MAX_SNIPPET_LEN)
+    }
+
+    /// It with whole lines only up to [`MAX_DIFF_LEN`] bytes as JSON
+    /// writes them, so a reading of changes fits its pages.
+    pub fn cut_to_page(self) -> Self {
+        self.cut_to(MAX_DIFF_LEN)
+    }
+
+    /// It with whole lines only up to `max` bytes as JSON writes them,
+    /// removed ones first, marked `cut` where they stop short.
+    fn cut_to(mut self, max: usize) -> Self {
+        let mut left = max;
         let mut keep = |lines: &mut Vec<String>| {
             let kept = lines.iter().take_while(|line| {
-                let fits = line.len() < left;
-                left = left.saturating_sub(line.len() + 1);
+                let len = serde_json::to_string(line).map_or(usize::MAX, |json| json.len());
+                let fits = len <= left;
+                left = left.saturating_sub(len);
                 fits
             });
             let kept = kept.count();

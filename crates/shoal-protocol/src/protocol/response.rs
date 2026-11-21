@@ -450,6 +450,8 @@ paged_bodies!(
     HubView,
     AppEntryPieces,
     AppEntries,
+    Changes,
+    ChangeDiffs,
 );
 
 impl TryFrom<Body> for () {

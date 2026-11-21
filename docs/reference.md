@@ -7087,7 +7087,8 @@ per space, until the references go with their thread.
 
 `--changes`, a list of [change](#agents-changes) numbers, points a post at
 those changes, which moves nothing between threads; the other side receives
-each as `Change N: path:first-last` with its hunk where its code is then.
+each as `Change N: path:first-last` with its hunk where its code is then, cut
+at a snippet's 2 KiB.
 
 `--in-chat` lets an agent with Shoal's hooks, Claude Code or Codex, that Shoal
 tracks in a workspace or runs as a chat's, post in its conversation, where the
@@ -7212,8 +7213,8 @@ they would take more, the oldest sum up their files without naming them, then
 merge. A post's alert sums up the changes made for the thread since the
 sender's previous post, such as `3 files changed, +40 −12`, and names the
 `shoal diff --thread <thread> --since <post>` that prints them: each hunk
-under its file where its code is now, without context, and each file without
-hunks by its kind and size. `--json` gives each change's `number`, `space`,
+under its file where its code is now, without context and cut at 32 KiB, and
+each file without hunks by its kind and size. `--json` gives each change's `number`, `space`,
 `author`, `kind`, `made_at`, `turn`, `execution`, `thread`, `original` and
 `latest` places, `state`, `added`, `removed` and `size`, and a diff's
 `before`, `removed_lines` and `added_lines`. Through `shoal-client`, an editor

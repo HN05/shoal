@@ -22,10 +22,12 @@ pub(super) async fn handle(
             Body::Changes(manager.record_tool_change(caller, change).await?)
         }
         ChangeMethod::ListChanges { filter } => {
-            Body::Changes(manager.changes(caller, filter).await?)
+            let listed = manager.changes(caller, filter).await;
+            return Ok(Answer::pages(listed, Body::Changes));
         }
         ChangeMethod::ChangeDiffs { filter } => {
-            Body::ChangeDiffs(manager.change_diffs(caller, filter).await?)
+            let listed = manager.change_diffs(caller, filter).await;
+            return Ok(Answer::pages(listed, Body::ChangeDiffs));
         }
         ChangeMethod::ClaimChanges {
             space,
