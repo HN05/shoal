@@ -5,7 +5,7 @@ use crate::{
     config::repo::ConfigLayers,
     model::{Chat, OwnedPlace, RunningAgent},
     protocol::{
-        self, Body, ConfigMethod, ConfigTarget, ExecutionMethod, Method, Operation, PlaceMethod,
+        self, AgentMethod, Body, ConfigMethod, ConfigTarget, Method, Operation, PlaceMethod,
         RepositoryLayers, Request, Response, SpaceMethod,
     },
     sessions::{HostName, Origin},
@@ -128,7 +128,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
         let request: Request = protocol::read(&mut stream).await?;
         let body = if matches!(
             request.method,
-            Method::Operation(Operation::Execution(ExecutionMethod::ListAgents))
+            Method::Operation(Operation::Agent(AgentMethod::ListAgents))
         ) {
             // A connected agent counts as it is; executions whose wrapper
             // is gone count only while their session is open.

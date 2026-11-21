@@ -137,6 +137,9 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         hooked: Option<ExecutionId>,
     },
+    /// Connected agents, and executions whose wrapper is gone, which may
+    /// run one, of the spaces the caller reaches.
+    ListAgents,
     /// The agents connected in the space, a workspace or a running chat,
     /// with their turns and places.
     SpaceAgents { space: SpaceSelector },
@@ -271,8 +274,10 @@ impl AgentMethod {
             | Self::InterruptTurn { .. }
             | Self::RestartAgent { .. }
             | Self::CancelRestart { .. } => Forwarding::Online,
-            // A fork starts from the session files where the caller runs.
+            // A fork starts from the session files where the caller runs;
+            // the list is of this machine's agents.
             Self::AgentSession { .. }
+            | Self::ListAgents
             | Self::SetAgentState { .. }
             | Self::StartWokenTurn { .. }
             | Self::ReportTurnFailure { .. }
@@ -321,7 +326,7 @@ impl AgentMethod {
             | Self::WaitAgentUpdates { space }
             | Self::UpdatesWaiting { space }
             | Self::AcknowledgePrUpdates { space, .. } => Some(Target::Space(space)),
-            Self::GitCredential { .. } => None,
+            Self::GitCredential { .. } | Self::ListAgents => None,
         }
     }
 }

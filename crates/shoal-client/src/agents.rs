@@ -10,7 +10,7 @@ use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     model::{AgentRestart, AgentSession, AgentStatus, RestartOutcome, RunningAgent},
-    protocol::{AgentMethod, ExecutionMethod, SubagentChange, TurnEnd, WakeEnd, WokenTurn},
+    protocol::{AgentMethod, SubagentChange, TurnEnd, WakeEnd, WokenTurn},
     state::{AgentState, TurnFailure},
 };
 
@@ -112,9 +112,9 @@ pub async fn report_attach(daemon: &impl Daemon, space: SpaceSelector) -> Result
     request(daemon, AgentMethod::ReportAttach { space }).await
 }
 
-/// The agents connected in every workspace.
+/// The agents connected in the spaces the caller reaches.
 pub async fn all(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
-    request(daemon, ExecutionMethod::ListAgents).await
+    request(daemon, AgentMethod::ListAgents).await
 }
 
 /// Restart the agent of `space` as `restart` says, answering with what the

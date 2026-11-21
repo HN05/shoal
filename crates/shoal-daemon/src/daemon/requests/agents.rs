@@ -36,6 +36,10 @@ pub(super) async fn handle(
                 Ok(Body::Ok)
             }));
         }
+        AgentMethod::ListAgents => {
+            let agents = manager.running_agents().await?;
+            Body::RunningAgents(manager.visible_agents(caller, agents).await?)
+        }
         AgentMethod::SpaceAgents { space } => {
             Body::RunningAgents(manager.space_agents(&space).await?)
         }
@@ -217,6 +221,9 @@ impl Scoped for AgentMethod {
     ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             AgentMethod::GitCredential { .. } => None,
+            // The handler narrows the list to the agents below the caller's
+            // space.
+            AgentMethod::ListAgents => None,
             AgentMethod::AwaitAgentWake { workspace, .. } => Some(workspace),
             AgentMethod::AgentSession { space }
             | AgentMethod::AgentUpdates { space }

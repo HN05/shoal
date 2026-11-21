@@ -19,6 +19,7 @@ impl Operation {
                         | AgentMethod::UpdatesWaiting { .. }
                         | AgentMethod::Progress { .. }
                         | AgentMethod::GitCredential { .. }
+                        | AgentMethod::ListAgents
                 )
                 | Self::Approval(
                     ApprovalMethod::ListApprovals { .. } | ApprovalMethod::ShowApproval { .. }
@@ -38,11 +39,7 @@ impl Operation {
                 )
                 | Self::Branch(BranchMethod::ListForgeBranches { .. })
                 | Self::Demo(DemoMethod::ListDemos { .. })
-                | Self::Execution(
-                    ExecutionMethod::CheckMerge
-                        | ExecutionMethod::CheckUnmerge
-                        | ExecutionMethod::ListAgents
-                )
+                | Self::Execution(ExecutionMethod::CheckMerge | ExecutionMethod::CheckUnmerge)
                 | Self::File(FileMethod::ListFiles { .. })
                 | Self::Hold(HoldMethod::HoldList { .. })
                 | Self::Item(

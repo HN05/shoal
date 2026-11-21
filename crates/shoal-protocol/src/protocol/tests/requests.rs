@@ -132,6 +132,7 @@ const REQUESTS: &[&str] = &[
     r#"{"report_attach":{"space":"fix"}}"#,
     r#"{"report_upstream_limit":{"workspace":"fix","execution":"e1","limit":{"limit":"exhausted","until":1700000000}}}"#,
     r#"{"await_agent_wake":{"workspace":"fix","due":true,"hooked":"e1"}}"#,
+    r#""list_agents""#,
     r#"{"space_agents":{"space":"fix"}}"#,
     r#"{"interrupt_turn":{"space":"fix","execution":"e1"}}"#,
     r#"{"restart_agent":{"space":"3","restart":{"wait":true,"change":{"set":{"push":"direct"}}}}}"#,
@@ -141,7 +142,6 @@ const REQUESTS: &[&str] = &[
     r#"{"reattach":{"execution":"e1","wrapper":{"pid":2,"birth":"b"},"child":null,"group_id":2,"scope_token":"t1","agent":null,"recover":false,"running_ms":0}}"#,
     r#""check_merge""#,
     r#""check_unmerge""#,
-    r#""list_agents""#,
     r#"{"session_signalled":{"signal":"terminate"}}"#,
     // Chats.
     r#"{"launch":{"launch":{"target":"app","in":{"space":"3"},"mode":"chat","agent":"claude","task":["Read the build"]}}}"#,

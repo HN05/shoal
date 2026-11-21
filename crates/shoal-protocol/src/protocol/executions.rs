@@ -65,8 +65,6 @@ pub enum ExecutionMethod {
     CheckMerge,
     /// Verify that this worker belongs to an unscoped caller's unmerge execution.
     CheckUnmerge,
-    /// Connected agents, and executions whose wrapper is gone, which may run one.
-    ListAgents,
     /// `signal` ends the session of the caller's execution, whose wrapper
     /// stops its command once the daemon answers, after the daemon ended
     /// what the command runs elsewhere, such as a CI job's run on its forge.
@@ -95,10 +93,9 @@ impl ExecutionMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::Execute { .. } => Lifetime::Open,
-            Self::CheckMerge
-            | Self::CheckUnmerge
-            | Self::ListAgents
-            | Self::SessionSignalled { .. } => Lifetime::Reply,
+            Self::CheckMerge | Self::CheckUnmerge | Self::SessionSignalled { .. } => {
+                Lifetime::Reply
+            }
         }
     }
 }
@@ -110,7 +107,6 @@ impl ExecutionMethod {
             Self::Execute { .. }
             | Self::CheckMerge
             | Self::CheckUnmerge
-            | Self::ListAgents
             | Self::SessionSignalled { .. } => Forwarding::Never,
         }
     }
@@ -118,10 +114,7 @@ impl ExecutionMethod {
     pub fn target(&self) -> Option<Target<'_>> {
         match self {
             Self::Execute { space, .. } => Some(Target::Space(space)),
-            Self::CheckMerge
-            | Self::CheckUnmerge
-            | Self::ListAgents
-            | Self::SessionSignalled { .. } => None,
+            Self::CheckMerge | Self::CheckUnmerge | Self::SessionSignalled { .. } => None,
         }
     }
 }

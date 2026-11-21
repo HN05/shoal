@@ -73,10 +73,6 @@ pub(super) async fn handle(
             require_kind(caller, ExecutionKind::Unmerge, "unmerge execution required")?;
             Body::Ok
         }
-        ExecutionMethod::ListAgents => {
-            let agents = manager.running_agents().await?;
-            Body::RunningAgents(manager.visible_agents(caller, agents).await?)
-        }
         ExecutionMethod::SessionSignalled { signal } => {
             (manager.runner)
                 .cancel_job_for_signal(&**manager, caller, signal)
@@ -93,9 +89,6 @@ impl Scoped for ExecutionMethod {
         caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
-            // The handler narrows the list to the agents below the caller's
-            // space.
-            ExecutionMethod::ListAgents => None,
             ExecutionMethod::CheckMerge => {
                 require_kind(
                     Some(caller),
