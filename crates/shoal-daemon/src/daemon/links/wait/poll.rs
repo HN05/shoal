@@ -3,6 +3,7 @@
 use crate::forge::items::reference::ItemRef;
 use shoal_links::space::LinkSpace;
 use shoal_links::wait::followed::activity_ended;
+use shoal_links::wait::framing::own_batch;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -12,7 +13,6 @@ use super::{
     Updates, UpdatesExt,
     branch_report::{BranchReport, branch_conflicts, branch_report, watches_branch},
     delivery::receiving,
-    framing::own_batch,
     start::PollStart,
 };
 use crate::{
@@ -94,7 +94,7 @@ impl Manager {
         let mut batch = own_batch(id, self.pending_activity(id, &keys).await?);
         batch.extend(self.delegated_pending(&children, selection.kind).await?);
         // A wait returns messages on their own, without updates.
-        let mut pending = self.fit_response(batch, 0).await?;
+        let mut pending = self.links.fit_response(batch, 0).await?;
         if !pending.is_empty() {
             drop(guard);
             self.summarize_failed_checks(&SpaceSelector::id(id), &mut pending)
@@ -146,7 +146,7 @@ impl Manager {
         let updates = self
             .record_observed(id, observations, selection, report, start)
             .await?;
-        self.fit_response(own_batch(id, updates), 0).await
+        self.links.fit_response(own_batch(id, updates), 0).await
     }
 
     /// The local check of the workspace `space`'s `branch` as `report` keeps

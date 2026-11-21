@@ -94,7 +94,7 @@ impl Manager {
         if batch.is_empty() {
             return Ok(Vec::new());
         }
-        self.fit_within(batch, EVENT_LIMIT).await
+        self.links.fit_within(batch, EVENT_LIMIT).await
     }
 
     /// Pass `updates` of `space` up to the space `above`, then, once the hub

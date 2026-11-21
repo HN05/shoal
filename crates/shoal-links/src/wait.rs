@@ -4,6 +4,7 @@ pub mod branch_report;
 pub mod changes;
 pub mod cursor;
 pub mod followed;
+pub mod framing;
 pub mod merge_lookups;
 mod waits;
 

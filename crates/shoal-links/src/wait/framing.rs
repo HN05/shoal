@@ -2,34 +2,31 @@
 //! moving what does not fit to a later delivery.
 use anyhow::Result;
 
-use super::{
-    Updates,
-    cursor::{all_pending, save_pending},
-};
-use crate::{
-    daemon::{alerts::Alert, manager::Manager},
-    forge::updates::Update,
-};
+use shoal_forge_types::updates::Update;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::{alerts::Alert, links::Updates, protocol::MAX_FRAME};
+
+use super::cursor::{all_pending, save_pending};
+use crate::Links;
 
 /// The bytes a response's updates and messages may take, leaving room for
 /// its other fields.
-pub(crate) const RESPONSE_LIMIT: usize = crate::protocol::MAX_FRAME - 256;
+pub const RESPONSE_LIMIT: usize = MAX_FRAME - 256;
 
-impl Manager {
+impl Links {
     /// The leading updates of `batch` that fit one response beside `reserved`
     /// bytes of its other content. Updates sharing
     /// a delivery are acknowledged together, so a delivery is cut only when
     /// it comes first and does not fit alone; its remainder then moves to a
     /// new delivery and stays pending once the sent part is acknowledged. The
     /// caller holds the PR gates of the workspaces in `batch`.
-    pub(super) async fn fit_response(&self, batch: Batch, reserved: usize) -> Result<Vec<Update>> {
+    pub async fn fit_response(&self, batch: Batch, reserved: usize) -> Result<Vec<Update>> {
         (self.fit_within(batch, RESPONSE_LIMIT.saturating_sub(reserved))).await
     }
 
     /// The leading updates of `batch` whose serialized form fits `limit`
     /// bytes, cut as [`Self::fit_response`] cuts them.
-    pub(super) async fn fit_within(&self, mut batch: Batch, limit: usize) -> Result<Vec<Update>> {
+    pub async fn fit_within(&self, mut batch: Batch, limit: usize) -> Result<Vec<Update>> {
         match frame_cut(&batch, limit) {
             Cut::Between(fitting) => batch.truncate(fitting),
             Cut::Inside(fitting) => {
@@ -47,9 +44,9 @@ impl Manager {
 
 /// Pending updates for one response, each with the workspace whose cursor
 /// holds it.
-pub(super) type Batch = Vec<(SpaceId, Update)>;
+pub type Batch = Vec<(SpaceId, Update)>;
 
-pub(super) fn own_batch(id: &SpaceId, updates: Vec<Update>) -> Batch {
+pub fn own_batch(id: &SpaceId, updates: Vec<Update>) -> Batch {
     updates
         .into_iter()
         .map(|update| (id.to_owned(), update))
@@ -58,7 +55,7 @@ pub(super) fn own_batch(id: &SpaceId, updates: Vec<Update>) -> Batch {
 
 /// Where a response ends within a batch.
 #[derive(Debug, PartialEq, Eq)]
-pub(super) enum Cut {
+pub enum Cut {
     /// After this many updates, between deliveries.
     Between(usize),
     /// After this many updates of the first delivery, which does not fit alone.
@@ -67,7 +64,7 @@ pub(super) enum Cut {
 
 /// Where the updates that fit in `limit` bytes end: after whole deliveries,
 /// or inside the first when it alone does not fit.
-pub(super) fn frame_cut(batch: &Batch, limit: usize) -> Cut {
+pub fn frame_cut(batch: &Batch, limit: usize) -> Cut {
     let sizes = batch
         .iter()
         .map(|(_, update)| serde_json::to_vec(update).map_or(usize::MAX, |bytes| bytes.len()) + 1)
@@ -138,7 +135,7 @@ fn redeliver_after(
 
 /// `updates` with the unread `messages` when the wait found updates and both
 /// fit one response; otherwise the messages wait for a later delivery.
-pub(super) fn with_unread_messages(mut updates: Updates, messages: Vec<Alert>) -> Result<Updates> {
+pub fn with_unread_messages(mut updates: Updates, messages: Vec<Alert>) -> Result<Updates> {
     if updates.updates.is_empty() || messages.is_empty() {
         return Ok(updates);
     }
@@ -148,3 +145,6 @@ pub(super) fn with_unread_messages(mut updates: Updates, messages: Vec<Alert>) -
     }
     Ok(updates)
 }
+
+#[cfg(test)]
+mod tests;

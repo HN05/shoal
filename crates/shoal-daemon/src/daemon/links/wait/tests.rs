@@ -13,7 +13,6 @@ use shoal_links::wait::changes::{OwnChange, queue_update, record_own_change};
 
 use super::{
     branch_report::{BranchReport, branch_conflicts},
-    framing::{Batch, Cut, frame_cut},
     poll::{wait_for_updates, watch_deadline},
     test_support::{item_url, register_watch, snapshot},
     wake::{UNWATCHED_WAKE_DELAY, WakePhase},
@@ -1117,29 +1116,6 @@ fn large_update(n: usize, delivery: usize) -> Update {
         check: None,
         workspace: None,
     }
-}
-
-#[test]
-fn combined_updates_fit_one_response_in_whole_deliveries() {
-    const LIMIT: usize = crate::protocol::MAX_FRAME - 256;
-    let batch = |deliveries: fn(usize) -> usize| {
-        (0..63)
-            .map(|n| (SpaceId::from("child"), large_update(n, deliveries(n))))
-            .collect::<Batch>()
-    };
-    // 21 deliveries of three updates each, more than one response holds.
-    let Cut::Between(fitting) = frame_cut(&batch(|n| n / 3), LIMIT) else {
-        panic!("whole deliveries fit");
-    };
-    assert!(fitting > 0 && fitting < 63 && fitting % 3 == 0);
-    let sent = batch(|n| n / 3)[..fitting].to_vec();
-    assert!(serde_json::to_vec(&sent).unwrap().len() < crate::protocol::MAX_FRAME);
-    // One delivery larger than a response is cut inside it.
-    let Cut::Inside(fitting) = frame_cut(&batch(|_| 0), LIMIT) else {
-        panic!("a delivery too large for a response is cut");
-    };
-    assert!(fitting > 0 && fitting < 63);
-    assert_eq!(frame_cut(&Vec::new(), LIMIT), Cut::Between(0));
 }
 
 #[tokio::test]

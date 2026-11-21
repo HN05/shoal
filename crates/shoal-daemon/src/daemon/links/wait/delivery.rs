@@ -2,10 +2,10 @@
 //! watch or a hook delivers to its agent.
 use anyhow::{Result, ensure};
 use shoal_links::wait::followed::followed_items;
+use shoal_links::wait::framing::{Batch, RESPONSE_LIMIT, own_batch, with_unread_messages};
 
 use super::{
     Updates, UpdatesExt,
-    framing::{Batch, RESPONSE_LIMIT, own_batch, with_unread_messages},
     poll::{until, wait_for_updates, watch_deadline},
     wake_log::WakeWaitLog,
 };
@@ -155,7 +155,7 @@ impl Manager {
     ) -> Result<Vec<Update>> {
         let mut batch = own_batch(&space.id, self.queued_updates(space, kind).await?);
         batch.extend(self.delegated_pending(children, kind).await?);
-        self.fit_response(batch, reserved).await
+        self.links.fit_response(batch, reserved).await
     }
 
     /// The updates of `kind`, or every kind, queued for the agent of

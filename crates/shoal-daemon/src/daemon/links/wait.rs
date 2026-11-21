@@ -13,7 +13,6 @@ mod activity;
 mod background;
 mod delivery;
 mod elsewhere;
-mod framing;
 mod items;
 mod merge_runs;
 mod poll;
