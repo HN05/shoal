@@ -2857,6 +2857,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shoal-ids",
+ "shoal-states",
  "shoal-time",
 ]
 
