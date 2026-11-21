@@ -1,4 +1,4 @@
-use crate::daemon::links::issue::test_support::{AGENT_TOKEN, Fixture, Refuse, USER};
+use crate::daemon::links::issue::test_support::{Fixture, Refuse, USER};
 use crate::{
     forge::items::reference::ItemRef,
     model::{Assigner, IssueAssignee, Workspace},
@@ -6,29 +6,6 @@ use crate::{
 };
 use serde_json::json;
 use shoal_protocol::{alerts::AlertKind, space_names::SpaceSelector};
-
-#[tokio::test]
-async fn linking_assigns_the_account_once() {
-    let fixture = Fixture::new(&["fix"], &[], USER).await;
-    let workspace = &fixture.workspaces[0];
-    assert!(fixture.link(workspace).await.is_empty());
-    assert_eq!(fixture.changes(), [json!(["shoal-user"])]);
-    // Linking it again assigns nothing more.
-    assert!(fixture.link(workspace).await.is_empty());
-    assert_eq!(fixture.changes().len(), 1);
-}
-
-#[tokio::test]
-async fn unlinking_takes_back_the_assignee_shoal_added() {
-    let fixture = Fixture::new(&["fix"], &["ann"], USER).await;
-    let workspace = &fixture.workspaces[0];
-    fixture.link(workspace).await;
-    assert!(fixture.unlink(workspace).await.is_empty());
-    assert_eq!(
-        fixture.changes(),
-        [json!(["ann", "shoal-user"]), json!(["ann"])]
-    );
-}
 
 #[tokio::test]
 async fn an_assignee_shoal_did_not_add_stays() {
@@ -215,56 +192,4 @@ async fn linking_an_issue_others_are_assigned_names_them() {
     assert_eq!(warnings.len(), 1);
     assert!(warnings[0].contains("ann, bob"), "{warnings:?}");
     assert_eq!(fixture.changes(), [json!(["ann", "bob", "shoal-user"])]);
-}
-
-#[tokio::test]
-async fn a_refused_assignment_warns_and_keeps_the_link() {
-    let fixture = Fixture::new(&["fix"], &[], USER).await;
-    fixture.refuse(Refuse::Adding);
-    let workspace = &fixture.workspaces[0];
-    let warnings = fixture.link(workspace).await;
-    assert!(warnings[0].contains("forbidden"), "{warnings:?}");
-    // Linking it again tries again.
-    assert!(fixture.link(workspace).await[0].contains("forbidden"));
-    let registrations = fixture
-        .manager
-        .links
-        .issue_registrations(&workspace.id)
-        .await;
-    assert_eq!(registrations.unwrap().len(), 1);
-}
-
-#[tokio::test]
-async fn an_agents_assignment_adds_the_users_login() {
-    let fixture = Fixture::start(&["fix"], &[], USER, AGENT_TOKEN).await;
-    let workspace = &fixture.workspaces[0];
-    let selector = SpaceSelector::id(&workspace.id);
-    let warnings = (fixture.manager.links)
-        .set_issue(
-            &*fixture.manager,
-            &selector,
-            &"7".parse().unwrap(),
-            None,
-            Assigner::Agent,
-        )
-        .await
-        .unwrap();
-    assert!(warnings.is_empty(), "{warnings:?}");
-    assert_eq!(fixture.change_tokens(), ["token user"]);
-}
-
-#[tokio::test]
-async fn assigning_off_leaves_assignees_alone() {
-    let fixture = Fixture::new(&["fix"], &[], "[issue]\nassign = \"none\"\n").await;
-    let workspace = &fixture.workspaces[0];
-    assert!(fixture.link(workspace).await.is_empty());
-    fixture.unlink(workspace).await;
-    // Only the watch's first read of the issue.
-    let lines: Vec<_> = (fixture.server.received().into_iter())
-        .map(|request| request.line)
-        .collect();
-    assert!(
-        lines.iter().all(|line| line.starts_with("GET ")),
-        "{lines:?}"
-    );
 }

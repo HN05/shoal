@@ -56,6 +56,8 @@ pub mod space_names;
 pub mod state;
 pub mod status;
 pub mod subscriptions;
+#[cfg(feature = "test-support")]
+pub mod test_support;
 pub mod threads;
 pub mod time;
 pub mod transcripts;

@@ -285,3 +285,6 @@ pub fn take_assignment(db: &Connection, url: &str, login: &str) -> Result<bool> 
     )?;
     Ok(taken == 1)
 }
+
+#[cfg(test)]
+mod tests;

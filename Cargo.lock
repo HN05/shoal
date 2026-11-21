@@ -2714,6 +2714,7 @@ dependencies = [
  "shoal-protocol",
  "shoal-refs",
  "shoal-store",
+ "tempfile",
  "tokio",
  "uuid",
 ]

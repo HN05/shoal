@@ -10,6 +10,7 @@ fn assigned(id: &SpaceId, urls: &[&str]) -> StandIn {
         .collect();
     StandIn {
         assigned: [(id.clone(), issues)].into(),
+        ..StandIn::default()
     }
 }
 

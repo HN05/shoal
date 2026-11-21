@@ -83,3 +83,6 @@ impl Links {
         &self.waits
     }
 }
+
+#[cfg(test)]
+shoal_core::prepare_test_process!();
