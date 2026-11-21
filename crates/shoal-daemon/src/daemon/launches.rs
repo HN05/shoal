@@ -122,17 +122,17 @@ impl Manager {
 }
 
 /// The URL of the origin `launch`, which another joined machine forwarded
-/// here, carried commits of, with those commits, which this machine holds
-/// for it until it ends: its base's and the one keeping a copy's files.
+/// here, carried commits of, with those commits, each once, which this
+/// machine holds for it until it ends: its base's and the one keeping a
+/// copy's files.
 fn carried_commits(launch: &Launch) -> Option<(String, Vec<shoal_refs::CommitId>)> {
     let carried = launch.forwarded.as_ref()?;
     let origin = carried.origin.clone()?;
     let base = carried.commit.clone();
-    let commits = base
-        .into_iter()
-        .chain(launch.carried_copy.as_ref().map(|copy| copy.files.clone()))
-        .collect();
-    Some((origin, commits))
+    // A copy without unsaved files carried them as its base, held once.
+    let files = (launch.carried_copy.as_ref()).map(|copy| copy.files.clone());
+    let files = files.filter(|files| base.as_ref() != Some(files));
+    Some((origin, base.into_iter().chain(files).collect()))
 }
 
 #[cfg(test)]
