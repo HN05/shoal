@@ -401,3 +401,19 @@ async fn a_marked_alert_reaches_a_space_below_on_another_machine_through_the_hub
         "{call}"
     );
 }
+
+#[tokio::test]
+async fn a_marked_alert_to_another_machine_takes_no_files() {
+    let tree = tree().await;
+    let manager = &tree.manager;
+    away_on_offline_machine(manager, Some(&tree.parent.space)).await;
+    let file = tree.root.path().join("report.txt");
+    std::fs::write(&file, "draft").unwrap();
+    let to = AlertTarget::Space {
+        space: SpaceSelector::Number(90.into()),
+    };
+    let caller = tree.parent.caller();
+    let marked = manager.mark_chat_alert(Some(&caller), to, vec![file.into()]);
+    let error = marked.await.unwrap_err().to_string();
+    assert!(error.contains("machine desk"), "{error}");
+}

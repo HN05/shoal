@@ -161,13 +161,10 @@ impl Hub {
         // A number another space there may take while it waits, never an ID.
         bind_space(&mut method, space, &listed.space.id)?;
         let name = shoal_protocol::protocol::name_of(Ok(method.clone()));
-        if attaches_files(&method) {
-            let message = format!(
-                "space {space} runs on machine {}, which cannot read files attached here; send it without them, or from that machine",
-                machine.name
-            );
-            return Err(Refusal::new(Reason::NotReady, message).into());
-        }
+        refuse_attached(
+            &method,
+            &format!("space {space} runs on machine {}", machine.name),
+        )?;
         let forwarded = Forwarded {
             caller: self.vouch(daemon, request.caller).await?,
             method,
@@ -298,10 +295,12 @@ impl Hub {
         caller: Option<&Caller>,
     ) -> Result<Forwarded> {
         operation.leave_caller_machine();
-        let name = shoal_protocol::protocol::name_of(serde_json::to_value(&operation));
+        let method = serde_json::to_value(operation)?;
+        refuse_attached(&method, &format!("machine {}", machine.name))?;
+        let name = shoal_protocol::protocol::name_of(Ok(method.clone()));
         Ok(Forwarded {
             caller: self.vouch(daemon, caller).await?,
-            method: serde_json::to_value(operation)?,
+            method,
             summary: format!("{name} on machine {}", machine.name),
         })
     }
@@ -489,6 +488,18 @@ fn bind_fields(
             fields.insert(key.to_owned(), bound.clone());
         }
     }
+}
+
+/// Refuse the request `method` when it attaches files, which the machine
+/// `elsewhere` describes as it is named: it cannot read this machine's.
+fn refuse_attached(method: &serde_json::Value, elsewhere: &str) -> Result<()> {
+    if attaches_files(method) {
+        let message = format!(
+            "{elsewhere}, which cannot read files attached here; send it without them, or from that machine"
+        );
+        return Err(Refusal::new(Reason::NotReady, message).into());
+    }
+    Ok(())
 }
 
 /// Whether the request `method` attaches files by their path on this

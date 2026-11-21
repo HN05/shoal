@@ -2,7 +2,7 @@
 //! message, once it ends, to the recipients `shoal send --in-chat` named,
 //! through the operation that sends every alert. Such an alert to the user
 //! is read once the user prompts the agent in that chat.
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::Transaction;
 use serde::{Deserialize, Serialize};
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
@@ -103,6 +103,18 @@ impl Manager {
         let turn = self.marked_turn(caller, &space).await?;
         crate::daemon::workspace_files::check_sent(&attachments)?;
         let (to, recipients) = self.marked_recipients(&space, to).await?;
+        if let MarkedRecipients::Space {
+            space,
+            machine: Some(machine),
+        } = &recipients
+        {
+            ensure!(
+                attachments.is_empty(),
+                "space {} runs on machine {machine}, which cannot read files attached here; \
+                 send it without them",
+                space.label()
+            );
+        }
         let alert = MarkedAlert {
             to,
             attachments,

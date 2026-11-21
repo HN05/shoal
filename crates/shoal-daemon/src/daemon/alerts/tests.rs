@@ -648,3 +648,17 @@ async fn a_message_to_another_machine_s_space_waits_at_the_hub_while_that_machin
         "{call}"
     );
 }
+
+#[tokio::test]
+async fn a_message_to_another_machine_s_space_takes_no_files_of_this_one() {
+    let (temp, manager) = manager().await;
+    away_on_offline_machine(&manager, None).await;
+    let file = temp.path().join("report.txt");
+    std::fs::write(&file, "draft").unwrap();
+    let to = SpaceSelector::Number(90.into());
+    let attachments = vec![NewFile::from(file)];
+    let sent = manager.send_space_message(None, &to, "See the report".into(), attachments);
+    let error = sent.await.unwrap_err().to_string();
+    assert!(error.contains("machine desk"), "{error}");
+    assert!(held_calls(&manager).await.is_empty());
+}
