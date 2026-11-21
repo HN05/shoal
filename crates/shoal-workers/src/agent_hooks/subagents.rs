@@ -8,16 +8,11 @@ use std::path::PathBuf;
 
 use anyhow::{Context as _, Result};
 use serde::Deserialize;
+use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
-    ai::IntegrationKind,
-    cli::{
-        context::Context,
-        ui::{self, Fallback},
-    },
-    model::Workspace,
+    agents::integration, ai::IntegrationKind, client::connection::CommandPaths, model::Workspace,
 };
-use shoal_protocol::space_names::SpaceSelector;
 
 /// What `SubagentStart` passes besides the common fields.
 #[derive(Deserialize)]
@@ -29,10 +24,10 @@ struct Start {
 
 /// Print the subagent's brief as hook context. Failing leaves the subagent
 /// without it and never stops it from starting.
-pub(super) async fn start(ctx: &Context) -> Result<i32> {
+pub async fn start(paths: &CommandPaths) -> Result<i32> {
     let input = hook_input();
-    match brief(ctx, &input).await {
-        Ok(brief) => outln!("{}", super::alerts::delivery::hook_output(&input, &brief)),
+    match brief(paths, &input).await {
+        Ok(brief) => shoal_core::outln!("{}", super::output(&input, &brief)),
         Err(error) => eprintln!("shoal: subagent brief unavailable: {error:#}"),
     }
     Ok(0)
@@ -41,18 +36,18 @@ pub(super) async fn start(ctx: &Context) -> Result<i32> {
 /// Report the change to the running subagents that the hook event on stdin
 /// of an agent with `integration` names, for the space `space` names, else
 /// the agent's own. An event that changes none reports nothing.
-pub(super) async fn report(
-    ctx: &Context,
+pub async fn report(
+    paths: &CommandPaths,
     space: Option<SpaceSelector>,
     integration: IntegrationKind,
 ) -> Result<i32> {
-    let event = shoal_workers::agent_hooks::input::event();
-    let change = event.and_then(|event| crate::cli::agents::subagent_change(integration, &event));
+    let event = super::input::event();
+    let change = event.and_then(|event| self::integration(integration).subagent_change(&event));
     let Some(change) = change else {
         return Ok(0);
     };
-    let space = ui::select_space(ctx, space, Fallback::OwnSpace).await?;
-    crate::client::agents::report_subagent(&ctx.paths, space, change).await?;
+    let space = super::own_space(paths, space).await?;
+    crate::client::agents::report_subagent(paths, space, change).await?;
     Ok(0)
 }
 
@@ -64,21 +59,22 @@ fn hook_input() -> String {
 }
 
 /// The brief for a subagent starting as `input` describes.
-async fn brief(ctx: &Context, input: &str) -> Result<String> {
+async fn brief(paths: &CommandPaths, input: &str) -> Result<String> {
     let start: Start = serde_json::from_str(input).context("read the hook's input")?;
-    let workspaces = crate::client::spaces::list(&ctx.paths)
-        .await?
-        .into_workspaces();
-    let own = own_workspace(ctx, &workspaces).await?;
-    let child = super::worktree_hooks::enclosing(&workspaces, &start.cwd)
+    let workspaces = crate::client::spaces::list(paths).await?.into_workspaces();
+    let own = listed_own(paths, &workspaces).await?;
+    let child = super::enclosing(&workspaces, &start.cwd)
         .ok()
         .filter(|child| child.id != own.id);
     Ok(text(own, child))
 }
 
-/// The workspace the agent's scope belongs to.
-async fn own_workspace<'a>(ctx: &Context, workspaces: &'a [Workspace]) -> Result<&'a Workspace> {
-    let own = ui::select_workspace(ctx, None, Fallback::OwnSpace).await?;
+/// The workspace the agent's scope belongs to, among `workspaces`.
+async fn listed_own<'a>(
+    paths: &CommandPaths,
+    workspaces: &'a [Workspace],
+) -> Result<&'a Workspace> {
+    let own = super::own_workspace(paths).await?;
     workspaces
         .iter()
         .find(|workspace| own.selects(&workspace.id, workspace.number))

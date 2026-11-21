@@ -6,10 +6,7 @@ use shoal_workers::agent_hooks;
 use crate::{
     cli::{
         args::internal::InternalCommand,
-        commands::{
-            alerts, approvals, changes, demo, environment, events, menu, progress, sessions,
-            subagents, worktree_hooks,
-        },
+        commands::{alerts, approvals, demo, environment, events, menu, sessions, worktree_hooks},
         context::Context,
         terminal,
     },
@@ -38,9 +35,11 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             let report = (state, ends_turn);
             agent_hooks::turns::report_state(&ctx.paths, ctx.json, space, report).await
         }
-        InternalCommand::Change { integration } => changes::report(&ctx, integration).await,
+        InternalCommand::Change { integration } => {
+            agent_hooks::changes::report(&ctx.paths, integration).await
+        }
         InternalCommand::Plan { integration, space } => {
-            progress::report_plan(&ctx, space, integration).await
+            agent_hooks::plan::report(&ctx.paths, space, integration).await
         }
         InternalCommand::TurnFailed { integration, space } => {
             agent_hooks::turns::report_failure(&ctx.paths, ctx.json, space, integration).await
@@ -52,9 +51,9 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             resume,
         } => alerts::delivery::wake(&ctx, agent, space.or(handed_over), resume).await,
         InternalCommand::Deliver => alerts::delivery::deliver(&ctx).await,
-        InternalCommand::SubagentStart => subagents::start(&ctx).await,
+        InternalCommand::SubagentStart => agent_hooks::subagents::start(&ctx.paths).await,
         InternalCommand::Subagent { integration, space } => {
-            subagents::report(&ctx, space, integration).await
+            agent_hooks::subagents::report(&ctx.paths, space, integration).await
         }
         InternalCommand::WorktreeCreate => worktree_hooks::create(&ctx).await,
         InternalCommand::WorktreeRemove => worktree_hooks::remove(&ctx).await,

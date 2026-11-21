@@ -20,9 +20,8 @@ use crate::{
     agent::{Agent, ModelChoice},
     agents::{
         ADDED, Added, AgentHome, HomeRecords, agent_integration, ensure_available, ensure_forks,
-        integration, resolve_model,
+        resolve_model,
     },
-    ai::IntegrationKind,
     cli::{context::Context, ui},
     config::{Effective, modes, templates},
     model::{RemovedSpace, Workspace},
@@ -357,33 +356,6 @@ pub(in crate::cli) fn fork_args(
 /// unless Shoal knows none.
 pub(in crate::cli) fn interrupt_key(settings: &Effective, name: &Agent) -> Option<&'static str> {
     agent_integration(settings, name).interrupt_key()
-}
-
-/// The change to its running subagents that `event`, from a subagent hook
-/// of an agent with integration `kind`, reports.
-pub(in crate::cli) fn subagent_change(
-    kind: IntegrationKind,
-    event: &serde_json::Value,
-) -> Option<crate::protocol::SubagentChange> {
-    integration(kind).subagent_change(event)
-}
-
-/// What `event`, from the change hook of an agent with integration
-/// `kind`, reports its tool call changes.
-pub(in crate::cli) fn tool_change(
-    kind: IntegrationKind,
-    event: &serde_json::Value,
-) -> Option<shoal_protocol::changes::ToolChange> {
-    integration(kind).tool_change(event)
-}
-
-/// The plan change that `event`, from the plan hook of an agent with
-/// integration `kind`, reports.
-pub(in crate::cli) fn plan_change(
-    kind: IntegrationKind,
-    event: &serde_json::Value,
-) -> Option<shoal_protocol::progress::ProgressChange> {
-    integration(kind).plan_change(event)
 }
 
 /// Trust the path of `workspace`, reopened from `removed`, for each agent

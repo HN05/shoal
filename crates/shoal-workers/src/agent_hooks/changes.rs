@@ -1,31 +1,25 @@
-//! The hook an agent runs before and after its tool calls, which reports
-//! what each changes and tells the agent about the changes Shoal could not
-//! tell were its own.
+//! `shoal internal change`: the hook an agent runs before and after its
+//! tool calls, which reports what each changes and tells the agent about
+//! the changes Shoal could not tell were its own.
 use anyhow::Result;
 use shoal_protocol::changes::Change;
 
-use crate::{ai::IntegrationKind, cli::context::Context, client::changes};
+use crate::{agents::integration, ai::IntegrationKind, client::connection::CommandPaths};
 
 /// Report what the tool call whose hook event stdin carries changed, as an
 /// agent with `integration` names it, and print the changes Shoal could
 /// not tell were the agent's as context for it.
-pub(in crate::cli::commands) async fn report(
-    ctx: &Context,
-    integration: IntegrationKind,
-) -> Result<i32> {
-    let Some(event) = shoal_workers::agent_hooks::input::event() else {
+pub async fn report(paths: &CommandPaths, integration: IntegrationKind) -> Result<i32> {
+    let Some(event) = super::input::event() else {
         return Ok(0);
     };
-    let Some(change) = crate::cli::agents::tool_change(integration, &event) else {
+    let Some(change) = self::integration(integration).tool_change(&event) else {
         return Ok(0);
     };
-    let mixed = changes::record(&ctx.paths, change).await?;
+    let mixed = crate::client::changes::record(paths, change).await?;
     if !mixed.is_empty() {
         let context = question(&mixed);
-        outln!(
-            "{}",
-            super::super::alerts::delivery::hook_output(&event.to_string(), &context)
-        );
+        shoal_core::outln!("{}", super::output(&event.to_string(), &context));
     }
     Ok(0)
 }

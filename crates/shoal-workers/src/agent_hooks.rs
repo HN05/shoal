@@ -2,14 +2,20 @@
 //! which `shoal internal` runs: each reads the event the agent passes on
 //! stdin, reports it for the agent's space, and prints what the agent reads
 //! as context.
-pub mod input;
+pub mod changes;
+mod input;
+pub mod plan;
+pub mod subagents;
 pub mod turns;
 
-use anyhow::{Result, bail, ensure};
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
     client::connection::CommandPaths,
     fsutil::current_dir::current_directory,
+    model::Workspace,
     scoping::Scoping,
     workspace_context::{ScopeOrder, WorkspaceContext},
 };
@@ -47,3 +53,34 @@ async fn own_workspace(paths: &CommandPaths) -> Result<SpaceSelector> {
     );
     bail!("no current workspace; pass an explicit workspace")
 }
+
+/// The innermost workspace containing `directory`, which a scoped caller
+/// lists among its own and those below it.
+fn enclosing<'a>(workspaces: &'a [Workspace], directory: &Path) -> Result<&'a Workspace> {
+    Workspace::innermost(workspaces, &canonical(directory))
+        .with_context(|| format!("{} is in no Shoal workspace", directory.display()))
+}
+
+/// `path` with symlinks resolved, as workspace records hold it, or as given
+/// when it does not exist.
+fn canonical(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_owned())
+}
+
+/// Claude Code and Codex read `additionalContext` for the event named in the
+/// hook input; without one, the context is plain text.
+fn output(input: &str, context: &str) -> String {
+    let event = serde_json::from_str::<serde_json::Value>(input)
+        .ok()
+        .and_then(|input| input["hook_event_name"].as_str().map(str::to_owned));
+    match event {
+        Some(event) => serde_json::json!({
+            "hookSpecificOutput": {"hookEventName": event, "additionalContext": context}
+        })
+        .to_string(),
+        None => context.to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests;

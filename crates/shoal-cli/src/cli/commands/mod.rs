@@ -83,7 +83,6 @@ mod sleep;
 mod spaces;
 mod start;
 mod stop;
-mod subagents;
 mod threads;
 mod transfer;
 mod triggers;
