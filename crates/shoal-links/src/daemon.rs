@@ -143,10 +143,11 @@ pub trait Watches: Send + Sync {
     /// Tell those waiting on agents that one's deliveries changed.
     fn agent_changed(&self);
 
-    /// A poll saw an item of the repository `id` merge.
+    /// An item of the repository `id` merged, as a poll or Shoal's own
+    /// merge saw.
     fn item_merged(&self, id: &RepositoryId);
 
-    /// A poll saw a PR the space `id` links move into or out of draft.
+    /// A PR the space `id` links moved into or out of draft.
     fn draft_changed(&self, id: &SpaceId);
 }
 
