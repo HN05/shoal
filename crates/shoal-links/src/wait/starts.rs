@@ -1,7 +1,4 @@
-//! When the daemon's reads of items for watches began, in the order they
-//! began, and the read each watch last started from, which tells a poll
-//! from a watch's start read made in the same second. A read in flight ends
-//! with the daemon, so none of this outlives it.
+//! When polls of item activity began, and the reads watches started from.
 use std::{
     collections::HashMap,
     sync::{
