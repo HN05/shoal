@@ -240,8 +240,6 @@ impl Apps for Manager {
     }
 }
 
-/// The spaces' records, as the hub reads and renumbers them in its own
-/// connections and transactions.
 impl Packages for Manager {
     fn package_state<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<String>> {
         Box::pin(Manager::package_state(self, space))
@@ -263,6 +261,8 @@ impl Packages for Manager {
     }
 }
 
+/// The spaces' records, as the hub reads and renumbers them in its own
+/// connections and transactions.
 pub(crate) struct HubRecords;
 
 impl Records for HubRecords {

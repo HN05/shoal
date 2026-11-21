@@ -19,6 +19,7 @@ use crate::{
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
+mod kept;
 mod moving;
 mod subtree;
 mod transfer;
