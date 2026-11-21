@@ -122,7 +122,7 @@ async fn the_hub_holds_the_activity_of_spaces_below_an_offline_coordinator() -> 
     assert_eq!(about(&told), [child.id.clone(), grandchild.id.clone()]);
     for (told, url) in told.iter().zip([&*CHILD_PR, &*GRANDCHILD_PR]) {
         assert_eq!(told.above, SpaceId::from("away"));
-        assert!(told.message.contains(url.as_str()), "{}", told.message);
+        assert!(text(told).contains(url.as_str()), "{}", text(told));
     }
     // Taken by the hub, they leave the cursors, so the next sweep sends
     // them no more.
@@ -143,15 +143,15 @@ async fn activity_too_large_for_one_event_goes_in_several() -> Result<()> {
     let first = held(&manager).await;
     assert_eq!(first.len(), 1);
     assert!(
-        first[0].message.len() <= EVENT_LIMIT,
+        text(&first[0]).len() <= EVENT_LIMIT,
         "{}",
-        first[0].message.len()
+        text(&first[0]).len()
     );
 
     manager.links.pass_up_delegated_activity(&*manager).await?;
     let told = held(&manager).await;
     assert_eq!(told.len(), 2);
-    assert!(told[1].message.ends_with("short"), "{}", told[1].message);
+    assert!(text(&told[1]).ends_with("short"), "{}", text(&told[1]));
     Ok(())
 }
 
@@ -209,4 +209,10 @@ async fn activity_stays_on_the_cursor_while_the_hub_cannot_be_reached() -> Resul
         .await?;
     assert_eq!(pending, 1_i64);
     Ok(())
+}
+
+/// The text `told` tells.
+fn text(told: &shoal_protocol::hub::routing::Told) -> &str {
+    let shoal_protocol::hub::routing::ToldRecord::Alert { message, .. } = &told.record;
+    message
 }

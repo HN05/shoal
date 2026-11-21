@@ -15,7 +15,7 @@ use shoal_protocol::{
     approvals::DecisionStatus,
     hub::{
         directory::Directory,
-        routing::{Told, ToldAbout},
+        routing::{Told, ToldAbout, ToldRecord},
     },
     threads::Thread,
 };
@@ -125,10 +125,12 @@ impl Hub {
                         space: thread.space_id.clone(),
                         name: thread.space.clone(),
                     }),
-                    kind: AlertKind::ThreadPosted,
                     for_user: true,
-                    message: thread.notice(),
-                    files: Vec::new(),
+                    record: ToldRecord::Alert {
+                        kind: AlertKind::ThreadPosted,
+                        message: thread.notice(),
+                        files: Vec::new(),
+                    },
                 };
                 self.send_told(daemon, told).await?;
             }

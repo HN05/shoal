@@ -14,7 +14,7 @@ use shoal_protocol::{
     alerts::AlertKind,
     hub::{
         link::Call,
-        routing::{Expired, HeldOutcome, Told, ToldAbout},
+        routing::{Expired, HeldOutcome, Told, ToldAbout, ToldRecord},
     },
     space_names::SpaceName,
 };
@@ -88,10 +88,12 @@ impl Hub {
         let told = Told {
             above: id.clone(),
             about: None,
-            kind,
             for_user: false,
-            message,
-            files: Vec::new(),
+            record: ToldRecord::Alert {
+                kind,
+                message,
+                files: Vec::new(),
+            },
         };
         self.send_told(daemon, told).await
     }
@@ -167,13 +169,18 @@ impl Hub {
     /// the user what is for the user.
     pub(super) async fn deliver_told(&self, daemon: &dyn Daemon, told: Told) -> Result<()> {
         let receiver = daemon.receiver_from(&told.above).await?;
-        let message = with_files(&told);
+        let ToldRecord::Alert {
+            kind,
+            message,
+            files,
+        } = &told.record;
+        let (kind, message) = (*kind, with_files(message, files));
         match (receiver, told.about) {
             (Some(Receiver::Here(coordinator)), about) => {
                 let about = about.map_or_else(About::default, |about| {
                     About::space(&about.name, &about.space)
                 });
-                let alert = told_alert(told.kind, about, message);
+                let alert = told_alert(kind, about, message);
                 (daemon.alert(&coordinator, alert, told.for_user)).await
             }
             (Some(Receiver::Elsewhere(next)), about) => {
@@ -187,7 +194,7 @@ impl Hub {
             (None, Some(about)) => {
                 if told.for_user {
                     let about = About::space(&about.name, &about.space);
-                    let alert = told_alert(told.kind, about, message);
+                    let alert = told_alert(kind, about, message);
                     self.notifications.notify_user(alert).await;
                 }
                 Ok(())
@@ -256,21 +263,22 @@ fn told_above(above: SpaceId, event: Event<'_>) -> Told {
             space: event.space.clone(),
             name: event.name.clone(),
         }),
-        kind: event.kind,
         for_user: event.for_user,
-        message: event.message,
-        files,
+        record: ToldRecord::Alert {
+            kind: event.kind,
+            message: event.message,
+            files,
+        },
     }
 }
 
-/// `told`'s message, naming the files it sent, which stay on its machine.
-fn with_files(told: &Told) -> String {
-    match told.files.is_empty() {
-        true => told.message.clone(),
+/// `message`, naming the `files` its space sent, which stay on its machine.
+fn with_files(message: &str, files: &[String]) -> String {
+    match files.is_empty() {
+        true => message.to_owned(),
         false => format!(
-            "{}\nFiles it sent, which stay on its machine: {}",
-            told.message,
-            told.files.join(", ")
+            "{message}\nFiles it sent, which stay on its machine: {}",
+            files.join(", ")
         ),
     }
 }

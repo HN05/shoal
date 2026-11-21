@@ -114,15 +114,25 @@ pub struct Told {
     /// The space below `above` it is about.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub about: Option<ToldAbout>,
-    /// The kind of alert it is.
-    pub kind: AlertKind,
     /// Whether the user receives it when no space above takes it.
     pub for_user: bool,
-    pub message: String,
-    /// What the space's machine kept of the files it sent, which stay
-    /// there.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub files: Vec<String>,
+    /// What it tells, from which the receiving machine builds its alert.
+    pub record: ToldRecord,
+}
+
+/// What a [`Told`] tells, which the machine that receives it turns into
+/// its own alert as it would for an event of its own.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToldRecord {
+    /// An alert of `kind` with its text, naming what the sending machine
+    /// kept of the files sent, which stay there.
+    Alert {
+        kind: AlertKind,
+        message: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        files: Vec<String>,
+    },
 }
 
 /// The space an event is about.

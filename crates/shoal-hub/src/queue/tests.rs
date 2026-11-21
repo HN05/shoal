@@ -2,6 +2,7 @@ use rusqlite::Connection;
 use serde_json::json;
 
 use super::*;
+use shoal_protocol::hub::routing::ToldRecord;
 
 fn database() -> Connection {
     let db = shoal_store::test_support::migrated().unwrap();
@@ -15,8 +16,8 @@ fn database() -> Connection {
 
 fn held(summary: &str) -> Held {
     let told = json!({
-        "above": "coordinator", "kind": "approval_decided", "for_user": false,
-        "message": summary,
+        "above": "coordinator", "for_user": false,
+        "record": {"alert": {"kind": "approval_decided", "message": summary}},
     });
     Held {
         sender: MemberId::from("desk".to_owned()),
@@ -30,7 +31,10 @@ fn held(summary: &str) -> Held {
 
 fn message(call: &Call) -> String {
     match call {
-        Call::Tell { told } => told.message.clone(),
+        Call::Tell { told } => {
+            let ToldRecord::Alert { message, .. } = &told.record;
+            message.clone()
+        }
         call => panic!("held {call:?}"),
     }
 }
