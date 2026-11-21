@@ -74,7 +74,7 @@ fn copy_to_stdout(path: &Path) -> Result<()> {
 /// was already removed, which its record moved.
 async fn end_here(ctx: &Context, moved: &SpaceMoved) -> Result<()> {
     let selector = SpaceSelector::id(&moved.id);
-    if crate::client::workspaces::present_space(&ctx.paths, &selector)
+    if crate::client::spaces::present_space(&ctx.paths, &selector)
         .await?
         .is_none()
     {

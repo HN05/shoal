@@ -31,7 +31,7 @@ pub(in crate::cli::commands) async fn status(
                 None => return service::shoal_status(ctx).await,
             },
         };
-        match crate::client::workspaces::status(&ctx.paths, space).await? {
+        match crate::client::spaces::status(&ctx.paths, space).await? {
             StatusAnswer::Live(status) => {
                 let status = status_view(ctx, *status).await;
                 ctx.show(&status, |status| render_status(status, ctx.json))?;
@@ -40,13 +40,13 @@ pub(in crate::cli::commands) async fn status(
         }
         return Ok(0);
     };
-    let spaces = crate::client::workspaces::find_spaces(&ctx.paths, target).await?;
+    let spaces = crate::client::spaces::find_spaces(&ctx.paths, target).await?;
     let mut statuses = Vec::new();
     for space in spaces {
         let selector = SpaceSelector::id(&space.id);
         // The spaces it finds are this machine's, whose status is its own.
         let StatusAnswer::Live(status) =
-            crate::client::workspaces::status(&ctx.paths, selector).await?
+            crate::client::spaces::status(&ctx.paths, selector).await?
         else {
             bail!("space {} has no status of its own here", space.id);
         };
@@ -128,7 +128,7 @@ async fn sessions(ctx: &Context, space: &SpaceDetail) -> Result<Vec<crate::termi
         SpaceDetail::Chat { chat } => ConfigTarget::chat(chat),
     };
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
-    let places = crate::client::workspaces::places(&ctx.paths, SpaceSelector::id(space.id()));
+    let places = crate::client::places::places(&ctx.paths, SpaceSelector::id(space.id()));
     let places = places.await?;
     crate::terminal::sessions(
         &settings,

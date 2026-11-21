@@ -71,7 +71,7 @@ async fn confirm_merge(
     pushing: Pushing,
 ) -> Result<Option<MergeConfirmation>> {
     let preview =
-        crate::client::workspaces::preview_merge(&ctx.paths, workspace.clone(), options).await?;
+        crate::client::merging::preview_merge(&ctx.paths, workspace.clone(), options).await?;
     if pushing != Pushing::AskingFirst && preview.warning.is_none() {
         return Ok(None);
     }

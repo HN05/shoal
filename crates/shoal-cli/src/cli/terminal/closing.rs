@@ -164,7 +164,7 @@ pub async fn watch(
 /// workspace or a chat took over is the daemon's to keep: only one it does
 /// not know is the watcher's.
 async fn at_removal(ctx: &Context, workspace: &SpaceId, record: &Origin) -> Option<AtRemoval> {
-    match crate::client::workspaces::place_ownership(&ctx.paths, workspace, record).await {
+    match crate::client::places::place_ownership(&ctx.paths, workspace, record).await {
         Ok(PlaceOwnership::Space | PlaceOwnership::Elsewhere) => Some(AtRemoval::Daemon),
         Ok(PlaceOwnership::Unknown) => Some(AtRemoval::Watcher),
         Err(_) => None,
@@ -183,7 +183,7 @@ async fn close_place(
     at_removal: Option<AtRemoval>,
 ) -> Result<()> {
     let closed =
-        crate::client::workspaces::close_owned_place(&ctx.paths, &place.workspace, record).await?;
+        crate::client::places::close_owned_place(&ctx.paths, &place.workspace, record).await?;
     close_left_to_host(host, place, closed, at_removal).await
 }
 

@@ -46,7 +46,7 @@ async fn linked_items(
     space: &SpaceSelector,
 ) -> Result<(Vec<LinkedItem>, &'static str)> {
     let unknown = || Refusal::new(Reason::NotFound, format!("no space {space}"));
-    let (links, path, kind) = match (crate::client::workspaces::present_space(&ctx.paths, space)
+    let (links, path, kind) = match (crate::client::spaces::present_space(&ctx.paths, space)
         .await?)
         .map(crate::model::Space::by_kind)
     {

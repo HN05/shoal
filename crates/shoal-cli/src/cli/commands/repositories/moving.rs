@@ -133,7 +133,7 @@ async fn stop_running(
 /// Whether the daemon still lists the space `id`.
 async fn space_listed(ctx: &Context, id: &SpaceId) -> Result<bool> {
     let selector = SpaceSelector::id(id);
-    Ok((crate::client::workspaces::present_space(&ctx.paths, &selector).await?).is_some())
+    Ok((crate::client::spaces::present_space(&ctx.paths, &selector).await?).is_some())
 }
 
 /// How long a move waits for a cancelled CI job's runner to stop it.

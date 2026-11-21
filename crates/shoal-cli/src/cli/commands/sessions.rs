@@ -176,7 +176,7 @@ async fn resolve(ctx: &Context, name: Option<SpaceSelector>) -> Result<Chosen> {
     }
     if let Some(selector) = &name
         && let Located::Elsewhere { space, machine, .. } =
-            crate::client::workspaces::locate(&ctx.paths, selector.clone()).await?
+            crate::client::spaces::locate(&ctx.paths, selector.clone()).await?
     {
         return Ok(chosen_elsewhere(space.space.id, machine.name));
     }
@@ -260,7 +260,7 @@ async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Chosen> {
         .await?
         .into_workspaces();
     let id = ui::pick_space(ctx, workspaces, &chats, Offered::Spaces, "workspace").await?;
-    match crate::client::workspaces::locate(&ctx.paths, SpaceSelector::id(&id)).await? {
+    match crate::client::spaces::locate(&ctx.paths, SpaceSelector::id(&id)).await? {
         Located::Elsewhere { space, machine, .. } => {
             Ok(chosen_elsewhere(space.space.id, machine.name))
         }
@@ -276,7 +276,7 @@ pub(in crate::cli) async fn chat_places(
     chats: &[Chat],
 ) -> Vec<(SpaceId, Origin)> {
     let agents = crate::client::agents::all(paths).await.unwrap_or_default();
-    let owned = crate::client::workspaces::owned_places(paths)
+    let owned = crate::client::places::owned_places(paths)
         .await
         .unwrap_or_default();
     let running = (agents.into_iter()).filter_map(|agent| Some((agent.space_id, agent.origin?)));

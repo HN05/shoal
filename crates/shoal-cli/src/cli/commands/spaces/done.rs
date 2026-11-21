@@ -19,7 +19,7 @@ use shoal_protocol::space_names::SpaceSelector;
 async fn selected(ctx: &Context, space: Option<SpaceSelector>) -> Result<Selected> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     Ok(
-        match crate::client::workspaces::present_space(&ctx.paths, &space)
+        match crate::client::spaces::present_space(&ctx.paths, &space)
             .await?
             .map(crate::model::Space::by_kind)
         {

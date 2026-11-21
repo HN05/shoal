@@ -43,7 +43,7 @@ pub(in crate::cli::commands) async fn rename_picked(ctx: &Context) -> Result<i32
 /// Give the space `space` selects the name `name`, and show it on the
 /// places that still show its previous one.
 async fn rename_space(ctx: &Context, space: SpaceSelector, name: SpaceName) -> Result<i32> {
-    let renamed = crate::client::workspaces::rename_space(&ctx.paths, space, name).await?;
+    let renamed = crate::client::spaces::rename_space(&ctx.paths, space, name).await?;
     // The name is recorded; a place left with its old label only warns.
     if let Err(error) = relabel(ctx, &renamed).await {
         eprintln!(
@@ -70,8 +70,7 @@ async fn relabel(ctx: &Context, renamed: &RenamedSpace) -> Result<()> {
         space,
         previous_name,
     } = renamed;
-    let places =
-        crate::client::workspaces::places(&ctx.paths, SpaceSelector::id(&space.id)).await?;
+    let places = crate::client::places::places(&ctx.paths, SpaceSelector::id(&space.id)).await?;
     let shown = shown_places(places);
     let settings = shoal_workers::settings::of(&ctx.paths, ConfigTarget::space(space)).await?;
     let labels = terminal::Renamed::new(ctx, space, previous_name);
@@ -143,7 +142,7 @@ struct AskedSpace {
 /// `rename --request` asks it: as its machine reports it, or while that
 /// machine is offline, as it last reported it.
 async fn asked_space(ctx: &Context, selector: &SpaceSelector) -> Result<AskedSpace> {
-    let status = crate::client::workspaces::status(&ctx.paths, selector.clone()).await?;
+    let status = crate::client::spaces::status(&ctx.paths, selector.clone()).await?;
     let space = match status {
         StatusAnswer::Live(status) => status.space,
         StatusAnswer::Reported(reported) => {

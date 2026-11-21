@@ -698,7 +698,7 @@ async fn prepare_push_gate(
     let workspace = &SpaceSelector::id(&workspace.id);
     let (mode, narrowing) = (agent.mode.clone(), agent.narrowing);
     let permissions =
-        crate::client::workspaces::launch_permissions(paths, workspace.clone(), mode, narrowing)
+        crate::client::permissions::launch_permissions(paths, workspace.clone(), mode, narrowing)
             .await?;
     if permissions.push.value == Pushes::Direct {
         return Ok(Default::default());

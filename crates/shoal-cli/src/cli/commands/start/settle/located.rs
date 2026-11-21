@@ -70,7 +70,7 @@ pub(in crate::cli::commands) fn launch_args(args: Vec<OsString>) -> Result<Vec<S
 /// The ID of the space `selector` names, by number or ID: one of this
 /// machine, else one the hub lists on another joined machine.
 async fn space_id(ctx: &Context, selector: &SpaceSelector) -> Result<SpaceId> {
-    let located = crate::client::workspaces::locate(&ctx.paths, selector.clone()).await?;
+    let located = crate::client::spaces::locate(&ctx.paths, selector.clone()).await?;
     Ok(located.id().clone())
 }
 

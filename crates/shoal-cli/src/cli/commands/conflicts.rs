@@ -13,7 +13,7 @@ pub(in crate::cli::commands) async fn conflicts(
     target: Option<String>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let check = crate::client::workspaces::conflicts(&ctx.paths, workspace.clone(), target).await?;
+    let check = crate::client::diffs::conflicts(&ctx.paths, workspace.clone(), target).await?;
     ctx.show(&check, |check| {
         if check.clean() {
             outln!("No conflicts with {}", check.target);

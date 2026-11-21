@@ -359,7 +359,7 @@ impl Typed {
                     })
                     .context("no current workspace")?;
                 let target = ConfigTarget::Space(SpaceSelector::id(&workspace.id));
-                crate::client::workspaces::config_layers(&paths, target).await
+                crate::client::config::config_layers(&paths, target).await
             }));
             if let Ok(found) = layer {
                 layers = found;

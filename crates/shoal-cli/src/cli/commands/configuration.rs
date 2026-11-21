@@ -112,7 +112,7 @@ async fn ensure_edits_held(ctx: &Context, changes: &[Change]) -> Result<()> {
     if !crate::cli::commands::authorization::scoped(ctx)? {
         return Ok(());
     }
-    let held = crate::client::workspaces::held_permissions(&ctx.paths, None).await?;
+    let held = crate::client::permissions::held_permissions(&ctx.paths, None).await?;
     crate::config::edit::ensure_permissions_held(changes, &held)
 }
 
@@ -227,7 +227,7 @@ async fn target(ctx: &Context, explicit: Option<SpaceSelector>) -> Result<Config
 /// and an ignored worktree file: the daemon's repository layers under the
 /// global file read now.
 async fn report(paths: &CommandPaths, target: ConfigTarget) -> Result<(Vec<Entry>, Vec<String>)> {
-    let layers = crate::client::workspaces::config_layers(paths, target).await?;
+    let layers = crate::client::config::config_layers(paths, target).await?;
     let stack = Stack::new(&Config::load_with_templates(paths)?, &layers)?;
     let mut warnings = stack.warnings().to_vec();
     warnings.extend(

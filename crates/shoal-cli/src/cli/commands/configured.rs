@@ -66,8 +66,7 @@ async fn current_layers(ctx: &Context) -> Result<ConfigLayers> {
 }
 
 async fn workspace_layers(ctx: &Context, workspace: SpaceSelector) -> Result<ConfigLayers> {
-    crate::client::workspaces::config_layers(&ctx.paths, ConfigTarget::Space(workspace.clone()))
-        .await
+    crate::client::config::config_layers(&ctx.paths, ConfigTarget::Space(workspace.clone())).await
 }
 
 /// The configuration that defines a command for one run.

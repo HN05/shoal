@@ -270,7 +270,7 @@ async fn restore_here(paths: &CommandPaths, stopped: StoppedExecutions) {
     let mut restoring = Vec::new();
     for (space, executions) in stopped {
         let selector = SpaceSelector::id(&space);
-        let present = crate::client::workspaces::present_space(paths, &selector).await;
+        let present = crate::client::spaces::present_space(paths, &selector).await;
         let Ok(Some(space)) = present else {
             continue;
         };

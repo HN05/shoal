@@ -133,7 +133,7 @@ impl Inbox {
 
     /// The inbox of the workspace or running chat `space` names.
     async fn named(ctx: &Context, space: &SpaceSelector) -> Result<Self> {
-        match crate::client::workspaces::present_space(&ctx.paths, space).await? {
+        match crate::client::spaces::present_space(&ctx.paths, space).await? {
             Some(space) => Ok(Self {
                 kind: space.kind().as_str(),
                 space: SpaceSelector::id(&space.id),

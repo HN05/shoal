@@ -1,41 +1,24 @@
-//! Workspaces: listing, creating and adopting them, their names,
-//! bases and places, their status, environment and settings, and the Git
-//! state the daemon reads in their worktrees; and the spaces, workspaces and
-//! chats together.
+//! Workspaces: creating, adopting and inspecting them, their branches and
+//! bases, and the Git state the daemon reads and changes in their
+//! worktrees.
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::status::{Inspection, StatusAnswer};
+use shoal_protocol::status::Inspection;
 use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::Result;
-use serde::de::DeserializeOwned;
 
 use crate::connection::{Daemon, call, pages, request};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     config::hooks::HookKind,
-    model::{
-        ConflictCheck, DiffBase, Located, MergeOptions, MergePreview, OwnedPlace, Refreshed,
-        RenamedSpace, Space, SpacePlaces, SpaceTarget, UntrackedWorktree, Workspace,
-    },
-    protocol::{
-        CommitStart, ConfigMethod, ConfigTarget, CreationOptions, DiffMethod, MergingMethod,
-        PermissionMethod, PlaceMethod, RepositoryLayers, SpaceMethod, WorkspaceMethod,
-    },
+    model::{Refreshed, UntrackedWorktree, Workspace},
+    protocol::{CommitStart, CreationOptions, WorkspaceMethod},
     repository::Selector,
-    sessions::{Origin, PlaceClose, PlaceOwnership},
 };
 
 /// `workspace` with its links, completion, executions, places and leases.
 pub async fn inspect(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Inspection> {
     request(daemon, WorkspaceMethod::InspectWorkspace { workspace }).await
-}
-
-/// The workspace or chat `selector` names, by number, ID or name.
-pub async fn present_space(
-    daemon: &impl Daemon,
-    selector: &SpaceSelector,
-) -> Result<Option<Space>> {
-    Ok(crate::spaces::list(daemon).await?.find(selector))
 }
 
 /// Create a workspace of `repository` at a commit `start` names, in the chat
@@ -79,15 +62,6 @@ pub async fn rename_branch(
     branch: String,
 ) -> Result<Workspace> {
     request(daemon, WorkspaceMethod::RenameBranch { workspace, branch }).await
-}
-
-/// Give the workspace or chat `space` the name `name`.
-pub async fn rename_space(
-    daemon: &impl Daemon,
-    space: SpaceSelector,
-    name: shoal_protocol::space_names::SpaceName,
-) -> Result<RenamedSpace> {
-    request(daemon, SpaceMethod::RenameSpace { space, name }).await
 }
 
 /// Build `workspace` on the workspace `base`, or on the default branch
@@ -142,115 +116,9 @@ pub async fn refresh(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<R
     request(daemon, WorkspaceMethod::RefreshWorkspace { workspace }).await
 }
 
-/// Where the space `space` names runs: here, with its record, or on the
-/// other joined machine the hub lists it on.
-pub async fn locate(daemon: &impl Daemon, space: SpaceSelector) -> Result<Located> {
-    let located: Box<Located> = request(daemon, SpaceMethod::LocateSpace { space }).await?;
-    Ok(*located)
-}
-
-/// The spaces `target` selects.
-pub async fn find_spaces(daemon: &impl Daemon, target: SpaceTarget) -> Result<Vec<Space>> {
-    request(daemon, SpaceMethod::FindSpaces { target }).await
-}
-
-/// What `space` is doing: its links, agents, leases and assignment, from
-/// the machine that runs it, or what that machine last reported while it
-/// is offline.
-pub async fn status(daemon: &impl Daemon, space: SpaceSelector) -> Result<StatusAnswer> {
-    request(daemon, SpaceMethod::SpaceStatus { space }).await
-}
-
 /// The worktrees of registered repositories that no workspace owns.
 pub async fn untracked_worktrees(daemon: &impl Daemon) -> Result<Vec<UntrackedWorktree>> {
     pages(daemon, WorkspaceMethod::UntrackedWorktrees).await
-}
-
-/// The places Shoal created for every space, a workspace or a chat.
-pub async fn owned_places(daemon: &impl Daemon) -> Result<Vec<OwnedPlace>> {
-    request(daemon, PlaceMethod::OwnedPlaces).await
-}
-
-/// Where the executions of `space`, a workspace or a chat, run, and the
-/// places Shoal created for it.
-pub async fn places(daemon: &impl Daemon, space: SpaceSelector) -> Result<SpacePlaces> {
-    request(daemon, PlaceMethod::SpacePlaces { space }).await
-}
-
-/// Record `origin`, a place Shoal created for `workspace`, so the daemon
-/// closes it once the workspace is removed.
-pub async fn record_owned_place(
-    daemon: &impl Daemon,
-    workspace: &SpaceId,
-    origin: Origin,
-) -> Result<()> {
-    call(
-        daemon,
-        PlaceMethod::RecordOwnedPlace {
-            workspace: SpaceSelector::id(workspace),
-            origin,
-        },
-    )
-    .await?;
-    Ok(())
-}
-
-/// Whose `place`, the place of a terminal host, is for `space`, as the
-/// daemon knows it.
-pub async fn place_ownership(
-    daemon: &impl Daemon,
-    space: &SpaceId,
-    place: &Origin,
-) -> Result<PlaceOwnership> {
-    request(
-        daemon,
-        PlaceMethod::PlaceOwnership {
-            space: SpaceSelector::id(space),
-            place: place.clone(),
-        },
-    )
-    .await
-}
-
-/// Close `place`, a place Shoal created for `workspace`, while the daemon
-/// still records it as that workspace's.
-pub async fn close_owned_place(
-    daemon: &impl Daemon,
-    workspace: &SpaceId,
-    place: &Origin,
-) -> Result<PlaceClose> {
-    request(
-        daemon,
-        PlaceMethod::CloseOwnedPlace {
-            workspace: workspace.clone(),
-            place: place.clone(),
-        },
-    )
-    .await
-}
-
-/// The effective permissions of an agent starting in `mode` in `workspace`.
-pub async fn launch_permissions(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    mode: shoal_protocol::config::modes::ModeName,
-    narrowing: shoal_protocol::config::permissions::PermissionsConfig,
-) -> Result<shoal_protocol::config::permissions::Permissions> {
-    let method = PermissionMethod::LaunchPermissions {
-        workspace,
-        mode,
-        narrowing,
-    };
-    request(daemon, method).await
-}
-
-/// The effective permissions of this scoped process's own space for an
-/// action in the registered repository `repository`.
-pub async fn held_permissions(
-    daemon: &impl Daemon,
-    repository: Option<shoal_protocol::repository::Selector>,
-) -> Result<shoal_protocol::config::permissions::Permissions> {
-    request(daemon, PermissionMethod::HeldPermissions { repository }).await
 }
 
 /// Keep where an agent of `workspace` keeps its configuration for the
@@ -287,44 +155,4 @@ pub async fn hook(
     kind: HookKind,
 ) -> Result<Option<PathBuf>> {
     request(daemon, WorkspaceMethod::WorkspaceHook { workspace, kind }).await
-}
-
-/// The repository configuration layers that apply to `target`, below the
-/// global configuration, read as `L`.
-pub async fn config_layers<L: DeserializeOwned>(
-    daemon: &impl Daemon,
-    target: ConfigTarget,
-) -> Result<L> {
-    let layers: RepositoryLayers = request(daemon, ConfigMethod::LayeredConfig { target }).await?;
-    layers.read()
-}
-
-/// The commit `workspace`'s changes are counted from.
-pub async fn diff_base(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<DiffBase> {
-    request(daemon, DiffMethod::DiffBase { workspace }).await
-}
-
-/// The files where `workspace`'s committed HEAD conflicts with `target`, by
-/// default its base.
-pub async fn conflicts(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    target: Option<String>,
-) -> Result<ConflictCheck> {
-    request(daemon, DiffMethod::Conflicts { workspace, target }).await
-}
-
-/// What merging `workspace`'s branch as `options` say would do.
-pub async fn preview_merge(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    options: &MergeOptions,
-) -> Result<MergePreview> {
-    let preview = MergingMethod::PreviewMerge {
-        workspace,
-        push: options.push,
-        method: options.method,
-        message: options.message.clone(),
-    };
-    request(daemon, preview).await
 }

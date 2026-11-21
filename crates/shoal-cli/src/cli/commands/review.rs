@@ -51,7 +51,7 @@ enum Space {
 /// runs in, else one the user picks.
 async fn select(ctx: &Context, space: Option<SpaceSelector>) -> Result<Space> {
     let selected = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let found = crate::client::workspaces::present_space(&ctx.paths, &selected).await?;
+    let found = crate::client::spaces::present_space(&ctx.paths, &selected).await?;
     Ok(match found.map(crate::model::Space::into_chat) {
         Some(Ok(chat)) => Space::Chat(Box::new(chat)),
         _ => Space::Workspace(selected),
@@ -68,7 +68,7 @@ async fn chat(ctx: &Context, space: Option<&SpaceSelector>) -> Result<Option<Cha
         }
         None => return Ok(None),
     };
-    let found = crate::client::workspaces::present_space(&ctx.paths, &named).await?;
+    let found = crate::client::spaces::present_space(&ctx.paths, &named).await?;
     Ok(found.and_then(|space| space.into_chat().ok()))
 }
 

@@ -92,7 +92,7 @@ enum Reverting {
 impl Reverting {
     /// The workspace or running chat `space` names.
     async fn of(ctx: &Context, space: SpaceSelector) -> Result<Self> {
-        match crate::client::workspaces::present_space(&ctx.paths, &space)
+        match crate::client::spaces::present_space(&ctx.paths, &space)
             .await?
             .map(crate::model::Space::by_kind)
         {

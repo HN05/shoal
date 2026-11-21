@@ -1,14 +1,31 @@
-//! A workspace's diff on whichever machine has it, as that machine's Git
-//! writes it, for a caller whose own Git colours and pages it.
+//! Diffs: a workspace's diff on whichever machine has it, as that
+//! machine's Git writes it, for a caller whose own Git colours and pages
+//! it, the commit it counts from, and its conflicts with another branch.
 use anyhow::Result;
 use shoal_protocol::{
     diffs::{DiffDisplay, DiffOutput},
+    model::{ConflictCheck, DiffBase},
     protocol::{Body, DiffMethod, Responses},
     space_names::SpaceSelector,
 };
 use tokio::{io::BufReader, net::UnixStream};
 
-use crate::connection::{Daemon, open_buffered};
+use crate::connection::{Daemon, open_buffered, request};
+
+/// The commit `workspace`'s changes are counted from.
+pub async fn diff_base(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<DiffBase> {
+    request(daemon, DiffMethod::DiffBase { workspace }).await
+}
+
+/// The files where `workspace`'s committed HEAD conflicts with `target`, by
+/// default its base.
+pub async fn conflicts(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+    target: Option<String>,
+) -> Result<ConflictCheck> {
+    request(daemon, DiffMethod::Conflicts { workspace, target }).await
+}
 
 /// A diff's frames, as the Git of the workspace's machine writes them.
 pub struct Diff {

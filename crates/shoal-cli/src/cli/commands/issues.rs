@@ -201,7 +201,7 @@ pub(in crate::cli) async fn read_context(ctx: &Context, repo: &Repository) -> Re
         Scoping::Unscoped => crate::env::own_space().map(SpaceSelector::Id),
     };
     if let Some(space) = own
-        && let Some(space) = crate::client::workspaces::present_space(&ctx.paths, &space).await?
+        && let Some(space) = crate::client::spaces::present_space(&ctx.paths, &space).await?
         && space.repository_id.as_ref() == Some(&repo.id)
     {
         return Ok(ItemContext::space(SpaceSelector::id(&space.id)));

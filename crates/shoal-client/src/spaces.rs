@@ -1,12 +1,14 @@
-//! Spaces of either kind: every space the caller sees.
+//! Spaces of either kind: finding, listing and naming them, where each
+//! runs, its status and environment, and its scope tokens.
 use anyhow::Result;
 
 use crate::connection::{Daemon, pages, request};
 use shoal_protocol::{
-    model::{Everywhere, Located, Space, Spaces},
+    model::{Everywhere, Located, RenamedSpace, Space, SpaceTarget, Spaces},
     protocol::SpaceMethod,
     scope_tokens::ScopeToken,
-    space_names::SpaceSelector,
+    space_names::{SpaceName, SpaceSelector},
+    status::StatusAnswer,
 };
 use std::collections::BTreeMap;
 
@@ -15,6 +17,14 @@ use std::collections::BTreeMap;
 pub async fn list(daemon: &impl Daemon) -> Result<Spaces> {
     let spaces: Vec<Space> = request(daemon, SpaceMethod::ListSpaces).await?;
     Ok(Spaces(spaces))
+}
+
+/// The workspace or chat `selector` names, by number, ID or name.
+pub async fn present_space(
+    daemon: &impl Daemon,
+    selector: &SpaceSelector,
+) -> Result<Option<Space>> {
+    Ok(list(daemon).await?.find(selector))
 }
 
 /// The spaces the caller sees on every machine: this machine's, unless not
@@ -67,4 +77,32 @@ pub async fn environment(
 ) -> Result<BTreeMap<String, String>> {
     let values = request(daemon, SpaceMethod::SpaceEnvironment { space }).await?;
     shoal_protocol::env::export_configured(values, inherited)
+}
+
+/// Give the workspace or chat `space` the name `name`.
+pub async fn rename_space(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+    name: SpaceName,
+) -> Result<RenamedSpace> {
+    request(daemon, SpaceMethod::RenameSpace { space, name }).await
+}
+
+/// Where the space `space` names runs: here, with its record, or on the
+/// other joined machine the hub lists it on.
+pub async fn locate(daemon: &impl Daemon, space: SpaceSelector) -> Result<Located> {
+    let located: Box<Located> = request(daemon, SpaceMethod::LocateSpace { space }).await?;
+    Ok(*located)
+}
+
+/// The spaces `target` selects.
+pub async fn find_spaces(daemon: &impl Daemon, target: SpaceTarget) -> Result<Vec<Space>> {
+    request(daemon, SpaceMethod::FindSpaces { target }).await
+}
+
+/// What `space` is doing: its links, agents, leases and assignment, from
+/// the machine that runs it, or what that machine last reported while it
+/// is offline.
+pub async fn status(daemon: &impl Daemon, space: SpaceSelector) -> Result<StatusAnswer> {
+    request(daemon, SpaceMethod::SpaceStatus { space }).await
 }

@@ -270,7 +270,7 @@ pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>)
 /// `chat`.
 async fn space_kind(ctx: &Context, space: &SpaceSelector) -> Result<&'static str> {
     Ok(
-        (crate::client::workspaces::present_space(&ctx.paths, space).await?)
+        (crate::client::spaces::present_space(&ctx.paths, space).await?)
             .map_or("workspace", |space| space.kind().as_str()),
     )
 }

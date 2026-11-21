@@ -39,7 +39,7 @@ async fn named(ctx: &Context, names: &[SpaceSelector], files: bool) -> Result<Ve
 /// The ID of the space `selector` names, wherever it runs, or with `files`
 /// of the removed space it names by ID.
 async fn live_or_removed(ctx: &Context, selector: &SpaceSelector, files: bool) -> Result<SpaceId> {
-    let located = crate::client::workspaces::locate(&ctx.paths, selector.clone()).await;
+    let located = crate::client::spaces::locate(&ctx.paths, selector.clone()).await;
     let missing = match located {
         Ok(located) => return Ok(located.id().clone()),
         Err(error) if files && names_no_space(&error) => error,
@@ -58,7 +58,7 @@ fn names_no_space(error: &anyhow::Error) -> bool {
 async fn picked(ctx: &Context) -> Result<Vec<SpaceId>> {
     let mut ids = Vec::new();
     for selector in ui::select_spaces(ctx, Vec::new(), true).await? {
-        let space = crate::client::workspaces::present_space(&ctx.paths, &selector)
+        let space = crate::client::spaces::present_space(&ctx.paths, &selector)
             .await?
             .with_context(|| format!("no space {selector}"))?;
         ids.push(space.id);

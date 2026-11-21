@@ -82,7 +82,7 @@ pub(in crate::cli::commands) async fn space_repository(
     ctx: &Context,
     selector: &SpaceSelector,
 ) -> Result<SpaceRepository> {
-    let space = match crate::client::workspaces::locate(&ctx.paths, selector.clone()).await? {
+    let space = match crate::client::spaces::locate(&ctx.paths, selector.clone()).await? {
         Located::Here(space) => {
             return Ok(match &space.repository_id {
                 Some(id) => SpaceRepository::Registered(id.clone()),

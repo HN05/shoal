@@ -85,7 +85,7 @@ pub(in crate::cli::commands) async fn permits(ctx: &Context, key: PermissionKey)
     if !crate::process::scoped::inherits_scope(&ctx.paths.state) {
         return Ok(true);
     }
-    let held = crate::client::workspaces::held_permissions(&ctx.paths, None).await?;
+    let held = crate::client::permissions::held_permissions(&ctx.paths, None).await?;
     Ok(held.acting(key) != Acting::Deny)
 }
 

@@ -639,7 +639,7 @@ async fn a_workspaces_agent_renames_the_spaces_its_scope_reaches() {
     let child = connection::request::<Workspace>(&app, split).await.unwrap();
     let agent = daemon.scoped(&parent).await;
     let rename = |space: &Workspace, name: &str| {
-        crate::workspaces::rename_space(&agent, SpaceSelector::id(&space.id), name.into())
+        crate::spaces::rename_space(&agent, SpaceSelector::id(&space.id), name.into())
     };
 
     let renamed = rename(&parent, "Login retries").await.unwrap();

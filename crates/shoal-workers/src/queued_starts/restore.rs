@@ -21,7 +21,7 @@ pub(super) async fn start(paths: &CommandPaths, entry: &QueueEntry) -> Result<()
         anyhow::bail!("the queued restore names no stopped agent");
     };
     let selector = SpaceSelector::id(space);
-    let space = crate::client::workspaces::present_space(paths, &selector)
+    let space = crate::client::spaces::present_space(paths, &selector)
         .await?
         .with_context(|| format!("no space {selector}"))?;
     let settings = crate::settings::of(paths, ConfigTarget::Space(selector.clone())).await?;

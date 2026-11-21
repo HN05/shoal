@@ -105,7 +105,7 @@ fn package_manifest(moving: &Moving<'_>) -> Option<Manifest> {
 /// The name of the space `record` moves, or its ID once it is gone.
 async fn space_name(paths: &CommandPaths, record: &MoveRecord) -> SpaceName {
     let selector = SpaceSelector::id(&record.space);
-    match crate::client::workspaces::present_space(paths, &selector).await {
+    match crate::client::spaces::present_space(paths, &selector).await {
         Ok(Some(space)) => space.name,
         _ => record.space.to_string().into(),
     }

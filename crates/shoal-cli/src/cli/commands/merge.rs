@@ -41,7 +41,7 @@ async fn merge_named(ctx: &Context, args: &MergeArgs, item: Option<ItemInput>) -
 /// its open PR, or a workspace's branch locally.
 async fn merge_work(ctx: &Context, args: &MergeArgs) -> Result<i32> {
     let space = ui::select_space(ctx, args.space.clone(), Fallback::CurrentDirectory).await?;
-    match crate::client::items::merge_path(&ctx.paths, space.clone()).await? {
+    match crate::client::merging::merge_path(&ctx.paths, space.clone()).await? {
         MergePath::Pr { pr } => {
             args.ensure_pull_flags(&format!("PR {pr}"))?;
             let target = RepoTarget {

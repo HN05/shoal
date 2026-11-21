@@ -27,14 +27,14 @@ pub(in crate::cli) async fn closes_with(
         return Ok(false);
     };
     let selector = SpaceSelector::id(space);
-    if crate::client::workspaces::present_space(paths, &selector)
+    if crate::client::spaces::present_space(paths, &selector)
         .await?
         .is_none()
     {
         return Ok(false);
     }
     Ok(
-        crate::client::workspaces::place_ownership(paths, space, &place).await?
+        crate::client::places::place_ownership(paths, space, &place).await?
             == crate::sessions::PlaceOwnership::Space,
     )
 }
@@ -43,9 +43,7 @@ pub(in crate::cli) async fn closes_with(
 /// so the daemon closes it once the space is removed. Without the record
 /// the place stays open, so a failure only warns.
 pub(super) async fn record_owned(ctx: &Context, space: &SpaceId, place: Origin) {
-    if let Err(error) =
-        crate::client::workspaces::record_owned_place(&ctx.paths, space, place).await
-    {
+    if let Err(error) = crate::client::places::record_owned_place(&ctx.paths, space, place).await {
         eprintln!("warning: cannot record the place Shoal opened: {error:#}");
     }
 }

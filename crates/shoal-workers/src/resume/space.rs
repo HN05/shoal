@@ -134,7 +134,7 @@ fn awaits_setup(inspection: &Inspection) -> bool {
 
 /// The space `selector` names, a workspace or a chat.
 pub async fn present_space(paths: &CommandPaths, selector: &SpaceSelector) -> Result<Space> {
-    let space = crate::client::workspaces::present_space(paths, selector).await?;
+    let space = crate::client::spaces::present_space(paths, selector).await?;
     space.with_context(|| format!("no space {selector}"))
 }
 

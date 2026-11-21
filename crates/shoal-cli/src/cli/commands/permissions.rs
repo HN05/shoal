@@ -15,6 +15,6 @@ pub(super) async fn ensure_held(
     if !crate::env::is_scoped() || given.is_empty() {
         return Ok(());
     }
-    let held = crate::client::workspaces::held_permissions(&ctx.paths, repository).await?;
+    let held = crate::client::permissions::held_permissions(&ctx.paths, repository).await?;
     given.ensure_held(&held)
 }

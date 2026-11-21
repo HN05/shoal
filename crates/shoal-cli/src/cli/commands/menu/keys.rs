@@ -127,7 +127,7 @@ async fn chat_id(ctx: &Context, space: Option<&SpaceSelector>) -> Result<Option<
         return Ok(None);
     };
     Ok(
-        match crate::client::workspaces::present_space(&ctx.paths, space)
+        match crate::client::spaces::present_space(&ctx.paths, space)
             .await?
             .map(crate::model::Space::by_kind)
         {

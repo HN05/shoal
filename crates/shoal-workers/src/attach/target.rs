@@ -66,7 +66,7 @@ impl Target {
     pub(super) async fn sessions(&self, paths: &CommandPaths) -> Result<Vec<Session>> {
         let settings = crate::settings::of(paths, self.config()).await?;
         let space = SpaceSelector::id(self.id());
-        let places = crate::client::workspaces::places(paths, space).await?;
+        let places = crate::client::places::places(paths, space).await?;
         let recorded = Recorded::space(&places.executions, &places.places);
         terminal::sessions(&settings, &recorded).await
     }

@@ -174,8 +174,7 @@ async fn in_chat_outside_repositories(ctx: &Context) -> Result<bool> {
     let Some(chat) = ui::current_chat(&None) else {
         return Ok(false);
     };
-    let space =
-        crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::id(&chat)).await?;
+    let space = crate::client::spaces::present_space(&ctx.paths, &SpaceSelector::id(&chat)).await?;
     Ok(space.is_some_and(|space| space.worktree().is_none() && space.repository_id.is_none()))
 }
 

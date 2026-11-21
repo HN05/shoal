@@ -319,7 +319,7 @@ pub async fn load(need: Need, paths: &CommandPaths, workspaces: &[Workspace]) ->
 /// launch.
 async fn session_workspaces(paths: &CommandPaths) -> HashSet<SpaceId> {
     let agents = crate::client::agents::all(paths).await.unwrap_or_default();
-    let owned = crate::client::workspaces::owned_places(paths)
+    let owned = crate::client::places::owned_places(paths)
         .await
         .unwrap_or_default();
     let places = agent_places(&agents);
@@ -378,7 +378,7 @@ async fn workspace_settings<'a>(
             continue;
         }
         let target = crate::protocol::ConfigTarget::Space(SpaceSelector::id(workspace));
-        let layers = crate::client::workspaces::config_layers(paths, target).await;
+        let layers = crate::client::config::config_layers(paths, target).await;
         if let Ok(resolved) = layers.and_then(|layers| config.resolve(&layers)) {
             settings.insert(workspace.clone(), resolved);
         }

@@ -23,7 +23,7 @@ pub async fn configuration(
     daemon: &impl Daemon,
     target: ConfigTarget,
 ) -> Result<(Config, Effective)> {
-    let layers: ConfigLayers = crate::client::workspaces::config_layers(daemon, target).await?;
+    let layers: ConfigLayers = crate::client::config::config_layers(daemon, target).await?;
     crate::config::configuration(daemon.paths(), &layers)
 }
 
