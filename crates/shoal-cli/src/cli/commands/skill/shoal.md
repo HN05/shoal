@@ -239,9 +239,9 @@ space is selected by its ID. Outside a space, `status` shows the daemon and
 `log` every space's entries with the daemon's. On a machine joined to a hub,
 `list`, `inbox` and `status` also show the other machines' spaces your scope
 reaches, each with its `machine`. Commands that act on a space work on one
-elsewhere through the hub, under your scope, except those that need its files
-or processes, such as `diff`, `conflicts`, leases and demos, which name its
-machine. While that machine is offline, an alert, answer, approval decision
+elsewhere through the hub, under your scope, except those that need the
+machine they run on, such as `setup`, leases, starting a demo and attaching
+files, which name its machine. While that machine is offline, an alert, answer, approval decision
 or stop prints that it is queued and goes through once it connects; other
 commands fail, naming the machine.
 The user's alerts report agent exits, thread posts, busy resources, pending

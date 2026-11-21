@@ -1121,20 +1121,17 @@ commands go as yours; a space's processes' go with that space's scope and
 permissions, which its machine vouches for, so an agent acts on the spaces
 below its own on every machine and is refused the rest, and a device's go as
 yours. An action a space's permission sets to `propose` is refused from another
-machine, since its approval request would belong to that space's machine. This covers `status`, `log`, `thread`, `approvals`, `send`, `alert withdraw`,
-`stop`, `resume`, `restart`, `rename`, `done`, `rm`, `priority`,
-`progress`, `sleep`, `conflicts`, `diff`, `attach`, holds, the issue, PR and
-CI commands that act on a space, and following an agent's session, whose bytes come back as its machine
-reads them. The link to the hub carries such answers as byte streams beside
+machine, since its approval request would belong to that space's machine. This covers every command
+that reads or changes a space's state, and following an agent's session,
+whose bytes come back as its machine reads them. The link to the hub carries such answers as byte streams beside
 its other traffic, each held to what its reader has taken, so a reader that
 falls behind holds up nothing else. A machine that received a request but
 did not answer it in time fails the command, saying that the request may go
 on there, which `shoal status <space>` shows. Commands that need the
-space's files or processes, such as `setup`, leases, demos,
-`stop --interrupt`, `--leftovers` and `--processes`, `files` and an agent's
-hooks, run only
-on its machine and are refused elsewhere, naming it, as is a command that
-attaches files, which that machine cannot read. Without a target, the
+machine they run on, such as `setup`, acquiring and releasing leases,
+starting a demo and an agent's hooks, are refused for a space elsewhere,
+naming its machine, as is a command that attaches files, which that
+machine cannot read. Without a target, the
 picker of a command this covers, outside `resume` and the issue, PR and CI
 groups, offers the other machines' spaces after this machine's where the
 hub's listing shows what the command needs, such as an agent for

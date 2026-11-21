@@ -1,6 +1,5 @@
 //! The per-user daemon: owns shared state, serves protocol requests over a
 //! Unix socket, and runs background cleanup.
-mod absent;
 pub(crate) use shoal_daemon_base::{
     config_state, events, file_access, gates, item_numbers, log, notifications,
 };
@@ -36,6 +35,7 @@ mod coordinated;
 mod daemon_exit;
 pub(crate) mod demos;
 pub(crate) mod disk;
+mod elsewhere;
 pub(crate) mod engagement;
 pub mod environment;
 mod execution_connection;
@@ -655,32 +655,33 @@ async fn serve_request(
         Method::Operation(operation) => operation,
     };
     let scope = request.scope.as_ref();
-    let routing = absent::Routing::of(&server, &operation, scope)?;
+    let routing = elsewhere::Routing::of(&server, &operation, scope)?;
     let accepted = accept(
         &mut stream,
         &server,
         request.id,
         request.protocol,
         scope,
+        routing.as_ref(),
         &mut operation,
     );
     let caller = match accepted.await? {
         Accepted::Caller(caller) => caller,
-        Accepted::Refused(error) => {
-            let failed = absent::Failed {
+        Accepted::Refused(error) | Accepted::Elsewhere(error) => {
+            let failed = elsewhere::Failed {
                 error: &error,
                 refused: answer::refusal(&error),
                 routing,
                 caller: None,
                 operation: operation_guard,
             };
-            return absent::answer(stream, &server, request.id, failed).await;
+            return elsewhere::answer(stream, &server, request.id, failed).await;
         }
         Accepted::Answered => return Ok(()),
     };
     let reads_only = operation.reads_only();
     // Its scope narrowed what it names to IDs, which every machine reads.
-    let routing = absent::Routing::of(&server, &operation, scope)?;
+    let routing = elsewhere::Routing::of(&server, &operation, scope)?;
     let answer = requests::operation(&server, operation, caller.as_ref(), scope);
     let answer = log::when_slow(&name, answer);
     let Some(answer) = unless_abandoned(&mut stream, &name, reads_only, answer).await else {
@@ -688,14 +689,14 @@ async fn serve_request(
     };
     match answer {
         Ok(answer::Answer::Failed(error)) | Err(error) => {
-            let failed = absent::Failed {
+            let failed = elsewhere::Failed {
                 error: &error,
                 refused: answer::failure(&error),
                 routing,
                 caller: Some(caller),
                 operation: operation_guard,
             };
-            absent::answer(stream, &server, request.id, failed).await
+            elsewhere::answer(stream, &server, request.id, failed).await
         }
         Ok(answer) => (answer.send(stream, request.id, &server.manager, operation_guard)).await,
     }
@@ -768,19 +769,24 @@ enum Accepted {
     Caller(Option<Caller>),
     /// Its scope refused it.
     Refused(anyhow::Error),
+    /// Another joined machine runs the space it targets, which this one
+    /// refuses as absent.
+    Elsewhere(anyhow::Error),
     /// It was answered already, as in another protocol.
     Answered,
 }
 
 /// The caller of a request this daemon's protocol reads and its scope
 /// allows, narrowing the request to that scope, or why the scope refused
-/// it.
+/// it; for one that `routing` lets go to another machine, first whether
+/// another machine runs the space it targets.
 async fn accept(
     stream: &mut UnixStream,
     server: &Server,
     request_id: u64,
     protocol: u32,
     scope: Option<&ScopeToken>,
+    routing: Option<&elsewhere::Routing<'_>>,
     operation: &mut Operation,
 ) -> Result<Accepted> {
     if protocol != protocol::VERSION {
@@ -793,6 +799,9 @@ async fn accept(
         );
         protocol::write(stream, &Response::new(request_id, body)).await?;
         return Ok(Accepted::Answered);
+    }
+    if let Some(absent) = elsewhere::targeted(&server.manager, routing, operation).await {
+        return Ok(Accepted::Elsewhere(absent));
     }
     Ok(
         match scope::authorize(&server.manager, scope, operation).await {

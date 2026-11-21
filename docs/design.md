@@ -213,10 +213,19 @@ reports the numbers it holds without a space, those of a removed space's
 issue proposals, with its spaces, and the hub gives them no other space. An import's
 claim of a space's ID also keeps its number for the claiming machine while
 the hub still lists the space, so `shoal move --machine` and `--ssh` keep it; an exported
-package imported after its source is gone takes a new one. A request for
-a space another machine owns goes from the caller's daemon through the hub
-to that machine, which decides it as its own caller's: no command is
-special on the hub. Each machine vouches for its own callers, so its
+package imported after its source is gone takes a new one. The daemon
+alone decides where a request runs: each request kind declares, with no
+default, whether it goes to the machine of the space it acts on, and every
+kind that only reads or changes Shoal's state does, while one that needs
+the caller's machine (its execution, terminal or files, its agent's hook
+and wrapper reports, a lease taken for it, a space created there) stays.
+A request names the space, or the thread or approval request of a space,
+it acts on, which the caller's daemon finds here or else in the hub's
+directory before it handles the request; a thread a space's process
+opens is numbered in its own space, so only the user's goes to the space
+named. A request for a space another machine owns goes from the caller's
+daemon through the hub to that machine, which decides it as its own
+caller's: no command is special on the hub. Each machine vouches for its own callers, so its
 unscoped callers' requests and a device's go as the user's and a space's
 process's with that space's ID, the reach of its scope and its effective
 permissions, which the owning machine checks through the operation every
@@ -276,9 +285,8 @@ Shoal checks only as TOML, layers as it layers its own options and hands to
 the app. The hub forwards requests under a `[machine.hub] forward` path
 prefix to a local address, such as an app's own server, a device-paired
 client that is never part of Shoal, once a paired member signed the request
-with a fresh time and an unused nonce. A request that needs
-the space's files or processes stays on its machine and is refused
-elsewhere, naming it. `shoal start --machine` forwards its launch through
+with a fresh time and an unused nonce. A request that needs the
+caller's machine is refused for another machine's space, naming it. `shoal start --machine` forwards its launch through
 the hub to the machine it names, whose daemon starts it as its own caller's,
 so the space's queue, admission, cleanup and leases are that machine's, as
 are its mode and the kind of space it implies, which the caller's machine

@@ -33,6 +33,14 @@ impl Manager {
         }
     }
 
+    /// Whether a workspace or chat here, running or stopped, is the one
+    /// `selector` names.
+    pub(crate) async fn holds_space(&self, selector: &SpaceSelector) -> Result<bool> {
+        let owned = selector.clone();
+        let found = self.store.read(move |db| selected(db, &owned)).await?;
+        Ok(found.is_some())
+    }
+
     /// The refusal of a request for the space `selector` names, which does
     /// not exist here, as another joined machine's may: one selected by
     /// the ID of a removed space says it was removed, with its repository

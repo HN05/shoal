@@ -1,15 +1,17 @@
-//! Answering a request refused for naming a space this machine has none
-//! of: the machine the hub lists that space on answers it instead, or the
-//! hub holds it for that machine, and only a space no machine has keeps the
-//! refusal; the answer of one that goes on, as a follow's, comes as that
-//! machine writes it, and a duplex one's connection, as a demo stream's,
-//! then carries bytes both ways. A request another machine forwarded here
-//! is never forwarded again.
+//! Answering a request for a space this machine has none of: one whose
+//! target the hub lists on another machine before it is handled here, and
+//! one refused here for naming such a space. The machine the hub lists that
+//! space on answers it instead, or the hub holds it for that machine, and
+//! only a space no machine has keeps the refusal; the answer of one that
+//! goes on, as a follow's, comes as that machine writes it, and a duplex
+//! one's connection, as a demo stream's, then carries bytes both ways. A
+//! request another machine forwarded here is never forwarded again.
 
 use anyhow::Result;
 use shoal_protocol::{
-    protocol::{self, Body, Forwarding, Operation, Response},
+    protocol::{self, Body, Forwarding, Operation, Response, Target},
     scope_tokens::ScopeToken,
+    space_names::SpaceSelector,
 };
 use tokio::net::UnixStream;
 
@@ -17,10 +19,42 @@ use super::{
     Server,
     answer::{self, OperationGuard},
     hub::{Elsewhere, Unanswered},
+    manager::Manager,
     relayed::Relayed,
     scope::Caller,
 };
 use crate::refusal::Refusal;
+
+/// The refusal of `operation`, which goes to another machine as `routing`
+/// says, for the space it targets when this machine has none of it and the
+/// hub lists it on another, which answers it instead; none for a request
+/// this machine answers.
+pub(super) async fn targeted(
+    manager: &Manager,
+    routing: Option<&Routing<'_>>,
+    operation: &Operation,
+) -> Option<anyhow::Error> {
+    let space = target_space(operation.target()?, routing?.scope)?;
+    // One this machine cannot read is left to its handler's refusal.
+    if manager.holds_space(&space).await.unwrap_or(true) {
+        return None;
+    }
+    match manager.hub.machine_of(manager, &space).await {
+        Ok(Some(_)) => Some(Refusal::absent(&space, format!("no space {space}")).into()),
+        _ => None,
+    }
+}
+
+/// The space `target` is in, for a request from `scope`; none where a
+/// space's process acts in its own.
+fn target_space(target: Target<'_>, scope: Option<&ScopeToken>) -> Option<SpaceSelector> {
+    match target {
+        Target::Space(space) => Some(space.clone()),
+        Target::Item(number) => Some(SpaceSelector::Number(number.space)),
+        Target::Acting(_) if scope.is_some() => None,
+        Target::Acting(space) => Some(space.clone()),
+    }
+}
 
 /// What a request for a space elsewhere goes on with: its method as its
 /// caller sent it, before its scope narrowed it, and its scope token.
@@ -163,3 +197,6 @@ async fn relay(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;
