@@ -11,7 +11,7 @@ use futures_util::future::BoxFuture;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use shoal_daemon_base::alerts::{AlertKind, NewAlert};
 use shoal_hub::daemon::{
-    Approvals, Apps, Dispatch, Messages, Receiver, Records, SpacePermissions, Spaces,
+    Approvals, Apps, Dispatch, Messages, Packages, Receiver, Records, SpacePermissions, Spaces,
 };
 
 use shoal_ids::repository_ids::RepositoryId;
@@ -242,6 +242,23 @@ impl Apps for Manager {
 
 /// The spaces' records, as the hub reads and renumbers them in its own
 /// connections and transactions.
+impl Packages for Manager {
+    fn package_state<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<String>> {
+        Box::pin(Manager::package_state(self, space))
+    }
+
+    fn write_package<'a>(
+        &'a self,
+        space: &'a Space,
+        file: &'a std::path::Path,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            self.write_kept_package(space, file.to_owned()).await?;
+            Ok(())
+        })
+    }
+}
+
 pub(crate) struct HubRecords;
 
 impl Records for HubRecords {

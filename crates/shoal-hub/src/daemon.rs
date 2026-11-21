@@ -1,8 +1,10 @@
 //! What the hub needs of the rest of the daemon, which implements it: the
 //! spaces it reports, routes to and tells about, their permissions, the
 //! messages that reach their agents, the approvals and threads that pass
-//! between machines, and the app store a member asks of the hub.
+//! between machines, the app store a member asks of the hub, and the
+//! packages of an intermittent machine's spaces.
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -207,15 +209,27 @@ pub trait Apps: Send + Sync {
     ) -> Result<()>;
 }
 
+/// The packages of this machine's spaces that an intermittent machine
+/// keeps on the hub.
+pub trait Packages: Send + Sync {
+    /// What a package of `space` taken now would hold, as a digest that
+    /// changes with it.
+    fn package_state<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<String>>;
+
+    /// Write a package of `space`, which keeps running here, under its own
+    /// ID, to the new file `file`.
+    fn write_package<'a>(&'a self, space: &'a Space, file: &'a Path) -> BoxFuture<'a, Result<()>>;
+}
+
 /// Everything the hub needs of the daemon, which each of its operations
 /// that reaches beyond it takes.
 pub trait Daemon:
-    Spaces + SpacePermissions + Messages + Approvals + Dispatch + Apps + Coordinators
+    Spaces + SpacePermissions + Messages + Approvals + Dispatch + Apps + Packages + Coordinators
 {
 }
 
 impl<T> Daemon for T where
-    T: Spaces + SpacePermissions + Messages + Approvals + Dispatch + Apps + Coordinators
+    T: Spaces + SpacePermissions + Messages + Approvals + Dispatch + Apps + Packages + Coordinators
 {
 }
 

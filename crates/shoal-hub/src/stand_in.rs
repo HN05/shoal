@@ -35,7 +35,9 @@ use shoal_schedule::priority::Priority;
 
 use crate::{
     Hub,
-    daemon::{Approvals, Apps, Dispatch, Messages, Receiver, Records, SpacePermissions, Spaces},
+    daemon::{
+        Approvals, Apps, Dispatch, Messages, Packages, Receiver, Records, SpacePermissions, Spaces,
+    },
     streams::{Incoming, Outgoing},
 };
 
@@ -232,6 +234,20 @@ impl Apps for StandIn {
         _: Outgoing,
     ) -> Result<()> {
         bail!("the stand-in daemon has no app store")
+    }
+}
+
+impl Packages for StandIn {
+    fn package_state<'a>(&'a self, _: &'a Space) -> BoxFuture<'a, Result<String>> {
+        Box::pin(async { bail!("the stand-in daemon has no spaces to package") })
+    }
+
+    fn write_package<'a>(
+        &'a self,
+        _: &'a Space,
+        _: &'a std::path::Path,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { bail!("the stand-in daemon has no spaces to package") })
     }
 }
 

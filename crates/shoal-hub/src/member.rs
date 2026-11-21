@@ -14,7 +14,7 @@ use anyhow::{Result, anyhow};
 use shoal_ids::member_ids::MemberId;
 use shoal_protocol::hub::{
     HubRole, Membership, Route,
-    availability::Classified,
+    availability::{Availability, Classified},
     link::{Call, Intent, RefusalReason, Reply},
 };
 use tokio::sync::Notify;
@@ -109,6 +109,12 @@ impl Link {
 
     pub(super) fn calls(&self) -> Option<Arc<Calls>> {
         self.state.lock().unwrap().calls.clone()
+    }
+
+    /// Whether the hub last told this machine it has `availability`.
+    pub(super) fn has_availability(&self, availability: Availability) -> bool {
+        let told = *self.availability.lock().unwrap();
+        told.is_some_and(|told| told.availability == availability)
     }
 
     /// Keep the availability the hub told this machine it has.
@@ -283,8 +289,8 @@ impl Hub {
 
     /// Serve the open link on `transport` until it ends or `stop`
     /// resolves, answering what the hub passes this machine, and sending
-    /// what waited for the link, then reporting this machine's spaces and
-    /// describing it, meanwhile.
+    /// what waited for the link, then reporting this machine's spaces,
+    /// describing it and sending its packages, meanwhile.
     async fn serve_hub(
         self: &Arc<Self>,
         daemon: &Arc<dyn Daemon>,
@@ -309,6 +315,7 @@ impl Hub {
                 never = self.keep_sending_outbox(&calls) => never,
                 never = self.keep_reporting(&**daemon, &calls) => never,
                 never = self.keep_describing(&calls) => never,
+                never = self.keep_packaging(&**daemon, &calls) => never,
             }
         };
         let end = tokio::select! {
