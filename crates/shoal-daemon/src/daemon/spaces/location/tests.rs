@@ -109,3 +109,28 @@ async fn a_walk_down_the_tree_crosses_between_machines_as_the_tree_does() {
     ];
     assert_eq!(found, expected);
 }
+
+#[tokio::test]
+async fn a_chat_in_a_worktree_reaches_neither_its_workspace_nor_itself_on_its_machine() {
+    let daemon = TestDaemon::start().await;
+    let manager = &daemon.manager;
+    let home = daemon.workspace("home").await;
+    let chat = manager
+        .start_chat_in_workspace(
+            &SpaceSelector::id(&home.id),
+            "reader".into(),
+            "claude".into(),
+            None,
+        )
+        .await
+        .unwrap();
+    let caller = Caller::of_space(chat.id.clone());
+    let reached = manager.reached_here(Some(&caller)).await.unwrap();
+    let ids: Vec<_> = (reached.iter())
+        .map(|located| located.id().clone())
+        .collect();
+    assert!(
+        !ids.contains(&home.id) && !ids.contains(&chat.id),
+        "{ids:?}"
+    );
+}

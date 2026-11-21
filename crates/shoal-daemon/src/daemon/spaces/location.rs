@@ -104,12 +104,12 @@ impl Manager {
         Ok(found)
     }
 
-    /// The spaces of this machine `caller` sees but its own.
+    /// The spaces of this machine `caller`'s scope reaches but its own, as
+    /// it may restart or stop them.
     async fn reached_here(&self, caller: Option<&Caller>) -> Result<Vec<Located>> {
-        let own = caller.map(|caller| &caller.space_id);
-        let spaces = self.visible_spaces(caller).await?;
-        Ok((spaces.into_iter())
-            .filter(|space| Some(&space.id) != own)
+        let visible = self.visible_spaces(caller).await?;
+        let reached = self.spaces_below(caller, visible).await?;
+        Ok((reached.into_iter())
             .map(|space| Located::Here(Box::new(space)))
             .collect())
     }
