@@ -4,7 +4,7 @@ use anyhow::Result;
 use crate::connection::{Daemon, pages, request};
 use shoal_protocol::{
     model::{Everywhere, Located, Space, Spaces},
-    protocol::WorkspaceMethod,
+    protocol::SpaceMethod,
     scope_tokens::ScopeToken,
     space_names::SpaceSelector,
 };
@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 /// The workspaces and chats, running or stopped, visible to this caller;
 /// the daemon filters scoped requests.
 pub async fn list(daemon: &impl Daemon) -> Result<Spaces> {
-    let spaces: Vec<Space> = request(daemon, WorkspaceMethod::ListSpaces).await?;
+    let spaces: Vec<Space> = request(daemon, SpaceMethod::ListSpaces).await?;
     Ok(Spaces(spaces))
 }
 
@@ -21,7 +21,7 @@ pub async fn list(daemon: &impl Daemon) -> Result<Spaces> {
 /// `here`, and the other joined machines' as the hub lists them, or why the
 /// hub could not be asked.
 pub async fn everywhere(daemon: &impl Daemon, here: bool) -> Result<Everywhere> {
-    let method = WorkspaceMethod::ListSpacesEverywhere { here };
+    let method = SpaceMethod::ListSpacesEverywhere { here };
     Everywhere::from_parts(pages(daemon, method).await?)
 }
 
@@ -34,7 +34,7 @@ pub async fn select(
     machines: Vec<String>,
     below: bool,
 ) -> Result<Vec<Located>> {
-    let method = WorkspaceMethod::SelectSpaces {
+    let method = SpaceMethod::SelectSpaces {
         spaces,
         machines,
         below,
@@ -45,7 +45,7 @@ pub async fn select(
 /// A new scope token that acts for `space` until [`revoke_scope`] revokes
 /// it or the space is removed.
 pub async fn issue_scope(daemon: &impl Daemon, space: SpaceSelector) -> Result<ScopeToken> {
-    request(daemon, WorkspaceMethod::IssueScope { space }).await
+    request(daemon, SpaceMethod::IssueScope { space }).await
 }
 
 /// Revoke `token`, which [`issue_scope`] issued for `space`.
@@ -54,7 +54,7 @@ pub async fn revoke_scope(
     space: SpaceSelector,
     token: ScopeToken,
 ) -> Result<()> {
-    request(daemon, WorkspaceMethod::RevokeScope { space, token }).await
+    request(daemon, SpaceMethod::RevokeScope { space, token }).await
 }
 
 /// The variables `space` gives its processes, without a scope token, as a
@@ -65,6 +65,6 @@ pub async fn environment(
     space: SpaceSelector,
     inherited: Option<std::ffi::OsString>,
 ) -> Result<BTreeMap<String, String>> {
-    let values = request(daemon, WorkspaceMethod::SpaceEnvironment { space }).await?;
+    let values = request(daemon, SpaceMethod::SpaceEnvironment { space }).await?;
     shoal_protocol::env::export_configured(values, inherited)
 }

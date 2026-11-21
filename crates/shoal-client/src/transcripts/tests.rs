@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use shoal_protocol::{
-    protocol::{MAX_FRAME, Request, WorkspaceMethod},
+    protocol::{MAX_FRAME, Request, SpaceMethod},
     space_names::SpaceSelector,
 };
 
@@ -37,7 +37,7 @@ fn following_again_after_many_files_fits_in_a_frame_and_keeps_the_furthest_read(
     let mut cursor = read(2_000);
     let from = cursor.resume();
     assert_eq!(from.get(&file(1_999)).map(|read| read.offset), Some(2_000));
-    let method = WorkspaceMethod::FollowSession {
+    let method = SpaceMethod::FollowSession {
         space: SpaceSelector::id(&"space".into()),
         session: None,
         from,

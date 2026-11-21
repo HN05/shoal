@@ -1,6 +1,43 @@
-//! Whose repository config a request reads, and the layers it returns.
+//! The requests for a repository's config, whose config they read, and the
+//! layers they return.
 use anyhow::Result;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+
+use super::{Forwarding, Target};
+use crate::space_names::SpaceSelector;
+
+/// Requests for the repository config of a space, a repository or the
+/// global config alone.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfigMethod {
+    /// The config file the repository of the space `space` tracks, as
+    /// TOML, which a machine without that repository reads a child's modes
+    /// under. Answers with [`super::Body::TrackedConfig`].
+    TrackedConfig { space: SpaceSelector },
+    /// The repository layer of the target's config, for the CLI to resolve
+    /// against the global config it reads at launch.
+    LayeredConfig { target: ConfigTarget },
+}
+
+impl ConfigMethod {
+    /// A space's config is read on its machine.
+    pub fn forwarding(&self) -> Forwarding {
+        match self {
+            Self::TrackedConfig { .. } | Self::LayeredConfig { .. } => Forwarding::Online,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::TrackedConfig { space }
+            | Self::LayeredConfig {
+                target: ConfigTarget::Space(space),
+            } => Some(Target::Space(space)),
+            Self::LayeredConfig { .. } => None,
+        }
+    }
+}
 
 /// Whose repository config: a space's, a workspace's worktree file under
 /// the saved config or a chat's repository's; the registered checkout's

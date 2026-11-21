@@ -1,10 +1,11 @@
 //! The request envelope and the method each request carries.
 use super::{
     AgentMethod, AlertMethod, AppMethod, ApprovalMethod, AssignmentMethod, BranchMethod,
-    ChangeMethod, ChatMethod, CiMethod, ContainerMethod, DaemonMethod, DemoMethod, ExecutionMethod,
-    ExitRequest, FileMethod, HoldMethod, HubMethod, ItemMethod, LaunchMethod, OperationMethod,
-    PortMethod, QueueMethod, Reattach, RecoveryMethod, RemovalMethod, RepositoryMethod,
-    ResourceMethod, ReviewMethod, SecretMethod, SimulatorMethod, SubscriptionMethod, ThreadMethod,
+    ChangeMethod, ChatMethod, CiMethod, ConfigMethod, ContainerMethod, DaemonMethod, DemoMethod,
+    DiffMethod, ExecutionMethod, ExitRequest, FileMethod, HoldMethod, HubMethod, ItemMethod,
+    LaunchMethod, MergingMethod, OperationMethod, PermissionMethod, PlaceMethod, PortMethod,
+    QueueMethod, Reattach, RecoveryMethod, RemovalMethod, RepositoryMethod, ResourceMethod,
+    ReviewMethod, SecretMethod, SimulatorMethod, SpaceMethod, SubscriptionMethod, ThreadMethod,
     TriggerMethod, VERSION, WorkspaceMethod,
 };
 use serde::{Deserialize, Serialize};
@@ -61,6 +62,12 @@ pub enum Operation {
     Daemon(DaemonMethod),
     Repository(RepositoryMethod),
     Workspace(WorkspaceMethod),
+    Space(SpaceMethod),
+    Place(PlaceMethod),
+    Permission(PermissionMethod),
+    Config(ConfigMethod),
+    Diff(DiffMethod),
+    Merging(MergingMethod),
     Removal(RemovalMethod),
     Recovery(RecoveryMethod),
     Execution(ExecutionMethod),
@@ -152,7 +159,8 @@ impl Operation {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::Repository(method) => method.lifetime(),
-            Self::Workspace(method) => method.lifetime(),
+            Self::Space(method) => method.lifetime(),
+            Self::Diff(method) => method.lifetime(),
             Self::Execution(method) => method.lifetime(),
             Self::Agent(method) => method.lifetime(),
             Self::Launch(method) => method.lifetime(),
@@ -166,6 +174,11 @@ impl Operation {
             Self::Demo(method) => method.lifetime(),
             Self::App(method) => method.lifetime(),
             Self::Daemon(_)
+            | Self::Workspace(_)
+            | Self::Place(_)
+            | Self::Permission(_)
+            | Self::Config(_)
+            | Self::Merging(_)
             | Self::Chat(_)
             | Self::Removal(_)
             | Self::Recovery(_)
@@ -220,6 +233,12 @@ from_domains!(
     Daemon(DaemonMethod),
     Repository(RepositoryMethod),
     Workspace(WorkspaceMethod),
+    Space(SpaceMethod),
+    Place(PlaceMethod),
+    Permission(PermissionMethod),
+    Config(ConfigMethod),
+    Diff(DiffMethod),
+    Merging(MergingMethod),
     Removal(RemovalMethod),
     Recovery(RecoveryMethod),
     Execution(ExecutionMethod),

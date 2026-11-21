@@ -9,7 +9,7 @@ use crate::{
         test_support::{ProcessGroup, agent_process, manager, repository},
     },
     model::{Chat, Repository, Workspace},
-    protocol::{AlertMethod, AlertTarget, ItemContext, ItemMethod, QueueMethod, WorkspaceMethod},
+    protocol::{AlertMethod, AlertTarget, ItemContext, ItemMethod, QueueMethod, SpaceMethod},
     state::AgentState,
 };
 use shoal_ids::space_ids::SpaceId;
@@ -358,7 +358,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
     assert_eq!(listed.len(), 3);
     let visible = manager.visible_repositories(Some(&caller)).await.unwrap();
     assert_eq!(visible.len(), 2);
-    let mut workspaces = WorkspaceMethod::ListSpaces;
+    let mut workspaces = SpaceMethod::ListSpaces;
     crate::daemon::scope::authorize(&manager, Some(&token), &mut workspaces)
         .await
         .unwrap();

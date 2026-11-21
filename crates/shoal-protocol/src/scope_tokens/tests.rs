@@ -1,5 +1,5 @@
 use super::*;
-use crate::protocol::{Body, Operation, Request, WorkspaceMethod};
+use crate::protocol::{Body, Operation, Request, SpaceMethod};
 use serde_json::json;
 
 const SECRET: &str = "5f0c3e1a-scope-secret";
@@ -14,7 +14,7 @@ fn structs_holding_a_token_never_debug_it() {
         }}
     }))
     .unwrap();
-    let revoke = Operation::Workspace(WorkspaceMethod::RevokeScope {
+    let revoke = Operation::Space(SpaceMethod::RevokeScope {
         space: crate::space_names::SpaceSelector::id(&"w1".into()),
         token: SECRET.parse().unwrap(),
     });

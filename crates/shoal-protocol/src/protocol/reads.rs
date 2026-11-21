@@ -3,10 +3,10 @@
 //! those finish instead, including reads that first finish or record work.
 use super::{
     AgentMethod, AlertMethod, AppMethod, ApprovalMethod, BranchMethod, ChangeMethod, CiMethod,
-    ContainerMethod, DaemonMethod, DemoMethod, ExecutionMethod, FileMethod, HoldMethod, HubMethod,
-    ItemMethod, LaunchMethod, Operation, PortMethod, QueueMethod, RecoveryMethod, RemovalMethod,
-    RepositoryMethod, ResourceMethod, SecretMethod, SimulatorMethod, ThreadMethod, TriggerMethod,
-    WorkspaceMethod,
+    ConfigMethod, ContainerMethod, DaemonMethod, DemoMethod, DiffMethod, ExecutionMethod,
+    FileMethod, HoldMethod, HubMethod, ItemMethod, LaunchMethod, MergingMethod, Operation,
+    PortMethod, QueueMethod, RecoveryMethod, RemovalMethod, RepositoryMethod, ResourceMethod,
+    SecretMethod, SimulatorMethod, SpaceMethod, ThreadMethod, TriggerMethod, WorkspaceMethod,
 };
 
 impl Operation {
@@ -44,7 +44,6 @@ impl Operation {
                         | ExecutionMethod::ListAgents
                 )
                 | Self::File(FileMethod::ListFiles { .. })
-                | Self::Workspace(WorkspaceMethod::SpaceLog { .. })
                 | Self::Hold(HoldMethod::HoldList { .. })
                 | Self::Item(
                     ItemMethod::ListItems { .. }
@@ -57,7 +56,6 @@ impl Operation {
                         | ItemMethod::IssueDetails { .. }
                         | ItemMethod::IssueBlockers { .. }
                         | ItemMethod::PullRequest { .. }
-                        | ItemMethod::MergePath { .. }
                         | ItemMethod::ViewItems { .. }
                         | ItemMethod::ForgeDownload { .. }
                 )
@@ -111,22 +109,28 @@ impl Operation {
                         | SimulatorMethod::SimHistory { .. }
                 )
                 | Self::Workspace(
-                    WorkspaceMethod::ListSpaces
-                        | WorkspaceMethod::ListSpacesEverywhere { .. }
-                        | WorkspaceMethod::LocateSpace { .. }
-                        | WorkspaceMethod::SelectSpaces { .. }
-                        | WorkspaceMethod::UntrackedWorktrees
-                        | WorkspaceMethod::FindSpaces { .. }
-                        | WorkspaceMethod::InspectWorkspace { .. }
-                        | WorkspaceMethod::SpaceStatus { .. }
-                        | WorkspaceMethod::TrackedConfig { .. }
-                        | WorkspaceMethod::SpaceSessions { .. }
-                        | WorkspaceMethod::FollowSession { .. }
-                        | WorkspaceMethod::DiffBase { .. }
-                        | WorkspaceMethod::Conflicts { .. }
-                        | WorkspaceMethod::Diff { .. }
-                        | WorkspaceMethod::LayeredConfig { .. }
+                    WorkspaceMethod::UntrackedWorktrees | WorkspaceMethod::InspectWorkspace { .. }
                 )
+                | Self::Space(
+                    SpaceMethod::ListSpaces
+                        | SpaceMethod::ListSpacesEverywhere { .. }
+                        | SpaceMethod::LocateSpace { .. }
+                        | SpaceMethod::SelectSpaces { .. }
+                        | SpaceMethod::FindSpaces { .. }
+                        | SpaceMethod::SpaceStatus { .. }
+                        | SpaceMethod::SpaceSessions { .. }
+                        | SpaceMethod::FollowSession { .. }
+                        | SpaceMethod::SpaceLog { .. }
+                )
+                | Self::Config(
+                    ConfigMethod::TrackedConfig { .. } | ConfigMethod::LayeredConfig { .. }
+                )
+                | Self::Diff(
+                    DiffMethod::DiffBase { .. }
+                        | DiffMethod::Conflicts { .. }
+                        | DiffMethod::Diff { .. }
+                )
+                | Self::Merging(MergingMethod::MergePath { .. })
         )
     }
 }

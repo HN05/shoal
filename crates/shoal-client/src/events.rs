@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use tokio::{io::BufReader, net::UnixStream};
 
 use crate::connection::{Daemon, open_buffered, reconnect, stream_closed};
-use shoal_protocol::protocol::{self, Body, Response, WorkspaceMethod};
+use shoal_protocol::protocol::{self, Body, Response, SpaceMethod};
 
 /// The journal of space, file and Shoal events from a cursor: a replay
 /// of the retained events, then with `follow` each new one as it happens,
@@ -25,7 +25,7 @@ impl Events {
         after: Option<EventCursor>,
         follow: bool,
     ) -> Result<Self> {
-        let method = WorkspaceMethod::WatchSpaceEvents { after, follow };
+        let method = SpaceMethod::WatchSpaceEvents { after, follow };
         let (reader, body) = open_buffered(daemon, method).await?;
         <()>::try_from(body)?;
         Ok(Self {
@@ -47,7 +47,7 @@ impl Events {
                 Ok(response) => response,
                 Err(error) if self.follow && stream_closed(&error) => {
                     let (after, follow) = (self.cursor, self.follow);
-                    let method = || WorkspaceMethod::WatchSpaceEvents { after, follow };
+                    let method = || SpaceMethod::WatchSpaceEvents { after, follow };
                     let (reader, body) = reconnect(daemon, method).await?;
                     <()>::try_from(body)?;
                     self.reader = reader;

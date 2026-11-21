@@ -18,7 +18,7 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     links::{OpenOutcome, Updates},
     model::{MergePath, Relation},
-    protocol::{Body, ItemMethod, RepoTarget},
+    protocol::{Body, ItemMethod, MergingMethod, RepoTarget},
 };
 
 /// Link the `kind` item `item` names to `space` as `relation`, with the
@@ -181,7 +181,7 @@ pub async fn act(
 /// How `shoal merge` merges the work of `space`: through its one open PR,
 /// or a workspace's branch locally.
 pub async fn merge_path(daemon: &impl Daemon, space: SpaceSelector) -> Result<MergePath> {
-    request(daemon, ItemMethod::MergePath { space }).await
+    request(daemon, MergingMethod::MergePath { space }).await
 }
 
 /// Carry out `action`, a merge of the PR `item` names or of the linked

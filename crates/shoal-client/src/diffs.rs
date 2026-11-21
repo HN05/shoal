@@ -3,7 +3,7 @@
 use anyhow::Result;
 use shoal_protocol::{
     diffs::{DiffDisplay, DiffOutput},
-    protocol::{Body, Responses, WorkspaceMethod},
+    protocol::{Body, DiffMethod, Responses},
     space_names::SpaceSelector,
 };
 use tokio::{io::BufReader, net::UnixStream};
@@ -25,7 +25,7 @@ pub async fn diff(
     workspace: SpaceSelector,
     display: DiffDisplay,
 ) -> Result<Diff> {
-    let method = WorkspaceMethod::Diff { workspace, display };
+    let method = DiffMethod::Diff { workspace, display };
     let (stream, first) = open_buffered(daemon, method).await?;
     let first = Some(first.into_result()?);
     Ok(Diff {

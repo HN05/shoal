@@ -5,8 +5,8 @@ use crate::{
     config::repo::ConfigLayers,
     model::{Chat, OwnedPlace, RunningAgent},
     protocol::{
-        self, Body, ConfigTarget, ExecutionMethod, Method, Operation, RepositoryLayers, Request,
-        Response, WorkspaceMethod,
+        self, Body, ConfigMethod, ConfigTarget, ExecutionMethod, Method, Operation, PlaceMethod,
+        RepositoryLayers, Request, Response, SpaceMethod,
     },
     sessions::{HostName, Origin},
     state::WorkspaceState,
@@ -154,7 +154,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
             )
         } else if matches!(
             request.method,
-            Method::Operation(Operation::Workspace(WorkspaceMethod::OwnedPlaces))
+            Method::Operation(Operation::Place(PlaceMethod::OwnedPlaces))
         ) {
             // `fifth` turned Herdr off, so its pane is never asked about;
             // `sixth`'s Herdr cannot answer, which leaves zmx's answers.
@@ -171,7 +171,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                 })
                 .into(),
             )
-        } else if let Method::Operation(Operation::Workspace(WorkspaceMethod::LayeredConfig {
+        } else if let Method::Operation(Operation::Config(ConfigMethod::LayeredConfig {
             target: ConfigTarget::Space(workspace),
         })) = &request.method
         {
@@ -181,7 +181,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
         } else {
             assert!(matches!(
                 request.method,
-                Method::Operation(Operation::Workspace(WorkspaceMethod::ListSpaces))
+                Method::Operation(Operation::Space(SpaceMethod::ListSpaces))
             ));
             let chat = Chat {
                 narrowing: Default::default(),

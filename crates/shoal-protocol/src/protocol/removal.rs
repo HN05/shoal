@@ -120,6 +120,18 @@ pub enum RemovalMethod {
         #[serde(default)]
         carrying: crate::transfer::Carrying,
     },
+    /// Write a copy of a workspace or chat, with copies of the spaces below
+    /// it that `carrying` carries, for another Shoal to the new file
+    /// `file`, leaving them running: a workspace at its checkpoint
+    /// `checkpoint`, or at a new one, and those below at new ones.
+    CopySpace {
+        space: SpaceSelector,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        checkpoint: Option<shoal_ids::checkpoint_numbers::CheckpointNumber>,
+        file: std::path::PathBuf,
+        #[serde(default)]
+        carrying: crate::transfer::Carrying,
+    },
     /// Record the move of the workspace or chat `space` and the spaces
     /// below it that `carrying` carries to `destination`, letting it delete
     /// the `unsaved` work the caller saw, then stop their agents, saving
@@ -201,6 +213,7 @@ impl RemovalMethod {
             | Self::RestoreSpace { .. }
             | Self::DropRestoredSessions { .. }
             | Self::ExportRemovedSpace { .. }
+            | Self::CopySpace { .. }
             | Self::ExportMovingSpace { .. }
             | Self::EndMovedSpace { .. }
             | Self::AbandonMove { .. }
@@ -219,6 +232,7 @@ impl RemovalMethod {
             | Self::CheckRemoval { space, .. }
             | Self::RemoveSpace { space, .. }
             | Self::StartRemoval { space, .. }
+            | Self::CopySpace { space, .. }
             | Self::ExportMovingSpace { space, .. }
             | Self::EndMovedSpace { space }
             | Self::AbandonMove { space }

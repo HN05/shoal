@@ -13,7 +13,7 @@ use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::config::modes::ModeShapes;
 use shoal_protocol::hub::Member;
 use shoal_protocol::launches::{Carried, CarriedCopy, Launch, StartTarget};
-use shoal_protocol::protocol::{LaunchMethod, Launched, Operation, WorkspaceMethod};
+use shoal_protocol::protocol::{ConfigMethod, LaunchMethod, Launched, Operation};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::CommitId;
 
@@ -284,7 +284,7 @@ impl Manager {
             return Ok(None);
         };
         let space = SpaceSelector::Id(listed.space.id);
-        let operation = Operation::Workspace(WorkspaceMethod::TrackedConfig { space });
+        let operation = Operation::Config(ConfigMethod::TrackedConfig { space });
         Ok(Some(String::try_from(
             self.hub
                 .ask_machine(self, &machine, operation, caller)

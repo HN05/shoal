@@ -190,9 +190,6 @@ pub(super) async fn handle(
                     .await?,
             )
         }
-        ItemMethod::MergePath { space } => {
-            Body::MergePath(manager.links.merge_path(&**manager, &space).await?)
-        }
         ItemMethod::OpenPull {
             workspace,
             options,
@@ -418,8 +415,7 @@ impl Scoped for ItemMethod {
             }
             | ItemMethod::MergedPull {
                 space: workspace, ..
-            }
-            | ItemMethod::MergePath { space: workspace } => Some(workspace),
+            } => Some(workspace),
         })
     }
 }

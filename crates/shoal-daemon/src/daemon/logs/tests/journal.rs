@@ -8,7 +8,7 @@ use crate::{
         test_support::{git, manager, repository},
         workspace_files::Attacher,
     },
-    protocol::{self, Body, Response, WorkspaceMethod},
+    protocol::{self, Body, Response, SpaceMethod},
 };
 use anyhow::Result;
 use shoal_protocol::assignments::Done;
@@ -36,7 +36,7 @@ async fn connect(
     let (server, client) = UnixStream::pair().unwrap();
     let mut client = BufReader::new(client);
     let startup = manager.gates.owned_operation().await;
-    let task = tokio::spawn(crate::daemon::requests::workspaces::watch_space_events(
+    let task = tokio::spawn(crate::daemon::requests::spaces::watch_space_events(
         server,
         1,
         manager,
@@ -160,7 +160,7 @@ async fn branch_observations_preserve_ownership_and_scope_denies_events() {
         .await
         .unwrap();
     for follow in [false, true] {
-        let mut method = WorkspaceMethod::WatchSpaceEvents {
+        let mut method = SpaceMethod::WatchSpaceEvents {
             after: Some(EventCursor::new(0)),
             follow,
         };

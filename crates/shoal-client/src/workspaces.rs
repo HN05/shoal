@@ -17,7 +17,10 @@ use shoal_protocol::{
         ConflictCheck, DiffBase, Located, MergeOptions, MergePreview, OwnedPlace, Refreshed,
         RenamedSpace, Space, SpacePlaces, SpaceTarget, UntrackedWorktree, Workspace,
     },
-    protocol::{CommitStart, ConfigTarget, CreationOptions, RepositoryLayers, WorkspaceMethod},
+    protocol::{
+        CommitStart, ConfigMethod, ConfigTarget, CreationOptions, DiffMethod, MergingMethod,
+        PermissionMethod, PlaceMethod, RepositoryLayers, SpaceMethod, WorkspaceMethod,
+    },
     repository::Selector,
     sessions::{Origin, PlaceClose, PlaceOwnership},
 };
@@ -84,7 +87,7 @@ pub async fn rename_space(
     space: SpaceSelector,
     name: shoal_protocol::space_names::SpaceName,
 ) -> Result<RenamedSpace> {
-    request(daemon, WorkspaceMethod::RenameSpace { space, name }).await
+    request(daemon, SpaceMethod::RenameSpace { space, name }).await
 }
 
 /// Build `workspace` on the workspace `base`, or on the default branch
@@ -142,20 +145,20 @@ pub async fn refresh(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<R
 /// Where the space `space` names runs: here, with its record, or on the
 /// other joined machine the hub lists it on.
 pub async fn locate(daemon: &impl Daemon, space: SpaceSelector) -> Result<Located> {
-    let located: Box<Located> = request(daemon, WorkspaceMethod::LocateSpace { space }).await?;
+    let located: Box<Located> = request(daemon, SpaceMethod::LocateSpace { space }).await?;
     Ok(*located)
 }
 
 /// The spaces `target` selects.
 pub async fn find_spaces(daemon: &impl Daemon, target: SpaceTarget) -> Result<Vec<Space>> {
-    request(daemon, WorkspaceMethod::FindSpaces { target }).await
+    request(daemon, SpaceMethod::FindSpaces { target }).await
 }
 
 /// What `space` is doing: its links, agents, leases and assignment, from
 /// the machine that runs it, or what that machine last reported while it
 /// is offline.
 pub async fn status(daemon: &impl Daemon, space: SpaceSelector) -> Result<StatusAnswer> {
-    request(daemon, WorkspaceMethod::SpaceStatus { space }).await
+    request(daemon, SpaceMethod::SpaceStatus { space }).await
 }
 
 /// The worktrees of registered repositories that no workspace owns.
@@ -165,13 +168,13 @@ pub async fn untracked_worktrees(daemon: &impl Daemon) -> Result<Vec<UntrackedWo
 
 /// The places Shoal created for every space, a workspace or a chat.
 pub async fn owned_places(daemon: &impl Daemon) -> Result<Vec<OwnedPlace>> {
-    request(daemon, WorkspaceMethod::OwnedPlaces).await
+    request(daemon, PlaceMethod::OwnedPlaces).await
 }
 
 /// Where the executions of `space`, a workspace or a chat, run, and the
 /// places Shoal created for it.
 pub async fn places(daemon: &impl Daemon, space: SpaceSelector) -> Result<SpacePlaces> {
-    request(daemon, WorkspaceMethod::SpacePlaces { space }).await
+    request(daemon, PlaceMethod::SpacePlaces { space }).await
 }
 
 /// Record `origin`, a place Shoal created for `workspace`, so the daemon
@@ -183,7 +186,7 @@ pub async fn record_owned_place(
 ) -> Result<()> {
     call(
         daemon,
-        WorkspaceMethod::RecordOwnedPlace {
+        PlaceMethod::RecordOwnedPlace {
             workspace: SpaceSelector::id(workspace),
             origin,
         },
@@ -201,7 +204,7 @@ pub async fn place_ownership(
 ) -> Result<PlaceOwnership> {
     request(
         daemon,
-        WorkspaceMethod::PlaceOwnership {
+        PlaceMethod::PlaceOwnership {
             space: SpaceSelector::id(space),
             place: place.clone(),
         },
@@ -218,7 +221,7 @@ pub async fn close_owned_place(
 ) -> Result<PlaceClose> {
     request(
         daemon,
-        WorkspaceMethod::CloseOwnedPlace {
+        PlaceMethod::CloseOwnedPlace {
             workspace: workspace.clone(),
             place: place.clone(),
         },
@@ -233,7 +236,7 @@ pub async fn launch_permissions(
     mode: shoal_protocol::config::modes::ModeName,
     narrowing: shoal_protocol::config::permissions::PermissionsConfig,
 ) -> Result<shoal_protocol::config::permissions::Permissions> {
-    let method = WorkspaceMethod::LaunchPermissions {
+    let method = PermissionMethod::LaunchPermissions {
         workspace,
         mode,
         narrowing,
@@ -247,7 +250,7 @@ pub async fn held_permissions(
     daemon: &impl Daemon,
     repository: Option<shoal_protocol::repository::Selector>,
 ) -> Result<shoal_protocol::config::permissions::Permissions> {
-    request(daemon, WorkspaceMethod::HeldPermissions { repository }).await
+    request(daemon, PermissionMethod::HeldPermissions { repository }).await
 }
 
 /// Keep where an agent of `workspace` keeps its configuration for the
@@ -292,14 +295,13 @@ pub async fn config_layers<L: DeserializeOwned>(
     daemon: &impl Daemon,
     target: ConfigTarget,
 ) -> Result<L> {
-    let layers: RepositoryLayers =
-        request(daemon, WorkspaceMethod::LayeredConfig { target }).await?;
+    let layers: RepositoryLayers = request(daemon, ConfigMethod::LayeredConfig { target }).await?;
     layers.read()
 }
 
 /// The commit `workspace`'s changes are counted from.
 pub async fn diff_base(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<DiffBase> {
-    request(daemon, WorkspaceMethod::DiffBase { workspace }).await
+    request(daemon, DiffMethod::DiffBase { workspace }).await
 }
 
 /// The files where `workspace`'s committed HEAD conflicts with `target`, by
@@ -309,7 +311,7 @@ pub async fn conflicts(
     workspace: SpaceSelector,
     target: Option<String>,
 ) -> Result<ConflictCheck> {
-    request(daemon, WorkspaceMethod::Conflicts { workspace, target }).await
+    request(daemon, DiffMethod::Conflicts { workspace, target }).await
 }
 
 /// What merging `workspace`'s branch as `options` say would do.
@@ -318,7 +320,7 @@ pub async fn preview_merge(
     workspace: SpaceSelector,
     options: &MergeOptions,
 ) -> Result<MergePreview> {
-    let preview = WorkspaceMethod::PreviewMerge {
+    let preview = MergingMethod::PreviewMerge {
         workspace,
         push: options.push,
         method: options.method,

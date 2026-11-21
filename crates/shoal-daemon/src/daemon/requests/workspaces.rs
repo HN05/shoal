@@ -2,44 +2,24 @@
 use shoal_daemon_base::permitted_actions::Action;
 use std::sync::Arc;
 
-use anyhow::{Context as _, Result, ensure};
-use tokio::net::UnixStream;
+use anyhow::Result;
 
 use super::super::{
-    answer::{Answer, OperationGuard},
+    answer::Answer,
     manager::Manager,
-    scope::{Caller, Scoped, denied},
+    scope::{Caller, Scoped},
     workspace,
 };
 use crate::config::permissions::PermissionKey;
-use crate::protocol::{
-    self, Body, ConfigTarget, ErrorCode, RepositoryLayers, Response, WorkspaceMethod,
-};
-use shoal_protocol::{
-    events::EventCursor, model::Everywhere, scope_tokens::ScopeToken, space_names::SpaceSelector,
-};
+use crate::protocol::{Body, WorkspaceMethod};
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
     method: WorkspaceMethod,
     caller: Option<&Caller>,
-    scope: Option<&ScopeToken>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        WorkspaceMethod::WatchSpaceEvents { after, follow } => {
-            let manager = manager.clone();
-            return Ok(Answer::connection(move |stream, request_id, guard| {
-                watch_space_events(stream, request_id, manager, after, follow, guard)
-            }));
-        }
-        WorkspaceMethod::SpaceLog {
-            space,
-            filter,
-            limit,
-        } => {
-            let log = manager.log(space.as_ref(), filter, limit).await;
-            return Ok(Answer::pages(log, Body::LogEntries));
-        }
         WorkspaceMethod::OpenBranch {
             path,
             repository,
@@ -155,33 +135,12 @@ pub(super) async fn handle(
                 .convert_to_chat(&workspace, mode.unwrap_or_else(crate::model::chat_mode))
                 .await?,
         ),
-        WorkspaceMethod::ListSpaces => Body::Spaces(manager.listed_spaces(caller).await?),
-        WorkspaceMethod::ListSpacesEverywhere { here } => {
-            let everywhere = manager.spaces_everywhere(caller, here).await;
-            let parts = everywhere.map(Everywhere::into_parts);
-            return Ok(Answer::pages(parts, Body::SpacesEverywhere));
-        }
-        WorkspaceMethod::LocateSpace { space } => {
-            Body::LocatedSpace(Box::new(manager.locate_space(caller, &space).await?))
-        }
-        WorkspaceMethod::SelectSpaces {
-            spaces,
-            machines,
-            below,
-        } => Body::LocatedSpaces(
-            manager
-                .select_spaces(caller, &spaces, &machines, below)
-                .await?,
-        ),
         WorkspaceMethod::UntrackedWorktrees => {
             let listed = manager.untracked_worktrees().await;
             return Ok(Answer::pages(listed, Body::UntrackedWorktrees));
         }
         WorkspaceMethod::SetBaseWorkspace { workspace, base } => {
             Body::Workspace(manager.set_base_workspace(&workspace, base).await?)
-        }
-        WorkspaceMethod::RenameSpace { space, name } => {
-            Body::RenamedSpace(manager.rename_space(&space, &name).await?)
         }
         WorkspaceMethod::VerifyWorkspace {
             workspace,
@@ -195,136 +154,6 @@ pub(super) async fn handle(
         }
         WorkspaceMethod::InspectWorkspace { workspace } => {
             Body::Inspection(manager.inspect_workspace(&workspace).await?)
-        }
-        WorkspaceMethod::LaunchPermissions {
-            workspace,
-            mode,
-            narrowing,
-        } => {
-            let workspace = manager.workspace(&workspace).await?;
-            Body::Permissions(
-                manager
-                    .launch_permissions(workspace, &mode, narrowing)
-                    .await?,
-            )
-        }
-        WorkspaceMethod::HeldPermissions { repository } => {
-            let caller = caller.context("the user holds every permission")?;
-            let repository = match repository {
-                Some(repository) => Some(manager.repository(repository).await?.id),
-                None => None,
-            };
-            let held = manager.caller_permissions(caller, repository.as_ref());
-            Body::Permissions(held.await?)
-        }
-        WorkspaceMethod::IssueScope { space } => {
-            Body::ScopeToken(manager.issue_scope(&space).await?)
-        }
-        WorkspaceMethod::RevokeScope { space, token } => {
-            manager.revoke_scope(&space, token).await?;
-            Body::Ok
-        }
-        WorkspaceMethod::SpaceEnvironment { space } => {
-            Body::SpaceEnvironment(manager.space_environment(&space).await?)
-        }
-        WorkspaceMethod::SpaceStatus { space } => {
-            let mut status = manager.space_status(&space).await?;
-            status.machine = super::forwarded::answering_machine(manager, scope).await?;
-            Body::SpaceStatus(Box::new(status))
-        }
-        WorkspaceMethod::TrackedConfig { space } => {
-            Body::TrackedConfig(manager.space_tracked_config(&space).await?)
-        }
-        WorkspaceMethod::SpaceSessions { space } => {
-            Body::SpaceSessions(manager.space_sessions(&space).await?)
-        }
-        WorkspaceMethod::FollowSession {
-            space,
-            session,
-            from,
-        } => {
-            // Chosen first, so a space another machine has is followed there.
-            // A client follows again, from where it read, on its own.
-            let resumed = !from.is_empty();
-            let following = manager.session_to_follow(&space, session, from).await?;
-            // Another machine's follow is checked there as it goes, its
-            // token here standing for its caller only while it starts.
-            let scope = scope.filter(|token| manager.hub.vouched_caller(token).is_none());
-            let scope = scope.cloned();
-            // Following an agent is the user's interaction with it, as
-            // attaching is.
-            if !resumed {
-                manager.record_user_interaction(caller, &space).await;
-            }
-            let manager = manager.clone();
-            return Ok(Answer::connection(move |stream, request_id, guard| {
-                manager.follow_session(stream, request_id, (following, scope), guard)
-            }));
-        }
-        WorkspaceMethod::AttachSession { space, viewer } => {
-            let terminal = manager.open_viewer_terminal(&space, &viewer).await?;
-            let manager = manager.clone();
-            return Ok(Answer::connection(move |stream, request_id, guard| {
-                let answer = (request_id, Body::Ok);
-                let until = std::future::pending();
-                manager.relay_viewer_terminal(stream, answer, terminal, until, guard)
-            }));
-        }
-        WorkspaceMethod::CopySpace {
-            space,
-            checkpoint,
-            file,
-            carrying,
-        } => Body::ExportedSpace(
-            manager
-                .copy_space(&space, checkpoint, file, &carrying)
-                .await?,
-        ),
-        WorkspaceMethod::FindSpaces { target } => {
-            Body::Spaces(manager.find_visible_spaces(&target, caller).await?)
-        }
-        WorkspaceMethod::DiffBase { workspace } => {
-            let mut base = manager.diff_base(&workspace).await?;
-            base.machine = super::forwarded::answering_machine(manager, scope).await?;
-            Body::DiffBase(base)
-        }
-        WorkspaceMethod::Conflicts { workspace, target } => {
-            Body::Conflicts(manager.check_conflicts(&workspace, target).await?)
-        }
-        WorkspaceMethod::Diff { workspace, display } => {
-            let diff = manager.start_diff(&workspace, display).await?;
-            let manager = manager.clone();
-            return Ok(Answer::connection(move |stream, request_id, guard| {
-                manager.stream_diff(stream, request_id, diff, guard)
-            }));
-        }
-        WorkspaceMethod::PreviewMerge {
-            workspace,
-            push,
-            method,
-            message,
-        } => {
-            let options = crate::model::MergeOptions {
-                push,
-                method,
-                message,
-                confirmed: None,
-            };
-            Body::MergePreview(manager.preview_merge(&workspace, &options, caller).await?)
-        }
-        WorkspaceMethod::CloseOwnedPlace { workspace, place } => {
-            Body::PlaceClose(manager.close_recorded_place(&workspace, &place).await?)
-        }
-        WorkspaceMethod::PlaceOwnership { space, place } => {
-            Body::PlaceOwnership(manager.place_ownership(&space, &place).await?)
-        }
-        WorkspaceMethod::OwnedPlaces => owned_places(manager).await?,
-        WorkspaceMethod::SpacePlaces { space } => {
-            Body::SpacePlaces(manager.space_places(&space).await?)
-        }
-        WorkspaceMethod::RecordOwnedPlace { workspace, origin } => {
-            manager.record_owned_place(&workspace, origin).await?;
-            Body::Ok
         }
         WorkspaceMethod::KeepAgentEnvironment {
             workspace,
@@ -341,22 +170,7 @@ pub(super) async fn handle(
         WorkspaceMethod::WorkspaceHook { workspace, kind } => {
             Body::Hook(manager.selected_workspace_hook(&workspace, kind).await?)
         }
-        WorkspaceMethod::LayeredConfig { target } => Body::LayeredConfig(RepositoryLayers::of(
-            &manager.config_layers_for(target).await?,
-        )?),
     }))
-}
-
-/// The places Shoal created for every space.
-async fn owned_places(manager: &Manager) -> Result<Body> {
-    Ok(Body::OwnedPlaces(
-        manager
-            .owned_places(None)
-            .await?
-            .into_iter()
-            .map(|(space_id, origin)| crate::model::OwnedPlace { space_id, origin })
-            .collect(),
-    ))
 }
 
 impl Scoped for WorkspaceMethod {
@@ -372,29 +186,7 @@ impl Scoped for WorkspaceMethod {
         {
             manager.copy_within(caller, source).await?;
         }
-        // A copy for a joined machine, which goes among the packages
-        // delivered from here, as a move there, needs no permission key.
-        if let WorkspaceMethod::CopySpace { space, file, .. } = &*self
-            && manager
-                .copies_for_joined_machine(caller, space, file)
-                .await?
-        {
-            return Ok(administered(self));
-        }
         Ok(match self {
-            // The settings of its own repository choose what it opens there.
-            WorkspaceMethod::LayeredConfig {
-                target: ConfigTarget::Repository(repository),
-            } => {
-                *repository = manager
-                    .own_repository(
-                        caller,
-                        repository,
-                        "scoped processes read only their own repository's config",
-                    )
-                    .await?;
-                None
-            }
             // A scoped caller opens workspaces only below its own space,
             // which must be in their repository.
             WorkspaceMethod::OpenBranch { parent, .. }
@@ -407,33 +199,7 @@ impl Scoped for WorkspaceMethod {
                 *parent = Some(SpaceSelector::id(&caller.space_id));
                 None
             }
-            // The workspace may be removed already, so its ID is checked as
-            // given instead of resolved.
-            WorkspaceMethod::CloseOwnedPlace { workspace, .. } => {
-                ensure!(
-                    manager.reaches(caller, workspace).await?,
-                    "workspace processes close only the places of their own space and those below it"
-                );
-                None
-            }
-            // A coordinator follows the spaces below it, removed ones too.
-            WorkspaceMethod::SpaceLog { space, .. } => {
-                manager.narrow_to_log(caller, space).await?;
-                None
-            }
-            WorkspaceMethod::LayeredConfig {
-                target: ConfigTarget::Global,
-            } => None,
-            // It finds only the spaces the caller sees.
-            WorkspaceMethod::ListSpaces
-            | WorkspaceMethod::ListSpacesEverywhere { .. }
-            | WorkspaceMethod::FindSpaces { .. }
-            | WorkspaceMethod::LocateSpace { .. }
-            | WorkspaceMethod::SelectSpaces { .. } => None,
-            // The handler answers with the caller's own space's.
-            WorkspaceMethod::HeldPermissions { .. } => None,
             WorkspaceMethod::SetBaseWorkspace { workspace, .. }
-            | WorkspaceMethod::SpacePlaces { space: workspace }
             | WorkspaceMethod::RenameBranch { workspace, .. }
             | WorkspaceMethod::ConvertToChat { workspace, .. }
             | WorkspaceMethod::CreateChild {
@@ -445,46 +211,19 @@ impl Scoped for WorkspaceMethod {
             }
             | WorkspaceMethod::InspectWorkspace { workspace }
             | WorkspaceMethod::VerifyWorkspace { workspace, .. }
-            | WorkspaceMethod::LaunchPermissions { workspace, .. }
             | WorkspaceMethod::FastForwardWorkspace { workspace, .. }
             | WorkspaceMethod::RefreshWorkspace { workspace }
-            | WorkspaceMethod::DiffBase { workspace }
-            | WorkspaceMethod::Conflicts { workspace, .. }
-            | WorkspaceMethod::Diff { workspace, .. }
-            | WorkspaceMethod::PreviewMerge { workspace, .. }
             | WorkspaceMethod::WorkspaceHook { workspace, .. }
             | WorkspaceMethod::CreatePendingWorktree { workspace }
-            | WorkspaceMethod::KeepAgentEnvironment { workspace, .. }
-            | WorkspaceMethod::RecordOwnedPlace { workspace, .. }
-            | WorkspaceMethod::LayeredConfig {
-                target: ConfigTarget::Space(workspace),
-            } => Some(workspace),
-            WorkspaceMethod::RenameSpace { space, .. }
-            | WorkspaceMethod::SpaceStatus { space }
-            | WorkspaceMethod::TrackedConfig { space }
-            | WorkspaceMethod::SpaceSessions { space }
-            | WorkspaceMethod::FollowSession { space, .. }
-            | WorkspaceMethod::PlaceOwnership { space, .. } => Some(space),
-            // A token for a space its scope reaches acts for no more than
-            // the caller's own.
-            WorkspaceMethod::IssueScope { space }
-            | WorkspaceMethod::RevokeScope { space, .. }
-            | WorkspaceMethod::SpaceEnvironment { space } => Some(space),
+            | WorkspaceMethod::KeepAgentEnvironment { workspace, .. } => Some(workspace),
             // The inbox lists them with the user's notifications.
             WorkspaceMethod::UntrackedWorktrees => {
                 let action = Action::new(PermissionKey::Notifications, "the untracked worktrees");
                 manager.authorize_action(Some(caller), action).await?;
                 None
             }
-            WorkspaceMethod::ReopenWorkspace { .. }
-            | WorkspaceMethod::AdoptWorkspace { .. }
-            | WorkspaceMethod::CopySpace { .. } => administer(manager, caller, self).await?,
-            WorkspaceMethod::OwnedPlaces | WorkspaceMethod::WatchSpaceEvents { .. } => {
-                return Err(denied());
-            }
-            // As `shoal attach` is in a scoped execution.
-            WorkspaceMethod::AttachSession { .. } => {
-                anyhow::bail!("attach to sessions outside scoped executions")
+            WorkspaceMethod::ReopenWorkspace { .. } | WorkspaceMethod::AdoptWorkspace { .. } => {
+                administer(manager, caller, self).await?
             }
         })
     }
@@ -521,78 +260,6 @@ async fn administer<'a>(
 fn administered(method: &mut WorkspaceMethod) -> Option<&mut SpaceSelector> {
     match method {
         WorkspaceMethod::ReopenWorkspace { workspace } => Some(workspace),
-        WorkspaceMethod::CopySpace { space, .. } => Some(space),
         _ => None,
-    }
-}
-
-pub(in crate::daemon) async fn watch_space_events(
-    mut stream: UnixStream,
-    request_id: u64,
-    manager: Arc<Manager>,
-    after: Option<EventCursor>,
-    follow: bool,
-    startup: OperationGuard,
-) -> Result<()> {
-    if after.is_some_and(|cursor| cursor.id() < 0) {
-        return protocol::write(
-            &mut stream,
-            &Response::new(
-                request_id,
-                Body::error(
-                    ErrorCode::InvalidRequest,
-                    "event cursor must be nonnegative",
-                ),
-            ),
-        )
-        .await;
-    }
-    // Subscribe before the first read so a concurrent commit cannot be missed.
-    let mut changed = manager.store.watch_changes();
-    let end = crate::daemon::events::latest_id(&manager.store).await?;
-    protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
-    let _finite_request = if follow {
-        drop(startup);
-        None
-    } else {
-        Some(startup)
-    };
-    let (mut reader, mut writer) = stream.split();
-    let mut cursor = after;
-    let mut pruned = None;
-    loop {
-        let operation = manager.gates.operation().await;
-        let (items, now_pruned) =
-            (crate::daemon::events::page(&manager.store, cursor, pruned, 100)).await?;
-        pruned = Some(now_pruned);
-        let mut delivered = false;
-        for item in items {
-            if let Some(id) = item.event_id() {
-                if !follow && id > end {
-                    break;
-                }
-                delivered = true;
-            }
-            cursor = Some(item.cursor());
-            protocol::write(
-                &mut writer,
-                &Response::new(request_id, Body::EventItem(item)),
-            )
-            .await?;
-        }
-        // Drain the complete backlog before waiting for another commit.
-        if delivered && (follow || cursor.is_some_and(|id| id < end)) {
-            continue;
-        }
-        if !follow {
-            protocol::write(&mut writer, &Response::new(request_id, Body::Ok)).await?;
-            return Ok(());
-        }
-        drop(operation);
-        let mut closed = [0u8; 1];
-        tokio::select! {
-            result = changed.changed() => result?,
-            _ = tokio::io::AsyncReadExt::read(&mut reader, &mut closed) => return Ok(()),
-        }
     }
 }

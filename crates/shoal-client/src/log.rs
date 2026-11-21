@@ -5,7 +5,7 @@ use anyhow::Result;
 use shoal_protocol::log::{LogEntry, LogFilter};
 
 use crate::connection::{self, Daemon};
-use shoal_protocol::{protocol::WorkspaceMethod, space_names::SpaceSelector};
+use shoal_protocol::{protocol::SpaceMethod, space_names::SpaceSelector};
 
 /// The newest `limit` events of `space`'s log, or Shoal's without one, that
 /// `filter` shows, oldest first. A removed space is named by its last name
@@ -16,7 +16,7 @@ pub async fn log(
     filter: LogFilter,
     limit: u32,
 ) -> Result<Vec<LogEntry>> {
-    let method = WorkspaceMethod::SpaceLog {
+    let method = SpaceMethod::SpaceLog {
         space,
         filter,
         limit,

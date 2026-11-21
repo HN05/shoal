@@ -16,8 +16,8 @@ async fn follower_reconnects_at_the_last_displayed_cursor() {
         let request: Request = protocol::read(&mut stream).await.unwrap();
         assert!(matches!(
             request.method,
-            Method::Operation(Operation::Workspace(
-                WorkspaceMethod::WatchSpaceEvents {
+            Method::Operation(Operation::Space(
+                SpaceMethod::WatchSpaceEvents {
                     after: Some(after),
                     follow: true
                 }
@@ -44,8 +44,8 @@ async fn follower_reconnects_at_the_last_displayed_cursor() {
         let request: Request = protocol::read(&mut stream).await.unwrap();
         assert!(matches!(
             request.method,
-            Method::Operation(Operation::Workspace(
-                WorkspaceMethod::WatchSpaceEvents {
+            Method::Operation(Operation::Space(
+                SpaceMethod::WatchSpaceEvents {
                     after: Some(after),
                     follow: true
                 }

@@ -6,7 +6,7 @@
 use anyhow::Result;
 use shoal_protocol::{
     attaching::{FromSession, ToSession, Viewer},
-    protocol::{Body, WorkspaceMethod},
+    protocol::{Body, SpaceMethod},
     space_names::SpaceSelector,
 };
 use tokio::{
@@ -32,7 +32,7 @@ pub async fn attach(
     space: SpaceSelector,
     viewer: Viewer,
 ) -> Result<(Screen, Keys)> {
-    let method = WorkspaceMethod::AttachSession { space, viewer };
+    let method = SpaceMethod::AttachSession { space, viewer };
     let (connection, body) = open_buffered(daemon, method).await?;
     match body.into_result()? {
         Body::Ok => {}

@@ -16,12 +16,12 @@ use anyhow::{Context as _, Result};
 use tokio::{io::BufReader, net::UnixStream};
 
 use crate::connection::{self, Daemon, open_buffered, request};
-use shoal_protocol::protocol::{Body, Responses, WorkspaceMethod};
+use shoal_protocol::protocol::{Body, Responses, SpaceMethod};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The sessions the agents of the workspace or chat `space` reported.
 pub async fn space_sessions(daemon: &impl Daemon, space: SpaceSelector) -> Result<SpaceSessions> {
-    request(daemon, WorkspaceMethod::SpaceSessions { space }).await
+    request(daemon, SpaceMethod::SpaceSessions { space }).await
 }
 
 /// The sessions the agents of the workspace or chat `space` reported, each
@@ -101,7 +101,7 @@ async fn open(
     session: &Option<AgentSessionId>,
     from: &BTreeMap<PathBuf, ReadTo>,
 ) -> Result<(Responses<BufReader<UnixStream>>, FollowedSession)> {
-    let method = WorkspaceMethod::FollowSession {
+    let method = SpaceMethod::FollowSession {
         space: space.clone(),
         session: session.clone(),
         from: from.clone(),

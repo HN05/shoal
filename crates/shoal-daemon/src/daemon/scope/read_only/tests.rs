@@ -2,7 +2,7 @@ use crate::daemon::{
     scope::{Caller, authorize},
     test_support::{manager, repository, workspace_below},
 };
-use crate::protocol::{AgentMethod, Operation, WorkspaceMethod};
+use crate::protocol::{AgentMethod, MergingMethod, Operation, SpaceMethod};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -35,7 +35,7 @@ async fn read_only_scope_reads_without_changing() {
     let operations = |space: &SpaceId| {
         let space = SpaceSelector::id(space);
         [
-            Operation::Workspace(WorkspaceMethod::SpaceStatus {
+            Operation::Space(SpaceMethod::SpaceStatus {
                 space: space.clone(),
             }),
             // Listing a space's alerts leaves them unread.
@@ -51,7 +51,7 @@ async fn read_only_scope_reads_without_changing() {
             }),
             Operation::Alert(crate::protocol::AlertMethod::MarkAlertsRead { ids: Vec::new() }),
             // Its review gate may queue a review.
-            Operation::Workspace(WorkspaceMethod::PreviewMerge {
+            Operation::Merging(MergingMethod::PreviewMerge {
                 workspace: space,
                 push: false,
                 method: None,

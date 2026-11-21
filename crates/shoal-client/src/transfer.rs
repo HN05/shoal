@@ -12,7 +12,7 @@ use tokio::net::UnixStream;
 use crate::connection::{Daemon, open_buffered, request};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
-    protocol::{self, RemovalMethod, WorkspaceMethod},
+    protocol::{self, RemovalMethod},
     removal::{RemovalResult, UnsavedWork},
     transfer::PackageSource,
 };
@@ -107,7 +107,7 @@ pub async fn copy(
     file: PathBuf,
     carrying: Carrying,
 ) -> Result<ExportedSpace> {
-    let method = WorkspaceMethod::CopySpace {
+    let method = RemovalMethod::CopySpace {
         space,
         checkpoint,
         file,

@@ -9,9 +9,11 @@ mod branches;
 mod changes;
 mod chats;
 mod ci;
+mod config;
 mod containers;
 pub(super) mod daemon;
 mod demos;
+mod diffs;
 mod executions;
 mod files;
 mod forwarded;
@@ -19,7 +21,10 @@ mod holds;
 mod hub;
 mod items;
 mod launches;
+mod merging;
 mod operations;
+mod permissions;
+mod places;
 mod ports;
 mod queue;
 mod recovery;
@@ -29,10 +34,11 @@ mod resources;
 mod reviews;
 mod secrets;
 mod simulators;
+pub(super) mod spaces;
 mod subscriptions;
 mod threads;
 mod triggers;
-pub(super) mod workspaces;
+mod workspaces;
 use anyhow::Result;
 use shoal_protocol::scope_tokens::ScopeToken;
 
@@ -64,9 +70,13 @@ pub(super) async fn handle(
         Operation::Repository(method) => {
             repositories::handle(&server.manager, method, caller).await
         }
-        Operation::Workspace(method) => {
-            workspaces::handle(&server.manager, method, caller, scope).await
-        }
+        Operation::Workspace(method) => workspaces::handle(&server.manager, method, caller).await,
+        Operation::Space(method) => spaces::handle(&server.manager, method, caller, scope).await,
+        Operation::Place(method) => places::handle(&server.manager, method).await,
+        Operation::Permission(method) => permissions::handle(&server.manager, method, caller).await,
+        Operation::Config(method) => config::handle(&server.manager, method).await,
+        Operation::Diff(method) => diffs::handle(&server.manager, method, scope).await,
+        Operation::Merging(method) => merging::handle(&server.manager, method, caller).await,
         Operation::Removal(method) => removal::handle(&server.manager, method, caller).await,
         Operation::Recovery(method) => recovery::handle(&server.manager, method, caller).await,
         Operation::Execution(method) => executions::handle(&server.manager, method, caller).await,

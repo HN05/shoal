@@ -699,7 +699,7 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
     use crate::{
         daemon::scope::{Caller, authorize},
         forge::items::link::Selection,
-        protocol::{ItemContext, ItemMethod, Operation, WorkspaceMethod},
+        protocol::{DiffMethod, ItemContext, ItemMethod, Operation, SpaceMethod, WorkspaceMethod},
     };
     let (temp, manager) = manager().await;
     let (repo, workspace) = workspace(temp.path(), &manager).await;
@@ -732,11 +732,11 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
     assert_eq!(names, ["worker-chat", "worker"]);
 
     let status = |space: &str| {
-        Operation::from(WorkspaceMethod::SpaceStatus {
+        Operation::from(SpaceMethod::SpaceStatus {
             space: space.into(),
         })
     };
-    let diff = Operation::from(WorkspaceMethod::DiffBase {
+    let diff = Operation::from(DiffMethod::DiffBase {
         workspace: SpaceSelector::id(&workspace.id),
     });
     let items = Operation::from(ItemMethod::SelectItems {

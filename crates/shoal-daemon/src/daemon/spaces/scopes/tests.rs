@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     daemon::{scope, test_support},
-    protocol::{AlertMethod, ExecutionMethod, Operation, WorkspaceMethod},
+    protocol::{AlertMethod, ExecutionMethod, Operation, SpaceMethod},
 };
 
 #[tokio::test]
@@ -30,10 +30,10 @@ async fn issued_scopes_are_persistent_independent_and_untracked() {
     // It issues and reads for the spaces its scope reaches, and acts as no
     // execution.
     for mut method in [
-        Operation::from(WorkspaceMethod::IssueScope {
+        Operation::from(SpaceMethod::IssueScope {
             space: selector.clone(),
         }),
-        WorkspaceMethod::SpaceEnvironment {
+        SpaceMethod::SpaceEnvironment {
             space: selector.clone(),
         }
         .into(),
@@ -43,7 +43,7 @@ async fn issued_scopes_are_persistent_independent_and_untracked() {
             .unwrap();
     }
     for mut method in [
-        Operation::from(WorkspaceMethod::IssueScope {
+        Operation::from(SpaceMethod::IssueScope {
             space: SpaceSelector::id(&other.id),
         }),
         ExecutionMethod::CheckMerge.into(),

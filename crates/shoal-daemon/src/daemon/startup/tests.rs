@@ -8,7 +8,7 @@ use tokio::{
 use super::*;
 use crate::{
     daemon::test_support::manager,
-    protocol::{AgentMethod, Request, WorkspaceMethod},
+    protocol::{AgentMethod, Request, SpaceMethod},
 };
 
 /// A hang guard, not the behavior under test.
@@ -45,7 +45,7 @@ async fn startup_answers_status_with_its_step_and_serves_other_requests_after() 
     let (unblock, blocked) = oneshot::channel::<()>();
     let audit = startup.step("auditing worktrees", blocked);
     let clients = async {
-        let waiting = send(&socket, 7, WorkspaceMethod::ListSpaces).await;
+        let waiting = send(&socket, 7, SpaceMethod::ListSpaces).await;
         let wake = AgentMethod::AwaitAgentWake {
             workspace: "w".into(),
             due: false,

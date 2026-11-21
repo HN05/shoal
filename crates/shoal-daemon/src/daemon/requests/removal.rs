@@ -45,7 +45,8 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         | RemovalMethod::RemovedSpaces
         | RemovalMethod::RemovedSpace { .. }
         | RemovalMethod::DropRestoredSessions { .. }
-        | RemovalMethod::ExportRemovedSpace { .. } => false,
+        | RemovalMethod::ExportRemovedSpace { .. }
+        | RemovalMethod::CopySpace { .. } => false,
         // A move in progress finishes, which an exit that waits for it
         // waits for.
         RemovalMethod::EndMovedSpace { .. }
@@ -155,6 +156,16 @@ pub(super) async fn handle(
         } => Body::ExportedSpace(
             manager
                 .export_removed_space(&space, file, &carrying)
+                .await?,
+        ),
+        RemovalMethod::CopySpace {
+            space,
+            checkpoint,
+            file,
+            carrying,
+        } => Body::ExportedSpace(
+            manager
+                .copy_space(&space, checkpoint, file, &carrying)
                 .await?,
         ),
         RemovalMethod::ExportMovingSpace {
@@ -367,6 +378,7 @@ impl Scoped for RemovalMethod {
             RemovalMethod::Cleanup { .. }
             | RemovalMethod::DropRestoredSessions { .. }
             | RemovalMethod::ExportRemovedSpace { .. }
+            | RemovalMethod::CopySpace { .. }
             | RemovalMethod::ExportMovingSpace { .. }
             | RemovalMethod::EndMovedSpace { .. }
             | RemovalMethod::AbandonMove { .. }
@@ -379,10 +391,11 @@ impl Scoped for RemovalMethod {
     }
 }
 
-/// Whether `method` packs, delivers, settles or ends a move to a joined
-/// machine, which takes no permission key, only the reach of `caller`'s
-/// scope, which the space it acts on must have; ending a space takes the
-/// user's holds of it as the caller's `user_holds` permission allows.
+/// Whether `method` packs, copies, delivers, settles or ends a move to a
+/// joined machine, which takes no permission key, only the reach of
+/// `caller`'s scope, which the space it acts on must have; ending a space
+/// takes the user's holds of it as the caller's `user_holds` permission
+/// allows.
 async fn moves_to_joined_machine(
     manager: &Manager,
     caller: &Caller,
@@ -391,6 +404,11 @@ async fn moves_to_joined_machine(
     match method {
         RemovalMethod::ExportMovingSpace { destination, .. } => {
             Ok(matches!(destination, MoveDestination::Machine(_)))
+        }
+        // A copy for a joined machine goes among the packages delivered
+        // from here, as a move there does.
+        RemovalMethod::CopySpace { space, file, .. } => {
+            manager.copies_for_joined_machine(caller, space, file).await
         }
         RemovalMethod::DeliverCopy { space, .. } => {
             manager.copies_other_than_own(caller, space).await
@@ -441,10 +459,12 @@ async fn administer<'a>(
 }
 
 /// The existing space `method`, which the `admin` permission governs, acts
-/// on: one it moves, or a restored workspace whose kept sessions it drops.
+/// on: one it moves or copies, or a restored workspace whose kept sessions
+/// it drops.
 fn administered(method: &mut RemovalMethod) -> Option<&mut SpaceSelector> {
     match method {
         RemovalMethod::ExportMovingSpace { space, .. }
+        | RemovalMethod::CopySpace { space, .. }
         | RemovalMethod::EndMovedSpace { space }
         | RemovalMethod::AbandonMove { space }
         | RemovalMethod::DeliverMove { space }

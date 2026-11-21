@@ -9,8 +9,8 @@ use crate::{
     },
     model::{CleanupReason, RefPart, SpaceRef, Workspace, WorkspaceRef},
     protocol::{
-        AgentMethod, ApprovalMethod, AssignmentMethod, Operation, QueueMethod, RemovalMethod,
-        ThreadMethod, WorkspaceMethod,
+        AgentMethod, ApprovalMethod, AssignmentMethod, Operation, PlaceMethod, QueueMethod,
+        RemovalMethod, ThreadMethod, WorkspaceMethod,
     },
     removal::{InspectionPolicy, UnsavedWork},
 };
@@ -241,7 +241,7 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
     }
     // A place's workspace may be removed, so the request names it by ID.
     for (workspace, allowed) in [(&child, true), (&parent, false), (&sibling, false)] {
-        let mut close = WorkspaceMethod::CloseOwnedPlace {
+        let mut close = PlaceMethod::CloseOwnedPlace {
             workspace: workspace.id.clone(),
             place: crate::sessions::Origin::created(crate::sessions::HostName::Rex, "p".into()),
         };
