@@ -93,7 +93,9 @@ fn spread() -> f64 {
 /// Record the turn `failure` ended in `execution` as its space's
 /// retry: the next attempt after a delivered one, the first for a new
 /// execution or a change between usage limits and transient failures, and the
-/// same one when the failure is reported again before it is due. An attempt
+/// same one when the failure is reported again before it is due. A delivered
+/// retry lasts only until the turn it started ends, so a failure while it
+/// stands is that turn's, though a restore runs it in a new execution. An attempt
 /// waits past the reset the execution's proxy last reported, read in the
 /// same transaction as a report of it, so neither can slip between.
 fn record_failure(
@@ -188,7 +190,8 @@ fn previous_attempt(db: &Connection, space_id: &SpaceId) -> Result<Option<Previo
         .optional()?)
 }
 
-/// Keep a pending attempt or advance a delivered one under the same policy.
+/// Keep a pending attempt of `execution` or advance a delivered one under
+/// the same policy.
 fn next_attempt(
     previous: Option<PreviousAttempt>,
     execution: &ExecutionId,
@@ -198,7 +201,8 @@ fn next_attempt(
 ) -> (u32, UnixTime) {
     let limited = |failure| failure == TurnFailure::RateLimited;
     let previous = previous.filter(|previous| {
-        previous.execution == *execution && limited(previous.failure) == limited(failure)
+        (previous.delivered || previous.execution == *execution)
+            && limited(previous.failure) == limited(failure)
     });
     match previous {
         Some(previous) if !previous.delivered => (previous.attempt, previous.due_at),
