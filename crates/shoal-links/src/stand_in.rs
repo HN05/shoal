@@ -82,6 +82,10 @@ impl Spaces for StandIn {
         Box::pin(async { bail!(NOT_HERE) })
     }
 
+    fn space_settings<'a>(&'a self, _: &'a Space) -> BoxFuture<'a, Result<Effective>> {
+        Box::pin(async { bail!(NOT_HERE) })
+    }
+
     fn workspace_settings<'a>(&'a self, _: &'a Workspace) -> BoxFuture<'a, Result<Effective>> {
         Box::pin(async { bail!(NOT_HERE) })
     }

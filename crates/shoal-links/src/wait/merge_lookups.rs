@@ -3,8 +3,9 @@
 //! runs each lookup linked, and when a lookup ends.
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use rusqlite::{OptionalExtension, params};
+use shoal_core::git::{self, default_branch::DefaultBranchLookup};
 use shoal_daemon_base::events;
 use shoal_forge::updates::{Snapshot, WatchRecord};
 use shoal_forge_types::{
@@ -13,14 +14,16 @@ use shoal_forge_types::{
         link::{ItemKind, LinkKind},
         reference::ItemRef,
     },
-    updates::{Update, UpdateKind},
+    updates::{SnapshotState, Update, UpdateKind},
 };
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::{events::MergeEvent, model::Relation, time::UnixTime};
+use shoal_protocol::{
+    events::MergeEvent, model::Relation, space_names::SpaceSelector, time::UnixTime,
+};
 use shoal_refs::{BranchName, CommitId};
 
 use super::{cursor::cursor_record, followed::observed_item};
-use crate::Links;
+use crate::{Links, daemon::Daemon};
 
 /// How long after a watch saw a merge Shoal looks for the default branch's
 /// runs for its commit.
@@ -78,6 +81,54 @@ pub struct MergeLookup {
     pub looking: bool,
     /// The runs it linked.
     pub runs: Vec<ItemRef>,
+}
+
+impl Links {
+    /// The URLs of the `observations` whose assignees Shoal is changing
+    /// on its own.
+    pub fn assignees_changing(&self, observations: &[(String, Snapshot)]) -> Vec<String> {
+        (observations.iter())
+            .map(|(url, _)| url)
+            .filter(|url| self.gates.issue_assignees_changing(url))
+            .cloned()
+            .collect()
+    }
+
+    /// Where the merges among `observations` of the space `id`'s items are
+    /// followed, when one shows a PR merged and its repository follows
+    /// merge runs. A failure to tell fails the recording of the
+    /// observations, so the next read follows the merge it shows.
+    pub async fn merge_target(
+        &self,
+        daemon: &dyn Daemon,
+        id: &SpaceId,
+        observations: &[(String, Snapshot)],
+    ) -> Result<Option<MergeTarget>> {
+        let merged = |snapshot: &Snapshot| snapshot.state() == Some(SnapshotState::Merged);
+        if !observations.iter().any(|(_, snapshot)| merged(snapshot)) {
+            return Ok(None);
+        }
+        (self.configured_merge_target(daemon, id).await)
+            .with_context(|| format!("could not tell whether {id} follows the runs of merges"))
+    }
+
+    pub async fn configured_merge_target(
+        &self,
+        daemon: &dyn Daemon,
+        id: &SpaceId,
+    ) -> Result<Option<MergeTarget>> {
+        let space = daemon.space(&SpaceSelector::id(id)).await?;
+        let Some(repository) = space.repository_id.clone() else {
+            return Ok(None);
+        };
+        if !daemon.space_settings(&space).await?.pr.watch_merge_runs {
+            return Ok(None);
+        }
+        let checkout = daemon.repository(&repository).await?;
+        let default_branch =
+            git::default_branch::resolve(&checkout.path, DefaultBranchLookup::Cached).await?;
+        Ok(Some(MergeTarget { default_branch }))
+    }
 }
 
 /// Follow the merge `record` newly reports for the PR at `url`, as

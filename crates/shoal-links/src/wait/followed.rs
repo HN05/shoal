@@ -179,3 +179,10 @@ pub fn activity_ended(
     let record = cursor_record(db, id, url)?;
     Ok(record.is_some_and(|record| record.snapshot.activity_ended(done)))
 }
+
+/// Whether the space `id` follows the item at `url`.
+pub fn follows(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<bool> {
+    Ok(followed_items(db, id, None)?
+        .iter()
+        .any(|followed| followed.url() == url))
+}

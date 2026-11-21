@@ -38,8 +38,8 @@ impl Manager {
         let _guard = self.gates.lock_prs([id]).await;
         // Checked before recording, so a change that starts later comes
         // after the poll's read, and one that ended was recorded first.
-        let changing = self.assignees_changing(&observations);
-        let merges = self.merge_target(id, &observations).await?;
+        let changing = self.links.assignees_changing(&observations);
+        let merges = self.links.merge_target(self, id, &observations).await?;
         let urls = observations.iter().map(|(url, _)| url);
         let stale = self.links.watch_starts().stale(id, urls, start.read());
         let poll = Poll {
@@ -55,16 +55,6 @@ impl Manager {
         self.store
             .write(move |tx| record_observations(tx, &id, observations, &poll, &agents))
             .await
-    }
-
-    /// The URLs of the `observations` whose assignees Shoal is changing
-    /// on its own.
-    pub(super) fn assignees_changing(&self, observations: &[(String, Snapshot)]) -> Vec<String> {
-        (observations.iter())
-            .map(|(url, _)| url)
-            .filter(|url| self.gates.issue_assignees_changing(url))
-            .cloned()
-            .collect()
     }
 
     pub(super) async fn pending_activity(
@@ -232,16 +222,9 @@ pub(in crate::daemon::links) fn record_received_change(
     agents: &crate::daemon::tree::TrackedAgents,
 ) -> Result<()> {
     for child in crate::daemon::tree::delegated(db, id, agents)? {
-        if follows(db, &child.id, change.url)? {
+        if shoal_links::wait::followed::follows(db, &child.id, change.url)? {
             record_own_change(db, &child.id, change.clone())?;
         }
     }
     record_own_change(db, id, change)
-}
-
-/// Whether the space `id` follows the item at `url`.
-pub(super) fn follows(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<bool> {
-    Ok(followed_items(db, id, None)?
-        .iter()
-        .any(|followed| followed.url() == url))
 }

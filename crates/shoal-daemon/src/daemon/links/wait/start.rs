@@ -10,10 +10,7 @@ use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 use tokio::sync::watch;
 
-use super::{
-    activity::follows,
-    cursor::{cursor_record, save_cursor_record},
-};
+use super::cursor::{cursor_record, save_cursor_record};
 use crate::{
     daemon::{log, manager::Manager},
     forge::{items::reference::ItemRef, updates::UpdateKind},
@@ -109,8 +106,8 @@ impl Manager {
         let starting = Starting {
             read_at: began.at,
             start,
-            changing: self.assignees_changing(&reads),
-            merges: self.merge_target(id, &reads).await?,
+            changing: self.links.assignees_changing(&reads),
+            merges: self.links.merge_target(self, id, &reads).await?,
         };
         let owned = id.to_owned();
         let started = self
@@ -152,7 +149,7 @@ fn start_followed(
     crate::daemon::links::ensure_accepts_links(tx, id)?;
     let mut started = Vec::new();
     for (url, snapshot) in reads {
-        if !follows(tx, id, &url)? {
+        if !shoal_links::wait::followed::follows(tx, id, &url)? {
             continue;
         }
         let mut record = cursor_record(tx, id, &url)?.unwrap_or_default();

@@ -8,8 +8,8 @@
 use shoal_links::space::LinkSpace;
 use shoal_links::wait::followed::opened_open_prs;
 use shoal_links::wait::merge_lookups::{
-    LOOKUP_WINDOW, MergeLookup, MergeTarget, Merged, PushedMerge, UnseenPrs, awaits_merge_runs,
-    merge_lookups, record_merge_runs, start_lookup, unseen_prs,
+    LOOKUP_WINDOW, MergeLookup, Merged, PushedMerge, UnseenPrs, awaits_merge_runs, merge_lookups,
+    record_merge_runs, start_lookup, unseen_prs,
 };
 
 use anyhow::{Context, Result};
@@ -24,7 +24,6 @@ use crate::{
         items::{link::Selection, reference::ItemRef},
         updates::SnapshotState,
     },
-    git::{self, default_branch::DefaultBranchLookup},
     time::UnixTime,
 };
 use shoal_forge::{
@@ -34,44 +33,18 @@ use shoal_forge::{
 };
 
 impl Manager {
-    /// Where the merges among `observations` of the space `id`'s items are
-    /// followed, when one shows a PR merged and its repository follows
-    /// merge runs. A failure to tell fails the recording of the
-    /// observations, so the next read follows the merge it shows.
-    pub(super) async fn merge_target(
-        &self,
-        id: &SpaceId,
-        observations: &[(String, Snapshot)],
-    ) -> Result<Option<MergeTarget>> {
-        let merged = |snapshot: &Snapshot| snapshot.state() == Some(SnapshotState::Merged);
-        if !observations.iter().any(|(_, snapshot)| merged(snapshot)) {
-            return Ok(None);
-        }
-        (self.configured_merge_target(id).await)
-            .with_context(|| format!("could not tell whether {id} follows the runs of merges"))
-    }
-
-    async fn configured_merge_target(&self, id: &SpaceId) -> Result<Option<MergeTarget>> {
-        let space = self.space_by_id(id).await?;
-        let Some(repository) = space.repository_id.clone() else {
-            return Ok(None);
-        };
-        if !self.space_settings(&space).await?.pr.watch_merge_runs {
-            return Ok(None);
-        }
-        let checkout = self.repository(&repository).await?;
-        let default_branch =
-            git::default_branch::resolve(&checkout.path, DefaultBranchLookup::Cached).await?;
-        Ok(Some(MergeTarget { default_branch }))
-    }
-
     /// Look up the runs of the commit a space's `shoal merge` pushed, as
     /// the read that sees a PR merge does, where `[pr] watch_merge_runs` is
     /// on. It follows the first URL the merge was pushed to that names a
     /// repository on a network host, since a local repository has no forge
     /// to list them on; a push to none starts no lookup.
     pub(crate) async fn follow_pushed_merge(&self, pushed: PushedMerge) -> Result<()> {
-        if self.configured_merge_target(&pushed.space).await?.is_none() {
+        if self
+            .links
+            .configured_merge_target(self, &pushed.space)
+            .await?
+            .is_none()
+        {
             return Ok(());
         }
         let on_host = |url: &String| ForgeRepo::parse(url).is_ok();
@@ -166,7 +139,13 @@ impl Manager {
             .store
             .read(move |db| opened_open_prs(db, &space))
             .await?;
-        if opened.is_empty() || self.configured_merge_target(id).await?.is_none() {
+        if opened.is_empty()
+            || self
+                .links
+                .configured_merge_target(self, id)
+                .await?
+                .is_none()
+        {
             return Ok(Vec::new());
         }
         Ok(opened)
@@ -210,7 +189,12 @@ impl Manager {
     /// The PRs whose merges the space `id` follows that no read of Shoal's
     /// own has seen merge or close, where `[pr] watch_merge_runs` is on.
     async fn unseen_prs(&self, id: &SpaceId) -> Result<UnseenPrs> {
-        if self.configured_merge_target(id).await?.is_none() {
+        if self
+            .links
+            .configured_merge_target(self, id)
+            .await?
+            .is_none()
+        {
             return Ok(UnseenPrs::default());
         }
         let id = id.to_owned();

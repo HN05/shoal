@@ -59,6 +59,10 @@ pub trait Spaces: Send + Sync {
     /// The settings of `space` in the repository it acts in.
     fn acting_settings<'a>(&'a self, space: &'a LinkSpace) -> BoxFuture<'a, Result<Effective>>;
 
+    /// The settings of `space`, in its own repository or, for a chat
+    /// without one, under the global config.
+    fn space_settings<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<Effective>>;
+
     /// The settings of `workspace`, read from its worktree.
     fn workspace_settings<'a>(
         &'a self,

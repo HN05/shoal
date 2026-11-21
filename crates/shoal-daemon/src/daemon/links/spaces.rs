@@ -61,6 +61,10 @@ impl Spaces for Manager {
         Box::pin(Manager::acting_settings(self, space))
     }
 
+    fn space_settings<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<Effective>> {
+        Box::pin(Manager::space_settings(self, space))
+    }
+
     fn workspace_settings<'a>(
         &'a self,
         workspace: &'a Workspace,
