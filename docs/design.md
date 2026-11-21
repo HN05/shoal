@@ -3685,7 +3685,19 @@ nothing reads it alone. `[machine]` has no provenance to report, so its tables
 merge key by key across the two files. Its paths and commands resolve on each
 machine as the global file's would; nothing checks them for portability, and
 what cannot be the same everywhere belongs in a machine's own file. Scoped
-processes never write it. A worktree file the current format rejects counts as absent,
+processes never write it. A hub's machines, its own included, share it and
+its mode and rule files: each machine looks at them every ten seconds and on
+each reload and sends the hub each file that differs from the copy it last
+agreed on with the hub, sent or received, once the files load, so a write
+from the hub is never sent back. The hub keeps whichever edit reached it
+last, with no revision check or conflict state, numbering its copies so a
+late copy never undoes a newer one, and sends it to every other machine,
+which writes it through `config_file` and reloads. On each link a machine
+sends its edits of files it agreed on before, which an offline edit is, then
+takes the hub's copies, so a file it never agreed on, as on joining, gives
+way to the hub's. A copy that replaces an edit the hub never got leaves it as
+`<file>.backup` with one alert, so a local edit is either on the hub or in
+that backup. A worktree file the current format rejects counts as absent,
 since a branch from before a format change keeps its old file and must not stop
 cleanup or anything else the other layers settle. The layers name the
 rejection, which `config show` warns about, and the daemon tells the log and the

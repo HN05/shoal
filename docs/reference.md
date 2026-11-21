@@ -1001,6 +1001,19 @@ of its state directory has less free space than
 it refuses new packages and records a `hub_package_refused` alert. The hub's
 own machine sends none.
 
+Every machine of a hub, the hub's own included, shares the
+[shared config](../crates/shoal-cli/src/cli/commands/configuration/reference.md):
+`shared.toml` and the mode and rule files in `shared/` beside it. A machine
+sends the hub each of them it edited within ten seconds, or at once on
+`shoal config reload` and `shoal config set --shared`, once they load; an
+invalid file stays on the machine, and an alert says why. The hub keeps
+whichever edit reached it last, a removal included, and every other machine
+writes it and applies it. An edit made while a machine is offline goes once
+its link opens; a joining machine takes the hub's copy of each file it has
+and sends those the hub lacks. When a copy replaces an edit the hub never
+got, the machine keeps that edit as `<file>.backup`, such as
+`shared.toml.backup`, and alerts you naming it.
+
 A machine can also reach the hub through a command, whose standard input and
 output its daemon uses as the link, restarting it with backoff and logging its
 standard error: `shoal daemon connect` on the hub relays them to its daemon's

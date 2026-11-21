@@ -28,6 +28,8 @@ its own from the first file that sets it:
    `enabled`, `listen`, `url` and `connect`. It must be valid on its own, since
    a machine whose global config sets nothing reads it alone. Paths, `~`, hooks
    and `{ cmd }` values in it resolve on each machine as in the global config.
+   Machines joined to a [hub](../../../../../../docs/reference.md#hub) keep it,
+   and its mode and rule files in `shared/`, the same on each.
 5. The **built-in default**.
 
 The `[machine]` table holds the settings that describe this machine, and only
