@@ -4,7 +4,7 @@
 //! stay, then ends them through the export's removal once the destination
 //! has the package, unless they changed meanwhile, or forgets a move that
 //! failed. The record lets a daemon restarted during a move finish it.
-use std::path::PathBuf;
+use std::{collections::HashSet, path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result};
 
@@ -22,6 +22,12 @@ use crate::{
 use shoal_ids::move_tickets::MoveTicket;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
+
+use crate::time::UnixTime;
+
+/// How long a move holds its package for the joined machine that started
+/// it before Shoal finishes it as one whose reader went.
+const HELD_FOR_READER: Duration = Duration::from_secs(30 * 60);
 
 /// What a move packs a space for: its `destination`, the spaces below it
 /// that go with it as `carrying` says, and the `unsaved` work the caller
@@ -143,6 +149,15 @@ impl Manager {
         self.store.read(records::all).await
     }
 
+    /// The spaces whose move holds its package for the joined machine that
+    /// started it, which that machine may still read and end.
+    pub(crate) async fn held_for_reader(&self) -> Result<HashSet<SpaceId>> {
+        let since = UnixTime::now() - HELD_FOR_READER;
+        self.store
+            .read(move |db| records::held_since(db, since))
+            .await
+    }
+
     /// The recorded move of `space` that `packing`, its finisher's, packs
     /// again, one recorded in its first phase; none when no move of it is
     /// recorded, and any other move of a space with one is refused.
@@ -237,7 +252,7 @@ impl Manager {
         {
             crate::daemon::log!("forget the move of {}: {error:#}", record.space);
         }
-        if record.destination.machine().is_some() {
+        if record.destination.stages_package() {
             let name = crate::transfer::package_name(&record.space);
             let _ = std::fs::remove_file(self.paths.move_packages().join(name));
         }
@@ -248,7 +263,7 @@ impl Manager {
     /// here to another machine.
     fn move_package(&self, id: &SpaceId, destination: &MoveDestination) -> Result<PathBuf> {
         let staging = self.paths.move_packages();
-        if destination.machine().is_some() {
+        if destination.stages_package() {
             std::fs::create_dir_all(&staging)
                 .with_context(|| format!("create {}", staging.display()))?;
         }

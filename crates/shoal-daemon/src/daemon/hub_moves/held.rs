@@ -4,7 +4,7 @@
 //! caller named and then ends the space here.
 use std::{fs::File, io::Read as _, sync::Arc};
 
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, bail};
 use shoal_protocol::{
     protocol::{self, Body, Response},
     space_names::SpaceSelector,
@@ -13,32 +13,43 @@ use tokio::{io::AsyncWriteExt as _, net::UnixStream};
 
 use crate::{
     daemon::{answer::OperationGuard, hub::sending::blocking, manager::Manager},
-    transfer::{MoveDestination, package_name},
+    transfer::{MoveDestination, MoveLock, MoveRecord, package_name},
 };
 
-/// A package a move holds, open, with its size.
+/// A package a move holds, open, with its size, under the move's lock,
+/// which keeps Shoal from finishing the move while it is read.
 pub(crate) struct HeldPackage {
     file: File,
     size: u64,
+    lock: MoveLock,
 }
 
 impl Manager {
     /// The package the recorded move of the space `selector` names holds
     /// here for the joined machine that started it.
     pub(crate) async fn held_package(&self, selector: &SpaceSelector) -> Result<HeldPackage> {
-        let space = self.space(selector).await?;
-        let record = self.move_record(&space.id).await?;
-        ensure!(
-            record.is_some_and(|record| record.destination == MoveDestination::Held),
-            "no move of space {selector} holds its package for another machine"
-        );
-        let path = self.paths.move_packages().join(package_name(&space.id));
-        blocking(move || {
+        let record = self.held_move(selector).await?;
+        let lock = MoveLock::try_take(&self.paths, &record.space)?
+            .context("Shoal is finishing this move, or another reader reads its package")?;
+        let path = self.paths.move_packages().join(package_name(&record.space));
+        let (file, size) = blocking(move || {
             let file = File::open(&path)?;
             let size = file.metadata()?.len();
-            Ok(HeldPackage { file, size })
+            Ok((file, size))
         })
-        .await
+        .await?;
+        Ok(HeldPackage { file, size, lock })
+    }
+
+    /// The recorded move of the space `selector` names that holds its
+    /// package for another machine.
+    async fn held_move(&self, selector: &SpaceSelector) -> Result<MoveRecord> {
+        let space = self.space(selector).await?;
+        let record = self.move_record(&space.id).await?;
+        match record {
+            Some(record) if record.destination == MoveDestination::Held => Ok(record),
+            _ => bail!("no move of space {selector} holds its package for another machine"),
+        }
     }
 
     /// Answer `request_id` on `stream` with the size of `package`, then
@@ -52,7 +63,7 @@ impl Manager {
     ) -> Result<()> {
         let size = Body::HeldPackage(package.size);
         protocol::write(&mut stream, &Response::new(request_id, size)).await?;
-        let mut file = package.file;
+        let HeldPackage { mut file, lock, .. } = package;
         loop {
             let (read, chunk) = blocking(move || {
                 let mut chunk = vec![0; CHUNK];
@@ -68,6 +79,7 @@ impl Manager {
             stream.write_all(&chunk).await?;
         }
         stream.shutdown().await?;
+        lock.release();
         drop(guard);
         Ok(())
     }

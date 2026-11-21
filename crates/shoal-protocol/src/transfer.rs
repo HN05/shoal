@@ -248,6 +248,15 @@ impl MoveDestination {
         }
     }
 
+    /// Whether its package waits among those being delivered, which a move
+    /// that ends deletes.
+    pub fn stages_package(&self) -> bool {
+        match self {
+            Self::Ssh(_) | Self::Machine(_) | Self::Held => true,
+            Self::File { .. } | Self::Directory { .. } | Self::Client { .. } => false,
+        }
+    }
+
     /// The other machine the package goes to, by its SSH host or as the
     /// move names the joined machine; none for a file.
     pub fn machine(&self) -> Option<&str> {

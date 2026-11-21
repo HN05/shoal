@@ -2,6 +2,8 @@
 //! phase, written before any of its agents stops, with the package's
 //! checkpoints once written, so a daemon restarted during a move finishes
 //! it from its record.
+use std::collections::HashSet;
+
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 
@@ -69,6 +71,18 @@ pub(crate) fn all(db: &Transaction<'_>) -> Result<Vec<MoveRecord>> {
     Ok(db
         .prepare(&format!("SELECT {COLUMNS} FROM space_moves"))?
         .query_map([], record)?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// The spaces whose move, recorded at `since` or later, holds its package
+/// for the joined machine that started it.
+pub(super) fn held_since(db: &Connection, since: UnixTime) -> Result<HashSet<SpaceId>> {
+    Ok(db
+        .prepare(
+            "SELECT space_id FROM space_moves
+                WHERE json_extract(destination,'$.kind')='held' AND created_at>=?1",
+        )?
+        .query_map([since], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
 
