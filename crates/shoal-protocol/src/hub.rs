@@ -252,6 +252,23 @@ pub struct Member {
 }
 
 impl Member {
+    /// The machine `id` that a listing names but the hub's members leave
+    /// out, as one never seen, named by its ID.
+    pub fn unlisted(id: MemberId) -> Self {
+        Self {
+            name: id.to_string(),
+            id,
+            kind: MemberKind::Machine,
+            version: None,
+            joined_at: UnixTime::from_seconds(0),
+            last_seen: None,
+            connected: false,
+            hub: false,
+            availability: None,
+            agents: Vec::new(),
+        }
+    }
+
     /// That it is offline, with when the hub last saw it, as of `now`.
     pub fn offline(&self, now: UnixTime) -> String {
         let seen = match self.last_seen {

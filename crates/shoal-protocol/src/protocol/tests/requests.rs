@@ -47,6 +47,7 @@ const REQUESTS: &[&str] = &[
     r#""list_spaces""#,
     r#"{"find_spaces":{"target":{"item":{"kind":"pr","input":"7"}}}}"#,
     r#"{"locate_space":{"space":"3"}}"#,
+    r#"{"select_spaces":{"spaces":["3"],"machines":["laptop"],"below":true}}"#,
     r#"{"rename_space":{"space":"3","name":"Login retries"}}"#,
     r#"{"space_places":{"space":"fix"}}"#,
     r#"{"set_base_workspace":{"workspace":"part","base":"fix"}}"#,
@@ -82,7 +83,6 @@ const REQUESTS: &[&str] = &[
     r#"{"space_log":{"space":"fix","filter":"entries","limit":50}}"#,
     // Removal and restore.
     r#""stop_targets""#,
-    r#"{"stop_selection":{"spaces":["3"],"below":true}}"#,
     r#"{"stop_space":{"space":"fix","acknowledge_unproven":false,"launches":"cancel","processes":{"stop":{"requester":42}}}}"#,
     r#"{"check_stop":{"space":"fix"}}"#,
     r#"{"stop_processes":{"space":"fix","selection":"leftovers","requester":42}}"#,

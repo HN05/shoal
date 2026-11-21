@@ -4,25 +4,23 @@
 use std::collections::{HashSet, VecDeque};
 
 use anyhow::{Context as _, Result};
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
 use shoal_protocol::{
     hub::{
-        Machine,
+        Member,
         directory::{HubView, Listed},
     },
     model::{Located, Space},
     space_names::SpaceSelector,
 };
 
-use crate::{
-    daemon::{log, manager::Manager, scope::Caller},
-    refusal::{Reason, Refusal},
-};
+use crate::daemon::{log, manager::Manager, scope::Caller};
 
 impl Manager {
     /// Where the space `selector` names runs, among those `caller` sees:
     /// here, with its record, else on the other joined machine the hub
-    /// lists it on; refused when neither has it.
+    /// lists it on; refused as absent when neither has it, naming a removed
+    /// space it names by ID.
     pub(crate) async fn locate_space(
         &self,
         caller: Option<&Caller>,
@@ -38,23 +36,25 @@ impl Manager {
         {
             return Ok(located_elsewhere(view, listed));
         }
-        Err(Refusal::new(Reason::NotFound, format!("no space {selector}")).into())
+        Err(self.missing_space(selector).await)
     }
 
     /// The spaces `selectors` name, located as [`Self::locate_space`]
-    /// locates one, with the spaces below each on every machine when
-    /// `below`, each once and after the space above it; a hub that cannot
-    /// be asked leaves out the other machines' spaces below.
-    pub(crate) async fn locate_tree(
+    /// locates one, or with `machines` every space of those joined
+    /// machines, with the spaces below each on every machine when `below`,
+    /// each once and after the space above it; a hub that cannot be asked
+    /// leaves out the other machines' spaces below.
+    pub(crate) async fn select_spaces(
         &self,
         caller: Option<&Caller>,
         selectors: &[SpaceSelector],
+        machines: &[String],
         below: bool,
     ) -> Result<Vec<Located>> {
-        let mut roots = Vec::new();
-        for selector in selectors {
-            roots.push(self.locate_space(caller, selector).await?);
-        }
+        let roots = match machines.is_empty() {
+            true => self.located(caller, selectors).await?,
+            false => self.spaces_on(caller, machines).await?,
+        };
         // Without the spaces below, the walk only drops repeated roots.
         let tree = match below {
             true => Tree {
@@ -67,6 +67,51 @@ impl Manager {
             },
         };
         Ok(tree.walk(roots))
+    }
+
+    /// The spaces `selectors` name, each located.
+    async fn located(
+        &self,
+        caller: Option<&Caller>,
+        selectors: &[SpaceSelector],
+    ) -> Result<Vec<Located>> {
+        let mut located = Vec::new();
+        for selector in selectors {
+            located.push(self.locate_space(caller, selector).await?);
+        }
+        Ok(located)
+    }
+
+    /// Every space `caller` sees of the joined machines `machines` names,
+    /// by name or ID: this machine's but the caller's own, and another's as
+    /// the hub lists them.
+    async fn spaces_on(
+        &self,
+        caller: Option<&Caller>,
+        machines: &[String],
+    ) -> Result<Vec<Located>> {
+        let view = (self.hub.hub_view(self, caller).await?).context(
+            "this machine joined no hub, so it runs every space it has; leave out --machine",
+        )?;
+        let mut found = Vec::new();
+        for named in machines {
+            let machine = (view.directory.named_machine(named)).map_err(anyhow::Error::msg)?;
+            match machine.id == view.machine {
+                true => found.extend(self.reached_here(caller).await?),
+                false => found.extend(listed_on(&view, &machine.id)),
+            }
+        }
+        Ok(found)
+    }
+
+    /// The spaces of this machine `caller` sees but its own.
+    async fn reached_here(&self, caller: Option<&Caller>) -> Result<Vec<Located>> {
+        let own = caller.map(|caller| &caller.space_id);
+        let spaces = self.visible_spaces(caller).await?;
+        Ok((spaces.into_iter())
+            .filter(|space| Some(&space.id) != own)
+            .map(|space| Located::Here(Box::new(space)))
+            .collect())
     }
 
     /// The space of this machine `selector` names, among those `caller`
@@ -143,17 +188,21 @@ impl Tree {
     }
 }
 
+/// The spaces `view` lists on the machine `machine`.
+fn listed_on<'a>(view: &'a HubView, machine: &'a MemberId) -> impl Iterator<Item = Located> + 'a {
+    (view.directory.spaces.iter())
+        .filter(move |listed| &listed.machine == machine)
+        .map(|listed| located_elsewhere(view, listed))
+}
+
 /// The other machine's space `listed`, as `view` lists it, with that
-/// machine, named by its ID where the directory lists no such machine.
+/// machine, one never seen where the hub's members leave it out.
 fn located_elsewhere(view: &HubView, listed: &Listed) -> Located {
-    let machine = view.directory.machine(&listed.machine);
+    let machine = (view.directory.machine(&listed.machine).cloned())
+        .unwrap_or_else(|| Member::unlisted(listed.machine.clone()));
     Located::Elsewhere {
         space: Box::new(listed.clone()),
-        machine: Machine {
-            id: listed.machine.clone(),
-            name: view.machine_name(listed).to_owned(),
-        },
-        online: machine.is_some_and(|machine| machine.connected),
+        machine: Box::new(machine),
     }
 }
 

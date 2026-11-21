@@ -157,6 +157,15 @@ pub(super) async fn handle(
         WorkspaceMethod::LocateSpace { space } => {
             Body::LocatedSpace(Box::new(manager.locate_space(caller, &space).await?))
         }
+        WorkspaceMethod::SelectSpaces {
+            spaces,
+            machines,
+            below,
+        } => Body::LocatedSpaces(
+            manager
+                .select_spaces(caller, &spaces, &machines, below)
+                .await?,
+        ),
         WorkspaceMethod::UntrackedWorktrees => {
             let listed = manager.untracked_worktrees().await;
             return Ok(Answer::pages(listed, Body::UntrackedWorktrees));
@@ -411,7 +420,8 @@ impl Scoped for WorkspaceMethod {
             // It finds only the spaces the caller sees.
             WorkspaceMethod::ListSpaces
             | WorkspaceMethod::FindSpaces { .. }
-            | WorkspaceMethod::LocateSpace { .. } => None,
+            | WorkspaceMethod::LocateSpace { .. }
+            | WorkspaceMethod::SelectSpaces { .. } => None,
             // The handler answers with the caller's own space's.
             WorkspaceMethod::HeldPermissions { .. } => None,
             WorkspaceMethod::SetBaseWorkspace { workspace, .. }

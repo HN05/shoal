@@ -48,7 +48,7 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
     }
     // Every target is found, wherever it runs, and checked before any
     // stops.
-    let located = crate::client::stopping::selection(&ctx.paths, selected, !skip_children);
+    let located = crate::client::spaces::select(&ctx.paths, selected, Vec::new(), !skip_children);
     let located = located.await?;
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         ensure_below(&targets::here(&located))?;

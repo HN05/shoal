@@ -55,9 +55,15 @@ async fn a_stop_s_selection_takes_the_spaces_below_after_the_one_above_only_when
         SpaceSelector::id(&top.id),
         SpaceSelector::Number(top.number),
     ];
-    let alone = manager.locate_tree(None, &twice, false).await.unwrap();
+    let alone = manager
+        .select_spaces(None, &twice, &[], false)
+        .await
+        .unwrap();
     assert_eq!(ids(alone), std::slice::from_ref(&top.id));
-    let tree = manager.locate_tree(None, &selected, true).await.unwrap();
+    let tree = manager
+        .select_spaces(None, &selected, &[], true)
+        .await
+        .unwrap();
     assert_eq!(ids(tree), [top.id.clone(), child.id.clone()]);
 }
 
@@ -88,11 +94,7 @@ async fn a_walk_down_the_tree_crosses_between_machines_as_the_tree_does() {
     };
     let root = Located::Elsewhere {
         space: Box::new(top),
-        machine: shoal_protocol::hub::Machine {
-            id: "laptop".into(),
-            name: "laptop".to_owned(),
-        },
-        online: false,
+        machine: Box::new(shoal_protocol::hub::Member::unlisted("laptop".into())),
     };
     let found: Vec<String> = (tree.walk(vec![root]).iter())
         .map(|located| match located {

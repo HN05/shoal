@@ -99,7 +99,7 @@ pub(super) fn checked(located: &[Located]) -> Vec<(String, SpaceSelector)> {
     (located.iter())
         .filter_map(|located| match located {
             Located::Here(space) => Some((space.name.to_string(), SpaceSelector::id(&space.id))),
-            Located::Elsewhere { space, online, .. } => (*online).then(|| {
+            Located::Elsewhere { space, machine } => machine.connected.then(|| {
                 let space = &space.space;
                 (space.name.to_string(), SpaceSelector::id(&space.id))
             }),

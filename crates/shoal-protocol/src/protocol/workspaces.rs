@@ -104,6 +104,16 @@ pub enum WorkspaceMethod {
     LocateSpace {
         space: SpaceSelector,
     },
+    /// The spaces `spaces` name, or with `machines` every space of those
+    /// joined machines, by name or ID, with those below each on every
+    /// machine when `below`, each once and after the space above it, and
+    /// where each runs, among the spaces the caller sees.
+    SelectSpaces {
+        spaces: Vec<SpaceSelector>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        machines: Vec<String>,
+        below: bool,
+    },
     /// Give the workspace or chat `space` the name `name`; the reply also
     /// names it as it was before.
     RenameSpace {
@@ -422,6 +432,7 @@ impl WorkspaceMethod {
             | Self::ListSpaces
             | Self::FindSpaces { .. }
             | Self::LocateSpace { .. }
+            | Self::SelectSpaces { .. }
             | Self::VerifyWorkspace { .. }
             | Self::HeldPermissions { .. }
             | Self::IssueScope { .. }
@@ -477,7 +488,7 @@ impl WorkspaceMethod {
             } => Some(Target::Space(space)),
             Self::SpaceLog { space, .. } => space.as_ref().map(Target::Space),
             // A location is this machine's view of where a space runs.
-            Self::LocateSpace { .. } => None,
+            Self::LocateSpace { .. } | Self::SelectSpaces { .. } => None,
             // A creation names the space it goes below, which a start below
             // another machine's space takes where the caller runs.
             Self::OpenBranch { .. }

@@ -3,7 +3,7 @@ use anyhow::Result;
 
 use crate::connection::{Daemon, request};
 use shoal_protocol::{
-    model::{Space, Spaces},
+    model::{Located, Space, Spaces},
     protocol::WorkspaceMethod,
     scope_tokens::ScopeToken,
     space_names::SpaceSelector,
@@ -15,6 +15,23 @@ use std::collections::BTreeMap;
 pub async fn list(daemon: &impl Daemon) -> Result<Spaces> {
     let spaces: Vec<Space> = request(daemon, WorkspaceMethod::ListSpaces).await?;
     Ok(Spaces(spaces))
+}
+
+/// The spaces `spaces` name, or with `machines` every space of those joined
+/// machines, with those below each on every machine when `below`, each
+/// after the space above it and with where it runs.
+pub async fn select(
+    daemon: &impl Daemon,
+    spaces: Vec<SpaceSelector>,
+    machines: Vec<String>,
+    below: bool,
+) -> Result<Vec<Located>> {
+    let method = WorkspaceMethod::SelectSpaces {
+        spaces,
+        machines,
+        below,
+    };
+    request(daemon, method).await
 }
 
 /// A new scope token that acts for `space` until [`revoke_scope`] revokes
