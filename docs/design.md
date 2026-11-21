@@ -4620,7 +4620,10 @@ cannot be resolved, is retained. Manual removal asks only before deleting
 uncommitted or untracked files or commits on a detached HEAD, which no branch keeps.
 Shoal remembers each branch a removal kept, at the commit removal left it on, and
 the cleanup sweep deletes it once a remote or the default branch has all its
-commits, without notifying anyone. It needs a default branch fetched in the last
+commits, without notifying anyone. A kept branch never expires, and the expiry
+of the removal's checkpoint notifies no one of it: its commits are nowhere
+else, and the checkpoint expiry prunes unreachable objects, so expiring it
+would lose that work for good. It needs a default branch fetched in the last
 ten minutes, fetching it when the background sync has not, and at most every ten
 minutes it asks every remote which branches it has; only those answers
 count, never remote-tracking refs, which a narrowed fetch mapping or a deleted
@@ -4876,7 +4879,8 @@ Implementation order: CLI/daemon, workspaces, ports, simulators, lifecycle
 polish, then filesystem restrictions. Open items:
 
 - **Storage policy:** ownership and retention for run data outside the
-  worktree other than temporary directories, caches, logs, and audit history.
+  worktree other than temporary directories, caches, logs, alerts, kept
+  branches and audit history.
 - **Distribution:** stable service identity across
   upgrades; native Linux service and recovery validation.
 - **Execution environments:** host/guest and cross-user coordination;
