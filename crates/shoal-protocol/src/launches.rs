@@ -58,6 +58,10 @@ pub struct Launch {
     /// The checkpoint of the copied workspace whose files it copies instead.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checkpoint: Option<CheckpointNumber>,
+    /// The commit keeping the unsaved files of a copy that another joined
+    /// machine carried here, which the new branch at `base` starts with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub carried_files: Option<shoal_refs::CommitId>,
     /// Skip a new workspace's setup.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub skip_setup: bool,

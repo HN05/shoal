@@ -42,9 +42,13 @@ pub(in crate::daemon) struct PendingWorktree {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum PendingSource {
+    /// A new branch from `base`, with the unsaved files the commit `files`
+    /// keeps, as a copy another joined machine carried here starts with.
     New {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         base: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        files: Option<CommitId>,
     },
     Existing {
         branch: crate::git::existing_branch::Branch,
@@ -86,15 +90,16 @@ enum Creation {
 }
 
 impl PendingWorktree {
-    /// The worktree `source` creates with `git_profile`, for an agent in
-    /// `mode` when it converts a chat.
+    /// The worktree `source` creates with `git_profile`, a new branch with
+    /// the unsaved files the commit `files` keeps, for an agent in `mode`
+    /// when it converts a chat.
     pub(super) fn of(
-        source: WorkspaceSource,
+        (source, files): (WorkspaceSource, Option<CommitId>),
         git_profile: Option<&str>,
         mode: Option<ModeName>,
     ) -> Self {
         let source = match source {
-            WorkspaceSource::New { base, .. } => PendingSource::New { base },
+            WorkspaceSource::New { base, .. } => PendingSource::New { base, files },
             WorkspaceSource::Existing {
                 branch,
                 base,
@@ -152,15 +157,20 @@ impl PendingWorktree {
         }
     }
 
-    /// The revision creating this worktree starts from or compares with,
-    /// if it names one: its base, or the commit it is detached at.
-    fn revision(&self) -> Option<&str> {
+    /// The revisions creating this worktree starts from or compares with:
+    /// its base, or the commit it is detached at, and the commit keeping
+    /// the unsaved files it starts with.
+    fn revisions(&self) -> Vec<&str> {
         match &self.source {
-            PendingSource::New { base }
-            | PendingSource::Existing { base, .. }
-            | PendingSource::Restore { base, .. } => base.as_deref(),
-            PendingSource::Commit { head } => Some(head.as_str()),
-            PendingSource::Copy { .. } | PendingSource::Outside { .. } => None,
+            PendingSource::New { base, files } => {
+                let files = files.as_ref().map(CommitId::as_str);
+                base.as_deref().into_iter().chain(files).collect()
+            }
+            PendingSource::Existing { base, .. } | PendingSource::Restore { base, .. } => {
+                base.as_deref().into_iter().collect()
+            }
+            PendingSource::Commit { head } => vec![head.as_str()],
+            PendingSource::Copy { .. } | PendingSource::Outside { .. } => Vec::new(),
         }
     }
 
@@ -284,8 +294,9 @@ impl Manager {
     /// reading a restore's checkpoint again.
     async fn creation(&self, workspace: &Workspace, source: PendingSource) -> Result<Creation> {
         Ok(match source {
-            PendingSource::New { base } => {
-                Creation::Branch(WorkspaceSource::New { base, parent: None }, None)
+            PendingSource::New { base, files } => {
+                let files = carried_files(base.as_deref(), files)?;
+                Creation::Branch(WorkspaceSource::New { base, parent: None }, files)
             }
             PendingSource::Existing { branch, base } => Creation::Branch(
                 WorkspaceSource::Existing {
@@ -438,7 +449,7 @@ pub(crate) fn pending_revisions(
     let mut revisions = Vec::new();
     for plan in plans {
         let plan: PendingWorktree = serde_json::from_str(&plan?)?;
-        revisions.extend(plan.revision().map(str::to_owned));
+        revisions.extend(plan.revisions().into_iter().map(str::to_owned));
     }
     Ok(revisions)
 }
@@ -461,7 +472,10 @@ pub(crate) fn build_pending_in(
     )?;
     let plan = plan.context("the workspace already has its worktree")?;
     let mut pending: PendingWorktree = serde_json::from_str(&plan)?;
-    let PendingSource::New { base: unset @ None } = &mut pending.source else {
+    let PendingSource::New {
+        base: unset @ None, ..
+    } = &mut pending.source
+    else {
         return Ok(());
     };
     *unset = Some(base.to_string());
@@ -474,4 +488,17 @@ pub(crate) fn build_pending_in(
         Some(owner) => stack::stack_on(tx, id, owner, EventCause::Blocker),
         None => Ok(()),
     }
+}
+
+/// The unsaved files the commit `files` keeps, which a new branch at
+/// `base` starts with; a commit without a base it names is refused.
+fn carried_files(base: Option<&str>, files: Option<CommitId>) -> Result<Option<RestoredFiles>> {
+    let Some(snapshot) = files else {
+        return Ok(None);
+    };
+    let base = base.context("a new branch that starts with carried files names its base")?;
+    Ok(Some(RestoredFiles {
+        head: CommitId::from(base),
+        snapshot,
+    }))
 }

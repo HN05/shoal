@@ -184,6 +184,7 @@ fn named_creation(launch: &Launch, copy: Option<crate::start_plan::CopyCreation>
             disposable: launch.disposable,
         },
         copy,
+        files: launch.carried_files.clone(),
         ..Creation::default()
     }
 }

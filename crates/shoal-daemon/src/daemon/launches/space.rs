@@ -235,6 +235,7 @@ fn placed_home(
         git_profile,
         mut options,
         pr,
+        files,
     } = opening;
     *profile = git_profile;
     let name = options.name.take();
@@ -242,6 +243,7 @@ fn placed_home(
         git_profile: profile.as_deref(),
         path,
         options,
+        files,
         ..Default::default()
     };
     let opening = Opening {

@@ -38,11 +38,13 @@ impl Manager {
             return Ok(launched);
         }
         let forwarded = launch.forwarded.is_some();
-        let carried = (launch.forwarded.as_ref())
-            .and_then(|carried| Some((carried.origin.clone()?, carried.commit.clone()?)));
+        let held = carried_commits(&launch);
         let launched = self.launch_here(launch, source, caller).await;
-        if let Some((origin, commit)) = carried {
-            self.release_carried_hold((&origin, &commit)).await;
+        // A pending worktree that starts from them keeps them from here.
+        if let Some((origin, commits)) = &held {
+            for commit in commits {
+                self.release_carried_hold((origin, commit)).await;
+            }
         }
         // The machine that forwarded it finds the space through the hub
         // once it hears of it.
@@ -117,6 +119,20 @@ impl Manager {
         }
         Ok(())
     }
+}
+
+/// The URL of the origin `launch`, which another joined machine forwarded
+/// here, carried commits of, with those commits, which this machine holds
+/// for it until it ends: its base's and the one keeping a copy's files.
+fn carried_commits(launch: &Launch) -> Option<(String, Vec<shoal_refs::CommitId>)> {
+    let carried = launch.forwarded.as_ref()?;
+    let origin = carried.origin.clone()?;
+    let base = carried.commit.clone();
+    let commits = base
+        .into_iter()
+        .chain(launch.carried_files.clone())
+        .collect();
+    Some((origin, commits))
 }
 
 #[cfg(test)]

@@ -92,6 +92,7 @@ impl Manager {
             git_profile: None,
             options: Default::default(),
             pr: None,
+            files: None,
         };
         Ok(Placement {
             home: PlacedHome::Workspace(workspace.repository().clone(), opening),

@@ -61,6 +61,10 @@ pub struct Creation {
     /// or is refused, rather than a name Shoal derived and may suffix.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub typed: bool,
+    /// The commit keeping the unsaved files a new branch at `base` starts
+    /// with, as a copy another joined machine carried here does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub files: Option<shoal_refs::CommitId>,
 }
 
 /// The workspace a new one copies, and the name the copy takes without a
@@ -92,6 +96,8 @@ pub struct Opening {
     pub options: CreationOptions,
     /// The PR it links.
     pub pr: Option<crate::forge::items::reference::ItemInput>,
+    /// The commit keeping the unsaved files its new branch starts with.
+    pub files: Option<shoal_refs::CommitId>,
 }
 
 impl Creation {
@@ -109,6 +115,7 @@ impl Creation {
             pull_head,
             copy,
             typed,
+            files,
         } = self;
         let start = match (pull_head, existing, copy) {
             (Some(head), ..) => WorkspaceStart::PullHead {
@@ -139,6 +146,7 @@ impl Creation {
             git_profile,
             options,
             pr,
+            files,
         })
     }
 }

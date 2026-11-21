@@ -21,7 +21,7 @@ pub(crate) use pending::{build_pending_in, pending_revisions};
 use rusqlite::params;
 use shoal_ids::{checkpoint_numbers::CheckpointNumber, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceName;
-use shoal_refs::BranchName;
+use shoal_refs::{BranchName, CommitId};
 use tokio::sync::OwnedMutexGuard;
 
 /// Where a new workspace goes, its Git profile, and what it leaves out.
@@ -45,6 +45,9 @@ pub(crate) struct NewWorkspace<'a> {
     /// [`Manager::create_pending_worktree`], so the record returns before
     /// Git runs; otherwise the creation creates it as a preparation would.
     pub pending: bool,
+    /// The commit keeping the unsaved files its new branch starts with, as
+    /// a copy another joined machine carried here does.
+    pub files: Option<CommitId>,
 }
 
 /// A worktree Git created and Shoal configured, which settling seeds.
@@ -168,6 +171,7 @@ impl Manager {
             exact_branch: _,
             id,
             pending,
+            files,
         } = new;
         let existing = match &source {
             WorkspaceSource::Existing { .. } => Some(branch.as_str()),
@@ -214,7 +218,7 @@ impl Manager {
         let record = Inserted {
             placement,
             chosen,
-            pending: Some(PendingWorktree::of(source, git_profile, mode)),
+            pending: Some(PendingWorktree::of((source, files), git_profile, mode)),
         };
         let workspace = self
             .insert_workspace_as(workspace, base_branch, record)

@@ -344,6 +344,7 @@ impl StartArgs {
             agent: self.agent.clone(),
             model: self.model.clone().into(),
             fork: None,
+            carried_files: None,
             name: self.name.clone(),
             priority: self.priority,
             permissions: PermissionChange::combined(&self.permissions).set,
