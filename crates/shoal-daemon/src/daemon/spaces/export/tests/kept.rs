@@ -43,12 +43,14 @@ async fn a_retired_chat_keeps_its_agent_s_session_in_its_removal_record() {
     let plan = test_support::chat(&manager, "plan", "chat", Some(&repo), None).await;
     test_support::report_session(&manager, &plan.id, "plan-session").await;
     let space = space(&manager, &plan.id).await;
-    manager.retire_space(&space).await.unwrap();
+    let opens = manager.retire_space(&space).await.unwrap();
     assert!(manager.find_space(&plan.id).await.unwrap().is_none());
     let removed = (manager.removed_spaces().await.unwrap().into_iter())
         .find(|removed| removed.space_id == plan.id)
         .unwrap();
     assert!(!removed.saved_no_session());
+    // A chat is no copy's source, so what opens its work is its session.
+    assert!(opens.contains("plan-session"), "{opens}");
 }
 
 #[tokio::test]
@@ -60,11 +62,15 @@ async fn a_retired_workspace_keeps_a_checkpoint_and_leaves_the_spaces_below_it()
         .unwrap();
     let below = test_support::chat(&manager, "below", "chat", Some(&repo), Some(&fix.id)).await;
     let space = space(&manager, &fix.id).await;
-    manager.retire_space(&space).await.unwrap();
+    let opens = manager.retire_space(&space).await.unwrap();
     let removed = (manager.removed_spaces().await.unwrap().into_iter())
         .find(|removed| removed.space_id == fix.id)
         .unwrap();
-    assert!(removed.workspace().is_some());
+    let number = removed.workspace().unwrap().checkpoint.number;
+    // Its ID names the space on the machine that took it over, so a copy
+    // of the work kept here names its checkpoint.
+    let copy = format!("--copy {} --checkpoint {number}", fix.id);
+    assert!(opens.contains(&copy), "{opens}");
     assert!(manager.find_space(&below.id).await.unwrap().is_some());
 }
 

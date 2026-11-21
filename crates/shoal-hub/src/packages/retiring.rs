@@ -53,37 +53,45 @@ impl Hub {
     /// As a returning machine: end each of `spaces`, which other machines
     /// took over from the hub's packages while this one was offline,
     /// alerting the user to each whose copy here changed after the package
-    /// the takeover went by; the spaces it no longer has.
+    /// the takeover went by, and to each it could not end, which then runs
+    /// on both machines; the spaces it no longer has.
     pub(crate) async fn retire(&self, daemon: &dyn Daemon, spaces: Vec<SpaceId>) -> Vec<SpaceId> {
         let mut retired = Vec::new();
-        for space in spaces {
+        for id in spaces {
+            let space = match daemon.find_space(&id).await {
+                Ok(Some(space)) => space,
+                Ok(None) => {
+                    retired.push(id);
+                    continue;
+                }
+                Err(error) => {
+                    log!(
+                        "hub: could not read space {id}, which another machine took over: {error:#}"
+                    );
+                    continue;
+                }
+            };
             match self.retire_one(daemon, &space).await {
-                Ok(()) => retired.push(space),
-                Err(error) => log!(
-                    "hub: could not retire space {space}, which another machine took over: {error:#}"
-                ),
+                Ok(()) => retired.push(id),
+                Err(error) => {
+                    let about = About::space(&space.name, &space.id);
+                    let message = unretired_message(&space, &error);
+                    (self.notify(daemon, about, AlertKind::SpaceConflict, message)).await;
+                }
             }
         }
         retired
     }
 
-    /// End the space `id` here, if this machine still has it, alerting the
-    /// user when its copy changed after the package the hub kept.
-    async fn retire_one(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<()> {
-        let Some(space) = daemon.find_space(id).await? else {
-            return Ok(());
-        };
-        let diverged = self.diverged(daemon, &space).await;
-        daemon.retire_space(&space).await?;
+    /// End `space` here, alerting the user when its copy changed after the
+    /// package the hub kept.
+    async fn retire_one(&self, daemon: &dyn Daemon, space: &Space) -> Result<()> {
+        let diverged = self.diverged(daemon, space).await;
+        let opens = daemon.retire_space(space).await?;
         if diverged {
             let about = About::space(&space.name, &space.id);
-            (self.notify(
-                daemon,
-                about,
-                AlertKind::SpaceDiverged,
-                diverged_message(&space),
-            ))
-            .await;
+            let message = diverged_message(space, &opens);
+            (self.notify(daemon, about, AlertKind::SpaceDiverged, message)).await;
         }
         Ok(())
     }
@@ -101,11 +109,22 @@ impl Hub {
 }
 
 /// What the user reads of `space`, which another machine took over and
-/// which changed here after the package the takeover went by.
-fn diverged_message(space: &Space) -> String {
+/// which changed here after the package the takeover went by, with what
+/// `opens` the work this machine removed.
+fn diverged_message(space: &Space, opens: &str) -> String {
     let (name, id) = (&space.name, &space.id);
     format!(
-        "{name} ({id}) changed on this machine after the package another machine took it over from, so the two diverged; this machine removed its copy, keeping that work, and shoal start --copy {id} opens it as a copy"
+        "{name} ({id}) changed on this machine after the package another machine took it over from, so the two diverged; this machine removed its copy, keeping that work: {opens}"
+    )
+}
+
+/// What the user reads of `space`, which another machine took over and
+/// this machine could not remove, failing with `error`, so it runs on both;
+/// the hub asks again the next time this machine connects.
+fn unretired_message(space: &Space, error: &anyhow::Error) -> String {
+    let (name, id) = (&space.name, &space.id);
+    format!(
+        "{name} ({id}) runs here and on the machine that took it over, since this machine could not remove its copy: {error:#}; shoal rm {id} here removes it, keeping a checkpoint"
     )
 }
 

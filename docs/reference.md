@@ -1099,8 +1099,11 @@ over meanwhile, and the machine stops their agents and removes each through
 the removal path, keeping a checkpoint, its agents' sessions in its removal
 record and its branch, and leaving the spaces below it, whose parent now
 runs on the other machine. A copy that changed after the hub's package also
-raises a `space_diverged` alert naming the removed space's ID and
-`shoal start --copy <id>`, which opens that work as a copy.
+raises a `space_diverged` alert naming what opens that work: for a
+workspace, `shoal start --copy <id> --checkpoint <number>` with the
+checkpoint its removal kept, and for a chat its agents' sessions. A copy the
+machine cannot remove raises a `space_conflict` alert naming the error and
+`shoal rm <id>`, and the hub asks it again the next time it connects.
 
 The hub never takes a space over on its own: a machine that is awake but
 lost only the hub keeps working. Once an `intermittent` machine has been

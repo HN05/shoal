@@ -256,7 +256,7 @@ impl Packages for Manager {
         })
     }
 
-    fn retire_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<()>> {
+    fn retire_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<String>> {
         Box::pin(Manager::retire_space(self, space))
     }
 }

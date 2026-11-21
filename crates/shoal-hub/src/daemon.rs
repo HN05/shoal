@@ -222,8 +222,9 @@ pub trait Packages: Send + Sync {
 
     /// End `space` here, which another machine took over from the hub's
     /// package of it while this one was offline, keeping its work in its
-    /// removal record and its branch, and leaving the spaces below it.
-    fn retire_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<()>>;
+    /// removal record and its branch, and leaving the spaces below it;
+    /// what then opens that work, for the user to read.
+    fn retire_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<String>>;
 }
 
 /// Everything the hub needs of the daemon, which each of its operations
