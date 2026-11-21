@@ -8,6 +8,7 @@ mod input;
 pub mod plan;
 pub mod subagents;
 pub mod turns;
+pub mod worktrees;
 
 use std::path::{Path, PathBuf};
 

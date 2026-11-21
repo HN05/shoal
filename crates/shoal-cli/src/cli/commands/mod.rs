@@ -91,7 +91,6 @@ mod unmerge;
 mod update;
 mod view;
 mod viewer;
-mod worktree_hooks;
 
 #[cfg(test)]
 mod tests;
