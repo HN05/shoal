@@ -3,11 +3,11 @@
 use anyhow::{Result, ensure};
 use shoal_links::wait::followed::followed_items;
 use shoal_links::wait::framing::{Batch, RESPONSE_LIMIT, own_batch, with_unread_messages};
+use shoal_links::wait::{UpdatesExt, wake_log::WakeWaitLog};
 
 use super::{
-    Updates, UpdatesExt,
+    Updates,
     poll::{until, wait_for_updates, watch_deadline},
-    wake_log::WakeWaitLog,
 };
 use crate::{
     daemon::{alerts::Alert, manager::Manager},

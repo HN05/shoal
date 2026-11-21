@@ -4,7 +4,6 @@
 
 pub(super) use self::activity::record_received_change;
 pub(crate) use self::start::WatchStarts;
-use crate::daemon::alerts::Alert;
 use shoal_links::wait::{branch_report, cursor};
 
 pub(crate) use shoal_protocol::links::Updates;
@@ -18,48 +17,6 @@ mod merge_runs;
 mod poll;
 mod start;
 mod wake;
-mod wake_log;
-
-/// Operations on the client type [`Updates`] that only the `shoal` command uses.
-pub(crate) trait UpdatesExt {
-    fn superseded() -> Self;
-
-    fn timed_out() -> Self;
-
-    fn messages(messages: Vec<Alert>) -> Self;
-}
-
-impl UpdatesExt for Updates {
-    fn superseded() -> Self {
-        Self {
-            updates: Vec::new(),
-            alerts: Vec::new(),
-            leftovers: Vec::new(),
-            timed_out: false,
-            superseded: true,
-        }
-    }
-
-    fn timed_out() -> Self {
-        Self {
-            updates: Vec::new(),
-            alerts: Vec::new(),
-            leftovers: Vec::new(),
-            timed_out: true,
-            superseded: false,
-        }
-    }
-
-    fn messages(messages: Vec<Alert>) -> Self {
-        Self {
-            updates: Vec::new(),
-            alerts: messages,
-            leftovers: Vec::new(),
-            timed_out: false,
-            superseded: false,
-        }
-    }
-}
 
 #[cfg(test)]
 pub(crate) mod test_support;

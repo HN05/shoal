@@ -2,6 +2,7 @@
 //! follows, and the reads of item activity the background poll shares.
 use crate::forge::items::reference::ItemRef;
 use shoal_links::space::LinkSpace;
+use shoal_links::wait::UpdatesExt;
 use shoal_links::wait::followed::activity_ended;
 use shoal_links::wait::framing::own_batch;
 use std::time::Duration;
@@ -10,7 +11,7 @@ use anyhow::{Context, Result};
 use futures_util::{StreamExt, TryStreamExt, stream};
 
 use super::{
-    Updates, UpdatesExt,
+    Updates,
     branch_report::{BranchReport, branch_conflicts, branch_report, watches_branch},
     delivery::receiving,
     start::PollStart,

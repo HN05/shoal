@@ -129,7 +129,10 @@ pub(super) async fn handle(
             Body::Ok
         }
         AgentMethod::ReportWakeEnd { space, ended } => {
-            manager.report_wake_end(&space, &ended).await?;
+            manager
+                .links
+                .report_wake_end(&**manager, &space, &ended)
+                .await?;
             Body::Ok
         }
         AgentMethod::ReportUpstreamReset {

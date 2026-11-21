@@ -4,22 +4,21 @@
 //! reasons the daemon cannot see.
 use anyhow::Result;
 
-use super::Updates;
-use crate::{
-    daemon::{log, manager::Manager},
-    protocol::WakeEnd,
-};
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_daemon_base::log;
+use shoal_protocol::{links::Updates, protocol::WakeEnd, space_names::SpaceSelector};
 
-impl Manager {
+use crate::{Links, daemon::Daemon};
+
+impl Links {
     /// Log that the wake hook of the agent of the workspace or running chat
     /// `selector` names ended for `ended` without starting the agent's turn.
-    pub(crate) async fn report_wake_end(
+    pub async fn report_wake_end(
         &self,
+        daemon: &dyn Daemon,
         selector: &SpaceSelector,
         ended: &WakeEnd,
     ) -> Result<()> {
-        let space = self.space(selector).await?;
+        let space = daemon.space(selector).await?;
         let name = &space.name;
         match ended {
             WakeEnd::AgentExited => log!("wake hook of {name} ended: its agent exited"),
@@ -48,13 +47,13 @@ enum Ending {
 
 /// Logs how the wait of the wake hook of the space `name` ended, unless it
 /// answered with updates.
-pub(super) struct WakeWaitLog {
+pub struct WakeWaitLog {
     name: String,
     answered: bool,
 }
 
 impl WakeWaitLog {
-    pub(super) fn start(name: &str) -> Self {
+    pub fn start(name: &str) -> Self {
         Self {
             name: name.to_owned(),
             answered: false,
@@ -62,7 +61,7 @@ impl WakeWaitLog {
     }
 
     /// Log the wait's `answer`, unless it holds updates.
-    pub(super) fn answered(mut self, answer: &Result<Updates>) {
+    pub fn answered(mut self, answer: &Result<Updates>) {
         self.answered = true;
         if let Some(ending) = ending(answer) {
             self.log(&ending);
