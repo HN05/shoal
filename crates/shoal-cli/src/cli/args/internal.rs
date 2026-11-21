@@ -221,6 +221,16 @@ pub enum InternalCommand {
         #[arg(long)]
         no_resume: bool,
     },
+    /// Put the session files whose list is on stdin, as JSON, where this
+    /// machine's agents look for them, as a start that another joined
+    /// machine forks a session for needs; the daemon runs it.
+    #[command(name = workers::PLACE_SESSIONS)]
+    PlaceSessions {
+        /// The repository whose settings describe the agents; the global
+        /// config's without one.
+        #[arg(long)]
+        repository: Option<shoal_ids::repository_ids::RepositoryId>,
+    },
     /// Attach this terminal, which a user on another machine views, to an
     /// agent's session as `shoal attach` would there; the daemon runs it.
     #[command(name = workers::ATTACH)]

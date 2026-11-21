@@ -32,7 +32,7 @@ use shoal_protocol::space_names::SpaceSelector;
 
 pub(in crate::cli) use crate::agents::{installed, names};
 pub(in crate::cli) use desktop::{app, ensure_opens, hand_off};
-pub(in crate::cli) use sessions::{SessionHome, install_kept_session_files};
+pub(in crate::cli) use sessions::{SessionHome, install_kept_session_files, place_forked_sessions};
 pub(in crate::cli) use trust::{cleanup_moved_trust, cleanup_repository_trust};
 
 /// One launch of an agent in a space, a ready workspace or a chat; settings

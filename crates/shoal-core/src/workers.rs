@@ -2,6 +2,7 @@
 //! commands the daemon, the execution wrapper and the CLI run in their own
 //! processes.
 use shoal_ids::move_tickets::MoveTicket;
+use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::space_names::SpaceSelector;
@@ -30,6 +31,7 @@ pub const GIT_CREDENTIAL: &str = "git-credential";
 pub const QUEUE_START: &str = "queue-start";
 pub const OPERATION: &str = "operation";
 pub const IMPORT_MOVED: &str = "import-moved";
+pub const PLACE_SESSIONS: &str = "place-sessions";
 pub const PLACE: &str = "place";
 pub const LAUNCH: &str = "launch";
 pub const COPY_IGNORED: &str = "copy-ignored";
@@ -117,6 +119,13 @@ pub enum Worker<'a> {
     ImportMoved {
         ticket: Option<&'a MoveTicket>,
         resume: bool,
+    },
+    /// Put the session files whose list the daemon writes to standard
+    /// input where this machine's agents look for them, under the settings
+    /// of `repository`, else of the global config, as a start that another
+    /// joined machine forks a session for needs.
+    PlaceSessions {
+        repository: Option<&'a RepositoryId>,
     },
     /// Start an admitted queue entry where its launching terminal would.
     QueueStart {
@@ -400,6 +409,12 @@ pub(crate) fn internal_command_for(
             }
             if !resume {
                 args.push("--no-resume".into());
+            }
+        }
+        Worker::PlaceSessions { repository } => {
+            args.push(PLACE_SESSIONS.into());
+            if let Some(repository) = repository {
+                args.extend(["--repository".into(), repository.as_str().into()]);
             }
         }
         Worker::QueueStart { entry } => args.extend([QUEUE_START.into(), entry.into()]),

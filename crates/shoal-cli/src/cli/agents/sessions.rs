@@ -63,9 +63,6 @@ pub(in crate::cli) async fn install_session_files(
     if files.is_empty() {
         return true;
     }
-    if !crate::build::changes_user_files() {
-        return false;
-    }
     let (target, workspace) = match home {
         SessionHome::Workspace(workspace) => (
             ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
@@ -73,6 +70,28 @@ pub(in crate::cli) async fn install_session_files(
         ),
         SessionHome::Chat(chat) => (ConfigTarget::chat(chat), None),
     };
+    let workspace_environment = match workspace {
+        Some(workspace) => workspaces::agent_environment(ctx, workspace).await,
+        None => BTreeMap::new(),
+    };
+    place_session_files(ctx, (target, &workspace_environment), files, existing).await
+}
+
+/// Put `files` where the agents look for them under the settings of
+/// `target` with a workspace's `[env]`, `workspace_environment`, as
+/// [`place`] does with the files there as `existing` says. A development
+/// build leaves them to the installed Shoal. Failures only warn; that
+/// agent's start from the session then fails to find it. Returns whether
+/// every file is in place.
+pub(in crate::cli) async fn place_session_files(
+    ctx: &Context,
+    (target, workspace_environment): (ConfigTarget, &BTreeMap<String, OsString>),
+    files: &[CarriedSessionFile],
+    existing: Existing,
+) -> bool {
+    if !crate::build::changes_user_files() {
+        return false;
+    }
     let settings = match shoal_workers::settings::of(&ctx.paths, target).await {
         Ok(settings) => settings,
         Err(error) => {
@@ -80,16 +99,12 @@ pub(in crate::cli) async fn install_session_files(
             return false;
         }
     };
-    let workspace_environment = match workspace {
-        Some(workspace) => workspaces::agent_environment(ctx, workspace).await,
-        None => BTreeMap::new(),
-    };
     let mut directories = BTreeMap::new();
     let mut placed_all = true;
     for imported in files {
         let agent = &imported.file.agent;
         let directory = directories.entry(agent.clone()).or_insert_with(|| {
-            session_dir(&settings, &workspace_environment, &ctx.paths.home, agent)
+            session_dir(&settings, workspace_environment, &ctx.paths.home, agent)
         });
         let placed = match directory {
             Ok(Some(directory)) => place(directory, imported, existing),
@@ -106,6 +121,37 @@ pub(in crate::cli) async fn install_session_files(
         }
     }
     placed_all
+}
+
+/// `shoal internal place-sessions`: put the session files whose list,
+/// with where each one's contents are, stdin holds where the agents look
+/// for them under the settings of `repository`, else of the global
+/// config, keeping one already there that the carried one does not
+/// continue. Exits 1 when a file could not be placed, so the fork that
+/// needs it is refused; a development build leaves them to the installed
+/// Shoal.
+pub(in crate::cli) async fn place_forked_sessions(
+    ctx: &Context,
+    repository: Option<shoal_ids::repository_ids::RepositoryId>,
+) -> Result<i32> {
+    let files: Vec<CarriedSessionFile> = serde_json::from_reader(std::io::stdin().lock())?;
+    if !crate::build::changes_user_files() {
+        eprintln!(
+            "warning: a development build leaves the forked session's files to the installed Shoal"
+        );
+        return Ok(0);
+    }
+    let target = match repository {
+        Some(repository) => ConfigTarget::Repository(repository.into()),
+        None => ConfigTarget::Global,
+    };
+    let placed = (target, &BTreeMap::new());
+    Ok(
+        match place_session_files(ctx, placed, &files, Existing::Continued).await {
+            true => 0,
+            false => 1,
+        },
+    )
 }
 
 /// Put `files`, which the daemon kept with the removal record `restored`,

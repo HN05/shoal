@@ -426,6 +426,19 @@ fn import_moved_round_trips_its_ticket_and_resume() {
 }
 
 #[test]
+fn place_sessions_round_trips_its_repository() {
+    let repository = shoal_ids::repository_ids::RepositoryId::generate();
+    for repository in [Some(&repository), None] {
+        let InternalCommand::PlaceSessions { repository: parsed } =
+            parse(Worker::PlaceSessions { repository }, true)
+        else {
+            panic!("expected place-sessions worker");
+        };
+        assert_eq!(parsed.as_ref(), repository);
+    }
+}
+
+#[test]
 fn proxy_report_round_trips_its_json() {
     let report = r#"{"report_upstream_reset":{"workspace":"w","execution":"e"}}"#;
     let InternalCommand::ProxyReport { report: parsed } =
