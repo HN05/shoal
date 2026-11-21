@@ -2,7 +2,7 @@
 //! of the hub, among the spaces the caller sees.
 use anyhow::{Context as _, Result};
 use shoal_protocol::{
-    hub::directory::HubView,
+    hub::{Machine, directory::HubView},
     model::{Located, Space},
     space_names::SpaceSelector,
 };
@@ -26,14 +26,12 @@ impl Manager {
         }
         let view = (self.hub.hub_view(self, caller).await)
             .with_context(|| format!("no space {selector} here, and the hub cannot be asked"))?;
-        match view
-            .as_ref()
-            .map(|view| listed_in(view, selector))
-            .transpose()?
+        if let Some(view) = &view
+            && let Some(located) = listed_in(view, selector)?
         {
-            Some(Some(located)) => Ok(located),
-            _ => Err(Refusal::new(Reason::NotFound, format!("no space {selector}")).into()),
+            return Ok(located);
         }
+        Err(Refusal::new(Reason::NotFound, format!("no space {selector}")).into())
     }
 
     /// The space of this machine `selector` names, among those `caller`
@@ -48,16 +46,21 @@ impl Manager {
     }
 }
 
-/// The other machine's space `selector` names in `view`, with that machine.
+/// The other machine's space `selector` names in `view`, with that
+/// machine, named by its ID where the directory lists no such machine.
 fn listed_in(view: &HubView, selector: &SpaceSelector) -> Result<Option<Located>> {
     let Some(listed) = view.selected(selector).map_err(anyhow::Error::msg)? else {
         return Ok(None);
     };
-    Ok(view
-        .directory
-        .machine(&listed.machine)
-        .map(|machine| Located::Elsewhere {
-            space: Box::new(listed.clone()),
-            machine: machine.clone(),
-        }))
+    let machine = Machine {
+        id: listed.machine.clone(),
+        name: view.machine_name(listed).to_owned(),
+    };
+    Ok(Some(Located::Elsewhere {
+        space: Box::new(listed.clone()),
+        machine,
+    }))
 }
+
+#[cfg(test)]
+mod tests;
