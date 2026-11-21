@@ -183,7 +183,6 @@ const REQUESTS: &[&str] = &[
     r#""update_hub""#,
     r#""hub_members""#,
     r#"{"revoke_hub_member":{"member":"laptop"}}"#,
-    r#""hub_directory""#,
     // Issues and PRs.
     r#"{"link_item":{"space":"fix","kind":"issue","item":"1","relation":"related"}}"#,
     r#"{"relink_space":{"space":"fix","links":{"issues":[{"kind":"issue","url":"https://github.com/o/r/issues/1"}],"prs":[],"opened":[],"related":[],"assignees":[{"url":"https://github.com/o/r/issues/1","account":"agent","added":true}]}}}"#,

@@ -93,7 +93,7 @@ impl Operation {
                 )
                 | Self::Secret(SecretMethod::SecretCatalog { .. })
                 | Self::Trigger(TriggerMethod::ListTriggers { .. })
-                | Self::Hub(HubMethod::HubMembers | HubMethod::HubDirectory)
+                | Self::Hub(HubMethod::HubMembers)
                 | Self::App(
                     AppMethod::ReadAppConfig { .. }
                         | AppMethod::ReadAppEntry { .. }

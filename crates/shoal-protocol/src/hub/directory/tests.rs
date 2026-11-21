@@ -1,7 +1,16 @@
 use serde_json::json;
 
 use super::*;
+use crate::model::Everywhere;
 use crate::protocol::{Body, MAX_FRAME, Response};
+
+/// The listing of every machine's spaces that carries `view`.
+fn everywhere(view: HubView) -> Everywhere {
+    Everywhere {
+        elsewhere: Some(view),
+        ..Everywhere::default()
+    }
+}
 
 #[test]
 fn a_view_larger_than_a_frame_arrives_in_pages_whole() {
@@ -27,7 +36,7 @@ fn a_view_larger_than_a_frame_arrives_in_pages_whole() {
             shoal_ids::space_ids::SpaceId::from("space-1".to_owned()),
         )],
     };
-    let frames = Response::new(1, Body::HubView(view.into_parts()))
+    let frames = Response::new(1, Body::SpacesEverywhere(everywhere(view).into_parts()))
         .frames()
         .unwrap();
     assert!(frames.len() > 1);
@@ -37,10 +46,10 @@ fn a_view_larger_than_a_frame_arrives_in_pages_whole() {
         assert!(serde_json::to_vec(&frame).unwrap().len() <= MAX_FRAME);
         body.extend(frame.body).unwrap();
     }
-    let Body::HubView(parts) = body else {
-        panic!("expected a hub view");
+    let Body::SpacesEverywhere(parts) = body else {
+        panic!("expected the spaces on every machine");
     };
-    let view = HubView::from_parts(parts).unwrap().unwrap();
+    let view = Everywhere::from_parts(parts).unwrap().elsewhere.unwrap();
     assert_eq!(view.machine.as_str(), "desk");
     assert_eq!(view.directory.spaces.len(), 2_000);
     assert_eq!(view.directory.spaces[1_999].space.id.as_str(), "space-1999");
@@ -76,7 +85,7 @@ fn a_space_whose_threads_fill_more_than_a_frame_arrives_whole() {
         },
         below_elsewhere: Vec::new(),
     };
-    let mut frames = Response::new(1, Body::HubView(view.into_parts()))
+    let mut frames = Response::new(1, Body::SpacesEverywhere(everywhere(view).into_parts()))
         .frames()
         .unwrap()
         .into_iter();
@@ -84,10 +93,10 @@ fn a_space_whose_threads_fill_more_than_a_frame_arrives_whole() {
     for frame in frames {
         body.extend(frame.body).unwrap();
     }
-    let Body::HubView(parts) = body else {
-        panic!("expected a hub view");
+    let Body::SpacesEverywhere(parts) = body else {
+        panic!("expected the spaces on every machine");
     };
-    let view = HubView::from_parts(parts).unwrap().unwrap();
+    let view = Everywhere::from_parts(parts).unwrap().elsewhere.unwrap();
     assert_eq!(view.directory.spaces.len(), 1);
     assert_eq!(view.directory.spaces[0].space.threads.len(), 6);
 }

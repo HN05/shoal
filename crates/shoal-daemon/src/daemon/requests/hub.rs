@@ -7,7 +7,7 @@ use shoal_daemon_base::permitted_actions::Action;
 use std::sync::Arc;
 
 use anyhow::Result;
-use shoal_protocol::{hub::directory::HubView, space_names::SpaceSelector};
+use shoal_protocol::space_names::SpaceSelector;
 
 use super::super::{
     answer::Answer,
@@ -37,11 +37,6 @@ pub(super) async fn handle(
         HubMethod::RevokeHubMember { member } => {
             Body::HubMember(manager.hub.revoke_hub_member(&**manager, member).await?)
         }
-        HubMethod::HubDirectory => {
-            let view = manager.hub.hub_view(&**manager, caller).await;
-            let parts = view.map(|view| view.map(HubView::into_parts).unwrap_or_default());
-            return Ok(Answer::pages(parts, Body::HubView));
-        }
     }))
 }
 
@@ -51,7 +46,7 @@ async fn authorize(manager: &Manager, method: &HubMethod, caller: Option<&Caller
         return Ok(());
     };
     match method {
-        HubMethod::HubMembers | HubMethod::HubDirectory => Ok(()),
+        HubMethod::HubMembers => Ok(()),
         HubMethod::UpdateHub => {
             let action = Action::new(PermissionKey::Daemon, "shoal hub update");
             manager.authorize_action(Some(caller), action).await

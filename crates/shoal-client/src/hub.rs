@@ -3,13 +3,13 @@
 //! a command's standard input and output.
 use anyhow::{Context as _, Result};
 use shoal_protocol::{
-    hub::{HubUpdate, Left, Member, Membership, Overview, directory::HubView, pairing::Pairing},
+    hub::{HubUpdate, Left, Member, Membership, Overview, pairing::Pairing},
     paths::Paths,
     protocol::{HubMethod, JoinVia},
 };
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt as _};
 
-use crate::connection::{Daemon, pages, request};
+use crate::connection::{Daemon, request};
 
 /// A new pairing code from the hub.
 pub async fn pair(daemon: &impl Daemon) -> Result<Pairing> {
@@ -40,12 +40,6 @@ pub async fn members(daemon: &impl Daemon) -> Result<Overview> {
 /// name.
 pub async fn revoke(daemon: &impl Daemon, member: String) -> Result<Member> {
     request(daemon, HubMethod::RevokeHubMember { member }).await
-}
-
-/// The other joined machines' spaces the caller sees, from the hub's
-/// directory; none on a machine that is not the hub and joined none.
-pub async fn directory(daemon: &impl Daemon) -> Result<Option<HubView>> {
-    HubView::from_parts(pages(daemon, HubMethod::HubDirectory).await?)
 }
 
 /// Carry `input` to the socket of the daemon `paths` names and its replies
