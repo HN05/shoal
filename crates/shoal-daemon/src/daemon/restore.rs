@@ -13,7 +13,6 @@ use anyhow::{Context, Result, bail};
 use super::manager::Manager;
 use crate::daemon::scope::Caller;
 use crate::model::{OpenedWorkspace, RemovedSpace, RestoredChat, RestoredSpace, RestoredWorkspace};
-use shoal_protocol::protocol::RemovalMethod;
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::threads::CloseCause;
@@ -30,13 +29,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<RestoredSpace> {
         if let Some(takeover) = self.takeover(selector).await? {
-            // It moves the space here, as an import does.
-            if let Some(caller) = caller {
-                let request = RemovalMethod::RestoreSpace {
-                    space: selector.clone(),
-                };
-                self.administer(caller, &request, None).await?;
-            }
+            self.ensure_takeover_allowed(caller, selector).await?;
             return self.take_over_from_package(takeover, caller).await;
         }
         if let Some(id) = selector.given_id() {

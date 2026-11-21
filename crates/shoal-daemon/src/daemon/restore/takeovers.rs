@@ -5,7 +5,9 @@
 use anyhow::Result;
 use shoal_daemon_base::log::elapsed;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::{hub::packages::KeptPackage, space_names::SpaceSelector};
+use shoal_protocol::{
+    hub::packages::KeptPackage, protocol::RemovalMethod, space_names::SpaceSelector,
+};
 
 use super::{Claim, PackageInput};
 use crate::{
@@ -108,6 +110,23 @@ impl Manager {
         let lacks = lacking(&takeover.machine, takeover.unsent_since, UnixTime::now());
         restored.warnings_mut().extend(lacks);
         Ok(restored)
+    }
+
+    /// Refuse a scoped `caller` the takeover of the space `selector` names
+    /// unless its `admin` permission allows it, since a takeover moves the
+    /// space here as an import does.
+    pub(super) async fn ensure_takeover_allowed(
+        &self,
+        caller: Option<&Caller>,
+        selector: &SpaceSelector,
+    ) -> Result<()> {
+        let Some(caller) = caller else {
+            return Ok(());
+        };
+        let request = RemovalMethod::RestoreSpace {
+            space: selector.clone(),
+        };
+        self.administer(caller, &request, None).await
     }
 
     /// Whether this machine has a removal record of the space `id`.
