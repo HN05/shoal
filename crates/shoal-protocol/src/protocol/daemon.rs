@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{Forwarding, operations::OperationKind};
+use super::{Forwarding, Target, operations::OperationKind};
 use crate::space_names::SpaceName;
 use crate::state::WorkspaceState;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
@@ -126,6 +126,12 @@ impl DaemonMethod {
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::Status | Self::ReloadConfig => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::Status | Self::ReloadConfig => None,
         }
     }
 }

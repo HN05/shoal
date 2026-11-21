@@ -2,7 +2,7 @@
 //! machine's daemon passes to it over its link.
 use serde::{Deserialize, Serialize};
 
-use super::Forwarding;
+use super::{Forwarding, Target};
 use crate::hub::pairing::PairingCode;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -58,6 +58,18 @@ impl HubMethod {
             | Self::UpdateHub
             | Self::RevokeHubMember { .. }
             | Self::HubDirectory => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::PairHub
+            | Self::JoinHub { .. }
+            | Self::LeaveHub
+            | Self::HubMembers
+            | Self::UpdateHub
+            | Self::RevokeHubMember { .. }
+            | Self::HubDirectory => None,
         }
     }
 }

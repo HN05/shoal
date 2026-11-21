@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{Forwarding, Lifetime};
+use super::{Forwarding, Lifetime, Target};
 use crate::reviews::{FindingId, Outcome, ReviewId, ReviewTarget};
 use crate::space_names::SpaceSelector;
 
@@ -96,6 +96,20 @@ impl ReviewMethod {
             | Self::CheckPrGate { .. }
             | Self::ResolveFinding { .. } => Forwarding::Online,
             Self::AwaitReview { .. } => Forwarding::Streamed,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::RunReview { workspace, .. } | Self::CheckPrGate { workspace } => {
+                Some(Target::Space(workspace))
+            }
+            Self::CancelReview { workspace, .. }
+            | Self::ListReviews { workspace, .. }
+            | Self::ShowReview { workspace, .. }
+            | Self::AwaitReview { workspace, .. }
+            | Self::ReplyToFinding { workspace, .. }
+            | Self::ResolveFinding { workspace, .. } => workspace.as_ref().map(Target::Space),
         }
     }
 }

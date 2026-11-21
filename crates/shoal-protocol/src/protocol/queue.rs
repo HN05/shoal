@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::queue_entry_ids::QueueEntryId;
 
-use super::{Forwarding, Lifetime};
+use super::{Forwarding, Lifetime, Target};
 
 /// Requests about the agent queue under `max_heavy_agents`.
 #[derive(Debug, Serialize, Deserialize)]
@@ -152,6 +152,27 @@ impl QueueMethod {
             | Self::QueueAttach { .. }
             | Self::QueueFail { .. }
             | Self::QueueRetry { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::QueueAgent { workspace, .. } | Self::QueueRestore { workspace, .. } => {
+                Some(Target::Space(workspace))
+            }
+            Self::SetPriority { space, .. } => Some(Target::Space(space)),
+            // It names the space its entry's start opened.
+            Self::QueueAttach { .. }
+            | Self::ListQueue
+            | Self::QueuedPlan { .. }
+            | Self::OpenStart { .. }
+            | Self::QueueRemove { .. }
+            | Self::QueueStart { .. }
+            | Self::QueueClaim { .. }
+            | Self::StartedLaunch { .. }
+            | Self::QueueHold { .. }
+            | Self::QueueFail { .. }
+            | Self::QueueRetry { .. } => None,
         }
     }
 }

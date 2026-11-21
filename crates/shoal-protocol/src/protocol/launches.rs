@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use shoal_ids::execution_ids::ExecutionId;
 
-use super::{Forwarding, Lifetime, operations::StartedWorkspace};
+use super::{Forwarding, Lifetime, Target, operations::StartedWorkspace};
+use crate::launches::SpaceChoice;
 use crate::{
     agents::Delivery,
     launches::Launch,
@@ -171,6 +172,22 @@ impl LaunchMethod {
             | Self::LabelledMode { .. } => Forwarding::Online,
             Self::ReceiveSession { .. } => Forwarding::Duplex,
             Self::CheckCreation { .. } | Self::TakeParentRepository { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::Launch { launch }
+            | Self::CheckLaunch { launch }
+            | Self::CheckCreation { launch }
+            | Self::LaunchModes { launch }
+            | Self::LabelledMode { launch }
+            | Self::TakeParentRepository { launch } => match &launch.in_workspace {
+                Some(SpaceChoice::Space(space)) => Some(Target::Space(space)),
+                Some(SpaceChoice::Current) | None => None,
+            },
+            // The hub sends it to the machine a start goes to.
+            Self::ReceiveSession { .. } => None,
         }
     }
 }

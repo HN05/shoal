@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{Forwarding, Lifetime};
+use super::{Forwarding, Lifetime, Target};
 use crate::space_names::SpaceSelector;
 use crate::{executions::ExecutionKind, processes::Identity};
 
@@ -112,6 +112,16 @@ impl ExecutionMethod {
             | Self::CheckUnmerge
             | Self::ListAgents
             | Self::SessionSignalled { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::Execute { space, .. } => Some(Target::Space(space)),
+            Self::CheckMerge
+            | Self::CheckUnmerge
+            | Self::ListAgents
+            | Self::SessionSignalled { .. } => None,
         }
     }
 }

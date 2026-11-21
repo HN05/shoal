@@ -1,4 +1,4 @@
-use super::Forwarding;
+use super::{Forwarding, Target};
 use crate::sim::SimRequest;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
@@ -46,6 +46,17 @@ impl SimulatorMethod {
             | Self::SimList { .. }
             | Self::SimHistory { .. } => Forwarding::Online,
             Self::SimAcquire { .. } | Self::SimRelease { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::SimCatalog { workspace }
+            | Self::SimAcquire { workspace, .. }
+            | Self::SimRelease { workspace, .. } => Some(Target::Space(workspace)),
+            Self::SimOverview { workspace }
+            | Self::SimList { workspace }
+            | Self::SimHistory { workspace, .. } => workspace.as_ref().map(Target::Space),
         }
     }
 }

@@ -1,4 +1,4 @@
-use super::Forwarding;
+use super::{Forwarding, Target};
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
@@ -31,6 +31,14 @@ impl HoldMethod {
             Self::HoldAcquire { .. } | Self::HoldRelease { .. } | Self::HoldList { .. } => {
                 Forwarding::Online
             }
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::HoldAcquire { space, .. }
+            | Self::HoldRelease { space, .. }
+            | Self::HoldList { space } => Some(Target::Space(space)),
         }
     }
 }

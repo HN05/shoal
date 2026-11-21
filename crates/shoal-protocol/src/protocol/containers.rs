@@ -1,4 +1,4 @@
-use super::Forwarding;
+use super::{Forwarding, Target};
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
@@ -45,6 +45,20 @@ impl ContainerMethod {
             | Self::ContainerRelease { .. }
             | Self::ContainerSetUp { .. }
             | Self::ContainerAgentStart { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::ContainerCatalog { workspace }
+            | Self::ContainerOverview {
+                workspace: Some(workspace),
+            }
+            | Self::ContainerAcquire { workspace, .. }
+            | Self::ContainerRelease { workspace }
+            | Self::ContainerSetUp { workspace, .. }
+            | Self::ContainerAgentStart { workspace } => Some(Target::Space(workspace)),
+            Self::ContainerOverview { workspace: None } => None,
         }
     }
 }

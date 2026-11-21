@@ -1,4 +1,4 @@
-use super::Forwarding;
+use super::{Forwarding, Target};
 use serde::{Deserialize, Serialize};
 use shoal_refs::BranchName;
 
@@ -35,6 +35,14 @@ impl BranchMethod {
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::ListForgeBranches { .. } | Self::DeleteForgeBranches { .. } => Forwarding::Online,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::ListForgeBranches { target, .. } | Self::DeleteForgeBranches { target, .. } => {
+                target.named_space().map(Target::Space)
+            }
         }
     }
 }

@@ -1,4 +1,4 @@
-use super::Forwarding;
+use super::{Forwarding, Target};
 use crate::model::PortRequest;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
@@ -35,6 +35,15 @@ impl PortMethod {
         match self {
             Self::PortOverview { .. } | Self::PortCatalog { .. } => Forwarding::Online,
             Self::PortAcquire { .. } | Self::PortRelease { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::PortAcquire { workspace, .. }
+            | Self::PortRelease { workspace, .. }
+            | Self::PortOverview { workspace }
+            | Self::PortCatalog { workspace } => Some(Target::Space(workspace)),
         }
     }
 }

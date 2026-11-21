@@ -1,4 +1,4 @@
-use super::Forwarding;
+use super::{Forwarding, Target};
 use serde::{Deserialize, Serialize};
 
 /// Requests about chats.
@@ -21,6 +21,12 @@ impl ChatMethod {
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::ChatRoot => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::ChatRoot => None,
         }
     }
 }

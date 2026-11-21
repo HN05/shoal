@@ -5,9 +5,15 @@
 //! answer goes on, as a follow's, comes back on a stream, and one whose
 //! connection carries bytes both ways, as a demo's, on a duplex stream; only
 //! one that needs the caller's machine stays there.
-use crate::{approvals::ApprovalRequest, item_numbers::ItemNumber};
+use crate::{
+    approvals::ApprovalRequest, item_numbers::ItemNumber, space_names::SpaceSelector,
+    threads::ThreadNumber,
+};
 
-use super::{ApprovalMethod, LaunchMethod, Operation, OperationMethod, RemovalMethod};
+use super::{
+    ApprovalMethod, ItemContext, LaunchMethod, Operation, OperationMethod, RemovalMethod,
+    RepoTarget,
+};
 
 /// What a daemon does with a request for another machine's space.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,6 +38,46 @@ pub enum Forwarding {
     /// caller's bytes go there on the same stream, as a demo's and carried
     /// commits' do; it fails at once while that machine is offline.
     Duplex,
+}
+
+/// What a request acts on, which decides the machine that answers it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Target<'a> {
+    /// A space, a workspace or a chat.
+    Space(&'a SpaceSelector),
+    /// A thread or an approval request, numbered in the space its number
+    /// begins with.
+    Item(&'a ItemNumber),
+    /// The space named, for a request from the user; a space's process
+    /// acts in its own space, as a thread it opens is numbered there.
+    Acting(&'a SpaceSelector),
+}
+
+impl RepoTarget {
+    /// The space the request acts in, if it names one.
+    pub fn named_space(&self) -> Option<&SpaceSelector> {
+        self.context.as_ref().and_then(ItemContext::named_space)
+    }
+}
+
+impl ItemContext {
+    /// The space the request acts in, if it names one.
+    pub fn named_space(&self) -> Option<&SpaceSelector> {
+        match self {
+            Self::Space { space, .. } => Some(space),
+            Self::Checkout(_) => None,
+        }
+    }
+}
+
+impl ThreadNumber {
+    /// Its full number, when it gives the space it is numbered in.
+    pub fn full(&self) -> Option<&ItemNumber> {
+        match self {
+            Self::Full(number) => Some(number),
+            Self::Own(_) => None,
+        }
+    }
 }
 
 impl Operation {
@@ -137,4 +183,46 @@ impl Operation {
             Self::App(method) => method.forwarding(),
         }
     }
+
+    /// What the request acts on, which decides the machine that answers
+    /// it; none for one that acts on no space, on several, or on one it
+    /// creates.
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::Daemon(method) => method.target(),
+            Self::Repository(method) => method.target(),
+            Self::Workspace(method) => method.target(),
+            Self::Removal(method) => method.target(),
+            Self::Recovery(method) => method.target(),
+            Self::Execution(method) => method.target(),
+            Self::Assignment(method) => method.target(),
+            Self::Agent(method) => method.target(),
+            Self::Chat(method) => method.target(),
+            Self::Launch(method) => method.target(),
+            Self::Queue(method) => method.target(),
+            Self::Hold(method) => method.target(),
+            Self::Demo(method) => method.target(),
+            Self::File(method) => method.target(),
+            Self::Item(method) => method.target(),
+            Self::Ci(method) => method.target(),
+            Self::Branch(method) => method.target(),
+            Self::Alert(method) => method.target(),
+            Self::Operations(method) => method.target(),
+            Self::Thread(method) => method.target(),
+            Self::Review(method) => method.target(),
+            Self::Approval(method) => method.target(),
+            Self::Port(method) => method.target(),
+            Self::Secret(method) => method.target(),
+            Self::Resource(method) => method.target(),
+            Self::Simulator(method) => method.target(),
+            Self::Container(method) => method.target(),
+            Self::Subscription(method) => method.target(),
+            Self::Trigger(method) => method.target(),
+            Self::Hub(method) => method.target(),
+            Self::App(method) => method.target(),
+        }
+    }
 }
+
+#[cfg(test)]
+mod tests;

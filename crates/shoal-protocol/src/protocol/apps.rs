@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{ConfigTarget, Forwarding, Lifetime};
+use super::{ConfigTarget, Forwarding, Lifetime, Target};
 use crate::apps::{
     AppName,
     store::{AppScope, EntryKey, KeyPrefix, Revision, Write},
@@ -96,6 +96,17 @@ impl AppMethod {
             | Self::WriteAppEntry { .. }
             | Self::DeleteAppEntry { .. }
             | Self::WatchAppEntries { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::ReadAppConfig { .. }
+            | Self::ReadAppEntry { .. }
+            | Self::ListAppEntries { .. }
+            | Self::WriteAppEntry { .. }
+            | Self::DeleteAppEntry { .. }
+            | Self::WatchAppEntries { .. } => None,
         }
     }
 }

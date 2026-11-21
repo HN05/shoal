@@ -1,4 +1,4 @@
-use super::{Forwarding, ItemContext};
+use super::{Forwarding, ItemContext, Target};
 use crate::triggers::WebhookRequest;
 use serde::{Deserialize, Serialize};
 
@@ -36,6 +36,17 @@ impl TriggerMethod {
             Self::ListTriggers { .. } | Self::PauseTrigger { .. } | Self::RunTrigger { .. } => {
                 Forwarding::Online
             }
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::ListTriggers { context }
+            | Self::PauseTrigger { context, .. }
+            | Self::RunTrigger { context, .. } => context
+                .as_ref()
+                .and_then(ItemContext::named_space)
+                .map(Target::Space),
         }
     }
 }

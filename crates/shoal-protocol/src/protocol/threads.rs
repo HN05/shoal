@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{Forwarding, Lifetime};
+use super::{Forwarding, Lifetime, Target};
 use crate::code::NewCodeRef;
 use crate::item_numbers::ItemNumber;
 use crate::space_names::SpaceSelector;
@@ -142,6 +142,25 @@ impl ThreadMethod {
             | Self::UnlinkThread { .. } => Forwarding::Online,
             Self::AwaitPost { .. } => Forwarding::Streamed,
             Self::PostInChat { .. } | Self::RepliedInChat { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            // A thread a space opens is numbered in its own space, and one
+            // the user opens in the space it is opened with.
+            Self::OpenThread { from: None, to, .. } => to.as_ref().map(Target::Acting),
+            Self::OpenThread { from: Some(_), .. } => None,
+            Self::Post { thread, .. }
+            | Self::ForwardThread { thread, .. }
+            | Self::ResolveThread { thread, .. }
+            | Self::ShowThread { thread } => thread.full().map(Target::Item),
+            Self::PostInChat { space, .. }
+            | Self::RepliedInChat { space, .. }
+            | Self::LinkThread { space, .. }
+            | Self::UnlinkThread { space, .. }
+            | Self::AwaitPost { space, .. } => Some(Target::Space(space)),
+            Self::ListThreads { space, .. } => space.as_ref().map(Target::Space),
         }
     }
 }

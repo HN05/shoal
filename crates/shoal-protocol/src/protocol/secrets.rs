@@ -1,4 +1,4 @@
-use super::Forwarding;
+use super::{Forwarding, Target};
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
@@ -33,6 +33,14 @@ impl SecretMethod {
         match self {
             Self::SecretCatalog { .. } => Forwarding::Online,
             Self::SecretAcquire { .. } | Self::SecretRelease { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::SecretAcquire { workspace, .. }
+            | Self::SecretRelease { workspace, .. }
+            | Self::SecretCatalog { workspace } => Some(Target::Space(workspace)),
         }
     }
 }

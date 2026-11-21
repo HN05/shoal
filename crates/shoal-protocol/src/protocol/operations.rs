@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::{CreationOptions, ErrorCode, Forwarding, Lifetime, PullHead};
+use super::{CreationOptions, ErrorCode, Forwarding, Lifetime, PullHead, Target};
 use crate::space_names::SpaceSelector;
 use crate::{
     agent::ModelChoice,
@@ -706,6 +706,22 @@ impl OperationMethod {
             | Self::StartCreation { .. }
             | Self::StartChild { .. }
             | Self::ReportProgress { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::ConvertToWorkspace { chat, .. } => Some(Target::Space(chat)),
+            Self::FollowOperation { operation, .. } | Self::CancelOperation { operation } => {
+                operation.space.as_ref().map(Target::Space)
+            }
+            // It names its spaces by ID, as a set.
+            Self::StartMove { .. }
+            | Self::StartOperation { .. }
+            | Self::StartWorkspace { .. }
+            | Self::StartCreation { .. }
+            | Self::StartChild { .. }
+            | Self::ReportProgress { .. } => None,
         }
     }
 }

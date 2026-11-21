@@ -1,7 +1,7 @@
 use crate::{attaching::Terminal, space_names::SpaceSelector};
 use serde::{Deserialize, Serialize};
 
-use super::{Forwarding, Lifetime};
+use super::{Forwarding, Lifetime, Target};
 
 /// Requests about workspaces' running demos.
 #[derive(Debug, Serialize, Deserialize)]
@@ -52,6 +52,18 @@ impl DemoMethod {
             Self::ListDemos { .. } | Self::StopDemos { .. } => Forwarding::Online,
             Self::OpenDemoStream { .. } => Forwarding::Duplex,
             Self::DemoProgress { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::ListDemos {
+                workspace: Some(workspace),
+            }
+            | Self::DemoProgress { workspace, .. }
+            | Self::StopDemos { workspace, .. }
+            | Self::OpenDemoStream { workspace, .. } => Some(Target::Space(workspace)),
+            Self::ListDemos { workspace: None } => None,
         }
     }
 }

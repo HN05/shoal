@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::Forwarding;
+use super::{Forwarding, Target};
 use crate::item_numbers::ItemNumber;
 use crate::space_names::SpaceSelector;
 
@@ -90,6 +90,23 @@ impl ApprovalMethod {
             | Self::BranchPush { .. }
             | Self::RequestPush { .. } => Forwarding::Online,
             Self::AuthorizeAction { .. } | Self::FinishPush { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::ShowApproval { number }
+            | Self::DecideApproval { number, .. }
+            | Self::EscalateApproval { number, .. } => Some(Target::Item(number)),
+            Self::ListApprovals { space: Some(space) } | Self::WithdrawApproval { space, .. } => {
+                Some(Target::Space(space))
+            }
+            Self::BranchPush { workspace } | Self::RequestPush { workspace, .. } => {
+                Some(Target::Space(workspace))
+            }
+            Self::ListApprovals { space: None }
+            | Self::AuthorizeAction { .. }
+            | Self::FinishPush { .. } => None,
         }
     }
 }

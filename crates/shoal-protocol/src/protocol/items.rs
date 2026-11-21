@@ -3,7 +3,7 @@ use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use serde::{Deserialize, Serialize};
 use shoal_ids::repository_ids::RepositoryId;
 
-use super::{Forwarding, Lifetime};
+use super::{Forwarding, Lifetime, Target};
 use crate::forge::download::Download;
 use crate::forge::numbers::CommentId;
 use crate::space_names::SpaceSelector;
@@ -357,6 +357,39 @@ impl ItemMethod {
             | Self::SelectItems { .. } => Forwarding::Online,
             Self::PrWait { .. } | Self::WatchItems { .. } => Forwarding::Streamed,
             Self::RelinkSpace { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::LinkItem { space, .. }
+            | Self::RelinkSpace { space, .. }
+            | Self::UnlinkItems { space, .. }
+            | Self::SetPr { space, .. }
+            | Self::WatchItems { space, .. }
+            | Self::RevertPull { space, .. }
+            | Self::MergedPull { space, .. }
+            | Self::MergePath { space } => Some(Target::Space(space)),
+            Self::PrWait { workspace, .. } | Self::OpenPull { workspace, .. } => {
+                Some(Target::Space(workspace))
+            }
+            Self::OpenIssue { target, .. }
+            | Self::MergeWarning { target, .. }
+            | Self::ItemAction { target, .. }
+            | Self::ListItems { target, .. }
+            | Self::Labels { target }
+            | Self::Reviewers { target, .. }
+            | Self::ViewItems { target, .. }
+            | Self::ForgeApi { target, .. }
+            | Self::ForgeDownload { target, .. }
+            | Self::Capabilities { target }
+            | Self::Reactions { target }
+            | Self::ReviewThread { target, .. }
+            | Self::NumberKind { target, .. }
+            | Self::SelectItems { target, .. } => target.named_space().map(Target::Space),
+            Self::IssueDetails { context, .. }
+            | Self::IssueBlockers { context, .. }
+            | Self::PullRequest { context, .. } => context.named_space().map(Target::Space),
         }
     }
 }

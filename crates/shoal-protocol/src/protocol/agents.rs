@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::execution_ids::ExecutionId;
 
-use super::{Forwarding, Lifetime};
+use super::{Forwarding, Lifetime, Target};
 
 /// Requests between a workspace's agents and the daemon: their state, messages and updates.
 #[derive(Debug, Serialize, Deserialize)]
@@ -291,6 +291,37 @@ impl AgentMethod {
             | Self::UpdatesWaiting { .. }
             | Self::GitCredential { .. }
             | Self::AcknowledgePrUpdates { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::SetAgentState { workspace, .. }
+            | Self::StartWokenTurn { workspace }
+            | Self::ReportTurnFailure { workspace, .. }
+            | Self::ReportProxyRetry { workspace, .. }
+            | Self::ReportUpstreamReset { workspace, .. }
+            | Self::ReportUpstreamLimit { workspace, .. }
+            | Self::ReportInput { workspace, .. }
+            | Self::ReportTyping { workspace, .. }
+            | Self::AwaitAgentWake { workspace, .. } => Some(Target::Space(workspace)),
+            Self::SetProgress { space, .. }
+            | Self::Progress { space }
+            | Self::Sleep { space, .. }
+            | Self::ReportSubagent { space, .. }
+            | Self::ReportSubagentRequest { space, .. }
+            | Self::ReportWakeEnd { space, .. }
+            | Self::ReportAttach { space }
+            | Self::SpaceAgents { space }
+            | Self::InterruptTurn { space, .. }
+            | Self::RestartAgent { space, .. }
+            | Self::CancelRestart { space }
+            | Self::AgentSession { space }
+            | Self::AgentUpdates { space }
+            | Self::WaitAgentUpdates { space }
+            | Self::UpdatesWaiting { space }
+            | Self::AcknowledgePrUpdates { space, .. } => Some(Target::Space(space)),
+            Self::GitCredential { .. } => None,
         }
     }
 }

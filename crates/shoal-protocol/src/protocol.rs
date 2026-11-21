@@ -56,7 +56,7 @@ pub use daemon::{DaemonMethod, Exit, ExitRequest, ExitWhen, Exited, Work, WorkPl
 pub use demos::DemoMethod;
 pub use executions::{ExecutionMethod, SessionSignal};
 pub use files::FileMethod;
-pub use forwarding::Forwarding;
+pub use forwarding::{Forwarding, Target};
 pub use frames::{
     FrameTooLarge, MAX_FRAME, Responses, frame_pages, read, read_buffered, read_response,
     text_pieces, write,

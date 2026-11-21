@@ -1,4 +1,4 @@
-use super::Forwarding;
+use super::{Forwarding, Target};
 use crate::removal::UnsavedWork;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
@@ -208,6 +208,36 @@ impl RemovalMethod {
             | Self::DeliverMove { .. }
             | Self::DeliverCopy { .. }
             | Self::SettleMove { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::StopSpace { space, .. }
+            | Self::CheckStop { space }
+            | Self::StopProcesses { space, .. }
+            | Self::CheckRemoval { space, .. }
+            | Self::RemoveSpace { space, .. }
+            | Self::StartRemoval { space, .. }
+            | Self::ExportMovingSpace { space, .. }
+            | Self::EndMovedSpace { space }
+            | Self::AbandonMove { space }
+            | Self::DeliverMove { space }
+            | Self::DeliverCopy { space, .. }
+            | Self::SettleMove { space } => Some(Target::Space(space)),
+            Self::AbsorbSpace(absorb) => Some(Target::Space(&absorb.space)),
+            // A removed space's record is this machine's, whichever runs
+            // the space now.
+            Self::RemovedSpace { .. }
+            | Self::RestoreSpace { .. }
+            | Self::DropRestoredSessions { .. }
+            | Self::ExportRemovedSpace { .. } => None,
+            // The hub sends it to the machine a move goes to.
+            Self::ReceiveMove { .. }
+            | Self::StopTargets
+            | Self::Cleanup { .. }
+            | Self::RemovedSpaces
+            | Self::ImportPackage(_) => None,
         }
     }
 }

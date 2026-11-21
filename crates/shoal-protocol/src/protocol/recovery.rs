@@ -1,4 +1,4 @@
-use super::Forwarding;
+use super::{Forwarding, Target};
 use crate::recovery::ReconcileOptions;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
@@ -53,6 +53,17 @@ impl RecoveryMethod {
             | Self::Saved { .. }
             | Self::Reconcile { .. } => Forwarding::Online,
             Self::SavedSummaries => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::Checkpoint { workspace, .. }
+            | Self::Checkpoints { workspace, .. }
+            | Self::RestoreCheckpoint { workspace, .. }
+            | Self::Saved { space: workspace } => Some(Target::Space(workspace)),
+            Self::Reconcile { workspace, .. } => workspace.as_ref().map(Target::Space),
+            Self::SavedSummaries => None,
         }
     }
 }

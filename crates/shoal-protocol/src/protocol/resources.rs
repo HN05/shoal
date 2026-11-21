@@ -1,4 +1,4 @@
-use super::Forwarding;
+use super::{Forwarding, Target};
 use crate::resources::ResourceRequest;
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
@@ -35,6 +35,15 @@ impl ResourceMethod {
         match self {
             Self::ResourceOverview { .. } | Self::ResourceCatalog { .. } => Forwarding::Online,
             Self::ResourceAcquire { .. } | Self::ResourceRelease { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::ResourceAcquire { workspace, .. }
+            | Self::ResourceRelease { workspace, .. }
+            | Self::ResourceOverview { workspace }
+            | Self::ResourceCatalog { workspace } => Some(Target::Space(workspace)),
         }
     }
 }

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use shoal_ids::repository_ids::RepositoryId;
 
-use super::{Forwarding, Lifetime};
+use super::{Forwarding, Lifetime, Target};
 
 /// Requests about registered repositories, their configuration and their branches.
 #[derive(Debug, Serialize, Deserialize)]
@@ -140,6 +140,30 @@ impl RepositoryMethod {
             | Self::AgentEnvironments { .. }
             | Self::ForgetAgentEnvironments { .. }
             | Self::KeepRepositoryAgentEnvironment { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::ReceiveCommits { .. }
+            | Self::ListRepositories
+            | Self::RegisterRepository { .. }
+            | Self::RegisterContribution { .. }
+            | Self::HoldContribution { .. }
+            | Self::RenameRepository { .. }
+            | Self::LocalConfigPath { .. }
+            | Self::EditLocalConfig { .. }
+            | Self::RemoveRepository { .. }
+            | Self::PlanRepositoryMoves { .. }
+            | Self::MoveRepositories { .. }
+            | Self::SyncRepository { .. }
+            | Self::FailingSyncs
+            | Self::ListBranches { .. }
+            | Self::KeptBranches { .. }
+            | Self::DeleteKeptBranches { .. }
+            | Self::AgentEnvironments { .. }
+            | Self::ForgetAgentEnvironments { .. }
+            | Self::KeepRepositoryAgentEnvironment { .. } => None,
         }
     }
 }

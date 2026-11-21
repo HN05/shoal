@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use shoal_refs::{BranchName, CommitId};
 
 use super::Lifetime;
-use super::{ConfigTarget, Forwarding};
+use super::{ConfigTarget, Forwarding, Target};
 use crate::config::hooks::HookKind;
 use crate::forge::numbers::PullNumber;
 use crate::space_names::SpaceSelector;
@@ -430,6 +430,60 @@ impl WorkspaceMethod {
             | Self::CreatePendingWorktree { .. }
             | Self::WorkspaceHook { .. }
             | Self::WatchSpaceEvents { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::ReopenWorkspace { workspace }
+            | Self::RenameBranch { workspace, .. }
+            | Self::ConvertToChat { workspace, .. }
+            | Self::SetBaseWorkspace { workspace, .. }
+            | Self::InspectWorkspace { workspace }
+            | Self::VerifyWorkspace { workspace, .. }
+            | Self::FastForwardWorkspace { workspace, .. }
+            | Self::RefreshWorkspace { workspace }
+            | Self::LaunchPermissions { workspace, .. }
+            | Self::DiffBase { workspace }
+            | Self::Conflicts { workspace, .. }
+            | Self::Diff { workspace, .. }
+            | Self::PreviewMerge { workspace, .. }
+            | Self::KeepAgentEnvironment { workspace, .. }
+            | Self::RecordOwnedPlace { workspace, .. }
+            | Self::CreatePendingWorktree { workspace }
+            | Self::WorkspaceHook { workspace, .. } => Some(Target::Space(workspace)),
+            Self::RenameSpace { space, .. }
+            | Self::SpacePlaces { space }
+            | Self::IssueScope { space }
+            | Self::RevokeScope { space, .. }
+            | Self::SpaceEnvironment { space }
+            | Self::SpaceStatus { space }
+            | Self::TrackedConfig { space }
+            | Self::SpaceSessions { space }
+            | Self::FollowSession { space, .. }
+            | Self::AttachSession { space, .. }
+            | Self::CopySpace { space, .. }
+            | Self::PlaceOwnership { space, .. } => Some(Target::Space(space)),
+            Self::LayeredConfig {
+                target: ConfigTarget::Space(space),
+            } => Some(Target::Space(space)),
+            Self::SpaceLog { space, .. } => space.as_ref().map(Target::Space),
+            // A creation names the space it goes below, which a start below
+            // another machine's space takes where the caller runs.
+            Self::OpenBranch { .. }
+            | Self::CreateWorkspace { .. }
+            | Self::CreateChild { .. }
+            | Self::CreateCommitWorkspace { .. }
+            | Self::OpenPullHead { .. }
+            | Self::AdoptWorkspace { .. }
+            | Self::LayeredConfig { .. }
+            | Self::UntrackedWorktrees
+            | Self::ListSpaces
+            | Self::FindSpaces { .. }
+            | Self::HeldPermissions { .. }
+            | Self::OwnedPlaces
+            | Self::CloseOwnedPlace { .. }
+            | Self::WatchSpaceEvents { .. } => None,
         }
     }
 }

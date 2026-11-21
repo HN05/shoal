@@ -1,4 +1,4 @@
-use super::Forwarding;
+use super::{Forwarding, Target};
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 use shoal_ids::execution_ids::ExecutionId;
@@ -61,6 +61,18 @@ impl AssignmentMethod {
             | Self::ClearReady { .. }
             | Self::DiscardStoppedAgent { .. }
             | Self::ChangeStoppedPermissions { .. } => Forwarding::Online,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::MarkDone { space, .. }
+            | Self::UndoDone { space }
+            | Self::MarkReady { space, .. }
+            | Self::ClearReady { space, .. }
+            | Self::DiscardStoppedAgent { space, .. } => Some(Target::Space(space)),
+            // It names several spaces.
+            Self::ChangeStoppedPermissions { .. } => None,
         }
     }
 }

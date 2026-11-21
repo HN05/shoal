@@ -1,7 +1,7 @@
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
-use super::{Forwarding, Lifetime};
+use super::{Forwarding, Lifetime, Target};
 
 /// Requests about alerts: one-way notices to the user or a space's agent.
 #[derive(Debug, Serialize, Deserialize)]
@@ -110,6 +110,31 @@ impl AlertMethod {
             | Self::MarkAlertsRead { .. }
             | Self::ClearAlerts
             | Self::WatchAlerts { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::ListAlerts {
+                to: AlertsFor::Space { space },
+                ..
+            }
+            | Self::SendAlert {
+                to: AlertTarget::Space { space },
+                ..
+            }
+            | Self::WithdrawAlert {
+                space: Some(space), ..
+            } => Some(Target::Space(space)),
+            // It marks the caller's own agent's turn, whose alert goes out
+            // once the turn ends.
+            Self::AlertInChat { .. } => None,
+            Self::ListAlerts { .. }
+            | Self::SendAlert { .. }
+            | Self::WithdrawAlert { space: None, .. }
+            | Self::MarkAlertsRead { .. }
+            | Self::ClearAlerts
+            | Self::WatchAlerts { .. } => None,
         }
     }
 }

@@ -1,4 +1,4 @@
-use super::Forwarding;
+use super::{Forwarding, Target};
 use serde::{Deserialize, Serialize};
 
 /// Requests about CI checks and workflow runs of the target repository: that
@@ -94,6 +94,20 @@ impl CiMethod {
             | Self::ListCiRuns { .. }
             | Self::ApproveCiRuns { .. }
             | Self::StartCiRun { .. } => Forwarding::Online,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::CheckLog { target, .. }
+            | Self::CiAction { target, .. }
+            | Self::CiRunAction { target, .. }
+            | Self::ViewCiRun { target, .. }
+            | Self::CiRunJobs { target, .. }
+            | Self::CiRunJobLog { target, .. }
+            | Self::ListCiRuns { target, .. }
+            | Self::ApproveCiRuns { target, .. }
+            | Self::StartCiRun { target, .. } => target.named_space().map(Target::Space),
         }
     }
 }

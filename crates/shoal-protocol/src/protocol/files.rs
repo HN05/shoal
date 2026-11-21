@@ -1,4 +1,4 @@
-use super::Forwarding;
+use super::{Forwarding, Target};
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
@@ -38,6 +38,17 @@ impl FileMethod {
         match self {
             Self::ListFiles { .. } | Self::RemoveFiles { .. } => Forwarding::Online,
             Self::AddFiles { .. } => Forwarding::Never,
+        }
+    }
+
+    pub fn target(&self) -> Option<Target<'_>> {
+        match self {
+            Self::ListFiles { space }
+            | Self::AddFiles { space, .. }
+            | Self::RemoveFiles {
+                space: Some(space), ..
+            } => Some(Target::Space(space)),
+            Self::RemoveFiles { space: None, .. } => None,
         }
     }
 }
