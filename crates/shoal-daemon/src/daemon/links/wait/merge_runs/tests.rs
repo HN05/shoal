@@ -1,3 +1,4 @@
+use shoal_links::wait::start::{Start, StartRead};
 use std::sync::Arc;
 
 use rusqlite::params;
@@ -7,11 +8,7 @@ use super::*;
 use crate::{
     daemon::{
         events::{EventItem, EventKind},
-        links::wait::{
-            branch_report::BranchReport,
-            start::{Start, StartRead},
-            test_support::register_watch,
-        },
+        links::wait::{branch_report::BranchReport, test_support::register_watch},
         test_support::{configure, manager, repository},
         workspace_files::Attacher,
     },
@@ -139,9 +136,12 @@ impl Following {
             reads: vec![(self.pr.clone(), snapshot)],
         };
         let id = &self.workspace.id;
-        (self.manager.record_watch_start(id, read, start))
-            .await
-            .unwrap();
+        (self
+            .manager
+            .links
+            .record_watch_start(&*self.manager, id, read, start))
+        .await
+        .unwrap();
         let urls = [self.pr.clone()];
         self.manager.pending_activity(id, &urls).await.unwrap()
     }

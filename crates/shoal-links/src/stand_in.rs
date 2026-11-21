@@ -124,13 +124,7 @@ impl Runs for StandIn {
 }
 
 impl Watches for StandIn {
-    fn start_linked_watches_gated<'a>(
-        &'a self,
-        _: &'a SpaceId,
-        _: Vec<ItemRef>,
-    ) -> BoxFuture<'a, ()> {
-        Box::pin(async {})
-    }
+    fn item_updates_queued(&self) {}
 }
 
 impl Coordinators for StandIn {

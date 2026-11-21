@@ -10,6 +10,7 @@ pub mod framing;
 pub mod merge_lookups;
 pub mod reads;
 pub mod selection;
+pub mod start;
 pub mod starts;
 mod waits;
 pub mod wake_log;

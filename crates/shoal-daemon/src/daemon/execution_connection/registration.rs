@@ -205,7 +205,11 @@ async fn restart_watches(
     space: &crate::model::Space,
     stop: watch::Receiver<bool>,
 ) {
-    if let Err(error) = manager.restart_watches(&space.id, stop).await {
+    if let Err(error) = manager
+        .links
+        .restart_watches(manager, &space.id, stop)
+        .await
+    {
         log!("{}'s watches not restarted: {error:#}", space.name);
     }
 }

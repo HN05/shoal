@@ -105,15 +105,10 @@ pub trait Runs: Send + Sync {
     ) -> BoxFuture<'a, Result<LinkedItem>>;
 }
 
-/// The watches of a space's linked items.
+/// What the daemon wakes for the watches of a space's linked items.
 pub trait Watches: Send + Sync {
-    /// Start the watches of `items`, which the space `id` just linked; the
-    /// caller holds the space's PR gate.
-    fn start_linked_watches_gated<'a>(
-        &'a self,
-        id: &'a SpaceId,
-        items: Vec<ItemRef>,
-    ) -> BoxFuture<'a, ()>;
+    /// Wake the agents whose watches just queued updates.
+    fn item_updates_queued(&self);
 }
 
 /// What the daemon records of a space's agent, which settling the agent

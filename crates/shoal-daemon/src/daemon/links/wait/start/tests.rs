@@ -356,5 +356,9 @@ async fn set_state(
 /// without a stop.
 async fn restart(manager: &crate::daemon::manager::Manager, id: &shoal_ids::space_ids::SpaceId) {
     let (_stop, stopped) = tokio::sync::watch::channel(false);
-    manager.restart_watches(id, stopped).await.unwrap();
+    manager
+        .links
+        .restart_watches(manager, id, stopped)
+        .await
+        .unwrap();
 }

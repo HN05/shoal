@@ -204,7 +204,8 @@ impl Links {
         (self.store)
             .write(move |tx| links.record_change(tx, &id, change))
             .await?;
-        daemon.start_linked_watches_gated(&space.id, added).await;
+        self.start_linked_watches_gated(daemon, &space.id, added)
+            .await;
         daemon.wake_cleanup();
         Ok(())
     }

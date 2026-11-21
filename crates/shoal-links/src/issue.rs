@@ -84,7 +84,7 @@ impl Links {
         let fresh = self
             .persist_issue_assignment(&space.id, &url, title, assigner)
             .await?;
-        (daemon.start_linked_watches_gated(&space.id, vec![url.clone()])).await;
+        (self.start_linked_watches_gated(daemon, &space.id, vec![url.clone()])).await;
         Ok(self
             .assign_linked(daemon, &space, &forge, &url, fresh)
             .await)

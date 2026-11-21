@@ -102,11 +102,7 @@ impl Spaces for Manager {
 }
 
 impl Watches for Manager {
-    fn start_linked_watches_gated<'a>(
-        &'a self,
-        id: &'a SpaceId,
-        items: Vec<ItemRef>,
-    ) -> BoxFuture<'a, ()> {
-        Box::pin(Manager::start_linked_watches_gated(self, id, items))
+    fn item_updates_queued(&self) {
+        self.signals.item_updates_queued();
     }
 }
