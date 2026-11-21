@@ -11,7 +11,7 @@ use crate::{
     config::Effective,
     daemon::manager::Manager,
     forge::items::{
-        link::{ItemKind, Selection},
+        link::{ItemKind, LinkKind, Selection},
         reference::ItemRef,
     },
     model::{Repository, Selected, Space, Workspace},
@@ -74,6 +74,26 @@ impl Spaces for Manager {
 
     fn wake_cleanup(&self) {
         self.signals.wake_cleanup();
+    }
+
+    fn registered_named<'a>(
+        &'a self,
+        named: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<Option<Repository>>> {
+        Box::pin(Manager::registered_named(self, named))
+    }
+
+    fn links_kind<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        kind: Option<LinkKind>,
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async move {
+            let (id, agents) = (id.to_owned(), self.tracked_agents().await);
+            (self.store)
+                .run(move |db| super::wait::links_kind(db, &id, kind, &agents))
+                .await
+        })
     }
 }
 

@@ -12,7 +12,7 @@ use shoal_daemon_base::{callers::Caller, notifications::Coordinators, permitted_
 use shoal_forge_types::{
     ForgeRepo,
     items::{
-        link::{ItemKind, Selection},
+        link::{ItemKind, LinkKind, Selection},
         reference::{ItemInput, ItemRef},
     },
 };
@@ -70,6 +70,22 @@ pub trait Spaces: Send + Sync {
 
     /// Run the cleanup sweep now, as after a change to what keeps a space.
     fn wake_cleanup(&self);
+
+    /// The registered repository `named` names, as OWNER/NAME on its forge
+    /// or by URL; none for another repository or without a name.
+    fn registered_named<'a>(
+        &'a self,
+        named: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<Option<Repository>>>;
+
+    /// Whether the space `id`, or a space below it whose activity its agent
+    /// receives, links an item of `kind`; every space links items of no
+    /// kind.
+    fn links_kind<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        kind: Option<LinkKind>,
+    ) -> BoxFuture<'a, Result<bool>>;
 }
 
 /// The CI runs spaces link, which the daemon reads until they move.

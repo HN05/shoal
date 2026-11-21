@@ -99,7 +99,11 @@ impl Manager {
             None => None,
         };
         let kind = marked_kind(&selection)?;
-        let explicit = marked_item(self.explicit_item(space.origin_path(), &selection).await?);
+        let explicit = marked_item(
+            self.links
+                .explicit_item(self, space.origin_path(), &selection)
+                .await?,
+        );
         let head = head.as_ref().map(CommitId::as_str);
         let pulls = (self.markable_pulls(&space, kind, explicit.as_ref(), head)).await?;
         let mut ready = (self.record_marks(&id, kind, explicit, pulls)).await?;
@@ -228,7 +232,11 @@ impl Manager {
         let _guard = self.lock_change_gates(&id, &[]).await?;
         let space = self.links.link_space(self, &SpaceSelector::id(&id)).await?;
         let kind = marked_kind(&selection)?;
-        let explicit = marked_item(self.explicit_item(space.origin_path(), &selection).await?);
+        let explicit = marked_item(
+            self.links
+                .explicit_item(self, space.origin_path(), &selection)
+                .await?,
+        );
         let selected = self.selected_marks(&space.id, kind, explicit).await?;
         let draft = match draft {
             Some(draft) => draft,

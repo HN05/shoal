@@ -8,6 +8,7 @@ pub mod cursor;
 pub mod followed;
 pub mod framing;
 pub mod merge_lookups;
+pub mod selection;
 mod waits;
 pub mod wake_log;
 

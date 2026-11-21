@@ -123,7 +123,8 @@ impl Manager {
             input: selection.input.clone(),
         };
         // Of the linked PRs, only an assigned one is read without a number.
-        let prs = (self.selection_items(
+        let prs = (self.links.selection_items(
+            self,
             space,
             &selection,
             shoal_links::wait::followed::followed_items,

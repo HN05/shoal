@@ -15,7 +15,7 @@ use shoal_daemon_base::{
 use shoal_forge_types::{
     ForgeRepo,
     items::{
-        link::{ItemKind, Selection},
+        link::{ItemKind, LinkKind, Selection},
         reference::{ItemInput, ItemRef},
     },
 };
@@ -91,6 +91,21 @@ impl Spaces for StandIn {
     }
 
     fn wake_cleanup(&self) {}
+
+    fn registered_named<'a>(
+        &'a self,
+        _: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<Option<Repository>>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn links_kind<'a>(
+        &'a self,
+        _: &'a SpaceId,
+        _: Option<LinkKind>,
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(false) })
+    }
 }
 
 impl Runs for StandIn {

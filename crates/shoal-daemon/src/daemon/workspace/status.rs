@@ -107,7 +107,7 @@ impl Manager {
         };
         let items = match other {
             Some(item) => vec![item],
-            None => (self.selected_items(space, selection).await?)
+            None => (self.links.selected_items(self, space, selection).await?)
                 .into_iter()
                 .map(|url| SelectedItem {
                     relations: space.links.relations_of(&url),

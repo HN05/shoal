@@ -68,7 +68,7 @@ impl Manager {
         space: &Space,
         kind: Option<LinkKind>,
     ) -> Result<Vec<Update>> {
-        self.ensure_links_kind(&space.id, kind).await?;
+        self.links.ensure_links_kind(self, &space.id, kind).await?;
         self.queued_activity(space, kind).await
     }
 
@@ -86,7 +86,7 @@ impl Manager {
         let guard = self.gates.lock_prs(receiving(id, &children)).await;
         let space = (self.links.find_link_space(self, id, repository).await?)
             .with_context(|| format!("space {id} no longer exists"))?;
-        let items = self.watched_items(&space, selection).await?;
+        let items = self.links.watched_items(self, &space, selection).await?;
         let report = branch_report(&items);
         let branch = watches_branch(selection).then(|| space.branch().map(str::to_owned));
         let branch = branch.flatten();

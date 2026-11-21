@@ -44,7 +44,8 @@ impl Manager {
         let deadline = watch_deadline(seconds);
         let space = self.space(selector).await?;
         let repository = self
-            .watched_repository(&space, selection, repository)
+            .links
+            .watched_repository(self, &space, selection, repository)
             .await?;
         // The space's hooks deliver what a watch would, so the newest of them
         // takes it.
