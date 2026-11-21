@@ -2,7 +2,7 @@
 //! [`crate::launches`] to decide over.
 use anyhow::Result;
 use shoal_protocol::launches::Launch;
-use shoal_protocol::model::Spaces;
+use shoal_protocol::model::Located;
 use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
@@ -11,7 +11,6 @@ use crate::{
     launches::{LaunchState, SpaceRepository, shape},
     model::Repository,
     protocol::ConfigTarget,
-    refusal::{Reason, Refusal},
 };
 
 /// The registered repository `launch` starts in, as
@@ -31,7 +30,7 @@ pub(in crate::cli::commands) async fn launch_repository(
 
 /// What [`shape::inherited_repository`] reads of `launch` beside the
 /// registered `repositories`: the workspaces this process sees and the
-/// repository of the space it goes below, from one listing of the spaces.
+/// repository of the space it goes below.
 async fn inherited_state(
     ctx: &Context,
     launch: &Launch,
@@ -39,7 +38,7 @@ async fn inherited_state(
 ) -> Result<LaunchState> {
     let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let parent = match &launch.parent {
-        Some(parent) => listed_space_repository(ctx, &spaces, parent).await?,
+        Some(parent) => space_repository(ctx, parent).await?,
         None => SpaceRepository::Without,
     };
     Ok(LaunchState {
@@ -76,48 +75,32 @@ async fn repository_settings_target(ctx: &Context, launch: &Launch) -> Result<Co
     shape::repository_target(launch, repository, &workspaces).await
 }
 
-/// The repository of the space `selector` names.
+/// The repository of the space `selector` names: its own here, else, for
+/// another joined machine's space, this machine's registration of the
+/// repository the hub lists it in, by its origin.
 pub(in crate::cli::commands) async fn space_repository(
     ctx: &Context,
     selector: &SpaceSelector,
 ) -> Result<SpaceRepository> {
-    let spaces = crate::client::spaces::list(&ctx.paths).await?;
-    listed_space_repository(ctx, &spaces, selector).await
-}
-
-/// The repository of the space `selector` names among `spaces`, else, for
-/// another joined machine's space, this machine's registration of the
-/// repository the hub lists it in, by its origin.
-async fn listed_space_repository(
-    ctx: &Context,
-    spaces: &Spaces,
-    selector: &SpaceSelector,
-) -> Result<SpaceRepository> {
-    if let Some(space) = spaces.find(selector) {
-        return Ok(match &space.repository_id {
-            Some(id) => SpaceRepository::Registered(id.clone()),
-            None => SpaceRepository::Without,
-        });
-    }
-    let elsewhere = crate::cli::commands::machines::space_elsewhere(ctx, selector);
-    let Some((remote, _)) = elsewhere.await? else {
-        let unknown = format!("unknown space: {selector}");
-        return Err(Refusal::new(Reason::NotFound, unknown).into());
+    let space = match crate::client::workspaces::locate(&ctx.paths, selector.clone()).await? {
+        Located::Here(space) => {
+            return Ok(match &space.repository_id {
+                Some(id) => SpaceRepository::Registered(id.clone()),
+                None => SpaceRepository::Without,
+            });
+        }
+        Located::Elsewhere { space, .. } => space,
     };
-    let origin = remote
-        .space
-        .repository
-        .and_then(|repository| repository.origin);
+    let origin = (space.space.repository).and_then(|repository| repository.origin);
     let Some(origin) = origin else {
         return Ok(SpaceRepository::Without);
     };
     let repos = crate::client::repositories::list(&ctx.paths).await?;
-    Ok(
-        match crate::repository::with_origin(&repos, &origin).await {
-            Some(repository) => SpaceRepository::Registered(repository.id.clone()),
-            None => SpaceRepository::Unregistered,
-        },
-    )
+    let registered = crate::repository::with_origin(&repos, &origin).await;
+    Ok(match registered {
+        Some(repository) => SpaceRepository::Registered(repository.id.clone()),
+        None => SpaceRepository::Unregistered,
+    })
 }
 
 /// The settings of `target`, with the mode and rule files beside the
