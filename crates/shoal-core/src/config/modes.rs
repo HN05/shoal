@@ -35,8 +35,8 @@ const WORKER_IDLE_WAKE_MINUTES: u64 = 60;
 /// The longest idle wake a mode may set: a year.
 const MAX_IDLE_WAKE_MINUTES: u64 = 525_600;
 
-const MODES_DIR: &str = "modes";
-const RULES_DIR: &str = "rules";
+pub(super) const MODES_DIR: &str = "modes";
+pub(super) const RULES_DIR: &str = "rules";
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]

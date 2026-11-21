@@ -135,3 +135,35 @@ fn a_global_trigger_replaces_the_shared_one_of_its_name() {
         (Some("Own"), Some("Weekly"))
     );
 }
+
+#[test]
+fn the_shared_files_are_the_config_and_its_mode_and_rule_files() {
+    let (_home, paths) = home("", "agent.default = 'claude'\n");
+    for (name, text) in [
+        ("shared/modes/review.md", "Review it."),
+        ("shared/rules/tests.md", "Test it."),
+        ("shared/modes/review.md.backup", "Older."),
+        ("shared/modes/notes.txt", "Not a mode."),
+        ("shared/modes/bad name.md", "No name."),
+        ("modes/own.md", "This machine's."),
+    ] {
+        write_beside_global_config(&paths, name, text);
+    }
+    let files = Shared::files(&paths).unwrap();
+    let listed: Vec<_> = (files.iter())
+        .map(|(name, text)| (name.to_string(), text.as_str()))
+        .collect();
+    assert_eq!(
+        listed,
+        [
+            ("shared.toml".to_owned(), "agent.default = 'claude'\n"),
+            ("modes/review.md".to_owned(), "Review it."),
+            ("rules/tests.md".to_owned(), "Test it."),
+        ]
+    );
+    let mode = FileName::Mode("review".into());
+    assert_eq!(
+        Shared::file(&paths, &mode),
+        Config::path(&paths).with_file_name("shared/modes/review.md")
+    );
+}

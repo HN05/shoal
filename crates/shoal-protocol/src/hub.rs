@@ -22,6 +22,7 @@ pub mod numbering;
 pub mod packages;
 pub mod pairing;
 pub mod routing;
+pub mod shared_config;
 
 states! {
     /// What a credential belongs to, which the joiner states and the hub

@@ -19,6 +19,7 @@ use crate::config::{
 };
 use crate::paths::Paths;
 
+pub mod shared_files;
 mod user_config;
 
 pub use user_config::refuse_user_config;
@@ -71,19 +72,27 @@ fn lock_global_files(paths: &Paths) -> Result<(fs::File, fs::File)> {
 /// Replace `path` with `text`, keeping the previous file as `<path>.backup`.
 /// Returns the path and the backup, if one was made.
 pub(crate) fn replace(path: PathBuf, text: &str) -> Result<(PathBuf, Option<PathBuf>)> {
-    refuse_user_config(&path)?;
+    let backup = path.with_extension("toml.backup");
+    let kept = replace_keeping(&path, text, Some(&backup))?;
+    Ok((path, kept.then_some(backup)))
+}
+
+/// Replace `path` with `text`, first leaving a copy of the previous file
+/// at `backup`, when given. Whether there was a file to keep.
+fn replace_keeping(path: &Path, text: &str, backup: Option<&Path>) -> Result<bool> {
+    refuse_user_config(path)?;
     let parent = path.parent().context("config path has no parent")?;
     fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
     // Prepare the complete replacement before touching the user's current file.
     let temporary = fsutil::atomic::prepare_atomic_write(
-        &path,
+        path,
         text.as_bytes(),
         ReplaceOptions {
             permissions: Permissions::Temporary,
             sync: false,
         },
     )?;
-    if let Ok(metadata) = fs::symlink_metadata(&path) {
+    if let Ok(metadata) = fs::symlink_metadata(path) {
         ensure!(
             !metadata.is_dir(),
             "config is a directory: {}",
@@ -92,13 +101,15 @@ pub(crate) fn replace(path: PathBuf, text: &str) -> Result<(PathBuf, Option<Path
     }
     // The current entry stays in place until the replacement takes its name
     // at once, so a reader never finds it missing.
-    let backup = path.with_extension("toml.backup");
-    let kept = keep_backup(&path, &backup)
-        .with_context(|| format!("keep {} as {}", path.display(), backup.display()))?;
+    let kept = backup.map(|backup| {
+        keep_backup(path, backup)
+            .with_context(|| format!("keep {} as {}", path.display(), backup.display()))
+    });
+    let kept = kept.transpose()?.unwrap_or(false);
     temporary
-        .persist(&path)
+        .persist(path)
         .with_context(|| format!("install config at {}", path.display()))?;
-    Ok((path, kept.then_some(backup)))
+    Ok(kept)
 }
 
 /// Leave a copy of `path` at `backup`, replacing whatever is there without

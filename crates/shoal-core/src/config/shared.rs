@@ -1,11 +1,15 @@
 //! The shared config: `shared.toml` beside the global config, with its mode
 //! and rule files in `shared/` beside it, is the layer under each machine's
 //! own file that the user's machines share.
-use std::path::{Path, PathBuf};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result};
+use shoal_protocol::hub::shared_config::FileName;
 
-use super::{Config, machine, parse, repo::RepoConfig};
+use super::{Config, machine, modes, parse, repo::RepoConfig};
 use crate::paths::Paths;
 
 /// The shared config's file name, beside the global config.
@@ -32,6 +36,33 @@ impl Shared {
         Config::path_for_home(home).with_file_name(FILE)
     }
 
+    /// Where the shared file `name` is on this machine.
+    pub fn file(paths: &Paths, name: &FileName) -> PathBuf {
+        match name {
+            FileName::Config => Self::path(paths),
+            name => Self::path(paths)
+                .with_file_name(TEMPLATES_DIR)
+                .join(name.to_string()),
+        }
+    }
+
+    /// The text of each shared file on disk, by name. A file whose name no
+    /// mode or rule may have is left out, as loading the config refuses it.
+    pub fn files(paths: &Paths) -> Result<BTreeMap<FileName, String>> {
+        let directory = Self::path(paths).with_file_name(TEMPLATES_DIR);
+        let mut names = vec![FileName::Config];
+        for kind in [modes::MODES_DIR, modes::RULES_DIR] {
+            names.extend(names_in(&directory.join(kind), kind)?);
+        }
+        let mut files = BTreeMap::new();
+        for name in names {
+            if let Some(text) = read_optional(&Self::file(paths, &name))? {
+                files.insert(name, text);
+            }
+        }
+        Ok(files)
+    }
+
     /// The file on disk; none while there is no file.
     pub fn load(paths: &Paths) -> Result<Self> {
         let path = Self::path(paths);
@@ -53,6 +84,31 @@ impl Shared {
         Config::checked(&shared, None, paths)?;
         Ok(shared)
     }
+}
+
+/// The names of the shared files in `directory`, the shared config's
+/// `kind` subdirectory.
+fn names_in(directory: &Path, kind: &str) -> Result<Vec<FileName>> {
+    let entries = match std::fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error).with_context(|| format!("read {}", directory.display())),
+    };
+    let mut names = Vec::new();
+    for entry in entries {
+        let entry = entry.with_context(|| format!("read {}", directory.display()))?;
+        let name = entry.file_name();
+        let name = name.to_str().map(|name| format!("{kind}/{name}").parse());
+        if let Some(Ok(name)) = name {
+            names.push(name);
+        }
+    }
+    Ok(names)
+}
+
+/// The text of the file at `path`, none while there is none.
+fn read_optional(path: &Path) -> Result<Option<String>> {
+    crate::fsutil::read_optional(path).with_context(|| format!("read {}", path.display()))
 }
 
 #[cfg(test)]
