@@ -268,17 +268,53 @@ pub fn finish(
 /// The session the latest earlier review of review `id`'s workspace and PR,
 /// or of the workspace alone, recorded, with the agent that reported it.
 pub fn session(db: &Connection, id: ReviewId) -> Result<Option<(Agent, AgentSessionId)>> {
+    let found = subject_session(db, id, "earlier.id<?1")?;
+    Ok(found.map(|(_, agent, session)| (agent, session)))
+}
+
+/// The session the latest review of review `id`'s workspace and PR, or of
+/// the workspace alone, this one included, recorded: the review that holds
+/// it, and the agent that reported it.
+pub fn latest_session(
+    db: &Connection,
+    id: ReviewId,
+) -> Result<Option<(ReviewId, Agent, AgentSessionId)>> {
+    subject_session(db, id, "TRUE")
+}
+
+/// The session the latest review of review `id`'s subject that `which`
+/// keeps recorded, with that review and the agent that reported it.
+fn subject_session(
+    db: &Connection,
+    id: ReviewId,
+    which: &str,
+) -> Result<Option<(ReviewId, Agent, AgentSessionId)>> {
     Ok(db
         .query_row(
-            "SELECT earlier.reviewer,earlier.session FROM reviews earlier JOIN reviews this
-                ON this.workspace_id=earlier.workspace_id
-                AND json_extract(this.target,'$.url') IS json_extract(earlier.target,'$.url')
-                WHERE this.id=?1 AND earlier.id<?1 AND earlier.session IS NOT NULL
-                ORDER BY earlier.id DESC LIMIT 1",
+            &format!(
+                "SELECT earlier.id,earlier.reviewer,earlier.session FROM reviews earlier
+                    JOIN reviews this ON this.workspace_id=earlier.workspace_id
+                    AND json_extract(this.target,'$.url') IS json_extract(earlier.target,'$.url')
+                    WHERE this.id=?1 AND {which} AND earlier.session IS NOT NULL
+                    ORDER BY earlier.id DESC LIMIT 1"
+            ),
             [id],
-            |row| Ok((row.get(0)?, AgentSessionId::from(row.get::<_, String>(1)?))),
+            |row| {
+                let session = AgentSessionId::from(row.get::<_, String>(2)?);
+                Ok((row.get(0)?, row.get(1)?, session))
+            },
         )
         .optional()?)
+}
+
+/// Record that review `id`'s session went on as `session`, which later
+/// reviews of its subject continue.
+pub fn continue_session(db: &Connection, id: ReviewId, session: &AgentSessionId) -> Result<()> {
+    db.execute(
+        "UPDATE reviews SET session=?2 WHERE id=?1",
+        params![id, session.as_str()],
+    )?;
+    Ok(())
 }
 
 /// End an active review as failed for `reason`; false when it already ended.

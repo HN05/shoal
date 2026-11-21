@@ -113,7 +113,7 @@ fn earlier_reviews(reviews: &[Review]) -> String {
 /// A finding's thread: its number, severity, place and title, its
 /// opening post, the posts after it, its outcome and, for one resolved
 /// `fixed`, the changes made for it.
-fn thread_entry(thread: &Thread) -> String {
+pub(crate) fn thread_entry(thread: &Thread) -> String {
     let mut text = format!("### Finding {}", thread.finding_line());
     for post in thread.posts.iter().filter(|post| post.speaks()) {
         let author = match post.side {

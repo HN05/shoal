@@ -473,6 +473,30 @@ async fn the_next_review_receives_the_history_and_checks_fixes() {
 }
 
 #[tokio::test]
+async fn the_reviewer_answers_a_post_in_its_finding_s_thread() {
+    // Asked to answer, it writes its prompt and answers; else it reviews.
+    let script = "case \"$1\" in *'reply in `answer`'*)\n\
+        printf '%s' \"$1\" > \"$(dirname '{review}')/prompt\"\n\
+        echo '{\"answer\":\"It is reachable from parse.\"}';;\n\
+        *) cat '{review}';; esac";
+    let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
+    let thread = fixture.review().await.threads.remove(0);
+    let mut answered = fixture.daemon.answered.subscribe();
+    fixture
+        .records
+        .post_as_holder(thread.number, "Is this reachable?");
+    fixture.reviews.answer_posts();
+    let answered = answered.wait_for(|answered| !answered.is_empty()).await;
+    assert_eq!(
+        answered.unwrap().as_slice(),
+        [(thread.id, "It is reachable from parse.".to_owned())]
+    );
+    let prompt = written(&fixture, "prompt");
+    assert!(prompt.contains("Author: Is this reachable?"), "{prompt}");
+    assert!(prompt.contains("### Finding 1.1 should-fix"), "{prompt}");
+}
+
+#[tokio::test]
 async fn later_reviews_receive_a_false_positive_until_it_is_reopened() {
     let script = "printf '%s' \"$1\" > \"$(dirname '{review}')/prompt\"\ncat '{review}'";
     let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;

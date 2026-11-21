@@ -1,4 +1,5 @@
 use super::*;
+use crate::reviews::output::ReviewerOutput;
 use crate::test_support::until_tests_end;
 
 fn files() -> (tempfile::TempDir, Files) {
@@ -31,7 +32,7 @@ async fn a_reviewer_running_past_the_limit_times_out() {
     let (_cancel, mut cancelled) = watch::channel(false);
     let mut slow = reviewer(&files, &["sh", "-c", &until_tests_end()]);
     slow.timeout = Duration::from_millis(300);
-    let ended = run(&slow, &mut cancelled).await;
+    let ended = run::<ReviewerOutput>(&slow, &mut cancelled).await;
     assert_eq!(ended, Ended::Failed(FailureReason::TimedOut));
 }
 
@@ -44,7 +45,7 @@ async fn a_reviewer_whose_processes_cannot_be_proven_stopped_is_left_running() {
         .runs
         .fail_inventory
         .store(true, std::sync::atomic::Ordering::SeqCst);
-    let ended = run(&reviewer, &mut cancelled).await;
+    let ended = run::<ReviewerOutput>(&reviewer, &mut cancelled).await;
     assert_eq!(ended, Ended::LeftRunning);
     assert!(files.directory.exists());
 }
@@ -58,13 +59,14 @@ async fn the_result_comes_from_the_output_file_when_the_reviewer_writes_one() {
     let script = format!("printf '%s' '{review}' > '{}'", files.output().display());
     let mut writer = reviewer(&files, &["sh", "-c", &script]);
     writer.writes_output = true;
-    let Ended::Returned { output, .. } = run(&writer, &mut cancelled).await else {
+    let Ended::Returned { output, .. } = run::<ReviewerOutput>(&writer, &mut cancelled).await
+    else {
         panic!("no review returned");
     };
     assert!(output.findings.is_empty());
     let missing = reviewer(&files, &["/nonexistent/reviewer"]);
     assert_eq!(
-        run(&missing, &mut cancelled).await,
+        run::<ReviewerOutput>(&missing, &mut cancelled).await,
         Ended::Failed(FailureReason::ExecutionFailed)
     );
 }
@@ -74,6 +76,7 @@ async fn an_oversized_result_is_invalid_output() {
     let (_root, files) = files();
     let (_cancel, mut cancelled) = watch::channel(false);
     let script = format!("head -c {} /dev/zero", RESULT_LIMIT + 1);
-    let ended = run(&reviewer(&files, &["sh", "-c", &script]), &mut cancelled).await;
+    let ended =
+        run::<ReviewerOutput>(&reviewer(&files, &["sh", "-c", &script]), &mut cancelled).await;
     assert_eq!(ended, Ended::Failed(FailureReason::InvalidOutput));
 }

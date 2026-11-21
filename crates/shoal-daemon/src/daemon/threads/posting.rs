@@ -223,6 +223,9 @@ impl Manager {
             )
             .await?;
         self.announce_post(delivered, versioned).await;
+        if super::findings::awaits_reviewer(&thread) {
+            self.reviews.answer_posts();
+        }
         Ok(thread)
     }
 

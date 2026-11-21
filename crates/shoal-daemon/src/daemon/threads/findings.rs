@@ -1,8 +1,9 @@
 //! The `review` threads Shoal opens for a local review's findings, held by
 //! the reviewed workspace: opening one with its finding as the opening
 //! post, reopening one a later review found still present, and reading a
-//! review's. Each runs in the review's own transaction and tells no one,
-//! since the review's one alert names its threads.
+//! review's, each in the review's own transaction, telling no one, since
+//! the review's one alert names its threads; and posting the reviewer's
+//! answers in them, which reach their holders.
 use anyhow::{Context as _, Result};
 use rusqlite::{Connection, Transaction, params};
 use shoal_ids::space_ids::SpaceId;
@@ -16,8 +17,10 @@ use shoal_reviews::daemon::FindingThread;
 
 use super::{
     code::NewCode,
+    delivery::{self, Delivered},
     records::{self, Author, NewRecord, NewThread},
 };
+use crate::daemon::manager::Manager;
 
 /// Open the `review` thread of `finding` from Shoal in the workspace that
 /// holds it, its title the thread's name and its body the opening post,
@@ -95,6 +98,56 @@ pub(in crate::daemon) fn reopen(
 /// The threads review `review` opened, oldest first.
 pub(in crate::daemon) fn of_review(db: &Connection, review: ReviewId) -> Result<Vec<Thread>> {
     records::query(db, "WHERE t.review_id=?1", [review.0])
+}
+
+/// The open `review` threads Shoal opened for a review whose last post that
+/// speaks is their holder's, which wait for the reviewer's answer.
+pub(in crate::daemon) fn awaiting_answers(db: &Connection) -> Result<Vec<i64>> {
+    Ok(db
+        .prepare(
+            "SELECT t.id FROM threads t WHERE t.review_id IS NOT NULL AND t.kind='review'
+                AND t.opener='shoal' AND t.outcome IS NULL AND t.space_number IS NOT NULL
+                AND (SELECT side FROM thread_posts WHERE thread_id=t.id AND forwards=0
+                    ORDER BY id DESC LIMIT 1)='holder'
+                ORDER BY t.id",
+        )?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Whether `thread` waits for the reviewer's answer, as
+/// [`awaiting_answers`] lists it.
+pub(in crate::daemon) fn awaits_reviewer(thread: &Thread) -> bool {
+    let review = thread
+        .finding
+        .is_some_and(|finding| finding.review.is_some());
+    review && thread.opener == Sender::Shoal && thread.awaits() == Some(Side::Opener)
+}
+
+impl Manager {
+    /// Post the reviewer's answer `text` from Shoal in the finding's thread
+    /// `id`, telling its holder, unless it was resolved meanwhile.
+    pub(in crate::daemon) async fn answer_finding(&self, id: i64, text: String) -> Result<()> {
+        let text = post_text(&text);
+        let delivered = self
+            .store
+            .write(move |tx| {
+                if !records::reread(tx, id)?.is_open() {
+                    return Ok(None);
+                }
+                record_shoal_post(tx, id, &text, &[])?;
+                let thread = records::reread(tx, id)?;
+                records::ensure_fits(&thread)?;
+                let mut delivered = Delivered::default();
+                delivery::deliver_post(tx, &thread, &mut delivered)?;
+                Ok(Some(delivered))
+            })
+            .await?;
+        if let Some(delivered) = delivered {
+            self.announce_threads(delivered).await;
+        }
+        Ok(())
+    }
 }
 
 /// The threads whose records are `ids`, in that order.

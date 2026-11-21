@@ -533,6 +533,7 @@ shoal view review [<id>]
 shoal watch review [<id>]
 shoal review cancel [<id>]
 shoal thread switch 3.1             # Your changes from now on fix finding 3.1
+shoal send 3.6 "Only on empty input?"  # The reviewer answers in the thread
 shoal thread resolve 3.1 fixed
 shoal thread resolve 3.2 false-positive --reason "The caller checks the length"
 shoal thread resolve 3.3 wont-fix --reason "..."
@@ -547,7 +548,8 @@ PR, it reviews the PR in the workspace that owns its branch. Each finding is a
 its space, whose opening post points at the reviewed lines; the review's
 summary and all its threads reach the workspace's agent in one message, and its
 coordinator as one line. The holder resolves a finding's thread with
-`thread resolve` and an outcome with its data. Later reviews of the
+`thread resolve` and an outcome with its data, or posts in it with `send`,
+which the reviewer answers there from the workspace's latest commit. Later reviews of the
 repository receive each `false-positive` finding's title, path and reason and
 skip that claim while the reason holds; the next review checks each `fixed`
 finding against the changes made for its thread and reopens it, with a post

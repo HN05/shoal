@@ -190,7 +190,7 @@ impl Manager {
         let post = in_chat(message.as_deref());
         let removing = self.space_removals.clone();
         let space = space.clone();
-        let delivered = self
+        let (delivered, answered) = self
             .store
             .write(move |tx| {
                 let thread = records::reread(tx, id)?;
@@ -202,19 +202,22 @@ impl Manager {
                         space.name,
                         thread.number
                     );
-                    return Ok(Delivered::default());
+                    return Ok((Delivered::default(), false));
                 };
                 let poster = Poster {
                     side,
                     space: Some((space.id.clone(), space.name.clone())),
                     seen: thread.holder.clone(),
                 };
-                let (_, delivered) =
+                let (thread, delivered) =
                     record_post(tx, id, &poster, &post, Attached::default(), true, &removing)?;
-                Ok(delivered)
+                Ok((delivered, super::findings::awaits_reviewer(&thread)))
             })
             .await?;
         self.announce_threads(delivered).await;
+        if answered {
+            self.reviews.answer_posts();
+        }
         Ok(())
     }
 }

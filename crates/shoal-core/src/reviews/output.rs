@@ -16,6 +16,18 @@ use super::failure::{
 /// The JSON schema of [`ReviewerOutput`], which the reviewer is given.
 pub const SCHEMA: &str = include_str!("schema.json");
 
+/// The JSON schema of [`Answer`], which a reviewer answering a post in a
+/// finding's thread is given.
+pub const ANSWER_SCHEMA: &str = include_str!("answer_schema.json");
+
+/// A reviewer's reply to the latest post in a finding's thread, as
+/// [`ANSWER_SCHEMA`] describes it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Answer {
+    pub answer: String,
+}
+
 /// A reviewer's result, as the output schema describes it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -147,6 +159,13 @@ pub struct Run<'a> {
 /// by its diagnostics, then output that does not match the schema.
 pub fn read(format: &ResultFormat, run: &Run) -> Result<ReviewerOutput, FailureReason> {
     validate(result(format, run)?).ok_or(FailureReason::InvalidOutput)
+}
+
+/// The answer `run` returned in `format`, or why it returned none, as
+/// [`read`] tells.
+pub fn read_answer(format: &ResultFormat, run: &Run) -> Result<Answer, FailureReason> {
+    let answer = serde_json::from_value::<Answer>(result(format, run)?).ok();
+    (answer.filter(|answer| !answer.answer.trim().is_empty())).ok_or(FailureReason::InvalidOutput)
 }
 
 /// The structured result `run` returned in `format`, unchecked against any

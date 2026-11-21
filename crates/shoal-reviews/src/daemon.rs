@@ -113,6 +113,10 @@ pub trait Threads: Send + Sync {
     /// reopened its threads, and keep the versions of the code they point
     /// at.
     fn findings_recorded<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, ()>;
+
+    /// Post `text` from Shoal, for the reviewer, in the finding's thread
+    /// `thread`, telling its holder, unless it was resolved meanwhile.
+    fn answer_finding(&self, thread: i64, text: String) -> BoxFuture<'_, Result<()>>;
 }
 
 /// The agent queue that admits a review's run, and the agents that hear
@@ -357,4 +361,8 @@ pub trait Records: Send + Sync {
 
     /// The threads whose records are `ids`, in that order.
     fn threads(&self, db: &Connection, ids: &[i64]) -> Result<Vec<Thread>>;
+
+    /// The open `review` threads Shoal opened for a review whose last post
+    /// is their holder's, which wait for the reviewer's answer.
+    fn awaiting_answers(&self, db: &Connection) -> Result<Vec<i64>>;
 }

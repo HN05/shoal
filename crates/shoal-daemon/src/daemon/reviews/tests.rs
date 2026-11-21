@@ -445,6 +445,49 @@ async fn a_finding_is_a_thread_its_workspace_resolves_keeping_its_false_positive
 }
 
 #[tokio::test]
+async fn the_reviewer_answers_its_workspace_s_post_in_a_finding_s_thread() {
+    use shoal_protocol::threads::{NewPost, Sender, ThreadNumber};
+    let script = "case \"$1\" in *'reply in `answer`'*)\n\
+        echo '{\"answer\":\"It is reachable from parse.\"}';;\n\
+        *) cat '{review}';; esac";
+    let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
+    let (manager, workspace) = (&fixture.manager, &fixture.workspace);
+    let review = fixture.review().await;
+    let number = ThreadNumber::Full(review.threads[0].number);
+    let agent = crate::daemon::scope::Caller {
+        space_id: workspace.id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+        vouched: None,
+    };
+    let post = NewPost {
+        text: "Is this reachable?".into(),
+        ..NewPost::default()
+    };
+    let mut changed = manager.store.watch_changes();
+    (manager.post_to_thread(
+        Some(&agent),
+        number,
+        post,
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    ))
+    .await
+    .unwrap();
+    let answer = loop {
+        let thread = manager.thread(None, number).await.unwrap();
+        if let [_, _, answer] = thread.posts.as_slice() {
+            break answer.clone();
+        }
+        changed.changed().await.unwrap();
+    };
+    assert_eq!(answer.sender, Sender::Shoal);
+    assert_eq!(answer.post.text, "It is reachable from parse.");
+}
+
+#[tokio::test]
 async fn a_later_review_reopens_only_a_fixed_finding_of_its_workspace() {
     use shoal_protocol::threads::{Outcome, OutcomeKind, Resolving, ThreadNumber};
     let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;

@@ -110,6 +110,8 @@ impl Fixture {
             held: Mutex::default(),
             messages: Mutex::default(),
             notices: Mutex::default(),
+            records: records.clone(),
+            answered: watch::channel(Vec::new()).0,
         };
         Self {
             root,
@@ -234,6 +236,10 @@ pub(crate) struct StandIn {
     pub(crate) messages: Mutex<Vec<String>>,
     /// What its coordinator was told.
     pub(crate) notices: Mutex<Vec<String>>,
+    /// The records the reviewer's answers are posted in.
+    records: Arc<StandInRecords>,
+    /// The answers posted, by thread record.
+    pub(crate) answered: watch::Sender<Vec<(i64, String)>>,
 }
 
 impl StandIn {
@@ -447,6 +453,18 @@ impl StandInRecords {
         });
     }
 
+    /// Post `text` in the thread `number` from its holder's side, as its
+    /// workspace's agent does.
+    pub(crate) fn post_as_holder(&self, number: ItemNumber, text: &str) {
+        let mut threads = self.threads.lock().unwrap();
+        let thread = (threads.iter_mut())
+            .find(|thread| thread.number == number)
+            .unwrap();
+        let mut post = Self::shoal_post(thread.id * 100 + 1, text, Vec::new());
+        (post.side, post.sender) = (Side::Holder, Sender::Space);
+        thread.posts.push(post);
+    }
+
     /// A post from Shoal saying `text`, pointing at `code`.
     fn shoal_post(id: i64, text: &str, code: Vec<CodeRef>) -> Post {
         Post {
@@ -533,6 +551,14 @@ impl Records for StandInRecords {
             .filter_map(|id| threads.iter().find(|thread| thread.id == *id).cloned())
             .collect())
     }
+
+    fn awaiting_answers(&self, _db: &Connection) -> Result<Vec<i64>> {
+        let threads = self.threads.lock().unwrap();
+        Ok((threads.iter())
+            .filter(|thread| thread.awaits() == Some(Side::Opener))
+            .map(|thread| thread.id)
+            .collect())
+    }
 }
 
 /// The thread `1.item` the stand-in's records open for `finding` in the
@@ -602,10 +628,22 @@ pub(crate) fn finding(item: u32, path: &str, severity: Severity, body: &str) -> 
     finding_thread(item, "fix-login", &finding)
 }
 
-/// Threads change nowhere else.
+/// The reviewer's answers go into the stand-in's records.
 impl Threads for StandIn {
     fn findings_recorded<'a>(&'a self, _workspace: &'a Workspace) -> BoxFuture<'a, ()> {
         Box::pin(async {})
+    }
+
+    fn answer_finding(&self, thread: i64, text: String) -> BoxFuture<'_, Result<()>> {
+        let mut threads = self.records.threads.lock().unwrap();
+        let answered = threads.iter_mut().find(|answered| answered.id == thread);
+        if let Some(answered) = answered {
+            let post = StandInRecords::shoal_post(thread * 100 + 2, &text, Vec::new());
+            answered.posts.push(post);
+        }
+        self.answered
+            .send_modify(|answered| answered.push((thread, text)));
+        Box::pin(async { Ok(()) })
     }
 }
 

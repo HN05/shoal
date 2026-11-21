@@ -1,5 +1,6 @@
 //! One reviewer run: an AI tool's review command run once in the review's
-//! checkout as a one-shot run, and its result read back.
+//! checkout as a one-shot run, and its result, a review or an answer in a
+//! finding's thread, read back.
 use std::{fs, path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result};
@@ -10,9 +11,40 @@ use crate::{
     oneshot::{self, AgentCommand},
     reviews::{
         FailureReason, ReviewId,
-        output::{self, ResultFormat, ReviewerOutput},
+        output::{self, Answer, ResultFormat, ReviewerOutput},
     },
 };
+
+/// What a reviewer returns, read from its run's result, with the schema it
+/// is given and what a session it resumes is told first.
+pub trait Output: Sized {
+    const SCHEMA: &'static str;
+    const RESUMED: &'static str;
+
+    fn read(format: &ResultFormat, run: &output::Run) -> Result<Self, FailureReason>;
+}
+
+impl Output for ReviewerOutput {
+    const SCHEMA: &'static str = output::SCHEMA;
+    const RESUMED: &'static str = "Earlier in this session you reviewed an earlier commit of \
+        this work. Review the commit now checked out as the instructions below say; what you \
+        learned before is context, and the history after them says how each earlier finding \
+        was resolved.";
+
+    fn read(format: &ResultFormat, run: &output::Run) -> Result<Self, FailureReason> {
+        output::read(format, run)
+    }
+}
+
+impl Output for Answer {
+    const SCHEMA: &'static str = output::ANSWER_SCHEMA;
+    const RESUMED: &'static str = "Earlier in this session you reviewed this work. Answer as \
+        the instructions below say; what you learned before is context.";
+
+    fn read(format: &ResultFormat, run: &output::Run) -> Result<Self, FailureReason> {
+        output::read_answer(format, run)
+    }
+}
 use shoal_ids::agent_session_ids::AgentSessionId;
 
 /// A reviewer still running after this long is stopped. Fixed, since a
@@ -70,9 +102,9 @@ pub struct Reviewer<'a> {
 
 /// How a run ended.
 #[derive(Debug, PartialEq, Eq)]
-pub enum Ended {
+pub enum Ended<O = ReviewerOutput> {
     Returned {
-        output: ReviewerOutput,
+        output: O,
         /// The session the reviewer reported.
         session: Option<AgentSessionId>,
     },
@@ -83,7 +115,7 @@ pub enum Ended {
     LeftRunning,
 }
 
-impl Ended {
+impl<O> Ended<O> {
     /// This end without the session its reviewer reported, for a run whose
     /// session no later review can find.
     pub fn without_session(self) -> Self {
@@ -99,7 +131,10 @@ impl Ended {
 
 /// Run `reviewer` until it exits, its timeout passes or `cancel` turns true,
 /// and read its result, which another reviewer of the run does not see.
-pub async fn run(reviewer: &Reviewer<'_>, cancel: &mut watch::Receiver<bool>) -> Ended {
+pub async fn run<O: Output>(
+    reviewer: &Reviewer<'_>,
+    cancel: &mut watch::Receiver<bool>,
+) -> Ended<O> {
     let files = reviewer.files;
     let run = oneshot::Run {
         runs: reviewer.runs,
@@ -114,7 +149,7 @@ pub async fn run(reviewer: &Reviewer<'_>, cancel: &mut watch::Receiver<bool>) ->
 }
 
 /// What `reviewer`'s run, which ended as `exited`, produced.
-fn ended(reviewer: &Reviewer<'_>, exited: Result<oneshot::Ended>) -> Ended {
+fn ended<O: Output>(reviewer: &Reviewer<'_>, exited: Result<oneshot::Ended>) -> Ended<O> {
     match exited {
         Ok(oneshot::Ended::Exited { success }) => match read(reviewer, success) {
             Ok(Ok((output, session))) => Ended::Returned { output, session },
@@ -137,9 +172,12 @@ fn ended(reviewer: &Reviewer<'_>, exited: Result<oneshot::Ended>) -> Ended {
     }
 }
 
-/// The review the run that exited with `success` returned, with the session
-/// it reported, or why it returned none.
-fn read(reviewer: &Reviewer, success: bool) -> Result<Result<Returned, FailureReason>> {
+/// What the run that exited with `success` returned, with the session it
+/// reported, or why it returned none.
+fn read<O: Output>(
+    reviewer: &Reviewer,
+    success: bool,
+) -> Result<Result<(O, Option<AgentSessionId>), FailureReason>> {
     let files = &reviewer.files.directory;
     // A result too large to be a review is no review; it is never loaded.
     let result = match reviewer.writes_output {
@@ -155,14 +193,11 @@ fn read(reviewer: &Reviewer, success: bool) -> Result<Result<Returned, FailureRe
         result: result.as_deref(),
         diagnostics: [&tail, &stdout],
     };
-    Ok(output::read(reviewer.format, &run).map(|output| {
+    Ok(O::read(reviewer.format, &run).map(|output| {
         let session = output::session(reviewer.format, result.as_deref(), &head);
         (output, session)
     }))
 }
-
-/// A review and the session its reviewer reported.
-type Returned = (ReviewerOutput, Option<AgentSessionId>);
 
 /// The most of a reviewer's result that is read.
 const RESULT_LIMIT: u64 = 8 * 1024 * 1024;
@@ -177,10 +212,9 @@ pub fn write_id(files: &Files, id: ReviewId) -> Result<()> {
     fs::write(files.id(), id.to_string()).with_context(|| format!("write {}", files.id().display()))
 }
 
-/// Write the output schema the reviewer is given.
-pub fn write_schema(files: &Files) -> Result<()> {
-    fs::write(files.schema(), output::SCHEMA)
-        .with_context(|| format!("write {}", files.schema().display()))
+/// Write the output schema `schema` the reviewer is given.
+pub fn write_schema(files: &Files, schema: &str) -> Result<()> {
+    fs::write(files.schema(), schema).with_context(|| format!("write {}", files.schema().display()))
 }
 
 #[cfg(test)]

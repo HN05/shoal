@@ -323,6 +323,16 @@ async fn a_review_resumes_the_latest_session_of_its_workspace_or_pr() {
             assert_eq!(saved(after)?, pair("claude", "s2"));
             let last = review(&ReviewTarget::Workspace, "claude", None)?;
             assert_eq!(saved(last)?, pair("codex", "c1"));
+            // An answer in a finding's thread goes on with the latest
+            // session, which later reviews continue.
+            let (holder, agent, session) = latest_session(tx, last)?.unwrap();
+            assert_eq!(
+                (agent.to_string(), session.as_str()),
+                ("codex".into(), "c1")
+            );
+            continue_session(tx, holder, &AgentSessionId::from("c2".to_owned()))?;
+            let continued = review(&ReviewTarget::Workspace, "claude", None)?;
+            assert_eq!(saved(continued)?, pair("codex", "c2"));
             // Each PR keeps its own.
             let again = review(&pr(8), "claude", None)?;
             assert_eq!(saved(again)?, pair("claude", "p8"));

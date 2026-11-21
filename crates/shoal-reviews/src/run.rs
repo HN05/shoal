@@ -28,8 +28,9 @@ use crate::{
     store,
 };
 
-/// Start every queued review, now and whenever one is queued; each then
-/// waits in the agent queue for admission.
+/// Start every queued review and every answer a finding's thread waits
+/// for, now and whenever one is queued or posted; each then waits in the
+/// agent queue for admission.
 pub async fn run(reviews: Arc<Reviews>, daemon: Arc<dyn Daemon>) {
     let mut running = JoinSet::new();
     let mut started = HashSet::new();
@@ -37,13 +38,16 @@ pub async fn run(reviews: Arc<Reviews>, daemon: Arc<dyn Daemon>) {
         let queued = reviews.queued.notified();
         tokio::pin!(queued);
         queued.as_mut().enable();
-        match reviews.store.run(|db| store::queued(db)).await {
-            Ok(ids) => {
-                for id in ids.into_iter().filter(|id| started.insert(*id)) {
+        match waiting(&reviews).await {
+            Ok(jobs) => {
+                for job in jobs.into_iter().filter(|job| started.insert(*job)) {
                     let (reviews, daemon) = (reviews.clone(), daemon.clone());
                     running.spawn(async move {
-                        reviews.run_review(&*daemon, id).await;
-                        id
+                        match job {
+                            Job::Review(id) => reviews.run_review(&*daemon, id).await,
+                            Job::Answer(thread) => reviews.answer(&*daemon, thread).await,
+                        }
+                        job
                     });
                 }
             }
@@ -52,12 +56,30 @@ pub async fn run(reviews: Arc<Reviews>, daemon: Arc<dyn Daemon>) {
         tokio::select! {
             () = &mut queued => {}
             Some(ended) = running.join_next(), if !running.is_empty() => {
-                if let Ok(id) = ended {
-                    started.remove(&id);
+                if let Ok(job) = ended {
+                    started.remove(&job);
                 }
             }
         }
     }
+}
+
+/// What the scheduler runs: a queued review, or the reviewer's answer to
+/// the latest post in a finding's thread.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Job {
+    Review(ReviewId),
+    Answer(i64),
+}
+
+/// The queued reviews, then the findings' threads that wait for an answer.
+async fn waiting(reviews: &Reviews) -> Result<Vec<Job>> {
+    let records = reviews.records.clone();
+    let (queued, answers) = (reviews.store)
+        .run(move |db| Ok((store::queued(db)?, records.awaiting_answers(db)?)))
+        .await?;
+    let queued = queued.into_iter().map(Job::Review);
+    Ok(queued.chain(answers.into_iter().map(Job::Answer)).collect())
 }
 
 /// How one pass of a review ended.
@@ -65,6 +87,23 @@ enum Pass {
     Ended,
     /// Protection stopped its run and queued the review again.
     Stopped,
+}
+
+/// A run in the place of a review's subject: the review, its workspace and
+/// settings, the commits it reads, and the run it holds there.
+pub(crate) struct InPlace<'a> {
+    pub(crate) review: &'a Review,
+    pub(crate) workspace: &'a Workspace,
+    pub(crate) settings: &'a Effective,
+    pub(crate) commits: &'a Commits,
+    pub(crate) held: &'a HeldRun<'a>,
+}
+
+/// One agent's attempt at a run, for a review.
+struct Attempt<'a> {
+    run: &'a Run<'a>,
+    review: &'a Review,
+    agent: &'a Agent,
 }
 
 /// What every reviewer of a run gets.
@@ -78,7 +117,7 @@ struct Run<'a> {
 }
 
 /// The commits a run reviews.
-struct Commits {
+pub(crate) struct Commits {
     head: CommitId,
     base: CommitId,
 }
@@ -160,11 +199,14 @@ impl Reviews {
         if !self.start_review(id, &commits).await? {
             return Ok(Pass::Ended);
         }
-        let ended = self
-            .run_in_checkout(
-                daemon, &review, &workspace, &settings, &commits, &held, cancelled,
-            )
-            .await;
+        let in_place = InPlace {
+            review: &review,
+            workspace: &workspace,
+            settings: &settings,
+            commits: &commits,
+            held: &held,
+        };
+        let ended = self.run_in_checkout(daemon, &in_place, cancelled).await;
         let left_running = matches!(ended, Ok((_, Ended::LeftRunning)));
         release_run(id, &held.files, held.checkout, admission, left_running).await;
         let (reviewer, ended) = ended?;
@@ -181,7 +223,7 @@ impl Reviews {
     /// Wait for review `id`'s admission in its workspace's repository, which
     /// protection takes back by sending `cancel`; none once `cancelled`, as a
     /// cancel or the workspace's removal recorded the review's end.
-    async fn await_admission<'a>(
+    pub(crate) async fn await_admission<'a>(
         &self,
         daemon: &'a dyn Daemon,
         id: ReviewId,
@@ -209,7 +251,7 @@ impl Reviews {
     /// review's does while it ends; while a run that could not be removed
     /// keeps the place, until a restarted daemon removes it, the review runs
     /// beside it instead.
-    async fn hold_run(
+    pub(crate) async fn hold_run(
         &self,
         id: ReviewId,
         repository: &RepositoryId,
@@ -257,62 +299,94 @@ impl Reviews {
             .await
     }
 
-    /// Check the reviewed commit out in `held` and run the reviewers there,
-    /// continuing the subject's session when it is at the subject's place;
-    /// returns the agent that produced the result and how it ended.
-    #[allow(clippy::too_many_arguments)]
+    /// Check the reviewed commit out in the run `place` holds and run the
+    /// reviewers there, continuing the subject's session; returns the agent
+    /// that produced the result and how it ended.
     async fn run_in_checkout(
         &self,
         daemon: &dyn Daemon,
-        review: &Review,
-        workspace: &Workspace,
-        settings: &Effective,
-        commits: &Commits,
-        held: &HeldRun<'_>,
+        place: &InPlace<'_>,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Result<(Agent, Ended)> {
+        let instructions = self.review_instructions(daemon, place).await?;
+        let session = self.review_session(place.review, place.settings).await;
+        let agent = &place.review.agent;
+        (self.run_reviewer(daemon, place, agent, instructions, session, cancelled)).await
+    }
+
+    /// Check the commit `place` reads out in the run it holds and run
+    /// `agent` there with `instructions`, then the fallback agent once,
+    /// resuming `session` when the run is at the subject's place, where its
+    /// session is found; returns the agent that produced the result and how
+    /// it ended.
+    pub(crate) async fn run_reviewer<O: reviewer::Output>(
+        &self,
+        daemon: &dyn Daemon,
+        place: &InPlace<'_>,
+        agent: &Agent,
+        instructions: String,
+        session: Option<AgentSessionId>,
+        cancelled: &mut watch::Receiver<bool>,
+    ) -> Result<(Agent, Ended<O>)> {
+        let InPlace {
+            review,
+            workspace,
+            settings,
+            commits,
+            held,
+        } = place;
         let files = &held.files;
-        prepare_checkout(daemon, review.id, workspace, &commits.head, files).await?;
+        prepare_checkout(
+            daemon,
+            review.id,
+            workspace,
+            &commits.head,
+            files,
+            O::SCHEMA,
+        )
+        .await?;
         let run = Run {
             runs: &self.runs,
             settings,
             configured: daemon.environment(workspace, settings).await?,
-            instructions: self
-                .review_instructions(daemon, review, workspace, settings, files, commits)
-                .await?,
+            instructions,
             files,
+        };
+        let attempt = Attempt {
+            run: &run,
+            review,
+            agent,
         };
         // A run elsewhere finds no session there, and no later review its own.
         if !held.at_place {
-            let (agent, ended) =
-                (self.review_with_fallback(&run, review, settings, None, cancelled)).await;
+            let (agent, ended) = self.review_with_fallback(&attempt, None, cancelled).await;
             return Ok((agent, ended.without_session()));
         }
-        let session = self.review_session(review, settings).await;
-        Ok((self.review_with_fallback(&run, review, settings, session, cancelled)).await)
+        Ok(self
+            .review_with_fallback(&attempt, session, cancelled)
+            .await)
     }
 
-    /// `review`'s own agent's attempt at `run`, resuming `session` when
-    /// given, then once the fallback agent's after any failure but a
-    /// timeout; returns the agent that produced the result and how it ended.
-    async fn review_with_fallback(
+    /// `attempt`'s own agent at its run, resuming `session` when given, then
+    /// once the fallback agent's after any failure but a timeout; returns
+    /// the agent that produced the result and how it ended.
+    async fn review_with_fallback<O: reviewer::Output>(
         &self,
-        run: &Run<'_>,
-        review: &Review,
-        settings: &Effective,
+        attempt: &Attempt<'_>,
         session: Option<AgentSessionId>,
         cancelled: &mut watch::Receiver<bool>,
-    ) -> (Agent, Ended) {
-        let agent = review.agent.clone();
-        let model = settings.model(&agent, review.model.clone());
+    ) -> (Agent, Ended<O>) {
+        let Attempt { run, review, agent } = attempt;
+        let settings = run.settings;
+        let model = settings.model(agent, review.model.clone());
         let ended = self
-            .review_by_agent(run, review.id, &agent, &model, session, cancelled)
+            .review_by_agent(run, review.id, agent, &model, session, cancelled)
             .await;
         let fallback = settings
             .review
             .fallback_agent
             .clone()
-            .filter(|fallback| *fallback != agent && !settings.turned_off(fallback));
+            .filter(|fallback| fallback != *agent && !settings.turned_off(fallback));
         match (ended, fallback) {
             (Ended::Failed(reason), Some(fallback)) if reason != FailureReason::TimedOut => {
                 log!(
@@ -323,7 +397,7 @@ impl Reviews {
                 let ended = self.attempt(run, &fallback, &model, None, cancelled).await;
                 (fallback, ended)
             }
-            (ended, _) => (agent, ended),
+            (ended, _) => ((*agent).clone(), ended),
         }
     }
 
@@ -336,9 +410,7 @@ impl Reviews {
         review: &Review,
         settings: &Effective,
     ) -> Option<AgentSessionId> {
-        let resumes = (settings.tools.get(review.agent.name()))
-            .is_some_and(|tool| tool.launch.arguments.review_resume.is_some());
-        if !resumes {
+        if !resumes(settings, &review.agent) {
             return None;
         }
         let id = review.id;
@@ -356,7 +428,7 @@ impl Reviews {
     /// The attempt of review `id`'s own `agent` at `run`, resuming `session`
     /// when there is one, and in a new session when there is none or
     /// resuming it failed for a reason other than running too long.
-    async fn review_by_agent(
+    async fn review_by_agent<O: reviewer::Output>(
         &self,
         run: &Run<'_>,
         id: ReviewId,
@@ -364,7 +436,7 @@ impl Reviews {
         model: &ModelChoice,
         session: Option<AgentSessionId>,
         cancelled: &mut watch::Receiver<bool>,
-    ) -> Ended {
+    ) -> Ended<O> {
         if let Some(session) = session {
             match self
                 .attempt(run, agent, model, Some(&session), cancelled)
@@ -388,15 +460,15 @@ impl Reviews {
 
     /// One reviewer's attempt at `run`: agent `agent` with `model`, resuming
     /// `session` when given.
-    async fn attempt(
+    async fn attempt<O: reviewer::Output>(
         &self,
         run: &Run<'_>,
         agent: &Agent,
         model: &ModelChoice,
         session: Option<&AgentSessionId>,
         cancelled: &mut watch::Receiver<bool>,
-    ) -> Ended {
-        let reviewer = match reviewer_for(run, agent, model, session, &self.paths.home) {
+    ) -> Ended<O> {
+        let reviewer = match reviewer_for::<O>(run, agent, model, session, &self.paths.home) {
             Ok(reviewer) => reviewer,
             Err(error) => {
                 log!("review by {agent}: {error:#}");
@@ -470,17 +542,21 @@ impl Reviews {
         Ok(self.load(id).await?.and_then(|review| review.head))
     }
 
-    /// The review's instructions for its checkout, then its history.
+    /// The review's instructions for the checkout `place` holds, then its
+    /// history.
     async fn review_instructions(
         &self,
         daemon: &dyn Daemon,
-        review: &Review,
-        workspace: &Workspace,
-        settings: &Effective,
-        files: &Files,
-        commits: &Commits,
+        place: &InPlace<'_>,
     ) -> Result<String> {
-        let checkout = files.checkout();
+        let InPlace {
+            review,
+            workspace,
+            settings,
+            commits,
+            held,
+        } = place;
+        let checkout = held.files.checkout();
         let instructions = templates::review_instructions(
             (settings.rules.get(crate::config::modes::REVIEW_RULE)).map(|rule| rule.text.as_str()),
             &templates::ReviewFields {
@@ -634,21 +710,29 @@ impl Reviews {
     }
 }
 
-/// Review `id`'s run directory with its ID, the output schema and a
-/// detached checkout of `head`.
+/// Whether `agent` can resume a session, through its tool's `review_resume`
+/// template.
+pub(crate) fn resumes(settings: &Effective, agent: &Agent) -> bool {
+    (settings.tools.get(agent.name()))
+        .is_some_and(|tool| tool.launch.arguments.review_resume.is_some())
+}
+
+/// Review `id`'s run directory with its ID, the output schema `schema` and
+/// a detached checkout of `head`.
 async fn prepare_checkout(
     daemon: &dyn Daemon,
     id: ReviewId,
     workspace: &Workspace,
     head: &CommitId,
     files: &Files,
+    schema: &str,
 ) -> Result<()> {
     let repository = daemon.repository(workspace.repository()).await?;
     review_runs(&repository).create()?;
     std::fs::create_dir_all(&files.directory)
         .with_context(|| format!("create {}", files.directory.display()))?;
     reviewer::write_id(files, id)?;
-    reviewer::write_schema(files)?;
+    reviewer::write_schema(files, schema)?;
     git::detached::add(&repository.path, &files.checkout(), head.as_str()).await
 }
 
@@ -677,7 +761,7 @@ async fn pull_discussion(
 
 /// The commits the review covers: the workspace's committed HEAD against
 /// `shoal diff`'s base, or the PR's fetched head against its base.
-async fn review_commits(
+pub(crate) async fn review_commits(
     daemon: &dyn Daemon,
     workspace: &Workspace,
     target: &ReviewTarget,
@@ -739,9 +823,9 @@ async fn left_runs(daemon: &dyn Daemon) -> Result<Vec<LeftRun>> {
 
 /// A review's held run, and whether it is at its subject's place, where
 /// the subject's session is found.
-struct HeldRun<'a> {
-    files: Files,
-    checkout: CheckoutHold<'a>,
+pub(crate) struct HeldRun<'a> {
+    pub(crate) files: Files,
+    pub(crate) checkout: CheckoutHold<'a>,
     at_place: bool,
 }
 
@@ -766,7 +850,7 @@ struct Unreconciled {
 /// Remove review `id`'s run and give back its checkout and admission. A run whose
 /// reviewer `left_running` processes keeps all three, as does a run that
 /// could not be removed its checkout, until a restarted daemon removes them.
-async fn release_run(
+pub(crate) async fn release_run(
     id: ReviewId,
     files: &Files,
     checkout: CheckoutHold<'_>,
@@ -785,15 +869,11 @@ async fn release_run(
     }
 }
 
-/// What a resumed session is told before the review's instructions.
-const RESUMED: &str = "Earlier in this session you reviewed an earlier commit of this work. \
-    Review the commit now checked out as the instructions below say; what you learned before \
-    is context, and the history after them says how each earlier finding was resolved.";
-
-/// The reviewer `agent` with `model`: its review template's arguments for
-/// this run, or its resume template's when it resumes `session`, after its
-/// launcher and the arguments selecting the model.
-fn reviewer_for<'a>(
+/// The reviewer `agent` with `model`, asked for an `O`: its review
+/// template's arguments for this run, or its resume template's when it
+/// resumes `session`, after its launcher and the arguments selecting the
+/// model.
+fn reviewer_for<'a, O: reviewer::Output>(
     run: &Run<'a>,
     agent: &Agent,
     model: &ModelChoice,
@@ -814,11 +894,11 @@ fn reviewer_for<'a>(
         .get(agent.name())
         .with_context(|| format!("no AI tool runs {agent}"))?;
     let arguments = &tool.launch.arguments;
-    let prompt = reviewer_prompt(instructions, session);
+    let prompt = reviewer_prompt::<O>(instructions, session);
     let fields = crate::ai::ReviewFields {
         prompt: &prompt,
         schema: &files.schema(),
-        schema_json: crate::reviews::output::SCHEMA,
+        schema_json: O::SCHEMA,
         output: &files.output(),
     };
     let (args, writes_output) = review_arguments(arguments, &fields, session)
@@ -833,11 +913,14 @@ fn reviewer_for<'a>(
     })
 }
 
-/// What a reviewer is asked: `instructions`, after what a resumed session
-/// is told when it resumes `session`.
-fn reviewer_prompt(instructions: &str, session: Option<&AgentSessionId>) -> String {
+/// What a reviewer is asked for an `O`: `instructions`, after what a
+/// resumed session is told when it resumes `session`.
+fn reviewer_prompt<O: reviewer::Output>(
+    instructions: &str,
+    session: Option<&AgentSessionId>,
+) -> String {
     match session {
-        Some(_) => format!("{RESUMED}\n\n{instructions}"),
+        Some(_) => format!("{}\n\n{instructions}", O::RESUMED),
         None => instructions.to_owned(),
     }
 }
@@ -884,7 +967,7 @@ fn run_directories(directory: &Path) -> Result<Vec<Files>> {
 /// one place for each workspace and each PR reviewed in it, so its reviewers
 /// run in the same directory each time, where an AI tool finds the sessions
 /// it saved there.
-fn run_files(repository: &Repository, review: &Review) -> Result<Files> {
+pub(crate) fn run_files(repository: &Repository, review: &Review) -> Result<Files> {
     let workspace = review.workspace_id.as_str();
     let place = match &review.target {
         ReviewTarget::Workspace => workspace.to_owned(),

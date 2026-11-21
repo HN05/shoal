@@ -22,6 +22,7 @@ use tokio::sync::{Notify, watch};
 #[cfg(test)]
 use shoal_core::test_support;
 
+mod answer;
 mod checkouts;
 mod code;
 pub mod daemon;

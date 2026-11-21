@@ -1687,6 +1687,7 @@ shoal view review [ID]          # One review in full; default: the workspace's l
 shoal watch review [ID]         # Wait until it ends, then show it
 shoal review cancel [ID]        # Default: the space's queued or running review; --space S
 shoal thread switch 3.4         # Changes from now on are for the finding
+shoal send 3.4 'It only happens on empty input'  # The reviewer answers in the thread
 shoal thread resolve 3.4 false-positive --reason 'The caller checks the length'
 shoal thread resolve 3.4 --undo
 ```
@@ -1710,7 +1711,12 @@ resolve` and one outcome with its data:
 | `withdrawn` | It no longer applies | `--reason`, optional |
 
 A finding fixed after `shoal thread switch` to its thread has the changes made
-for it in the thread, which the next review checks it against. A finding that
+for it in the thread, which the next review checks it against. A post in a
+finding's thread, `shoal send 3.4 "<text>"` from its holder or you, reaches the
+reviewer: Shoal resumes the session the reviews of the workspace or PR continue,
+as a one-shot, read-only run in a checkout of the workspace's latest commit, and
+posts its answer, or why it gave none, in the thread, which tells the holder.
+A post that waits for an answer gets it after a daemon restart too. A finding that
 needs your decision stays unresolved while the agent asks in a
 [thread](#threads) of its own, which keeps the gates below closed until you
 answer.

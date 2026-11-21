@@ -170,6 +170,10 @@ impl Threads for Manager {
                 .await;
         })
     }
+
+    fn answer_finding(&self, thread: i64, text: String) -> BoxFuture<'_, Result<()>> {
+        Box::pin(Manager::answer_finding(self, thread, text))
+    }
 }
 
 /// A one-shot run's admission in the daemon's agent queue.
@@ -257,6 +261,10 @@ impl Records for ReviewRecords {
 
     fn threads(&self, db: &rusqlite::Connection, ids: &[i64]) -> Result<Vec<Thread>> {
         super::threads::findings::by_ids(db, ids)
+    }
+
+    fn awaiting_answers(&self, db: &rusqlite::Connection) -> Result<Vec<i64>> {
+        super::threads::findings::awaiting_answers(db)
     }
 }
 

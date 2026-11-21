@@ -2671,7 +2671,11 @@ carrying its reason or issue; `fixed` points at the changes attributed to the
 thread, which the next review receives with it, reopening it with a post saying
 why when the problem remains, instead of rereading free text. The gates count the
 threads a review opened or reopened, since a reopened finding is one that review
-raised again. A finding
+raised again. A holder's post in a finding's thread, instead of a resolution,
+resumes the reviewer's session for that workspace or PR as a one-shot, read-only
+run in the subject's place, which answers in the thread, so the agent can argue
+a finding with the reviewer that made it. Whether a thread waits for an answer
+is read from its posts, so a pending one outlives a daemon restart. A finding
 resolved `false-positive` outlives its workspace as a claim of its repository, which
 every later review receives, so a wrong claim the reviewer would raise in every change
 touching the same code is answered once. It is kept in a file beside the
