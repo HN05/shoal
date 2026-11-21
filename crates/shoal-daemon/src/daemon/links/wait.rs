@@ -1,5 +1,5 @@
 //! Whether an idle agent is due a wake for its messages and linked items'
-//! activity, and passing that activity up to coordinators elsewhere.
+//! activity, and the watches' tests across subsystems.
 
 mod elsewhere;
 mod merge_runs;
