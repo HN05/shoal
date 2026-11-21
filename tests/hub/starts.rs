@@ -180,20 +180,23 @@ const FORKING_CLAUDE: &str =
 
 /// A Claude Code that, started from a fork, records its arguments in
 /// `$HOME/forked`, and otherwise keeps the transcript of session
-/// `parent-session`, reports it as Claude Code's hooks do, and starts a
-/// child on the laptop from a fork of it with `shoal`.
-fn forking_agent(shoal: &str) -> String {
+/// `parent-session`, reports it as Claude Code's hooks do, and runs
+/// `shoal --json start --machine laptop` with `start` to start from a fork
+/// of it there.
+fn forking_agent(shoal: &str, start: &str) -> String {
     format!(
         "if [ \"$1\" = --resume ]; then printf '%s\\0' \"$@\" > \"$HOME/forked.tmp\"; mv \"$HOME/forked.tmp\" \"$HOME/forked\"; exit 0; fi\n\
          mkdir -p \"$HOME/.claude/projects/p\"\n\
          printf '{{\"type\":\"user\"}}\\n' > \"$HOME/.claude/projects/p/parent-session.jsonl\"\n\
          printf '{{\"session_id\":\"parent-session\"}}' | '{shoal}' internal agent-state idle >/dev/null || exit 3\n\
-         '{shoal}' --json start --machine laptop \"$(cat \"$HOME/repo-path\")\" --branch child --fork -- 'Take the child part' > \"$HOME/split.json\" 2> \"$HOME/split.err\"\n"
+         '{shoal}' --json start --machine laptop {start} > \"$HOME/split.json\" 2> \"$HOME/split.err\"\n"
     )
 }
 
-#[test]
-fn a_start_on_another_machine_forks_a_session_only_this_machine_keeps() {
+/// The machines, once the hub's coordinator's agent, a [`forking_agent`],
+/// ran the `start` it reads of them from a fork of its session, with the
+/// arguments the agent that started from that fork on the laptop recorded.
+fn forked_on_laptop(start: impl FnOnce(&Machines) -> String) -> (Machines, String) {
     // The laptop puts the carried session where its Claude Code looks.
     let config = (
         &*format!("{AGENT}{FORKING_CLAUDE}"),
@@ -202,11 +205,11 @@ fn a_start_on_another_machine_forks_a_session_only_this_machine_keeps() {
     let laptop = Base::start_with_env(home(), config, "notes", &[]);
     let machines = machines_joining((FORKING_CLAUDE, &[]), laptop);
     let (hub, laptop) = (machines.hub.root.path(), machines.laptop.root.path());
+    let start = start(&machines);
     for home in [hub, laptop] {
-        let agent = forking_agent(support::shoal_binary());
+        let agent = forking_agent(support::shoal_binary(), &start);
         fs::write(home.join("agent.sh"), agent).unwrap();
     }
-    fs::write(hub.join("repo-path"), machines.hub.repo.to_str().unwrap()).unwrap();
     // The laptop's queue starts the forked agent in a session of its zmx.
     install_test_script(laptop.join("bin/zmx"), zmx::terminal_zmx());
     fs::write(laptop.join("zmx.shoal-ownership.lock"), "").unwrap();
@@ -221,19 +224,53 @@ fn a_start_on_another_machine_forks_a_session_only_this_machine_keeps() {
         "claude",
     ];
     let output = machines.hub.output(command.args(args).stdin(Stdio::null()));
-    assert!(output.status.success(), "{}", printed(&output));
+    let split = || fs::read_to_string(hub.join("split.err")).unwrap_or_default();
+    assert!(output.status.success(), "{}{}", printed(&output), split());
     let forked = wait_for("the forked agent's start", || {
+        let split = fs::read_to_string(hub.join("split.err")).unwrap_or_default();
+        assert!(!split.contains("\"error\""), "{split}");
         fs::read_to_string(laptop.join("forked")).ok()
     });
-    let split = || fs::read_to_string(hub.join("split.err")).unwrap_or_default();
     assert!(
         forked.contains("--resume\0parent-session\0--fork-session"),
-        "{forked}{}",
-        split()
+        "{forked}"
     );
     let transcript = laptop.join(".claude/projects/p/parent-session.jsonl");
     let carried = fs::read_to_string(transcript).unwrap();
     assert_eq!(carried, "{\"type\":\"user\"}\n");
+    (machines, forked)
+}
+
+#[test]
+fn a_start_on_another_machine_forks_a_session_only_this_machine_keeps() {
+    forked_on_laptop(|machines| {
+        let repo = machines.hub.repo.to_str().unwrap();
+        format!("'{repo}' --branch child --fork -- 'Take the child part'")
+    });
+}
+
+#[test]
+fn a_copy_on_another_machine_forks_the_copied_workspace_s_agent() {
+    // Below another space than the copied one, whose agent it forks.
+    let (machines, _) = forked_on_laptop(|machines| {
+        let token = scope_of(&machines.hub, &machines.coordinator);
+        let mut create = machines.hub.command();
+        create.env("SHOAL_SCOPE_TOKEN", &token);
+        let created = machines
+            .hub
+            .output(create.args(["create", "--branch", "kid"]));
+        assert!(created.status.success(), "{}", printed(&created));
+        let kid = machines.hub.id("kid");
+        wait_for("the child's preparation", || {
+            let status = machines.hub.ok(&["status", &kid]);
+            (status["workspace"]["state"] == "ready").then_some(())
+        });
+        format!("--copy --fork --parent {kid} -- 'Take a copy'")
+    });
+    let listed = machines.laptop.ok(&["list"]);
+    let copied = (listed.as_array().unwrap().iter())
+        .any(|space| space["machine"].is_null() && space["branch"] == "coordinator-copy");
+    assert!(copied, "{listed}");
 }
 
 #[test]

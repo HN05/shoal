@@ -9,6 +9,7 @@
 //! or commit of that origin, or else as the commit this machine carries
 //! there, with the history only it has.
 use anyhow::{Context as _, Result, bail, ensure};
+use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::config::modes::ModeShapes;
 use shoal_protocol::hub::Member;
 use shoal_protocol::launches::{Carried, CarriedCopy, Launch, StartTarget};
@@ -38,10 +39,13 @@ impl Manager {
         ensure_carried(launch, &machine.name)?;
         let mut launch = std::mem::take(launch);
         self.forwarded_spaces(&mut launch, caller).await?;
-        self.copy_as_carried(&mut launch, caller).await?;
+        let copied = self.copy_as_carried(&mut launch, caller).await?;
         let carried = self.carried(&mut launch, &machine, caller).await?;
-        self.carry_forked(&launch, &machine, carried.origin.as_deref(), caller)
-            .await?;
+        let forked = (launch.fork.as_ref()).map(|session| (copied.as_ref(), session));
+        if let Some(forked) = forked {
+            let origin = carried.origin.as_deref();
+            (self.carry_forked(&launch, forked, &machine, origin, caller)).await?;
+        }
         launch.forwarded = Some(carried);
         // That machine starts it as its own.
         launch.machine = None;
@@ -54,11 +58,16 @@ impl Manager {
     /// starts it from: a new branch, the one it names or else one named
     /// after the copied workspace's, at that workspace's HEAD as its base,
     /// with a commit that keeps the files the copy starts with, which go
-    /// there with the base's history. A scoped caller copies only what it
-    /// copies here.
-    async fn copy_as_carried(&self, launch: &mut Launch, caller: Option<&Caller>) -> Result<()> {
+    /// there with the base's history; the copied workspace, if any, whose
+    /// agent's session a fork of the copy starts from. A scoped caller
+    /// copies only what it copies here.
+    async fn copy_as_carried(
+        &self,
+        launch: &mut Launch,
+        caller: Option<&Caller>,
+    ) -> Result<Option<SpaceSelector>> {
         let Some(mut copied) = self.launch_copy(launch, caller).await? else {
-            return Ok(());
+            return Ok(None);
         };
         if let Some(caller) = caller {
             self.copy_within(caller, &mut copied.creation.source)
@@ -70,24 +79,24 @@ impl Manager {
         launch.base = Some(head.to_string());
         let name = copied.creation.name;
         launch.carried_copy = Some(CarriedCopy { files, name });
-        Ok(())
+        Ok(Some(copied.creation.source.workspace))
     }
 
-    /// Carry the session `launch` forks to `machine` for `caller`'s start
-    /// there in the repository whose origin's URL is `origin`, or in none:
-    /// the session of the agent of the space it goes below.
+    /// Carry `session`, which `launch` forks, to `machine` for `caller`'s
+    /// start there in the repository whose origin's URL is `origin`, or in
+    /// none: the session of the agent of the `copied` workspace, else of
+    /// the space it goes below, as a fork here takes it.
     async fn carry_forked(
         &self,
         launch: &Launch,
+        (copied, session): (Option<&SpaceSelector>, &AgentSessionId),
         machine: &Member,
         origin: Option<&str>,
         caller: Option<&Caller>,
     ) -> Result<()> {
-        let Some(session) = &launch.fork else {
-            return Ok(());
-        };
-        let forked = (launch.parent.as_ref())
-            .context("a start that forks a session goes below the space whose agent it forks")?;
+        let forked = copied.or(launch.parent.as_ref()).context(
+            "a start that forks a session goes below the space whose agent it forks, or copies its workspace",
+        )?;
         (self.carry_session(machine, (forked, session), origin, caller)).await
     }
 
