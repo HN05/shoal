@@ -15,53 +15,34 @@ use crate::{
     protocol::{QueuedLaunches, UntrackedProcesses},
 };
 
-/// A space of another machine a stop takes.
-pub(super) struct Remote {
-    space: Listed,
-    /// Its machine's link to the hub is open, so the stop can be checked.
-    online: bool,
+/// The spaces of this machine among `located`.
+pub(super) fn here(located: &[Located]) -> Vec<Space> {
+    (located.iter())
+        .filter_map(|located| match located {
+            Located::Here(space) => Some((**space).clone()),
+            Located::Elsewhere { .. } => None,
+        })
+        .collect()
 }
 
-/// The spaces of this machine among `located`, and those of the others,
-/// each in the order the selection gives.
-pub(super) fn partition(located: Vec<Located>) -> (Vec<Space>, Vec<Remote>) {
-    let mut here = Vec::new();
-    let mut elsewhere = Vec::new();
-    for located in located {
-        match located {
-            Located::Here(space) => here.push(*space),
-            Located::Elsewhere { space, online, .. } => elsewhere.push(Remote {
-                space: *space,
-                online,
+/// What a stop of `located` checks before it stops any: each space here,
+/// and those elsewhere on connected machines, since a stop for an offline
+/// one waits for it unchecked.
+pub(super) fn checked(located: &[Located]) -> Vec<(String, SpaceSelector)> {
+    (located.iter())
+        .filter_map(|located| match located {
+            Located::Here(space) => Some((space.name.to_string(), SpaceSelector::id(&space.id))),
+            Located::Elsewhere { space, online, .. } => (*online).then(|| {
+                let space = &space.space;
+                (space.name.to_string(), SpaceSelector::id(&space.id))
             }),
-        }
-    }
-    (here, elsewhere)
-}
-
-/// What a stop of `here` and `elsewhere` checks before it stops any: each
-/// space here, and those elsewhere on connected machines, since a stop for
-/// an offline one waits for it unchecked.
-pub(super) fn checked(here: &[Space], elsewhere: &[Remote]) -> Vec<(String, SpaceSelector)> {
-    let here = (here.iter()).map(|space| (space.name.to_string(), SpaceSelector::id(&space.id)));
-    let elsewhere = (elsewhere.iter().filter(|remote| remote.online)).map(|remote| {
-        let space = &remote.space.space;
-        (space.name.to_string(), SpaceSelector::id(&space.id))
-    });
-    here.chain(elsewhere).collect()
-}
-
-/// Stop `spaces`, which other machines run, each on its machine.
-pub(super) async fn stop(ctx: &Context, spaces: Vec<Remote>, yes: bool) -> Result<()> {
-    for remote in spaces {
-        stop_one(ctx, &remote.space, yes).await?;
-    }
-    Ok(())
+        })
+        .collect()
 }
 
 /// Stop `space` on its machine, reporting it, or that the hub holds the
 /// stop.
-async fn stop_one(ctx: &Context, space: &Listed, yes: bool) -> Result<()> {
+pub(super) async fn stop_one(ctx: &Context, space: &Listed, yes: bool) -> Result<()> {
     let selector = SpaceSelector::id(&space.space.id);
     // A process here is none of that machine's.
     let processes = UntrackedProcesses::Stop { requester: None };

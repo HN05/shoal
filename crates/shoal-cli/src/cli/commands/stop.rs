@@ -12,6 +12,7 @@ use crate::{
     model::{Space, StoppedSpace},
     protocol::{ErrorCode, QueuedLaunches, RemoteError, UntrackedProcesses},
 };
+use shoal_protocol::model::Located;
 use shoal_protocol::space_names::SpaceSelector;
 
 mod batch;
@@ -48,16 +49,38 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
     // Every target is found, wherever it runs, and checked before any
     // stops.
     let located = crate::client::stopping::selection(&ctx.paths, selected, !skip_children);
-    let (selected, elsewhere) = elsewhere::partition(located.await?);
+    let located = located.await?;
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
-        ensure_below(&selected)?;
+        ensure_below(&elsewhere::here(&located))?;
     }
-    let checked = elsewhere::checked(&selected, &elsewhere);
+    let checked = elsewhere::checked(&located);
     if checked.len() > 1 {
         targets::check_targets(ctx, checked).await?;
     }
-    elsewhere::stop(ctx, elsewhere, yes).await?;
-    match selected.as_slice() {
+    stop_located(ctx, located, yes).await
+}
+
+/// Stop `located` in the selection's order, each space after the one above
+/// it: this machine's together where they follow each other, another
+/// machine's each on its machine.
+async fn stop_located(ctx: &Context, located: Vec<Located>, yes: bool) -> Result<i32> {
+    let mut code = 0;
+    let mut here = Vec::new();
+    for located in located {
+        match located {
+            Located::Here(space) => here.push(*space),
+            Located::Elsewhere { space, .. } => {
+                code = code.max(stop_here(ctx, &std::mem::take(&mut here), yes).await?);
+                elsewhere::stop_one(ctx, &space, yes).await?;
+            }
+        }
+    }
+    Ok(code.max(stop_here(ctx, &here, yes).await?))
+}
+
+/// Stop `spaces`, this machine's, reporting one alone and several each.
+async fn stop_here(ctx: &Context, spaces: &[Space], yes: bool) -> Result<i32> {
+    match spaces {
         [] => Ok(0),
         [space] => stop_one(ctx, space, yes).await,
         spaces => stop_each(ctx, spaces, "", yes).await,
