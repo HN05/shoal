@@ -125,10 +125,14 @@ service keeps the watches' running waits and the forge's remembered
 answers, builds the accounts requests go out as, finds where a request
 comes from and the repository it acts in, reads the forge, links items
 to spaces under their relations, issues as assigned with their forge
-assignees, and keeps the PR watches and merge acknowledgements of
-spaces, while the spaces, the forge each host serves, permission checks
-and the agents' records stay with the daemon, which its interface
-reaches. Its record functions read and write what spaces link, which
+assignees, keeps the PR watches and merge acknowledgements of spaces,
+polls their items in watches and in the background, follows the runs of
+their merges, reads failed check logs, and delivers the activity to
+agents, or through the hub to coordinators on other machines, while the
+spaces, the forge each host serves, permission checks, the agents'
+records and messages, and the hub stay with the daemon, which its
+interface reaches; whether an idle agent is due a wake is the agent
+queue's. Its record functions read and write what spaces link, which
 other subsystems call in their own transactions.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
 the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
