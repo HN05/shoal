@@ -42,7 +42,7 @@ pub async fn configured_environment(
     Ok(crate::env::render_configured_environment(
         &settings.env,
         workspace,
-        repo.display_name(),
+        Some(repo.display_name()),
         &crate::client::workspaces::inspect(paths, SpaceSelector::id(&workspace.id))
             .await?
             .ports,

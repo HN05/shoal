@@ -81,7 +81,7 @@ fn configured_values_render_identity_and_only_reserved_ports_once() {
     let rendered = render_configured_environment(
         &values,
         &workspace,
-        "project-{workspace}",
+        Some("project-{workspace}"),
         &ports,
         &caches,
         None,
@@ -117,7 +117,7 @@ fn the_temporary_directory_is_tmpdir_unless_env_sets_it() {
         render_configured_environment(
             values,
             &workspace,
-            "repo",
+            Some("repo"),
             &[],
             &BTreeMap::new(),
             Some(tmp_dir),
@@ -139,12 +139,81 @@ fn configured_paths_preserve_non_utf8_bytes() {
         crate::state::WorkspaceState::Ready,
     );
     let values = BTreeMap::from([("PROFILE".into(), "{workspace_path}/profile".into())]);
-    let rendered =
-        render_configured_environment(&values, &workspace, "repo", &[], &BTreeMap::new(), None);
+    let rendered = render_configured_environment(
+        &values,
+        &workspace,
+        Some("repo"),
+        &[],
+        &BTreeMap::new(),
+        None,
+    );
     assert_eq!(
         rendered["PROFILE"].as_os_str(),
         OsStr::from_bytes(b"/tmp/\xff/profile")
     );
+}
+
+/// A chat of the repository `repository_id`, or of none, that works in
+/// `/repo`.
+fn chat(repository_id: Option<&str>) -> crate::model::Chat {
+    serde_json::from_value(serde_json::json!({
+        "id": "chat", "number": 1, "repository_id": repository_id, "name": "talk",
+        "running": true, "workdir": {"kind": "checkout", "path": "/repo"},
+        "started_at": 0,
+    }))
+    .unwrap()
+}
+
+/// A configured value for each placeholder a chat may or may not fill.
+fn chat_values() -> BTreeMap<String, String> {
+    BTreeMap::from([
+        ("PROFILE".into(), "{path}/profile".into()),
+        ("SESSION".into(), "{workspace}".into()),
+        ("WORKTREE".into(), "{workspace_path}".into()),
+        ("BRANCH".into(), "x-{branch}".into()),
+        ("URL".into(), "http://localhost:{port.web}".into()),
+        ("PROJECT".into(), "{repo}".into()),
+        ("GOCACHE".into(), "{cache.go}".into()),
+        ("LITERAL".into(), "{unknown}".into()),
+    ])
+}
+
+#[test]
+fn a_chat_leaves_unset_what_names_a_worktree() {
+    let caches = BTreeMap::from([("go".into(), PathBuf::from("/caches/go"))]);
+    let rendered = render_configured_environment(
+        &chat_values(),
+        &chat(Some("repo")),
+        Some("project"),
+        &[],
+        &caches,
+        Some(Path::new("/tmp/chat")),
+    );
+    let expected = BTreeMap::from([
+        (TMPDIR.to_owned(), OsString::from("/tmp/chat")),
+        ("PROFILE".to_owned(), "/repo/profile".into()),
+        ("PROJECT".to_owned(), "project".into()),
+        ("GOCACHE".to_owned(), "/caches/go".into()),
+        ("LITERAL".to_owned(), "{unknown}".into()),
+    ]);
+    assert_eq!(rendered, expected);
+}
+
+#[test]
+fn a_chat_without_a_repository_leaves_its_fields_unset_too() {
+    let rendered = render_configured_environment(
+        &chat_values(),
+        &chat(None),
+        None,
+        &[],
+        &BTreeMap::new(),
+        None,
+    );
+    let expected = BTreeMap::from([
+        ("PROFILE".to_owned(), OsString::from("/repo/profile")),
+        ("LITERAL".to_owned(), "{unknown}".into()),
+    ]);
+    assert_eq!(rendered, expected);
 }
 
 /// The variables `command` sets, with `None` for those it removes.

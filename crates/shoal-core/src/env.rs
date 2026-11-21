@@ -35,31 +35,31 @@ pub fn agent_config_environment(
         .collect()
 }
 
-/// Render configured values once for `space`, after `tmp_dir`, its
-/// temporary directory, as [`TMPDIR`], which `[env]` may override: a
-/// workspace's placeholders where it owns a worktree, else `{path}`, the
-/// directory it works in, and `{repo}`. Inserted values are never scanned
+/// The placeholders only a workspace's worktree fills; `{port.` stands for
+/// every port's.
+const WORKTREE_FIELDS: [&str; 4] = ["{workspace}", "{workspace_path}", "{branch}", "{port."];
+
+/// The placeholders only a space of a repository fills; `{cache.` stands
+/// for every cache's.
+const REPOSITORY_FIELDS: [&str; 2] = ["{repo}", "{cache."];
+
+/// Render configured values once for `space`, of the repository named
+/// `repository_name` or of none, after `tmp_dir`, its temporary directory,
+/// as [`TMPDIR`], which `[env]` may override: a workspace's placeholders
+/// where it owns a worktree, else `{path}`, the directory it works in, and
+/// with a repository `{repo}` and its caches. A variable naming a
+/// placeholder the space lacks stays unset, so no value keeps one, such as
+/// a session every chat would share. Inserted values are never scanned
 /// again, matching the prompt template substitution rules.
 pub fn render_configured_environment<P: Part>(
     values: &BTreeMap<String, String>,
     space: &Space<P>,
-    repository_name: &str,
+    repository_name: Option<&str>,
     ports: &[PortReservation],
     caches: &BTreeMap<String, PathBuf>,
     tmp_dir: Option<&Path>,
 ) -> BTreeMap<String, OsString> {
-    let mut fields = match space.worktree() {
-        Some(worktree) => workspace_fields(
-            worktree.directory_name(),
-            &worktree.path,
-            worktree.branch().map(BranchName::as_str),
-            repository_name,
-        ),
-        None => vec![
-            ("{path}", space.workdir.path().as_os_str()),
-            ("{repo}", OsStr::new(repository_name)),
-        ],
-    };
+    let (mut fields, lacking) = space_fields(space, repository_name);
     let mut port_values = Vec::new();
     for port in ports {
         port_values.push((format!("{{port.{}}}", port.name), port.port.to_string()));
@@ -69,7 +69,43 @@ pub fn render_configured_environment<P: Part>(
             .iter()
             .map(|(name, value)| (name.as_str(), std::ffi::OsStr::new(value))),
     );
-    render_environment(values, fields, caches, tmp_dir)
+    render_environment(&without(values, &lacking), fields, caches, tmp_dir)
+}
+
+/// The placeholders `space` fills, and those it lacks: a worktree's, or
+/// `{path}`, with `{repo}` when it has a repository.
+fn space_fields<'a, P: Part>(
+    space: &'a Space<P>,
+    repository_name: Option<&'a str>,
+) -> (Vec<(&'a str, &'a OsStr)>, Vec<&'static str>) {
+    if let Some(worktree) = space.worktree() {
+        let fields = workspace_fields(
+            worktree.directory_name(),
+            &worktree.path,
+            worktree.branch().map(BranchName::as_str),
+            repository_name.unwrap_or_default(),
+        );
+        return (fields, Vec::new());
+    }
+    let path = ("{path}", space.workdir.path().as_os_str());
+    match repository_name {
+        Some(name) => (
+            vec![path, ("{repo}", OsStr::new(name))],
+            WORKTREE_FIELDS.to_vec(),
+        ),
+        None => (
+            vec![path],
+            [WORKTREE_FIELDS.as_slice(), &REPOSITORY_FIELDS].concat(),
+        ),
+    }
+}
+
+/// `values` without the variables whose value names one of `fields`.
+fn without(values: &BTreeMap<String, String>, fields: &[&str]) -> BTreeMap<String, String> {
+    (values.iter())
+        .filter(|(_, value)| !fields.iter().any(|field| value.contains(field)))
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect()
 }
 
 /// [`render_configured_environment`] for the seed build of `branch` in

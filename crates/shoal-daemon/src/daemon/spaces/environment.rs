@@ -47,7 +47,7 @@ impl Manager {
                 let mut values = env::render_configured_environment(
                     &configured,
                     &workspace,
-                    &repository_name,
+                    Some(&repository_name),
                     &ports,
                     &caches,
                     Some(&tmp_dir),

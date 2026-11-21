@@ -261,7 +261,7 @@ impl Home {
             } => crate::env::render_configured_environment(
                 &settings.env,
                 workspace,
-                repository.display_name(),
+                Some(repository.display_name()),
                 ports,
                 &directories.caches,
                 directories.tmp_dir.as_deref(),
