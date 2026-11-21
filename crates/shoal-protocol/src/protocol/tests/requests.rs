@@ -148,6 +148,7 @@ const REQUESTS: &[&str] = &[
     r#"{"launch_modes":{"launch":{"target":"app","machine":"laptop"}}}"#,
     r#"{"labelled_mode":{"launch":{"target":"https://forge.example/team/app/issues/42"}}}"#,
     r#"{"take_parent_repository":{"launch":{"branch":"fix","parent":"7"}}}"#,
+    r#"{"receive_session":{"origin":"https://forge.example/team/app","files":[{"agent":"claude","session":"s1","path":"p/s1.jsonl","size":12}]}}"#,
     r#""chat_root""#,
     // The agent queue.
     r#"{"queue_agent":{"workspace":"fix","launch":{"agent":null,"prompt":"Fix the build"}}}"#,
