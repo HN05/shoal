@@ -324,6 +324,20 @@ fn decode(row: Row) -> Result<(i64, Lapsed)> {
     Ok((seq, lapsed))
 }
 
+/// The calls the hub holds for `member` that it took since `since`.
+pub(super) fn held_since(
+    tx: &Transaction<'_>,
+    member: &MemberId,
+    since: UnixTime,
+) -> Result<Vec<Call>> {
+    let mut statement =
+        tx.prepare("SELECT call FROM hub_queue WHERE member_id=?1 AND queued_at>=?2")?;
+    let calls = statement.query_map(params![member, since], |row| row.get::<_, String>(0))?;
+    calls
+        .map(|call| serde_json::from_str(&call?).context("unreadable held call"))
+        .collect()
+}
+
 fn remove(tx: &Transaction<'_>, seq: i64) -> Result<()> {
     tx.execute("DELETE FROM hub_queue WHERE seq=?1", [seq])?;
     Ok(())

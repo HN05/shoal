@@ -634,7 +634,7 @@ CREATE TABLE hub_members (
     last_seen INTEGER,
     revoked_at INTEGER
 , battery INTEGER CHECK(battery IN (0,1)), availability TEXT NOT NULL DEFAULT 'auto'
-    CHECK(availability IN ('auto','always_on','intermittent')), present_since INTEGER);
+    CHECK(availability IN ('auto','always_on','intermittent')), present_since INTEGER, drop_alerted INTEGER);
 
 CREATE TABLE hub_membership (
     id INTEGER PRIMARY KEY CHECK(id = 1),
