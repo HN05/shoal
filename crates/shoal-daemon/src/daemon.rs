@@ -778,8 +778,8 @@ enum Accepted {
 
 /// The caller of a request this daemon's protocol reads and its scope
 /// allows, narrowing the request to that scope, or why the scope refused
-/// it; for one that `routing` lets go to another machine, first whether
-/// another machine runs the space it targets.
+/// it; unless another machine forwarded it here, which leaves `routing`
+/// none, first whether another machine runs the space it targets.
 async fn accept(
     stream: &mut UnixStream,
     server: &Server,

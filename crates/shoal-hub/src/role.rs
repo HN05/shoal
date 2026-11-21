@@ -23,6 +23,12 @@ impl Hub {
         self.hub_settings(daemon).is_some_and(|hub| hub.enabled)
     }
 
+    /// Whether this daemon reaches other machines now: as the hub, or
+    /// through its open link to one.
+    pub fn reaches_other_machines(&self, daemon: &dyn Daemon) -> bool {
+        self.is_hub(daemon) || self.member.calls().is_some()
+    }
+
     /// The hub role this daemon takes, for `shoal status`.
     pub async fn hub_role(&self, daemon: &dyn Daemon) -> Result<Option<HubRole>> {
         if self.is_hub(daemon) {

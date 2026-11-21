@@ -35,6 +35,9 @@ pub(super) async fn targeted(
     operation: &Operation,
 ) -> Option<anyhow::Error> {
     let space = target_space(operation.target()?, routing?.scope)?;
+    if !manager.hub.reaches_other_machines(manager) {
+        return None;
+    }
     // One this machine cannot read is left to its handler's refusal.
     if manager.holds_space(&space).await.unwrap_or(true) {
         return None;
