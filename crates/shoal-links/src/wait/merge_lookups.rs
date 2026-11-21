@@ -149,7 +149,7 @@ pub fn follow_merge(
 }
 
 /// The PR at `url`, when the space `id` watches it or links it as opened.
-pub fn followed_pr(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<Option<ItemRef>> {
+fn followed_pr(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<Option<ItemRef>> {
     let watched = crate::linked::assigned_items(db, id, Some(ItemKind::Pr))?;
     let opened = crate::linked::recorded_items(db, id, Relation::Opened)?;
     let opened = opened.into_iter().map(|item| item.url);
@@ -230,7 +230,7 @@ pub fn record_merge_runs(
 
 /// Link each of `runs` that `lookup` has not linked to the space `id`, and
 /// record it as the lookup's.
-pub fn link_new_runs(
+fn link_new_runs(
     links: &Links,
     db: &rusqlite::Connection,
     id: &SpaceId,
@@ -253,7 +253,7 @@ pub fn link_new_runs(
 /// merge when it `found_none`. The ended lookup stays, so a read that sees
 /// the merge later, such as a cursor that held older updates back, starts
 /// none again.
-pub fn end_lookup(
+fn end_lookup(
     db: &rusqlite::Connection,
     id: &SpaceId,
     lookup: &MergeLookup,
@@ -275,7 +275,7 @@ pub fn end_lookup(
 
 /// Link the run at `url` of `workflow` to the space `id` as related, unless
 /// it links the run already.
-pub fn link_merge_run(
+fn link_merge_run(
     service: &Links,
     db: &rusqlite::Connection,
     id: &SpaceId,
@@ -289,7 +289,7 @@ pub fn link_merge_run(
 }
 
 /// Whether the space `id` links the item at `url` under any relation.
-pub fn links(db: &rusqlite::Connection, id: &SpaceId, url: &ItemRef) -> Result<bool> {
+fn links(db: &rusqlite::Connection, id: &SpaceId, url: &ItemRef) -> Result<bool> {
     Ok(db
         .query_row(
             "SELECT 1 FROM space_items WHERE space_id=?1 AND url=?2",
@@ -302,7 +302,7 @@ pub fn links(db: &rusqlite::Connection, id: &SpaceId, url: &ItemRef) -> Result<b
 
 /// Whether the space `id` still links one of `runs` that it has not seen
 /// finish.
-pub fn any_running(db: &rusqlite::Connection, id: &SpaceId, runs: &[ItemRef]) -> Result<bool> {
+fn any_running(db: &rusqlite::Connection, id: &SpaceId, runs: &[ItemRef]) -> Result<bool> {
     for run in runs {
         if !run_finished(db, id, run)? && links(db, id, run)? {
             return Ok(true);
@@ -314,7 +314,7 @@ pub fn any_running(db: &rusqlite::Connection, id: &SpaceId, runs: &[ItemRef]) ->
 /// Whether a read of the space `id` saw the run at `url` finish: its watch
 /// cursor's, or the background poll's own, which no delivery the agent has
 /// not taken holds back.
-pub fn run_finished(db: &rusqlite::Connection, id: &SpaceId, run: &ItemRef) -> Result<bool> {
+fn run_finished(db: &rusqlite::Connection, id: &SpaceId, run: &ItemRef) -> Result<bool> {
     let watched = cursor_record(db, id, run.url())?;
     if watched.is_some_and(|record| record.snapshot.run_finished()) {
         return Ok(true);
@@ -353,14 +353,14 @@ pub fn merge_lookups(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<Merg
 
 /// What the lookup in `row` follows the merge of, from its `pr_url` and
 /// `remote_url`, of which the store holds exactly one.
-pub fn merged(row: &rusqlite::Row<'_>) -> rusqlite::Result<Merged> {
+fn merged(row: &rusqlite::Row<'_>) -> rusqlite::Result<Merged> {
     match row.get::<_, Option<ItemRef>>("pr_url")? {
         Some(pr) => Ok(Merged::Pr(pr)),
         None => Ok(Merged::Push(row.get("remote_url")?)),
     }
 }
 
-pub fn save_lookup(db: &rusqlite::Connection, id: &SpaceId, lookup: &MergeLookup) -> Result<()> {
+fn save_lookup(db: &rusqlite::Connection, id: &SpaceId, lookup: &MergeLookup) -> Result<()> {
     db.execute(
         "UPDATE merge_runs SET looking=?3, runs=?4 WHERE space_id=?1 AND merge_commit=?2",
         params![

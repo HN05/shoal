@@ -50,7 +50,7 @@ pub fn shown_items(
 
 /// The assigned issue and PRs of `kind`, or of every kind, and the runs
 /// `runs` lists when the kind takes runs.
-pub fn with_runs(
+fn with_runs(
     db: &rusqlite::Connection,
     id: &SpaceId,
     kind: Option<LinkKind>,
@@ -70,7 +70,7 @@ pub fn with_runs(
 }
 
 /// Every run the workspace links, oldest first.
-pub fn linked_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
+fn linked_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     Ok(db
         .prepare(
             "SELECT url FROM space_items WHERE space_id=?1 AND kind=?2
@@ -82,7 +82,7 @@ pub fn linked_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRe
 
 /// The workspace's linked runs, except those whose finish the workspace's
 /// cursor holds as delivered, which ends their watch.
-pub fn unfinished_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
+fn unfinished_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     let mut runs = linked_runs(db, id)?;
     let mut delivered = Vec::new();
     for url in &runs {
@@ -99,7 +99,7 @@ pub fn unfinished_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<It
 /// The workspace's linked runs the background poll has yet to see finish,
 /// or to queue the finish of on the workspace's cursor; the two are
 /// recorded apart, so a run is polled until both have it.
-pub fn unpolled_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
+fn unpolled_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     let mut runs = linked_runs(db, id)?;
     let mut finished = Vec::new();
     for url in &runs {
@@ -122,7 +122,7 @@ pub fn watches_open_pr(db: &rusqlite::Connection, id: &SpaceId) -> Result<bool> 
 }
 
 /// The PRs the workspace watches that no poll has seen merged or closed.
-pub fn open_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
+fn open_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     let mut open = Vec::new();
     for url in crate::linked::assigned_items(db, id, Some(ItemKind::Pr))? {
         if observed_item(db, id, url.url())?.is_none_or(|snapshot| !snapshot.concluded()) {
