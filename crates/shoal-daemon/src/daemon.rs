@@ -667,12 +667,22 @@ async fn serve_request(
     );
     let caller = match accepted.await? {
         Accepted::Caller(caller) => caller,
-        Accepted::Refused(error) | Accepted::Elsewhere(error) => {
+        Accepted::Refused(error) => {
             let failed = elsewhere::Failed {
                 error: &error,
                 refused: answer::refusal(&error),
                 routing,
                 caller: None,
+                operation: operation_guard,
+            };
+            return elsewhere::answer(stream, &server, request.id, failed).await;
+        }
+        Accepted::Elsewhere(targeted) => {
+            let failed = elsewhere::Failed {
+                error: &targeted.refusal,
+                refused: answer::refusal(&targeted.refusal),
+                routing,
+                caller: Some(targeted.caller),
                 operation: operation_guard,
             };
             return elsewhere::answer(stream, &server, request.id, failed).await;
@@ -771,7 +781,7 @@ enum Accepted {
     Refused(anyhow::Error),
     /// Another joined machine runs the space it targets, which this one
     /// refuses as absent.
-    Elsewhere(anyhow::Error),
+    Elsewhere(elsewhere::Targeted),
     /// It was answered already, as in another protocol.
     Answered,
 }
@@ -800,8 +810,8 @@ async fn accept(
         protocol::write(stream, &Response::new(request_id, body)).await?;
         return Ok(Accepted::Answered);
     }
-    if let Some(absent) = elsewhere::targeted(&server.manager, routing, operation).await {
-        return Ok(Accepted::Elsewhere(absent));
+    if let Some(targeted) = elsewhere::targeted(&server.manager, routing, operation).await {
+        return Ok(Accepted::Elsewhere(targeted));
     }
     Ok(
         match scope::authorize(&server.manager, scope, operation).await {

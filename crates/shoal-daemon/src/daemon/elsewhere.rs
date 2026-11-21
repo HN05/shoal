@@ -25,16 +25,18 @@ use super::{
 };
 use crate::refusal::Refusal;
 
-/// The refusal of `operation`, which goes to another machine as `routing`
-/// says, for the space it targets when this machine has none of it and the
-/// hub lists it on another, which answers it instead; none for a request
-/// this machine answers.
+/// What another machine answers `operation` from: the request's caller
+/// and its refusal here for the space it targets, when this machine has none
+/// of that space and the hub lists it on another; none for a request this
+/// machine answers, or whose scope token it does not know, which its scope
+/// check refuses.
 pub(super) async fn targeted(
     manager: &Manager,
     routing: Option<&Routing<'_>>,
     operation: &Operation,
-) -> Option<anyhow::Error> {
-    let space = target_space(operation.target()?, routing?.scope)?;
+) -> Option<Targeted> {
+    let routing = routing?;
+    let space = target_space(operation.target()?, routing.scope)?;
     if !manager.hub.reaches_other_machines(manager) {
         return None;
     }
@@ -42,10 +44,18 @@ pub(super) async fn targeted(
     if manager.holds_space(&space).await.unwrap_or(true) {
         return None;
     }
-    match manager.hub.machine_of(manager, &space).await {
-        Ok(Some(_)) => Some(Refusal::absent(&space, format!("no space {space}")).into()),
-        _ => None,
+    if !matches!(manager.hub.machine_of(manager, &space).await, Ok(Some(_))) {
+        return None;
     }
+    let caller = scoped_caller(manager, routing.scope).await.ok()??;
+    let refusal = Refusal::absent(&space, format!("no space {space}")).into();
+    Some(Targeted { caller, refusal })
+}
+
+/// A request another machine answers, as [`targeted`] finds it.
+pub(super) struct Targeted {
+    pub caller: Option<Caller>,
+    pub refusal: anyhow::Error,
 }
 
 /// The space `target` is in, for a request from `scope`; none where a
@@ -125,7 +135,11 @@ pub(super) async fn answer(
     };
     let caller = match caller {
         Some(caller) => caller,
-        None => scoped_caller(server, routing.scope).await?,
+        None => match scoped_caller(&server.manager, routing.scope).await? {
+            Some(caller) => caller,
+            // A token this daemon does not know vouches for no one.
+            None => return reply(&mut stream, request_id, refused).await,
+        },
     };
     let scope = routing.scope;
     let unanswered = Unanswered {
@@ -171,11 +185,16 @@ pub(super) async fn answer(
     }
 }
 
-/// The caller `scope` stands for, which its refusal left unresolved.
-async fn scoped_caller(server: &Server, scope: Option<&ScopeToken>) -> Result<Option<Caller>> {
+/// The caller `scope` stands for, which its refusal or the routing before
+/// it left unresolved, the user's none; none for a token this daemon does
+/// not know, such as an expired one.
+async fn scoped_caller(
+    manager: &Manager,
+    scope: Option<&ScopeToken>,
+) -> Result<Option<Option<Caller>>> {
     match scope {
-        Some(token) => server.manager.caller(token).await,
-        None => Ok(None),
+        Some(token) => Ok(manager.caller(token).await?.map(Some)),
+        None => Ok(Some(None)),
     }
 }
 
