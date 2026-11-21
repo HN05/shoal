@@ -819,6 +819,16 @@ fn a_merge_ends_activity_and_closing_ends_it_once_the_assignment_is_done() {
 }
 
 #[test]
+fn a_finished_run_ends_activity_only_once_the_assignment_is_done() {
+    use SnapshotState::*;
+    let run = |state| Snapshot::of(SnapshotKind::Run, Some(state));
+    // A rerun starts another attempt of a run that finished.
+    assert!(!run(Failed).activity_ended(false));
+    assert!(run(Failed).activity_ended(true));
+    assert!(!run(Running).activity_ended(true));
+}
+
+#[test]
 fn an_assignee_counts_as_removed_only_once_a_read_lacks_it() {
     let assigned = |logins: &[&str]| Snapshot {
         details: Some(ItemDetails {

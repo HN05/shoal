@@ -1,5 +1,4 @@
 use crate::model::Space;
-use shoal_links::wait::followed::{followed_items, polled_items};
 use shoal_refs::BranchName;
 use std::{
     sync::{Arc, LazyLock},
@@ -2132,7 +2131,16 @@ async fn polls_stop_looking_up_items_whose_activity_ended() {
         .await
         .unwrap();
     register_watch(&manager, &workspace.id, PR.as_str()).await;
-    // Nothing serves either item, so looking one up fails.
+    let run = crate::model::LinkedItem {
+        url: RUN.as_str().parse().unwrap(),
+        title: None,
+    };
+    manager
+        .links
+        .record_items(&workspace.id, vec![(crate::model::Relation::Related, run)])
+        .await
+        .unwrap();
+    // Nothing serves the items, so looking one up fails.
     let unfiltered = Selection::default();
     let poll = || {
         manager
@@ -2153,6 +2161,7 @@ async fn polls_stop_looking_up_items_whose_activity_ended() {
             vec![
                 (PR.as_str().into(), ended("merged")),
                 (ISSUE.as_str().into(), ended("closed")),
+                (RUN.as_str().into(), ended("failed")),
             ],
             &Selection::default(),
         )
@@ -2164,7 +2173,8 @@ async fn polls_stop_looking_up_items_whose_activity_ended() {
         .acknowledge_pr_updates(&*manager, &SpaceSelector::id(&workspace.id), deliveries)
         .await
         .unwrap();
-    // A closed issue may reopen while the assignment goes on.
+    // A closed issue may reopen, and a finished run start another attempt,
+    // while the assignment goes on.
     assert!(poll().await.is_err());
 
     let id = workspace.id.clone();
@@ -3167,11 +3177,6 @@ fn run_snapshot(state: &str) -> Snapshot {
     .unwrap()
 }
 
-/// The URLs of `items`.
-fn urls(items: &[crate::forge::items::reference::ItemRef]) -> Vec<&str> {
-    items.iter().map(|item| item.url()).collect()
-}
-
 #[tokio::test]
 async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
     let (root, manager) = manager().await;
@@ -3227,17 +3232,6 @@ async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
         )
         .await
         .unwrap();
-    let (watched, polled) = manager
-        .store
-        .run({
-            let id = id.clone();
-            move |db| Ok((followed_items(db, &id, None)?, polled_items(db, &id)?))
-        })
-        .await
-        .unwrap();
-    assert!(watched.is_empty(), "{watched:?}");
-    assert_eq!(urls(&polled), [RUN.as_str()]);
-
     // The background poll still records the finish on its own baseline.
     manager
         .links
@@ -3256,7 +3250,7 @@ async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
 }
 
 #[tokio::test]
-async fn background_polls_a_finished_run_until_its_finish_is_queued() {
+async fn a_watch_reports_each_attempt_of_a_linked_run() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
@@ -3277,32 +3271,31 @@ async fn background_polls_a_finished_run_until_its_finish_is_queued() {
         .record_items(&id, vec![(crate::model::Relation::Related, run)])
         .await
         .unwrap();
-    let polled = || {
+    let observe = |state: &str| {
+        let observations = vec![(RUN.to_owned(), run_snapshot(state))];
         let id = id.clone();
-        manager.store.run(move |db| polled_items(db, &id))
+        let manager = &*manager;
+        async move {
+            let updates = (manager.record_activity(&id, observations, &Selection::default()))
+                .await
+                .unwrap();
+            let deliveries = updates.iter().map(|update| update.delivery.clone());
+            manager
+                .links
+                .acknowledge_pr_updates(manager, &SpaceSelector::id(&id), deliveries.collect())
+                .await
+                .unwrap();
+            updates
+                .into_iter()
+                .map(|update| update.kind)
+                .collect::<Vec<_>>()
+        }
     };
-    // The poll is interrupted after recording the finish on its baseline.
-    let finished = vec![(RUN.to_owned(), run_snapshot("finished"))];
-    manager
-        .links
-        .record_background_activity(&*manager, &id, finished.clone())
-        .await
-        .unwrap();
-    assert_eq!(urls(&polled().await.unwrap()), [RUN.as_str()]);
-    // The next poll queues it for the agent's hooks, which ends the polling.
-    manager
-        .links
-        .queue_background_updates(&*manager, &id, finished, manager.links.poll_start())
-        .await
-        .unwrap();
-    assert!(polled().await.unwrap().is_empty());
-    let queued = manager
-        .links
-        .agent_updates(&*manager, &SpaceSelector::id(&id))
-        .await
-        .unwrap()
-        .updates;
-    assert_eq!(queued[0].kind, UpdateKind::CiCompleted, "{queued:?}");
+    assert!(observe("running").await.is_empty());
+    assert_eq!(observe("failed").await, [UpdateKind::CiCompleted]);
+    // A rerun opens the same run again, and its finish is reported anew.
+    assert!(observe("running").await.is_empty());
+    assert_eq!(observe("finished").await, [UpdateKind::CiCompleted]);
 }
 
 /// A workspace whose repository holds agent messages for a minute.

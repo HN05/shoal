@@ -169,9 +169,11 @@ impl Links {
         Some((branch, branch_conflicts(check.transpose()?, report)))
     }
 
-    /// The `items` whose activity is still to come: a merged PR has none,
-    /// and once the space's assignment is done neither has an item seen
-    /// closed, so a forge that cannot be reached fails no poll for them.
+    /// The `items` whose activity is still to come, as
+    /// [`Snapshot::activity_ended`] decides: a merged PR has none, and once
+    /// the space's assignment is done neither has an item seen closed nor a
+    /// run seen finished, so a forge that cannot be reached fails no poll
+    /// for them.
     pub async fn items_to_look_up(
         &self,
         space: &LinkSpace,

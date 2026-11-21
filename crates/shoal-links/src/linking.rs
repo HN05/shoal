@@ -1,7 +1,8 @@
 //! Linking issues, PRs and CI runs to spaces, workspaces and chats, by
 //! relation. Assigned items keep the issue and PR watch rules, which drive
 //! a workspace's completion and cleanup; opened and related items are only
-//! recorded, and watches follow linked runs until they finish.
+//! recorded, and watches report each finish of a linked run until the
+//! space is done.
 use std::sync::Arc;
 
 use anyhow::{Result, bail, ensure};

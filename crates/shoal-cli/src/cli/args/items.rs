@@ -20,8 +20,8 @@ pub enum ItemsCommand {
     /// Link an issue, PR, CI run or thread with a relation: `link 42 assigned`, `link ci 2765 related`.
     ///
     /// Assigned items drive completion and cleanup; opened and related items
-    /// are recorded only. A CI run is opened or related, and watches follow
-    /// it until it finishes. A thread you read is related, and its new posts
+    /// are recorded only. A CI run is opened or related, and watches report
+    /// each time it finishes until the space is done. A thread you read is related, and its new posts
     /// reach the space: `link thread 3.2 related`.
     Link {
         #[command(flatten)]

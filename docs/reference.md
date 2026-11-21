@@ -6173,10 +6173,13 @@ also when the opener fails; workspace processes cannot.
 seconds, and the daemon queues what its own polling of a space's linked items
 observes for the next watch, which returns at once: it polls every ready
 workspace and every chat of a repository, whether or not its agent runs; `watch pr`, `watch
-issue` or `watch ci` filters by kind. A run delivers one `ci_completed` update
-when it finishes, with its final state, `cancelled` for a failed run whose
+issue` or `watch ci` filters by kind. A run delivers a `ci_completed` update
+each time it finishes, with its final state, `cancelled` for a failed run whose
 jobs only stopped by being cancelled, each failed job's failing step where its
-log or Forgejo's step list names one, and a pointer to `shoal view ci`; its watch then ends. `watch <number-or-url>`, `watch pr <number-or-url>` and
+log or Forgejo's step list names one, and a pointer to `shoal view ci`. A
+finished run stays watched while it is linked, until the space is done, so a
+later attempt of it, an automatic retry, `shoal ci rerun` or a rerun on the
+forge, reports its finish the same way. `watch <number-or-url>`, `watch pr <number-or-url>` and
 `watch issue <number-or-url>` select an explicit item in the workspace's repository
 without linking it or changing completion policy; explicit PR watches also accept
 PRs whose head branch is in a fork. A [chat without a repository](#master-session)

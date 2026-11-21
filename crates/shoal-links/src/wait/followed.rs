@@ -17,21 +17,27 @@ use super::cursor::cursor_record;
 pub type LinkedItems =
     fn(&rusqlite::Connection, &SpaceId, Option<LinkKind>) -> Result<Vec<ItemRef>>;
 
-/// The items a watch of `kind`, or of every kind, follows: the assigned
-/// issue and PRs, and the linked runs whose finish it has yet to deliver.
+/// The items a watch of `kind`, or of every kind, and the background poll
+/// follow: the assigned issue and PRs, and every linked run, finished or
+/// not, since a rerun starts a new attempt of the same run. Lookups of an
+/// item whose activity ended stop apart from this, as
+/// [`Snapshot::activity_ended`] decides.
 pub fn followed_items(
     db: &rusqlite::Connection,
     id: &SpaceId,
     kind: Option<LinkKind>,
 ) -> Result<Vec<ItemRef>> {
-    with_runs(db, id, kind, unfinished_runs)
-}
-
-/// The items the background poll reads for integrations: the assigned issue
-/// and PRs, and the linked runs its own baseline has not seen finish, apart
-/// from what watches delivered.
-pub fn polled_items(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
-    with_runs(db, id, None, unpolled_runs)
+    let mut items = match kind {
+        None => crate::linked::assigned_items(db, id, None)?,
+        Some(kind) => match kind.item() {
+            Some(kind) => crate::linked::assigned_items(db, id, Some(kind))?,
+            None => Vec::new(),
+        },
+    };
+    if matches!(kind, None | Some(LinkKind::Ci)) {
+        items.extend(linked_runs(db, id)?);
+    }
+    Ok(items)
 }
 
 /// The items `shoal view` shows for `kind`, or every kind: every linked
@@ -48,27 +54,6 @@ pub fn shown_items(
         .collect())
 }
 
-/// The assigned issue and PRs of `kind`, or of every kind, and the runs
-/// `runs` lists when the kind takes runs.
-fn with_runs(
-    db: &rusqlite::Connection,
-    id: &SpaceId,
-    kind: Option<LinkKind>,
-    runs: fn(&rusqlite::Connection, &SpaceId) -> Result<Vec<ItemRef>>,
-) -> Result<Vec<ItemRef>> {
-    let mut items = match kind {
-        None => crate::linked::assigned_items(db, id, None)?,
-        Some(kind) => match kind.item() {
-            Some(kind) => crate::linked::assigned_items(db, id, Some(kind))?,
-            None => Vec::new(),
-        },
-    };
-    if matches!(kind, None | Some(LinkKind::Ci)) {
-        items.extend(runs(db, id)?);
-    }
-    Ok(items)
-}
-
 /// Every run the workspace links, oldest first.
 fn linked_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     Ok(db
@@ -78,41 +63,6 @@ fn linked_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> 
         )?
         .query_map(params![id, LinkKind::Ci], |row| row.get::<_, ItemRef>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?)
-}
-
-/// The workspace's linked runs, except those whose finish the workspace's
-/// cursor holds as delivered, which ends their watch.
-fn unfinished_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
-    let mut runs = linked_runs(db, id)?;
-    let mut delivered = Vec::new();
-    for url in &runs {
-        let record = cursor_record(db, id, url.url())?;
-        if record.is_some_and(|record| record.pending.is_empty() && record.snapshot.run_finished())
-        {
-            delivered.push(url.clone());
-        }
-    }
-    runs.retain(|url| !delivered.contains(url));
-    Ok(runs)
-}
-
-/// The workspace's linked runs the background poll has yet to see finish,
-/// or to queue the finish of on the workspace's cursor; the two are
-/// recorded apart, so a run is polled until both have it.
-fn unpolled_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
-    let mut runs = linked_runs(db, id)?;
-    let mut finished = Vec::new();
-    for url in &runs {
-        let observed = observed_item(db, id, url.url())?;
-        let queued = cursor_record(db, id, url.url())?;
-        if observed.is_some_and(|snapshot| snapshot.run_finished())
-            && queued.is_some_and(|record| record.snapshot.run_finished())
-        {
-            finished.push(url.clone());
-        }
-    }
-    runs.retain(|url| !finished.contains(url));
-    Ok(runs)
 }
 
 /// Whether the workspace watches a PR that no poll has seen merged or

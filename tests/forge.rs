@@ -4736,7 +4736,7 @@ fn forgejo_ci_runs_link_the_run_they_start() {
 }
 
 #[test]
-fn linked_runs_are_viewed_and_watched_until_they_finish() {
+fn linked_runs_are_viewed_and_watched_for_each_finish() {
     let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
     let respond = |status: &str| {
         fixture.respond(json!({
@@ -4806,16 +4806,16 @@ fn linked_runs_are_viewed_and_watched_until_they_finish() {
     );
     let message = update["message"].as_str().unwrap_or_default();
     assert!(message.contains("Tests"), "{finished}");
-    // The run's watch has ended, but it stays linked.
-    let output = fixture.run(&[
+    // The finished run stays watched for a later attempt.
+    let rerun = fixture.ok(&[
         "watch",
         "ci",
         "--space",
         &fixture.id("topic"),
         "--timeout",
-        "600",
+        "1",
     ]);
-    assert!(!output.status.success(), "{}", printed(&output));
+    assert_eq!(rerun["updates"], json!([]), "{rerun}");
     let viewed = fixture.ok(&["view", "ci", "--space", &fixture.id("topic")]);
     assert_eq!(viewed[0]["state"], "failed", "{viewed}");
     let output = fixture.run(&["ready", "ci", "--space", &fixture.id("topic")]);
@@ -4910,7 +4910,7 @@ fn a_chat_links_views_and_watches_items_as_a_workspace_does() {
     let viewed = fixture.ok(&["view", "ci", "--space", &fixture.id("planning")]);
     assert_eq!(viewed[0]["state"], "running", "{viewed}");
 
-    // The chat watches its run until it finishes, as a workspace does.
+    // The chat watches its run as a workspace does.
     let running = fixture.ok(&[
         "watch",
         "ci",

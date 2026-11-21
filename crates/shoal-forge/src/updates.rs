@@ -278,7 +278,7 @@ impl Snapshot {
         Some(change)
     }
 
-    /// Whether the snapshot shows a finished run, whose activity has ended.
+    /// Whether the snapshot shows a finished run.
     pub fn run_finished(&self) -> bool {
         matches!(
             self.state,
@@ -295,9 +295,11 @@ impl Snapshot {
     }
 
     /// Whether the item's activity ended: a PR merged, or, once the
-    /// assignment watching it is `done`, an item closed.
+    /// assignment watching it is `done`, an item closed or a run finished.
+    /// Until then a finished run may start another attempt.
     pub fn activity_ended(&self, done: bool) -> bool {
-        self.state == Some(SnapshotState::Merged) || (done && self.concluded())
+        self.state == Some(SnapshotState::Merged)
+            || (done && (self.concluded() || self.run_finished()))
     }
 
     /// The message for a conflict `next` reports that `self` had not.
