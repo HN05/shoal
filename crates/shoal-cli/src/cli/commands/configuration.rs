@@ -1,5 +1,6 @@
 use crate::config_file::ConfigExt;
 use anyhow::{Context as _, Result, ensure};
+use std::path::PathBuf;
 
 use crate::client::output::{
     config::{Edited, Reference},
@@ -47,24 +48,31 @@ pub(super) fn unsets(keys: Vec<String>) -> Vec<Change> {
         .collect()
 }
 
-pub(super) async fn edit(
-    ctx: &Context,
-    changes: Vec<Change>,
-    repository: Option<String>,
-) -> Result<i32> {
-    if let Some(repository) = repository {
-        let repository = crate::cli::ui::repository_selector(repository)?;
-        // The daemon edits the file, holding off moves and removal; it reads
-        // the file on each request, so nothing reloads.
-        let edit =
-            crate::client::repositories::edit_local_config(&ctx.paths, repository, changes).await?;
-        ctx.emit(&format!("Updated {}", edit.config.display()), &edit)?;
-        return Ok(0);
+/// The config file a `config set` or `unset` edits.
+pub(super) enum EditedFile {
+    Global,
+    Shared,
+    /// The local config of the repository the selector names.
+    Local(String),
+}
+
+impl EditedFile {
+    pub(super) fn new(repository: Option<String>, shared: bool) -> Self {
+        match (repository, shared) {
+            (Some(repository), _) => Self::Local(repository),
+            (None, true) => Self::Shared,
+            (None, false) => Self::Global,
+        }
     }
-    ensure_edits_held(ctx, &changes).await?;
-    let admin = crate::config::permissions::PermissionKey::Admin;
-    crate::cli::commands::authorization::authorize_key(ctx, admin).await?;
-    let (path, backup) = crate::config::Config::edit(&ctx.paths, &changes)?;
+}
+
+pub(super) async fn edit(ctx: &Context, changes: Vec<Change>, file: EditedFile) -> Result<i32> {
+    let (path, backup) = match file {
+        EditedFile::Local(repository) => return edit_local(ctx, changes, repository).await,
+        EditedFile::Global => edit_global(ctx, &changes).await?,
+        // Only the user's own terminal gets here: see `belongs_to_user`.
+        EditedFile::Shared => crate::config::Config::edit_shared(&ctx.paths, &changes)?,
+    };
     let reloaded = reload_daemon(ctx).await;
     ctx.emit(
         &reload_message(format!("Updated {}", path.display()), reloaded),
@@ -74,6 +82,26 @@ pub(super) async fn edit(
             daemon_reloaded: reloaded,
         },
     )?;
+    Ok(0)
+}
+
+/// Save `changes` to this machine's global file, as the caller's `admin`
+/// permission allows.
+async fn edit_global(ctx: &Context, changes: &[Change]) -> Result<(PathBuf, Option<PathBuf>)> {
+    ensure_edits_held(ctx, changes).await?;
+    let admin = crate::config::permissions::PermissionKey::Admin;
+    crate::cli::commands::authorization::authorize_key(ctx, admin).await?;
+    crate::config::Config::edit(&ctx.paths, changes)
+}
+
+/// Edit a repository's local config through the daemon, which holds off
+/// moves and removal; it reads the file on each request, so nothing
+/// reloads.
+async fn edit_local(ctx: &Context, changes: Vec<Change>, repository: String) -> Result<i32> {
+    let repository = crate::cli::ui::repository_selector(repository)?;
+    let edit =
+        crate::client::repositories::edit_local_config(&ctx.paths, repository, changes).await?;
+    ctx.emit(&format!("Updated {}", edit.config.display()), &edit)?;
     Ok(0)
 }
 
@@ -95,7 +123,7 @@ pub(super) async fn reload(ctx: &Context) -> Result<i32> {
     );
     ctx.emit_styled(
         Style::Success,
-        "Daemon reloaded the global config",
+        "Daemon reloaded the global and shared config",
         Reloaded { reloaded: true },
     )?;
     Ok(0)

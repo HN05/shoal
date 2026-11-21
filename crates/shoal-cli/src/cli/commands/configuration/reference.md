@@ -47,8 +47,8 @@ Mode instructions and rule text may also live in Markdown files; see
 [modes and rules](#modes-and-rules).
 
 `shoal config show` prints every effective option with the layer that set it,
-`shoal config set` and `unset` edit the global file, or with `--repo` a
-repository's local config, and `shoal config reference` prints this document;
+`shoal config set` and `unset` edit the global file, with `--shared` the shared
+config, or with `--repo` a repository's local config, and `shoal config reference` prints this document;
 see [inspect effective configuration](../../../../../../docs/reference.md#inspect-effective-configuration).
 `shoal config` edits apply to a running daemon at once. After editing the global
 or shared file by hand, run `shoal config reload`; an invalid file leaves the daemon's

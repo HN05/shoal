@@ -22,7 +22,7 @@ pub(super) async fn authorize(ctx: &Context, command: &Command) -> Result<()> {
     // catches a process that cleared its token.
     ensure!(
         !(command.belongs_to_user() && crate::process::scoped::inherits_scope(&ctx.paths.state)),
-        "only the user's own terminal, or a command it runs, such as over ssh, changes the hub's machines or relays to the daemon"
+        "only the user's own terminal, or a command it runs, such as over ssh, changes the hub's machines or the shared config, or relays to the daemon"
     );
     match command.permission() {
         Some(key) => authorize_in(ctx, key, command.repository()).await,

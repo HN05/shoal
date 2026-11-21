@@ -290,13 +290,17 @@ impl Command {
     }
 
     /// Whether only the user's own terminal runs the command: what changes
-    /// the hub's machines or this machine's membership of the hub, and the
-    /// relay to the daemon's socket, over which a member joins as the user.
+    /// the hub's machines or this machine's membership of the hub, the
+    /// shared config, which reaches every machine, and the relay to the
+    /// daemon's socket, over which a member joins as the user.
     pub fn belongs_to_user(&self) -> bool {
         matches!(
             self,
             Command::Service(
-                ServiceCommand::Hub {
+                ServiceCommand::Config {
+                    command: ConfigCommand::Set { shared: true, .. }
+                        | ConfigCommand::Unset { shared: true, .. },
+                } | ServiceCommand::Hub {
                     command: HubCommand::Pair
                         | HubCommand::Join(_)
                         | HubCommand::Leave

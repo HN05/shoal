@@ -165,6 +165,21 @@ fn config_show_and_reference_are_available_to_workspace_processes() {
 }
 
 #[test]
+fn only_the_users_terminal_edits_the_shared_config() {
+    let parsed = |args: &[&str]| Cli::try_parse_from(args).unwrap().command.unwrap();
+    for verb in [
+        ["set", "agent.default", "codex"].as_slice(),
+        &["unset", "agent.default"],
+    ] {
+        let mut args = vec!["shoal", "config"];
+        args.extend(verb);
+        assert!(!parsed(&args).belongs_to_user(), "{args:?}");
+        args.push("--shared");
+        assert!(parsed(&args).belongs_to_user(), "{args:?}");
+    }
+}
+
+#[test]
 fn the_daemon_permission_governs_the_service_commands() {
     let reload = Cli::try_parse_from(["shoal", "config", "reload"]).unwrap();
     assert_eq!(reload.command.unwrap().permission(), None);

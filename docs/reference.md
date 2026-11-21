@@ -3788,6 +3788,11 @@ shoal config set machine.simulators.profiles.phone.device '"iPhone 17"' \
 
 An invalid result leaves both files unchanged.
 
+`--shared` makes `set` and `unset` edit the shared config, `shared.toml` beside
+the global file, saving only a result that is valid on its own and under this
+machine's global file; edits of the global file check it over the shared config
+in turn. Only the user's own terminal edits the shared config.
+
 ### Store repository config outside Git
 
 ```sh

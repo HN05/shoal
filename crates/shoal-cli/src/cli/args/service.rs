@@ -50,6 +50,9 @@ pub enum ConfigCommand {
         /// Edit this repository's local config instead of the global file.
         #[arg(short = 'r', long = "repo")]
         repository: Option<String>,
+        /// Edit the shared config, shared.toml, instead of the global file.
+        #[arg(long, conflicts_with = "repository")]
+        shared: bool,
     },
     /// Remove config keys or tables, falling back to lower layers or defaults.
     Unset {
@@ -58,6 +61,9 @@ pub enum ConfigCommand {
         /// Edit this repository's local config instead of the global file.
         #[arg(short = 'r', long = "repo")]
         repository: Option<String>,
+        /// Edit the shared config, shared.toml, instead of the global file.
+        #[arg(long, conflicts_with = "repository")]
+        shared: bool,
     },
     /// Show effective repository settings and the layer each value came from.
     Show {

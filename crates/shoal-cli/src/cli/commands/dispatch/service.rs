@@ -17,9 +17,18 @@ pub(in crate::cli::commands) async fn run(
             ConfigCommand::Set {
                 assignments,
                 repository,
-            } => configuration::edit(&ctx, configuration::sets(assignments)?, repository).await,
-            ConfigCommand::Unset { keys, repository } => {
-                configuration::edit(&ctx, configuration::unsets(keys), repository).await
+                shared,
+            } => {
+                let file = configuration::EditedFile::new(repository, shared);
+                configuration::edit(&ctx, configuration::sets(assignments)?, file).await
+            }
+            ConfigCommand::Unset {
+                keys,
+                repository,
+                shared,
+            } => {
+                let file = configuration::EditedFile::new(repository, shared);
+                configuration::edit(&ctx, configuration::unsets(keys), file).await
             }
             ConfigCommand::Show {
                 workspace,

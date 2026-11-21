@@ -151,6 +151,10 @@ pub trait ConfigExt: Sized {
     /// Apply `changes` together, saving only when the result is valid.
     fn edit(paths: &Paths, changes: &[edit::Change]) -> Result<(PathBuf, Option<PathBuf>)>;
 
+    /// Apply `changes` to the shared config together, saving only when it
+    /// is valid on its own and under this machine's own file.
+    fn edit_shared(paths: &Paths, changes: &[edit::Change]) -> Result<(PathBuf, Option<PathBuf>)>;
+
     fn install_named(paths: &Paths, name: &str) -> Result<(PathBuf, Option<PathBuf>)>;
 
     /// [`Self::load`] under both files' edit locks, so a concurrent edit is
@@ -177,6 +181,19 @@ impl ConfigExt for Config {
             Self::parse_over(edited, &shared, paths)
                 .map(drop)
                 .context("invalid edited config")
+        })
+    }
+
+    fn edit_shared(paths: &Paths, changes: &[edit::Change]) -> Result<(PathBuf, Option<PathBuf>)> {
+        let own = Self::path(paths);
+        let own = fsutil::read_optional(&own)
+            .with_context(|| format!("read {}", own.display()))?
+            .unwrap_or_default();
+        edit(Shared::path(paths), changes, |edited| {
+            let shared = Shared::parse(edited, paths).context("invalid edited shared config")?;
+            Self::parse_over(&own, &shared, paths)
+                .map(drop)
+                .context("the edited shared config does not combine with this machine's config")
         })
     }
 

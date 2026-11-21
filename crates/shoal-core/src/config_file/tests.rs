@@ -118,3 +118,23 @@ fn dependent_global_edits_validate_together() {
             .is_empty()
     );
 }
+
+#[test]
+fn shared_edits_must_combine_with_this_machines_file() {
+    let home = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(home.path());
+    crate::test_support::write_beside_global_config(&paths, "config.toml", "ports.end = 55000\n");
+    let start = |value| [change("ports.start", Some(value))];
+    assert!(Config::edit_shared(&paths, &start("60000")).is_err());
+    assert!(!Shared::path(&paths).exists());
+    let (path, _) = Config::edit_shared(&paths, &start("50000")).unwrap();
+    assert_eq!(path, home.path().join(".config/shoal/shared.toml"));
+    let ports = Config::load(&paths)
+        .unwrap()
+        .global_settings()
+        .unwrap()
+        .ports;
+    assert_eq!((ports.start, ports.end), (50000, 55000));
+    // This machine's edits check against the shared file in turn.
+    assert!(edit_one(&paths, "ports.end", Some("45000")).is_err());
+}
