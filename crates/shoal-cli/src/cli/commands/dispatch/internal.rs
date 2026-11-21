@@ -1,13 +1,14 @@
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::executions::TrackedAgent;
+use shoal_workers::agent_hooks;
 
 use crate::{
     cli::{
         args::internal::InternalCommand,
         commands::{
-            agent_state, alerts, approvals, changes, demo, environment, events, menu, progress,
-            sessions, subagents, worktree_hooks,
+            alerts, approvals, changes, demo, environment, events, menu, progress, sessions,
+            subagents, worktree_hooks,
         },
         context::Context,
         terminal,
@@ -33,13 +34,16 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             state,
             ends_turn,
             space,
-        } => agent_state::run(&ctx, space, state, ends_turn).await,
+        } => {
+            let report = (state, ends_turn);
+            agent_hooks::turns::report_state(&ctx.paths, ctx.json, space, report).await
+        }
         InternalCommand::Change { integration } => changes::report(&ctx, integration).await,
         InternalCommand::Plan { integration, space } => {
             progress::report_plan(&ctx, space, integration).await
         }
         InternalCommand::TurnFailed { integration, space } => {
-            agent_state::turn_failed(&ctx, space, integration).await
+            agent_hooks::turns::report_failure(&ctx.paths, ctx.json, space, integration).await
         }
         InternalCommand::Wake {
             agent,

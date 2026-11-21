@@ -46,7 +46,7 @@ pub(super) async fn report(
     space: Option<SpaceSelector>,
     integration: IntegrationKind,
 ) -> Result<i32> {
-    let event = super::agent_state::hook_event();
+    let event = shoal_workers::agent_hooks::input::event();
     let change = event.and_then(|event| crate::cli::agents::subagent_change(integration, &event));
     let Some(change) = change else {
         return Ok(0);

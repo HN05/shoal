@@ -13,7 +13,7 @@ pub(in crate::cli::commands) async fn report(
     ctx: &Context,
     integration: IntegrationKind,
 ) -> Result<i32> {
-    let Some(event) = super::super::agent_state::hook_event() else {
+    let Some(event) = shoal_workers::agent_hooks::input::event() else {
         return Ok(0);
     };
     let Some(change) = crate::cli::agents::tool_change(integration, &event) else {

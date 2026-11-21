@@ -4,7 +4,6 @@ use crate::paths::PathsExt;
 mod absorb;
 mod acquisition;
 mod adopt;
-mod agent_state;
 mod alerts;
 mod api;
 mod approvals;

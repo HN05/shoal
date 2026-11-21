@@ -126,7 +126,7 @@ async fn ending_signal() -> WakeEnd {
 /// restore. A failed report still delivers, since without the turn the agent
 /// would stay idle.
 async fn woken_turn_starts(ctx: &Context, inbox: &Inbox) -> bool {
-    super::super::super::agent_state::start_woken_turn(ctx, inbox.space.clone())
+    crate::client::agents::start_woken_turn(&ctx.paths, inbox.space.clone())
         .await
         .unwrap_or_else(|error| {
             eprintln!("shoal: the woken turn was not reported: {error:#}");

@@ -359,14 +359,6 @@ pub(in crate::cli) fn interrupt_key(settings: &Effective, name: &Agent) -> Optio
     agent_integration(settings, name).interrupt_key()
 }
 
-/// The failure an agent with integration `kind` reports in `event`.
-pub(in crate::cli) fn turn_failure(
-    kind: IntegrationKind,
-    event: &serde_json::Value,
-) -> Option<crate::state::TurnFailure> {
-    integration(kind).turn_failure(event)
-}
-
 /// The change to its running subagents that `event`, from a subagent hook
 /// of an agent with integration `kind`, reports.
 pub(in crate::cli) fn subagent_change(
