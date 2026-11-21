@@ -1,3 +1,5 @@
+use shoal_links::runs::reach::branch_in_reach;
+
 use crate::daemon::{
     scope::Caller,
     test_support::{chat, manager, repository, workspace_below},
@@ -27,8 +29,7 @@ async fn a_scope_reaches_the_default_branch_and_its_workspaces_branches() {
             read_only: false,
             vouched: None,
         };
-        manager
-            .branch_in_reach(&caller, &repo.id, branch)
+        branch_in_reach(&*manager, &caller, &repo.id, branch)
             .await
             .unwrap()
     };

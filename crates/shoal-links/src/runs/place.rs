@@ -3,34 +3,35 @@
 //! repository `--repo` or a run's or workflow's URL names, which a scoped
 //! caller only reads, and the branch a run starts on there.
 use anyhow::{Context, Result, ensure};
-use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
-use shoal_links::place::{Access, Place};
-use shoal_links::target::ForgeTarget;
-
-use crate::{
-    daemon::{manager::Manager, scope::Caller},
-    forge::{
-        ForgeRepo,
-        items::{
-            link::{LinkKind, Selection},
-            reference::{ItemInput, ItemRef},
-        },
-    },
-    model::Workspace,
-    protocol::RepoTarget,
-};
+use shoal_daemon_base::callers::Caller;
 use shoal_forge::{
     account::Account,
     ci::workflow::{WorkflowRequests, is_workflow_url},
 };
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_forge_types::{
+    ForgeRepo,
+    items::{
+        link::{LinkKind, Selection},
+        reference::{ItemInput, ItemRef},
+    },
+};
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_protocol::{model::Workspace, protocol::RepoTarget, space_names::SpaceSelector};
+
+use crate::{
+    Links,
+    daemon::Daemon,
+    forges,
+    place::{Access, Place},
+    target::ForgeTarget,
+};
 
 /// The refusal of a workspace process's watch of a run of another
 /// repository.
-pub(super) const ELSEWHERE: &str = "workspace processes watch only CI runs of their own repository";
+pub const ELSEWHERE: &str = "workspace processes watch only CI runs of their own repository";
 
 /// The repository a CI run request acts in and the account it acts as.
-pub(in crate::daemon::links) struct RunPlace {
+pub(crate) struct RunPlace {
     pub target: ForgeTarget,
     forge: ForgeRepo,
     pub account: Account,
@@ -81,23 +82,21 @@ impl RunPlace {
     }
 }
 
-impl Manager {
+impl Links {
     /// Where a request from `target` acts with `access` on the run or
     /// workflow of `named`, the repository its URL names, if any: as the
     /// account of the place it comes from in its own repository, and
     /// elsewhere as the caller to read and the user to change.
-    pub(in crate::daemon::links) async fn run_place(
+    pub(crate) async fn run_place(
         &self,
+        daemon: &dyn Daemon,
         target: &RepoTarget,
         named: Option<ForgeRepo>,
         access: Access,
         caller: Option<&Caller>,
     ) -> Result<RunPlace> {
-        let target = self
-            .links
-            .forge_target(self, target, named, access, caller)
-            .await?;
-        let account = self.links.target_account(&target, access, caller);
+        let target = (self.forge_target(daemon, target, named, access, caller)).await?;
+        let account = self.target_account(&target, access, caller);
         let forge = target.forge()?.clone();
         Ok(RunPlace {
             target,
@@ -108,60 +107,65 @@ impl Manager {
 
     /// Where a request acts with `access` on the run `input`, its web URL
     /// or the number in it, names, and the run.
-    pub(in crate::daemon::links) async fn named_run(
+    pub(crate) async fn named_run(
         &self,
+        daemon: &dyn Daemon,
         target: &RepoTarget,
         input: &ItemInput,
         access: Access,
         caller: Option<&Caller>,
     ) -> Result<(RunPlace, ItemRef)> {
-        let named = shoal_links::forges::of_input(self, input).await?;
-        let place = self.run_place(target, named, access, caller).await?;
+        let named = forges::of_input(daemon, input).await?;
+        let place = (self.run_place(daemon, target, named, access, caller)).await?;
         let run = ItemRef::in_repository(place.forge(), LinkKind::Ci, input)?;
         Ok((place, run))
     }
 
     /// Where a request starts the workflow `input` names, by its file or ID
     /// or by its web URL, with the workflow and the branch the URL names.
-    pub(in crate::daemon::links) async fn workflow_place(
+    pub(crate) async fn workflow_place(
         &self,
+        daemon: &dyn Daemon,
         target: &RepoTarget,
         input: Option<String>,
         caller: Option<&Caller>,
     ) -> Result<(RunPlace, Option<String>, Option<String>)> {
         let Some(url) = input.as_deref().filter(|input| is_workflow_url(input)) else {
-            let place = self.run_place(target, None, Access::Change, caller).await?;
+            let place = (self.run_place(daemon, target, None, Access::Change, caller)).await?;
             return Ok((place, input, None));
         };
-        let hosts = self.forge_hosts();
-        let (named, link) = ForgeRepo::resolve_workflow_url(url, &hosts).await?;
-        let place = (self.run_place(target, Some(named), Access::Change, caller)).await?;
-        Ok((place, Some(link.workflow), link.branch))
+        let (named, link) = daemon.resolve_workflow(url).await?;
+        let place = self.run_place(daemon, target, Some(named), Access::Change, caller);
+        Ok((place.await?, Some(link.workflow), link.branch))
     }
 
     /// Refuse a workspace process the explicitly selected run of another
     /// repository than its space's, which a watch would read with the user's
     /// own logins. A chat without a repository counts every registered
     /// repository as its own, and its watch reads no other.
-    pub(in crate::daemon) async fn ensure_own_repository_run(
+    pub async fn ensure_own_repository_run(
         &self,
+        daemon: &dyn Daemon,
         selector: &SpaceSelector,
         selection: &Selection,
     ) -> Result<()> {
         let (Some(LinkKind::Ci), Some(input)) = (selection.kind, selection.input.as_ref()) else {
             return Ok(());
         };
-        let Some(named) = shoal_links::forges::of_input(self, input).await? else {
+        let Some(named) = forges::of_input(daemon, input).await? else {
             return Ok(());
         };
-        if self.space(selector).await?.repository_id.as_ref().is_none() {
+        if daemon
+            .space(selector)
+            .await?
+            .repository_id
+            .as_ref()
+            .is_none()
+        {
             return Ok(());
         }
-        let space = self.links.link_space(self, selector).await?;
-        ensure!(
-            named == shoal_links::forges::of_space(self, &space).await?,
-            ELSEWHERE
-        );
+        let space = self.link_space(daemon, selector).await?;
+        ensure!(named == forges::of_space(daemon, &space).await?, ELSEWHERE);
         Ok(())
     }
 }

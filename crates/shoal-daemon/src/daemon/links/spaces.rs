@@ -9,7 +9,7 @@ use shoal_links::{
 
 use crate::{
     config::Effective,
-    daemon::manager::Manager,
+    daemon::{manager::Manager, scope::Caller},
     forge::items::{
         link::{ItemKind, Selection},
         reference::ItemRef,
@@ -89,6 +89,27 @@ impl Spaces for Manager {
 
     fn tracked_agents(&self) -> BoxFuture<'_, Vec<SpaceId>> {
         Box::pin(async { self.running_agent_workspaces().await })
+    }
+
+    fn repository_workspaces<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<Vec<Workspace>>> {
+        Box::pin(Manager::repository_workspaces(self, id))
+    }
+
+    fn reached_workspaces<'a>(
+        &'a self,
+        caller: &'a Caller,
+    ) -> BoxFuture<'a, Result<Vec<Workspace>>> {
+        Box::pin(async move {
+            let root = self.reach_root(Some(caller)).await?;
+            self.list_workspaces_within(root.as_ref()).await
+        })
+    }
+
+    fn reaches<'a>(&'a self, caller: &'a Caller, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(Manager::reaches(self, caller, id))
     }
 
     fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>> {

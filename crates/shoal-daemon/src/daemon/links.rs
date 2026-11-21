@@ -1,8 +1,6 @@
 //! What the daemon keeps of the issues, PRs and CI runs spaces link until
 //! it moves into `shoal-links`, and whether a space takes link changes.
 mod actions;
-pub(in crate::daemon) mod branches;
-mod ci;
 mod elsewhere;
 mod forges;
 pub mod issue;
@@ -19,7 +17,6 @@ mod raw;
 mod reads;
 pub(crate) mod records;
 mod revert;
-mod run_approval;
 mod runs;
 pub(crate) mod space;
 mod spaces;

@@ -5,33 +5,32 @@
 //! own logins.
 mod deletion;
 
-use shoal_links::place::Access;
 use std::path::Path;
 
 use anyhow::Result;
 use futures_util::{StreamExt, TryStreamExt, stream};
-use shoal_refs::{BranchName, CommitId};
-
-use crate::{
+use shoal_core::git;
+use shoal_daemon_base::callers::Caller;
+use shoal_forge::{account::Account, branches::BranchRequests, ci::workflow::WorkflowRequests};
+use shoal_forge_types::{
+    ForgeRepo,
+    branches::{ForgeBranch, OpenPull},
+};
+use shoal_protocol::{
     branches::{BranchSpace, ListedBranch, SpaceWork},
-    daemon::{manager::Manager, scope::Caller},
-    forge::{
-        ForgeRepo,
-        branches::{ForgeBranch, OpenPull},
-    },
-    git,
     model::{Repository, Workspace},
     protocol::RepoTarget,
 };
-use shoal_forge::{account::Account, branches::BranchRequests, ci::workflow::WorkflowRequests};
-use shoal_links::target::ForgeTarget;
+use shoal_refs::{BranchName, CommitId};
+
+use crate::{Links, daemon::Daemon, place::Access, target::ForgeTarget};
 
 /// How many branches the merged check reads at once.
 const CHECKS_AT_ONCE: usize = 8;
 
 /// A repository's branches on its forge as the daemon read them, with what
 /// a deletion needs beyond them.
-pub(in crate::daemon) struct ReadBranches {
+pub struct ReadBranches {
     pub forge: ForgeRepo,
     pub account: Account,
     /// The registered repository they are the branches of; none for one
@@ -49,40 +48,39 @@ struct Context<'a> {
     workspaces: &'a [Workspace],
 }
 
-impl Manager {
+impl Links {
     /// The branches on the forge of the `target` repository, only those
     /// whose merged state is known to be `merged` when it is given.
     pub async fn list_branches(
         &self,
+        daemon: &dyn Daemon,
         target: &RepoTarget,
         merged: Option<bool>,
         caller: Option<&Caller>,
     ) -> Result<Vec<ListedBranch>> {
-        let read = self.read_branches(target, Access::Read, caller).await?;
+        let read = (self.read_branches(daemon, target, Access::Read, caller)).await?;
         let wanted = |branch: &ListedBranch| merged.is_none() || branch.merged == merged;
         Ok(read.listed.into_iter().filter(wanted).collect())
     }
 
     /// The branches on the forge of the `target` repository, read for
     /// `access` as [`Self::read_account`] chooses.
-    pub(in crate::daemon) async fn read_branches(
+    pub async fn read_branches(
         &self,
+        daemon: &dyn Daemon,
         target: &RepoTarget,
         access: Access,
         caller: Option<&Caller>,
     ) -> Result<ReadBranches> {
-        let target = self
-            .links
-            .forge_target(self, target, None, access, caller)
-            .await?;
-        let checkout = self.target_checkout(&target).await?;
-        let (forge, account) = (target.into_forge()?, self.links.read_account(caller));
+        let target = (self.forge_target(daemon, target, None, access, caller)).await?;
+        let checkout = target_checkout(daemon, &target).await?;
+        let (forge, account) = (target.into_forge()?, self.read_account(caller));
         let (branches, pulls, default) = tokio::try_join!(
             forge.branches(&account),
             forge.open_pulls(&account),
             forge.default_branch(&account),
         )?;
-        let workspaces = self.checkout_workspaces(checkout.as_ref()).await?;
+        let workspaces = checkout_workspaces(daemon, checkout.as_ref()).await?;
         let context = Context {
             default: &BranchName::from(default),
             pulls: &pulls,
@@ -98,23 +96,25 @@ impl Manager {
             pulls,
         })
     }
+}
 
-    /// The workspaces of `checkout`'s repository; none outside a registered
-    /// one.
-    async fn checkout_workspaces(&self, checkout: Option<&Repository>) -> Result<Vec<Workspace>> {
-        match checkout {
-            Some(checkout) => self.repository_workspaces(&checkout.id).await,
-            None => Ok(Vec::new()),
-        }
+/// The workspaces of `checkout`'s repository; none outside a registered one.
+async fn checkout_workspaces(
+    daemon: &dyn Daemon,
+    checkout: Option<&Repository>,
+) -> Result<Vec<Workspace>> {
+    match checkout {
+        Some(checkout) => daemon.repository_workspaces(&checkout.id).await,
+        None => Ok(Vec::new()),
     }
+}
 
-    /// The registered repository a request acts in as its own; none for
-    /// another one.
-    async fn target_checkout(&self, target: &ForgeTarget) -> Result<Option<Repository>> {
-        match target.own_place() {
-            Some(place) => Ok(Some(self.repository(place.repository_id()).await?)),
-            None => Ok(None),
-        }
+/// The registered repository a request acts in as its own; none for
+/// another one.
+async fn target_checkout(daemon: &dyn Daemon, target: &ForgeTarget) -> Result<Option<Repository>> {
+    match target.own_place() {
+        Some(place) => Ok(Some(daemon.repository(place.repository_id()).await?)),
+        None => Ok(None),
     }
 }
 

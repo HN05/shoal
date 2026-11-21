@@ -19,7 +19,10 @@ pub(super) async fn handle(
 ) -> Result<Answer> {
     match method {
         BranchMethod::ListForgeBranches { target, merged } => {
-            let listed = manager.list_branches(&target, merged, caller).await;
+            let listed = manager
+                .links
+                .list_branches(&**manager, &target, merged, caller)
+                .await;
             Ok(Answer::pages(listed, Body::ForgeBranches))
         }
         BranchMethod::DeleteForgeBranches {
@@ -27,7 +30,9 @@ pub(super) async fn handle(
             branches,
             force,
         } => {
-            let deleted = manager.delete_branches(&target, &branches, force, caller);
+            let deleted = manager
+                .links
+                .delete_branches(&**manager, &target, &branches, force, caller);
             Ok(Answer::pages(deleted.await, Body::DeletedBranches))
         }
     }

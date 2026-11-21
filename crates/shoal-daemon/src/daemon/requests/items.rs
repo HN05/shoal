@@ -276,7 +276,8 @@ impl Scoped for ItemMethod {
                 ..
             } => {
                 manager
-                    .ensure_own_repository_run(workspace, selection)
+                    .links
+                    .ensure_own_repository_run(manager, workspace, selection)
                     .await?;
                 Some(workspace)
             }

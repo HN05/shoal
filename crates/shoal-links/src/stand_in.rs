@@ -12,23 +12,25 @@ use shoal_daemon_base::{
     notifications::{Coordinators, Source},
     permitted_actions::Action,
 };
+use shoal_forge::ci::workflow::WorkflowLink;
 use shoal_forge_types::{
     ForgeRepo,
     items::{
         link::{ItemKind, Selection},
-        reference::{ItemInput, ItemRef},
+        reference::ItemRef,
     },
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    model::{ConflictCheck, LinkedItem, Repository, Selected, Space, SpaceRef, Workspace},
+    config::permissions::PermissionKey,
+    model::{ConflictCheck, Repository, Selected, Space, SpaceRef, Workspace},
     processes::Leftover,
     space_names::SpaceSelector,
 };
 use tokio::sync::watch;
 
 use crate::{
-    daemon::{Elsewhere, Forges, Messages, Permissions, Runs, SpaceAgent, Spaces, Watches},
+    daemon::{Elsewhere, Forges, Messages, Permissions, SpaceAgent, Spaces, Watches},
     space::LinkSpace,
 };
 
@@ -109,6 +111,21 @@ impl Spaces for StandIn {
         Box::pin(async { Vec::new() })
     }
 
+    fn repository_workspaces<'a>(
+        &'a self,
+        _: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<Vec<Workspace>>> {
+        Box::pin(async { bail!(NOT_HERE) })
+    }
+
+    fn reached_workspaces<'a>(&'a self, _: &'a Caller) -> BoxFuture<'a, Result<Vec<Workspace>>> {
+        Box::pin(async { bail!(NOT_HERE) })
+    }
+
+    fn reaches<'a>(&'a self, _: &'a Caller, _: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { bail!(NOT_HERE) })
+    }
+
     fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>> {
         Box::pin(async { Ok(Vec::new()) })
     }
@@ -118,17 +135,6 @@ impl Spaces for StandIn {
         _: &'a SpaceSelector,
         _: bool,
     ) -> BoxFuture<'a, Result<Option<ConflictCheck>>> {
-        Box::pin(async { bail!(NOT_HERE) })
-    }
-}
-
-impl Runs for StandIn {
-    fn linked_run<'a>(
-        &'a self,
-        _: &'a LinkSpace,
-        _: &'a ItemInput,
-        _: Option<&'a Caller>,
-    ) -> BoxFuture<'a, Result<LinkedItem>> {
         Box::pin(async { bail!(NOT_HERE) })
     }
 }
@@ -211,6 +217,13 @@ impl Forges for StandIn {
         Box::pin(async { bail!(NOT_HERE) })
     }
 
+    fn resolve_workflow<'a>(
+        &'a self,
+        _: &'a str,
+    ) -> BoxFuture<'a, Result<(ForgeRepo, WorkflowLink)>> {
+        Box::pin(async { bail!(NOT_HERE) })
+    }
+
     fn item_forge<'a>(&'a self, _: &'a ItemRef) -> BoxFuture<'a, Result<ForgeRepo>> {
         Box::pin(async { bail!(NOT_HERE) })
     }
@@ -221,6 +234,23 @@ impl Permissions for StandIn {
         &'a self,
         _: Option<&'a Caller>,
         _: Action,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn authorize_actions<'a>(
+        &'a self,
+        _: Option<&'a Caller>,
+        _: Vec<Action>,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn refuse_denied<'a>(
+        &'a self,
+        _: &'a Caller,
+        _: PermissionKey,
+        _: Option<&'a RepositoryId>,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { Ok(()) })
     }

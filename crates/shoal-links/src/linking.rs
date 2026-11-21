@@ -160,7 +160,7 @@ impl Links {
         caller: Option<&Caller>,
     ) -> Result<()> {
         let space = self.link_space(daemon, selector).await?;
-        let item = daemon.linked_run(&space, input, caller).await?;
+        let item = self.linked_run(daemon, &space, input, caller).await?;
         self.record_items(&space.id, vec![(relation, item)]).await
     }
 

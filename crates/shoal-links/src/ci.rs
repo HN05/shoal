@@ -1,24 +1,27 @@
 //! Rerunning failed and cancelling running CI jobs on a PR's current head,
 //! as the agent account of the workspace or registered checkout.
 use anyhow::{Context, Result};
+use shoal_daemon_base::{callers::Caller, events};
+use shoal_forge::ci::{CiRequests, checks::validate_check_name};
+use shoal_forge_types::{
+    ci::{CiActed, CiAction},
+    items::{link::ItemKind, reference::ItemInput},
+};
 use shoal_ids::space_ids::SpaceId;
-use shoal_links::place::{Access, Place};
+use shoal_protocol::protocol::RepoTarget;
 
 use crate::{
-    daemon::{events, manager::Manager, scope::Caller},
-    forge::{
-        ci::{CiActed, CiAction},
-        items::{link::ItemKind, reference::ItemInput},
-    },
-    protocol::RepoTarget,
+    Links,
+    daemon::Daemon,
+    place::{Access, Place},
 };
-use shoal_forge::ci::{CiRequests, checks::validate_check_name};
 
-impl Manager {
+impl Links {
     /// Rerun the failed, or cancel the running, `checks` of a PR in the
     /// `target` repository, or every such CI job when none is named.
     pub async fn ci_action(
         &self,
+        daemon: &dyn Daemon,
         target: &RepoTarget,
         item: Option<ItemInput>,
         action: CiAction,
@@ -28,11 +31,9 @@ impl Manager {
         for check in &checks {
             validate_check_name(check)?;
         }
-        let acted =
-            self.links
-                .target_item(self, target, item, ItemKind::Pr, Access::Change, caller);
+        let acted = self.target_item(daemon, target, item, ItemKind::Pr, Access::Change, caller);
         let (target, pull) = acted.await?;
-        let account = self.links.target_account(&target, Access::Change, caller);
+        let account = self.target_account(&target, Access::Change, caller);
         let (forge, number, url) = (target.forge()?, pull.pull()?, pull.to_string());
         let plan = forge
             .plan_ci(&account, number, action, &checks)

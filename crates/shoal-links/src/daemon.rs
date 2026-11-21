@@ -1,5 +1,6 @@
 //! What links need of the rest of the daemon, which implements it: the
-//! registered repositories and the spaces requests come from, the watches
+//! registered repositories, the spaces requests come from and the
+//! workspaces a scope reaches, the watches
 //! of their linked items, the messages agents receive beside them, the
 //! hub their activity goes up through, which forge
 //! each host serves, the permission a scoped caller acts with, the
@@ -15,16 +16,18 @@ use shoal_daemon_base::{
     notifications::Coordinators,
     permitted_actions::Action,
 };
+use shoal_forge::ci::workflow::WorkflowLink;
 use shoal_forge_types::{
     ForgeRepo,
     items::{
         link::{ItemKind, Selection},
-        reference::{ItemInput, ItemRef},
+        reference::ItemRef,
     },
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    model::{ConflictCheck, LinkedItem, Repository, Selected, Space, SpaceRef, Workspace},
+    config::permissions::PermissionKey,
+    model::{ConflictCheck, Repository, Selected, Space, SpaceRef, Workspace},
     processes::Leftover,
     space_names::SpaceSelector,
 };
@@ -93,6 +96,21 @@ pub trait Spaces: Send + Sync {
     /// The spaces whose agent the daemon tracks.
     fn tracked_agents(&self) -> BoxFuture<'_, Vec<SpaceId>>;
 
+    /// The workspaces of the registered repository `id`.
+    fn repository_workspaces<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<Vec<Workspace>>>;
+
+    /// The workspaces `caller`'s scope reaches.
+    fn reached_workspaces<'a>(
+        &'a self,
+        caller: &'a Caller,
+    ) -> BoxFuture<'a, Result<Vec<Workspace>>>;
+
+    /// Whether `caller`'s scope reaches the space `id`.
+    fn reaches<'a>(&'a self, caller: &'a Caller, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;
+
     /// Every space present on this machine.
     fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>>;
 
@@ -104,19 +122,6 @@ pub trait Spaces: Send + Sync {
         selector: &'a SpaceSelector,
         only_sensitive: bool,
     ) -> BoxFuture<'a, Result<Option<ConflictCheck>>>;
-}
-
-/// The CI runs spaces link, which the daemon reads until they move.
-pub trait Runs: Send + Sync {
-    /// The CI run `input` names, by number in the repository `space` acts
-    /// in or by URL, as `caller` may link it, with its workflow as its
-    /// title.
-    fn linked_run<'a>(
-        &'a self,
-        space: &'a LinkSpace,
-        input: &'a ItemInput,
-        caller: Option<&'a Caller>,
-    ) -> BoxFuture<'a, Result<LinkedItem>>;
 }
 
 /// What the daemon wakes for the watches of a space's linked items.
@@ -203,6 +208,23 @@ pub trait Permissions: Send + Sync {
         caller: Option<&'a Caller>,
         action: Action,
     ) -> BoxFuture<'a, Result<()>>;
+
+    /// Let `caller` take each of `actions` together: none is taken until
+    /// all may be.
+    fn authorize_actions<'a>(
+        &'a self,
+        caller: Option<&'a Caller>,
+        actions: Vec<Action>,
+    ) -> BoxFuture<'a, Result<()>>;
+
+    /// Refuse `caller` the actions `key` governs in `repository` where its
+    /// space's permission for it is `deny`, before the work that names one.
+    fn refuse_denied<'a>(
+        &'a self,
+        caller: &'a Caller,
+        key: PermissionKey,
+        repository: Option<&'a RepositoryId>,
+    ) -> BoxFuture<'a, Result<()>>;
 }
 
 /// The forges repositories are on, by the forge each host serves.
@@ -218,6 +240,13 @@ pub trait Forges: Send + Sync {
         named: &'a str,
     ) -> BoxFuture<'a, Result<ForgeRepo>>;
 
+    /// The repository the workflow URL `url` names, with the workflow and
+    /// the branch it names.
+    fn resolve_workflow<'a>(
+        &'a self,
+        url: &'a str,
+    ) -> BoxFuture<'a, Result<(ForgeRepo, WorkflowLink)>>;
+
     /// The forge the repository of `item` is on.
     fn item_forge<'a>(&'a self, item: &'a ItemRef) -> BoxFuture<'a, Result<ForgeRepo>>;
 }
@@ -225,12 +254,12 @@ pub trait Forges: Send + Sync {
 /// Everything links need of the daemon, which each of their operations
 /// that reaches beyond them takes.
 pub trait Daemon:
-    Spaces + Watches + Messages + Elsewhere + Runs + Forges + Permissions + Coordinators
+    Spaces + Watches + Messages + Elsewhere + Forges + Permissions + Coordinators
 {
 }
 
 impl<T> Daemon for T where
-    T: Spaces + Watches + Messages + Elsewhere + Runs + Forges + Permissions + Coordinators
+    T: Spaces + Watches + Messages + Elsewhere + Forges + Permissions + Coordinators
 {
 }
 

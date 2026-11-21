@@ -19,11 +19,17 @@ pub(super) async fn handle(
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
         CiMethod::CiRunJobs { target, run } => {
-            let listed = manager.ci_run_jobs(&target, run, caller).await;
+            let listed = manager
+                .links
+                .ci_run_jobs(&**manager, &target, run, caller)
+                .await;
             return Ok(Answer::pages(listed, Body::CiRunJobs));
         }
         CiMethod::ListCiRuns { target, pr, filter } => {
-            let listed = manager.list_ci_runs(&target, pr, filter, caller).await;
+            let listed = manager
+                .links
+                .list_ci_runs(&**manager, &target, pr, filter, caller)
+                .await;
             return Ok(Answer::pages(listed, Body::CiRuns));
         }
         CiMethod::CheckLog {
@@ -42,7 +48,8 @@ pub(super) async fn handle(
             checks,
         } => Body::CiActed(
             manager
-                .ci_action(&target, item, action, checks, caller)
+                .links
+                .ci_action(&**manager, &target, item, action, checks, caller)
                 .await?,
         ),
         CiMethod::CiRunAction {
@@ -52,18 +59,26 @@ pub(super) async fn handle(
             failed,
         } => Body::CiRunActed(
             manager
-                .ci_run_action(&target, run, action, failed, caller)
+                .links
+                .ci_run_action(&**manager, &target, run, action, failed, caller)
                 .await?,
         ),
-        CiMethod::ApproveCiRuns { target, run, pr } => {
-            Body::CiRunsApproved(manager.approve_ci_runs(&target, run, pr, caller).await?)
-        }
-        CiMethod::ViewCiRun { target, run } => {
-            Body::CiRun(manager.view_ci_run(&target, run, caller).await?)
-        }
+        CiMethod::ApproveCiRuns { target, run, pr } => Body::CiRunsApproved(
+            manager
+                .links
+                .approve_ci_runs(&**manager, &target, run, pr, caller)
+                .await?,
+        ),
+        CiMethod::ViewCiRun { target, run } => Body::CiRun(
+            manager
+                .links
+                .view_ci_run(&**manager, &target, run, caller)
+                .await?,
+        ),
         CiMethod::CiRunJobLog { target, run, job } => {
             let log = manager
-                .ci_run_job_log(&target, run, job, caller)
+                .links
+                .ci_run_job_log(&**manager, &target, run, job, caller)
                 .await
                 .and_then(|log| super::items::json_pieces(&log));
             return Ok(Answer::pages(log, Body::ViewPieces));
@@ -75,7 +90,8 @@ pub(super) async fn handle(
             inputs,
         } => Body::CiRunStarted(
             manager
-                .start_ci_run(&target, workflow, branch, inputs, caller)
+                .links
+                .start_ci_run(&**manager, &target, workflow, branch, inputs, caller)
                 .await?,
         ),
     }))
