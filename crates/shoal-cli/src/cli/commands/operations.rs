@@ -27,22 +27,21 @@ where
 {
     let id =
         crate::client::operations::start(&ctx.paths, spec, crate::env::without_secrets()).await?;
-    follow_started(ctx, id).await
+    follow_started(ctx, OperationRef::here(id)).await
 }
 
-/// Follow operation `id`, which the daemon started for a request of this
+/// Follow `operation`, which the daemon started for a request of this
 /// command, to its end, returning what it did.
-pub(super) async fn follow_started<T>(ctx: &Context, id: String) -> Result<T>
+pub(super) async fn follow_started<T>(ctx: &Context, operation: OperationRef) -> Result<T>
 where
     T: TryFrom<Outcome, Error = anyhow::Error>,
 {
-    T::try_from(follow(ctx, id).await?)
+    T::try_from(follow(ctx, operation).await?)
 }
 
-/// Follow operation `id` to its end, as [`show`] shows it, returning how it
+/// Follow `operation` to its end, as [`show`] shows it, returning how it
 /// did.
-async fn follow(ctx: &Context, id: String) -> Result<Outcome> {
-    let operation = OperationRef::here(id);
+async fn follow(ctx: &Context, operation: OperationRef) -> Result<Outcome> {
     let mut following = Following::open(&ctx.paths, operation.clone(), 0).await?;
     let shown = (&operation, Lines::Command);
     match show(ctx, shown, async || following.next().await).await? {

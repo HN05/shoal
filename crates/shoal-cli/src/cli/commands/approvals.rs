@@ -17,6 +17,7 @@ use crate::{
     },
     client::approvals,
 };
+use shoal_protocol::protocol::operations::OperationRef;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     approvals::{
@@ -302,13 +303,8 @@ pub(super) async fn submit(
         && request.status == DecisionStatus::Pending
     {
         let space = SpaceSelector::id(&request.space_id);
-        match super::machines::space_elsewhere(ctx, &space).await? {
-            None => request = super::operations::follow_started(ctx, operation).await?,
-            Some(_) => eprintln!(
-                "The push runs on the machine of space {}; shoal approvals {} shows its outcome",
-                request.space_id, request.number
-            ),
-        }
+        let operation = OperationRef::in_space(operation, space);
+        request = super::operations::follow_started(ctx, operation).await?;
     }
     for warning in &request.warnings {
         eprintln!("{warning}");
