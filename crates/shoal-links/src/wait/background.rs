@@ -87,7 +87,7 @@ impl Links {
     /// whose merges it follows, and record and queue what changed.
     async fn poll_space_items(&self, daemon: &dyn Daemon, space: &LinkSpace) -> Result<()> {
         let id = space.id.to_owned();
-        let items = self.store.run(move |db| polled_items(db, &id)).await?;
+        let items = self.store.read(move |db| polled_items(db, &id)).await?;
         let opened = self.opened_prs_to_follow(daemon, &space.id).await?;
         if items.is_empty() && opened.is_empty() {
             return Ok(());

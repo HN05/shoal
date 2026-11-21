@@ -216,7 +216,7 @@ impl Links {
             let child_id = child.id.clone();
             let keys = self
                 .store
-                .run(move |db| followed_items(db, &child_id, kind))
+                .read(move |db| followed_items(db, &child_id, kind))
                 .await?
                 .into_iter()
                 .map(|url| url.to_string())
@@ -246,7 +246,7 @@ impl Links {
         let id = space.id.clone();
         let items = self
             .store
-            .run(move |db| followed_items(db, &id, kind))
+            .read(move |db| followed_items(db, &id, kind))
             .await?;
         let branch = (space.worktree())
             .filter(|_| kind.is_none())
@@ -269,7 +269,7 @@ impl Links {
         let (id, records) = (id.to_owned(), self.records.clone());
         let agents = daemon.tracked_agents().await;
         (self.store)
-            .run(move |db| records.delegated(db, &id, &agents))
+            .read(move |db| records.delegated(db, &id, &agents))
             .await
     }
 }

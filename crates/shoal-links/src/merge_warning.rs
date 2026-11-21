@@ -139,7 +139,7 @@ impl Links {
     pub async fn recorded_for_pull(&self, url: ItemRef) -> Result<Vec<ChangedOnBothSides>> {
         let records = self.records.clone();
         self.store
-            .run(move |db| {
+            .read(move |db| {
                 let mut found = Vec::new();
                 for (id, record) in records.changed_on_both_sides(db)? {
                     if links_pull(db, &id, &url)? {

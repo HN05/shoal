@@ -30,7 +30,7 @@ impl Links {
         let agents = daemon.tracked_agents().await;
         let records = self.records.clone();
         let groups = (self.store)
-            .run(move |db| records.delegated_elsewhere(db, &agents))
+            .read(move |db| records.delegated_elsewhere(db, &agents))
             .await?;
         for (above, spaces) in groups {
             self.pass_up_group(daemon, &above, &spaces).await;

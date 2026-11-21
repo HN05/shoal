@@ -33,7 +33,7 @@ impl Links {
                 let (workspace, update) = &batch[0];
                 let (workspace, delivery) = (workspace.clone(), update.delivery.clone());
                 self.store
-                    .run(move |db| redeliver_after(db, &workspace, &delivery, fitting))
+                    .write(move |tx| redeliver_after(tx, &workspace, &delivery, fitting))
                     .await?;
                 batch.truncate(fitting);
             }

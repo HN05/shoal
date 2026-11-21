@@ -88,7 +88,7 @@ impl Links {
     async fn ensure_links_accepted(&self, id: &SpaceId) -> Result<()> {
         let (id, records) = (id.to_owned(), self.records.clone());
         self.store
-            .run(move |db| records.ensure_accepts_links(db, &id))
+            .read(move |db| records.ensure_accepts_links(db, &id))
             .await
     }
 
@@ -249,7 +249,7 @@ impl Links {
     async fn linked_pr(&self, id: &SpaceId) -> Result<Option<ItemRef>> {
         let id = id.to_owned();
         let prs = (self.store)
-            .run(move |db| crate::linked::assigned_items(db, &id, Some(ItemKind::Pr)))
+            .read(move |db| crate::linked::assigned_items(db, &id, Some(ItemKind::Pr)))
             .await?;
         match prs.as_slice() {
             [] => Ok(None),

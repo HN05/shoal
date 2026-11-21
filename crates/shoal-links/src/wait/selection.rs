@@ -167,6 +167,6 @@ impl Links {
         }
         let id = space.id.to_owned();
         let kind = selection.kind;
-        self.store.run(move |db| linked(db, &id, kind)).await
+        self.store.read(move |db| linked(db, &id, kind)).await
     }
 }

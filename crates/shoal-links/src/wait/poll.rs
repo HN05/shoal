@@ -179,7 +179,7 @@ impl Links {
     ) -> Result<Vec<ItemRef>> {
         let (id, done) = (space.id.to_owned(), space.done());
         self.store
-            .run(move |db| {
+            .read(move |db| {
                 let mut open = Vec::new();
                 for url in items {
                     if !activity_ended(db, &id, url.url(), done)? {
