@@ -207,6 +207,35 @@ fn a_restart_names_the_machine_of_the_space_and_fails_at_once_while_it_is_offlin
 }
 
 #[test]
+fn an_offline_machine_s_last_report_reaches_only_a_caller_whose_scope_reaches_it() {
+    let (hub, laptop, there) = laptop_space();
+    let here = workspace(&hub, "here");
+    reroute(&laptop, Some("false"));
+    wait_for("the hub to see the laptop go", || {
+        let members = hub.ok(&["hub", "ls"])["members"].clone();
+        let laptop = (members.as_array().unwrap().iter()).find(|member| member["name"] == "laptop");
+        (laptop?["connected"] == false).then_some(())
+    });
+    let reported = hub.ok(&["status", &there]);
+    assert_eq!(reported["machine"]["name"], "laptop", "{reported}");
+    // A space's process outside it reads none of it.
+    let mut command = hub.command();
+    command.args([
+        "run",
+        "--workspace",
+        &here,
+        "--",
+        shoal_binary(),
+        "status",
+        &there,
+    ]);
+    let refused = command.output().unwrap();
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    let error = String::from_utf8_lossy(&refused.stderr);
+    assert!(error.contains("outside this space's scope"), "{error}");
+}
+
+#[test]
 fn a_space_s_files_list_from_its_machine_and_attaching_one_from_here_names_it() {
     let (hub, laptop, there) = laptop_space();
     let note = laptop.root.path().join("note.md");

@@ -142,11 +142,10 @@ impl Hub {
             return Err(Refusal::new(Reason::NotReady, message).into());
         };
         if request.forwarding == Forwarding::Reported && !machine.connected {
-            let reported = ReportedStatus {
-                space: listed.clone(),
-                machine: machine.clone(),
-            };
-            return Ok(Elsewhere::Reported(Box::new(reported)));
+            return self
+                .reported(daemon, machine, space, listed, request.caller)
+                .await
+                .map(Elsewhere::Reported);
         }
         let delivery = match request.forwarding {
             Forwarding::Queued => Delivery::Queued,
@@ -191,6 +190,31 @@ impl Hub {
             Reply::Queued(queued) => Ok(Elsewhere::Queued(queued)),
             reply => Err(anyhow!("the hub answered with an unexpected {reply:?}")),
         }
+    }
+
+    /// What the offline `machine` last reported of the space `space` names,
+    /// as the hub lists it in `listed`, for `caller`, whose scope must reach
+    /// it, as the owning machine would check.
+    async fn reported(
+        &self,
+        daemon: &dyn Daemon,
+        machine: &Member,
+        space: &SpaceSelector,
+        listed: &Listed,
+        caller: Option<&Caller>,
+    ) -> Result<Box<ReportedStatus>> {
+        if let Some(caller) = caller
+            && !self
+                .reaches_elsewhere(daemon, caller, &listed.space.id)
+                .await?
+        {
+            let message = format!("space {space} is outside this space's scope");
+            return Err(Refusal::new(Reason::NotFound, message).into());
+        }
+        Ok(Box::new(ReportedStatus {
+            space: listed.clone(),
+            machine: machine.clone(),
+        }))
     }
 
     /// The answer `machine` gives `operation` from `caller`, which this
