@@ -62,7 +62,7 @@ async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
     // The local config moves with the repository's directory.
     assert!(directory.join(".shoal/config.toml").exists());
     assert_eq!(
-        manager.local_config_path(&repo.id).await?,
+        manager.repositories.local_config_path(&repo.id).await?,
         directory.join(".shoal/config.toml")
     );
 

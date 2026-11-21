@@ -452,7 +452,7 @@ impl Manager {
         if !self.agent_exit_space_ready(&space.id).await? {
             return Ok(());
         }
-        let settings = self.space_settings(space).await?;
+        let settings = self.repositories.space_settings(self, space).await?;
         let Some(command) = Self::space_hook(space, HookKind::PostAgentExit, &settings) else {
             return Ok(());
         };

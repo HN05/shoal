@@ -19,6 +19,7 @@ shoal-ids = { workspace = true, features = ["rusqlite"] }
 shoal-protocol = { workspace = true, features = ["rusqlite"] }
 shoal-store.workspace = true
 tokio = { workspace = true, features = ["sync"] }
+toml.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]

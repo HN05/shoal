@@ -28,7 +28,10 @@ impl Manager {
         pr: Option<ItemInput>,
     ) -> Result<QueueEntry> {
         let workspace = self.workspace(workspace).await?;
-        let settings = self.workspace_settings_with_templates(&workspace).await?;
+        let settings = self
+            .repositories
+            .workspace_settings_with_templates(self, &workspace)
+            .await?;
         let place = (crate::model::SpaceKind::Workspace, true);
         let mut launch = resolve_launch(launch, &settings, place)?;
         if let Some(issue) = assigned_issue(&workspace) {

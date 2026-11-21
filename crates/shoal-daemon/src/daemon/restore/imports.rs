@@ -315,7 +315,10 @@ impl Manager {
     /// `root_dir`, which this prepares as a chat's start does.
     async fn imported_record(&self, here: Here<'_>, removed: RemovedSpace) -> Result<RemovedSpace> {
         let repo = here.repo;
-        let settings = self.space_settings_in(repo.map(|repo| &repo.id)).await?;
+        let settings = self
+            .repositories
+            .space_settings_in(repo.map(|repo| &repo.id))
+            .await?;
         let retention = settings.cleanup.restore.retention();
         let expires_at = UnixTime::now() + retention;
         // The space it was below where it was exported stays its parent only

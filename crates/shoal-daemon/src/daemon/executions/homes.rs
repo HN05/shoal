@@ -86,7 +86,10 @@ impl Manager {
                     "workspace directory is missing"
                 );
                 self.verify_worktree(&workspace).await?;
-                let settings = self.workspace_settings(&workspace).await?;
+                let settings = self
+                    .repositories
+                    .workspace_settings(self, &workspace)
+                    .await?;
                 let repository = self.repositories.repository(workspace.repository()).await?;
                 Home::Workspace {
                     workspace,
@@ -115,7 +118,10 @@ impl Manager {
         );
         let repository = self.chat_repository(&chat).await?;
         let tmp_dir = self.chat_tmp_dir(repository.as_ref(), &chat)?;
-        let settings = self.space_settings(&Space::from(chat.clone())).await?;
+        let settings = self
+            .repositories
+            .space_settings(self, &Space::from(chat.clone()))
+            .await?;
         Ok(Home::Chat {
             chat,
             repository,

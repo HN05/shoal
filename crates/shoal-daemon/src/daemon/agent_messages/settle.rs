@@ -70,7 +70,7 @@ impl Manager {
     /// holds nothing, since messages are how the user reaches the agent to
     /// fix it.
     async fn settle_window(&self, space: &Space) -> Duration {
-        match self.space_settings(space).await {
+        match self.repositories.space_settings(self, space).await {
             Ok(settings) => Duration::from_secs(settings.alerts.settle_seconds),
             Err(error) => {
                 crate::daemon::log!("agent messages delivered unsettled: {error:#}");

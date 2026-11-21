@@ -31,7 +31,7 @@ impl Manager {
     /// now: after its `cleanup.restore.retention_days`, or the global
     /// setting's when its own cannot be read.
     pub(crate) async fn removed_files_expiry(&self, space: &crate::model::Space) -> UnixTime {
-        let settings = match self.space_settings(space).await {
+        let settings = match self.repositories.space_settings(self, space).await {
             Ok(settings) => Ok(settings),
             Err(error) => {
                 log!(

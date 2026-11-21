@@ -55,7 +55,10 @@ impl Settings for Manager {
         config: &'a Config,
         workspace: &'a Workspace,
     ) -> BoxFuture<'a, Result<Effective>> {
-        Box::pin(self.workspace_settings_from(config, workspace))
+        Box::pin(
+            self.repositories
+                .workspace_settings_from(self, config, workspace),
+        )
     }
 
     fn hook<'a>(
@@ -73,7 +76,10 @@ impl Settings for Manager {
         executable: &'a Path,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
-            let settings = self.workspace_settings(workspace).await?;
+            let settings = self
+                .repositories
+                .workspace_settings(self, workspace)
+                .await?;
             let repository = workspace.repository();
             let environment =
                 (self.hook_environment(workspace, Some(repository), &settings)).await?;

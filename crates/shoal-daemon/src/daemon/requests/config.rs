@@ -15,11 +15,17 @@ use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn handle(manager: &Arc<Manager>, method: ConfigMethod) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        ConfigMethod::TrackedConfig { space } => {
-            Body::TrackedConfig(manager.space_tracked_config(&space).await?)
-        }
+        ConfigMethod::TrackedConfig { space } => Body::TrackedConfig(
+            manager
+                .repositories
+                .space_tracked_config(&**manager, &space)
+                .await?,
+        ),
         ConfigMethod::LayeredConfig { target } => Body::LayeredConfig(RepositoryLayers::of(
-            &manager.config_layers_for(target).await?,
+            &manager
+                .repositories
+                .config_layers_for(&**manager, target)
+                .await?,
         )?),
     }))
 }

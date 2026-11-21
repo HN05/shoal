@@ -115,7 +115,7 @@ impl Manager {
         let carried = match self.found_repository(&launch, caller).await? {
             Some(repository) => Carried {
                 origin: crate::repository::remote_url_from_source(&repository.source).await?,
-                tracked_config: Some(self.tracked_config(&repository).await?),
+                tracked_config: Some(self.repositories.tracked_config(&repository).await?),
                 ..Carried::default()
             },
             None => (self.inherited_carried(&launch, caller).await?).unwrap_or_default(),
@@ -299,7 +299,9 @@ impl Manager {
     /// machine clones it.
     async fn ensure_inherited_agent(&self, launch: &Launch, caller: Option<&Caller>) -> Result<()> {
         let tracked = self.inherited_tracked_config(launch, caller).await?;
-        let settings = self.tracked_settings(&tracked.unwrap_or_default())?;
+        let settings = self
+            .repositories
+            .tracked_settings(&tracked.unwrap_or_default())?;
         let Some(agent) = (launch.agent.clone()).or_else(|| settings.agent.default.clone()) else {
             return Ok(());
         };

@@ -101,7 +101,8 @@ impl Manager {
         name: Option<String>,
     ) -> Result<Checkpoint> {
         let retention = self
-            .workspace_settings(workspace)
+            .repositories
+            .workspace_settings(self, workspace)
             .await?
             .cleanup
             .restore
@@ -467,6 +468,7 @@ impl Manager {
         }
         let repo = &self.repositories.repository(&repo.id).await?;
         let retention = self
+            .repositories
             .repository_settings(&repo.id)
             .await?
             .cleanup

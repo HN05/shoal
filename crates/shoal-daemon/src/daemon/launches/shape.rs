@@ -136,7 +136,9 @@ impl Manager {
             None => self.inherited_tracked_config(&launch, caller).await?,
         };
         if let Some(tracked) = tracked {
-            return Ok(modes::shapes(&self.tracked_settings(&tracked)?.modes));
+            return Ok(modes::shapes(
+                &self.repositories.tracked_settings(&tracked)?.modes,
+            ));
         }
         self.local_launch_modes(&launch, caller).await
     }
@@ -157,7 +159,10 @@ impl Manager {
     /// The modes the settings of `target` define, each with the space it
     /// starts.
     async fn target_modes(&self, target: ConfigTarget) -> Result<ModeShapes> {
-        let settings = self.target_settings_with_templates(target).await?;
+        let settings = self
+            .repositories
+            .target_settings_with_templates(self, target)
+            .await?;
         Ok(modes::shapes(&settings.modes))
     }
 

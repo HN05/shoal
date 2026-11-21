@@ -53,7 +53,7 @@ impl Manager {
         app: &AppName,
         target: ConfigTarget,
     ) -> Result<Option<toml::Table>> {
-        let layers = self.config_layers_for(target).await?;
+        let layers = self.repositories.config_layers_for(self, target).await?;
         let mut settings = self.config().resolve(&layers)?;
         Ok(settings.apps.remove(app.as_str()))
     }

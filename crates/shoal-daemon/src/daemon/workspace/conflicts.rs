@@ -36,7 +36,10 @@ impl Manager {
 
     /// Whether the workspace's repository lists sensitive files.
     async fn lists_sensitive_files(&self, workspace: &Workspace) -> Result<bool> {
-        let settings = self.workspace_settings(workspace).await?;
+        let settings = self
+            .repositories
+            .workspace_settings(self, workspace)
+            .await?;
         Ok(!settings.conflicts.sensitive.is_empty())
     }
 
@@ -134,7 +137,10 @@ impl Manager {
         head: &CommitId,
         target_commit: &CommitId,
     ) -> Result<Vec<String>> {
-        let settings = self.workspace_settings(workspace).await?;
+        let settings = self
+            .repositories
+            .workspace_settings(self, workspace)
+            .await?;
         let sensitive = &settings.conflicts.sensitive;
         let (head_rev, target_rev) = (head.as_str(), target_commit.as_str());
         let files = changed_on_both_sides(&workspace.path, head_rev, target_rev, sensitive).await?;

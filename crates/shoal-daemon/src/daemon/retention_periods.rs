@@ -12,7 +12,8 @@ impl Retention for Manager {
     /// a repository or when the repository's cannot be read.
     fn of<'a>(&'a self, repository: Option<&'a RepositoryId>) -> BoxFuture<'a, Duration> {
         Box::pin(async move {
-            let settings = self.space_settings_in(repository).await.or_else(|error| {
+            let settings = self.repositories.space_settings_in(repository).await;
+            let settings = settings.or_else(|error| {
                 log!("global retention used for a repository: {error:#}");
                 self.config().resolve(&Default::default())
             });

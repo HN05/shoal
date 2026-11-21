@@ -347,7 +347,7 @@ impl Manager {
         id: &RepositoryId,
         toml: Option<String>,
     ) -> anyhow::Result<std::path::PathBuf> {
-        let path = self.local_config_path(id).await?;
+        let path = self.repositories.local_config_path(id).await?;
         match toml {
             Some(text) => {
                 crate::config::repo::parse(&text)?;

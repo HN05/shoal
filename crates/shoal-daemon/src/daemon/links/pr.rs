@@ -115,7 +115,7 @@ impl Manager {
         }
         // A repository that disabled PR cleanup keeps its watches waiting;
         // unreadable config is recorded like a failed lookup.
-        let settings = self.workspace_settings(workspace).await;
+        let settings = self.repositories.workspace_settings(self, workspace).await;
         if restacked.is_ok()
             && settings
                 .as_ref()

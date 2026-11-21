@@ -91,7 +91,10 @@ impl Manager {
         chain: &[ChainedMode],
         repository: &RepositoryId,
     ) -> Result<Permissions> {
-        let settings = self.space_settings_in(Some(repository)).await?;
+        let settings = self
+            .repositories
+            .space_settings_in(Some(repository))
+            .await?;
         let mut effective: Option<Permissions> = None;
         for link in chain {
             let mode = (link.mode.as_ref()).map(|name| SpaceMode {
@@ -256,7 +259,10 @@ impl Manager {
         parent: Option<Permissions>,
         repository: Option<&RepositoryId>,
     ) -> Result<Permissions> {
-        let settings = (self.space_settings_from(config, space, repository)).await?;
+        let settings = (self
+            .repositories
+            .space_settings_from(self, config, space, repository))
+        .await?;
         let (mode, given) = agent.unzip();
         let permissions = permissions::resolve(&settings, mode)
             .with_context(|| format!("the permissions of {}", space.name))?;

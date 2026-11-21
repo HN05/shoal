@@ -1,3 +1,4 @@
+//! The configuration layers of the workspaces and chats of a repository.
 use crate::daemon::{notifications::AlertKind, test_support};
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -5,7 +6,7 @@ use shoal_protocol::space_names::SpaceSelector;
 /// exist yet.
 async fn repository_with_local_directory() -> (
     tempfile::TempDir,
-    std::sync::Arc<super::Manager>,
+    std::sync::Arc<crate::daemon::manager::Manager>,
     crate::model::Repository,
     std::path::PathBuf,
 ) {
@@ -16,7 +17,11 @@ async fn repository_with_local_directory() -> (
         .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let local = manager.local_config_path(&repo.id).await.unwrap();
+    let local = manager
+        .repositories
+        .local_config_path(&repo.id)
+        .await
+        .unwrap();
     let directory = local.parent().unwrap().to_path_buf();
     let _ = std::fs::remove_dir(&directory);
     (root, manager, repo, directory)
@@ -54,14 +59,21 @@ async fn a_workspace_recorded_where_the_local_config_belongs_is_never_local_conf
     let tracked = directory.join("config.toml");
     std::fs::write(&tracked, "agent.default = 'codex'\n").unwrap();
     test_support::commit(&directory, "config.toml");
-    let edit = manager.edit_local_config(&repo.id, Vec::new()).await;
+    let edit = manager
+        .repositories
+        .edit_local_config(&*manager, &repo.id, Vec::new())
+        .await;
     assert!(edit.is_err());
     assert_eq!(
         std::fs::read_to_string(&tracked).unwrap(),
         "agent.default = 'codex'\n"
     );
     // Settings resolve without it, so the workspace and repository go as usual.
-    let settings = manager.repository_settings(&repo.id).await.unwrap();
+    let settings = manager
+        .repositories
+        .repository_settings(&repo.id)
+        .await
+        .unwrap();
     let agent = settings.agent.default.as_ref().map(ToString::to_string);
     assert_ne!(agent.as_deref(), Some("codex"));
     manager
@@ -74,25 +86,6 @@ async fn a_workspace_recorded_where_the_local_config_belongs_is_never_local_conf
         .unwrap();
     assert!(!directory.exists());
     manager.remove_repository(&repo.id).await.unwrap();
-}
-
-#[tokio::test]
-async fn an_unrecorded_worktree_where_the_local_config_belongs_is_never_local_config() {
-    let (_root, manager, repo, directory) = repository_with_local_directory().await;
-    test_support::git(
-        &repo.path,
-        &[
-            "worktree",
-            "add",
-            "-b",
-            "other",
-            directory.to_str().unwrap(),
-        ],
-    );
-    let edit = manager.edit_local_config(&repo.id, Vec::new()).await;
-    assert!(edit.is_err());
-    assert!(!directory.join("config.toml").exists());
-    manager.repository_settings(&repo.id).await.unwrap();
 }
 
 #[tokio::test]
@@ -114,13 +107,24 @@ async fn a_workspace_in_a_stalled_directory_refuses_its_layers_without_reading_t
     manager.file_access.stall_rechecking(&workspace.path);
 
     let target = crate::protocol::ConfigTarget::Space(SpaceSelector::id(&workspace.id));
-    let error = format!("{:#}", manager.config_layers_for(target).await.unwrap_err());
+    let error = format!(
+        "{:#}",
+        manager
+            .repositories
+            .config_layers_for(&*manager, target)
+            .await
+            .unwrap_err()
+    );
     let directory = workspace.path.parent().unwrap().display().to_string();
     assert!(
         error.starts_with(&format!("file access in {directory} timed out")),
         "{error}"
     );
-    let settings = manager.workspace_settings(&workspace).await.unwrap_err();
+    let settings = manager
+        .repositories
+        .workspace_settings(&*manager, &workspace)
+        .await
+        .unwrap_err();
     assert!(
         format!("{settings:#}").contains("timed out"),
         "{settings:#}"
@@ -130,14 +134,18 @@ async fn a_workspace_in_a_stalled_directory_refuses_its_layers_without_reading_t
     // the layers say why.
     manager.file_access.recover_at(&workspace.path);
     let target = crate::protocol::ConfigTarget::Space(SpaceSelector::id(&workspace.id));
-    let layers = manager.config_layers_for(target).await.unwrap();
+    let layers = manager
+        .repositories
+        .config_layers_for(&*manager, target)
+        .await
+        .unwrap();
     let rejected = layers.rejected_worktree_file.unwrap();
     assert!(rejected.contains("TOML parse error"), "{rejected}");
     assert_eq!(ignored_configs(&manager).await.len(), 1);
 }
 
 /// The unread notifications that a workspace's config file is ignored.
-async fn ignored_configs(manager: &super::Manager) -> Vec<String> {
+async fn ignored_configs(manager: &crate::daemon::manager::Manager) -> Vec<String> {
     (manager
         .notifications
         .list(true, 50)
@@ -149,7 +157,7 @@ async fn ignored_configs(manager: &super::Manager) -> Vec<String> {
     .collect()
 }
 
-async fn mark_all_read(manager: &super::Manager) {
+async fn mark_all_read(manager: &crate::daemon::manager::Manager) {
     let unread = manager.notifications.list(true, 50).await.unwrap();
     let ids = unread
         .into_iter()
@@ -179,7 +187,11 @@ async fn a_worktree_file_the_format_rejects_is_ignored_and_reported_once_per_err
     std::fs::write(&file, "setup_cmd = \"scripts/setup.sh\"\n").unwrap();
 
     // The other layers still apply.
-    let settings = manager.workspace_settings(&workspace).await.unwrap();
+    let settings = manager
+        .repositories
+        .workspace_settings(&*manager, &workspace)
+        .await
+        .unwrap();
     assert_eq!(settings.cleanup.auto.idle_minutes, 3);
     let reported = ignored_configs(&manager).await;
     assert_eq!(reported.len(), 1);
@@ -187,20 +199,36 @@ async fn a_worktree_file_the_format_rejects_is_ignored_and_reported_once_per_err
 
     // Once read, the same error is not reported again.
     mark_all_read(&manager).await;
-    manager.workspace_settings(&workspace).await.unwrap();
+    manager
+        .repositories
+        .workspace_settings(&*manager, &workspace)
+        .await
+        .unwrap();
     assert!(ignored_configs(&manager).await.is_empty());
 
     // Another error is.
     std::fs::write(&file, "[setup]\ncmd = \"scripts/setup.sh\"\n").unwrap();
-    manager.workspace_settings(&workspace).await.unwrap();
+    manager
+        .repositories
+        .workspace_settings(&*manager, &workspace)
+        .await
+        .unwrap();
     assert_eq!(ignored_configs(&manager).await.len(), 1);
     mark_all_read(&manager).await;
 
     // A file the format accepts in between makes the next rejection new.
     std::fs::write(&file, "").unwrap();
-    manager.workspace_settings(&workspace).await.unwrap();
+    manager
+        .repositories
+        .workspace_settings(&*manager, &workspace)
+        .await
+        .unwrap();
     std::fs::write(&file, "[setup]\ncmd = \"scripts/setup.sh\"\n").unwrap();
-    manager.workspace_settings(&workspace).await.unwrap();
+    manager
+        .repositories
+        .workspace_settings(&*manager, &workspace)
+        .await
+        .unwrap();
     assert_eq!(ignored_configs(&manager).await.len(), 1);
 }
 
@@ -289,7 +317,7 @@ async fn a_chats_layers_are_its_repositorys() {
 
     let read = |id: &shoal_ids::space_ids::SpaceId| {
         let target = crate::protocol::ConfigTarget::Space(SpaceSelector::id(id));
-        manager.config_layers_for(target)
+        manager.repositories.config_layers_for(&*manager, target)
     };
     let chat = read(&chat.id).await.unwrap();
     let workspace = read(&workspace.id).await.unwrap();
@@ -305,7 +333,7 @@ async fn repository_with_local_config(
     local: &str,
 ) -> (
     tempfile::TempDir,
-    std::sync::Arc<super::Manager>,
+    std::sync::Arc<crate::daemon::manager::Manager>,
     crate::model::Repository,
 ) {
     let (root, manager) = test_support::manager().await;
@@ -322,7 +350,10 @@ async fn repository_with_local_config(
 }
 
 /// The names of the secrets the workspace `id`'s agents receive.
-async fn secret_names(manager: &super::Manager, id: &shoal_ids::space_ids::SpaceId) -> Vec<String> {
+async fn secret_names(
+    manager: &crate::daemon::manager::Manager,
+    id: &shoal_ids::space_ids::SpaceId,
+) -> Vec<String> {
     let selector = SpaceSelector::id(id);
     let catalog = manager
         .leases

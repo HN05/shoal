@@ -61,7 +61,7 @@ impl Manager {
             None => Vec::new(),
         };
         let (environments, _) = self.package_environments(&repos).await;
-        let settings = self.space_settings(space).await?;
+        let settings = self.repositories.space_settings(self, space).await?;
         tokio::task::spawn_blocking(move || {
             let (sources, _) =
                 crate::transfer::session_sources(&settings, &environments, &sessions);

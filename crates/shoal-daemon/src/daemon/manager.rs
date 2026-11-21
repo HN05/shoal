@@ -76,9 +76,6 @@ pub struct Manager {
     pub(super) upstream_limits: std::sync::Mutex<
         std::collections::HashMap<ExecutionId, super::upstream_limits::UpstreamLimit>,
     >,
-    /// The config files of worktrees the current format rejects, which the
-    /// daemon ignores.
-    pub(super) rejected_configs: super::repo_configuration::RejectedConfigs,
     /// When each space's agent state was last reported.
     pub(super) report_times: Arc<super::lost_reports::ReportTimes>,
     /// Directories whose file access stalls, shared with startup's status answer.
@@ -138,6 +135,8 @@ impl Manager {
             store.clone(),
             gates.clone(),
             config_state.clone(),
+            notifications.clone(),
+            file_access.clone(),
             paths.clone(),
             Arc::new(super::repositories::RepositoryRecords),
         ));
@@ -191,7 +190,6 @@ impl Manager {
             reviews,
             proxy_retries: Default::default(),
             upstream_limits: Default::default(),
-            rejected_configs: Default::default(),
             report_times: Default::default(),
             file_access,
             hub,

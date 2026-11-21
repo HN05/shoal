@@ -59,7 +59,7 @@ impl Workspaces for Manager {
         &'a self,
         workspace: &'a Workspace,
     ) -> BoxFuture<'a, Result<Effective>> {
-        Box::pin(Manager::workspace_settings(self, workspace))
+        Box::pin(self.repositories.workspace_settings(self, workspace))
     }
 
     fn hold_permit<'a>(

@@ -1,20 +1,29 @@
 //! A stand-in for the rest of the daemon, which the repositories' tests
 //! build the service over: a home with its state directory under a
-//! temporary directory, the default global config, no workspaces, and no
-//! forge a contribution could fork on.
+//! temporary directory, the default global config, no spaces or
+//! coordinators, and no forge a contribution could fork on.
 use std::sync::Arc;
 
 use anyhow::{Result, bail};
 use futures_util::future::BoxFuture;
 use rusqlite::Connection;
-use shoal_daemon_base::{config_state::ConfigState, gates::Gates};
+use shoal_daemon_base::{
+    alerts::{NewAlert, Sent},
+    config_state::ConfigState,
+    gates::Gates,
+    notifications::{Coordinators, Notifications, Source},
+};
 use shoal_forge::account::Account;
 use shoal_forge_types::ForgeRepo;
-use shoal_protocol::{model::Workspace, paths::Paths};
+use shoal_protocol::{
+    model::{Space, Workspace},
+    paths::Paths,
+    space_names::SpaceSelector,
+};
 
 use crate::{
     Repositories,
-    daemon::{Forges, Records},
+    daemon::{Forges, Records, Spaces},
 };
 
 /// The service over a stand-in daemon.
@@ -34,9 +43,11 @@ impl Fixture {
             .unwrap();
         let config = shoal_core::test_support::global_config("");
         let repositories = Repositories::new(
-            store,
+            store.clone(),
             Arc::new(Gates::default()),
             Arc::new(ConfigState::new(config)),
+            Arc::new(Notifications::new(store)),
+            Arc::default(),
             paths,
             Arc::new(StandIn),
         );
@@ -54,8 +65,22 @@ impl Fixture {
     }
 }
 
-/// A daemon without workspaces or forges.
+/// A daemon without spaces or forges.
 pub(crate) struct StandIn;
+
+impl Spaces for StandIn {
+    fn space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>> {
+        Box::pin(async move { bail!("no space {selector}") })
+    }
+
+    fn local_config_changed(&self) {}
+}
+
+impl Coordinators for StandIn {
+    fn tell(&self, _: NewAlert, _: bool, _: Source) -> BoxFuture<'_, Option<Sent>> {
+        Box::pin(async { None })
+    }
+}
 
 impl Forges for StandIn {
     fn forge<'a>(&'a self, remote: &'a str) -> BoxFuture<'a, Result<ForgeRepo>> {

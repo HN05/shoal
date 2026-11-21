@@ -105,17 +105,29 @@ impl Manager {
             (Home::Opening(_, opening), _) => {
                 if let WorkspaceStart::Workspace(workspace) = &opening.start {
                     let workspace = self.workspace(workspace).await?;
-                    return self.workspace_settings_with_templates(&workspace).await;
+                    return self
+                        .repositories
+                        .workspace_settings_with_templates(self, &workspace)
+                        .await;
                 }
             }
             (Home::Child(..), _) => {
                 let parent = self.space_by_id(parent.context("a child names its parent")?);
-                return (self.space_settings_with_templates(&parent.await?, repository)).await;
+                return (self.repositories.space_settings_with_templates(
+                    self,
+                    &parent.await?,
+                    repository,
+                ))
+                .await;
             }
             _ => {}
         }
         match repository {
-            Some(repository) => self.repository_settings_with_templates(repository).await,
+            Some(repository) => {
+                self.repositories
+                    .repository_settings_with_templates(repository)
+                    .await
+            }
             None => (self.config()).resolve_with_template_files(&Default::default(), &self.paths),
         }
     }

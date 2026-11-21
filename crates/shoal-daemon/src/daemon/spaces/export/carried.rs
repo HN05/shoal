@@ -31,7 +31,7 @@ impl Manager {
     ) -> Vec<Result<crate::config::Effective>> {
         let mut settings = Vec::new();
         for space in spaces {
-            settings.push(self.space_settings(space).await);
+            settings.push(self.repositories.space_settings(self, space).await);
         }
         settings
     }

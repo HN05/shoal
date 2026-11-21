@@ -85,7 +85,11 @@ impl Manager {
         let mut settings = Settings::new();
         for repository in repositories {
             if let hash_map::Entry::Vacant(vacant) = settings.entry(repository) {
-                let resolved = self.repository_settings(vacant.key()).await.ok();
+                let resolved = self
+                    .repositories
+                    .repository_settings(vacant.key())
+                    .await
+                    .ok();
                 vacant.insert(resolved);
             }
         }

@@ -2790,6 +2790,7 @@ dependencies = [
  "shoal-store",
  "tempfile",
  "tokio",
+ "toml",
  "uuid",
 ]
 

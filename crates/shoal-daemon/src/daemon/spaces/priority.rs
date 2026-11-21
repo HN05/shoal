@@ -97,7 +97,7 @@ impl Manager {
         if request.issue_labels.is_empty() {
             return Ok(None);
         }
-        let settings = self.repository_settings(repository).await?;
+        let settings = self.repositories.repository_settings(repository).await?;
         let labels = request.issue_labels.iter().map(String::as_str);
         Ok(settings.priority.of_labels(labels))
     }

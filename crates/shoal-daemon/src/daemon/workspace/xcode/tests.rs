@@ -33,7 +33,11 @@ async fn cleanup_skips_a_busy_repository_and_recorded_worktrees() {
     let directory = repo.workspaces_dir.clone();
     let left = derived_data::folder(&location, "App-gone", &directory.join("gone/App"));
     let moved = derived_data::folder(&location, "App-moved", &worktrees[1].join("App"));
-    let settings = manager.repository_settings(&repo.id).await.unwrap();
+    let settings = manager
+        .repositories
+        .repository_settings(&repo.id)
+        .await
+        .unwrap();
     let cache = crate::caches::directories(&repo, &settings.caches).unwrap()[presets::XCODE_CACHE]
         .join("SourcePackages/unpinned");
     fs::create_dir_all(&cache).unwrap();
@@ -101,7 +105,11 @@ async fn removal_prunes_package_checkouts_nothing_pins() {
         fs::write(generated.join(xcode::PINS), name).unwrap();
         fs::write(workspace.path.join(".gitignore"), "App.xcodeproj/\n").unwrap();
     }
-    let settings = manager.repository_settings(&repo.id).await.unwrap();
+    let settings = manager
+        .repositories
+        .repository_settings(&repo.id)
+        .await
+        .unwrap();
     let cache =
         crate::caches::directories(&repo, &settings.caches).unwrap()[presets::XCODE_CACHE].clone();
     let checkouts = |pins: &str| {

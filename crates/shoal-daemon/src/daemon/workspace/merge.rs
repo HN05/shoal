@@ -204,7 +204,10 @@ impl Manager {
         workspace: &Workspace,
         options: &MergeOptions,
     ) -> Result<(MergeMethod, Option<String>)> {
-        let settings = self.workspace_settings(workspace).await?;
+        let settings = self
+            .repositories
+            .workspace_settings(self, workspace)
+            .await?;
         let settings = &settings.merge;
         ensure!(
             settings.enabled,

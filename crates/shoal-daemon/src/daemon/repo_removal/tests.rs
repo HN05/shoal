@@ -283,7 +283,11 @@ async fn removal_refuses_a_repository_inside_its_local_config_directory() {
         .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let local = manager.local_config_path(&parent.id).await.unwrap();
+    let local = manager
+        .repositories
+        .local_config_path(&parent.id)
+        .await
+        .unwrap();
     let directory = local.parent().unwrap();
     std::fs::create_dir_all(directory).unwrap();
     // Registration refuses this place; an earlier version recorded it.

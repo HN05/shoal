@@ -49,7 +49,10 @@ impl Manager {
     ) -> Result<StartedWorkspace> {
         let chat = self.convertible_chat(selector).await?;
         let repository = (chat.repository_id.clone()).context("the chat has no repository")?;
-        let settings = self.repository_settings_with_templates(&repository).await?;
+        let settings = self
+            .repositories
+            .repository_settings_with_templates(&repository)
+            .await?;
         super::ensure_mode(&settings, &conversion.mode)?;
         ensure!(
             !conversion.options.disposable,

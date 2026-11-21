@@ -173,7 +173,7 @@ impl Manager {
 
     /// The repository's seed settings, or `None` when it configures no seed.
     async fn seed_plan(&self, repo: &Repository, layout: &Layout) -> Result<Option<Plan>> {
-        let settings = self.repository_settings(&repo.id).await?;
+        let settings = self.repositories.repository_settings(&repo.id).await?;
         Plan::new(repo, layout, &settings).await
     }
 
@@ -453,7 +453,7 @@ impl Manager {
     /// tracked file stays, so Git still finds a clean worktree clean, and
     /// settings or files it cannot read leave every output to that delete.
     pub(super) async fn destroy_seed_outputs(&self, workspace: &Workspace) {
-        let Ok(settings) = self.workspace_settings(workspace).await else {
+        let Ok(settings) = self.repositories.workspace_settings(self, workspace).await else {
             return;
         };
         let presets = settings.setup.presets.as_deref().unwrap_or_default();

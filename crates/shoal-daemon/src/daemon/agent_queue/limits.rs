@@ -431,7 +431,8 @@ impl Manager {
                 continue;
             }
             let layers = self
-                .config_layers_for(ConfigTarget::Repository(id.clone().into()))
+                .repositories
+                .config_layers_for(self, ConfigTarget::Repository(id.clone().into()))
                 .await?;
             let resolved = config.resolve(&layers)?;
             limits

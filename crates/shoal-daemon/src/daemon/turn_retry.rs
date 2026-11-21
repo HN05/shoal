@@ -432,12 +432,15 @@ impl Manager {
 
     /// Whether the AI tool `agent` names has `retry` on in `space`.
     async fn retries(&self, space: &Space, agent: &crate::agent::Agent) -> bool {
-        self.space_settings(space).await.is_ok_and(|settings| {
-            settings
-                .tools
-                .get(agent.name())
-                .is_some_and(|tool| tool.retry)
-        })
+        self.repositories
+            .space_settings(self, space)
+            .await
+            .is_ok_and(|settings| {
+                settings
+                    .tools
+                    .get(agent.name())
+                    .is_some_and(|tool| tool.retry)
+            })
     }
 
     /// Deliver the retries due now; when the next one is due.

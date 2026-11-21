@@ -126,7 +126,7 @@ impl Manager {
     /// asks: by its method, else `[merge] method`, with its squash message,
     /// else one naming the absorbed space.
     async fn sides(&self, target: &Workspace, into: &Workspace, request: &Absorb) -> Result<Sides> {
-        let settings = self.workspace_settings(into).await?;
+        let settings = self.repositories.workspace_settings(self, into).await?;
         let method = (request.method.or(settings.merge.method)).unwrap_or(MergeMethod::Merge);
         let branch = target.require_branch("absorbing its branch")?.clone();
         let message = squash_message(method, request.message.as_deref())?;

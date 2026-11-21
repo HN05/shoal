@@ -512,7 +512,10 @@ impl Manager {
         let Some(command) = self.removal_hook(workspace, HookKind::PreRemove).await? else {
             return Ok(());
         };
-        let settings = self.workspace_settings(workspace).await?;
+        let settings = self
+            .repositories
+            .workspace_settings(self, workspace)
+            .await?;
         let repository = workspace.repository();
         let configured_env =
             (self.hook_environment(workspace, Some(repository), &settings)).await?;

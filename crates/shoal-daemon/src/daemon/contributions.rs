@@ -44,7 +44,12 @@ impl Manager {
         if self.checkout_has_work(repo).await? {
             return Ok(());
         }
-        let grace = self.repository_settings(&repo.id).await?.cleanup.grace();
+        let grace = self
+            .repositories
+            .repository_settings(&repo.id)
+            .await?
+            .cleanup
+            .grace();
         if UnixTime::now()
             < self
                 .claim_contribution_grace(repo.id.as_str(), grace)

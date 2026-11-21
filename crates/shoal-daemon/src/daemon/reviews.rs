@@ -78,31 +78,34 @@ impl Repositories for Manager {
         &'a self,
         id: &'a RepositoryId,
     ) -> BoxFuture<'a, Result<Option<PathBuf>>> {
-        Box::pin(Manager::false_positives_path(self, id))
+        Box::pin(self.repositories.false_positives_path(id))
     }
 
     fn writable_false_positives_path<'a>(
         &'a self,
         id: &'a RepositoryId,
     ) -> BoxFuture<'a, Result<PathBuf>> {
-        Box::pin(Manager::writable_false_positives_path(self, id))
+        Box::pin(self.repositories.writable_false_positives_path(id))
     }
 }
 
 impl Settings for Manager {
     fn settings<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<Effective>> {
-        Box::pin(self.workspace_settings(workspace))
+        Box::pin(self.repositories.workspace_settings(self, workspace))
     }
 
     fn settings_with_templates<'a>(
         &'a self,
         workspace: &'a Workspace,
     ) -> BoxFuture<'a, Result<Effective>> {
-        Box::pin(self.workspace_settings_with_templates(workspace))
+        Box::pin(
+            self.repositories
+                .workspace_settings_with_templates(self, workspace),
+        )
     }
 
     fn repository_settings<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Effective>> {
-        Box::pin(self.space_settings_in(Some(id)))
+        Box::pin(self.repositories.space_settings_in(Some(id)))
     }
 
     fn environment<'a>(

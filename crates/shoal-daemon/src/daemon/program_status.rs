@@ -76,7 +76,10 @@ impl Reports {
 
     /// Whether `agent` reports its own turns to the terminal.
     async fn reports_itself(&self, manager: &Manager, agent: &Agent) -> bool {
-        let settings = manager.space_settings(&self.space).await;
+        let settings = manager
+            .repositories
+            .space_settings(manager, &self.space)
+            .await;
         // Without its settings, Shoal reports what it knows of the agent too.
         settings.is_ok_and(|settings| {
             crate::agents::agent_integration(&settings, agent).reports_program_status()

@@ -171,7 +171,7 @@ impl Manager {
     /// Drop in-memory bookkeeping for a workspace that no longer exists.
     pub(crate) async fn forget_workspace(&self, id: &SpaceId) {
         self.usage.forget_workspace(id);
-        self.rejected_configs.forget(id);
+        self.repositories.forget_rejected_config(id);
         self.executions.forget_workspace(id).await;
     }
 }

@@ -318,7 +318,12 @@ impl Manager {
                 .checked(&self.notifications, &workspace.path, checked)
                 .await?;
         }
-        let grace = self.space_settings(space).await?.cleanup.grace();
+        let grace = self
+            .repositories
+            .space_settings(self, space)
+            .await?
+            .cleanup
+            .grace();
         let cleanup_at = self.claim_grace(&space.id, grace).await?;
         Ok(crate::time::UnixTime::now() < cleanup_at)
     }

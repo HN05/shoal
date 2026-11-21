@@ -6,9 +6,12 @@
 use std::sync::Arc;
 
 use shoal_core::{config, paths::Paths};
-use shoal_daemon_base::{config_state::ConfigState, gates::Gates};
+use shoal_daemon_base::{
+    config_state::ConfigState, file_access::FileAccess, gates::Gates, notifications::Notifications,
+};
 use shoal_store::Store;
 
+pub mod configuration;
 pub mod contributions;
 pub mod daemon;
 mod records;
@@ -23,9 +26,14 @@ pub struct Repositories {
     store: Store,
     gates: Arc<Gates>,
     config: Arc<ConfigState>,
+    notifications: Arc<Notifications>,
+    file_access: Arc<FileAccess>,
     paths: Paths,
     records: Arc<dyn daemon::Records>,
     contribution_holds: contributions::holds::ContributionHolds,
+    /// The config files of worktrees the current format rejects, which the
+    /// daemon ignores.
+    rejected_configs: configuration::RejectedConfigs,
 }
 
 impl Repositories {
@@ -33,6 +41,8 @@ impl Repositories {
         store: Store,
         gates: Arc<Gates>,
         config: Arc<ConfigState>,
+        notifications: Arc<Notifications>,
+        file_access: Arc<FileAccess>,
         paths: Paths,
         records: Arc<dyn daemon::Records>,
     ) -> Self {
@@ -40,9 +50,12 @@ impl Repositories {
             store,
             gates,
             config,
+            notifications,
+            file_access,
             paths,
             records,
             contribution_holds: Default::default(),
+            rejected_configs: Default::default(),
         }
     }
 

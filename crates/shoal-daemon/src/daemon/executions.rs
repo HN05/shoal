@@ -704,7 +704,11 @@ impl Manager {
                 let pre_setup = self.workspace_hook(workspace, HookKind::PreSetup).await?;
                 // A copy of a workspace's files has that workspace's ignored
                 // files instead.
-                let setup = &self.workspace_settings(workspace).await?.setup;
+                let setup = &self
+                    .repositories
+                    .workspace_settings(self, workspace)
+                    .await?
+                    .setup;
                 let copy_ignored = (setup.copy_ignored
                     && !(workspace.copied_from.as_ref()).is_some_and(CopiedFrom::took_files))
                 .then(|| CopyIgnored {

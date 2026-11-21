@@ -424,10 +424,12 @@ async fn a_finding_is_a_thread_its_workspace_resolves_keeping_its_false_positive
     (manager.resolve_thread(Some(&agent), number, resolving))
         .await
         .unwrap();
-    let path = (manager.false_positives_path(workspace.repository()))
-        .await
-        .unwrap()
-        .unwrap();
+    let path = (manager
+        .repositories
+        .false_positives_path(workspace.repository()))
+    .await
+    .unwrap()
+    .unwrap();
     let kept = std::fs::read_to_string(&path).unwrap();
     assert!(kept.contains("The type names it."), "{kept}");
     // It names the finding by its review and its place there.

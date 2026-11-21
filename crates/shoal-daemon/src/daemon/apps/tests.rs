@@ -11,6 +11,7 @@ async fn an_app_reads_its_table_resolved_for_a_repository_or_the_global_config()
         .config_state
         .publish(Config::from_toml(global).unwrap());
     let local = manager
+        .repositories
         .local_config_path(&daemon.repository.id)
         .await
         .unwrap();

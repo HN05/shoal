@@ -34,7 +34,11 @@ async fn cleanup_deletes_xcode_data_of_removed_workspaces_first() {
     let directory = repo.workspaces_dir.as_path();
     let removed = folder("App-removed", &directory.join("gone/App.xcodeproj"));
     let elsewhere = folder("App-elsewhere", Path::new("/nonexistent/App.xcodeproj"));
-    let settings = manager.repository_settings(&repo.id).await.unwrap();
+    let settings = manager
+        .repositories
+        .repository_settings(&repo.id)
+        .await
+        .unwrap();
     let cache =
         &crate::caches::directories(&repo, &settings.caches).unwrap()[crate::presets::XCODE_CACHE];
     let unpinned = cache.join("SourcePackages/unpinned");

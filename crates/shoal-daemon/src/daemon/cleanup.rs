@@ -401,7 +401,7 @@ async fn idle_delay(manager: &Manager, space: &Space) -> Result<Option<Duration>
     if space.worktree().and_then(not_ready).is_some() {
         return Ok(None);
     }
-    let settings = manager.space_settings(space).await?;
+    let settings = manager.repositories.space_settings(manager, space).await?;
     Ok(settings.cleanup.auto.delay())
 }
 

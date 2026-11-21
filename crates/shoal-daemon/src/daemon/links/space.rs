@@ -73,7 +73,10 @@ impl Manager {
     /// The settings of the space in the repository it acts in.
     pub(crate) async fn acting_settings(&self, space: &LinkSpace) -> Result<Effective> {
         let config = self.config();
-        (self.space_settings_from(&config, space, Some(space.repository_id()))).await
+        (self
+            .repositories
+            .space_settings_from(self, &config, space, Some(space.repository_id())))
+        .await
     }
 }
 

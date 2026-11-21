@@ -67,22 +67,22 @@ impl Spaces for Manager {
     }
 
     fn space_settings<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<Effective>> {
-        Box::pin(Manager::space_settings(self, space))
+        Box::pin(self.repositories.space_settings(self, space))
     }
 
     fn repository_settings<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Effective>> {
-        Box::pin(Manager::repository_settings(self, id))
+        Box::pin(self.repositories.repository_settings(id))
     }
 
     fn settings_in<'a>(&'a self, id: Option<&'a RepositoryId>) -> BoxFuture<'a, Result<Effective>> {
-        Box::pin(Manager::space_settings_in(self, id))
+        Box::pin(self.repositories.space_settings_in(id))
     }
 
     fn workspace_settings<'a>(
         &'a self,
         workspace: &'a Workspace,
     ) -> BoxFuture<'a, Result<Effective>> {
-        Box::pin(Manager::workspace_settings(self, workspace))
+        Box::pin(self.repositories.workspace_settings(self, workspace))
     }
 
     fn space_agent<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<SpaceAgent>> {

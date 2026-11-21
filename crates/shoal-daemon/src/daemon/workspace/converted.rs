@@ -85,7 +85,10 @@ impl Manager {
         workspace: &Workspace,
         mode: &ModeName,
     ) -> Result<()> {
-        let settings = self.workspace_settings_with_templates(workspace).await?;
+        let settings = self
+            .repositories
+            .workspace_settings_with_templates(self, workspace)
+            .await?;
         crate::daemon::conversions::ensure_mode(&settings, mode)
     }
 

@@ -35,9 +35,11 @@ impl Manager {
         present: bool,
     ) -> Option<Effective> {
         let settings = if present {
-            self.workspace_settings(workspace).await
+            self.repositories.workspace_settings(self, workspace).await
         } else {
-            self.repository_settings(workspace.repository()).await
+            self.repositories
+                .repository_settings(workspace.repository())
+                .await
         };
         match settings {
             Ok(settings) => uses_xcode(&settings).then_some(settings),
@@ -86,7 +88,7 @@ impl Manager {
         on: impl Fn(&Path) -> bool,
     ) -> bool {
         let name = repo.display_name();
-        let settings = match self.repository_settings(&repo.id).await {
+        let settings = match self.repositories.repository_settings(&repo.id).await {
             Ok(settings) if uses_xcode(&settings) => settings,
             Ok(_) => return false,
             Err(error) => {

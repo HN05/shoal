@@ -193,7 +193,12 @@ impl Manager {
         idle_since: UnixTime,
     ) -> Result<Option<UnixTime>> {
         let space = self.space_by_id(id).await?;
-        let sleep = self.space_settings(&space).await?.sleep.clone();
+        let sleep = self
+            .repositories
+            .space_settings(self, &space)
+            .await?
+            .sleep
+            .clone();
         if !sleep.enabled {
             return Ok(None);
         }

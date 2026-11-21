@@ -552,7 +552,10 @@ impl Manager {
             let profile = config.machine.git_profiles.profile(name)?;
             crate::git_profile::apply(&workspace.path, profile).await?;
         }
-        let settings = self.workspace_settings_from(&config, workspace).await?;
+        let settings = self
+            .repositories
+            .workspace_settings_from(self, &config, workspace)
+            .await?;
         Ok(Configured {
             needs_setup: settings.setup.command.is_some() || settings.hooks.pre_setup.is_some(),
             seed: None,

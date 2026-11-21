@@ -199,7 +199,8 @@ impl Manager {
             return Ok(true);
         }
         let settings = self
-            .workspace_settings(workspace)
+            .repositories
+            .workspace_settings(self, workspace)
             .await?
             .into_settings()
             .cleanup

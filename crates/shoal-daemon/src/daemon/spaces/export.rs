@@ -100,7 +100,11 @@ impl Manager {
         let carried = carried::taken_by_removal(&records, &removed.space_id, carrying);
         let mut settings = Vec::new();
         for record in std::iter::once(&removed).chain(&carried) {
-            settings.push(self.space_settings_in(record.repository_id.as_ref()).await);
+            settings.push(
+                self.repositories
+                    .space_settings_in(record.repository_id.as_ref())
+                    .await,
+            );
         }
         self.prepare_removed(removed, carried, settings).await
     }

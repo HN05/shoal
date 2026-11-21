@@ -458,7 +458,13 @@ async fn a_repository_whose_config_does_not_resolve_maps_no_labels_and_holds_up_
         "[priority.labels]\nurgent = 101\n",
     )
     .unwrap();
-    assert!(manager.repository_settings(&broken.id).await.is_err());
+    assert!(
+        manager
+            .repositories
+            .repository_settings(&broken.id)
+            .await
+            .is_err()
+    );
 
     assert_eq!(
         waiting_priorities(&manager).await,

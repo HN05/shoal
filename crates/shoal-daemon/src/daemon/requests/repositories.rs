@@ -61,12 +61,17 @@ pub(super) async fn handle(
             Body::Repository(manager.repositories.rename(&repository, name).await?)
         }
         RepositoryMethod::LocalConfigPath { repository } => {
-            Body::LocalConfigPath(manager.local_config_path(&repository).await?)
+            Body::LocalConfigPath(manager.repositories.local_config_path(&repository).await?)
         }
         RepositoryMethod::EditLocalConfig {
             repository,
             changes,
-        } => Body::LocalConfigEdit(manager.edit_local_config(&repository, changes).await?),
+        } => Body::LocalConfigEdit(
+            manager
+                .repositories
+                .edit_local_config(&**manager, &repository, changes)
+                .await?,
+        ),
         RepositoryMethod::RemoveRepository { repository } => {
             Body::RepositoryRemoved(manager.remove_repository(&repository).await?)
         }

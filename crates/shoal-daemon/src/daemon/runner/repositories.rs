@@ -27,7 +27,7 @@ impl Repositories for Manager {
         id: &'a RepositoryId,
     ) -> BoxFuture<'a, Result<ConfigLayers>> {
         let target = ConfigTarget::Repository(id.clone().into());
-        Box::pin(self.config_layers_for(target))
+        Box::pin(self.repositories.config_layers_for(self, target))
     }
 
     fn context_repository(
@@ -42,7 +42,7 @@ impl Repositories for Manager {
         config: &'a Config,
         id: &'a RepositoryId,
     ) -> BoxFuture<'a, Result<Effective>> {
-        Box::pin(Manager::repository_settings_from(self, config, id))
+        Box::pin(self.repositories.repository_settings_from(config, id))
     }
 
     fn ensure_repository_available<'a>(

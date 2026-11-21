@@ -120,7 +120,7 @@ impl Manager {
         let mut light = HashMap::new();
         for repository in repositories {
             let settings = match &repository {
-                Some(id) => self.repository_settings(id).await,
+                Some(id) => self.repositories.repository_settings(id).await,
                 None => self.config().resolve(&Default::default()),
             };
             let Ok(settings) = settings else {

@@ -482,7 +482,10 @@ impl Manager {
             restore::write_files(&workspace.path, files).await?;
         }
         let config = self.config();
-        let settings = self.workspace_settings_from(&config, workspace).await?;
+        let settings = self
+            .repositories
+            .workspace_settings_from(self, &config, workspace)
+            .await?;
         self.apply_workspace_git_profile(workspace, &config, &settings, git_profile)
             .await?;
         Ok(Configured {
