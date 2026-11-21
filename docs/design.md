@@ -127,7 +127,9 @@ comes from and the repository it acts in, reads the forge, links items
 to spaces under their relations, issues as assigned with their forge
 assignees, keeps the PR watches and merge acknowledgements of spaces,
 polls their items in watches and in the background, follows the runs of
-their merges, reads failed check logs, and delivers the activity to
+their merges, starts, reads, reruns, cancels and approves CI runs, lists
+and deletes the forge's branches, reads failed check logs, and delivers
+the activity to
 agents, or through the hub to coordinators on other machines, while the
 spaces, the forge each host serves, permission checks, the agents'
 records and messages, and the hub stay with the daemon, which its
