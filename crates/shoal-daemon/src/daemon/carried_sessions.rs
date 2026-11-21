@@ -91,27 +91,18 @@ impl Manager {
             )
         })?;
         let environments = Environments::new(&self.paths.home, &sessions.environments);
-        let found = transcripts::find(store, &environments.each(), session.as_str())?;
+        let id = session.clone();
+        let found = tokio::task::spawn_blocking(move || {
+            transcripts::find(store, &environments.each(), id.as_str())
+        })
+        .await??;
         let found = found.with_context(|| {
             format!(
                 "this machine has no files of {} session {session}",
                 reported.agent
             )
         })?;
-        let directory = found.directory;
-        (found.files.files.into_iter())
-            .map(|path| {
-                let source = directory.join(&path);
-                let size = std::fs::metadata(&source)?.len();
-                let file = SessionFile {
-                    agent: reported.agent.clone(),
-                    session: session.clone(),
-                    path,
-                    size,
-                };
-                Ok((file, source))
-            })
-            .collect()
+        Ok(sources(found, &reported.agent, session))
     }
 
     /// Put the session files `files` that another joined machine writes on
@@ -189,6 +180,28 @@ impl Manager {
         );
         Ok(())
     }
+}
+
+/// The files of `session` of `agent` that `found` lists, each with where it
+/// is here; each one's size is its length once it is copied.
+fn sources(
+    found: transcripts::Found,
+    agent: &shoal_protocol::agent::Agent,
+    session: &AgentSessionId,
+) -> Vec<(SessionFile, PathBuf)> {
+    let directory = found.directory;
+    (found.files.files.into_iter())
+        .map(|path| {
+            let source = directory.join(&path);
+            let file = SessionFile {
+                agent: agent.clone(),
+                session: session.clone(),
+                path,
+                size: 0,
+            };
+            (file, source)
+        })
+        .collect()
 }
 
 /// Write the files `sources` lists to the new file `joined`, one after
