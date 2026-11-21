@@ -1,9 +1,10 @@
 use shoal_refs::{BranchName, CommitId};
 
+use shoal_links::stack::{Onto, Restack};
+
 use crate::{
     daemon::{
         events::{EventItem, EventKind},
-        links::stack::{Onto, Restack},
         manager::Manager,
         test_support::{manager, repository},
     },

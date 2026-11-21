@@ -5,8 +5,10 @@ use anyhow::{Context as _, Result, ensure};
 use rusqlite::{OptionalExtension as _, Transaction};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 
+use shoal_links::stack::Restack;
+
 use crate::{
-    daemon::{links::stack::Restack, manager::Manager, spaces::Removing},
+    daemon::{manager::Manager, spaces::Removing},
     model::SpaceRef,
 };
 
@@ -28,7 +30,7 @@ impl Manager {
             && let Some(stacked) =
                 (restack.base.stacked_workspaces.iter()).find(|stacked| stacked.id == *id)
         {
-            self.restack(stacked, restack).await?;
+            self.links.restack(self, stacked, restack).await?;
         }
         Ok(above)
     }

@@ -104,7 +104,10 @@ impl Manager {
             }
         };
         // A base stays until its stacked workspaces moved; a failure retries next sweep.
-        let restacked = self.advance_stack(workspace, &registration.kind).await;
+        let restacked = self
+            .links
+            .advance_stack(self, workspace, &registration.kind)
+            .await;
         if let Ok(Some(error)) = &restacked {
             registration.error = Some(format!("{STACK_ERROR}: {error:#}"));
             self.save_registration(&workspace.id, &registration).await?;

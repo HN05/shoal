@@ -33,7 +33,10 @@ use shoal_protocol::{
     agent::Agent,
     approvals::ApprovalRequest,
     config::permissions::{self, PermissionKey},
-    model::{ChangedOnBothSides, ConflictCheck, Repository, Selected, Space, SpaceRef, Workspace},
+    model::{
+        ChangedOnBothSides, ConflictCheck, EventCause, Repository, Selected, Space, SpaceRef,
+        Workspace,
+    },
     processes::Leftover,
     protocol::operations::OperationSpec,
     space_names::SpaceSelector,
@@ -220,6 +223,9 @@ pub trait Messages: Send + Sync {
 
     /// A receiver that changes whenever a message is queued for an agent.
     fn watch_messages(&self) -> watch::Receiver<u64>;
+
+    /// Wake the agents a transaction just queued messages for.
+    fn message_queued(&self);
 }
 
 /// The hub, through which the item activity of this machine's spaces goes
@@ -490,6 +496,31 @@ pub trait Records: Send + Sync {
         db: &Connection,
         space: Option<&SpaceId>,
     ) -> Result<Vec<ApprovalRequest>>;
+
+    /// Whether the workspace `id` is `base` or a workspace whose branch the
+    /// branch of `base` builds on.
+    fn builds_on(&self, db: &Connection, base: &SpaceId, id: &SpaceId) -> Result<bool>;
+
+    /// Have the workspace `id` build on `new_base`, or the default branch
+    /// without one, in place of `base`, journaled for `cause`; false once it
+    /// no longer builds on `base`.
+    fn change_base(
+        &self,
+        tx: &Transaction<'_>,
+        id: &SpaceId,
+        base: &SpaceId,
+        new_base: Option<&SpaceId>,
+        cause: EventCause,
+    ) -> Result<bool>;
+
+    /// Queue Shoal's `message` of `kind` for the agent of the space `id`.
+    fn queue_shoal_message(
+        &self,
+        tx: &Transaction<'_>,
+        id: &SpaceId,
+        kind: AlertKind,
+        message: &str,
+    ) -> Result<()>;
 
     /// The space `id` and every space below it.
     fn subtree(&self, db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>>;

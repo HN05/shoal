@@ -37,4 +37,8 @@ impl Messages for Manager {
     fn watch_messages(&self) -> watch::Receiver<u64> {
         self.signals.watch_messages()
     }
+
+    fn message_queued(&self) {
+        self.signals.message_queued();
+    }
 }

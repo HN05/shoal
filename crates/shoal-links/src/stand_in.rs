@@ -233,6 +233,8 @@ impl Messages for StandIn {
     fn watch_messages(&self) -> watch::Receiver<u64> {
         watch::channel(0).1
     }
+
+    fn message_queued(&self) {}
 }
 
 impl Elsewhere for StandIn {

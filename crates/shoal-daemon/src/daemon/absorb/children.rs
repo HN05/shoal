@@ -10,15 +10,11 @@ use shoal_refs::{BranchName, CommitId};
 
 use super::{code::Folded, parties::Parties};
 use crate::{
-    daemon::{
-        gates::PrGuard,
-        links::stack::{Onto, Restack},
-        manager::Manager,
-        scope::Caller,
-    },
+    daemon::{gates::PrGuard, manager::Manager, scope::Caller},
     git::default_branch::{self, DefaultBranchLookup},
     model::{EventCause, Space, SpaceRef, Workspace},
 };
+use shoal_links::stack::{Onto, Restack};
 
 impl Manager {
     /// Move the spaces directly below the target up one level, and stack
@@ -57,7 +53,7 @@ impl Manager {
         for other in stacked.filter(|stacked| !children.iter().any(|child| child.id == stacked.id))
         {
             if let Some(restack) = restack(&other.id) {
-                self.restack(other, &restack).await?;
+                self.links.restack(self, other, &restack).await?;
             }
         }
         Ok(children)

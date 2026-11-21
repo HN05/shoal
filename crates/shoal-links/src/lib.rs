@@ -26,6 +26,7 @@ mod revert;
 mod run_approval;
 pub mod runs;
 pub mod space;
+pub mod stack;
 #[cfg(test)]
 mod stand_in;
 pub mod target;

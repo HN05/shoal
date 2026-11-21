@@ -1,36 +1,39 @@
 //! Move stacked workspaces down when their base workspace's work merges:
 //! through its PRs, or into the space that absorbs it.
-use crate::forge::items::reference::ItemRef;
-use crate::model::EventCause;
 use anyhow::{Result, ensure};
-use rusqlite::params;
-use shoal_ids::space_ids::SpaceId;
-use shoal_links::pr::current_head;
-use shoal_refs::{BranchName, CommitId};
-
-use super::pr::RegistrationKind;
-use crate::{
-    daemon::{agent_messages, manager::Manager, workspace::record_base_changed},
-    forge::{
-        PullRequest,
-        items::link::ItemKind,
-        updates::{Update, UpdateKind},
-    },
-    model::{Workspace, WorkspaceRef},
-};
+use shoal_daemon_base::alerts::AlertKind;
 use shoal_forge::{
     RepoRequests, account::Account, items::retarget::RetargetRequests, updates::Edited,
 };
+use shoal_forge_types::{
+    PullRequest,
+    items::{link::ItemKind, reference::ItemRef},
+    updates::{Update, UpdateKind},
+};
+use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::{
+    links::pr::RegistrationKind,
+    model::{EventCause, Workspace, WorkspaceRef},
+};
+use shoal_refs::{BranchName, CommitId};
 
-impl Manager {
+use crate::{
+    Links,
+    daemon::{Daemon, Records},
+    pr::current_head,
+    wait::changes::{OwnChange, queue_update, record_own_change},
+};
+
+impl Links {
     /// Once every watched PR of `base` has merged, retarget the PRs of the
     /// workspaces stacked on it that target the head branch of one of them
     /// to the branch they merged into, stack them on
     /// its own base, and queue a `base_merged` update for their next watch.
     /// A failed merge lookup returns its error as `Ok(Some(_))`: the base's
     /// cleanup waits for the next sweep without reporting a failure.
-    pub(super) async fn advance_stack(
+    pub async fn advance_stack(
         &self,
+        daemon: &dyn Daemon,
         base: &Workspace,
         registration: &RegistrationKind,
     ) -> Result<Option<anyhow::Error>> {
@@ -41,10 +44,10 @@ impl Manager {
             return Ok(None);
         }
         // Its HEAD and remote authorize forge writes for other workspaces.
-        self.verify_checked(base).await?;
+        self.verify_checked(daemon, base).await?;
         let mut merged = Vec::new();
         for url in urls {
-            match self.base_pr_commits(base, url).await {
+            match self.base_pr_commits(daemon, base, url).await {
                 Ok(Some(commits)) => merged.extend(commits),
                 Ok(None) => return Ok(None),
                 Err(error) => {
@@ -65,7 +68,7 @@ impl Manager {
                 "the merged PRs do not contain the base workspace's HEAD"
             )));
         }
-        let pulls = self.base_pulls(base, urls).await?;
+        let pulls = self.base_pulls(daemon, base, urls).await?;
         let Some(target) = merged_into(&pulls) else {
             return Ok(None);
         };
@@ -73,7 +76,7 @@ impl Manager {
         let merged_heads: Vec<BranchName> = pulls.into_iter().map(|pull| pull.head).collect();
         // Reload: they may have moved since. The caller holds the PR gates of
         // those stacked when it read `base`, so one stacked since waits.
-        let stacked = self
+        let stacked = daemon
             .workspace_by_id(&base.id)
             .await?
             .part
@@ -92,41 +95,41 @@ impl Manager {
             onto: Onto::Remote,
             new_base: base.base_workspace.as_ref().map(|base| base.id.clone()),
             cause: EventCause::Pr,
-            account: &self.links.user_account(),
+            account: &self.user_account(),
         };
         for stacked in stacked {
-            self.restack(&stacked, &restack).await?;
+            self.restack(daemon, &stacked, &restack).await?;
         }
         Ok(None)
     }
 
     async fn base_pr_commits(
         &self,
+        daemon: &dyn Daemon,
         base: &Workspace,
         url: &ItemRef,
     ) -> Result<Option<Vec<CommitId>>> {
         let (forge, pull) = self
-            .links
-            .pr_forge(self, &base.path, &url.clone().into())
+            .pr_forge(daemon, &base.path, &url.clone().into())
             .await?;
         forge
-            .merged_commits(&self.links.user_account(), pull.pull()?)
+            .merged_commits(&self.user_account(), pull.pull()?)
             .await
     }
 
     /// The watched PRs `urls` of `base`, in order.
-    async fn base_pulls(&self, base: &Workspace, urls: &[ItemRef]) -> Result<Vec<PullRequest>> {
+    async fn base_pulls(
+        &self,
+        daemon: &dyn Daemon,
+        base: &Workspace,
+        urls: &[ItemRef],
+    ) -> Result<Vec<PullRequest>> {
         let mut pulls = Vec::new();
         for url in urls {
             let (forge, pull) = self
-                .links
-                .pr_forge(self, &base.path, &url.clone().into())
+                .pr_forge(daemon, &base.path, &url.clone().into())
                 .await?;
-            pulls.push(
-                forge
-                    .pull_request(&self.links.user_account(), &pull)
-                    .await?,
-            );
+            pulls.push(forge.pull_request(&self.user_account(), &pull).await?);
         }
         Ok(pulls)
     }
@@ -134,8 +137,9 @@ impl Manager {
     /// Stack `stacked` past the base `restack` names: retarget its PRs that
     /// still target a merged head, record its new base and queue a
     /// `base_merged` update for its next watch.
-    pub(crate) async fn restack(
+    pub async fn restack(
         &self,
+        daemon: &dyn Daemon,
         stacked: &WorkspaceRef,
         restack: &Restack<'_>,
     ) -> Result<()> {
@@ -146,12 +150,11 @@ impl Manager {
             target,
             ..
         } = *restack;
-        let workspace = self.workspace_by_id(&stacked.id).await?;
-        self.verify_checked(&workspace).await?;
+        let workspace = daemon.workspace_by_id(&stacked.id).await?;
+        self.verify_checked(daemon, &workspace).await?;
         let id = workspace.id.clone();
-        let items = self
-            .store
-            .run(move |db| shoal_links::linked::assigned_items(db, &id, None))
+        let items = (self.store)
+            .read(move |db| crate::linked::assigned_items(db, &id, None))
             .await?;
         let mut updates = Vec::new();
         let mut retargeted = Vec::new();
@@ -163,7 +166,7 @@ impl Manager {
                         url: &url,
                         merged_heads,
                     };
-                    self.retarget_stacked(pr, restack).await?
+                    self.retarget_stacked(daemon, pr, restack).await?
                 }
                 _ => None,
             };
@@ -172,7 +175,7 @@ impl Manager {
             }
             updates.push(base_merged_update(&url, restack, outcome));
         }
-        self.ensure_base_unchanged(base, head).await?;
+        self.ensure_base_unchanged(daemon, base, head).await?;
         // Without a linked item to deliver an update with, its agent hears
         // of the rebase as a message, queued with the base change.
         let message = updates.is_empty().then(|| base_merged_message(restack, ""));
@@ -188,11 +191,12 @@ impl Manager {
             message,
             retargeted,
         };
-        self.store
-            .write(move |tx| record_restack(tx, &stacked, tell))
+        let records = self.records.clone();
+        (self.store)
+            .write(move |tx| record_restack(&*records, tx, &stacked, tell))
             .await?;
         if told {
-            self.signals.message_queued();
+            daemon.message_queued();
         }
         Ok(())
     }
@@ -202,6 +206,7 @@ impl Manager {
     /// base HEAD aborts the restack instead.
     async fn retarget_stacked(
         &self,
+        daemon: &dyn Daemon,
         pr: StackedPr<'_>,
         restack: &Restack<'_>,
     ) -> Result<Option<Retarget>> {
@@ -219,8 +224,7 @@ impl Manager {
         } = pr;
         let lookup = async {
             let (forge, pull) = self
-                .links
-                .pr_forge(self, &workspace.path, &url.clone().into())
+                .pr_forge(daemon, &workspace.path, &url.clone().into())
                 .await?;
             let number = pull.pull()?;
             let current = forge.pull_request(account, &pull).await?.base;
@@ -237,31 +241,36 @@ impl Manager {
             Err(error) => return Ok(Some(Retarget::Failed(error))),
         };
         // Lookups take time; recheck what authorizes the write right before it.
-        self.verify_checked(workspace).await?;
-        self.ensure_base_unchanged(base, head).await?;
+        self.verify_checked(daemon, workspace).await?;
+        self.ensure_base_unchanged(daemon, base, head).await?;
         Ok(Some(match forge.retarget(account, number, target).await {
             Ok(()) => Retarget::Done { from },
             Err(error) => Retarget::Failed(error),
         }))
     }
 
-    /// [`Manager::verify_worktree`] of `workspace`, inspected under
+    /// The daemon's check of `workspace`'s worktree, inspected under
     /// `FileAccess::checked` since it may be in another directory than
     /// the workspace the sweep is handling.
-    async fn verify_checked(&self, workspace: &Workspace) -> Result<()> {
+    async fn verify_checked(&self, daemon: &dyn Daemon, workspace: &Workspace) -> Result<()> {
         self.file_access
             .checked(
                 &self.notifications,
                 &workspace.path,
-                self.verify_worktree(workspace),
+                daemon.verify_worktree(workspace),
             )
             .await
     }
 
     /// The rebase cutoff in the update is the base HEAD read before restacking.
-    async fn ensure_base_unchanged(&self, base: &Workspace, head: &CommitId) -> Result<()> {
+    async fn ensure_base_unchanged(
+        &self,
+        daemon: &dyn Daemon,
+        base: &Workspace,
+        head: &CommitId,
+    ) -> Result<()> {
         let current = async {
-            self.verify_worktree(base).await?;
+            daemon.verify_worktree(base).await?;
             current_head(base).await
         };
         anyhow::ensure!(
@@ -285,29 +294,29 @@ fn merged_into(pulls: &[PullRequest]) -> Option<BranchName> {
 }
 
 /// Where the workspaces stacked on a base go once its work merged.
-pub(crate) struct Restack<'a> {
-    pub(crate) base: &'a Workspace,
+pub struct Restack<'a> {
+    pub base: &'a Workspace,
     /// The base's HEAD, past which stacked branches rebase.
-    pub(crate) head: &'a CommitId,
+    pub head: &'a CommitId,
     /// The branches a stacked PR may still target, which it retargets.
-    pub(crate) merged_heads: &'a [BranchName],
+    pub merged_heads: &'a [BranchName],
     /// The branch the base's work merged into, which stacked ones rebase
     /// onto and their PRs target.
-    pub(crate) target: &'a BranchName,
-    pub(crate) onto: Onto,
+    pub target: &'a BranchName,
+    pub onto: Onto,
     /// The workspace stacked ones build on next; none for the default
     /// branch.
-    pub(crate) new_base: Option<SpaceId>,
-    pub(crate) cause: EventCause,
+    pub new_base: Option<SpaceId>,
+    pub cause: EventCause,
     /// The account retargeting goes out as: the user's for Shoal's own
     /// sweeps and the user's requests, the agent account for an agent's.
-    pub(crate) account: &'a Account,
+    pub account: &'a Account,
 }
 
 /// Where the branch the base merged into is for a stacked branch to rebase
 /// onto.
 #[derive(Clone, Copy)]
-pub(crate) enum Onto {
+pub enum Onto {
     /// On the remote, fetched first.
     Remote,
     /// A local branch of the repository.
@@ -400,7 +409,12 @@ fn base_merged_message(restack: &Restack<'_>, retargeted: &str) -> String {
 /// retargeted as changed already, since the updates say so. Does
 /// nothing once it no longer builds on its old base: another sweep or a
 /// manual change already moved it.
-fn record_restack(tx: &rusqlite::Transaction<'_>, stacked: &Stacked, tell: Tell) -> Result<()> {
+fn record_restack(
+    records: &dyn Records,
+    tx: &rusqlite::Transaction<'_>,
+    stacked: &Stacked,
+    tell: Tell,
+) -> Result<()> {
     let Tell {
         updates,
         message,
@@ -409,46 +423,28 @@ fn record_restack(tx: &rusqlite::Transaction<'_>, stacked: &Stacked, tell: Tell)
     let id = &stacked.id;
     if let Some(new_base) = &stacked.new_base {
         ensure!(
-            !builds_on(tx, new_base, id)?,
+            !records.builds_on(tx, new_base, id)?,
             "the workspace's new base builds on it; stacking it there would make a cycle"
         );
     }
-    let changed = tx.execute(
-        "UPDATE workspaces SET base_workspace_id=?3 WHERE id=?1 AND base_workspace_id=?2",
-        params![id, stacked.base, stacked.new_base],
-    )?;
-    if changed == 0 {
+    let new_base = stacked.new_base.as_ref();
+    if !records.change_base(tx, id, &stacked.base, new_base, stacked.cause)? {
         return Ok(());
     }
-    record_base_changed(tx, id, stacked.cause)?;
     for update in updates {
-        shoal_links::wait::changes::queue_update(tx, id, update)?;
+        queue_update(tx, id, update)?;
     }
     if let Some(message) = message {
-        let kind = crate::daemon::alerts::AlertKind::BaseChanged;
-        agent_messages::queue_shoal_message(tx, id, kind, &message)?;
+        records.queue_shoal_message(tx, id, AlertKind::BaseChanged, &message)?;
     }
     for (url, edited) in retargeted {
-        let change = shoal_links::wait::changes::OwnChange {
+        let change = OwnChange {
             url: url.url(),
             authored: Vec::new(),
             state: None,
             edited,
         };
-        shoal_links::wait::changes::record_own_change(tx, id, change)?;
+        record_own_change(tx, id, change)?;
     }
     Ok(())
-}
-
-/// Whether the workspace `id` is `base` or a workspace whose branch the
-/// branch of `base` builds on.
-fn builds_on(tx: &rusqlite::Transaction<'_>, base: &SpaceId, id: &SpaceId) -> Result<bool> {
-    Ok(tx.query_row(
-        "WITH RECURSIVE up(id) AS (SELECT ?1
-            UNION SELECT workspaces.base_workspace_id FROM workspaces JOIN up USING(id)
-                WHERE workspaces.base_workspace_id IS NOT NULL)
-         SELECT EXISTS(SELECT 1 FROM up WHERE id=?2)",
-        params![base, id],
-        |row| row.get(0),
-    )?)
 }

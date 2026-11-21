@@ -7,11 +7,15 @@ use shoal_links::daemon::{ProposalKind, Records};
 use shoal_protocol::model::{ChangedOnBothSides, SpaceRef};
 
 use crate::daemon::{
+    agent_messages,
+    alerts::AlertKind,
     approvals::{self, ApprovalRequest, proposals},
     events::{self, EventKind},
     item_numbers::ItemNumber,
     tree::{self, TrackedAgents},
+    workspace::record_base_changed,
 };
+use crate::model::EventCause;
 
 /// The space records links read, which the daemon keeps.
 pub(crate) struct LinkRecords;
@@ -107,6 +111,45 @@ impl Records for LinkRecords {
         space: Option<&SpaceId>,
     ) -> Result<Vec<ApprovalRequest>> {
         approvals::list_of_space(db, space)
+    }
+
+    fn builds_on(&self, db: &Connection, base: &SpaceId, id: &SpaceId) -> Result<bool> {
+        Ok(db.query_row(
+            "WITH RECURSIVE up(id) AS (SELECT ?1
+                UNION SELECT workspaces.base_workspace_id FROM workspaces JOIN up USING(id)
+                    WHERE workspaces.base_workspace_id IS NOT NULL)
+             SELECT EXISTS(SELECT 1 FROM up WHERE id=?2)",
+            rusqlite::params![base, id],
+            |row| row.get(0),
+        )?)
+    }
+
+    fn change_base(
+        &self,
+        tx: &Transaction<'_>,
+        id: &SpaceId,
+        base: &SpaceId,
+        new_base: Option<&SpaceId>,
+        cause: EventCause,
+    ) -> Result<bool> {
+        let changed = tx.execute(
+            "UPDATE workspaces SET base_workspace_id=?3 WHERE id=?1 AND base_workspace_id=?2",
+            rusqlite::params![id, base, new_base],
+        )?;
+        if changed > 0 {
+            record_base_changed(tx, id, cause)?;
+        }
+        Ok(changed > 0)
+    }
+
+    fn queue_shoal_message(
+        &self,
+        tx: &Transaction<'_>,
+        id: &SpaceId,
+        kind: AlertKind,
+        message: &str,
+    ) -> Result<()> {
+        agent_messages::queue_shoal_message(tx, id, kind, message).map(drop)
     }
 
     fn subtree(&self, db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>> {
