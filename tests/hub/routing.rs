@@ -155,7 +155,7 @@ fn the_user_s_terminal_renames_and_removes_a_space_on_another_machine() {
     hub.ok(&["rename", &there, "Renamed there"]);
     let status = hub.ok(&["status", &there]);
     assert_eq!(status["workspace"]["name"], "Renamed there", "{status}");
-    assert!(status["machine"].is_string(), "{status}");
+    assert_eq!(status["machine"]["name"], "laptop", "{status}");
     let stopped = hub.ok(&["stop", &there]);
     assert_eq!(stopped["stopped"], true, "{stopped}");
     hub.ok(&["rm", &there, "--wait", "--yes"]);

@@ -30,6 +30,13 @@ pub(super) fn render_status(view: &StatusView, json: bool) {
     render_permissions(status, palette);
     render_cleanup(status, palette);
     render_attention(status);
+    if let Some(machine) = &status.machine {
+        let note = format!(
+            "Runs on machine {}, which keeps its sessions and transcripts",
+            machine.name
+        );
+        outln!("{}", palette.paint(Style::Muted, &note));
+    }
 }
 
 /// The workspace, its branch, setup, changes and holds.

@@ -26,6 +26,10 @@ pub enum Forwarding {
     /// It goes to the space's machine, and fails at once while that machine
     /// is offline.
     Online,
+    /// It goes to the space's machine, and while that machine is offline
+    /// is answered with what the machine last reported to the hub, as a
+    /// space's status is.
+    Reported,
     /// It goes to the space's machine, and waits at the hub while that
     /// machine is offline, as messages, answers, decisions and stops can.
     Queued,

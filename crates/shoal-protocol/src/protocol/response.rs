@@ -279,6 +279,7 @@ response_bodies! {
     WaitingUpdates(WaitingUpdates),
     AgentSession(crate::model::AgentSession),
     SpaceStatus(Box<SpaceStatus>),
+    ReportedStatus(Box<crate::status::ReportedStatus>),
     SpaceSessions(crate::transcripts::SpaceSessions),
     FollowedSession(crate::transcripts::FollowedSession),
     SessionBytes(crate::transcripts::SessionBytes),

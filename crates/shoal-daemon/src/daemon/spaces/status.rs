@@ -66,6 +66,7 @@ impl Manager {
             waiting_jobs,
             turn_retry,
             proxy_retry,
+            machine: None,
         })
     }
 

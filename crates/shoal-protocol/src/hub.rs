@@ -219,6 +219,13 @@ impl PublicKey {
     }
 }
 
+/// The joined machine an answer comes from, as the hub names it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Machine {
+    pub id: MemberId,
+    pub name: String,
+}
+
 /// A machine or device paired with the hub, the hub's own machine included.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Member {

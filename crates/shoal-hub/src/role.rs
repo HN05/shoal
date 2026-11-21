@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use shoal_ids::member_ids::MemberId;
-use shoal_protocol::hub::{HubRole, Overview};
+use shoal_protocol::hub::{HubRole, Machine, Overview};
 
 use crate::{Hub, answers, daemon::Daemon, identity, members};
 
@@ -27,6 +27,21 @@ impl Hub {
     /// through its open link to one.
     pub fn reaches_other_machines(&self, daemon: &dyn Daemon) -> bool {
         self.is_hub(daemon) || self.member.calls().is_some()
+    }
+
+    /// This machine as the hub names it: the hub's own, or the member it
+    /// joined as; none on a machine in no hub.
+    pub async fn this_machine(&self, daemon: &dyn Daemon) -> Result<Option<Machine>> {
+        if self.is_hub(daemon) {
+            let own = self.own_machine(daemon).await?;
+            let (id, name) = (own.id, own.name);
+            return Ok(Some(Machine { id, name }));
+        }
+        let joined = self.store.read(crate::membership::load).await?;
+        Ok(joined.map(|joined| Machine {
+            id: joined.membership.member,
+            name: joined.membership.name,
+        }))
     }
 
     /// The hub role this daemon takes, for `shoal status`.

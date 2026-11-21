@@ -75,6 +75,38 @@ pub struct SpaceStatus {
     /// The request the agent's proxy waits to retry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_retry: Option<crate::executions::ProxyRetry>,
+    /// The other joined machine that runs it and answered for it, which
+    /// keeps its sessions and transcripts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<crate::hub::Machine>,
+}
+
+/// What a space's machine last reported of it to the hub, which is its
+/// status while that machine is offline.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReportedStatus {
+    pub space: crate::hub::directory::Listed,
+    pub machine: crate::hub::Member,
+}
+
+/// A space's status: its machine's, or while another machine that runs it
+/// is offline, what that machine last reported.
+#[derive(Debug)]
+pub enum StatusAnswer {
+    Live(Box<SpaceStatus>),
+    Reported(Box<ReportedStatus>),
+}
+
+impl TryFrom<crate::protocol::Body> for StatusAnswer {
+    type Error = anyhow::Error;
+
+    fn try_from(body: crate::protocol::Body) -> anyhow::Result<Self> {
+        match body {
+            crate::protocol::Body::SpaceStatus(status) => Ok(Self::Live(status)),
+            crate::protocol::Body::ReportedStatus(reported) => Ok(Self::Reported(reported)),
+            body => Err(body.unexpected("SpaceStatus")),
+        }
+    }
 }
 
 /// What awaits the user about a space.

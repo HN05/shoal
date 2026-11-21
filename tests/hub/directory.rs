@@ -135,7 +135,7 @@ fn joined_machines_list_each_others_spaces_and_keep_an_offline_ones() {
     let own = (own.as_array().unwrap().iter()).find(|space| space["id"] == there);
     assert!(own.is_some_and(|space| space["machine"].is_null() && space["path"].is_string()));
     let status = hub.ok(&["status", &there]);
-    assert_eq!(status["machine"], laptop_id.as_str());
+    assert_eq!(status["machine"]["id"], laptop_id.as_str());
     // An offline machine's spaces stay, with when the hub last saw it.
     laptop.daemon.kill();
     let row = wait_for("the offline machine's row", || {
@@ -146,6 +146,10 @@ fn joined_machines_list_each_others_spaces_and_keep_an_offline_ones() {
             .map(str::to_owned)
     });
     assert!(row.contains("on-laptop"), "{row}");
+    // Its status is what it last reported.
+    let reported = hub.ok(&["status", &there]);
+    assert_eq!(reported["space"]["id"], there.as_str(), "{reported}");
+    assert_eq!(reported["machine"]["name"], "laptop", "{reported}");
 }
 
 #[test]

@@ -3,7 +3,7 @@
 //! state the daemon reads in their worktrees; and the spaces, workspaces and
 //! chats together.
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::status::{Inspection, SpaceStatus};
+use shoal_protocol::status::{Inspection, StatusAnswer};
 use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::Result;
@@ -144,10 +144,11 @@ pub async fn find_spaces(daemon: &impl Daemon, target: SpaceTarget) -> Result<Ve
     request(daemon, WorkspaceMethod::FindSpaces { target }).await
 }
 
-/// What `space` is doing: its links, agents, leases and assignment.
-pub async fn status(daemon: &impl Daemon, space: SpaceSelector) -> Result<SpaceStatus> {
-    let status: Box<SpaceStatus> = request(daemon, WorkspaceMethod::SpaceStatus { space }).await?;
-    Ok(*status)
+/// What `space` is doing: its links, agents, leases and assignment, from
+/// the machine that runs it, or what that machine last reported while it
+/// is offline.
+pub async fn status(daemon: &impl Daemon, space: SpaceSelector) -> Result<StatusAnswer> {
+    request(daemon, WorkspaceMethod::SpaceStatus { space }).await
 }
 
 /// The worktrees of registered repositories that no workspace owns.

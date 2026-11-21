@@ -209,7 +209,12 @@ pub(super) async fn handle(
             Body::SpaceEnvironment(manager.space_environment(&space).await?)
         }
         WorkspaceMethod::SpaceStatus { space } => {
-            Body::SpaceStatus(Box::new(manager.space_status(&space).await?))
+            let mut status = manager.space_status(&space).await?;
+            // Another machine asked for it, whose caller learns where it runs.
+            if scope.is_some_and(|token| manager.hub.vouched_caller(token).is_some()) {
+                status.machine = manager.hub.this_machine(&**manager).await?;
+            }
+            Body::SpaceStatus(Box::new(status))
         }
         WorkspaceMethod::TrackedConfig { space } => {
             Body::TrackedConfig(manager.space_tracked_config(&space).await?)

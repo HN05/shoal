@@ -380,7 +380,8 @@ impl WorkspaceMethod {
 }
 
 impl WorkspaceMethod {
-    /// A request about a space's state goes to its machine, a follow's or a
+    /// A request about a space's state goes to its machine, its status
+    /// what that machine last reported while it is offline, a follow's or a
     /// diff's answer coming as that machine writes it and an attachment's
     /// connection carrying bytes both ways; a creation, a listing, a copy
     /// written where the caller runs, and what the caller's execution,
@@ -398,12 +399,12 @@ impl WorkspaceMethod {
             | Self::FastForwardWorkspace { .. }
             | Self::RefreshWorkspace { .. }
             | Self::LaunchPermissions { .. }
-            | Self::SpaceStatus { .. }
             | Self::TrackedConfig { .. }
             | Self::Conflicts { .. }
             | Self::PreviewMerge { .. }
             | Self::LayeredConfig { .. }
             | Self::SpaceLog { .. } => Forwarding::Online,
+            Self::SpaceStatus { .. } => Forwarding::Reported,
             Self::FollowSession { .. } | Self::Diff { .. } => Forwarding::Streamed,
             Self::AttachSession { .. } => Forwarding::Duplex,
             Self::OpenBranch { .. }

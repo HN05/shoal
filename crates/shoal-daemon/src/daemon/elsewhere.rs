@@ -158,6 +158,9 @@ pub(super) async fn answer(
         Some(Ok(Elsewhere::Queued(queued))) => {
             reply(&mut stream, request_id, Body::Queued(queued)).await
         }
+        Some(Ok(Elsewhere::Reported(reported))) => {
+            reply(&mut stream, request_id, Body::ReportedStatus(reported)).await
+        }
         Some(Ok(Elsewhere::Answered(frames))) => relay(&mut stream, request_id, frames).await,
         Some(Ok(Elsewhere::Streamed(incoming))) => {
             // It goes on, so it holds no operation, which would hold off a

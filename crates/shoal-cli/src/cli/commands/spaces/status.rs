@@ -1,19 +1,16 @@
 //! A space's status: what the daemon reports and the sessions the CLI finds,
-//! or another joined machine's status of its space.
-mod elsewhere;
+//! or another joined machine's status of its space, or what that machine
+//! last reported while it is offline.
 mod render;
+mod reported;
 
-use anyhow::{Context as _, Result, ensure};
-use shoal_protocol::status::SpaceDetail;
+use anyhow::{Context as _, Result, bail, ensure};
+use shoal_protocol::status::{SpaceDetail, SpaceStatus, StatusAnswer};
 
 use self::render::render_status;
 use crate::client::{output::status::StatusView, transcripts};
 use crate::{
-    cli::{
-        commands::{machines, service},
-        context::Context,
-        ui,
-    },
+    cli::{commands::service, context::Context, ui},
     forge::IssueInput,
     model::SpaceTarget,
     protocol::ConfigTarget,
@@ -27,12 +24,6 @@ pub(in crate::cli::commands) async fn status(
 ) -> Result<i32> {
     let Some(target) = status_target(space.as_deref(), item)? else {
         let space = space.as_deref().map(SpaceSelector::parse).transpose()?;
-        if let Some(selector) = &space
-            && let Some((remote, view)) = machines::space_elsewhere(ctx, selector).await?
-        {
-            elsewhere::show(ctx, &remote, &view).await?;
-            return Ok(0);
-        }
         let space = match space {
             Some(space) => ui::select_space_here(ctx, Some(space)).await?,
             None => match space_here(ctx).await? {
@@ -40,14 +31,26 @@ pub(in crate::cli::commands) async fn status(
                 None => return service::shoal_status(ctx).await,
             },
         };
-        let status = status_view(ctx, space).await?;
-        ctx.show(&status, |status| render_status(status, ctx.json))?;
+        match crate::client::workspaces::status(&ctx.paths, space).await? {
+            StatusAnswer::Live(status) => {
+                let status = status_view(ctx, *status).await;
+                ctx.show(&status, |status| render_status(status, ctx.json))?;
+            }
+            StatusAnswer::Reported(reported) => reported::show(ctx, &reported)?,
+        }
         return Ok(0);
     };
     let spaces = crate::client::workspaces::find_spaces(&ctx.paths, target).await?;
     let mut statuses = Vec::new();
     for space in spaces {
-        statuses.push(status_view(ctx, SpaceSelector::id(&space.id)).await?);
+        let selector = SpaceSelector::id(&space.id);
+        // The spaces it finds are this machine's, whose status is its own.
+        let StatusAnswer::Live(status) =
+            crate::client::workspaces::status(&ctx.paths, selector).await?
+        else {
+            bail!("space {} has no status of its own here", space.id);
+        };
+        statuses.push(status_view(ctx, *status).await);
     }
     ctx.show(&statuses, |statuses| {
         for (index, status) in statuses.iter().enumerate() {
@@ -77,15 +80,24 @@ async fn space_here(ctx: &Context) -> Result<Option<SpaceSelector>> {
     }
 }
 
-/// The status of `space`, with the sessions its terminal hosts keep and
-/// where its agents' transcripts are.
-async fn status_view(ctx: &Context, space: SpaceSelector) -> Result<StatusView> {
-    let status = crate::client::workspaces::status(&ctx.paths, space.clone()).await?;
+/// `status` with the sessions its terminal hosts keep and where its
+/// agents' transcripts are, which another machine that runs the space
+/// keeps there.
+async fn status_view(ctx: &Context, status: SpaceStatus) -> StatusView {
+    if status.machine.is_some() {
+        return StatusView {
+            status,
+            sessions: Vec::new(),
+            sessions_error: None,
+            transcripts: Vec::new(),
+            transcripts_error: None,
+        };
+    }
     let (sessions, sessions_error) = listed(sessions(ctx, &status.space).await);
     let id = status.space.id().to_owned();
     let (transcripts, transcripts_error) =
         listed(transcripts::space_transcripts(&ctx.paths, SpaceSelector::id(&id)).await);
-    Ok(StatusView {
+    StatusView {
         status,
         sessions: sessions
             .into_iter()
@@ -94,8 +106,7 @@ async fn status_view(ctx: &Context, space: SpaceSelector) -> Result<StatusView> 
         sessions_error,
         transcripts,
         transcripts_error,
-        machine: None,
-    })
+    }
 }
 
 /// What `found` lists, or why it could not, which status shows in place of

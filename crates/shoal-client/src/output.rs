@@ -99,6 +99,7 @@ outputs!(
     shoal_protocol::demos::Running,
     shoal_protocol::events::EventItem,
     shoal_protocol::hub::directory::Listed,
+    shoal_protocol::status::ReportedStatus,
     shoal_protocol::files::AttachedFile,
     shoal_protocol::log::LogEntry,
     shoal_protocol::links::Proposed,

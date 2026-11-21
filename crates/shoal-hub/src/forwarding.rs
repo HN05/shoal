@@ -20,6 +20,7 @@ use shoal_protocol::{
     },
     protocol::{Body, Forwarding, Operation, Response},
     space_names::SpaceSelector,
+    status::ReportedStatus,
 };
 
 use super::{
@@ -46,6 +47,9 @@ pub enum Elsewhere {
     Answered(Vec<serde_json::Value>),
     /// The hub holds it until the machine connects.
     Queued(shoal_protocol::hub::routing::Queued),
+    /// What the offline machine last reported of the space, which answers
+    /// a request that takes that.
+    Reported(Box<ReportedStatus>),
     /// The frames its daemon writes come on this stream.
     Streamed(Incoming),
     /// Its daemon's answer comes on this duplex stream, followed by the
@@ -137,6 +141,13 @@ impl Hub {
             );
             return Err(Refusal::new(Reason::NotReady, message).into());
         };
+        if request.forwarding == Forwarding::Reported && !machine.connected {
+            let reported = ReportedStatus {
+                space: listed.clone(),
+                machine: machine.clone(),
+            };
+            return Ok(Elsewhere::Reported(Box::new(reported)));
+        }
         let delivery = match request.forwarding {
             Forwarding::Queued => Delivery::Queued,
             _ => Delivery::Now,

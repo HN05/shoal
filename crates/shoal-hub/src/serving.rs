@@ -98,7 +98,7 @@ impl Hub {
             Method::Operation(operation)
                 if matches!(
                     operation.forwarding(),
-                    Forwarding::Online | Forwarding::Queued
+                    Forwarding::Online | Forwarding::Reported | Forwarding::Queued
                 ) => {}
             Method::Operation(operation)
                 if matches!(

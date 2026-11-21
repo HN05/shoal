@@ -225,7 +225,9 @@ directory before it handles the request; a thread a space's process
 opens is numbered in its own space, so only the user's goes to the space
 named. A request for a space another machine owns goes from the caller's
 daemon through the hub to that machine, which decides it as its own
-caller's: no command is special on the hub. Each machine vouches for its own callers, so its
+caller's and names itself in the answer where the caller shows it, as a
+space's status does; while that machine is offline, a space's status is
+what it last reported to the hub. No command is special on the hub. Each machine vouches for its own callers, so its
 unscoped callers' requests and a device's go as the user's and a space's
 process's with that space's ID, the reach of its scope and its effective
 permissions, which the owning machine checks through the operation every
