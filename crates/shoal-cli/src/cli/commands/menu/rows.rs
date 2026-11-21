@@ -344,7 +344,7 @@ async fn space_rows(ctx: &Context, scoping: Scoping) -> Result<Entries> {
         .into_workspaces();
     let palette = Palette::picker();
     let statuses = ui::Statuses {
-        stopped: ui::stopped_workspaces(&ctx.paths).await,
+        stopped: ui::stopped_spaces(&ctx.paths).await,
         queued: queued_agents::entries(ctx).await?,
     };
     statuses.sort(&mut workspaces);

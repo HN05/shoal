@@ -77,7 +77,7 @@ impl Inbox {
         let everywhere = crate::cli::everywhere::spaces(ctx).await?;
         let (spaces, view) = (everywhere.here, everywhere.elsewhere);
         let mut workspaces = spaces.workspaces();
-        let stopped = ui::stopped_workspaces(&ctx.paths).await;
+        let stopped = ui::stopped_spaces(&ctx.paths).await;
         let existing: HashSet<SpaceId> = workspaces.iter().map(|w| w.id.clone()).collect();
         workspaces.retain(|w| {
             filter.keeps_workspace(w, &[ListStatus::of_workspace(w, stopped.contains(&w.id))])

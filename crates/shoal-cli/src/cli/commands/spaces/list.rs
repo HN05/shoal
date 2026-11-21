@@ -89,7 +89,7 @@ async fn kept_workspaces(
     filter: &listing::ListFilter,
 ) -> Result<(Vec<Workspace>, ui::Statuses)> {
     let mut statuses = ui::Statuses {
-        stopped: ui::stopped_workspaces(&ctx.paths).await,
+        stopped: ui::stopped_spaces(&ctx.paths).await,
         queued: queued_agents::entries(ctx).await?,
     };
     workspaces.retain(|workspace| filter.keeps_workspace(workspace, &statuses.shown(workspace)));

@@ -25,9 +25,11 @@
 //! - [`several`]: choosing several items at once; Tab selects each and
 //!   Ctrl-A all of them ([`pick_many`]).
 //! - [`workspaces`]: the workspace a command acts on, named, current or
-//!   picked ([`select_workspace`]), listed by what the command needs of it,
-//!   or picked among running chats as well as a space ([`select_space`],
-//!   [`pick_space`]), or several spaces at once ([`select_spaces`]).
+//!   picked ([`select_workspace`]), listed by what the command needs of it.
+//! - [`spaces`]: the space a command acts on, a workspace or a chat, picked
+//!   among running chats as well as workspaces ([`select_space`],
+//!   [`pick_space`]), several spaces at once ([`select_spaces`]), or those
+//!   `shoal resume` brings back ([`select_resumable`]).
 //! - [`elsewhere`]: the other joined machines' spaces those pickers offer
 //!   after this machine's, for a command that acts on them.
 //! - [`machines`]: another joined machine, picked among those online
@@ -51,6 +53,7 @@ mod picker;
 mod prompt;
 mod rows;
 mod several;
+mod spaces;
 mod views;
 mod workspaces;
 
@@ -63,5 +66,6 @@ pub use picker::*;
 pub use prompt::*;
 pub use rows::*;
 pub use several::{Report, confirm_losses, failure, pick_many};
+pub use spaces::*;
 pub use views::*;
 pub use workspaces::*;
