@@ -20,12 +20,16 @@ use shoal_protocol::threads::CloseCause;
 impl Manager {
     /// Open the removed space `selector` names again, as
     /// [`Self::reopen_space`] does, unless the hub lists it on another
-    /// machine.
+    /// machine: one whose machine is offline it takes over from the hub's
+    /// package of it, and any other it refuses.
     pub async fn restore_space(
         &self,
         selector: &SpaceSelector,
         caller: Option<&Caller>,
     ) -> Result<RestoredSpace> {
+        if let Some(takeover) = self.takeover(selector).await? {
+            return self.take_over_from_package(takeover, caller).await;
+        }
         if let Some(id) = selector.given_id() {
             self.hub.refuse_live_elsewhere(self, id).await?;
         }
@@ -149,7 +153,7 @@ impl Manager {
         selector: &SpaceSelector,
         caller: &Caller,
     ) -> Result<()> {
-        let removed = self.removed_space(selector).await?;
+        let removed = self.restorable_space(selector).await?;
         match self.scoped_restore_refusal(&removed, caller).await? {
             Some(refusal) => bail!("{refusal}"),
             None => Ok(()),
@@ -403,6 +407,7 @@ mod packages;
 pub(crate) use imports::SpaceImport;
 pub(crate) use packages::PackageInput;
 mod records;
+mod takeovers;
 mod worktree;
 
 #[cfg(test)]

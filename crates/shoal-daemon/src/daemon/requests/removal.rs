@@ -70,7 +70,7 @@ pub(super) async fn handle(
             return Ok(Answer::pages(listed, Body::RemovedSpaces));
         }
         RemovalMethod::RemovedSpace { space } => {
-            Body::RemovedSpaces(vec![manager.removed_space(&space).await?])
+            Body::RemovedSpaces(vec![manager.restorable_space(&space).await?])
         }
         RemovalMethod::StopTargets => {
             let targets = manager.stop_targets(QueuedLaunches::Cancel).await?;
