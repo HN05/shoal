@@ -1,10 +1,9 @@
 //! The hub's alert once an intermittent machine has stayed unreachable for
-//! [`UNREACHABLE_FOR`] without announcing a sleep or shutdown, while its
-//! spaces had something to do: an agent working when its link dropped, a
-//! queued agent, or an update the hub holds for one since. It names each
-//! such space, how far behind the hub's package of it is, and the restore
-//! that takes it over, and starts nothing, since a machine that lost only
-//! the hub keeps working.
+//! [`UNREACHABLE_FOR`] while its spaces had something to do: an agent
+//! working when its link dropped, a queued agent, or an update the hub
+//! holds for one since. It names each such space, how far behind the hub's
+//! package of it is, and the restore that takes it over, and starts
+//! nothing, since a machine that lost only the hub keeps working.
 use std::{
     collections::{HashMap, HashSet},
     time::Duration,
@@ -60,18 +59,19 @@ impl Hub {
         }
     }
 
-    /// Alert the user to each machine that dropped by `now` and was not
-    /// alerted for that drop yet.
+    /// Alert the user to each machine that dropped by `now` while its
+    /// spaces had something to do, and was not alerted for that drop yet.
     async fn alert_drops(&self, daemon: &dyn Daemon, now: UnixTime) -> Result<()> {
         let directory = self.local_directory(daemon).await?;
         for (machine, dropped_at) in dropped(&directory, now) {
-            if !self.take_drop(&machine.id, dropped_at).await? {
-                continue;
-            }
             let id = machine.id.clone();
             let held = self.store.read(move |tx| held(tx, &id, dropped_at)).await?;
             let busy = busy_spaces(&directory, &machine.id, &held.spaces);
+            // An idle machine's drop alerts once something waits for it.
             if busy.is_empty() && held.others == 0 {
+                continue;
+            }
+            if !self.take_drop(&machine.id, dropped_at).await? {
                 continue;
             }
             let id = machine.id.clone();
@@ -169,7 +169,7 @@ fn drop_message(
     others: usize,
 ) -> String {
     let mut message = format!(
-        "Machine {} has been unreachable for {} without announcing a sleep or shutdown; the hub starts nothing in its place, since it may still be working without the hub.",
+        "Machine {} has been unreachable for {}; the hub starts nothing in its place, since it may still be working without the hub.",
         machine.name,
         elapsed(away),
     );
