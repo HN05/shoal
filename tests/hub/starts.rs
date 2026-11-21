@@ -320,9 +320,13 @@ fn a_space_copies_to_another_machine_only_what_it_copies_here() {
     assert!(created.status.success(), "{}", printed(&created));
     let kid = machines.hub.id("kid");
     machines.hub.ok(&["rm", &kid, "--yes", "--wait"]);
-    // A space's process copies no removed workspace here, nor there.
-    let started = start_in_coordinator(&machines, &["--copy", &kid, "--checkpoint", "1"]);
-    assert!(!started.status.success(), "{}", printed(&started));
+    // A space's process copies no removed workspace here, nor there, even
+    // where its launch comes without the CLI's own check.
+    let launch = serde_json::json!({"launch": {"launch": {
+        "machine": "laptop", "agent": "pi", "copy": {"space": kid}, "checkpoint": 1,
+    }}});
+    let refused = machines.hub.request_as(launch, Some(&token));
+    assert_eq!(refused["type"], "error", "{refused}");
     let listed = machines.laptop.ok(&["list"]);
     let there = (listed.as_array().unwrap().iter()).any(|space| space["machine"].is_null());
     assert!(!there, "{listed}");
