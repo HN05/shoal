@@ -133,10 +133,7 @@ impl Manager {
         let answer = self
             .hub
             .ask_machine_or_hold(self, alert.machine, operation, caller);
-        match answer.await? {
-            Some(body) => Sent::try_from(body),
-            None => Ok(Sent::default()),
-        }
+        Sent::try_from(answer.await?)
     }
 
     /// Send `message` from `caller` to every workspace and chat with an

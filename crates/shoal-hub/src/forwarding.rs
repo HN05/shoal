@@ -241,15 +241,17 @@ impl Hub {
 
     /// The answer `machine` gives `operation` from `caller`, which this
     /// machine forwards there through the hub, leaving out what belongs to
-    /// this machine; none while the hub holds it for that machine, which
-    /// is offline, as messages and decisions wait.
+    /// this machine; it fails with [`Queued`] while the hub holds it for
+    /// that machine, which is offline, as messages and decisions wait.
+    ///
+    /// [`Queued`]: shoal_protocol::hub::routing::Queued
     pub async fn ask_machine_or_hold(
         &self,
         daemon: &dyn Daemon,
         machine: &Member,
         operation: Operation,
         caller: Option<&Caller>,
-    ) -> Result<Option<Body>> {
+    ) -> Result<Body> {
         let request = self
             .forwarded_to(daemon, machine, operation, caller)
             .await?;
@@ -257,8 +259,8 @@ impl Hub {
             .send_forwarded(daemon, machine, request, Delivery::Queued)
             .await?
         {
-            Reply::Answered(answered) => answered_body(answered.frames).map(Some),
-            Reply::Queued(_) => Ok(None),
+            Reply::Answered(answered) => answered_body(answered.frames),
+            Reply::Queued(queued) => Err(queued.into()),
             reply => Err(anyhow!("the hub answered with an unexpected {reply:?}")),
         }
     }

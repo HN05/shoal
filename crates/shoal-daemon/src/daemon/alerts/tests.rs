@@ -1,7 +1,7 @@
 use super::*;
 use crate::daemon::test_support::{away_on_offline_machine, held_calls, manager};
 use crate::daemon::workspace_files::{FileSource, NewFile};
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{hub::routing::Queued, space_names::SpaceSelector};
 
 #[tokio::test]
 async fn repeated_conflicts_collapse_until_read_and_completed_events_never_do() {
@@ -636,7 +636,9 @@ async fn a_message_to_another_machine_s_space_waits_at_the_hub_while_that_machin
     away_on_offline_machine(&manager, None).await;
     let to = SpaceSelector::Number(90.into());
     let sent = manager.send_space_message(None, &to, "Rebase onto main".into(), Vec::new());
-    assert!(sent.await.unwrap().alerts.is_empty());
+    let error = sent.await.unwrap_err();
+    let queued = error.downcast_ref::<Queued>().expect("the hub holds it");
+    assert_eq!(queued.name, "desk");
     let held = held_calls(&manager).await;
     let [call] = held.as_slice() else {
         panic!("the hub holds {held:?}");

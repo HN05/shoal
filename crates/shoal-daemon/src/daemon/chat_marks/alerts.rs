@@ -10,6 +10,7 @@ use shoal_protocol::{
     alerts::Recipient,
     chat_marks::{ChatMarked, MarkedRecipients},
     files::NewFile,
+    hub::routing::Queued,
     model::Located,
     protocol::AlertTarget,
     space_names::SpaceSelector,
@@ -191,9 +192,11 @@ impl Manager {
         } = alert;
         self.scope_alert_target(&caller, &mut to).await?;
         let text = alert_text(&to, message.as_deref());
-        let sent = self
-            .send_alert(Some(&caller), to, text, attachments)
-            .await?;
+        let sent = match self.send_alert(Some(&caller), to, text, attachments).await {
+            // Held at the hub until the recipient's machine connects.
+            Err(error) if error.is::<Queued>() => return Ok(()),
+            sent => sent?,
+        };
         self.store
             .write(move |tx| mark_in_chat(tx, &sent.alerts))
             .await

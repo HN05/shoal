@@ -4,6 +4,8 @@ use anyhow::Result;
 use futures_util::{FutureExt, future::BoxFuture};
 use tokio::{io::AsyncWrite, net::UnixStream, sync::OwnedRwLockReadGuard};
 
+use shoal_protocol::hub::routing::Queued;
+
 use super::{approvals::Undecided, manager::Manager};
 use crate::{
     protocol::{self, Body, ErrorCode, Response},
@@ -95,10 +97,14 @@ impl Answer {
 }
 
 /// The error body of an operation that failed with `error`: the approval
-/// request it waits for or was refused by, else its code and message.
+/// request it waits for or was refused by, or what the hub holds for an
+/// offline machine, else its code and message.
 pub(super) fn failure(error: &anyhow::Error) -> Body {
-    match error.downcast_ref::<Undecided>() {
-        Some(Undecided(request)) => Body::Undecided(request.clone()),
+    if let Some(Undecided(request)) = error.downcast_ref::<Undecided>() {
+        return Body::Undecided(request.clone());
+    }
+    match error.downcast_ref::<Queued>() {
+        Some(queued) => Body::Queued(queued.clone()),
         None => Body::error(error_code(error), format!("{error:#}")),
     }
 }
