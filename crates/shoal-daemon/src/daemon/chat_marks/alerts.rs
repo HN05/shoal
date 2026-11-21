@@ -16,8 +16,7 @@ use shoal_protocol::{
 use super::Mark;
 use crate::{
     daemon::{
-        agent_messages::Delivery,
-        alerts::{AlertKind, Recipients, recipient},
+        alerts::{Recipients, recipient},
         executions::ExecutionKind,
         manager::Manager,
         notifications::Source,
@@ -153,29 +152,6 @@ impl Manager {
     async fn repository_name(&self, selector: &Selector) -> Result<String> {
         let repository = self.repository(selector.clone()).await?;
         Ok(repository.display_name().to_owned())
-    }
-
-    /// Tell the agent of `space` that a prompt the user submitted answered
-    /// its turn, leaving the alert it marked the turn to send, to whom
-    /// `alert` names, unsent; its next delivery shows the agent. A failure
-    /// is logged, since the prompt it describes is recorded.
-    pub(super) async fn tell_alert_dropped(&self, space: &Space, alert: MarkedAlert) {
-        let to = match alert.recipients {
-            MarkedRecipients::User => "the user".to_owned(),
-            MarkedRecipients::Coordinator { space } | MarkedRecipients::Space { space } => {
-                format!("the agent of {}", space.label())
-            }
-            MarkedRecipients::Above => "your coordinator".to_owned(),
-            MarkedRecipients::All { .. } => "the agents below".to_owned(),
-        };
-        let message = format!(
-            "The user's prompt answered your turn, so the alert to {to} that `shoal send --in-chat` marked it to send was not sent. Send it again if it still applies."
-        );
-        let kind = AlertKind::ChatAlertDropped;
-        let told = self.queue_agent_message_delivered(&space.id, kind, message, Delivery::NextTurn);
-        if let Err(error) = told.await {
-            crate::daemon::log!("unsent alert of {} not told: {error:#}", space.name);
-        }
     }
 
     /// Send `message`, the final message of the turn `turn` of the agent

@@ -586,8 +586,9 @@ read; `--space` names the space it went to, as for one on another machine.
 `--in-chat` sends your turn's final message as the alert once the turn
 ends, for an agent with Shoal's hooks: it names whom it goes to now, and
 `shoal log` the alert's number once sent. A prompt the user submits during
-the turn drops it, which Shoal tells you, and marks read the alerts your
-chat sent them.
+the turn drops it and marks read the alerts your chat sent them; Shoal
+tells you when your final message goes unsent, as then or when sending
+fails.
 
 ## Threads
 

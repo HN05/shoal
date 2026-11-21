@@ -319,7 +319,7 @@ async fn a_prompt_during_a_marked_turn_drops_its_alert_and_tells_the_agent() {
     let kinds: Vec<AlertKind> = (tree.unread(&tree.parent).await.into_iter())
         .map(|alert| alert.kind)
         .collect();
-    assert_eq!(kinds, [AlertKind::ChatAlertDropped]);
+    assert_eq!(kinds, [AlertKind::ChatMessageUnsent]);
 }
 
 #[tokio::test]
@@ -347,4 +347,25 @@ async fn a_prompt_marks_read_the_alerts_its_chat_sent_the_user() {
         .collect();
     assert_eq!(users, ["Plain"]);
     assert_eq!(tree.unread(&tree.child).await.len(), 1);
+}
+
+#[tokio::test]
+async fn a_marked_alert_that_fails_as_the_turn_ends_is_told_to_the_agent() {
+    let tree = tree().await;
+    let file = tree.root.path().join("report.txt");
+    std::fs::write(&file, "draft").unwrap();
+    (tree.parent)
+        .mark_alert(&tree.manager, AlertTarget::Up, vec![file.clone().into()])
+        .await;
+    std::fs::remove_file(&file).unwrap();
+    tree.parent.end_turn(&tree.manager, "Done").await;
+    assert!(tree.users().await.is_empty());
+    let unsent: Vec<String> = (tree.unread(&tree.parent).await.into_iter())
+        .filter(|alert| alert.kind == AlertKind::ChatMessageUnsent)
+        .map(|alert| alert.message)
+        .collect();
+    let [notice] = unsent.as_slice() else {
+        panic!("{unsent:?}");
+    };
+    assert!(notice.contains("report.txt"), "{notice}");
 }

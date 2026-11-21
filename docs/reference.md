@@ -6762,7 +6762,8 @@ as they are then; the alert gets its number
 then, which the sender's [`shoal log`](#space-log) names. A turn without a
 final message sends that the agent wrote in its chat. A prompt the user
 submits during the turn drops the alert, and the agent's next delivery says
-it was not sent; a prompt in a chat also marks read the user's unread
+it was not sent, as it says when a marked post or alert fails to send at the
+end of the turn, with why; a prompt in a chat also marks read the user's unread
 alerts that chat sent in-chat, since the user is reading it there.
 
 `--all` sends to every agent the sender's scope reaches, and `--repo` to every

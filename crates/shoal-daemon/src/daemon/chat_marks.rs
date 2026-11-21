@@ -24,6 +24,7 @@ pub(crate) const WROTE_IN_CHAT: &str =
     "The agent wrote in its chat; attach to its session to read it.";
 
 mod alerts;
+mod unsent;
 
 use alerts::MarkedAlert;
 
@@ -69,6 +70,16 @@ fn take(tx: &Transaction<'_>, execution: &ExecutionId) -> Result<Option<Mark>> {
         Some((None, Some(alert))) => Some(Mark::Alert(serde_json::from_str(&alert)?)),
         Some((None, None)) => bail!("a turn's mark names neither a thread nor an alert"),
     })
+}
+
+/// Clear the mark of the turn of the agent `execution` runs, returning it
+/// with what it shows the agent.
+fn taken(tx: &Transaction<'_>, execution: &ExecutionId) -> Result<Option<(Mark, ChatMark)>> {
+    let Some(mark) = take(tx, execution)? else {
+        return Ok(None);
+    };
+    let shown = shown(tx, &mark)?;
+    Ok(Some((mark, shown)))
 }
 
 /// What `mark` shows the agent: the thread its post goes to, or whom its
@@ -126,7 +137,8 @@ impl Manager {
 
     /// Send the turn's `final_message` as the agent `execution` runs in the
     /// space `selector` names marked its turn to, consuming the mark. The
-    /// agent's turn ends either way, so a failure is only logged.
+    /// agent's turn ends either way, so a failure is logged and told to the
+    /// agent, which may send the message again.
     pub(crate) async fn end_marked_turn(
         &self,
         selector: &SpaceSelector,
@@ -151,15 +163,20 @@ impl Manager {
         let space = self.space(selector).await?;
         let taken = {
             let turn = turn.clone();
-            self.store.write(move |tx| take(tx, &turn)).await?
+            self.store.write(move |tx| taken(tx, &turn)).await?
         };
-        match taken {
-            None => Ok(()),
-            Some(Mark::Post(thread)) => self.post_marked(&space, thread, message).await,
-            Some(Mark::Alert(alert)) => {
-                (self.send_marked_alert(&space, turn, alert, message)).await
-            }
+        let Some((mark, shown)) = taken else {
+            return Ok(());
+        };
+        let sent = match mark {
+            Mark::Post(thread) => self.post_marked(&space, thread, message).await,
+            Mark::Alert(alert) => (self.send_marked_alert(&space, turn, alert, message)).await,
+        };
+        if let Err(error) = &sent {
+            let why = format!("sending it failed: {error:#}");
+            self.tell_unsent(&space, &shown, &why).await;
         }
+        sent
     }
 
     /// The user replied `prompt` in the conversation of the agent
@@ -181,7 +198,7 @@ impl Manager {
             .store
             .write(move |tx| {
                 let dropped = match &turn {
-                    Some(turn) => take(tx, turn)?,
+                    Some(turn) => taken(tx, turn)?,
                     None => None,
                 };
                 alerts::read_in_chat(tx, &id)?;
@@ -191,8 +208,10 @@ impl Manager {
             })
             .await?;
         self.announce_threads(delivered).await;
-        if let Some(Mark::Alert(alert)) = dropped {
-            self.tell_alert_dropped(&space, alert).await;
+        // The prompt answers a post the turn marked; an alert goes unsent.
+        if let Some((Mark::Alert(_), shown)) = dropped {
+            let why = "the user's prompt answered your turn";
+            self.tell_unsent(&space, &shown, why).await;
         }
         Ok(())
     }
