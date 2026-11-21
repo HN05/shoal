@@ -8,7 +8,11 @@ use toml::{
     de::{DeTable, DeValue, Deserializer, Error, ValueDeserializer},
 };
 
-use super::{machine::Machine, repo::RepoConfig, same_as::References};
+use super::{
+    machine::{self, Machine},
+    repo::RepoConfig,
+    same_as::References,
+};
 
 const MACHINE: &str = "machine";
 
@@ -83,13 +87,49 @@ fn refuse_removed(root: &Spanned<DeTable<'_>>) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn global(text: &str) -> Result<(Machine, RepoConfig), Error> {
+/// One global file as written: its `[machine]` table and its values for
+/// the options a repository may override.
+#[derive(Debug, Default)]
+pub(crate) struct GlobalFile {
+    pub machine: machine::Written,
+    pub repository: RepoConfig,
+}
+
+/// This machine's own global file.
+pub(crate) fn global(text: &str) -> Result<GlobalFile, Error> {
+    global_file(text, |_| Ok(()))
+}
+
+/// The shared config, which takes every key of the global file but the
+/// settings a machine reaches the hub with, which it needs before it has
+/// the shared file.
+pub(crate) fn shared(text: &str) -> Result<GlobalFile, Error> {
+    global_file(text, |root| {
+        for key in HUB_REACH {
+            let message = format!(
+                "machine.hub.{key} belongs in each machine's own config.toml, since a machine reaches the hub before it has the shared config"
+            );
+            refuse(root, &[MACHINE, "hub", key], &message)?;
+        }
+        Ok(())
+    })
+}
+
+/// The settings of `[machine.hub]` that say how a machine reaches the hub.
+const HUB_REACH: [&str; 4] = ["enabled", "listen", "url", "connect"];
+
+/// A global file, after `refusals` checked what it may not set.
+fn global_file(
+    text: &str,
+    refusals: impl Fn(&Spanned<DeTable<'_>>) -> Result<(), Error>,
+) -> Result<GlobalFile, Error> {
     let positioned = |mut error: Error| {
         error.set_input(Some(text));
         error
     };
     let mut root = DeTable::parse(text)?;
-    refuse_removed(&root)
+    refusals(&root)
+        .and_then(|()| refuse_removed(&root))
         .and_then(|()| refuse_root_same_as(&root))
         .map_err(positioned)?;
     let machine = match root.get_mut().remove(MACHINE) {
@@ -98,22 +138,27 @@ pub fn global(text: &str) -> Result<(Machine, RepoConfig), Error> {
                 DeValue::Table(table) => References::take(table),
                 _ => References::default(),
             };
-            let machine: Machine = serde::Deserialize::deserialize(ValueDeserializer::from(value))
+            // Read alone for its errors' positions, which the tables the
+            // files merge into no longer have.
+            let _: Machine =
+                serde::Deserialize::deserialize(ValueDeserializer::from(value.clone()))
+                    .map_err(positioned)?;
+            let table = serde::Deserialize::deserialize(ValueDeserializer::from(value))
                 .map_err(positioned)?;
-            Machine { same_as, ..machine }
+            machine::Written::new(table, same_as)
         }
-        None => Machine::default(),
+        None => machine::Written::default(),
     };
     let same_as = References::take(root.get_mut());
     let repository: RepoConfig =
         serde::Deserialize::deserialize(Deserializer::from(root)).map_err(positioned)?;
-    Ok((
+    Ok(GlobalFile {
         machine,
-        RepoConfig {
+        repository: RepoConfig {
             same_as,
             ..repository
         },
-    ))
+    })
 }
 
 pub fn repository(text: &str) -> Result<RepoConfig, Error> {

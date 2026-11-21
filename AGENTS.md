@@ -237,7 +237,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   per option over the worktree config, and is deleted with its registration.
   Settings that describe the machine live under the global `[machine]` table;
   every other option follows the repository schema in both files and resolves
-  local config, worktree file, global config, then default; the CLI reads the global file at launch and asks the
+  local config, worktree file, global config, shared config (`shared.toml`
+  beside it), then default; the CLI reads the global files at launch and asks the
   daemon for the repository layer. Named ports are lazy, with CLI overrides and
   explicit conflicts.
 - Workspace commands and every chat's agent inherit a scope token, a chat's

@@ -22,13 +22,19 @@ its own from the first file that sets it:
 3. The **global config**, `~/.config/shoal/config.toml` (or
    `$XDG_CONFIG_HOME/shoal/config.toml`), which `shoal daemon install` creates
    from [default.toml](../../../../../shoal-core/configs/default.toml).
-4. The **built-in default**.
+4. The **shared config**, `shared.toml` beside the global config, for the
+   settings you want on every machine. It takes every key the global config
+   takes, but not the `[machine.hub]` settings a machine reaches the hub with:
+   `enabled`, `listen`, `url` and `connect`. It must be valid on its own, since
+   a machine whose global config sets nothing reads it alone. Paths, `~`, hooks
+   and `{ cmd }` values in it resolve on each machine as in the global config.
+5. The **built-in default**.
 
-The global file's `[machine]` table holds the settings that describe this
-machine, and only the global file may set it. Everything outside it follows the
-repository schema in every file, so a setting copies between them. An unknown
-or misplaced key fails with its line and column, and an unknown value of a
-typed option is an error.
+The `[machine]` table holds the settings that describe this machine, and only
+the global and shared configs may set it; a table there merges key by key with
+the shared config's. Everything outside it follows the repository schema in
+every file, so a setting copies between them. An unknown or misplaced key fails
+with its line and column, and an unknown value of a typed option is an error.
 
 A named entry, such as `[ports.web]`, `[resources.signing]`,
 `[resource_pools.devices]`, `[demos.tui]` or `[secrets.TOKEN]`, replaces the one
@@ -45,7 +51,7 @@ Mode instructions and rule text may also live in Markdown files; see
 repository's local config, and `shoal config reference` prints this document;
 see [inspect effective configuration](../../../../../../docs/reference.md#inspect-effective-configuration).
 `shoal config` edits apply to a running daemon at once. After editing the global
-file by hand, run `shoal config reload`; an invalid file leaves the daemon's
+or shared file by hand, run `shoal config reload`; an invalid file leaves the daemon's
 previous settings in place. The CLI reads agent settings on each command, and
 repository files apply on the next request.
 
@@ -559,11 +565,13 @@ ships. `worker` always starts in a workspace, and the built-in `setup` mode
 cannot be configured.
 
 A mode's instructions may also be written as `modes/<name>.md` and a rule's text
-as `rules/<name>.md`, beside the global `config.toml`, beside the local config,
-or in the repository root or its `.shoal/` directory; a file names its mode or
+as `rules/<name>.md`, beside the global `config.toml`, in `shared/` beside the
+shared config, beside the local config, or in the repository root or its
+`.shoal/` directory; a file names its mode or
 rule, which it adds when no table declares it. A file in more than one of a
-layer's directories is an error naming both, and inline TOML wins over Markdown
-at each level. A repository's text is appended after the global text with a
+layer's directories is an error naming both, inline TOML wins over Markdown
+in each file's layer, and the global config's text, inline or in a file, wins
+over the shared config's. A repository's text is appended after the global text with a
 blank line between nonempty texts, and the local config's wins over the
 worktree's; an empty repository value suppresses the repository's additions,
 and an empty global value suppresses the built-in text. Texts are read at

@@ -20,6 +20,7 @@ pub mod proxies;
 pub mod repo;
 pub mod resolve;
 pub mod same_as;
+pub mod shared;
 pub mod span;
 pub mod templates;
 #[cfg(test)]
@@ -41,6 +42,8 @@ pub use repo::{
 };
 use repo::{ConfigLayers, RepoConfig};
 pub use resolve::Effective;
+use resolve::GlobalLayer;
+pub use shared::Shared;
 pub use shoal_protocol::config::options;
 
 /// How many of a repository's heavy agents may run at once: a fixed
@@ -94,14 +97,21 @@ impl<'de> Deserialize<'de> for RunLimit {
 }
 
 /// The global config: settings that describe this machine, and its values
-/// for the options a repository may override, in the repository schema.
+/// for the options a repository may override, in the repository schema,
+/// over the shared config's.
 #[derive(Debug, Default)]
 pub struct Config {
+    /// This machine's own file's `[machine]` over the shared config's.
     pub machine: Machine,
     pub repository: RepoConfig,
     /// The file each mode's instructions or rule's text came from, once
     /// [`Self::load_with_templates`] read them.
     pub template_files: modes::Files,
+    /// The shared config's values for the options a repository may
+    /// override, under [`Self::repository`].
+    pub shared: RepoConfig,
+    /// The file each of the shared config's texts came from.
+    pub shared_template_files: modes::Files,
 }
 
 impl Ports {
@@ -208,44 +218,70 @@ impl Config {
             .join("shoal/config.toml")
     }
 
-    /// The global file as one snapshot: machine policy, without the prompt
-    /// template files only agent launches need.
+    /// The global file over the shared config as one snapshot: machine
+    /// policy, without the prompt template files only agent launches need.
     pub fn load(paths: &Paths) -> Result<Self> {
+        let shared = Shared::load(paths)?;
         let path = Self::path(paths);
-        let Some(text) = crate::fsutil::read_optional(&path)
-            .with_context(|| format!("read {}", path.display()))?
-        else {
-            return Self::parse("", paths);
-        };
-        Self::parse(&text, paths).with_context(|| format!("parse {}", path.display()))
+        let text = read_file(&path)?;
+        Self::parse_over(&text, &shared, paths).with_context(|| format!("parse {}", path.display()))
     }
 
-    /// [`Self::load`] with the template files beside the config standing in
-    /// for omitted inline templates, as the CLI reads it for a launch.
+    /// Both files as written, layered without validating their values, as
+    /// skill delivery reads them without daemon paths.
+    pub fn load_unchecked(home: &Path) -> Result<Self> {
+        let path = Shared::path_for_home(home);
+        let shared = parse::shared(&read_file(&path)?)
+            .with_context(|| format!("parse {}", path.display()))?;
+        let path = Self::path_for_home(home);
+        let own = parse::global(&read_file(&path)?)
+            .with_context(|| format!("parse {}", path.display()))?;
+        Ok(Self {
+            machine: Machine::layered(shared.machine, own.machine)?,
+            repository: own.repository,
+            shared: shared.repository,
+            ..Default::default()
+        })
+    }
+
+    /// [`Self::load`] with the template files beside each file standing in
+    /// for its omitted inline templates, as the CLI reads it for a launch.
     pub fn load_with_templates(paths: &Paths) -> Result<Self> {
         let mut config = Self::load(paths)?;
-        config.template_files = read_template_files(&mut config.repository, paths)?;
+        let [shared, own] = template_directories(paths)?;
+        config.shared_template_files = modes::fill(&mut config.shared, &[shared])?;
+        config.template_files = modes::fill(&mut config.repository, &[own])?;
         Ok(config)
     }
 
-    /// This machine's repository-overridable settings as the layer below the
-    /// repository's own, without its triggers, which are its own and never
-    /// a repository's.
-    pub fn repository_layer(&self) -> RepoConfig {
-        RepoConfig {
-            triggers: Default::default(),
-            ..self.repository.clone()
-        }
+    /// The global files' values for the options a repository may override,
+    /// the shared config's below this machine's, without their triggers,
+    /// which are their own and never a repository's.
+    pub fn global_layers(&self) -> [GlobalLayer; 2] {
+        let layer = |config: &RepoConfig, files: &modes::Files| GlobalLayer {
+            config: RepoConfig {
+                triggers: Default::default(),
+                ..config.clone()
+            },
+            files: files.clone(),
+        };
+        [
+            layer(&self.shared, &self.shared_template_files),
+            layer(&self.repository, &self.template_files),
+        ]
     }
 
-    /// The global config's triggers, each starting in the repository it
-    /// names or in a chat without one.
-    pub fn triggers(&self) -> &crate::triggers::Triggers {
-        &self.repository.triggers
+    /// The global files' triggers, each starting in the repository it
+    /// names or in a chat without one; this machine's file replaces a
+    /// shared trigger of the same name.
+    pub fn triggers(&self) -> crate::triggers::Triggers {
+        let mut triggers = self.shared.triggers.clone();
+        triggers.extend(self.repository.triggers.clone());
+        triggers
     }
 
     /// This machine's settings over the built-in defaults, without a
-    /// repository's layers, with the global file's references followed.
+    /// repository's layers, with the global files' references followed.
     pub fn global_settings(&self) -> Result<Settings> {
         resolve::Stack::new(self, &ConfigLayers::default())?.resolve()
     }
@@ -260,47 +296,63 @@ impl Config {
         )))
     }
 
+    /// `text` as this machine's global file, without a shared config.
     pub fn parse(text: &str, paths: &Paths) -> Result<Self> {
-        let mut config = Self::from_toml(text)?;
-        let machine = &mut config.machine;
-        let written: toml::Table = toml::from_str(text)?;
-        let overload = written
-            .get("machine")
-            .and_then(toml::Value::as_table)
-            .and_then(|machine| machine.get("overload"))
-            .and_then(toml::Value::as_table);
-        machine
-            .overload
-            .follow_load(machine.load, overload.unwrap_or(&toml::Table::new()));
-        machine.follow_references()?;
+        Self::parse_over(text, &Shared::default(), paths)
+    }
+
+    /// `text` as this machine's global file over `shared`.
+    pub fn parse_over(text: &str, shared: &Shared, paths: &Paths) -> Result<Self> {
+        Self::checked(shared, Some(parse::global(text)?), paths)
+    }
+
+    /// The config of `own`, this machine's global file, over `shared`, or
+    /// of the shared config alone, as a machine whose own file sets nothing
+    /// reads it, once its values are valid together.
+    fn checked(shared: &Shared, own: Option<parse::GlobalFile>, paths: &Paths) -> Result<Self> {
+        let [shared_directory, own_directory] = template_directories(paths)?;
+        let directories = [
+            Some(shared_directory),
+            own.is_some().then_some(own_directory),
+        ];
+        let own = own.unwrap_or_default();
+        let config = Self {
+            machine: Machine::layered(shared.machine.clone(), own.machine)?,
+            repository: own.repository,
+            shared: shared.repository.clone(),
+            ..Default::default()
+        };
         config.validate(paths)?;
         // A global file is complete with the mode and rule files beside it:
         // its bounds must combine with the built-in defaults, so
         // `config set ports.end 4000` is refused rather than failing every
         // later command, and its modes may name rules only a file defines.
         // The config keeps what it says itself, as `config set` writes it.
-        let written = config.repository.clone();
-        read_template_files(&mut config.repository, paths)?;
-        let resolved = config.resolve(&ConfigLayers::default());
-        config.repository = written;
-        let resolved = resolved?;
+        let layers = config.filled_layers(directories)?;
+        let resolved = config.resolve_over(layers, &ConfigLayers::default())?;
         modes::check(&resolved.modes, &resolved.rules)?;
         Ok(config)
     }
 
     /// The file's two parts as written, without validating their values.
     pub fn from_toml(text: &str) -> Result<Self> {
-        let (machine, repository) = parse::global(text)?;
-        Ok(Self {
+        let parse::GlobalFile {
             machine,
             repository,
-            template_files: modes::Files::new(),
+        } = parse::global(text)?;
+        Ok(Self {
+            machine: machine.read()?,
+            repository,
+            ..Default::default()
         })
     }
 
     fn validate(&self, paths: &Paths) -> Result<()> {
-        let (machine, repository) = (&self.machine, &self.repository);
-        repository.validate()?;
+        let machine = &self.machine;
+        let layers = [&self.shared, &self.repository];
+        for layer in layers {
+            layer.validate()?;
+        }
         crate::ai::validate::skill_dirs(&machine.agents, &paths.home)?;
         crate::config::proxies::validate(&machine.proxies)?;
         crate::config::proxies::validate_references(&machine.agents, &machine.proxies)?;
@@ -310,10 +362,8 @@ impl Config {
         machine.git_profiles.validate()?;
         machine.forges.validate()?;
         machine.app_store.validate()?;
-        for name in [&repository.git_profile, &repository.agent.git_profile]
-            .into_iter()
-            .flatten()
-        {
+        let profiles = layers.map(|layer| [&layer.git_profile, &layer.agent.git_profile]);
+        for name in profiles.into_iter().flatten().flatten() {
             machine.git_profiles.profile(name)?;
         }
         Ok(())
@@ -322,38 +372,46 @@ impl Config {
     /// The settings in effect for a target whose repository layers are
     /// `layers`: those over this machine's, then the built-in defaults.
     pub fn resolve(&self, layers: &ConfigLayers) -> Result<Effective> {
-        self.resolve_over(self.repository_layer(), self.template_files.clone(), layers)
+        self.resolve_over(self.global_layers(), layers)
     }
 
-    /// [`Self::resolve`] with the template files beside the config standing
-    /// in for omitted inline templates, as a loaded snapshot lacks them.
+    /// [`Self::resolve`] with the template files beside each global file
+    /// standing in for its omitted inline templates, as a loaded snapshot
+    /// lacks them.
     pub fn resolve_with_template_files(
         &self,
         layers: &ConfigLayers,
         paths: &Paths,
     ) -> Result<Effective> {
-        let mut global = self.repository_layer();
-        let files = read_template_files(&mut global, paths)?;
-        let settings = self.resolve_over(global, files, layers)?;
+        let directories = template_directories(paths)?.map(Some);
+        let settings = self.resolve_over(self.filled_layers(directories)?, layers)?;
         modes::check(&settings.modes, &settings.rules)?;
         Ok(settings)
     }
 
-    /// The settings of `global`, this config's repository layer with its
-    /// templates read from `files`, under `layers`, with this machine's tools.
-    fn resolve_over(
-        &self,
-        global: RepoConfig,
-        files: modes::Files,
-        layers: &ConfigLayers,
-    ) -> Result<Effective> {
-        let settings = resolve::Stack::over(global, files, layers)?.resolve()?;
+    /// [`Self::global_layers`] with the mode and rule files in each layer's
+    /// directory, where there is one, standing in for its omitted inline
+    /// texts.
+    fn filled_layers(&self, directories: [Option<PathBuf>; 2]) -> Result<[GlobalLayer; 2]> {
+        let mut layers = self.global_layers();
+        for (layer, directory) in layers.iter_mut().zip(directories) {
+            if let Some(directory) = directory {
+                layer.fill(&directory)?;
+            }
+        }
+        Ok(layers)
+    }
+
+    /// The settings of `global`, the global files' layers, under `layers`,
+    /// with this machine's tools.
+    fn resolve_over(&self, global: [GlobalLayer; 2], layers: &ConfigLayers) -> Result<Effective> {
+        let settings = resolve::Stack::over(global, layers)?.resolve()?;
         let agents = agents::describe(&settings.agents, &self.machine.agents);
         crate::ai::validate(&agents)?;
         let tools = crate::ai::tools(&agents);
         crate::config::proxies::validate_routes(&tools, &self.machine.proxies)?;
         let proxies = crate::config::proxies::routes(&tools, &self.machine.proxies);
-        let agent_secrets = crate::secrets::for_agents(&settings, self.triggers(), layers);
+        let agent_secrets = crate::secrets::for_agents(&settings, &self.triggers(), layers);
         Ok(Effective::new(settings, tools, proxies, agent_secrets))
     }
 }
@@ -370,12 +428,19 @@ pub fn configuration(paths: &Paths, layers: &ConfigLayers) -> Result<(Config, Ef
     Ok((config, settings))
 }
 
-/// Fill `global`'s omitted inline instructions and rule texts from the
-/// files beside the global config, returning the file each came from.
-fn read_template_files(global: &mut RepoConfig, paths: &Paths) -> Result<modes::Files> {
+/// The directories whose mode and rule files fill in the global files'
+/// omitted inline texts: the shared config's, then this machine's.
+fn template_directories(paths: &Paths) -> Result<[PathBuf; 2]> {
     let path = Config::path(paths);
     let directory = path.parent().context("config has no directory")?;
-    modes::fill(global, &[directory.to_owned()])
+    Ok([directory.join(shared::TEMPLATES_DIR), directory.to_owned()])
+}
+
+/// The text of the config file at `path`, empty while there is none.
+fn read_file(path: &Path) -> Result<String> {
+    let text =
+        crate::fsutil::read_optional(path).with_context(|| format!("read {}", path.display()))?;
+    Ok(text.unwrap_or_default())
 }
 
 /// Named templates shipped in this binary, independent of the source checkout.

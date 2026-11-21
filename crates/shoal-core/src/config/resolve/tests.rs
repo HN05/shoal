@@ -488,13 +488,17 @@ fn every_option_survives_layering_in_both_directions() {
     assert_eq!(json(&full.clone().over(RepoConfig::default())), json(&full));
     assert_eq!(json(&RepoConfig::default().over(full.clone())), json(&full));
     // The same values reported from any single layer name that layer.
-    for (index, layer) in [
-        (1, Layer::GlobalConfig),
-        (2, Layer::WorktreeFile),
-        (3, Layer::LocalConfig),
+    for layer in [
+        Layer::SharedConfig,
+        Layer::GlobalConfig,
+        Layer::WorktreeFile,
+        Layer::LocalConfig,
     ] {
         let mut stack = stack("", "", "");
-        stack.layers[index].0 = full.clone();
+        let (config, _) = (stack.layers.iter_mut())
+            .find(|(_, of)| *of == layer)
+            .unwrap();
+        *config = full.clone();
         for entry in stack.report().unwrap() {
             // The fixture leaves the built-in agents' own settings alone.
             let built_in_agent = entry.key.strip_prefix("agents.").is_some_and(|key| {

@@ -6,11 +6,14 @@ fn message(error: Error) -> String {
 
 #[test]
 fn the_global_file_splits_into_machine_and_repository_settings() {
-    let (machine, repository) = global(
+    let GlobalFile {
+        machine,
+        repository,
+    } = global(
         "agent.default = 'claude'\n[machine]\nkeep_awake = true\n[cleanup.auto]\nenabled = false\n",
     )
     .unwrap();
-    assert!(machine.keep_awake);
+    assert!(machine.read().unwrap().keep_awake);
     assert!(repository.agent.default.is_some());
     assert_eq!(repository.cleanup.auto.enabled, Some(false));
 }

@@ -36,6 +36,22 @@ impl References {
     pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
+    /// The references of a file over `below`'s, where `written` is what it
+    /// sets of their table: `below`'s that it leaves in effect, by neither
+    /// setting their key nor naming another value for it, then its own.
+    pub(crate) fn over(self, written: &Value, below: Self) -> Self {
+        let overridden = |reference: &Reference| {
+            let path = reference.key_path();
+            lookup(written, &path).is_some_and(has_value)
+                || self.0.iter().any(|own| own.key_path() == path)
+        };
+        let kept = below
+            .0
+            .into_iter()
+            .filter(|reference| !overridden(reference));
+        Self(kept.chain(self.0.iter().cloned()).collect())
+    }
 }
 
 fn take(table: &mut DeTable<'_>, path: &mut Vec<String>, found: &mut Vec<Reference>) {

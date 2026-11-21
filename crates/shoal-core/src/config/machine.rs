@@ -201,10 +201,73 @@ impl Hub {
     }
 }
 
+/// `[machine]` as one file writes it: the keys it sets, with its `same_as`
+/// references taken out.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct Written {
+    table: toml::Table,
+    same_as: same_as::References,
+}
+
+impl Written {
+    pub(crate) fn new(table: toml::Table, same_as: same_as::References) -> Self {
+        Self { table, same_as }
+    }
+
+    /// What this table sets over the defaults, its references not followed.
+    pub(crate) fn read(&self) -> Result<Machine> {
+        let machine: Machine = self.table.clone().try_into()?;
+        Ok(Machine {
+            same_as: self.same_as.clone(),
+            ..machine
+        })
+    }
+
+    /// This table over `below`: each key it sets wins, a table merging key
+    /// by key with the one below it, and each reference of `below` stays
+    /// unless this table sets its key or names another value for it.
+    fn over(self, below: Self) -> Result<Self> {
+        let same_as = (self.same_as).over(&serde_json::to_value(&self.table)?, below.same_as);
+        let mut table = below.table;
+        merge_tables(&mut table, self.table);
+        Ok(Self { table, same_as })
+    }
+}
+
+/// Layer `top` over `base`: a table merges with the table below it, and any
+/// other value replaces what is below.
+fn merge_tables(base: &mut toml::Table, top: toml::Table) {
+    for (key, value) in top {
+        match (base.get_mut(&key), value) {
+            (Some(toml::Value::Table(below)), toml::Value::Table(above)) => {
+                merge_tables(below, above)
+            }
+            (_, value) => {
+                base.insert(key, value);
+            }
+        }
+    }
+}
+
 impl Machine {
+    /// `[machine]` of this machine's own global file over the shared
+    /// file's, with each `same_as` reference followed and the overload
+    /// thresholds the files leave out following `load`.
+    pub(crate) fn layered(shared: Written, own: Written) -> Result<Self> {
+        let written = own.over(shared)?;
+        let mut machine = written.read()?;
+        let overload = written
+            .table
+            .get("overload")
+            .and_then(toml::Value::as_table);
+        (machine.overload).follow_load(machine.load, overload.unwrap_or(&toml::Table::new()));
+        machine.follow_references()?;
+        Ok(machine)
+    }
+
     /// Give each key a `same_as` reference names its target's value, over
     /// the defaults of what the file leaves out.
-    pub(crate) fn follow_references(&mut self) -> Result<()> {
+    fn follow_references(&mut self) -> Result<()> {
         let mut layers = [std::mem::take(self)];
         same_as::follow(
             &mut layers,

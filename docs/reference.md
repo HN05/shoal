@@ -151,7 +151,8 @@ install <name>` replaces the entire global file with a packaged template;
 copied, so package upgrades leave installed edits alone. Unknown names fail
 without changing either file; installation needs no daemon. `shoal config` edits,
 installs and resets apply to a running daemon at once; after editing the file by
-hand, run `shoal config reload`, which scoped processes may also run. Reloading
+hand, run `shoal config reload`, which scoped processes may also run and which
+rereads the shared config too. Reloading
 keeps running agents and leases, and an invalid file leaves the daemon's previous
 settings in place. [Configuration](../crates/shoal-cli/src/cli/commands/configuration/reference.md) describes the config files, their
 layers and every option. Setup preserves compatible
@@ -3760,7 +3761,7 @@ to the main checkout's `config.worktree`. Other worktrees retain their settings.
 ### Inspect effective configuration
 
 Run `shoal config show [workspace]` to print every effective repository setting
-and the layer that supplied it. With no workspace, Shoal uses the current
+and the layer that supplied it, such as `shared config` for the shared file. With no workspace, Shoal uses the current
 workspace, the registered checkout when no workspace exists yet, then the
 workspace picker. `--repo NAME` shows a repository's settings in its registered
 checkout from any directory. Named tables

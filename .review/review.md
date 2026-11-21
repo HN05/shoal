@@ -172,7 +172,7 @@ instead of the PR delivery guidance below.
   and untracked files with Git status codes, bounding the preview and reporting omitted
   entries. Environment checks and the untracked-worktree listing only report,
   as alerts and inbox items; dependency checks use the shared executable catalog.
-- `[env]` layers per variable from local config, worktree, global,
+- `[env]` layers per variable from local config, worktree, global, shared,
   then default. Tracked executions, hooks and workspace exports substitute known
   workspace and reserved-port fields once without shell or recursive expansion;
   `SHOAL_*` names stay reserved and port exports win collisions. Desktop handoffs

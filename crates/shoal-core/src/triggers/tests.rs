@@ -103,7 +103,7 @@ fn global_triggers_stay_out_of_every_repository() {
             .map(|r| r.as_str()),
         Some("shoal")
     );
-    assert!(config.repository_layer().triggers.is_empty());
+    assert!(config.global_layers()[1].config.triggers.is_empty());
 }
 
 #[test]

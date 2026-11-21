@@ -54,45 +54,63 @@ impl std::ops::DerefMut for Effective {
     }
 }
 
+/// A global file's values for the options a repository may override, with
+/// the file each of its templates came from.
+#[derive(Debug, Clone, Default)]
+pub struct GlobalLayer {
+    pub config: RepoConfig,
+    pub files: modes::Files,
+}
+
+impl GlobalLayer {
+    /// Fill the layer's omitted inline texts from the mode and rule files
+    /// in `directory`.
+    pub(crate) fn fill(&mut self, directory: &std::path::Path) -> Result<()> {
+        self.files = modes::fill(&mut self.config, &[directory.to_owned()])?;
+        Ok(())
+    }
+}
+
 /// Every layer of one target, lowest first.
 #[derive(Debug, Clone)]
 pub struct Stack {
-    layers: [(RepoConfig, Layer); 4],
+    layers: [(RepoConfig, Layer); 5],
     /// The file each template of a layer that reads them came from.
-    template_files: [(modes::Files, Layer); 3],
+    template_files: [(modes::Files, Layer); 4],
     /// Settings a layer sets that repeat Shoal's guidance.
     warnings: Vec<String>,
 }
 
 impl Stack {
     pub fn new(global: &Config, repository: &ConfigLayers) -> Result<Self> {
-        Self::over(
-            global.repository_layer(),
-            global.template_files.clone(),
-            repository,
-        )
+        Self::over(global.global_layers(), repository)
     }
 
-    /// The stack of `global`, the global config's repository layer with its
-    /// templates read from `global_files`, under `repository`'s layers, with
-    /// each key a `same_as` reference names holding its target's value;
-    /// fails for a reference that cannot be followed.
-    pub fn over(
-        global: RepoConfig,
-        global_files: modes::Files,
-        repository: &ConfigLayers,
-    ) -> Result<Self> {
+    /// The stack of `global`, the shared config's layer and this machine's
+    /// own, under `repository`'s layers, with each key a `same_as`
+    /// reference names holding its target's value; fails for a reference
+    /// that cannot be followed.
+    pub fn over(global: [GlobalLayer; 2], repository: &ConfigLayers) -> Result<Self> {
+        let [shared, global] = global;
         let mut configs = [
             RepoConfig::built_in(),
-            global,
+            shared.config,
+            global.config,
             repository.worktree_file.clone(),
             repository.local_config.clone(),
         ];
         follow_references(&mut configs)?;
-        let [built_in, global, worktree_file, local_config] = configs;
+        let [
+            built_in,
+            shared_config,
+            global_config,
+            worktree_file,
+            local_config,
+        ] = configs;
         let layers = [
             (built_in, Layer::BuiltInDefault),
-            (global, Layer::GlobalConfig),
+            (shared_config, Layer::SharedConfig),
+            (global_config, Layer::GlobalConfig),
             (worktree_file, Layer::WorktreeFile),
             (local_config, Layer::LocalConfig),
         ];
@@ -103,7 +121,8 @@ impl Stack {
             })
             .collect();
         let template_files = [
-            (global_files, Layer::GlobalConfig),
+            (shared.files, Layer::SharedConfig),
+            (global.files, Layer::GlobalConfig),
             (
                 repository.worktree_template_files.clone(),
                 Layer::WorktreeFile,
@@ -181,8 +200,8 @@ impl Stack {
 }
 
 /// Give each key a `same_as` reference of `layers`, the built-in default,
-/// global config, worktree file and local config, names its target's final
-/// value.
+/// shared config, global config, worktree file and local config, names its
+/// target's final value.
 fn follow_references(layers: &mut [RepoConfig]) -> Result<()> {
     same_as::follow(
         layers,
@@ -192,16 +211,17 @@ fn follow_references(layers: &mut [RepoConfig]) -> Result<()> {
     )
 }
 
-/// `layers`, the built-in default, global config, worktree file and local
-/// config, combined as written.
+/// `layers`, the built-in default, shared config, global config, worktree
+/// file and local config, combined as written.
 fn merged(layers: &[RepoConfig]) -> RepoConfig {
     let (mut base, repository) = levels(layers);
     base.merge(repository, Merge::RepositoryOverGlobal);
     base
 }
 
-/// The global level of `layers`, the built-in default and global config
-/// merged, and the repository level, the worktree file and local config.
+/// The global level of `layers`, the built-in default, shared config and
+/// global config merged, and the repository level, the worktree file and
+/// local config.
 fn levels(layers: &[RepoConfig]) -> (RepoConfig, RepoConfig) {
     let level = |layers: &[RepoConfig]| {
         let mut layers = layers.iter().cloned();
@@ -211,7 +231,7 @@ fn levels(layers: &[RepoConfig]) -> (RepoConfig, RepoConfig) {
         }
         merged
     };
-    let (global, repository) = layers.split_at(2);
+    let (global, repository) = layers.split_at(3);
     (level(global), level(repository))
 }
 

@@ -14,7 +14,7 @@ use crate::fsutil::{
 };
 
 use crate::config::{
-    Config, PACKAGED,
+    Config, PACKAGED, Shared,
     edit::{self, Change},
 };
 use crate::paths::Paths;
@@ -153,9 +153,10 @@ pub trait ConfigExt: Sized {
 
     fn install_named(paths: &Paths, name: &str) -> Result<(PathBuf, Option<PathBuf>)>;
 
-    /// [`Self::load`] under the edit lock, so a concurrent edit is read whole
-    /// rather than while its file is moved aside. A build that may not write
-    /// the file reads it without the lock, whose file it would create there.
+    /// [`Self::load`] under both files' edit locks, so a concurrent edit is
+    /// read whole rather than while its file is moved aside. A build that
+    /// may not write the files reads them without the locks, whose files it
+    /// would create there.
     fn load_settled(paths: &Paths) -> Result<Self>;
 }
 
@@ -171,8 +172,9 @@ impl ConfigExt for Config {
     }
 
     fn edit(paths: &Paths, changes: &[edit::Change]) -> Result<(PathBuf, Option<PathBuf>)> {
+        let shared = Shared::load(paths)?;
         edit(Self::path(paths), changes, |edited| {
-            Self::parse(edited, paths)
+            Self::parse_over(edited, &shared, paths)
                 .map(drop)
                 .context("invalid edited config")
         })
@@ -180,7 +182,8 @@ impl ConfigExt for Config {
 
     fn install_named(paths: &Paths, name: &str) -> Result<(PathBuf, Option<PathBuf>)> {
         let text = packaged(name)?;
-        Self::parse(text, paths).with_context(|| format!("validate packaged config {name}"))?;
+        Self::parse_over(text, &Shared::load(paths)?, paths)
+            .with_context(|| format!("validate packaged config {name}"))?;
         let path = Self::path(paths);
         let _lock = lock(&path)?;
         replace(path, text)
@@ -188,9 +191,11 @@ impl ConfigExt for Config {
 
     fn load_settled(paths: &Paths) -> Result<Self> {
         let path = Self::path(paths);
-        let _lock = refuse_user_config(&path)
-            .is_ok()
-            .then(|| lock(&path))
+        let writable = refuse_user_config(&path).is_ok();
+        // Each edit holds one file's lock, so taking both never waits on a
+        // holder that waits for the other.
+        let _locks = writable
+            .then(|| Ok::<_, anyhow::Error>((lock(&path)?, lock(&Shared::path(paths))?)))
             .transpose()?;
         Self::load(paths)
     }

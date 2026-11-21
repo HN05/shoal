@@ -3640,8 +3640,17 @@ and removal, hold the file's lock, keep a backup and save only a valid result,
 as global edits do; unset restores lower-layer values.
 It moves with the repository's directory and is deleted with the registration.
 Every option that does not describe the machine may be set at either level and
-resolves per option: local config, worktree file, global config, then the
-built-in default. A worktree file the current format rejects counts as absent,
+resolves per option: local config, worktree file, global config, shared config,
+then the built-in default. The shared config, `shared.toml` beside the global
+file with its mode and rule files in `shared/`, holds what the user's machines
+share, so a machine's own file overrides any of its keys. It takes every global
+key but the `[machine.hub]` settings a machine reaches the hub with before it
+can have the file, and must be valid alone, since a machine whose own file sets
+nothing reads it alone. `[machine]` has no provenance to report, so its tables
+merge key by key across the two files. Its paths and commands resolve on each
+machine as the global file's would; nothing checks them for portability, and
+what cannot be the same everywhere belongs in a machine's own file. Scoped
+processes never write it. A worktree file the current format rejects counts as absent,
 since a branch from before a format change keeps its old file and must not stop
 cleanup or anything else the other layers settle. The layers name the
 rejection, which `config show` warns about, and the daemon tells the log and the

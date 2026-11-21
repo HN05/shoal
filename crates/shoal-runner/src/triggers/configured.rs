@@ -39,7 +39,7 @@ impl Runner {
     /// Every configured trigger, the global config's first. A repository
     /// whose config cannot be read has none until it can.
     pub(crate) async fn configured_triggers(&self, daemon: &dyn Daemon) -> Vec<Configured> {
-        let mut triggers = global(self.config().triggers());
+        let mut triggers = global(&self.config().triggers());
         let repositories = match daemon.repositories().await {
             Ok(repositories) => repositories.into_iter().map(|repository| repository.id),
             Err(error) => {
@@ -67,7 +67,7 @@ impl Runner {
         daemon: &dyn Daemon,
         repository: Option<&RepositoryId>,
     ) -> Result<Vec<Configured>> {
-        let mut triggers = global(self.config().triggers());
+        let mut triggers = global(&self.config().triggers());
         if let Some(repository) = repository {
             triggers.extend(self.repository_triggers(daemon, repository).await?);
         }

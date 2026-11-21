@@ -118,11 +118,14 @@ async fn root_dir(root: Result<PathBuf>) -> Check {
     }
 }
 
-/// Whether the global config repeats what Shoal already says; `config show`
+/// Whether the global files repeat what Shoal already says; `config show`
 /// reports the repository layers too.
 fn global_config_check(paths: &crate::paths::Paths) -> Check {
-    let redundant = crate::config::Config::load_with_templates(paths)
-        .map(|config| config.repository_layer().normalize());
+    let redundant = crate::config::Config::load_with_templates(paths).map(|config| {
+        (config.global_layers().iter())
+            .flat_map(|layer| layer.config.normalize())
+            .collect::<Vec<_>>()
+    });
     match redundant {
         Ok(redundant) if redundant.is_empty() => Check::new(
             CheckStatus::Ok,
