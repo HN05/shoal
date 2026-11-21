@@ -36,7 +36,8 @@ use shoal_schedule::priority::Priority;
 use crate::{
     Hub,
     daemon::{
-        Approvals, Apps, Dispatch, Messages, Packages, Receiver, Records, SpacePermissions, Spaces,
+        Approvals, Apps, Dispatch, GlobalConfig, Messages, Packages, Receiver, Records,
+        SpacePermissions, Spaces,
     },
     streams::{Incoming, Outgoing},
 };
@@ -252,6 +253,12 @@ impl Packages for StandIn {
 
     fn retire_space<'a>(&'a self, _: &'a Space) -> BoxFuture<'a, Result<String>> {
         Box::pin(async { bail!("the stand-in daemon has no spaces to retire") })
+    }
+}
+
+impl GlobalConfig for StandIn {
+    fn reload_config(&self) -> BoxFuture<'_, Result<()>> {
+        Box::pin(async { Ok(()) })
     }
 }
 

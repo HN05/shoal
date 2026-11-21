@@ -1,8 +1,9 @@
 //! What the hub needs of the rest of the daemon, which [`Manager`] gives
 //! it: the spaces it reports, routes to and tells about, their
 //! permissions, the messages that reach their agents, the approvals and
-//! threads that pass between machines, and the app store a member asks
-//! of the hub.
+//! threads that pass between machines, the app store a member asks of
+//! the hub, and the global config the hub's copies of the shared files
+//! change.
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -11,7 +12,8 @@ use futures_util::future::BoxFuture;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use shoal_daemon_base::alerts::{AlertKind, NewAlert};
 use shoal_hub::daemon::{
-    Approvals, Apps, Dispatch, Messages, Packages, Receiver, Records, SpacePermissions, Spaces,
+    Approvals, Apps, Dispatch, GlobalConfig, Messages, Packages, Receiver, Records,
+    SpacePermissions, Spaces,
 };
 
 use shoal_ids::repository_ids::RepositoryId;
@@ -258,6 +260,12 @@ impl Packages for Manager {
 
     fn retire_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<String>> {
         Box::pin(Manager::retire_space(self, space))
+    }
+}
+
+impl GlobalConfig for Manager {
+    fn reload_config(&self) -> BoxFuture<'_, Result<()>> {
+        Box::pin(self.reload_config_and_recheck())
     }
 }
 

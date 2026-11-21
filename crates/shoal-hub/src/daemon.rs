@@ -2,7 +2,8 @@
 //! spaces it reports, routes to and tells about, their permissions, the
 //! messages that reach their agents, the approvals and threads that pass
 //! between machines, the app store a member asks of the hub, and the
-//! packages of an intermittent machine's spaces.
+//! packages of an intermittent machine's spaces, and the global config the
+//! hub's copies of the shared files change.
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
@@ -227,15 +228,38 @@ pub trait Packages: Send + Sync {
     fn retire_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<String>>;
 }
 
+/// The global config the daemon runs under.
+pub trait GlobalConfig: Send + Sync {
+    /// Load the global files again, as `shoal config reload` does, leaving
+    /// the previous settings in place when they do not load.
+    fn reload_config(&self) -> BoxFuture<'_, Result<()>>;
+}
+
 /// Everything the hub needs of the daemon, which each of its operations
 /// that reaches beyond it takes.
 pub trait Daemon:
-    Spaces + SpacePermissions + Messages + Approvals + Dispatch + Apps + Packages + Coordinators
+    Spaces
+    + SpacePermissions
+    + Messages
+    + Approvals
+    + Dispatch
+    + Apps
+    + Packages
+    + GlobalConfig
+    + Coordinators
 {
 }
 
 impl<T> Daemon for T where
-    T: Spaces + SpacePermissions + Messages + Approvals + Dispatch + Apps + Packages + Coordinators
+    T: Spaces
+        + SpacePermissions
+        + Messages
+        + Approvals
+        + Dispatch
+        + Apps
+        + Packages
+        + GlobalConfig
+        + Coordinators
 {
 }
 

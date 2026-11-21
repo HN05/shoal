@@ -61,6 +61,7 @@ pub mod routing;
 pub mod sealing;
 pub mod serving;
 pub mod session;
+mod shared_config;
 #[cfg(test)]
 mod stand_in;
 pub mod streams;
@@ -117,6 +118,8 @@ pub struct Hub {
         std::sync::Mutex<std::collections::HashMap<shoal_ids::space_ids::SpaceId, tree::Reported>>,
     /// The spaces of this machine the hub took in its last report.
     reported: reports::Reported,
+    /// This machine's side of the shared config.
+    sharing: shared_config::Sharing,
 }
 
 impl Hub {
@@ -149,6 +152,7 @@ impl Hub {
             known_tree: Default::default(),
             parent_permissions: Default::default(),
             reported: Default::default(),
+            sharing: Default::default(),
         }
     }
 }
@@ -162,9 +166,9 @@ impl Hub {
     }
 }
 
-/// Serve the hub's listener and keep its own machine's spaces in its
-/// directory while this daemon is the hub, and keep a link to the hub while
-/// it is a member of one, until the daemon stops; whether the daemon
+/// Serve the hub's listener and keep its own machine's spaces and shared
+/// files in its directory while this daemon is the hub, and keep a link to
+/// the hub while it is a member of one, until the daemon stops; whether the daemon
 /// `restarts_on_update` decides what following the hub's version tells the
 /// user.
 pub async fn run(hub: Arc<Hub>, daemon: Arc<dyn Daemon>, restarts_on_update: bool) {
@@ -176,6 +180,7 @@ pub async fn run(hub: Arc<Hub>, daemon: Arc<dyn Daemon>, restarts_on_update: boo
         hub.escalate_waiting(&*daemon),
         hub.keep_marking_presence(&*daemon),
         hub.keep_alerting_drops(&*daemon),
+        hub.keep_sharing_own(&daemon),
         member::run(hub.clone(), daemon.clone()),
     );
 }

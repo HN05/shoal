@@ -290,7 +290,8 @@ impl Hub {
     /// Serve the open link on `transport` until it ends or `stop`
     /// resolves, answering what the hub passes this machine, and sending
     /// what waited for the link, then reporting this machine's spaces,
-    /// describing it and sending its packages, meanwhile.
+    /// describing it, sending its packages and sharing its shared files,
+    /// meanwhile.
     async fn serve_hub(
         self: &Arc<Self>,
         daemon: &Arc<dyn Daemon>,
@@ -316,6 +317,7 @@ impl Hub {
                 never = self.keep_reporting(&**daemon, &calls) => never,
                 never = self.keep_describing(&calls) => never,
                 never = self.keep_packaging(&**daemon, &calls) => never,
+                never = self.keep_sharing(daemon, &calls) => never,
             }
         };
         let end = tokio::select! {

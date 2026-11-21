@@ -8,6 +8,7 @@ mod following;
 mod moves;
 mod numbers;
 mod routing;
+mod shared_config;
 mod starts;
 #[path = "../support/mod.rs"]
 mod support;

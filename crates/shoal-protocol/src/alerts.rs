@@ -164,6 +164,9 @@ states!(AlertKind {
     /// An intermittent machine stayed unreachable while its spaces had
     /// work to do.
     MachineUnreachable => "machine_unreachable",
+    /// The hub's copy of a shared config file replaced an edit this
+    /// machine had not sent it, which Shoal kept as a backup.
+    SharedFileKept => "shared_file_kept",
 });
 
 states!(Sender {

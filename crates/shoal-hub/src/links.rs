@@ -36,6 +36,9 @@ struct Open {
     told: Option<Classified>,
     /// The agent tools the member last said it has.
     agents: Vec<Agent>,
+    /// Whether the member read the hub's shared files on this link, so it
+    /// receives the copies others change.
+    shares: bool,
 }
 
 /// A member's open link, which leaves [`Links`] when dropped.
@@ -95,6 +98,7 @@ impl Links {
             calls: None,
             told: None,
             agents: Vec::new(),
+            shares: false,
         };
         open.insert(member.clone(), registered);
         Some(Registration {
@@ -150,6 +154,24 @@ impl Links {
         let open = self.open.lock().unwrap();
         open.get(member)
             .map_or_else(Vec::new, |open| open.agents.clone())
+    }
+
+    /// Send `member`, whose link is open, the shared files' copies others
+    /// change from now on.
+    pub fn share_with(&self, member: &MemberId) {
+        if let Some(open) = self.open.lock().unwrap().get_mut(member) {
+            open.shares = true;
+        }
+    }
+
+    /// The machines whose links receive the shared files' copies, with the
+    /// hub's calls to each.
+    pub fn sharing(&self) -> Vec<(MemberId, Arc<Calls>)> {
+        let open = self.open.lock().unwrap();
+        (open.iter())
+            .filter(|(_, open)| open.shares)
+            .filter_map(|(member, open)| Some((member.clone(), open.calls.clone()?)))
+            .collect()
     }
 
     /// The machines whose links are open and that described themselves,
