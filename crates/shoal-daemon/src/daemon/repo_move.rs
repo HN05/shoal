@@ -537,13 +537,14 @@ impl Manager {
         // resolve to it, and repair reconnects them only once it is gone.
         remove_recorded(&intent.source, &intent.source_id)?;
         self.reconnect_worktrees(id).await?;
-        self.close_move(&intent).await?;
+        // Before the intent goes, so a daemon that stops meanwhile carries
+        // the entries when it finishes the move again.
         self.move_agent_trust(&intent).await;
-        Ok(())
+        self.close_move(&intent).await
     }
 
-    /// Carry the agents' trust entries for the paths the finished move of
-    /// `intent` took to the paths they have now.
+    /// Carry the agents' trust entries for the paths the move of `intent`
+    /// took to the paths they have now; repeating it changes nothing.
     async fn move_agent_trust(&self, intent: &Intent) {
         let records = async {
             let repo = self.repository(&intent.repository_id).await?;
