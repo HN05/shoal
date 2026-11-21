@@ -146,3 +146,6 @@ impl From<Action> for ActionFields {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
