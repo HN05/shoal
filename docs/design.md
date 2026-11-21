@@ -2840,8 +2840,8 @@ keeps, inherited variables included, from when the CLI trusts its space there, s
 a renamed or removed space, or a changed `[env]`, no longer resolves to
 it; it never reads a caller's environment. A removal forgets the locations after
 cleanup, when no agent can add one. Failures are logged and alert the user, and
-never fail the removal or move. A development build changes only a home that is
-not the user's own.
+never fail the removal or move. A development build changes only the configs in a
+home that is not the user's own, skipping kept locations outside it.
 
 Issue-based workspace opening requires an open issue and persists its canonical
 URL before tracked setup or agent launch. Reopening first follows the issue

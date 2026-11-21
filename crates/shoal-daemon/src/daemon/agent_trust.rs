@@ -63,7 +63,7 @@ impl Manager {
     /// directories, in the tools' default configs and in those its agents
     /// ran with, which a removal then forgets. Failures go to the log and
     /// in an alert to the user, never to the caller; a development build
-    /// leaves the user's own home to the installed Shoal.
+    /// leaves the user's own files to the installed Shoal.
     pub(super) async fn update_agent_trust(&self, repository: &Repository, change: TrustChange) {
         if !crate::build::changes_files_under(&self.paths.home) {
             return;
@@ -76,11 +76,35 @@ impl Manager {
             ));
         }
         let kept = environments.as_ref().map(Vec::clone).unwrap_or_default();
+        let kept = self.editable_locations(kept);
         warnings.extend(self.edit_trust(repository, &change, kept).await);
         if matches!(change, TrustChange::Removed(_)) && environments.is_ok() {
             self.forget_agent_environments_logged(repository).await;
         }
         self.report_trust_left(repository, &change, warnings).await;
+    }
+
+    /// The kept agent config locations this build may edit: all of them
+    /// where it changes user files, else only those in its home, which is
+    /// not the user's, since an agent there may have inherited the user's
+    /// own config location.
+    fn editable_locations(
+        &self,
+        mut kept: Vec<BTreeMap<String, String>>,
+    ) -> Vec<BTreeMap<String, String>> {
+        if crate::build::changes_user_files() {
+            return kept;
+        }
+        let home = &self.paths.home;
+        let canonical_home = std::fs::canonicalize(home).unwrap_or_else(|_| home.clone());
+        // A location the agent never created has no canonical path.
+        let in_home = |value: &String| {
+            let path = Path::new(value);
+            path.starts_with(home)
+                || std::fs::canonicalize(path).is_ok_and(|path| path.starts_with(&canonical_home))
+        };
+        kept.retain(|environment| environment.values().all(in_home));
+        kept
     }
 
     /// [`TrustChange::apply`] off the runtime, since it waits for other
