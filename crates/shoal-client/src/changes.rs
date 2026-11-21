@@ -8,7 +8,7 @@ use shoal_protocol::{
     threads::ThreadNumber,
 };
 
-use crate::connection::{Daemon, request};
+use crate::connection::{Daemon, pages, request};
 
 /// Record what a tool call of the caller's agent changed, as its hook
 /// reports it; the changes Shoal could not tell were the agent's.

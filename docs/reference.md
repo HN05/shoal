@@ -4142,6 +4142,7 @@ after), `up_to_date`, and `setup`, whether setup ran again.
 
 ```sh
 shoal diff                 # Current workspace, otherwise fzf
+shoal diff --thread 3.4    # The changes agents made for a thread
 ```
 
 Runs native `git diff` (your pager and external diff apply) from the fork point
@@ -4151,7 +4152,8 @@ Fixed-commit bases use that commit; older workspaces without base metadata use
 `main`. Committed, staged, and unstaged tracked changes appear; untracked files
 follow Git. A missing or unrelated base is an error. A chat's agent runs it as a
 plain process in the worktree rather than a tracked execution of the
-workspace, which its scope may read but not run in.
+workspace, which its scope may read but not run in. `--thread` prints a
+thread's [changes](#agents-changes) instead.
 
 `shoal diff` of a workspace on another machine of the hub, by its number or
 ID, runs `git diff` there as a plain read, under that machine's Git config for
@@ -7009,7 +7011,7 @@ reach a chat's files.
 ```sh
 shoal thread open "<name>" [--kind question|request] [--space S] [--code PATH[:FIRST-LAST]]...
 shoal send <thread> "<text>" [--choice C]... [--recommend R --reason R] [--attach FILE]...
-  [--code PATH[:FIRST-LAST]]... [--wait]
+  [--code PATH[:FIRST-LAST]]... [--changes N[,N]...] [--wait]
 shoal send <thread> --body-file F    # The text from a file
 shoal send <thread> --choose N       # Pick a choice the other side offered
 shoal send <thread> --in-chat        # The turn's final message in the chat is the post
@@ -7017,6 +7019,9 @@ shoal thread forward <thread> [--space S] [--note "<text>"]
 shoal thread resolve <thread> <outcome> [--choose N | --of <thread> | --reason R]
 shoal thread resolve <thread> --undo
 shoal thread list [--space S] [--state open|resolved|all] [-p]
+shoal thread switch [<thread> | --none] [--space S]
+shoal thread add <thread> <change>... [--space S]
+shoal thread remove <thread> <change>... [--space S]
 shoal view thread <thread>
 shoal link thread <S.N> related
 shoal unlink thread <S.N>
@@ -7079,6 +7084,10 @@ looked for, so the reference is `outdated`. `--json` gives each reference's
 `end` excluded, and `blob`, its `snippet`, `commit` and `state`. The
 repository keeps the versions under `refs/shoal/threads/<space-id>`, one ref
 per space, until the references go with their thread.
+
+`--changes`, a list of [change](#agents-changes) numbers, points a post at
+those changes, which moves nothing between threads; the other side receives
+each as `Change N: path:first-last` with its hunk where its code is then.
 
 `--in-chat` lets an agent with Shoal's hooks, Claude Code or Codex, that Shoal
 tracks in a workspace or runs as a chat's, post in its conversation, where the
@@ -7143,9 +7152,75 @@ Shoal's post that the holder finished; removing the space does the same. `done
 for that cause that nothing resolved otherwise since, without Shoal's posts.
 `--json` gives a thread's `kind`, `name`, `opener`, `holder`, its `posts`, each
 with its `side`, `sender`, `space`, `text`, `choices`, `recommendation`,
-`reason`, `choice`, `files`, `code`, `in_chat` and the holder it `forwarded_to`, and
-its `resolution` with its `outcome`, its data, `by`, `by_space` and
-`resolved_at`.
+`reason`, `choice`, `files`, `code`, `changes`, `in_chat` and the holder it
+`forwarded_to`, its `resolution` with its `outcome`, its data, `by`,
+`by_space` and `resolved_at`, whether it is `working`, and its `changes`.
+
+### Agents' changes
+
+```sh
+shoal changes [--thread <thread> | --space S]   # Latest changes, numbered, with their threads
+shoal changes claim <change>... [--thread <thread>] [--space S]
+shoal changes unclaim <change>... [--space S]
+shoal diff --thread <thread> [--since <post>]
+```
+
+Shoal records what a workspace's agent with its hooks, Claude Code or Codex,
+changes in the worktree, leaving out files Git ignores. Claude Code's Edit, Write and MultiEdit pass their
+patch, whose hunks are the agent's, mixed where the file no longer holds the
+lines where the tool put them. A command, Claude Code's NotebookEdit and
+Codex's `apply_patch` are snapshotted before and after, which delays each by
+the time Git takes to hash the worktree's unsaved files: what changed between
+is the agent's, or mixed in a file an editor reported you edited or saved
+while it ran, and what changed since the agent's previous tool call is
+someone else's. Agents without the hooks, and chats, record no changes.
+
+A change is one hunk of a file: its path, its lines in the version it made,
+which the space's ref keeps as it keeps [references](#threads)' versions, the
+lines it added and removed, who made it (`agent`, `mixed` or `others`) and
+the agent's turn. A file the repository marks `linguist-generated` in
+`.gitattributes`, a binary file and one over 1 MiB are one change each, with
+their size and no hunks: they count in no size, are never asked about and
+show as `generated`, `binary` or `large`. Changes are numbered in their
+space's own sequence, apart from threads and approval requests, and keep their
+number; a bare number names one of your own space, or of `--space`, and
+`S.N` change `N` of the space numbered `S`. A change's lines follow its code
+as a reference's do, also once it is committed.
+
+After a command leaves mixed changes, the hook's context lists them and asks
+you to `claim` those you made and `unclaim` the others; nothing waits on the
+answer, and an unanswered one stays `mixed`. `claim` makes changes the
+agent's, with `--thread` for that thread; `unclaim` makes them someone
+else's, for no thread. `shoal changes` lists your space's latest 200 changes,
+or with `--thread` that thread's, each with who made it, where it is now, its
+size and its thread.
+
+`shoal thread switch <thread>` makes your changes from then on go to an open
+thread your space takes part in, as its opener's space or its holder, of any
+kind, until the next switch or until the thread is resolved; `--none` sends
+them to none, and without either it prints the current one, or on a terminal
+picks an open one. Your own and mixed changes go to it, someone else's to
+none. A change belongs to at most one thread: `thread add` puts changes into
+one, out of any other, and `thread remove` takes them out. A thread delivered
+to your agent reminds it to switch before working on it, and editors show a
+thread `working` while its holder's agent has switched to it.
+
+A thread's history shows, between its posts, one entry per turn and agent with
+the files it changed for the thread and their size, and `view thread` numbers
+its posts. Its entries take at most 8 KiB, which posts leave room for: once
+they would take more, the oldest sum up their files without naming them, then
+merge. A post's alert sums up the changes made for the thread since the
+sender's previous post, such as `3 files changed, +40 −12`, and names the
+`shoal diff --thread <thread> --since <post>` that prints them: each hunk
+under its file where its code is now, without context, and each file without
+hunks by its kind and size. `--json` gives each change's `number`, `space`,
+`author`, `kind`, `made_at`, `turn`, `execution`, `thread`, `original` and
+`latest` places, `state`, `added`, `removed` and `size`, and a diff's
+`before`, `removed_lines` and `added_lines`. Through `shoal-client`, an editor
+reads the same changes and reports the files you edit.
+
+A change in a thread goes with it; one in no thread that no post points at
+expires after [`[cleanup.restore] retention_days`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup), as checkpoints do.
 
 ### Leases
 

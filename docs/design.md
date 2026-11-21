@@ -3047,8 +3047,8 @@ optionally on a choice, a `request`, which asks its holder to do something,
 another thread, `withdrawn` or `closed`, which only Shoal sets. Unknown kinds
 and outcomes are refused rather than kept as text. Editors draw a thread with
 a state that comes from what Shoal records rather than a field of its own:
-`queued` while its last post is its opener's, `waiting` while it is the
-holder's, else its outcome.
+`working` while its holder's agent has switched to it, `queued` while its last
+post is its opener's, `waiting` while it is the holder's, else its outcome.
 
 A space opens a thread with its coordinator, else the user, or with a space
 below it; the user opens one with a space. A thread lives on the machine of
@@ -3108,6 +3108,43 @@ versions under one ref per space, whose commit's tree holds each blob the
 space's references keep, since a ref per blob would slow every Git command
 that lists refs; the expiry pass rewrites it as references go with their
 threads and prunes as checkpoint expiry does.
+
+Shoal records what the agents it runs change, so a thread shows the code its
+work changed, a review reads per request and editors read one record,
+including after they restart. It attributes changes itself, and the agent
+corrects what it cannot tell. An edit tool's hook passes the edit, Claude
+Code's Edit, Write and MultiEdit their structured patch, whose hunks are the
+agent's, so the user editing the same file meanwhile does not confuse it; a
+hunk the file no longer holds where the tool put it is mixed. A tool whose
+payload carries no lines, a shell command, Claude Code's NotebookEdit or
+Codex's `apply_patch`, is snapshotted before and after: a snapshot is the
+tree of the worktree's files Git does not ignore, written through a temporary
+index as a checkpoint is, and what changed between the two is the agent's,
+or mixed in a file an editor reported the user edited meanwhile. Each space
+keeps one snapshot that its next change is diffed against, which an edit
+tool's version updates, so what changed between the agent's tool calls, the
+user's or a formatter's, is someone else's, and while one command runs, every
+change is that command's. Detecting the writing process instead needs root
+or an Apple entitlement on macOS, and library injection misses the system
+binaries shell commands use. Agents without Shoal's hooks report no tool
+calls, so they get no record, and a chat changes no files of its own.
+
+A change is one hunk, numbered in a sequence of its space's own, apart from
+`S.N`, so an agent corrects one after its turn; a generated, binary or large
+file is one change without hunks that counts in no size and is never asked
+about. Its lines follow its code through the same mapping references take, and
+stay valid once the agent commits it. Most changes belong to no thread, so
+authorship is its own group: `shoal changes` lists, claims and unclaims them,
+and the hook after a command lists its mixed changes and asks once, with
+nothing waiting on the answer. The agent says which thread its work is for
+with `thread switch`, since a request can take several turns and Shoal cannot
+infer it from the posts it delivered; a switch lasts until the next or until
+the thread is resolved, and a change belongs to at most one thread, an open
+one its space takes part in, of any kind. A thread's history shows an entry
+per turn and agent between its posts, and a post's alert sums up the changes
+since the sender's last post. A post may point at changes as it points at
+code, which moves nothing between threads. Changes in a thread go with it;
+the others expire as checkpoints do.
 
 An agent posts in its chat with `send <thread> --in-chat`, and its turn's
 final message, which the `Stop` hook passes, becomes the post. A user talking

@@ -597,7 +597,7 @@ fails.
 ```sh
 shoal thread open "<name>" [--space <space>] [--kind question|request] [--code PATH[:FIRST-LAST]]
 shoal send <thread> "<text>" [--choice A --choice B --recommend A --reason R] \
-  [--attach FILE] [--code PATH[:FIRST-LAST]] [--body-file F] [--wait]
+  [--attach FILE] [--code PATH[:FIRST-LAST]] [--changes 12,14] [--body-file F] [--wait]
 shoal send <thread> --choose <N>     # Pick a choice the other side offered
 shoal send <thread> --in-chat        # Your turn's final message is the post
 shoal thread forward <thread> [--space <space>] [--note "<text>"]
@@ -648,6 +648,33 @@ that waits for its holder keeps the space that opened it from cleanup, and
 the user's waiting threads fill the inbox. `shoal done`, and removal, close
 the threads the space opened or holds, telling the other side; `done --undo`
 and a restore reopen them.
+
+## Changes
+
+```sh
+shoal thread switch <thread>         # Your changes from now on are for it; --none for none
+shoal changes [--thread <thread>]    # Your latest changes, numbered, with their threads
+shoal changes claim 12 14 [--thread <thread>]
+shoal changes unclaim 11
+shoal thread add <thread> 12 14      # Into that thread, out of any other
+shoal thread remove <thread> 12
+shoal diff --thread <thread> [--since <post>]
+```
+
+Shoal records what your tools change in your worktree, each hunk a change
+numbered in your space's own sequence: an edit tool's hunks are yours, and a
+command's are yours unless the user edited the same file while it ran, which
+makes them `mixed`. What changed between your tool calls is someone else's.
+`thread switch` sends your changes, and mixed ones, from then on to an open
+thread your space opened or holds, of any kind, until the next switch or
+until it is resolved, and editors show the thread `working`. After a
+command, Shoal lists the mixed changes it left; `claim` makes changes yours,
+with `--thread` for that thread, and `unclaim` someone else's, for none. A generated, binary or large file
+is one change without hunks. `view thread` shows the changes made for a
+thread between its posts, a post's alert sums up those since the sender's
+last post, and `diff --thread` prints them, with `--since` those since a
+post as `view thread` numbers them. `send --changes` points a post at
+changes, as `--code` points at code.
 
 ## Files
 
