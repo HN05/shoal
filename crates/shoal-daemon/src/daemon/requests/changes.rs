@@ -35,6 +35,10 @@ pub(super) async fn handle(
             let claimed = manager.claim_changes(caller, space.as_ref(), &changes, thread);
             Body::Changes(claimed.await?)
         }
+        ChangeMethod::ReportEdits { paths } => {
+            manager.report_edits(caller, paths).await?;
+            Body::Ok
+        }
         ChangeMethod::UnclaimChanges { space, changes } => {
             let unclaimed = manager.unclaim_changes(caller, space.as_ref(), &changes);
             Body::Changes(unclaimed.await?)
@@ -53,7 +57,7 @@ impl Scoped for ChangeMethod {
         caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
-            ChangeMethod::RecordChange { .. } => None,
+            ChangeMethod::RecordChange { .. } | ChangeMethod::ReportEdits { .. } => None,
             ChangeMethod::ListChanges { filter } | ChangeMethod::ChangeDiffs { filter } => {
                 match filter.thread {
                     Some(_) => None,

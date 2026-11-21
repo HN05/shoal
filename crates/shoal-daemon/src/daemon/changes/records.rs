@@ -499,3 +499,19 @@ pub(crate) fn follow(
         ],
     )? > 0)
 }
+
+/// Record that an editor reported the user edited the file `path` of the
+/// space `space`'s worktree at `at`.
+pub(super) fn report_edit(
+    tx: &Transaction<'_>,
+    space: &SpaceId,
+    path: &str,
+    at: UnixTime,
+) -> Result<()> {
+    tx.execute(
+        "INSERT INTO space_edit_reports(space_id,path,at) VALUES (?1,?2,?3)
+            ON CONFLICT(space_id,path) DO UPDATE SET at=excluded.at",
+        params![space, path, at],
+    )?;
+    Ok(())
+}

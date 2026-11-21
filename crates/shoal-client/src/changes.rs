@@ -50,3 +50,10 @@ pub async fn unclaim(
 ) -> Result<Vec<Change>> {
     request(daemon, ChangeMethod::UnclaimChanges { space, changes }).await
 }
+
+/// Tell Shoal the user edited or saved the files `paths`, by absolute
+/// path, as an editor sees them, so a change an agent's command made to
+/// one while it ran counts as mixed.
+pub async fn report_edits(daemon: &impl Daemon, paths: Vec<std::path::PathBuf>) -> Result<()> {
+    request(daemon, ChangeMethod::ReportEdits { paths }).await
+}

@@ -471,3 +471,23 @@ async fn a_change_in_no_thread_expires_as_checkpoints_do() {
     fixture.manager.expire_checkpoints().await.unwrap();
     assert_eq!(fixture.recorded().await, ["1 agent text lib.rs:2"]);
 }
+
+#[tokio::test]
+async fn a_command_s_change_of_a_file_the_user_edited_meanwhile_is_mixed() {
+    let fixture = fixture().await;
+    fixture.write("lib.rs", "a\n");
+    fixture.write("main.rs", "fn main() {}\n");
+    fixture
+        .report(ToolChange::Starts { call: "1".into() })
+        .await;
+    let edited = vec![fixture.workspace.path.join("lib.rs")];
+    fixture.manager.report_edits(None, edited).await.unwrap();
+    fixture.write("lib.rs", "a\nb\n");
+    fixture.write("main.rs", "fn main() { run() }\n");
+    let mixed = fixture.report(ToolChange::Ends { call: "1".into() }).await;
+    let paths: Vec<&str> = mixed
+        .iter()
+        .map(|change| change.latest.path.as_str())
+        .collect();
+    assert_eq!(paths, ["lib.rs"]);
+}

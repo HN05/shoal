@@ -20,6 +20,7 @@ use records::{Made, NewChange};
 
 mod attribution;
 mod commands;
+mod edit_reports;
 mod edits;
 mod listing;
 pub(crate) mod records;

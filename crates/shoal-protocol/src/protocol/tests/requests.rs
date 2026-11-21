@@ -260,6 +260,7 @@ const REQUESTS: &[&str] = &[
     r#"{"change_diffs":{"filter":{"space":"fix"}}}"#,
     r#"{"claim_changes":{"changes":[12],"thread":4}}"#,
     r#"{"unclaim_changes":{"space":"fix","changes":[12]}}"#,
+    r#"{"report_edits":{"paths":["/work/fix/lib.rs"]}}"#,
     // Approvals.
     r#"{"list_approvals":{"space":null}}"#,
     r#"{"show_approval":{"number":{"space_number":2,"item":7,"number":"2.7"}}}"#,

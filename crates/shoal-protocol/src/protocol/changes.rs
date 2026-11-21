@@ -34,6 +34,10 @@ pub enum ChangeMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         thread: Option<ThreadNumber>,
     },
+    /// The user edited or saved the files `paths`, by absolute path, as
+    /// an editor reports them, which makes a change an agent's command
+    /// made to one while it ran mixed.
+    ReportEdits { paths: Vec<std::path::PathBuf> },
     /// The changes `changes` names are not its agent's, and for no thread.
     UnclaimChanges {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -47,7 +51,7 @@ impl ChangeMethod {
     /// to the machine of the space whose worktree the changes are in.
     pub fn forwarding(&self) -> Forwarding {
         match self {
-            Self::RecordChange { .. } => Forwarding::Never,
+            Self::RecordChange { .. } | Self::ReportEdits { .. } => Forwarding::Never,
             Self::ListChanges { .. }
             | Self::ChangeDiffs { .. }
             | Self::ClaimChanges { .. }
@@ -57,7 +61,7 @@ impl ChangeMethod {
 
     pub fn target(&self) -> Option<Target<'_>> {
         match self {
-            Self::RecordChange { .. } => None,
+            Self::RecordChange { .. } | Self::ReportEdits { .. } => None,
             Self::ListChanges { filter } | Self::ChangeDiffs { filter } => filter.target(),
             Self::ClaimChanges { space, .. } | Self::UnclaimChanges { space, .. } => {
                 space.as_ref().map(Target::Space)
