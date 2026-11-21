@@ -1,6 +1,6 @@
 //! The approval requests proposals and pushes wait for, the operations
-//! that run approved pushes, and the reviews a new PR waits for, as links
-//! reach them.
+//! that run approved pushes, and the reviews a new PR and a PR merge wait
+//! for, as links reach them.
 use std::collections::BTreeMap;
 
 use anyhow::{Result, bail};

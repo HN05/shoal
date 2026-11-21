@@ -284,8 +284,8 @@ pub trait Approvals: Send + Sync {
     fn operation_running(&self, id: &str) -> bool;
 }
 
-/// The local reviews a new PR waits for, as `[review] require_for_pr`
-/// asks.
+/// The local reviews a new PR and a PR merge wait for, as `[review]
+/// require_for_pr` and `require_for_merge` ask.
 pub trait Reviews: Send + Sync {
     /// Whether `settings` require a review of a PR merge from `caller`.
     fn merge_review_required(&self, settings: &Effective, caller: Option<&Caller>) -> bool;
