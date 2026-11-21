@@ -195,7 +195,7 @@ impl Forge for Manager {
         &'a self,
         workspace: &'a Workspace,
     ) -> BoxFuture<'a, Result<(ForgeRepo, Account)>> {
-        Box::pin(self.workspace_forge_account(workspace))
+        Box::pin(self.links.workspace_forge_account(self, workspace))
     }
 
     fn checkout_forge<'a>(
@@ -215,7 +215,10 @@ impl Forge for Manager {
             let target = ItemContext::space(SpaceSelector::id(&workspace.id)).into();
             let pull = Some(pull.clone().into());
             let action = Action::Review(review);
-            (self.item_action(&target, ItemKind::Pr, pull, action, None)).await?;
+            (self
+                .links
+                .item_action(self, &target, ItemKind::Pr, pull, action, None))
+            .await?;
             Ok(())
         })
     }

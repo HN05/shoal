@@ -65,6 +65,14 @@ impl Spaces for Manager {
         Box::pin(Manager::space_settings(self, space))
     }
 
+    fn repository_settings<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Effective>> {
+        Box::pin(Manager::repository_settings(self, id))
+    }
+
+    fn global_settings(&self) -> BoxFuture<'_, Result<Effective>> {
+        Box::pin(Manager::space_settings_in(self, None))
+    }
+
     fn workspace_settings<'a>(
         &'a self,
         workspace: &'a Workspace,

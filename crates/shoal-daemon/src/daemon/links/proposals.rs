@@ -191,7 +191,10 @@ impl Manager {
         let duplicated = self.duplicated_proposal(&decision).await?;
         let changed = duplicated.iter().map(|original| &original.space_id);
         let changed = changed.collect::<Vec<_>>();
-        let _gate = self.lock_change_gates(&request.space_id, &changed).await?;
+        let _gate = self
+            .links
+            .lock_change_gates(&request.space_id, &changed)
+            .await?;
         let request = self.pending_proposal(request).await?;
         if let Some(workspace) = routed_to {
             ensure!(
@@ -350,7 +353,7 @@ impl Manager {
             Specification::Pull(pull) => Some(pull.pull.body.as_str()),
             _ => None,
         };
-        let required = super::actions::required_labels(&settings, item.kind);
+        let required = shoal_links::actions::required_labels(&settings, item.kind);
         conventions::warnings(&forge, &account, &path, item, body, required).await
     }
 
@@ -472,7 +475,7 @@ impl Manager {
         account: &Account,
         item: &Item,
     ) -> Result<()> {
-        let target = super::actions::Target {
+        let target = shoal_links::actions::Target {
             kind: ItemKind::Issue,
             number: item.number,
             url: item.url.to_string(),
@@ -509,7 +512,15 @@ impl Manager {
         };
         // Only a scoped caller proposes, and it acts as the agent account.
         let recorded = async {
-            self.keep_created(&space.id, ItemKind::Issue, item, link, Assigner::Agent)
+            self.links
+                .keep_created(
+                    self,
+                    &space.id,
+                    ItemKind::Issue,
+                    item,
+                    link,
+                    Assigner::Agent,
+                )
                 .await
         };
         match recorded.await {
@@ -535,7 +546,7 @@ impl Manager {
             workspace.state.accepts_links(),
             "workspace cannot accept a PR in its current state"
         );
-        let (forge, account) = self.workspace_forge_account(workspace).await?;
+        let (forge, account) = self.links.workspace_forge_account(self, workspace).await?;
         if request.url.is_none() {
             let proposed = request
                 .proposed_pull()
@@ -566,7 +577,15 @@ impl Manager {
             .finish_proposed(request, &forge, &account, ItemKind::Pr)
             .await?;
         let (linked, _) = self
-            .keep_created(&workspace.id, ItemKind::Pr, &item, true, Assigner::Agent)
+            .links
+            .keep_created(
+                self,
+                &workspace.id,
+                ItemKind::Pr,
+                &item,
+                true,
+                Assigner::Agent,
+            )
             .await?;
         Ok((item, linked))
     }
@@ -580,7 +599,7 @@ impl Manager {
         number: u64,
     ) -> Result<(Item, bool)> {
         let item = forge.read(account, ItemKind::Pr, number).await?.item;
-        self.link_open_pull(workspace, &item).await?;
+        self.links.link_open_pull(self, workspace, &item).await?;
         Ok((item, true))
     }
 
@@ -653,7 +672,7 @@ impl Manager {
     ) -> Result<(ItemRef, Option<String>)> {
         let (forge, account) = self.proposal_forge_account(request, space).await?;
         let url = ItemRef::in_repository(&forge, LinkKind::Issue, input)?;
-        let target = super::actions::Target {
+        let target = shoal_links::actions::Target {
             kind: ItemKind::Issue,
             number: url.number().get(),
             url: url.to_string(),
@@ -712,12 +731,21 @@ impl Manager {
         space: Option<&LinkSpace>,
         forge: &ForgeRepo,
         account: &Account,
-        target: &super::actions::Target,
+        target: &shoal_links::actions::Target,
         comment: Action,
     ) -> Result<Option<String>> {
         let posted = match space {
             Some(space) => self
-                .apply_own(&space.id, forge, account, target.clone(), &comment, None)
+                .links
+                .apply_own(
+                    self,
+                    &space.id,
+                    forge,
+                    account,
+                    target.clone(),
+                    &comment,
+                    None,
+                )
                 .await
                 .map(|_| ()),
             None => forge
@@ -771,7 +799,7 @@ impl Manager {
             .as_ref()
             .context("the space that made the proposal is gone")?;
         let repository = self.repository(repository).await?;
-        self.checkout_forge_account(&repository).await
+        self.links.checkout_forge_account(self, &repository).await
     }
 }
 

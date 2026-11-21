@@ -54,6 +54,10 @@ impl Records for LinkRecords {
         tree::delegated_elsewhere(db, &TrackedAgents::of(agents))
     }
 
+    fn subtree(&self, db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>> {
+        tree::subtree(db, id)
+    }
+
     fn checked_branch(&self, db: &Connection, id: &SpaceId) -> Result<Option<String>> {
         checked_branch(db, id)
     }

@@ -90,6 +90,14 @@ impl Spaces for StandIn {
         Box::pin(async { bail!(NOT_HERE) })
     }
 
+    fn repository_settings<'a>(&'a self, _: &'a RepositoryId) -> BoxFuture<'a, Result<Effective>> {
+        Box::pin(async { bail!(NOT_HERE) })
+    }
+
+    fn global_settings(&self) -> BoxFuture<'_, Result<Effective>> {
+        Box::pin(async { bail!(NOT_HERE) })
+    }
+
     fn workspace_settings<'a>(&'a self, _: &'a Workspace) -> BoxFuture<'a, Result<Effective>> {
         Box::pin(async { bail!(NOT_HERE) })
     }

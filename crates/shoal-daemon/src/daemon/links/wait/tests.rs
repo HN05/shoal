@@ -1983,7 +1983,7 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
         let manager = &manager;
         let id = parent.id.clone();
         async move {
-            let agents = manager.tracked_agents().await;
+            let agents = shoal_links::daemon::Spaces::tracked_agents(&**manager).await;
             let edited = Edited::retarget(&from.into(), &to.into());
             let links = manager.links.clone();
             manager
@@ -1995,7 +1995,7 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
                         state: None,
                         edited,
                     };
-                    links.record_received_change(db, &id, change, agents.ids())
+                    links.record_received_change(db, &id, change, &agents)
                 })
                 .await
                 .unwrap();
@@ -2027,7 +2027,11 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
     // A change of the parent's keeps the child's polls out until its
     // cursors know it, whether or not the child has an agent by then.
     let child_gate_held = || async {
-        let _gate = manager.lock_change_gates(&parent.id, &[]).await.unwrap();
+        let _gate = manager
+            .links
+            .lock_change_gates(&parent.id, &[])
+            .await
+            .unwrap();
         manager.gates.try_lock_prs([&child.id]).is_none()
     };
     assert!(child_gate_held().await);

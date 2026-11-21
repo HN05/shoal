@@ -19,9 +19,15 @@ use tokio::{sync::Notify, time::Instant};
 use super::{mark_published, section, stored};
 use crate::{
     daemon::{log, manager::Manager},
-    forge::items::link::ItemKind,
+    forge::items::{
+        action::{Action, Edit},
+        item::ItemState,
+        link::ItemKind,
+    },
     model::Relation,
 };
+use shoal_forge::items::action::ActionRequests;
+use shoal_links::actions::Target;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The shortest time between two publications of one space's progress.
@@ -138,7 +144,7 @@ impl Manager {
         if !self.acting_settings(&space).await?.pr.progress {
             return Ok(());
         }
-        let _gates = self.lock_change_gates(id, &[]).await?;
+        let _gates = self.links.lock_change_gates(id, &[]).await?;
         let query = id.to_owned();
         let (stored, urls) = (self.store)
             .read(move |db| Ok((stored(db, &query)?, publishing_pulls(db, &query)?)))
@@ -159,8 +165,8 @@ impl Manager {
     /// Show `section` in the space's draft PRs at `urls`, removing it from
     /// the others, or remove it from every one for `None`, logging each PR
     /// that fails without stopping at it; whether every one succeeded. The
-    /// caller holds the gates [`Manager::lock_change_gates`] takes for the
-    /// space.
+    /// caller holds the gates [`shoal_links::Links::lock_change_gates`] takes
+    /// for the space.
     async fn write_sections(
         &self,
         space: &LinkSpace,
@@ -169,7 +175,7 @@ impl Manager {
     ) -> bool {
         let mut written = true;
         for url in urls {
-            if let Err(error) = self.write_progress_section(space, url, section).await {
+            if let Err(error) = self.write_section(space, url, section).await {
                 log!("progress section of {url}: {error:#}");
                 written = false;
             }
@@ -190,6 +196,45 @@ impl Manager {
                     .collect::<rusqlite::Result<_>>()?)
             })
             .await
+    }
+
+    /// Show `section` as the progress section of the space's PR at `url`
+    /// while it is a draft, or remove its section for `None` or a PR out of
+    /// draft, as the agent account, unless the PR is no longer open or
+    /// already shows it. The caller holds the gates
+    /// [`shoal_links::Links::lock_change_gates`] takes for the space.
+    async fn write_section(
+        &self,
+        space: &LinkSpace,
+        pull: &ItemRef,
+        section: Option<&str>,
+    ) -> Result<()> {
+        let forge = shoal_links::forges::of_space(self, space).await?;
+        let account = self.links.agent_account();
+        pull.belongs_to(&forge)?;
+        let (number, url) = (pull.pull()?, pull.to_string());
+        let current = forge.read(&account, ItemKind::Pr, number.get()).await?;
+        if current.item.state != ItemState::Open {
+            return Ok(());
+        }
+        let draft = current.item.pr.as_ref().is_some_and(|pr| pr.draft);
+        let body = section::with_section(&current.body, section.filter(|_| draft));
+        if body == current.body {
+            return Ok(());
+        }
+        let action = Action::edit(Edit {
+            body: Some(body),
+            ..Edit::default()
+        });
+        let target = Target {
+            kind: ItemKind::Pr,
+            number: number.get(),
+            url,
+        };
+        let applied =
+            (self.links).apply_own(self, &space.id, &forge, &account, target, &action, None);
+        applied.await?;
+        Ok(())
     }
 }
 

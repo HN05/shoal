@@ -86,7 +86,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<ReadyMarks> {
         let id = self.links.link_space(self, selector).await?.id.to_owned();
-        let _guard = self.lock_change_gates(&id, &[]).await?;
+        let _guard = self.links.lock_change_gates(&id, &[]).await?;
         let space = self.links.link_space(self, &SpaceSelector::id(&id)).await?;
         let head = self.ready_head(&space, caller).await?;
         let settings = self.acting_settings(&space).await?;
@@ -108,7 +108,11 @@ impl Manager {
         let pulls = (self.markable_pulls(&space, kind, explicit.as_ref(), head)).await?;
         let mut ready = (self.record_marks(&id, kind, explicit, pulls)).await?;
         let undrafted = match settings.pr.undraft_on_ready {
-            true => self.set_draft(&space, &pr_urls(&ready.marks), false).await,
+            true => {
+                self.links
+                    .set_draft(self, &space, &pr_urls(&ready.marks), false)
+                    .await
+            }
             false => Ok(()),
         };
         if let Some(command) = command {
@@ -119,7 +123,10 @@ impl Manager {
         let alert = crate::daemon::alerts::NewAlert::shoal(kind, about, ready_notice(&ready.marks));
         (self.tell_coordinator(alert, false, super::notifications::Source::Agent)).await;
         undrafted.context("marked ready for review, but a PR is still a draft")?;
-        (self.check_conventions(&space, &settings, &mut ready.marks)).await;
+        (self
+            .links
+            .check_conventions(self, &space, &settings, &mut ready.marks))
+        .await;
         Ok(ready)
     }
 
@@ -229,7 +236,7 @@ impl Manager {
         draft: Option<bool>,
     ) -> Result<Vec<ReviewMark>> {
         let id = self.links.link_space(self, selector).await?.id.to_owned();
-        let _guard = self.lock_change_gates(&id, &[]).await?;
+        let _guard = self.links.lock_change_gates(&id, &[]).await?;
         let space = self.links.link_space(self, &SpaceSelector::id(&id)).await?;
         let kind = marked_kind(&selection)?;
         let explicit = marked_item(
@@ -243,7 +250,8 @@ impl Manager {
             None => self.acting_settings(&space).await?.pr.draft_on_unready,
         };
         if draft {
-            self.set_draft(&space, &pr_urls(&selected), true)
+            self.links
+                .set_draft(self, &space, &pr_urls(&selected), true)
                 .await
                 .context(
                     "kept the marks: a PR could not return to draft; retry, or pass --no-draft",

@@ -74,7 +74,8 @@ impl Manager {
             current == confirmed.warning,
             "the merge warning changed since you confirmed the merge; run shoal merge again"
         );
-        self.item_action(target, ItemKind::Pr, Some(url.into()), action, caller)
+        self.links
+            .item_action(self, target, ItemKind::Pr, Some(url.into()), action, caller)
             .await
     }
 
@@ -123,7 +124,7 @@ impl Manager {
             Some(caller),
         );
         let (target, url) = item.await?;
-        self.configure_merge(target.own_place(), action).await?;
+        shoal_links::actions::configure_merge(self, target.own_place(), action).await?;
         if action.merges() && action.merge_head().is_none() {
             let forge = target.into_forge()?;
             let pull = forge

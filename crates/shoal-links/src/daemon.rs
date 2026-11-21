@@ -74,6 +74,14 @@ pub trait Spaces: Send + Sync {
     /// without one, under the global config.
     fn space_settings<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<Effective>>;
 
+    /// The settings of the registered repository `id`, with the file in
+    /// its checkout.
+    fn repository_settings<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Effective>>;
+
+    /// The global config's settings alone, for a place outside every
+    /// registered repository.
+    fn global_settings(&self) -> BoxFuture<'_, Result<Effective>>;
+
     /// The settings of `workspace`, read from its worktree.
     fn workspace_settings<'a>(
         &'a self,
@@ -306,6 +314,9 @@ pub trait Records: Send + Sync {
         db: &Connection,
         agents: &[SpaceId],
     ) -> Result<Vec<(SpaceId, Vec<SpaceRef>)>>;
+
+    /// The space `id` and every space below it.
+    fn subtree(&self, db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>>;
 
     /// The branch of the workspace `id` while its conflicts are checked:
     /// none for a chat, a workspace at a commit and one whose assignment is

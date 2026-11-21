@@ -1,5 +1,9 @@
 use super::*;
-use shoal_protocol::space_names::SpaceSelector;
+use crate::forge::items::{
+    action::Action,
+    item::{Item, ItemState},
+};
+use shoal_links::place::Place;
 
 #[tokio::test]
 async fn a_branch_pushed_to_a_fork_on_the_same_forge_names_the_fork_as_its_head() {
@@ -72,7 +76,9 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
 
     // A link failing for another reason still fails, after the record.
     manager
+        .links
         .keep_created(
+            &*manager,
             &workspace.id,
             ItemKind::Issue,
             &item(1),
@@ -128,7 +134,9 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
     // An item created after the check but before removal reserved the
     // workspace keeps its creation event and comes back with a warning.
     let (linked, warning) = manager
+        .links
         .keep_created(
+            &*manager,
             &workspace.id,
             ItemKind::Issue,
             &item(2),
@@ -154,27 +162,6 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
     assert_eq!(created, 2);
 }
 
-#[test]
-fn a_scoped_verdict_is_the_space_s_own_post_and_the_user_s_is_not() {
-    use crate::forge::items::review::{NewReview, ReviewVerdict};
-    let approval = Action::Review(NewReview {
-        verdict: ReviewVerdict::Approve,
-        body: "Looks right".into(),
-        comments: Vec::new(),
-        commit: None,
-    });
-    let posted = || vec!["review-1".to_owned()];
-    let scoped = Caller {
-        space_id: "space".into(),
-        execution: None,
-        granted: None,
-        read_only: false,
-        vouched: None,
-    };
-    assert_eq!(own_posts(&approval, Some(&scoped), posted()), posted());
-    assert!(own_posts(&approval, None, posted()).is_empty());
-}
-
 #[tokio::test]
 async fn a_merge_naming_no_method_takes_the_configured_one() {
     use crate::{
@@ -197,7 +184,9 @@ async fn a_merge_naming_no_method_takes_the_configured_one() {
         head: None,
     };
     let method = async |place: Option<&Place>, mut action| {
-        manager.configure_merge(place, &mut action).await.unwrap();
+        shoal_links::actions::configure_merge(&*manager, place, &mut action)
+            .await
+            .unwrap();
         match action {
             Action::Merge { method, .. } => method,
             other => panic!("not a merge: {other:?}"),

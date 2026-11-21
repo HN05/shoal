@@ -169,7 +169,12 @@ pub(super) async fn handle(
                 Some(confirmed) => {
                     (manager.confirmed_merge(&target, item, action, &confirmed, caller)).await?
                 }
-                None => (manager.item_action(&target, kind, item, action, caller)).await?,
+                None => {
+                    (manager
+                        .links
+                        .item_action(&**manager, &target, kind, item, action, caller))
+                    .await?
+                }
             })
         }
         ItemMethod::MergeWarning { target, item } => {

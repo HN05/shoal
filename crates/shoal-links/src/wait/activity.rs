@@ -214,7 +214,7 @@ fn recorded_urls(
 /// item, so none of its deliveries reports the change back. A space below
 /// with an agent of its own still hears about it. The caller holds the PR
 /// gates of these spaces from before the change.
-fn record_received_change(
+pub(crate) fn record_received_change(
     records: &dyn Records,
     db: &rusqlite::Connection,
     id: &SpaceId,

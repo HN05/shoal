@@ -84,7 +84,9 @@ impl Manager {
         let revert = NewRevert::new(options, settings.pr.draft);
         let created = forge.revert_pull(&account, &current, &revert).await?;
         let (_, warning) = self
+            .links
             .keep_created(
+                self,
                 &space.id,
                 ItemKind::Pr,
                 &created.item,

@@ -221,7 +221,10 @@ impl Manager {
         let (linked, kept) = match space.keeps_links() {
             true => {
                 let assigner = Assigner::of(caller);
-                (self.keep_created(&space.id, ItemKind::Issue, &item, link, assigner)).await?
+                (self
+                    .links
+                    .keep_created(self, &space.id, ItemKind::Issue, &item, link, assigner))
+                .await?
             }
             false => (false, Vec::new()),
         };
