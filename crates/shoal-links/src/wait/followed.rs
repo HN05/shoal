@@ -151,7 +151,7 @@ pub fn opened_open_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<It
 }
 
 /// The item as the workspace's last poll saw it, if one has.
-pub fn observed_item(
+pub(crate) fn observed_item(
     db: &rusqlite::Connection,
     id: &SpaceId,
     url: &str,

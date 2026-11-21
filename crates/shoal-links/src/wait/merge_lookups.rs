@@ -60,7 +60,7 @@ pub enum Merged {
 
 impl Merged {
     /// The PR's URL and the remote's, as the store records them.
-    pub fn columns(&self) -> (Option<&str>, Option<&str>) {
+    pub(crate) fn columns(&self) -> (Option<&str>, Option<&str>) {
         match self {
             Self::Pr(pr) => (Some(pr.url()), None),
             Self::Push(remote) => (None, Some(remote)),
