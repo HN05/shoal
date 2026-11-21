@@ -6754,8 +6754,10 @@ agent's current turn the alert, so the agent writes it in its conversation,
 where the user reads it as written, and it still reaches its recipients. It
 takes `--space`, `--all`, `--repo` and `--attach` as a plain alert does, and
 the command resolves and checks them at once: it prints whom the alert goes
-to, `user`, `coordinator`, `above` for a coordinator on another joined
-machine, `space`, or `all` with its `repository`. When the turn ends, Shoal
+to, and the mark it replaced, which `--json` gives as the `mark` and
+`replaced`, an alert's `to` of `kind` `user`, `coordinator`, `above` for a
+coordinator on another joined machine, `space`, or `all` with its
+`repository`. When the turn ends, Shoal
 sends the final message through the same path as `shoal send "<text>"`, as
 one line up or as lines down, each shortened to fit, with copies of the files
 as they are then; the alert gets its number
