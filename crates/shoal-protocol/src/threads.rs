@@ -28,6 +28,9 @@ states!(
         /// Its opener asks its holder to do something, such as implement
         /// the code its posts point at, and accepts the work once done.
         Request => "request",
+        /// A reviewer's finding on the holder's code, which Shoal opens for
+        /// a local review and its holder resolves.
+        Review => "review",
     }
 );
 
@@ -36,6 +39,10 @@ states!(
     OutcomeKind: ValueEnum {
         Answered => "answered",
         Done => "done",
+        Fixed => "fixed",
+        FalsePositive => "false-positive",
+        WontFix => "wont-fix",
+        Deferred => "deferred",
         Duplicate => "duplicate",
         Withdrawn => "withdrawn",
         Closed => "closed",
@@ -72,7 +79,7 @@ states!(
 
 /// How a thread was settled; each outcome carries what it needs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "outcome", rename_all = "snake_case")]
+#[serde(tag = "outcome", rename_all = "kebab-case")]
 pub enum Outcome {
     /// A question got its answer, optionally a choice it offered.
     Answered {
@@ -81,6 +88,15 @@ pub enum Outcome {
     },
     /// A request's work was made and its opener accepted it.
     Done,
+    /// A finding's code was changed to address it; the next review checks
+    /// it against the changes made for the thread.
+    Fixed,
+    /// A finding's claim is wrong.
+    FalsePositive { reason: String },
+    /// A finding's claim holds, but the code is not changed.
+    WontFix { reason: String },
+    /// A finding's claim holds and the work of an issue fixes it.
+    Deferred { issue: String },
     /// Another thread asks the same.
     Duplicate { of: ItemNumber },
     /// Its opener no longer needs it.
@@ -102,16 +118,24 @@ impl Outcome {
         choice: Option<u32>,
         of: Option<ItemNumber>,
         reason: Option<String>,
+        issue: Option<String>,
     ) -> Result<Self> {
         if !thread.takes(kind) {
             bail!("a {thread} thread is never {kind}");
         }
-        let reason = reason.filter(|reason| !reason.trim().is_empty());
-        Ok(match (kind, choice, of, reason) {
-            (OutcomeKind::Answered, choice, None, None) => Self::Answered { choice },
-            (OutcomeKind::Done, None, None, None) => Self::Done,
-            (OutcomeKind::Duplicate, None, Some(of), None) => Self::Duplicate { of },
-            (OutcomeKind::Withdrawn, None, None, reason) => Self::Withdrawn { reason },
+        let present = |text: Option<String>| text.filter(|text| !text.trim().is_empty());
+        let (reason, issue) = (present(reason), present(issue));
+        Ok(match (kind, choice, of, reason, issue) {
+            (OutcomeKind::Answered, choice, None, None, None) => Self::Answered { choice },
+            (OutcomeKind::Done, None, None, None, None) => Self::Done,
+            (OutcomeKind::Fixed, None, None, None, None) => Self::Fixed,
+            (OutcomeKind::FalsePositive, None, None, Some(reason), None) => {
+                Self::FalsePositive { reason }
+            }
+            (OutcomeKind::WontFix, None, None, Some(reason), None) => Self::WontFix { reason },
+            (OutcomeKind::Deferred, None, None, None, Some(issue)) => Self::Deferred { issue },
+            (OutcomeKind::Duplicate, None, Some(of), None, None) => Self::Duplicate { of },
+            (OutcomeKind::Withdrawn, None, None, reason, None) => Self::Withdrawn { reason },
             (OutcomeKind::Closed, ..) => {
                 bail!("only Shoal closes threads, when a space that took part finishes or goes")
             }
@@ -123,6 +147,10 @@ impl Outcome {
         match self {
             Self::Answered { .. } => OutcomeKind::Answered,
             Self::Done => OutcomeKind::Done,
+            Self::Fixed => OutcomeKind::Fixed,
+            Self::FalsePositive { .. } => OutcomeKind::FalsePositive,
+            Self::WontFix { .. } => OutcomeKind::WontFix,
+            Self::Deferred { .. } => OutcomeKind::Deferred,
             Self::Duplicate { .. } => OutcomeKind::Duplicate,
             Self::Withdrawn { .. } => OutcomeKind::Withdrawn,
             Self::Closed { .. } => OutcomeKind::Closed,
@@ -137,6 +165,10 @@ impl Outcome {
                 choice: Some(choice),
             } => format!("answered with choice {choice}"),
             Self::Done => "done".into(),
+            Self::Fixed => "fixed".into(),
+            Self::FalsePositive { reason } => format!("false-positive: {reason}"),
+            Self::WontFix { reason } => format!("wont-fix: {reason}"),
+            Self::Deferred { issue } => format!("deferred to {issue}"),
             Self::Duplicate { of } => format!("duplicate of {of}"),
             Self::Withdrawn { reason: None } => "withdrawn".into(),
             Self::Withdrawn {
@@ -157,7 +189,9 @@ impl OutcomeKind {
     fn data(self) -> &'static str {
         match self {
             Self::Answered => "only --choose",
-            Self::Done => "nothing",
+            Self::Done | Self::Fixed => "nothing",
+            Self::FalsePositive | Self::WontFix => "--reason and nothing else",
+            Self::Deferred => "--issue and nothing else",
             Self::Duplicate => "--of and nothing else",
             Self::Withdrawn => "only --reason",
             Self::Closed => "nothing",
@@ -166,11 +200,12 @@ impl OutcomeKind {
 }
 
 impl ThreadKind {
-    /// The outcome its opener settles it with once it got what it asked.
+    /// The outcome it is settled with once it got what it asked.
     pub fn settled(self) -> OutcomeKind {
         match self {
             Self::Question => OutcomeKind::Answered,
             Self::Request => OutcomeKind::Done,
+            Self::Review => OutcomeKind::Fixed,
         }
     }
 
@@ -179,6 +214,10 @@ impl ThreadKind {
         match outcome {
             OutcomeKind::Answered => self == Self::Question,
             OutcomeKind::Done => self == Self::Request,
+            OutcomeKind::Fixed
+            | OutcomeKind::FalsePositive
+            | OutcomeKind::WontFix
+            | OutcomeKind::Deferred => self == Self::Review,
             OutcomeKind::Duplicate | OutcomeKind::Withdrawn | OutcomeKind::Closed => true,
         }
     }
@@ -322,6 +361,38 @@ impl fmt::Display for ThreadStatus {
     }
 }
 
+/// How a thread is to be settled, as `shoal thread resolve` names it: an
+/// outcome with its data, or none to reopen it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Resolving {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outcome: Option<OutcomeKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub choice: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub of: Option<ThreadNumber>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issue: Option<String>,
+}
+
+impl Resolving {
+    /// Whether it names any outcome data, which reopening takes none of.
+    pub fn has_data(&self) -> bool {
+        self.choice.is_some() || self.of.is_some() || self.reason.is_some() || self.issue.is_some()
+    }
+}
+
+/// What a `review` thread is about: the review that opened it, while it
+/// exists, and how much its finding matters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Finding {
+    pub severity: crate::reviews::Severity,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<crate::reviews::ReviewId>,
+}
+
 /// How a thread was settled, by whom and when.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Resolution {
@@ -348,6 +419,9 @@ pub struct Thread {
     /// That space's current name.
     pub space: SpaceName,
     pub kind: ThreadKind,
+    /// A `review` thread's finding.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finding: Option<Finding>,
     pub name: String,
     pub opener: Sender,
     pub holder: Holder,

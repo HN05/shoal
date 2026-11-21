@@ -23,12 +23,21 @@ fn a_thread_is_linked_as_related_and_unlinked_with_or_without_it() {
     assert!(number(&["thread", "2", "related"], true).is_err());
 }
 
+fn data(choose: Option<u32>) -> OutcomeData {
+    OutcomeData {
+        choose,
+        of: None,
+        reason: None,
+        issue: None,
+    }
+}
+
 #[test]
 fn resolving_needs_an_outcome_unless_it_reopens() {
-    assert!(resolving(None, None, None, None, false).is_err());
-    let reopen = resolving(None, None, None, None, true).unwrap();
+    assert!(resolving(None, data(None), false).is_err());
+    let reopen = resolving(None, data(None), true).unwrap();
     assert!(reopen.outcome.is_none());
-    let answered = resolving(Some(OutcomeKind::Answered), Some(2), None, None, false).unwrap();
+    let answered = resolving(Some(OutcomeKind::Answered), data(Some(2)), false).unwrap();
     assert_eq!(
         (answered.outcome, answered.choice),
         (Some(OutcomeKind::Answered), Some(2))

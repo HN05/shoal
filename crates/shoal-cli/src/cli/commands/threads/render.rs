@@ -3,7 +3,7 @@
 use shoal_protocol::{
     changes::{ChangeDiff, ChangeEntry, ChangeKind, ChangeSize},
     code::CodeRef,
-    threads::{Post, Side, Thread},
+    threads::{Finding, Post, Side, Thread},
 };
 
 use crate::cli::{
@@ -57,6 +57,21 @@ pub(super) fn row(thread: &Thread, palette: Palette) -> String {
     lines.join("\n")
 }
 
+/// The thread's kind, with a review's finding's severity and review.
+fn kind(thread: &Thread) -> String {
+    match thread.finding {
+        None => thread.kind.to_string(),
+        Some(Finding {
+            severity,
+            review: None,
+        }) => format!("{} ({severity})", thread.kind),
+        Some(Finding {
+            severity,
+            review: Some(review),
+        }) => format!("{} ({severity}, review {review})", thread.kind),
+    }
+}
+
 /// The thread's number and name, labeled rows of who opened and holds it
 /// and where it stands, then each post.
 pub(super) fn details(thread: &Thread, palette: Palette) -> String {
@@ -65,7 +80,7 @@ pub(super) fn details(thread: &Thread, palette: Palette) -> String {
         rows.push([(label.to_owned(), Some(Style::Muted)), (value, None)]);
     };
     row("Status", status(thread));
-    row("Kind", thread.kind.to_string());
+    row("Kind", kind(thread));
     row("Opened by", thread.party(Side::Opener));
     row("Held by", thread.party(Side::Holder));
     let heading = format!("Thread {}: {}", thread.number, thread.one_line());

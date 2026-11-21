@@ -3,7 +3,7 @@ use std::{fs, sync::Arc};
 use shoal_protocol::{
     changes::{Change, ChangeAuthor, ChangeKind, ChangeNumber, Hunk, ToolChange},
     space_names::SpaceSelector,
-    threads::{NewPost, OutcomeKind, Thread, ThreadKind, ThreadNumber, ThreadStatus},
+    threads::{NewPost, OutcomeKind, Resolving, Thread, ThreadKind, ThreadNumber, ThreadStatus},
 };
 
 use super::records;
@@ -334,10 +334,10 @@ async fn changes_go_to_the_thread_switched_to_and_move_as_the_agent_says() {
     let resolved = manager.resolve_thread(
         agent,
         first_number,
-        Some(OutcomeKind::Withdrawn),
-        None,
-        None,
-        None,
+        Resolving {
+            outcome: Some(OutcomeKind::Withdrawn),
+            ..Resolving::default()
+        },
     );
     resolved.await.unwrap();
     let own_space = SpaceSelector::id(&fixture.workspace.id);

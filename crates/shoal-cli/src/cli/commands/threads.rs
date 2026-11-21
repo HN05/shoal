@@ -5,18 +5,21 @@ use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
     cli::{
-        args::{items::RelationArgs, threads::CodeArg},
+        args::{
+            items::RelationArgs,
+            threads::{CodeArg, OutcomeData},
+        },
         context::Context,
         ui::{self, Fallback},
     },
-    client::threads::{self, Resolving},
+    client::threads,
 };
 use shoal_protocol::{
     code::NewCodeRef,
     item_numbers::ItemNumber,
     model::Relation,
     space_names::SpaceSelector,
-    threads::{OutcomeKind, Side, ThreadKind, ThreadNumber},
+    threads::{OutcomeKind, Resolving, Side, ThreadKind, ThreadNumber},
 };
 
 mod listing;
@@ -133,22 +136,21 @@ pub(super) async fn resolve(
 /// reopening the thread with `undo`.
 pub(super) fn resolving(
     outcome: Option<OutcomeKind>,
-    choose: Option<u32>,
-    of: Option<ThreadNumber>,
-    reason: Option<String>,
+    data: OutcomeData,
     undo: bool,
 ) -> Result<Resolving> {
     if undo {
         return Ok(Resolving::default());
     }
     if outcome.is_none() {
-        bail!("name an outcome: answered, done, duplicate or withdrawn; or reopen with --undo");
+        bail!("name an outcome, such as answered, done or fixed; or reopen with --undo");
     }
     Ok(Resolving {
         outcome,
-        choice: choose,
-        of,
-        reason,
+        choice: data.choose,
+        of: data.of,
+        reason: data.reason,
+        issue: data.issue.map(|issue| issue.to_string()),
     })
 }
 

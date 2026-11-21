@@ -377,6 +377,9 @@ fn hint(thread: &Thread, side: Side) -> String {
         (Side::Holder, ThreadKind::Request) => format!(
             "Once it is done, say what you did with `shoal send {number} \"<text>\"`, or there why you cannot; pass it on with `shoal thread forward {number}`."
         ),
+        (Side::Holder, ThreadKind::Review) => format!(
+            "Settle it with `shoal thread resolve {number} fixed`, or `false-positive` or `wont-fix` with `--reason`, or `deferred` with `--issue`; discuss it with the reviewer with `shoal send {number} \"<text>\"`."
+        ),
         (Side::Opener, kind) => format!(
             "Reply with `shoal send {number} \"<text>\"`, or settle it with `shoal thread resolve {number} {}`.",
             kind.settled()

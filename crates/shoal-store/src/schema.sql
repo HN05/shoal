@@ -862,7 +862,7 @@ CREATE TABLE threads (
     outcome TEXT,
     resolved_by TEXT CHECK(resolved_by IN ('user','space','shoal')),
     resolver_id TEXT,
-    resolved_at INTEGER,
+    resolved_at INTEGER, severity TEXT CHECK(severity IN ('blocker','should-fix','nit')), review_id INTEGER,
     CHECK((outcome IS NULL) = (resolved_by IS NULL)
         AND (outcome IS NULL) = (resolved_at IS NULL))
 );
@@ -1175,6 +1175,8 @@ CREATE INDEX space_current_thread_thread ON space_current_thread(thread_id);
 CREATE INDEX thread_post_changes_change ON thread_post_changes(change_id);
 
 CREATE INDEX space_turn_retries_execution ON space_turn_retries(execution_id);
+
+CREATE INDEX threads_review ON threads(review_id) WHERE review_id IS NOT NULL;
 
 CREATE VIEW space_refs AS
     SELECT spaces.id, CASE spaces.kind

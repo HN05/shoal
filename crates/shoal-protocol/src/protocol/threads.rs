@@ -4,7 +4,7 @@ use super::{Forwarding, Lifetime, Target};
 use crate::code::NewCodeRef;
 use crate::item_numbers::ItemNumber;
 use crate::space_names::SpaceSelector;
-use crate::threads::{NewPost, OutcomeKind, ThreadKind, ThreadNumber, ThreadState};
+use crate::threads::{NewPost, Resolving, ThreadKind, ThreadNumber, ThreadState};
 
 /// Requests about threads: opening one, posting, forwarding, resolving,
 /// reading and linking them.
@@ -77,14 +77,8 @@ pub enum ThreadMethod {
     /// without one.
     ResolveThread {
         thread: ThreadNumber,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        outcome: Option<OutcomeKind>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        choice: Option<u32>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        of: Option<ThreadNumber>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        reason: Option<String>,
+        #[serde(flatten)]
+        resolving: Resolving,
         /// The space the user acts as, as a session in it that Shoal did
         /// not start does; a scoped caller acts as its own.
         #[serde(default, skip_serializing_if = "Option::is_none")]

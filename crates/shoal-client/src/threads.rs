@@ -7,7 +7,7 @@ use shoal_protocol::{
     item_numbers::ItemNumber,
     protocol::ThreadMethod,
     space_names::SpaceSelector,
-    threads::{Listing, NewPost, OutcomeKind, Thread, ThreadKind, ThreadNumber, ThreadState},
+    threads::{Listing, NewPost, Resolving, Thread, ThreadKind, ThreadNumber, ThreadState},
 };
 
 use crate::connection::{Daemon, await_reply, request};
@@ -94,16 +94,6 @@ pub async fn forward(
     Ok(*request::<Box<Thread>>(daemon, method).await?)
 }
 
-/// What resolving a thread records: an outcome with its data, or none to
-/// reopen it.
-#[derive(Debug, Default)]
-pub struct Resolving {
-    pub outcome: Option<OutcomeKind>,
-    pub choice: Option<u32>,
-    pub of: Option<ThreadNumber>,
-    pub reason: Option<String>,
-}
-
 /// Resolve the thread `thread` as `resolving` says, acting as the space
 /// `from`.
 pub async fn resolve(
@@ -112,18 +102,9 @@ pub async fn resolve(
     resolving: Resolving,
     from: Option<SpaceSelector>,
 ) -> Result<Thread> {
-    let Resolving {
-        outcome,
-        choice,
-        of,
-        reason,
-    } = resolving;
     let method = ThreadMethod::ResolveThread {
         thread,
-        outcome,
-        choice,
-        of,
-        reason,
+        resolving,
         from,
     };
     Ok(*request::<Box<Thread>>(daemon, method).await?)

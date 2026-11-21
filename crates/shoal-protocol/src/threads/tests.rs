@@ -34,6 +34,7 @@ fn thread(opener: Sender, holder: Holder, posts: Vec<Post>) -> Thread {
         space_id: "w1".into(),
         space: "cache".into(),
         kind: ThreadKind::Question,
+        finding: None,
         name: "Which database?".into(),
         opener,
         holder,
@@ -129,21 +130,49 @@ fn a_thread_carries_its_resolution_beside_its_other_fields() {
 fn an_outcome_takes_only_its_own_data() {
     let question = ThreadKind::Question;
     assert_eq!(
-        Outcome::new(question, OutcomeKind::Answered, Some(2), None, None).unwrap(),
+        Outcome::new(question, OutcomeKind::Answered, Some(2), None, None, None).unwrap(),
         Outcome::Answered { choice: Some(2) }
     );
-    assert!(Outcome::new(question, OutcomeKind::Duplicate, None, None, None).is_err());
-    assert!(
+    assert!(Outcome::new(question, OutcomeKind::Duplicate, None, None, None, None).is_err());
+    let of = Some(number(1, 1));
+    assert!(Outcome::new(question, OutcomeKind::Withdrawn, None, of, None, None).is_err());
+    assert!(Outcome::new(question, OutcomeKind::Closed, None, None, None, None).is_err());
+}
+
+#[test]
+fn only_a_review_thread_takes_a_finding_s_outcomes() {
+    let reason = || Some("The caller checks the length".to_owned());
+    let review = ThreadKind::Review;
+    assert_eq!(
         Outcome::new(
-            question,
-            OutcomeKind::Withdrawn,
+            review,
+            OutcomeKind::FalsePositive,
             None,
-            Some(number(1, 1)),
+            None,
+            reason(),
             None
         )
-        .is_err()
+        .unwrap(),
+        Outcome::FalsePositive {
+            reason: reason().unwrap()
+        }
     );
-    assert!(Outcome::new(question, OutcomeKind::Closed, None, None, None).is_err());
+    let issue = Some("#1240".to_owned());
+    assert!(Outcome::new(review, OutcomeKind::Deferred, None, None, None, issue).is_ok());
+    assert!(Outcome::new(review, OutcomeKind::WontFix, None, None, None, None).is_err());
+    assert!(Outcome::new(review, OutcomeKind::Answered, None, None, None, None).is_err());
+    let question = ThreadKind::Question;
+    assert!(Outcome::new(question, OutcomeKind::Fixed, None, None, None, None).is_err());
+}
+
+#[test]
+fn a_finding_s_outcome_is_stored_by_the_name_the_command_takes() {
+    let outcome = Outcome::WontFix {
+        reason: "Rare".into(),
+    };
+    let json = serde_json::to_value(&outcome).unwrap();
+    assert_eq!(json["outcome"], OutcomeKind::WontFix.to_string());
+    assert_eq!(serde_json::from_value::<Outcome>(json).unwrap(), outcome);
 }
 
 #[test]
@@ -171,12 +200,22 @@ fn a_thread_s_status_follows_whose_turn_it_is_and_its_outcome() {
 fn a_request_is_done_and_a_question_answered() {
     let request = ThreadKind::Request;
     assert_eq!(
-        Outcome::new(request, OutcomeKind::Done, None, None, None).unwrap(),
+        Outcome::new(request, OutcomeKind::Done, None, None, None, None).unwrap(),
         Outcome::Done
     );
-    assert!(Outcome::new(request, OutcomeKind::Done, Some(1), None, None).is_err());
-    assert!(Outcome::new(request, OutcomeKind::Answered, None, None, None).is_err());
-    assert!(Outcome::new(ThreadKind::Question, OutcomeKind::Done, None, None, None).is_err());
+    assert!(Outcome::new(request, OutcomeKind::Done, Some(1), None, None, None).is_err());
+    assert!(Outcome::new(request, OutcomeKind::Answered, None, None, None, None).is_err());
+    assert!(
+        Outcome::new(
+            ThreadKind::Question,
+            OutcomeKind::Done,
+            None,
+            None,
+            None,
+            None
+        )
+        .is_err()
+    );
     let json = serde_json::to_value(Outcome::Done).unwrap();
     assert_eq!(json, serde_json::json!({"outcome": "done"}));
 }

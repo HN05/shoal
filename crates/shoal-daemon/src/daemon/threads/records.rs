@@ -9,8 +9,8 @@ use shoal_protocol::{
     changes::MAX_ENTRIES_BYTES,
     space_names::{MAX_SPACE_NAME_LEN, SpaceName},
     threads::{
-        Holder, MAX_THREAD_BYTES, NewPost, Outcome, Post, Resolution, Sender, Side, Thread,
-        ThreadKind, ThreadSpace,
+        Finding, Holder, MAX_THREAD_BYTES, NewPost, Outcome, Post, Resolution, Sender, Side,
+        Thread, ThreadKind, ThreadSpace,
     },
 };
 
@@ -32,7 +32,7 @@ const NUMBERED: &str = "t.space_number IS NOT NULL";
 const THREADS: &str = "SELECT t.id,t.space_number,t.number,t.space_id,
         COALESCE(s.name,t.space_id) AS space,t.kind,t.name,t.created_at,t.opener,t.holder_id,
         h.name AS holder_name,h.number AS holder_number,t.outcome,t.resolved_by,t.resolver_id,
-        t.resolved_at,EXISTS (SELECT 1 FROM space_current_thread c
+        t.resolved_at,t.severity,t.review_id,EXISTS (SELECT 1 FROM space_current_thread c
             WHERE c.thread_id=t.id AND c.space_id=t.holder_id) AS working
     FROM threads t LEFT JOIN spaces s ON s.id=t.space_id LEFT JOIN spaces h ON h.id=t.holder_id";
 
@@ -54,6 +54,13 @@ fn thread(row: &rusqlite::Row<'_>) -> rusqlite::Result<Thread> {
             resolved_at: row.get("resolved_at")?,
         }),
     };
+    let finding = match row.get("severity")? {
+        Some(severity) => Some(Finding {
+            severity,
+            review: row.get("review_id")?,
+        }),
+        None => None,
+    };
     Ok(Thread {
         id: row.get("id")?,
         number: ItemNumber {
@@ -63,6 +70,7 @@ fn thread(row: &rusqlite::Row<'_>) -> rusqlite::Result<Thread> {
         space_id: row.get("space_id")?,
         space: row.get("space")?,
         kind: row.get("kind")?,
+        finding,
         name: row.get("name")?,
         opener: row.get("opener")?,
         holder,
@@ -255,9 +263,11 @@ pub(super) fn linkers(db: &Connection, id: i64) -> Result<Vec<SpaceId>> {
 }
 
 /// What a new thread is: its kind and name, who opened it, the space it is
-/// numbered in and who holds it, none for the user.
-pub(super) struct NewThread<'a> {
+/// numbered in and who holds it, none for the user, and a `review` thread's
+/// finding.
+pub(in crate::daemon) struct NewThread<'a> {
     pub(super) kind: ThreadKind,
+    pub(super) finding: Option<Finding>,
     pub(super) name: &'a str,
     pub(super) opener: Sender,
     pub(super) space_id: &'a SpaceId,
@@ -268,8 +278,9 @@ pub(super) struct NewThread<'a> {
 pub(super) fn insert_thread(tx: &Transaction<'_>, new: &NewThread<'_>) -> Result<i64> {
     let number = item_numbers::next(tx, new.space_id)?;
     tx.execute(
-        "INSERT INTO threads(space_id,space_number,number,kind,name,created_at,opener,holder_id)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+        "INSERT INTO threads(space_id,space_number,number,kind,name,created_at,opener,holder_id,
+                severity,review_id)
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
         params![
             new.space_id,
             number.space,
@@ -278,7 +289,9 @@ pub(super) fn insert_thread(tx: &Transaction<'_>, new: &NewThread<'_>) -> Result
             new.name,
             crate::time::UnixTime::now(),
             new.opener,
-            new.holder
+            new.holder,
+            new.finding.map(|finding| finding.severity),
+            new.finding.and_then(|finding| finding.review)
         ],
     )?;
     let id = tx.last_insert_rowid();

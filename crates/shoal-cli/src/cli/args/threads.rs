@@ -48,24 +48,20 @@ pub enum ThreadCommand {
         note: Option<String>,
     },
     /// Settle a thread with an outcome, or reopen it with --undo; its
-    /// opener resolves it.
+    /// opener resolves it, or its holder one Shoal opened, such as a
+    /// review's finding.
     Resolve {
         /// Thread number, such as 3.2, or 2 for one of your own space.
         thread: ThreadNumber,
-        /// answered (a question), done (a request), duplicate or withdrawn.
+        /// answered (a question), done (a request), fixed, false-positive,
+        /// wont-fix or deferred (a review's finding), duplicate or
+        /// withdrawn.
         #[arg(required_unless_present = "undo")]
         outcome: Option<OutcomeKind>,
-        /// The number of the choice an answer settled on.
-        #[arg(long, value_name = "N", conflicts_with_all = ["of", "reason"])]
-        choose: Option<u32>,
-        /// The thread a duplicate repeats.
-        #[arg(long, value_name = "THREAD", conflicts_with = "reason")]
-        of: Option<ThreadNumber>,
-        /// Why it was withdrawn.
-        #[arg(long)]
-        reason: Option<String>,
+        #[command(flatten)]
+        data: OutcomeData,
         /// Reopen a resolved thread.
-        #[arg(long, conflicts_with_all = ["outcome", "choose", "of", "reason"])]
+        #[arg(long, conflicts_with_all = ["outcome", "choose", "of", "reason", "issue"])]
         undo: bool,
     },
     /// Say which thread your changes from now on are for, until the next
@@ -121,6 +117,25 @@ pub enum ThreadCommand {
         #[arg(short = 'p', long)]
         print: bool,
     },
+}
+
+// What an outcome of `shoal thread resolve` takes besides its name; a doc
+// comment here would replace that command's description.
+#[derive(Debug, Args)]
+pub struct OutcomeData {
+    /// The number of the choice an answer settled on.
+    #[arg(long, value_name = "N", conflicts_with_all = ["of", "reason", "issue"])]
+    pub choose: Option<u32>,
+    /// The thread a duplicate repeats.
+    #[arg(long, value_name = "THREAD", conflicts_with_all = ["reason", "issue"])]
+    pub of: Option<ThreadNumber>,
+    /// Why it was withdrawn, why a finding's claim is wrong
+    /// (false-positive) or why its code stays (wont-fix).
+    #[arg(long, conflicts_with = "issue")]
+    pub reason: Option<String>,
+    /// The issue whose work fixes a finding (deferred).
+    #[arg(short = 'i', long, value_parser = super::issue_input)]
+    pub issue: Option<crate::forge::items::reference::ItemInput>,
 }
 
 // What `shoal send` takes for a post in a thread; a doc comment would

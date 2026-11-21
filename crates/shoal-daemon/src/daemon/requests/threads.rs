@@ -72,15 +72,11 @@ pub(super) async fn handle(
         }
         ThreadMethod::ResolveThread {
             thread: number,
-            outcome,
-            choice,
-            of,
-            reason,
+            resolving,
             from,
         } => {
             let acting = acting(manager, caller, from).await?;
-            let resolved =
-                manager.resolve_thread(acting.as_ref(), number, outcome, choice, of, reason);
+            let resolved = manager.resolve_thread(acting.as_ref(), number, resolving);
             thread(resolved.await?)
         }
         ThreadMethod::ListThreads {

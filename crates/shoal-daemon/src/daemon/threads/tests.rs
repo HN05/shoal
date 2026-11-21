@@ -4,7 +4,8 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::{
     space_names::{SpaceName, SpaceSelector},
     threads::{
-        CloseCause, NewPost, Outcome, OutcomeKind, Sender, Side, Thread, ThreadKind, ThreadNumber,
+        CloseCause, NewPost, Outcome, OutcomeKind, Resolving, Sender, Side, Thread, ThreadKind,
+        ThreadNumber,
     },
 };
 
@@ -225,6 +226,22 @@ async fn the_user_opens_a_thread_only_with_a_space() {
             "Which?".into(),
             ThreadKind::Question,
             None,
+            Vec::new(),
+        )
+        .await;
+    assert!(opened.is_err());
+}
+
+#[tokio::test]
+async fn only_shoal_opens_a_review_thread() {
+    let tree = tree().await;
+    let to = SpaceSelector::id(&tree.child.id);
+    let opened = (tree.manager)
+        .open_thread(
+            None,
+            "Unchecked length".into(),
+            ThreadKind::Review,
+            Some(&to),
             Vec::new(),
         )
         .await;
@@ -594,10 +611,10 @@ async fn the_opener_resolves_its_thread_and_takes_back_an_unread_notice() {
         .resolve_thread(
             Some(&parent),
             full(&thread),
-            Some(withdraw),
-            None,
-            None,
-            None,
+            Resolving {
+                outcome: Some(withdraw),
+                ..Resolving::default()
+            },
         )
         .await;
     assert!(by_holder.is_err());
@@ -605,10 +622,10 @@ async fn the_opener_resolves_its_thread_and_takes_back_an_unread_notice() {
         .resolve_thread(
             Some(&child),
             full(&thread),
-            Some(withdraw),
-            None,
-            None,
-            None,
+            Resolving {
+                outcome: Some(withdraw),
+                ..Resolving::default()
+            },
         )
         .await
         .unwrap();
@@ -628,7 +645,7 @@ async fn the_opener_resolves_its_thread_and_takes_back_an_unread_notice() {
     assert!(resolved.await.is_err());
 
     let reopened = manager
-        .resolve_thread(Some(&child), full(&thread), None, None, None, None)
+        .resolve_thread(Some(&child), full(&thread), Resolving::default())
         .await
         .unwrap();
     assert!(reopened.is_open());
@@ -739,9 +756,16 @@ async fn a_thread_resolved_otherwise_stays_resolved_when_done_is_undone() {
         .await
         .unwrap();
     let answered = Some(OutcomeKind::Answered);
-    (manager.resolve_thread(None, full(&thread), answered, None, None, None))
-        .await
-        .unwrap();
+    (manager.resolve_thread(
+        None,
+        full(&thread),
+        Resolving {
+            outcome: answered,
+            ..Resolving::default()
+        },
+    ))
+    .await
+    .unwrap();
     manager.undo_space_done(&selector).await.unwrap();
     let kept = manager.thread(None, full(&thread)).await.unwrap();
     assert_eq!(

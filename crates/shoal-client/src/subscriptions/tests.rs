@@ -18,7 +18,7 @@ use shoal_protocol::subscriptions::{
     Update,
     records::{Record, RecordKind, Topic},
 };
-use shoal_protocol::threads::{NewPost, OutcomeKind, Thread, ThreadKind, ThreadNumber};
+use shoal_protocol::threads::{NewPost, OutcomeKind, Resolving, Thread, ThreadKind, ThreadNumber};
 
 use super::Subscription;
 
@@ -191,15 +191,15 @@ async fn a_subscription_sends_its_snapshot_then_each_kind_of_change() {
     })
     .await;
 
-    let answered = Some(OutcomeKind::Answered);
+    let answered = Resolving {
+        outcome: Some(OutcomeKind::Answered),
+        ..Resolving::default()
+    };
     manager
         .resolve_thread(
             Some(&caller(&workspace.id)),
             ThreadNumber::Full(question.number),
             answered,
-            None,
-            None,
-            None,
         )
         .await
         .unwrap();

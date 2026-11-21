@@ -3,7 +3,7 @@
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::Transaction;
 use shoal_protocol::threads::{
-    Outcome, OutcomeKind, Post, Resolution, Sender, Side, Thread, ThreadNumber,
+    Outcome, OutcomeKind, Post, Resolution, Resolving, Sender, Side, Thread, ThreadNumber,
 };
 
 use super::{
@@ -13,36 +13,27 @@ use super::{
 use crate::daemon::{manager::Manager, scope::Caller};
 
 impl Manager {
-    /// Resolve the thread `number` for `caller` as `outcome` with its
-    /// data, or reopen it without an outcome, telling the other side.
+    /// Resolve the thread `number` for `caller` as `resolving` says, or
+    /// reopen it without an outcome, telling the other side.
     pub async fn resolve_thread(
         &self,
         caller: Option<&Caller>,
         number: ThreadNumber,
-        outcome: Option<OutcomeKind>,
-        choice: Option<u32>,
-        of: Option<ThreadNumber>,
-        reason: Option<String>,
+        resolving: Resolving,
     ) -> Result<Thread> {
         let thread = self.readable_thread(caller, number).await?;
         let side = self.ensure_resolves(caller, &thread).await?;
-        let resolution = match outcome {
+        let resolution = match resolving.outcome {
             None => {
                 ensure!(
                     !thread.is_open(),
                     "thread {} is open; resolve it with an outcome",
                     thread.number
                 );
-                ensure!(
-                    choice.is_none() && of.is_none() && reason.is_none(),
-                    "--undo takes no outcome data"
-                );
+                ensure!(!resolving.has_data(), "--undo takes no outcome data");
                 None
             }
-            Some(kind) => Some(
-                self.resolution(caller, &thread, kind, choice, of, reason)
-                    .await?,
-            ),
+            Some(kind) => Some(self.resolution(caller, &thread, kind, resolving).await?),
         };
         let by = match caller {
             Some(caller) => self.speaker(caller).await?.1.to_string(),
@@ -67,16 +58,22 @@ impl Manager {
         Ok(thread)
     }
 
-    /// The resolution `kind` with its data that `caller` gives `thread`.
+    /// The resolution `kind` with the data `resolving` names that `caller`
+    /// gives `thread`.
     async fn resolution(
         &self,
         caller: Option<&Caller>,
         thread: &Thread,
         kind: OutcomeKind,
-        choice: Option<u32>,
-        of: Option<ThreadNumber>,
-        reason: Option<String>,
+        resolving: Resolving,
     ) -> Result<Resolution> {
+        let Resolving {
+            choice,
+            of,
+            reason,
+            issue,
+            ..
+        } = resolving;
         let of = match of {
             Some(of) => {
                 let of = self.readable_thread(caller, of).await?;
@@ -85,10 +82,12 @@ impl Manager {
             }
             None => None,
         };
-        if let Some(reason) = &reason {
-            crate::validate::message(reason).context("invalid reason")?;
+        for (field, text) in [("reason", &reason), ("issue", &issue)] {
+            if let Some(text) = text {
+                crate::validate::message(text).with_context(|| format!("invalid {field}"))?;
+            }
         }
-        let outcome = Outcome::new(thread.kind, kind, choice, of, reason)?;
+        let outcome = Outcome::new(thread.kind, kind, choice, of, reason, issue)?;
         if let Outcome::Answered {
             choice: Some(choice),
         } = outcome

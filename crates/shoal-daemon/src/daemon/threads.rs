@@ -52,6 +52,11 @@ impl Manager {
         code: Vec<NewCodeRef>,
     ) -> Result<Thread> {
         crate::validate::message(&name).context("invalid thread name")?;
+        ensure!(
+            kind != ThreadKind::Review,
+            "Shoal opens a review thread for each finding of a local review; start one with \
+             shoal review run"
+        );
         let (opener, space_id, holder) = match (caller, to) {
             // Numbered in the space it is opened with, on that space's
             // machine, which takes a request for a space this one lacks.
@@ -88,6 +93,7 @@ impl Manager {
                 removing.require_taking_work(tx, &space_id)?;
                 let new = NewThread {
                     kind,
+                    finding: None,
                     name: &name,
                     opener,
                     space_id: &space_id,

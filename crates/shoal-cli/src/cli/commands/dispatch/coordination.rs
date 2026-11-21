@@ -203,12 +203,10 @@ async fn thread(ctx: &Context, command: ThreadCommand) -> Result<i32> {
         ThreadCommand::Resolve {
             thread,
             outcome,
-            choose,
-            of,
-            reason,
+            data,
             undo,
         } => {
-            let resolving = threads::resolving(outcome, choose, of, reason, undo)?;
+            let resolving = threads::resolving(outcome, data, undo)?;
             threads::resolve(ctx, thread, resolving).await
         }
         ThreadCommand::List {
