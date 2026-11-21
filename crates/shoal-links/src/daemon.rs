@@ -27,7 +27,7 @@ use shoal_forge_types::{
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     config::permissions::PermissionKey,
-    model::{ConflictCheck, Repository, Selected, Space, SpaceRef, Workspace},
+    model::{ChangedOnBothSides, ConflictCheck, Repository, Selected, Space, SpaceRef, Workspace},
     processes::Leftover,
     space_names::SpaceSelector,
 };
@@ -314,6 +314,10 @@ pub trait Records: Send + Sync {
         db: &Connection,
         agents: &[SpaceId],
     ) -> Result<Vec<(SpaceId, Vec<SpaceRef>)>>;
+
+    /// Each workspace's last conflict check that lists files changed on
+    /// both sides.
+    fn changed_on_both_sides(&self, db: &Connection) -> Result<Vec<(SpaceId, ChangedOnBothSides)>>;
 
     /// The space `id` and every space below it.
     fn subtree(&self, db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>>;

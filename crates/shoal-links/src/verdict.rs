@@ -4,21 +4,17 @@
 //! text.
 use anyhow::Result;
 use serde::Serialize;
-use shoal_daemon_base::permitted_actions::Action;
-use shoal_links::place::Access;
+use shoal_daemon_base::{callers::Caller, permitted_actions::Action};
+use shoal_forge::items::review::{OwnPull, SubmitRequests};
+use shoal_forge_types::items::{
+    reference::ItemInput,
+    review::{LineComment, NewReview, ReviewVerdict},
+};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::{config::permissions::PermissionKey, protocol::RepoTarget};
 use shoal_refs::CommitId;
 
-use crate::{
-    config::permissions::PermissionKey,
-    daemon::{manager::Manager, scope::Caller},
-    forge::items::{
-        reference::ItemInput,
-        review::{LineComment, NewReview, ReviewVerdict},
-    },
-    protocol::RepoTarget,
-};
-use shoal_forge::items::review::{OwnPull, SubmitRequests};
-use shoal_ids::repository_ids::RepositoryId;
+use crate::{Links, daemon::Daemon, place::Access};
 
 /// What approving a review with a verdict binds.
 #[derive(Serialize)]
@@ -30,24 +26,25 @@ struct Verdict<'a> {
     comments: &'a [LineComment],
 }
 
-impl Manager {
+impl Links {
     /// The `pr_review` action of a scoped `caller`'s `review` of the PR
     /// `input` names in the `target` repository, or the space's linked PR,
     /// in `repository`: the PR, the head it covers, to which the review is
     /// pinned, and its text. A host without a `review_token`, a PR its
     /// account opened and another repository than the caller's refuse it
     /// before anything is sent or asked.
-    pub(crate) async fn verdict_action(
+    pub async fn verdict_action(
         &self,
+        daemon: &dyn Daemon,
         target: &RepoTarget,
         input: Option<ItemInput>,
         review: &mut NewReview,
         repository: RepositoryId,
         caller: &Caller,
     ) -> Result<Action> {
-        let pull = self.context_pull(target, input, Access::Change, Some(caller));
+        let pull = self.context_pull(daemon, target, input, Access::Change, Some(caller));
         let (forge, url) = pull.await?;
-        let account = self.links.review_account();
+        let account = self.review_account();
         let head = forge.verdict_head(&account, url.pull()?).await;
         let head = head.map_err(|error| naming_review_token(error, &forge.host))?;
         if review.commit.is_none() {

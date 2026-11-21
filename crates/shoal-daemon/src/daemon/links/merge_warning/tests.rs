@@ -3,10 +3,19 @@ use std::fs;
 
 use rusqlite::params;
 
-use super::*;
+use shoal_links::merge_warning::{Merged, warning};
+
+use shoal_refs::CommitId;
+
 use crate::daemon::{
     links::pr::{Registration, RegistrationKind},
     test_support::{commit, manager, repository},
+};
+use crate::{
+    daemon::{manager::Manager, scope::Caller},
+    forge::items::action::Action,
+    model::{ConfirmedWarning, MergeWarning},
+    protocol::RepoTarget,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -120,7 +129,7 @@ async fn a_pr_finds_the_record_of_the_workspace_that_links_it() {
     let (_root, manager, workspace) = changed_on_both_sides().await;
     let url = "https://forge.example/team/project/pulls/7".to_owned();
     assert!(
-        manager
+        (manager.links)
             .recorded_for_pull(url.clone().parse().unwrap())
             .await
             .unwrap()
@@ -146,7 +155,7 @@ async fn a_pr_finds_the_record_of_the_workspace_that_links_it() {
         })
         .await
         .unwrap();
-    let recorded = manager
+    let recorded = (manager.links)
         .recorded_for_pull(url.parse().unwrap())
         .await
         .unwrap();
@@ -191,7 +200,9 @@ async fn a_merge_is_refused_once_its_warning_is_not_the_one_confirmed() {
         head: None,
     };
     let refused = manager
+        .links
         .confirmed_merge(
+            &*manager,
             &context,
             Some("7".parse().unwrap()),
             merge,
@@ -202,7 +213,9 @@ async fn a_merge_is_refused_once_its_warning_is_not_the_one_confirmed() {
         .unwrap_err();
     assert!(refused.to_string().contains("changed since you confirmed"));
     let refused = manager
+        .links
         .confirmed_merge(
+            &*manager,
             &context,
             Some("7".parse().unwrap()),
             Action::Close,
@@ -275,7 +288,11 @@ async fn a_confirmed_merge_keeps_the_pr_whose_warning_it_read() {
     let context = RepoTarget::from(crate::protocol::ItemContext::space(SpaceSelector::id(
         &workspace.id,
     )));
-    let warning = manager.merge_warning(&context, None).await.unwrap();
+    let warning = manager
+        .links
+        .merge_warning(&*manager, &context, None)
+        .await
+        .unwrap();
     assert!(warning.is_some());
     let merge = Action::Merge {
         method: Some(crate::forge::items::action::MergeMethod::Merge),
@@ -285,7 +302,10 @@ async fn a_confirmed_merge_keeps_the_pr_whose_warning_it_read() {
     };
     let confirmed = ConfirmedWarning { warning };
     // Whatever the forge answers after the merge, it merged PR 1.
-    let _ = (manager.confirmed_merge(&context, None, merge, &confirmed, None)).await;
+    let _ = (manager
+        .links
+        .confirmed_merge(&*manager, &context, None, merge, &confirmed, None))
+    .await;
     let merges: Vec<_> = (server.received().into_iter())
         .filter(|request| request.line.starts_with("POST"))
         .map(|request| request.line)
@@ -347,7 +367,13 @@ async fn a_merge_binds_the_head_the_pr_has_unless_it_names_one() {
     };
 
     let mut read = merge(None);
-    let subject = manager.bind_merge(&context, Some("1".parse().unwrap()), &mut read, &caller);
+    let subject = manager.links.bind_merge(
+        &*manager,
+        &context,
+        Some("1".parse().unwrap()),
+        &mut read,
+        &caller,
+    );
     assert!(
         subject
             .await
@@ -358,7 +384,13 @@ async fn a_merge_binds_the_head_the_pr_has_unless_it_names_one() {
     // A merge that names its head, as an approval bound it, keeps it.
     let named = CommitId::from("b".repeat(40));
     let mut kept = merge(Some(named.clone()));
-    let subject = manager.bind_merge(&context, Some("1".parse().unwrap()), &mut kept, &caller);
+    let subject = manager.links.bind_merge(
+        &*manager,
+        &context,
+        Some("1".parse().unwrap()),
+        &mut kept,
+        &caller,
+    );
     assert!(
         subject
             .await
@@ -376,7 +408,13 @@ async fn a_merge_binds_the_head_the_pr_has_unless_it_names_one() {
         delete_branch: false,
         head: Some(named.clone()),
     };
-    let subject = manager.bind_merge(&context, Some("1".parse().unwrap()), &mut squash, &caller);
+    let subject = manager.links.bind_merge(
+        &*manager,
+        &context,
+        Some("1".parse().unwrap()),
+        &mut squash,
+        &caller,
+    );
     let subject = subject.await.unwrap();
     assert!(
         subject.ends_with(&format!(" at {named} by squash as \"Fix login\\n\\nWhy\"")),
@@ -396,6 +434,12 @@ async fn a_merge_binds_the_head_the_pr_has_unless_it_names_one() {
         delete_branch: false,
         head: Some(named.clone()),
     };
-    let other = manager.bind_merge(&context, Some("1".parse().unwrap()), &mut reworded, &caller);
+    let other = manager.links.bind_merge(
+        &*manager,
+        &context,
+        Some("1".parse().unwrap()),
+        &mut reworded,
+        &caller,
+    );
     assert_ne!(other.await.unwrap(), subject);
 }

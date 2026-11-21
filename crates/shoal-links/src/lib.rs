@@ -12,6 +12,7 @@ pub mod linked;
 mod linking;
 mod memories;
 mod merge_path;
+pub mod merge_warning;
 pub mod place;
 pub mod pr;
 mod raw;
@@ -24,6 +25,7 @@ pub mod space;
 #[cfg(test)]
 mod stand_in;
 pub mod target;
+mod verdict;
 mod view;
 pub mod wait;
 

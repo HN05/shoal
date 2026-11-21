@@ -15,6 +15,7 @@ test-support = []
 anyhow.workspace = true
 futures-util.workspace = true
 rusqlite = { workspace = true, features = ["bundled"] }
+serde.workspace = true
 serde_json.workspace = true
 shoal-core.workspace = true
 shoal-daemon-base.workspace = true

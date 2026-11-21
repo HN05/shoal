@@ -167,7 +167,10 @@ pub(super) async fn handle(
             }
             Body::Item(match confirmed {
                 Some(confirmed) => {
-                    (manager.confirmed_merge(&target, item, action, &confirmed, caller)).await?
+                    (manager
+                        .links
+                        .confirmed_merge(&**manager, &target, item, action, &confirmed, caller))
+                    .await?
                 }
                 None => {
                     (manager
@@ -180,7 +183,12 @@ pub(super) async fn handle(
         ItemMethod::MergeWarning { target, item } => {
             // Before the question, which a merge its gate refuses never asks.
             (manager.require_pull_review(&target, item.clone(), None, None, caller)).await?;
-            Body::MergeWarning(manager.merge_warning(&target, item).await?)
+            Body::MergeWarning(
+                manager
+                    .links
+                    .merge_warning(&**manager, &target, item)
+                    .await?,
+            )
         }
         ItemMethod::MergePath { space } => {
             Body::MergePath(manager.links.merge_path(&**manager, &space).await?)
@@ -301,7 +309,10 @@ impl Scoped for ItemMethod {
             } => {
                 let context = own_context(caller, target);
                 let repository = reached_change_context(manager, caller, context).await?;
-                let subject = manager.bind_merge(target, item.clone(), action, caller);
+                let subject =
+                    manager
+                        .links
+                        .bind_merge(manager, target, item.clone(), action, caller);
                 let subject = subject.await?;
                 (manager.gate_pull_merge(target, item.clone(), action, Some(caller))).await?;
                 let merge = permitted_actions::Action::new(PermissionKey::Merge, subject)
@@ -324,8 +335,14 @@ impl Scoped for ItemMethod {
                     manager
                         .refuse_denied(caller, key, Some(&repository))
                         .await?;
-                    let verdict =
-                        manager.verdict_action(target, item.clone(), review, repository, caller);
+                    let verdict = manager.links.verdict_action(
+                        manager,
+                        target,
+                        item.clone(),
+                        review,
+                        repository,
+                        caller,
+                    );
                     manager
                         .authorize_action(Some(caller), verdict.await?)
                         .await?;

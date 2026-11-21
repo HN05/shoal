@@ -4,7 +4,7 @@ use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension};
 use shoal_ids::space_ids::SpaceId;
 use shoal_links::daemon::Records;
-use shoal_protocol::model::SpaceRef;
+use shoal_protocol::model::{ChangedOnBothSides, SpaceRef};
 
 use crate::daemon::tree::{self, TrackedAgents};
 
@@ -52,6 +52,10 @@ impl Records for LinkRecords {
         agents: &[SpaceId],
     ) -> Result<Vec<(SpaceId, Vec<SpaceRef>)>> {
         tree::delegated_elsewhere(db, &TrackedAgents::of(agents))
+    }
+
+    fn changed_on_both_sides(&self, db: &Connection) -> Result<Vec<(SpaceId, ChangedOnBothSides)>> {
+        crate::daemon::workspace::conflicts::recorded::listing_files(db)
     }
 
     fn subtree(&self, db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>> {
