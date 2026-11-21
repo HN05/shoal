@@ -6,6 +6,7 @@
 use std::{fs::File, io::Read as _, sync::Arc};
 
 use anyhow::{Context as _, Result, bail};
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     protocol::{self, Body, Response},
     space_names::SpaceSelector,
@@ -13,7 +14,7 @@ use shoal_protocol::{
 use tokio::{io::AsyncWriteExt as _, net::UnixStream};
 
 use crate::{
-    daemon::{answer::OperationGuard, hub::sending::blocking, manager::Manager},
+    daemon::{answer::OperationGuard, hub::sending::blocking, log, manager::Manager},
     protocol::operations::OperationSpec,
     transfer::{MoveDestination, MoveLock, MovePhase, MoveRecord, package_name},
 };
@@ -24,6 +25,7 @@ pub(crate) struct HeldPackage {
     file: File,
     size: u64,
     lock: MoveLock,
+    space: SpaceId,
 }
 
 impl Manager {
@@ -40,7 +42,13 @@ impl Manager {
             Ok((file, size))
         })
         .await?;
-        Ok(HeldPackage { file, size, lock })
+        let space = record.space;
+        Ok(HeldPackage {
+            file,
+            size,
+            lock,
+            space,
+        })
     }
 
     /// Give back the move of the space `selector` names, whose package the
@@ -85,7 +93,12 @@ impl Manager {
     ) -> Result<()> {
         let size = Body::HeldPackage(package.size);
         protocol::write(&mut stream, &Response::new(request_id, size)).await?;
-        let HeldPackage { mut file, lock, .. } = package;
+        let HeldPackage {
+            mut file,
+            lock,
+            space,
+            ..
+        } = package;
         loop {
             let (read, chunk) = blocking(move || {
                 let mut chunk = vec![0; CHUNK];
@@ -101,6 +114,11 @@ impl Manager {
             stream.write_all(&chunk).await?;
         }
         stream.shutdown().await?;
+        // Its reader writes it where its caller named before it ends the
+        // space here.
+        if let Err(error) = self.hold_for_reader(&space).await {
+            log!("the move of {space} waits for its reader no longer: {error:#}");
+        }
         lock.release();
         drop(guard);
         Ok(())

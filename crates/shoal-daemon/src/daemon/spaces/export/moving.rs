@@ -26,7 +26,8 @@ use shoal_protocol::space_names::SpaceSelector;
 use crate::time::UnixTime;
 
 /// How long a move holds its package for the joined machine that started
-/// it before Shoal finishes it as one whose reader went.
+/// it, after packing and after each read, before Shoal finishes it as one
+/// whose reader went.
 const HELD_FOR_READER: Duration = Duration::from_secs(30 * 60);
 
 /// What a move packs a space for: its `destination`, the spaces below it
@@ -81,6 +82,9 @@ impl Manager {
         (self.store)
             .write(move |tx| records::advance(tx, &advanced))
             .await?;
+        if *destination == MoveDestination::Held {
+            self.hold_for_reader(&record.space).await?;
+        }
         Ok(exported)
     }
 
@@ -160,9 +164,18 @@ impl Manager {
     /// The spaces whose move holds its package for the joined machine that
     /// started it, which that machine may still read and end.
     pub(crate) async fn held_for_reader(&self) -> Result<HashSet<SpaceId>> {
-        let since = UnixTime::now() - HELD_FOR_READER;
+        let now = UnixTime::now();
         self.store
-            .read(move |db| records::held_since(db, since))
+            .read(move |db| records::held_after(db, now))
+            .await
+    }
+
+    /// Have the move of the space `space`, which holds its package for the
+    /// joined machine that started it, wait for that machine from now on.
+    pub(crate) async fn hold_for_reader(&self, space: &SpaceId) -> Result<()> {
+        let (space, until) = (space.clone(), UnixTime::now() + HELD_FOR_READER);
+        (self.store)
+            .write(move |tx| records::hold_until(tx, &space, until))
             .await
     }
 

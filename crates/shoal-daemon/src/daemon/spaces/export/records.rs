@@ -74,16 +74,26 @@ pub(crate) fn all(db: &Transaction<'_>) -> Result<Vec<MoveRecord>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The spaces whose move, recorded at `since` or later, holds its package
-/// for the joined machine that started it.
-pub(super) fn held_since(db: &Connection, since: UnixTime) -> Result<HashSet<SpaceId>> {
+/// The spaces whose move holds its package for the joined machine that
+/// started it, which waits for that machine after `now`.
+pub(super) fn held_after(db: &Connection, now: UnixTime) -> Result<HashSet<SpaceId>> {
     Ok(db
         .prepare(
             "SELECT space_id FROM space_moves
-                WHERE json_extract(destination,'$.kind')='held' AND created_at>=?1",
+                WHERE json_extract(destination,'$.kind')='held' AND held_until>?1",
         )?
-        .query_map([since], |row| row.get(0))?
+        .query_map([now], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Have the move of the space `space` wait for the machine that started it
+/// until `until`.
+pub(super) fn hold_until(tx: &Transaction<'_>, space: &SpaceId, until: UnixTime) -> Result<()> {
+    tx.execute(
+        "UPDATE space_moves SET held_until=?2 WHERE space_id=?1",
+        params![space, until],
+    )?;
+    Ok(())
 }
 
 /// Forget the move of the space `space`.

@@ -889,7 +889,7 @@ CREATE TABLE "space_moves" (
     checkpoints TEXT NOT NULL DEFAULT '{}',
     saved_before TEXT NOT NULL DEFAULT '{}',
     created_at INTEGER NOT NULL
-);
+, held_until INTEGER);
 
 CREATE TABLE moved_parents (
     space_id TEXT PRIMARY KEY REFERENCES spaces(id) ON DELETE CASCADE,
