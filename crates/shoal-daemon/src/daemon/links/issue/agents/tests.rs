@@ -93,9 +93,17 @@ async fn the_agent_account_another_shoal_took_off_goes_back_on() {
     let fixture = agents(&["fix"], &[], "").await;
     let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);
     fixture.link_as(workspace, Assigner::Agent).await;
-    manager.poll_linked_item_activity().await.unwrap();
+    manager
+        .links
+        .poll_linked_item_activity(&**manager)
+        .await
+        .unwrap();
     fixture.assign_elsewhere(&[]);
-    manager.poll_linked_item_activity().await.unwrap();
+    manager
+        .links
+        .poll_linked_item_activity(&**manager)
+        .await
+        .unwrap();
     manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(
         fixture.changes(),
@@ -184,7 +192,7 @@ async fn finish(manager: &Manager, execution: ExecutionId) {
     (manager.finish_execution(execution, ExecutionKind::Command, Some(0)))
         .await
         .unwrap();
-    manager.links.settle_requested_agents(&*manager).await;
+    manager.links.settle_requested_agents(manager).await;
 }
 
 #[tokio::test]

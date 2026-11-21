@@ -1,9 +1,6 @@
 //! A watch's polling of the forge for the activity of the items it
 //! follows, and the reads of item activity the background poll shares.
-use crate::forge::items::reference::ItemRef;
-use shoal_links::space::LinkSpace;
 use shoal_links::wait::UpdatesExt;
-use shoal_links::wait::followed::activity_ended;
 use shoal_links::wait::framing::own_batch;
 use shoal_links::wait::starts::PollStart;
 use std::time::Duration;
@@ -12,7 +9,7 @@ use anyhow::{Context, Result};
 
 use super::{
     Updates,
-    branch_report::{BranchReport, branch_conflicts, branch_report, watches_branch},
+    branch_report::{BranchReport, branch_report, watches_branch},
     delivery::receiving,
 };
 use crate::{
@@ -96,11 +93,15 @@ impl Manager {
         }
         drop(guard);
         let start = self.links.poll_start();
-        let items = self.items_to_look_up(&space, items).await?;
+        let items = self.links.items_to_look_up(&space, items).await?;
         let items = self.links.item_activity(self, items, selection).await;
         let mut observations = Vec::new();
         if let Some(branch) = branch {
-            observations.extend(self.branch_observation(&space, branch, report).await);
+            observations.extend(
+                self.links
+                    .branch_observation(self, &space, branch, report)
+                    .await,
+            );
         }
         match items {
             Ok(items) => {
@@ -142,49 +143,6 @@ impl Manager {
             .record_observed(self, id, observations, selection, report, start)
             .await?;
         self.links.fit_response(own_batch(id, updates), 0).await
-    }
-
-    /// The local check of the workspace `space`'s `branch` as `report` keeps
-    /// it, or none when it could report nothing: its assignment is done, so
-    /// its work is finished and a failed check must not wake its agent, or a
-    /// linked PR leaves conflicts to the forge and the repository lists no
-    /// sensitive files.
-    pub(super) async fn branch_observation(
-        &self,
-        space: &LinkSpace,
-        branch: String,
-        report: BranchReport,
-    ) -> Option<(String, Snapshot)> {
-        if space.done() {
-            return None;
-        }
-        let only_sensitive = report == BranchReport::ChangedOnBothSides;
-        let check = self
-            .watched_conflicts(&SpaceSelector::id(&space.id), only_sensitive)
-            .await;
-        Some((branch, branch_conflicts(check.transpose()?, report)))
-    }
-
-    /// The `items` whose activity is still to come: a merged PR has none,
-    /// and once the space's assignment is done neither has an item seen
-    /// closed, so a forge that cannot be reached fails no poll for them.
-    pub(super) async fn items_to_look_up(
-        &self,
-        space: &LinkSpace,
-        items: Vec<ItemRef>,
-    ) -> Result<Vec<ItemRef>> {
-        let (id, done) = (space.id.to_owned(), space.done());
-        self.store
-            .run(move |db| {
-                let mut open = Vec::new();
-                for url in items {
-                    if !activity_ended(db, &id, url.url(), done)? {
-                        open.push(url);
-                    }
-                }
-                Ok(open)
-            })
-            .await
     }
 }
 

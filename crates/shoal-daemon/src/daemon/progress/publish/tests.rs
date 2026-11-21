@@ -274,13 +274,28 @@ async fn a_pr_the_forge_takes_out_of_draft_loses_the_progress() {
     );
     // The background poll's first read is its baseline, and a PR still in
     // draft asks for nothing.
-    assigned.manager.poll_linked_item_activity().await.unwrap();
+    assigned
+        .manager
+        .links
+        .poll_linked_item_activity(&*assigned.manager)
+        .await
+        .unwrap();
     assigned.requested();
-    assigned.manager.poll_linked_item_activity().await.unwrap();
+    assigned
+        .manager
+        .links
+        .poll_linked_item_activity(&*assigned.manager)
+        .await
+        .unwrap();
     assert!(!assigned.requested());
 
     pull.set_draft(false);
-    assigned.manager.poll_linked_item_activity().await.unwrap();
+    assigned
+        .manager
+        .links
+        .poll_linked_item_activity(&*assigned.manager)
+        .await
+        .unwrap();
     assert!(assigned.requested());
     assigned.publish().await;
     assert_eq!(pull.body(), "Closes #3\n");

@@ -4,23 +4,29 @@ use std::sync::Arc;
 use rusqlite::params;
 use serde_json::{Value, json};
 
-use super::*;
 use crate::{
     daemon::{
         events::{EventItem, EventKind},
         links::wait::{branch_report::BranchReport, test_support::register_watch},
+        manager::Manager,
         test_support::{configure, manager, repository},
         workspace_files::Attacher,
     },
     forge::items::link::Selection,
     model::{CleanupReason, Workspace},
+    time::UnixTime,
 };
 use crate::{
     forge::{items::link::LinkKind, updates::UpdateKind},
     model::Relation,
 };
 use shoal_forge::test_support::Server;
+use shoal_forge::updates::Snapshot;
 use shoal_links::wait::merge_lookups::UNFOLLOWED_MERGE;
+use shoal_links::{
+    space::LinkSpace,
+    wait::merge_lookups::{LOOKUP_WINDOW, PushedMerge},
+};
 use shoal_protocol::{assignments::Done, space_names::SpaceSelector};
 use std::time::Duration;
 
@@ -160,7 +166,11 @@ impl Following {
             branch: "main".into(),
             commit: commit.into(),
         };
-        self.manager.follow_pushed_merge(pushed).await.unwrap();
+        self.manager
+            .links
+            .follow_pushed_merge(&*self.manager, pushed)
+            .await
+            .unwrap();
     }
 
     /// The forge's repository, as a remote URL.
@@ -170,11 +180,15 @@ impl Following {
 
     async fn follow(&self) {
         let space = LinkSpace::from(self.workspace.clone());
-        self.manager.follow_merge_runs(&space).await.unwrap();
+        self.manager
+            .links
+            .follow_merge_runs(&*self.manager, &space)
+            .await
+            .unwrap();
     }
 
     async fn awaits(&self) -> bool {
-        (self.manager.awaits_merge_runs(&self.workspace.id))
+        (self.manager.links.awaits_merge_runs(&self.workspace.id))
             .await
             .unwrap()
     }
@@ -276,7 +290,10 @@ async fn a_restart_that_reads_the_merge_follows_it() {
     assert_eq!(merged[0].kind, UpdateKind::Merged, "{merged:?}");
     assert!(following.awaits().await);
     // The watch holds the merge, so PR cleanup counts it seen.
-    let unseen = following.manager.merge_unseen(&following.workspace.id);
+    let unseen = following
+        .manager
+        .links
+        .merge_unseen(&*following.manager, &following.workspace.id);
     assert!(!unseen.await.unwrap());
 }
 
@@ -389,8 +406,12 @@ async fn a_first_background_read_of_a_merged_pr_follows_its_merge() {
     hold_a_comment(&following).await;
     assert!(!following.awaits().await);
     let (pr, id) = (following.pr.clone(), following.workspace.id.clone());
-    (following.manager)
-        .record_background_activity(&id, vec![(pr, pull("merged", Some(MERGED)))])
+    (following.manager.links)
+        .record_background_activity(
+            &*following.manager,
+            &id,
+            vec![(pr, pull("merged", Some(MERGED)))],
+        )
         .await
         .unwrap();
     assert!(following.awaits().await);
@@ -404,8 +425,8 @@ async fn the_background_poll_follows_a_merge_while_older_updates_wait() {
     assert!(!following.awaits().await);
 
     for snapshot in [pull("open", None), pull("merged", Some(MERGED))] {
-        (following.manager)
-            .record_background_activity(&id, vec![(pr.clone(), snapshot)])
+        (following.manager.links)
+            .record_background_activity(&*following.manager, &id, vec![(pr.clone(), snapshot)])
             .await
             .unwrap();
     }
@@ -448,8 +469,12 @@ async fn pr_cleanup_waits_for_a_poll_to_see_the_merge() {
 
     // The poll that sees the merge starts its lookup, which keeps the space.
     for snapshot in [pull("open", None), pull("merged", Some(MERGED))] {
-        (manager)
-            .record_background_activity(&workspace.id, vec![(following.pr.clone(), snapshot)])
+        (manager.links)
+            .record_background_activity(
+                &**manager,
+                &workspace.id,
+                vec![(following.pr.clone(), snapshot)],
+            )
             .await
             .unwrap();
     }
@@ -468,7 +493,7 @@ async fn a_merge_seen_while_its_default_branch_is_unknown_is_followed_by_the_nex
     let (pr, id) = (following.pr.clone(), following.workspace.id.clone());
     let record = |snapshot| {
         let observations = vec![(pr.clone(), snapshot)];
-        (following.manager).record_background_activity(&id, observations)
+        (following.manager.links).record_background_activity(&*following.manager, &id, observations)
     };
     record(pull("open", None)).await.unwrap();
     // Without a remote, the checkout's branch names the default branch.
@@ -504,8 +529,12 @@ async fn a_run_the_background_poll_saw_finish_ends_its_wait_while_its_updates_wa
 
     // The background poll's own reads see it finish.
     for state in ["running", "failed"] {
-        (following.manager)
-            .record_background_activity(&id, vec![(run.clone(), read(state, json!({})))])
+        (following.manager.links)
+            .record_background_activity(
+                &*following.manager,
+                &id,
+                vec![(run.clone(), read(state, json!({})))],
+            )
             .await
             .unwrap();
     }
@@ -547,8 +576,12 @@ async fn completion_cleanup_waits_for_a_poll_to_see_a_done_chats_merge() {
 
     // The poll that sees the merge looks up its runs until the window ends.
     for snapshot in [pull("open", None), pull("merged", Some(MERGED))] {
-        (manager)
-            .record_background_activity(&chat.id, vec![(following.pr.clone(), snapshot)])
+        (manager.links)
+            .record_background_activity(
+                &**manager,
+                &chat.id,
+                vec![(following.pr.clone(), snapshot)],
+            )
             .await
             .unwrap();
     }
@@ -565,7 +598,11 @@ async fn completion_cleanup_waits_for_a_poll_to_see_a_done_chats_merge() {
         })
         .await
         .unwrap();
-    manager.follow_merge_runs(&space).await.unwrap();
+    manager
+        .links
+        .follow_merge_runs(&**manager, &space)
+        .await
+        .unwrap();
     manager.sweep_completed().await.unwrap();
     assert!(!present().await);
 }
@@ -576,8 +613,8 @@ async fn a_cursor_that_sees_the_merge_after_its_lookup_ended_starts_none() {
     let (pr, id) = (following.pr.clone(), following.workspace.id.clone());
     hold_a_comment(&following).await;
     for snapshot in [pull("open", None), pull("merged", Some(MERGED))] {
-        (following.manager)
-            .record_background_activity(&id, vec![(pr.clone(), snapshot)])
+        (following.manager.links)
+            .record_background_activity(&*following.manager, &id, vec![(pr.clone(), snapshot)])
             .await
             .unwrap();
     }
@@ -621,9 +658,12 @@ impl Following {
     /// Run the background poll of the workspace once.
     async fn poll(&self) {
         let space = LinkSpace::from(self.workspace.clone());
-        (self.manager.poll_space_item_activity(&space))
-            .await
-            .unwrap();
+        (self
+            .manager
+            .links
+            .poll_space_item_activity(&*self.manager, &space))
+        .await
+        .unwrap();
     }
 
     /// How many reads of the PR the forge received.
@@ -652,8 +692,8 @@ async fn the_merge_of_a_pr_linked_as_opened_reports_nothing_of_the_pr() {
     let following = opening(true, json!([])).await;
     let (pr, id) = (following.pr.clone(), following.workspace.id.clone());
     for snapshot in [pull("open", None), pull("merged", Some(MERGED))] {
-        (following.manager)
-            .record_background_activity(&id, vec![(pr.clone(), snapshot)])
+        (following.manager.links)
+            .record_background_activity(&*following.manager, &id, vec![(pr.clone(), snapshot)])
             .await
             .unwrap();
     }
@@ -729,7 +769,14 @@ async fn a_pushed_merge_whose_forge_cannot_be_found_ends_with_its_window() {
     let remote = format!("http://{}/team/repo.git", host.host);
     following.push(MERGED, remote).await;
     let space = LinkSpace::from(following.workspace.clone());
-    assert!(following.manager.follow_merge_runs(&space).await.is_err());
+    assert!(
+        following
+            .manager
+            .links
+            .follow_merge_runs(&*following.manager, &space)
+            .await
+            .is_err()
+    );
     assert!(following.awaits().await);
 
     following.end_window().await;

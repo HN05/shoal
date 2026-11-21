@@ -125,7 +125,7 @@ impl Manager {
     /// every unattended removal, or a watched PR that merged before a poll
     /// recorded the merge, which starts the lookup of its runs.
     async fn completion_keeps(&self, id: &SpaceId) -> Result<bool> {
-        Ok(self.keep_reason(id).await?.is_some() || self.merged_unseen(id).await?)
+        Ok(self.keep_reason(id).await?.is_some() || self.links.merged_unseen(self, id).await?)
     }
 
     pub(crate) async fn completion_cause(&self, id: &SpaceId) -> Result<EventCause> {

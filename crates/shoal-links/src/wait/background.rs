@@ -1,41 +1,46 @@
 //! The background poll of every polled space's linked items for
 //! integrations, with its own baseline, which queues what changed on each
 //! space's watch cursor.
+use std::sync::Arc;
+
 use anyhow::Result;
 use futures_util::{StreamExt, stream};
 use rusqlite::{OptionalExtension, params};
-use shoal_links::space::LinkSpace;
-use shoal_links::wait::followed::{opened_open_prs, polled_items};
-use shoal_links::wait::merge_lookups::{MergeTarget, follow_merge};
-use shoal_links::wait::starts::PollStart;
-
-use super::branch_report::{BranchReport, branch_report};
-use crate::{
-    daemon::{links::space::require_ready_space, manager::Manager},
-    forge::{
-        items::{
-            link::{LinkKind, Selection},
-            reference::ItemRef,
-        },
-        updates::{SnapshotState, UpdateKind},
-    },
-    model::Space,
-    time::UnixTime,
-};
+use shoal_daemon_base::events;
 use shoal_forge::updates::Snapshot;
+use shoal_forge_types::{
+    items::{
+        link::{LinkKind, Selection},
+        reference::ItemRef,
+    },
+    updates::{SnapshotState, UpdateKind},
+};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::{model::Space, state::WorkspaceState, time::UnixTime};
+
+use super::{
+    branch_report::{BranchReport, branch_report},
+    followed::{opened_open_prs, polled_items},
+    merge_lookups::{MergeTarget, follow_merge},
+    starts::PollStart,
+};
+use crate::{
+    Links,
+    daemon::{Daemon, Records},
+    space::LinkSpace,
+};
 
 /// How many spaces the background poll reads at once: a slow forge must not
 /// hold back every other space's poll.
 const POLLED_SPACES_AT_ONCE: usize = 4;
 
-impl Manager {
+impl Links {
     /// Poll linked items for integrations, with their own baseline, and queue
     /// the changes on each polled space's cursor.
-    pub(crate) async fn poll_linked_item_activity(&self) -> Result<()> {
-        let mut polls = stream::iter(self.polled_spaces().await?)
+    pub async fn poll_linked_item_activity(self: &Arc<Self>, daemon: &dyn Daemon) -> Result<()> {
+        let mut polls = stream::iter(self.polled_spaces(daemon).await?)
             .map(|space| async move {
-                let result = self.poll_space_item_activity(&space).await;
+                let result = self.poll_space_item_activity(daemon, &space).await;
                 (space, result)
             })
             .buffer_unordered(POLLED_SPACES_AT_ONCE);
@@ -45,7 +50,7 @@ impl Manager {
                 continue;
             };
             // The limit is the forge's, not the space's; a later poll retries.
-            if self.links.notify_rate_limit(&error).await {
+            if self.notify_rate_limit(&error).await {
                 continue;
             }
             failure.get_or_insert_with(|| {
@@ -58,8 +63,8 @@ impl Manager {
     /// The spaces whose linked items the background poll reads: every
     /// ready space of a repository, whether or not its agent runs. A space
     /// without a repository records no links to read.
-    pub(super) async fn polled_spaces(&self) -> Result<Vec<LinkSpace>> {
-        let spaces = self.present_spaces().await?.into_iter();
+    pub async fn polled_spaces(&self, daemon: &dyn Daemon) -> Result<Vec<LinkSpace>> {
+        let spaces = daemon.present_spaces().await?.into_iter();
         (spaces.filter(|space| space.repository_id.is_some() && is_ready(space)))
             .map(LinkSpace::own)
             .collect()
@@ -68,42 +73,45 @@ impl Manager {
     /// Link the runs of the space's merges, then read the activity of its
     /// polled items, and record and queue what changed. A failed lookup of
     /// either holds back neither.
-    pub(super) async fn poll_space_item_activity(&self, space: &LinkSpace) -> Result<()> {
-        let followed = self.follow_merge_runs(space).await;
-        let polled = self.poll_space_items(space).await;
+    pub async fn poll_space_item_activity(
+        self: &Arc<Self>,
+        daemon: &dyn Daemon,
+        space: &LinkSpace,
+    ) -> Result<()> {
+        let followed = self.follow_merge_runs(daemon, space).await;
+        let polled = self.poll_space_items(daemon, space).await;
         polled.and(followed)
     }
 
     /// Read the activity of the space's polled items, and of the opened PRs
     /// whose merges it follows, and record and queue what changed.
-    async fn poll_space_items(&self, space: &LinkSpace) -> Result<()> {
+    async fn poll_space_items(&self, daemon: &dyn Daemon, space: &LinkSpace) -> Result<()> {
         let id = space.id.to_owned();
         let items = self.store.run(move |db| polled_items(db, &id)).await?;
-        let opened = self.opened_prs_to_follow(&space.id).await?;
+        let opened = self.opened_prs_to_follow(daemon, &space.id).await?;
         if items.is_empty() && opened.is_empty() {
             return Ok(());
         }
-        let start = self.links.poll_start();
+        let start = self.poll_start();
         let report = branch_report(&items);
         let items = self.items_to_look_up(space, items).await?;
         let items = [items, opened].concat();
-        let activity = self
-            .links
-            .item_activity(self, items, &Selection::default())
-            .await;
+        let activity = (self.item_activity(daemon, items, &Selection::default())).await;
         let mut observations = Vec::new();
-        observations.extend(self.background_branch_observation(space, report).await);
+        observations.extend(
+            self.background_branch_observation(daemon, space, report)
+                .await,
+        );
         // A failed item lookup must not hold back the branch's changes.
         let looked_up = match activity {
             Ok(activity) => {
-                self.act_on_background_activity(space, activity.clone())
-                    .await?;
+                (self.act_on_background_activity(daemon, space, activity.clone())).await?;
                 observations.splice(0..0, activity);
                 Ok(())
             }
             Err(error) => Err(error),
         };
-        self.queue_background_updates(&space.id, observations, start)
+        self.queue_background_updates(daemon, &space.id, observations, start)
             .await?;
         looked_up
     }
@@ -112,37 +120,37 @@ impl Manager {
     /// linked PR: without one, a watch checks the branch.
     async fn background_branch_observation(
         &self,
+        daemon: &dyn Daemon,
         space: &LinkSpace,
         report: BranchReport,
     ) -> Option<(String, Snapshot)> {
         let branch = space
             .branch()
             .filter(|_| report == BranchReport::ChangedOnBothSides)?;
-        self.branch_observation(space, branch.to_owned(), report)
+        self.branch_observation(daemon, space, branch.to_owned(), report)
             .await
     }
 
-    /// Record the background `activity` of `space`'s items; sync the
-    /// default branch once one of them merged, since other workspaces'
-    /// conflict checks read it, publish the space's progress again once a
-    /// PR moved into or out of draft, which its progress section follows,
-    /// and settle the agent account on its issues again once one lost an
+    /// Record the background `activity` of `space`'s items; tell the daemon
+    /// once one of them merged, or a PR moved into or out of draft, and
+    /// settle the agent account on its issues again once one lost an
     /// assignee, since another Shoal acting as the same account may have
     /// taken it off one an agent here works.
     async fn act_on_background_activity(
         &self,
+        daemon: &dyn Daemon,
         space: &LinkSpace,
         activity: Vec<(String, Snapshot)>,
     ) -> Result<()> {
-        let seen = (self.record_background_activity(&space.id, activity)).await?;
+        let seen = (self.record_background_activity(daemon, &space.id, activity)).await?;
         if seen.merged {
-            self.syncs.request(space.repository_id());
+            daemon.item_merged(space.repository_id());
         }
         if seen.changed_draft {
-            self.publications.request(&space.id);
+            daemon.draft_changed(&space.id);
         }
         if seen.lost_assignee {
-            self.links.agent_settles().request(&space.id);
+            self.agent_settles().request(&space.id);
         }
         Ok(())
     }
@@ -151,8 +159,9 @@ impl Manager {
     /// them without a running watch, and wake the watches that wait for them.
     /// The cursor drops those of items the space's watch does not follow,
     /// such as the opened PRs read only for their merges.
-    pub(super) async fn queue_background_updates(
+    pub async fn queue_background_updates(
         &self,
+        daemon: &dyn Daemon,
         id: &SpaceId,
         observations: Vec<(String, Snapshot)>,
         start: PollStart,
@@ -160,27 +169,25 @@ impl Manager {
         let all = Selection::default();
         // A background poll checks the branch only beside a linked PR.
         let report = BranchReport::ChangedOnBothSides;
-        let updates = self
-            .links
-            .record_observed(self, id, observations, &all, report, start)
-            .await?;
+        let updates = (self.record_observed(daemon, id, observations, &all, report, start)).await?;
         if !updates.is_empty() {
-            self.signals.item_updates_queued();
+            daemon.item_updates_queued();
         }
         Ok(())
     }
 
     /// Record what changed since the last poll.
-    pub(super) async fn record_background_activity(
+    pub async fn record_background_activity(
         &self,
+        daemon: &dyn Daemon,
         id: &SpaceId,
         observations: Vec<(String, Snapshot)>,
     ) -> Result<Seen> {
         // The baseline sees a merge whatever the cursor still delivers.
-        let merges = self.links.merge_target(self, id, &observations).await?;
-        let id = id.to_owned();
+        let merges = self.merge_target(daemon, id, &observations).await?;
+        let (id, records) = (id.to_owned(), self.records.clone());
         self.store
-            .write(move |tx| record_baseline(tx, &id, observations, merges.as_ref()))
+            .write(move |tx| record_baseline(&*records, tx, &id, observations, merges.as_ref()))
             .await
     }
 }
@@ -189,12 +196,13 @@ impl Manager {
 /// of each item it polls, journaling what changed of the items it follows,
 /// and following the merges they show into `merges`' branch.
 fn record_baseline(
+    records: &dyn Records,
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
     observations: Vec<(String, Snapshot)>,
     merges: Option<&MergeTarget>,
 ) -> Result<Seen> {
-    require_ready_space(tx, id)?;
+    records.require_ready_space(tx, id)?;
     let linked = polled_items(tx, id)?;
     let opened = opened_open_prs(tx, id)?;
     let mut seen = Seen::default();
@@ -265,7 +273,7 @@ fn record_baseline_item(
         for update in previous.changes(&snapshot, url) {
             seen.merged |= update.kind == UpdateKind::Merged;
             if observed.followed {
-                crate::daemon::events::record_item_activity(tx, id, observed.kind, url, &update)?;
+                events::record_item_activity(tx, id, observed.kind, url, &update)?;
             }
         }
     }
@@ -292,12 +300,12 @@ fn saved_observation(
 /// Whether `space` is ready for work: a worktree once its setup readied it;
 /// a space without one has no setup to wait for.
 fn is_ready(space: &Space) -> bool {
-    (space.worktree()).is_none_or(|worktree| worktree.state == crate::state::WorkspaceState::Ready)
+    (space.worktree()).is_none_or(|worktree| worktree.state == WorkspaceState::Ready)
 }
 
 /// What a background poll saw change that Shoal acts on.
 #[derive(Default)]
-pub(super) struct Seen {
+pub struct Seen {
     /// An item merged.
     pub merged: bool,
     /// A PR moved into or out of draft.
@@ -320,7 +328,7 @@ fn save_observation(
         params![id, url, serde_json::to_string(snapshot)?],
     )?;
     if let Some(title) = snapshot.title() {
-        shoal_links::linked::refresh_titles(db, id, url, title)?;
+        crate::linked::refresh_titles(db, id, url, title)?;
     }
     Ok(())
 }

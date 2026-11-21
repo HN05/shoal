@@ -194,7 +194,12 @@ async fn background_activity_uses_its_own_baseline_and_publishes_events() {
     register_watch(&manager, &workspace.id, PR.as_str()).await;
 
     manager
-        .record_background_activity(&workspace.id, vec![(PR.as_str().into(), snapshot("first"))])
+        .links
+        .record_background_activity(
+            &*manager,
+            &workspace.id,
+            vec![(PR.as_str().into(), snapshot("first"))],
+        )
         .await
         .unwrap();
     assert!(manager
@@ -205,7 +210,9 @@ async fn background_activity_uses_its_own_baseline_and_publishes_events() {
             .all(|item| !matches!(item, crate::daemon::events::EventItem::Event(event) if event.details.kind == crate::daemon::events::EventKind::ItemActivity)));
 
     manager
+        .links
         .record_background_activity(
+            &*manager,
             &workspace.id,
             vec![(PR.as_str().into(), snapshot("second"))],
         )
@@ -274,7 +281,8 @@ async fn a_linked_item_takes_the_title_the_forge_reports() {
         (issue.clone(), titled("Bug")),
     ];
     manager
-        .record_background_activity(&id, observed)
+        .links
+        .record_background_activity(&*manager, &id, observed)
         .await
         .unwrap();
     assert_eq!(titles().await, (Some("Fix".into()), Some("Bug".into())));
@@ -303,7 +311,12 @@ async fn a_failed_first_background_read_leaves_the_baseline_to_the_next() {
         snapshot("first"),
     ] {
         manager
-            .record_background_activity(&workspace.id, vec![(PR.as_str().into(), snapshot)])
+            .links
+            .record_background_activity(
+                &*manager,
+                &workspace.id,
+                vec![(PR.as_str().into(), snapshot)],
+            )
             .await
             .unwrap();
     }
@@ -330,7 +343,9 @@ async fn background_activity_queues_for_the_agents_hooks() {
     register_watch(&manager, &workspace.id, PR.as_str()).await;
     let queued = manager.signals.watch_item_updates();
     manager
+        .links
         .queue_background_updates(
+            &*manager,
             &workspace.id,
             vec![(PR.as_str().into(), snapshot("first"))],
             manager.links.poll_start(),
@@ -405,7 +420,9 @@ async fn a_chats_hooks_receive_the_activity_on_its_items() {
         async move { manager.wait_space_updates(&SpaceSelector::id(&chat)).await }
     });
     manager
+        .links
         .queue_background_updates(
+            &**manager,
             &chat.id,
             vec![(PR.as_str().into(), snapshot("first"))],
             manager.links.poll_start(),
@@ -472,7 +489,9 @@ async fn a_chat_receives_the_activity_of_the_workspaces_below_it_without_an_agen
         .unwrap();
     register_watch(&manager, &worker.id, WORKER_PR.as_str()).await;
     manager
+        .links
         .queue_background_updates(
+            &*manager,
             &worker.id,
             vec![(WORKER_PR.as_str().into(), snapshot("first"))],
             manager.links.poll_start(),
@@ -553,7 +572,9 @@ async fn a_chat_without_a_repository_waits_for_the_activity_below_it() {
         async move { manager.wait_space_updates(&SpaceSelector::id(&chat)).await }
     });
     manager
+        .links
         .queue_background_updates(
+            &**manager,
             &below.id,
             vec![(PR.as_str().into(), snapshot("first"))],
             manager.links.poll_start(),
@@ -603,7 +624,8 @@ async fn chat_above_linked_workspace(manager: &Arc<Manager>, root: &std::path::P
         (ISSUE.as_str().into(), snapshot("on the issue")),
     ];
     manager
-        .queue_background_updates(&below.id, observed, manager.links.poll_start())
+        .links
+        .queue_background_updates(&**manager, &below.id, observed, manager.links.poll_start())
         .await
         .unwrap();
     chat.id
@@ -761,7 +783,9 @@ async fn hook_delivery_does_not_wait_for_the_pr_gate() {
         .unwrap();
     register_watch(&manager, &workspace.id, PR.as_str()).await;
     manager
+        .links
         .queue_background_updates(
+            &*manager,
             &workspace.id,
             vec![(PR.as_str().into(), snapshot("first"))],
             manager.links.poll_start(),
@@ -830,7 +854,9 @@ async fn hook_delivery_waits_only_for_the_workspaces_it_reads() {
         .unwrap();
     register_watch(&manager, &child.id, CHILD_PR.as_str()).await;
     manager
+        .links
         .queue_background_updates(
+            &*manager,
             &child.id,
             vec![(CHILD_PR.as_str().into(), snapshot("first"))],
             manager.links.poll_start(),
@@ -919,7 +945,9 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
     };
     for (workspace, url) in watched {
         manager
+            .links
             .queue_background_updates(
+                &*manager,
                 &workspace.id,
                 vec![(url.into(), snapshot("first"))],
                 manager.links.poll_start(),
@@ -942,8 +970,12 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
     );
     let observation = vec![(child.branch().unwrap().to_string(), changed)];
     let now = crate::time::UnixTime::now();
-    let queued =
-        manager.queue_background_updates(&child.id, observation, manager.links.poll_start_at(now));
+    let queued = manager.links.queue_background_updates(
+        &*manager,
+        &child.id,
+        observation,
+        manager.links.poll_start_at(now),
+    );
     queued.await.unwrap();
     let delivered = manager
         .agent_updates(&SpaceSelector::id(&parent.id))
@@ -1053,7 +1085,9 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
     for (workspace, url) in [(&parent, PARENT_PR.as_str()), (&child, CHILD_PR.as_str())] {
         register_watch(&manager, &workspace.id, url).await;
         manager
+            .links
             .queue_background_updates(
+                &*manager,
                 &workspace.id,
                 vec![(url.into(), snapshot("first"))],
                 manager.links.poll_start(),
@@ -1487,7 +1521,9 @@ async fn an_idle_agent_wakes_once_for_a_heads_passing_checks() {
     register_watch(&manager, &workspace.id, PR.as_str()).await;
     let poll = async |snapshot| {
         manager
+            .links
             .queue_background_updates(
+                &*manager,
                 &workspace.id,
                 vec![(PR.as_str().into(), snapshot)],
                 manager.links.poll_start(),
@@ -1553,7 +1589,9 @@ async fn passes_held_past_one_response_are_delivered_in_parts() {
             })
             .collect::<Vec<_>>();
         manager
+            .links
             .queue_background_updates(
+                &*manager,
                 &workspace.id,
                 vec![(PR.as_str().into(), checks_at("a", &checks))],
                 manager.links.poll_start(),
@@ -1873,7 +1911,12 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
         let observation = vec![(CHILD_PR.as_str().into(), based(base))];
         // Each poll starts after the changes before it.
         let later = UnixTime::now() + Duration::from_secs(1);
-        manager.queue_background_updates(&child.id, observation, manager.links.poll_start_at(later))
+        manager.links.queue_background_updates(
+            &*manager,
+            &child.id,
+            observation,
+            manager.links.poll_start_at(later),
+        )
     };
     let retarget = |from: &'static str, to: &'static str| {
         let manager = &manager;
@@ -1977,11 +2020,17 @@ async fn background_activity_does_not_repeat_an_unchanged_baseline_failure() {
     .unwrap();
 
     manager
-        .record_background_activity(&workspace.id, vec![(PR.as_str().into(), failed.clone())])
+        .links
+        .record_background_activity(
+            &*manager,
+            &workspace.id,
+            vec![(PR.as_str().into(), failed.clone())],
+        )
         .await
         .unwrap();
     manager
-        .record_background_activity(&workspace.id, vec![(PR.as_str().into(), failed)])
+        .links
+        .record_background_activity(&*manager, &workspace.id, vec![(PR.as_str().into(), failed)])
         .await
         .unwrap();
     assert!(manager
@@ -2061,7 +2110,11 @@ async fn polls_stop_looking_up_items_whose_activity_ended() {
         .await
         .unwrap();
     assert!(poll().await.unwrap().is_empty());
-    manager.poll_linked_item_activity().await.unwrap();
+    manager
+        .links
+        .poll_linked_item_activity(&*manager)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -2165,7 +2218,9 @@ async fn messages_queued_during_a_wait_come_with_its_updates() {
         .unwrap();
     drop(held);
     manager
+        .links
         .queue_background_updates(
+            &*manager,
             &child.id,
             vec![(CHILD_PR.as_str().into(), snapshot("first"))],
             manager.links.poll_start(),
@@ -2780,7 +2835,10 @@ async fn sensitive_files_changed_on_both_sides_are_reported_beside_a_linked_pr()
         .link_space(&*manager, &SpaceSelector::id(&linked.id))
         .await
         .unwrap();
-    let polled = manager.poll_space_item_activity(&space).await;
+    let polled = manager
+        .links
+        .poll_space_item_activity(&*manager, &space)
+        .await;
     assert!(polled.is_err(), "the PR lookup fails");
     let queued = manager
         .queued_updates(&Space::from(linked.clone()), None)
@@ -2834,7 +2892,10 @@ async fn a_stalled_worktree_fails_the_background_branch_check_at_once() {
         .link_space(&*manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
-    let polled = manager.poll_space_item_activity(&space).await;
+    let polled = manager
+        .links
+        .poll_space_item_activity(&*manager, &space)
+        .await;
     assert!(polled.is_err(), "the PR lookup fails");
     let queued = manager
         .queued_updates(&Space::from(workspace.clone()), None)
@@ -2888,7 +2949,10 @@ async fn a_done_workspace_records_no_branch_check() {
     tokio::time::resume();
     assert!(stalled.is_err());
 
-    let _ = manager.poll_space_item_activity(&space).await;
+    let _ = manager
+        .links
+        .poll_space_item_activity(&*manager, &space)
+        .await;
     let queued = manager
         .queued_updates(&Space::from(workspace.clone()), None)
         .await
@@ -3043,7 +3107,12 @@ async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
         .await
         .unwrap();
     manager
-        .record_background_activity(&id, vec![(RUN.as_str().into(), run_snapshot("running"))])
+        .links
+        .record_background_activity(
+            &*manager,
+            &id,
+            vec![(RUN.as_str().into(), run_snapshot("running"))],
+        )
         .await
         .unwrap();
 
@@ -3083,7 +3152,12 @@ async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
 
     // The background poll still records the finish on its own baseline.
     manager
-        .record_background_activity(&id, vec![(RUN.as_str().into(), run_snapshot("finished"))])
+        .links
+        .record_background_activity(
+            &*manager,
+            &id,
+            vec![(RUN.as_str().into(), run_snapshot("finished"))],
+        )
         .await
         .unwrap();
     let events = manager.space_events(None, 100).await.unwrap();
@@ -3122,13 +3196,15 @@ async fn background_polls_a_finished_run_until_its_finish_is_queued() {
     // The poll is interrupted after recording the finish on its baseline.
     let finished = vec![(RUN.to_owned(), run_snapshot("finished"))];
     manager
-        .record_background_activity(&id, finished.clone())
+        .links
+        .record_background_activity(&*manager, &id, finished.clone())
         .await
         .unwrap();
     assert_eq!(urls(&polled().await.unwrap()), [RUN.as_str()]);
     // The next poll queues it for the agent's hooks, which ends the polling.
     manager
-        .queue_background_updates(&id, finished, manager.links.poll_start())
+        .links
+        .queue_background_updates(&*manager, &id, finished, manager.links.poll_start())
         .await
         .unwrap();
     assert!(polled().await.unwrap().is_empty());
@@ -3289,8 +3365,11 @@ async fn a_merge_a_background_poll_sees_asks_for_a_sync() {
         .unwrap()
     };
     let record = |state| {
-        manager
-            .record_background_activity(&workspace.id, vec![(PR.as_str().into(), in_state(state))])
+        manager.links.record_background_activity(
+            &*manager,
+            &workspace.id,
+            vec![(PR.as_str().into(), in_state(state))],
+        )
     };
     assert!(!record("open").await.unwrap().merged);
     assert!(!record("open").await.unwrap().merged);
@@ -3359,7 +3438,11 @@ async fn the_background_poll_reads_spaces_together() {
             .unwrap();
     }
     polling.store(true, std::sync::atomic::Ordering::SeqCst);
-    manager.poll_linked_item_activity().await.unwrap();
+    manager
+        .links
+        .poll_linked_item_activity(&*manager)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -3388,6 +3471,6 @@ async fn a_stopped_chat_is_polled_as_a_workspace_is() {
         })
         .await
         .unwrap();
-    let spaces = manager.polled_spaces().await.unwrap();
+    let spaces = manager.links.polled_spaces(&*manager).await.unwrap();
     assert!(spaces.iter().any(|space| space.id == chat.id));
 }

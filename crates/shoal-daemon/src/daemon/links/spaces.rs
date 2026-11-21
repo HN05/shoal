@@ -14,7 +14,7 @@ use crate::{
         link::{ItemKind, Selection},
         reference::ItemRef,
     },
-    model::{Repository, Selected, Space, Workspace},
+    model::{ConflictCheck, Repository, Selected, Space, Workspace},
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
@@ -90,6 +90,18 @@ impl Spaces for Manager {
     fn tracked_agents(&self) -> BoxFuture<'_, Vec<SpaceId>> {
         Box::pin(async { self.running_agent_workspaces().await })
     }
+
+    fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>> {
+        Box::pin(Manager::present_spaces(self))
+    }
+
+    fn watched_conflicts<'a>(
+        &'a self,
+        selector: &'a SpaceSelector,
+        only_sensitive: bool,
+    ) -> BoxFuture<'a, Result<Option<ConflictCheck>>> {
+        Box::pin(Manager::watched_conflicts(self, selector, only_sensitive))
+    }
 }
 
 impl Watches for Manager {
@@ -99,5 +111,15 @@ impl Watches for Manager {
 
     fn agent_changed(&self) {
         self.signals.agent_changed();
+    }
+
+    // Other workspaces' conflict checks read the default branch.
+    fn item_merged(&self, id: &RepositoryId) {
+        self.syncs.request(id);
+    }
+
+    // A PR's progress section follows its draft state.
+    fn draft_changed(&self, id: &SpaceId) {
+        self.publications.request(id);
     }
 }

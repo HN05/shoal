@@ -21,7 +21,7 @@ use shoal_forge_types::{
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    model::{LinkedItem, Repository, Selected, Space, Workspace},
+    model::{ConflictCheck, LinkedItem, Repository, Selected, Space, Workspace},
     space_names::SpaceSelector,
 };
 
@@ -106,6 +106,18 @@ impl Spaces for StandIn {
     fn tracked_agents(&self) -> BoxFuture<'_, Vec<SpaceId>> {
         Box::pin(async { Vec::new() })
     }
+
+    fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn watched_conflicts<'a>(
+        &'a self,
+        _: &'a SpaceSelector,
+        _: bool,
+    ) -> BoxFuture<'a, Result<Option<ConflictCheck>>> {
+        Box::pin(async { bail!(NOT_HERE) })
+    }
 }
 
 impl Runs for StandIn {
@@ -123,6 +135,10 @@ impl Watches for StandIn {
     fn item_updates_queued(&self) {}
 
     fn agent_changed(&self) {}
+
+    fn item_merged(&self, _: &RepositoryId) {}
+
+    fn draft_changed(&self, _: &SpaceId) {}
 }
 
 impl Coordinators for StandIn {

@@ -37,7 +37,7 @@ impl Manager {
         if self.converting(id).await? {
             return Ok(Some(Retention::Converting));
         }
-        if self.awaits_merge_runs(id).await? {
+        if self.links.awaits_merge_runs(id).await? {
             return Ok(Some(Retention::MergeRuns));
         }
         let waits = self.has_queued_launch(id).await?;
@@ -90,7 +90,7 @@ impl Manager {
         }
         // Merged cleanup reads the merge from Git, which can show it before
         // the poll that starts the lookup of its runs.
-        if rule == Rule::Merged && self.merged_unseen(id).await? {
+        if rule == Rule::Merged && self.links.merged_unseen(self, id).await? {
             return Ok(Err(CleanupReason::MergeRuns));
         }
         if rule == Rule::Idle {

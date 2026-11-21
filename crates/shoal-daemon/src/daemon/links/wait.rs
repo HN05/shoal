@@ -6,7 +6,6 @@ use shoal_links::wait::branch_report;
 
 pub(crate) use shoal_protocol::links::Updates;
 
-mod background;
 mod delivery;
 mod elsewhere;
 mod merge_runs;

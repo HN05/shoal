@@ -168,6 +168,6 @@ async fn a_push_to_a_repository_on_no_forge_follows_no_runs() {
     assert!(merged);
     let change = RecordChange::Merge(Box::new(plan));
     f.manager.follow_pushed_merge_runs(&change).await;
-    let awaits = f.manager.awaits_merge_runs(&f.workspace.id).await;
+    let awaits = f.manager.links.awaits_merge_runs(&f.workspace.id).await;
     assert!(!awaits.unwrap());
 }

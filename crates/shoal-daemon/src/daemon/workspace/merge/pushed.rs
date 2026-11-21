@@ -23,7 +23,7 @@ impl Manager {
         };
         let followed = async {
             match pushed_merge(plan).await? {
-                Some(pushed) => self.follow_pushed_merge(pushed).await,
+                Some(pushed) => self.links.follow_pushed_merge(self, pushed).await,
                 None => Ok(()),
             }
         };

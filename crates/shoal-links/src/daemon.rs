@@ -18,7 +18,7 @@ use shoal_forge_types::{
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    model::{LinkedItem, Repository, Selected, Space, SpaceRef, Workspace},
+    model::{ConflictCheck, LinkedItem, Repository, Selected, Space, SpaceRef, Workspace},
     space_names::SpaceSelector,
 };
 
@@ -84,6 +84,18 @@ pub trait Spaces: Send + Sync {
 
     /// The spaces whose agent the daemon tracks.
     fn tracked_agents(&self) -> BoxFuture<'_, Vec<SpaceId>>;
+
+    /// Every space present on this machine.
+    fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>>;
+
+    /// The conflicts a workspace watch reports for the workspace
+    /// `selector` names, or none when `only_sensitive` and its repository
+    /// lists no sensitive files.
+    fn watched_conflicts<'a>(
+        &'a self,
+        selector: &'a SpaceSelector,
+        only_sensitive: bool,
+    ) -> BoxFuture<'a, Result<Option<ConflictCheck>>>;
 }
 
 /// The CI runs spaces link, which the daemon reads until they move.
@@ -106,6 +118,12 @@ pub trait Watches: Send + Sync {
 
     /// Tell those waiting on agents that one's deliveries changed.
     fn agent_changed(&self);
+
+    /// A poll saw an item of the repository `id` merge.
+    fn item_merged(&self, id: &RepositoryId);
+
+    /// A poll saw a PR the space `id` links move into or out of draft.
+    fn draft_changed(&self, id: &SpaceId);
 }
 
 /// What the daemon records of a space's agent, which settling the agent

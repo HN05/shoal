@@ -540,8 +540,10 @@ async fn poll_item_activity(manager: Arc<Manager>) {
         interval.tick().await;
         let _operation = manager.gates.operation().await;
         // Blockers are unrelated items; a slow item sweep must not delay them.
-        let (items, blockers) =
-            tokio::join!(manager.poll_linked_item_activity(), manager.poll_blockers(),);
+        let (items, blockers) = tokio::join!(
+            manager.links.poll_linked_item_activity(&*manager),
+            manager.poll_blockers(),
+        );
         if let Err(error) = items {
             log!("item activity: {error:#}");
         }
