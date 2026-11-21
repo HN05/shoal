@@ -2,12 +2,12 @@
 //! message, once it ends, to the recipients `shoal send --in-chat` named,
 //! through the operation that sends every alert. Such an alert to the user
 //! is read once the user prompts the agent in that chat.
-use anyhow::{Context as _, Result, bail, ensure};
+use anyhow::{Context as _, Result, bail};
 use rusqlite::Transaction;
 use serde::{Deserialize, Serialize};
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use shoal_protocol::{
-    alerts::Recipient,
+    alerts::{Recipient, Sent},
     chat_marks::{ChatMarked, MarkedRecipients},
     files::NewFile,
     hub::routing::Queued,
@@ -103,18 +103,7 @@ impl Manager {
         let turn = self.marked_turn(caller, &space).await?;
         crate::daemon::workspace_files::check_sent(&attachments)?;
         let (to, recipients) = self.marked_recipients(&space, to).await?;
-        if let MarkedRecipients::Space {
-            space,
-            machine: Some(machine),
-        } = &recipients
-        {
-            ensure!(
-                attachments.is_empty(),
-                "space {} runs on machine {machine}, which cannot read files attached here; \
-                 send it without them",
-                space.label()
-            );
-        }
+        refuse_files_elsewhere(&recipients, &attachments)?;
         let alert = MarkedAlert {
             to,
             attachments,
@@ -204,21 +193,47 @@ impl Manager {
         } = alert;
         self.scope_alert_target(&caller, &mut to).await?;
         let text = alert_text(&to, message.as_deref());
-        let sent = match self.send_alert(Some(&caller), to, text, attachments).await {
-            // Held at the hub until the recipient's machine connects.
-            Err(error) if error.is::<Queued>() => return Ok(()),
-            sent => sent?,
-        };
-        // Another machine's alerts, which its IDs name, are not this one's.
-        if let MarkedRecipients::Space {
-            machine: Some(_), ..
-        } = recipients
-        {
-            return Ok(());
+        let sent = held_as_sent(self.send_alert(Some(&caller), to, text, attachments).await)?;
+        let here = recorded_here(&recipients, sent);
+        self.store.write(move |tx| mark_in_chat(tx, &here)).await
+    }
+}
+
+/// Refuse `attachments` to `recipients` on another machine, which cannot
+/// read this machine's files.
+fn refuse_files_elsewhere(recipients: &MarkedRecipients, attachments: &[NewFile]) -> Result<()> {
+    match recipients {
+        MarkedRecipients::Space {
+            machine: Some(machine),
+            ..
+        } if !attachments.is_empty() => {
+            Err(shoal_hub::files_stay_here(&format!("machine {machine}")))
         }
-        self.store
-            .write(move |tx| mark_in_chat(tx, &sent.alerts))
-            .await
+        _ => Ok(()),
+    }
+}
+
+/// What `sent` sent, none while the hub holds it until the recipient's
+/// machine connects.
+fn held_as_sent(sent: Result<Sent>) -> Result<Option<Sent>> {
+    match sent {
+        Err(error) if error.is::<Queued>() => Ok(None),
+        sent => sent.map(Some),
+    }
+}
+
+/// The IDs of this machine's alerts in `sent`, an alert to `recipients`:
+/// none for another machine's space, whose IDs name that machine's.
+fn recorded_here(recipients: &MarkedRecipients, sent: Option<Sent>) -> Vec<i64> {
+    match (recipients, sent) {
+        (
+            MarkedRecipients::Space {
+                machine: Some(_), ..
+            },
+            _,
+        )
+        | (_, None) => Vec::new(),
+        (_, Some(sent)) => sent.alerts,
     }
 }
 

@@ -490,16 +490,23 @@ fn bind_fields(
     }
 }
 
-/// Refuse the request `method` when it attaches files, which the machine
-/// `elsewhere` describes as it is named: it cannot read this machine's.
+/// Refuse the request `method` when it attaches files, as
+/// [`files_stay_here`] refuses them.
 fn refuse_attached(method: &serde_json::Value, elsewhere: &str) -> Result<()> {
-    if attaches_files(method) {
-        let message = format!(
-            "{elsewhere}, which cannot read files attached here; send it without them, or from that machine"
-        );
-        return Err(Refusal::new(Reason::NotReady, message).into());
+    match attaches_files(method) {
+        true => Err(files_stay_here(elsewhere)),
+        false => Ok(()),
     }
-    Ok(())
+}
+
+/// The refusal of files attached here on what goes to `elsewhere`, which
+/// names where it runs, as "machine desk": that machine cannot read this
+/// one's files.
+pub fn files_stay_here(elsewhere: &str) -> anyhow::Error {
+    let message = format!(
+        "{elsewhere}, which cannot read files attached here; send it without them, or from that machine"
+    );
+    Refusal::new(Reason::NotReady, message).into()
 }
 
 /// Whether the request `method` attaches files by their path on this

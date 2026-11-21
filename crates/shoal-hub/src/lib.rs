@@ -21,7 +21,7 @@ use shoal_protocol::paths::Paths;
 use shoal_protocol::time;
 use shoal_store::Store;
 
-pub use forwarding::{Elsewhere, Unanswered};
+pub use forwarding::{Elsewhere, Unanswered, files_stay_here};
 pub use machines::Named;
 pub use owners::ClaimFailure;
 pub use streams::{Incoming, Outgoing};
