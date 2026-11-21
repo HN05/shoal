@@ -21,8 +21,8 @@ use shoal_protocol::{
     paths::Paths,
     processes::Identity,
     protocol::{
-        self, Body, DaemonMethod, DaemonStatus, ErrorCode, ExitRequest, ExitWhen, Method, Request,
-        Response, ViewPiece, Work, timing,
+        self, Body, DaemonMethod, DaemonStatus, ErrorCode, ExitRequest, ExitWhen, Method,
+        Operation, Request, Response, ViewPiece, Work, timing,
     },
     scope_tokens::ScopeToken,
 };
@@ -429,6 +429,37 @@ pub async fn call(daemon: &impl Daemon, method: impl Into<Method>) -> Result<Bod
             }
         })??;
     body.into_result()
+}
+
+/// A request built before it is sent, with the answer it expects, as one a
+/// picker offers spaces for, which the daemon judges by what it does.
+pub struct Prepared<T> {
+    operation: Operation,
+    answer: std::marker::PhantomData<fn() -> T>,
+}
+
+impl<T> Prepared<T> {
+    pub fn new(method: impl Into<Operation>) -> Self {
+        Self {
+            operation: method.into(),
+            answer: std::marker::PhantomData,
+        }
+    }
+
+    pub fn operation(&self) -> &Operation {
+        &self.operation
+    }
+
+    pub fn into_operation(self) -> Operation {
+        self.operation
+    }
+}
+
+impl<T: TryFrom<Body, Error = anyhow::Error>> Prepared<T> {
+    /// Send it, with its answer.
+    pub async fn send(self, daemon: &impl Daemon) -> Result<T> {
+        request(daemon, self.operation).await
+    }
 }
 
 /// Send a request and extract its expected response payload.

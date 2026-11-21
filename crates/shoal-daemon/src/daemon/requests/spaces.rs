@@ -38,8 +38,9 @@ pub(super) async fn handle(
             return Ok(Answer::pages(log, Body::LogEntries));
         }
         SpaceMethod::ListSpaces => Body::Spaces(manager.listed_spaces(caller).await?),
-        SpaceMethod::ListSpacesEverywhere { here } => {
-            let everywhere = manager.spaces_everywhere(caller, here).await;
+        SpaceMethod::ListSpacesEverywhere { here, acting } => {
+            let acting = acting.as_deref();
+            let everywhere = manager.spaces_everywhere(caller, here, acting).await;
             let parts = everywhere.map(Everywhere::into_parts);
             return Ok(Answer::pages(parts, Body::SpacesEverywhere));
         }

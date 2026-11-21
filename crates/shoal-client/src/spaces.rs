@@ -2,7 +2,7 @@
 //! runs, its status and environment, and its scope tokens.
 use anyhow::Result;
 
-use crate::connection::{Daemon, pages, request};
+use crate::connection::{Daemon, Prepared, pages, request};
 use shoal_protocol::{
     model::{Everywhere, Located, RenamedSpace, Space, SpaceTarget, Spaces},
     protocol::SpaceMethod,
@@ -31,7 +31,19 @@ pub async fn present_space(
 /// `here`, and the other joined machines' as the hub lists them, or why the
 /// hub could not be asked.
 pub async fn everywhere(daemon: &impl Daemon, here: bool) -> Result<Everywhere> {
-    let method = SpaceMethod::ListSpacesEverywhere { here };
+    let method = SpaceMethod::ListSpacesEverywhere { here, acting: None };
+    Everywhere::from_parts(pages(daemon, method).await?)
+}
+
+/// The other joined machines' spaces the caller sees that `acting`, a
+/// request a picker offers spaces for, can act on, or why the hub could
+/// not be asked; none when it stays on this machine.
+pub async fn offered_elsewhere<T>(daemon: &impl Daemon, acting: Prepared<T>) -> Result<Everywhere> {
+    let acting = Some(Box::new(acting.into_operation()));
+    let method = SpaceMethod::ListSpacesEverywhere {
+        here: false,
+        acting,
+    };
     Everywhere::from_parts(pages(daemon, method).await?)
 }
 

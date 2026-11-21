@@ -13,8 +13,13 @@ pub enum SpaceMethod {
     ListSpaces,
     /// The spaces the caller sees on every machine: this machine's, unless
     /// `here` is false, then the other joined machines' as the hub lists
-    /// them, in pages.
-    ListSpacesEverywhere { here: bool },
+    /// them, in pages; with `acting`, the request a picker offers them for,
+    /// none of the other machines' when it stays on this one.
+    ListSpacesEverywhere {
+        here: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        acting: Option<Box<super::Operation>>,
+    },
     /// The spaces that link an item or the workspaces that hold a resource.
     FindSpaces { target: crate::model::SpaceTarget },
     /// Where the space `space` names runs: here, or on the other joined

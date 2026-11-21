@@ -10,6 +10,7 @@ use shoal_protocol::{
         directory::{HubView, Listed},
     },
     model::{Everywhere, Located, Space, Spaces},
+    protocol::Operation,
     space_names::SpaceSelector,
 };
 
@@ -18,16 +19,25 @@ use crate::daemon::{log, manager::Manager, scope::Caller};
 impl Manager {
     /// The spaces `caller` sees on every machine: this machine's as a
     /// listing shows them, unless not `here`, and the other machines' as
-    /// the hub lists them, or why the hub could not be asked.
+    /// the hub lists them, or why the hub could not be asked; none of the
+    /// other machines' for `acting`, a request that stays on this one.
     pub(crate) async fn spaces_everywhere(
         &self,
         caller: Option<&Caller>,
         here: bool,
+        acting: Option<&Operation>,
     ) -> Result<Everywhere> {
         let here = match here {
             true => Spaces(self.listed_spaces(caller).await?),
             false => Spaces::default(),
         };
+        if acting.is_some_and(|acting| !acting.reaches_other_machines()) {
+            return Ok(Everywhere {
+                here,
+                elsewhere: None,
+                unreachable: None,
+            });
+        }
         Ok(match self.hub.hub_view(self, caller).await {
             Ok(elsewhere) => Everywhere {
                 here,
