@@ -184,7 +184,7 @@ impl Manager {
         let space = (self.store)
             .write(move |tx| requeue(tx, &owned, &removing))
             .await?;
-        self.agent_settles.request(&space);
+        self.links.agent_settles().request(&space);
         // Under the gate, so no pass admits it before it starts as asked.
         match start {
             RetryStart::Queued => {}

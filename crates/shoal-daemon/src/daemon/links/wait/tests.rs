@@ -1782,7 +1782,7 @@ async fn the_agent_account_done_takes_off_is_the_spaces_own_change() {
     let fixture = assigned_issue().await;
     let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);
     run_agent(manager, workspace).await;
-    manager.settle_requested_agents().await;
+    manager.links.settle_requested_agents(&**manager).await;
     assert!(
         observe_issue(&fixture, &["shoal-agent"], 1)
             .await
@@ -1792,7 +1792,7 @@ async fn the_agent_account_done_takes_off_is_the_spaces_own_change() {
     (manager.mark_space_done(&selector, Done::default(), &Attacher::User))
         .await
         .unwrap();
-    manager.settle_requested_agents().await;
+    manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(fixture.changes().last(), Some(&json!([])));
     assert!(observe_issue(&fixture, &[], 2).await.is_empty());
     // The same change made on the forge is someone else's.
@@ -1808,7 +1808,7 @@ async fn the_agent_account_an_agents_start_puts_on_is_the_spaces_own_change() {
     let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);
     assert!(observe_issue(&fixture, &[], 1).await.is_empty());
     run_agent(manager, workspace).await;
-    manager.settle_requested_agents().await;
+    manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"])]);
     assert!(
         observe_issue(&fixture, &["shoal-agent"], 2)

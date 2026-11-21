@@ -38,6 +38,7 @@ pub struct Links {
     memories: memories::ForgeMemories,
     waits: wait::ActiveWaits,
     watch_starts: wait::starts::WatchStarts,
+    agent_settles: issue::agent_settles::AgentSettles,
 }
 
 impl Links {
@@ -59,6 +60,7 @@ impl Links {
             memories: Default::default(),
             waits: Default::default(),
             watch_starts: Default::default(),
+            agent_settles: Default::default(),
         }
     }
 

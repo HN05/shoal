@@ -447,7 +447,7 @@ impl Manager {
         let entry = (self.record_stopped_restore(&space, execution, env, now)).await?;
         self.reopen_for_resume(&id).await;
         // The queued agent works its issues again.
-        self.agent_settles.request(&id);
+        self.links.agent_settles().request(&id);
         Ok(entry)
     }
 
@@ -698,7 +698,7 @@ impl Manager {
             .run(move |db| delete_stopped_restores(db, &id))
             .await?;
         // An agent no longer asleep no longer works its issues.
-        self.agent_settles.request(workspace_id);
+        self.links.agent_settles().request(workspace_id);
         Ok(())
     }
 

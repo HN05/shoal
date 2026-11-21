@@ -841,7 +841,7 @@ impl Manager {
             .await?;
         self.ask_user_about(&completed.released).await;
         if let Some(space) = &completed.agent_space {
-            self.agent_settles.request(space);
+            self.links.agent_settles().request(space);
         }
         let demo = completed.demo;
         if connections.disconnect(&id).await {

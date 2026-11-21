@@ -294,12 +294,9 @@ pub async fn run(
         "progress sections",
         progress::run,
     );
-    spawn_supervised(
-        &mut background,
-        &manager,
-        "agent assignees",
-        links::issue::agent_settles::run,
-    );
+    spawn_supervised(&mut background, &manager, "agent assignees", |manager| {
+        shoal_links::issue::agent_settles::run(manager.links.clone(), manager)
+    });
     spawn_supervised(&mut background, &manager, "reviews", |manager| {
         shoal_reviews::run(manager.reviews.clone(), manager)
     });

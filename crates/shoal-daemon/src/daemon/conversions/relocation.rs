@@ -91,7 +91,7 @@ impl Manager {
             self.report_failed_relocation(id, &pending, &error).await;
         }
         // An agent kept down or not restarted no longer works its issues.
-        self.agent_settles.request(id);
+        self.links.agent_settles().request(id);
         Ok(())
     }
 

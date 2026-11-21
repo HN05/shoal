@@ -1,4 +1,5 @@
 //! The issues a space assigns, as its records hold them.
+pub mod agent_settles;
 pub mod agents;
 pub mod assignees;
 

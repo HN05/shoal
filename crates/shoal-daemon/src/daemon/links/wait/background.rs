@@ -142,7 +142,7 @@ impl Manager {
             self.publications.request(&space.id);
         }
         if seen.lost_assignee {
-            self.agent_settles.request(&space.id);
+            self.links.agent_settles().request(&space.id);
         }
         Ok(())
     }

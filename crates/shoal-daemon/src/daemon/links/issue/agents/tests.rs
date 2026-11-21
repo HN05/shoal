@@ -96,7 +96,7 @@ async fn the_agent_account_another_shoal_took_off_goes_back_on() {
     manager.poll_linked_item_activity().await.unwrap();
     fixture.assign_elsewhere(&[]);
     manager.poll_linked_item_activity().await.unwrap();
-    manager.settle_requested_agents().await;
+    manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(
         fixture.changes(),
         [json!(["shoal-agent"]), json!(["shoal-agent"])]
@@ -184,7 +184,7 @@ async fn finish(manager: &Manager, execution: ExecutionId) {
     (manager.finish_execution(execution, ExecutionKind::Command, Some(0)))
         .await
         .unwrap();
-    manager.settle_requested_agents().await;
+    manager.links.settle_requested_agents(&*manager).await;
 }
 
 #[tokio::test]
@@ -193,7 +193,7 @@ async fn an_agent_starting_puts_the_agent_account_on_and_exiting_takes_it_off() 
     let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);
     fixture.link(workspace).await;
     let execution = run_agent(manager, workspace).await;
-    manager.settle_requested_agents().await;
+    manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"])]);
     finish(manager, execution).await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
@@ -223,7 +223,7 @@ async fn a_stopped_agent_gives_up_the_issue_an_agent_assigned_until_restored() {
     (manager.queue_stopped_restore(&selector, &execution, Default::default()))
         .await
         .unwrap();
-    manager.settle_requested_agents().await;
+    manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(fixture.changes()[2], json!(["shoal-agent"]));
 }
 
@@ -237,9 +237,9 @@ async fn done_takes_the_agent_account_off_and_undoing_it_puts_it_back() {
     (manager.mark_space_done(&selector, done, &Attacher::User))
         .await
         .unwrap();
-    manager.settle_requested_agents().await;
+    manager.links.settle_requested_agents(&**manager).await;
     manager.undo_space_done(&selector).await.unwrap();
-    manager.settle_requested_agents().await;
+    manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(
         fixture.changes(),
         [json!(["shoal-agent"]), json!([]), json!(["shoal-agent"])]
@@ -257,7 +257,7 @@ async fn a_chats_agent_gives_up_its_issue_once_done() {
     (manager.mark_space_done(&SpaceSelector::id(&chat.id), done, &Attacher::User))
         .await
         .unwrap();
-    manager.settle_requested_agents().await;
+    manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
 }
 
@@ -296,12 +296,12 @@ async fn a_queued_launch_puts_the_agent_account_on_until_cancelled() {
     };
     let admission = manager.queue_add(request).await.unwrap();
     let entry = admission.entry.unwrap();
-    manager.settle_requested_agents().await;
+    manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"])]);
     (manager.queue_remove(entry.id.as_str(), None))
         .await
         .unwrap();
-    manager.settle_requested_agents().await;
+    manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
 }
 
@@ -327,7 +327,7 @@ async fn a_forgotten_agent_execution_gives_up_the_issue() {
     let execution = run_agent(manager, workspace).await;
     // As after a reboot, whose processes ran in an earlier boot.
     manager.forget_execution(&execution).await.unwrap();
-    manager.settle_requested_agents().await;
+    manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
 }
 
@@ -343,6 +343,6 @@ async fn stopping_an_asleep_agent_takes_the_agent_account_off() {
     (manager.stop_space(&SpaceSelector::id(&workspace.id), stop))
         .await
         .unwrap();
-    manager.settle_requested_agents().await;
+    manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
 }

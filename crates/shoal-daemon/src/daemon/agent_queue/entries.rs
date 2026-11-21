@@ -99,7 +99,7 @@ impl Manager {
             .write(move |tx| insert_launch(tx, &launch, &removing))
             .await?;
         // Its queued agent works the space's issues.
-        self.agent_settles.request(&space.id);
+        self.links.agent_settles().request(&space.id);
         let admitted = now || self.admit_waiting(Some(&id)).await?;
         // Kept before the gate opens, so no pass starts it in the background
         // before its caller holds it.
@@ -364,7 +364,7 @@ impl Manager {
             ByKind::Chat(chat) => self.attach_chat(id, &chat.id).await,
         }?;
         // Its queued agent works its issues.
-        self.agent_settles.request(&space_id);
+        self.links.agent_settles().request(&space_id);
         Ok(())
     }
 
@@ -444,7 +444,7 @@ impl Manager {
         };
         self.fail_renewal_started_by(id, error).await;
         if let Some(space) = &failed.space {
-            self.agent_settles.request(space);
+            self.links.agent_settles().request(space);
         }
         match (&failed.space, failed.kept) {
             (Some(space), true) => self.tell_launch_failed(space, error).await,

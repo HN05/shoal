@@ -205,7 +205,7 @@ impl Manager {
             entry.name
         );
         if let Some(space) = entry.space() {
-            self.agent_settles.request(space);
+            self.links.agent_settles().request(space);
         }
         Ok(entry)
     }
@@ -222,7 +222,7 @@ impl Manager {
             .write(move |tx| delete_waiting_launches(tx, &id))
             .await?;
         if !cancelled.is_empty() {
-            self.agent_settles.request(workspace_id);
+            self.links.agent_settles().request(workspace_id);
         }
         Ok(cancelled)
     }
@@ -252,7 +252,7 @@ impl Manager {
             .as_ref()
             .is_some_and(|cancelled| !cancelled.is_empty())
         {
-            self.agent_settles.request(workspace_id);
+            self.links.agent_settles().request(workspace_id);
         }
         Ok(cancelled)
     }

@@ -4,7 +4,6 @@ use shoal_ids::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::Connection;
 
-pub(crate) mod agent_settles;
 mod agents;
 mod assignees;
 

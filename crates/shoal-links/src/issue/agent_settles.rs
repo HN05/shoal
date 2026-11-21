@@ -1,26 +1,26 @@
 //! Settling the agent account on the issues of the spaces whose agent
 //! started or stopped, or whose work was done or resumed, in the
 //! background, so a slow forge holds none of those back.
-use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::HashSet,
     sync::{Arc, Mutex, PoisonError},
 };
 
+use shoal_ids::space_ids::SpaceId;
 use tokio::sync::Notify;
 
-use crate::daemon::manager::Manager;
+use crate::{Links, daemon::Daemon};
 
 /// The spaces whose issues wait for the agent account to be settled.
 #[derive(Default)]
-pub(crate) struct AgentSettles {
+pub struct AgentSettles {
     requested: Mutex<HashSet<SpaceId>>,
     wake: Notify,
 }
 
 impl AgentSettles {
     /// Settle the agent account on the issues of the space `id`.
-    pub(crate) fn request(&self, id: &SpaceId) {
+    pub fn request(&self, id: &SpaceId) {
         self.lock().insert(id.clone());
         self.wake.notify_one();
     }
@@ -37,19 +37,24 @@ impl AgentSettles {
 }
 
 /// Settle each requested space as it is requested.
-pub async fn run(manager: Arc<Manager>) {
+pub async fn run(links: Arc<Links>, daemon: Arc<dyn Daemon>) {
     loop {
-        manager.settle_requested_agents().await;
-        manager.agent_settles.wake.notified().await;
+        links.settle_requested_agents(&*daemon).await;
+        links.agent_settles.wake.notified().await;
     }
 }
 
-impl Manager {
+impl Links {
+    /// The spaces whose issues wait for the agent account to be settled.
+    pub fn agent_settles(&self) -> &AgentSettles {
+        &self.agent_settles
+    }
+
     /// Settle the agent account on the issues of each space requested
     /// since the last time.
-    pub(crate) async fn settle_requested_agents(&self) {
+    pub async fn settle_requested_agents(&self, daemon: &dyn Daemon) {
         for id in self.agent_settles.take() {
-            self.links.settle_agent_assignees(self, &id).await;
+            self.settle_agent_assignees(daemon, &id).await;
         }
     }
 }

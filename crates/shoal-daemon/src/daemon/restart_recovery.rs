@@ -277,7 +277,7 @@ impl Manager {
             .write(move |tx| forget_unknown_execution(tx, &id))
             .await?;
         if let Some(Some(space)) = &forgotten {
-            self.agent_settles.request(space);
+            self.links.agent_settles().request(space);
         }
         if forgotten.is_some() {
             log!(

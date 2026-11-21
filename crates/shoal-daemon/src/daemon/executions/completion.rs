@@ -89,7 +89,7 @@ impl Manager {
             })
             .await?;
         if let Some(space) = &agent_space {
-            self.agent_settles.request(space);
+            self.links.agent_settles().request(space);
         }
         // A demo's viewer goes with it.
         self.viewers.end(id);

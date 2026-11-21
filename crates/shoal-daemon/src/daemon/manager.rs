@@ -26,7 +26,6 @@ pub struct Manager {
     /// The spaces whose PRs' progress sections wait for an update.
     pub(crate) publications: super::progress::Publications,
     /// The spaces whose issues wait for the agent account to be settled.
-    pub(crate) agent_settles: super::links::issue::agent_settles::AgentSettles,
     pub config_state: Arc<super::config_state::ConfigState>,
     pub notifications: Arc<super::notifications::Notifications>,
     /// The leases workspaces hold.
@@ -154,7 +153,6 @@ impl Manager {
             syncs: Default::default(),
             runner,
             publications: Default::default(),
-            agent_settles: Default::default(),
             store,
             // Tests inject hosts and never discover or close the user's
             // sessions.

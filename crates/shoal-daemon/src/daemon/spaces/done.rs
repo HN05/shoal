@@ -73,7 +73,7 @@ impl Manager {
             .await?;
         self.announce_threads(delivered).await;
         self.signals.wake_cleanup();
-        self.agent_settles.request(&space.id);
+        self.links.agent_settles().request(&space.id);
         Ok(completion)
     }
 
@@ -168,7 +168,7 @@ impl Manager {
         if persisted.progressed {
             self.publications.request(&space.id);
         }
-        self.agent_settles.request(&space.id);
+        self.links.agent_settles().request(&space.id);
         let closed = persisted.closed;
         self.forget_last_sessions(&space.id);
         // Finished work needs no agent; only naming the space in `shoal
