@@ -510,7 +510,8 @@ impl Manager {
         };
         let settings = self.workspace_settings(workspace).await?;
         let repository = workspace.repository();
-        let configured_env = (self.hook_environment(workspace, repository, &settings)).await?;
+        let configured_env =
+            (self.hook_environment(workspace, Some(repository), &settings)).await?;
         hooks::run_detached(
             Hook::PreRemove,
             workspace,

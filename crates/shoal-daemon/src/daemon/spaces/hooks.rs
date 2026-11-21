@@ -21,8 +21,8 @@ impl Manager {
         (kind.command(settings)).map(|path| space.workdir.path().join(path))
     }
 
-    /// Run `hook`'s `command` in `space` with what its repository's `[env]`
-    /// adds, which a space without a repository goes without.
+    /// Run `hook`'s `command` in `space` with what `[env]` adds: its
+    /// repository's, or the global config's for a space without one.
     pub(crate) async fn run_space_hook(
         &self,
         hook: Hook<'_>,
@@ -30,10 +30,8 @@ impl Manager {
         settings: &Effective,
         command: &Path,
     ) -> Result<()> {
-        let configured_env = match &space.repository_id {
-            Some(repository) => (self.hook_environment(space, repository, settings)).await?,
-            None => Default::default(),
-        };
+        let repository = space.repository_id.as_ref();
+        let configured_env = (self.hook_environment(space, repository, settings)).await?;
         (hooks::run_detached(hook, space, command, &self.paths, &configured_env)).await
     }
 }

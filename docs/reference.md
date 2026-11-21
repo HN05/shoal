@@ -5165,7 +5165,7 @@ cleanup proceeds as if `done` had not run.
 `hooks.post_done` runs in the daemon after recording completion, before cleanup,
 with the directory the space's agent works in as its working directory, no
 terminal, and a 60-second limit; a chat without a repository runs the global config's hook in
-its `root_dir`, without `[env]`.
+its `root_dir`, with the global config's `[env]`.
 It follows normal global and repository configuration precedence and receives the
 [hook identity environment](#workspace-setup-and-hooks) plus
 `SHOAL_DONE_CHOICE=keep` or `cleanup`. It runs even when cleanup retains the

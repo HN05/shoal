@@ -162,7 +162,7 @@ impl Manager {
     ) {
         let repository = space.repository_id();
         let result = match self
-            .hook_environment(&space.space, repository, settings)
+            .hook_environment(&space.space, Some(repository), settings)
             .await
         {
             Ok(configured) => {

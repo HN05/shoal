@@ -110,7 +110,7 @@ impl Settings for Manager {
         workspace: &'a Workspace,
         settings: &'a Effective,
     ) -> BoxFuture<'a, Result<BTreeMap<String, OsString>>> {
-        Box::pin(self.hook_environment(workspace, workspace.repository(), settings))
+        Box::pin(self.hook_environment(workspace, Some(workspace.repository()), settings))
     }
 }
 

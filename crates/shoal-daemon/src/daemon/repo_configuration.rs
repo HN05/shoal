@@ -440,11 +440,11 @@ impl Manager {
     /// What `[env]` of `settings` and the temporary directory of `space`,
     /// created when missing, add to the environment of its hooks, which act
     /// in the repository `repository`: its own, or the registered one a chat
-    /// without one acts in.
+    /// without one acts in, or none.
     pub(crate) async fn hook_environment<P: Part>(
         &self,
         space: &Space<P>,
-        repository: &RepositoryId,
+        repository: Option<&RepositoryId>,
         settings: &Effective,
     ) -> Result<BTreeMap<String, std::ffi::OsString>> {
         (self.environment_from_settings(space, repository, settings, true)).await
@@ -458,26 +458,32 @@ impl Manager {
         workspace: &Workspace,
     ) -> Result<BTreeMap<String, std::ffi::OsString>> {
         let settings = self.workspace_settings(workspace).await?;
-        let repository = workspace.repository();
+        let repository = Some(workspace.repository());
         (self.environment_from_settings(workspace, repository, &settings, false)).await
     }
 
     async fn environment_from_settings<P: Part>(
         &self,
         space: &Space<P>,
-        repository: &RepositoryId,
+        repository: Option<&RepositoryId>,
         settings: &Effective,
         with_tmp_dir: bool,
     ) -> Result<BTreeMap<String, std::ffi::OsString>> {
-        let repository = self.repository(repository).await?;
+        let repository = match repository {
+            Some(id) => Some(self.repository(id).await?),
+            None => None,
+        };
         let id = space.id.clone();
         let ports = (self.store)
             .read(move |tx| crate::daemon::store::ports(tx, Some(&id)))
             .await?;
-        let caches = crate::caches::directories(&repository, &settings.caches)?;
+        let caches = match &repository {
+            Some(repository) => crate::caches::directories(repository, &settings.caches)?,
+            None => BTreeMap::new(),
+        };
         let tmp_dir = match with_tmp_dir {
             true => {
-                let own = space.repository_id.is_some().then_some(&repository);
+                let own = (repository.as_ref()).filter(|_| space.repository_id.is_some());
                 (self.tmp_layout(own, space.workdir.root_dir()))
                     .map(|layout| layout.prepare(&space.id))
                     .transpose()?
@@ -487,7 +493,7 @@ impl Manager {
         Ok(crate::env::render_configured_environment(
             &settings.env,
             space,
-            Some(repository.display_name()),
+            repository.as_ref().map(Repository::display_name),
             &ports,
             &caches,
             tmp_dir.as_deref(),

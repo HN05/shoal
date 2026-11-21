@@ -137,6 +137,29 @@ async fn a_chats_agent_exit_hook_runs_where_it_works_and_skips_a_removal() {
 }
 
 #[tokio::test]
+async fn a_chat_without_a_repository_runs_its_hooks_with_the_global_env() {
+    let (root, manager) = manager().await;
+    let exits = root.path().join("exits");
+    let hook = root.path().join("exited");
+    let script = format!(
+        "#!/bin/sh\nprintf '%s|%s\\n' \"$GREETING\" \"${{SESSION-unset}}\" >> '{}'\n",
+        exits.display()
+    );
+    install_test_script(&hook, &script);
+    let config = format!(
+        "hooks.post_agent_exit = '{}'\n[env]\nGREETING = 'hello'\nSESSION = '{{workspace}}'\n",
+        hook.display()
+    );
+    crate::daemon::test_support::configure(&manager, &config).await;
+    let chat = crate::daemon::test_support::chat(&manager, "master", "chat", None, None).await;
+
+    let space = Space::from(chat.clone());
+    (manager.post_agent_exit(&space, &"claude".into(), Some(0), true)).await;
+
+    assert_eq!(std::fs::read_to_string(&exits).unwrap(), "hello|unset\n");
+}
+
+#[tokio::test]
 async fn agent_exit_wakes_cleanup_for_completed_workspace() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");

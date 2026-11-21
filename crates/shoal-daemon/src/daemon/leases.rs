@@ -75,7 +75,8 @@ impl Settings for Manager {
         Box::pin(async move {
             let settings = self.workspace_settings(workspace).await?;
             let repository = workspace.repository();
-            let environment = (self.hook_environment(workspace, repository, &settings)).await?;
+            let environment =
+                (self.hook_environment(workspace, Some(repository), &settings)).await?;
             hooks::run_detached(hook, workspace, executable, &self.paths, &environment).await
         })
     }
