@@ -793,6 +793,9 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
     if version >= 269 {
         db.execute_batch(include_str!("thread_space_names.sql"))?;
     }
+    if version >= 270 {
+        db.execute_batch(include_str!("told_records.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -4329,5 +4332,49 @@ fn a_turn_marked_with_a_thread_keeps_its_mark_beside_alert_marks() -> Result<()>
     db.execute("DELETE FROM threads WHERE id=3", [])?;
     let left: i64 = db.query_row("SELECT COUNT(*) FROM chat_marks", [], |r| r.get(0))?;
     assert_eq!(left, 0);
+    Ok(())
+}
+
+#[test]
+fn held_events_carry_their_alert_as_a_record() -> Result<()> {
+    let mut db = historical_database(269)?;
+    let told = r#"{"tell":{"told":{"above":"coordinator","for_user":true,
+        "kind":"workspace_done","message":"child: done","files":["report.md"]}}}"#;
+    let bare = r#"{"tell":{"told":{"above":"coordinator","for_user":false,
+        "kind":"approval_decided","message":"approved"}}}"#;
+    db.execute(
+        "INSERT INTO hub_members(id,kind,name,public_key,joined_at)
+            VALUES ('desk','machine','desk','key',0)",
+        [],
+    )?;
+    db.execute(
+        "INSERT INTO hub_outbox(seq,call,queued_at) VALUES (1,?1,0),(2,?2,0)",
+        [told, bare],
+    )?;
+    db.execute(
+        "INSERT INTO hub_queue(seq,member_id,sender_id,call,summary,queued_at,expires_at)
+            VALUES (1,'desk','hub',?1,'',0,1)",
+        [told],
+    )?;
+    migrate(&mut db)?;
+    let calls = db
+        .prepare(
+            "SELECT json_extract(call,'$.tell.told') FROM hub_outbox
+             UNION ALL SELECT json_extract(call,'$.tell.told') FROM hub_queue",
+        )?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let calls: Vec<serde_json::Value> = (calls.iter())
+        .map(|call| serde_json::from_str(call))
+        .collect::<serde_json::Result<_>>()?;
+    let record = serde_json::json!({"alert": {
+        "kind": "workspace_done", "message": "child: done", "files": ["report.md"],
+    }});
+    assert_eq!(
+        calls[0],
+        serde_json::json!({"above": "coordinator", "for_user": true, "record": record})
+    );
+    assert_eq!(calls[1]["record"]["alert"]["files"], serde_json::json!([]));
+    assert_eq!(calls[2], calls[0]);
     Ok(())
 }
