@@ -45,7 +45,7 @@ pub use proxy::{
     Routing, agent_url, launch_proxy, proxy_defaults, proxy_ends_turns, proxy_environment,
     route_through_proxy, upstream, with_proxy_args,
 };
-pub use trust::forget_repository_trust;
+pub use trust::{forget_repository_trust, move_repository_trust};
 
 use shoal_protocol::transcripts::AgentEnvironment;
 

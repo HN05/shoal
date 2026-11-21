@@ -208,3 +208,25 @@ fn claude_trust_adds_the_project_once_and_preserves_other_settings() {
     fs::write(&config, r#"{"projects": []}"#).unwrap();
     assert!(trust_claude_workspace(&config, &workspace).is_err());
 }
+
+#[test]
+fn a_move_trusts_the_new_path_only_where_the_old_one_was_trusted() {
+    let home = tempfile::tempdir().unwrap();
+    let home = fs::canonicalize(home.path()).unwrap();
+    let (old, new, untrusted) = (home.join("old"), home.join("new"), home.join("elsewhere"));
+    fs::create_dir(&new).unwrap();
+    let claude = home.join(".claude.json");
+    let projects = json!({"projects": {old.to_str().unwrap(): {"hasTrustDialogAccepted": true}}});
+    fs::write(&claude, projects.to_string()).unwrap();
+
+    let moves = [(old.clone(), new.clone()), (untrusted, home.join("unused"))];
+    let warnings = move_repository_trust(&home, &moves, &[]);
+    assert_eq!(warnings, Vec::<String>::new());
+    let root: Value = serde_json::from_str(&fs::read_to_string(&claude).unwrap()).unwrap();
+    assert_eq!(
+        root["projects"],
+        json!({new.to_str().unwrap(): {"hasTrustDialogAccepted": true}})
+    );
+    // Codex trusted nothing there, so its config stays absent.
+    assert!(!home.join(".codex/config.toml").exists());
+}

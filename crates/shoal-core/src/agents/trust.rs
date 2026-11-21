@@ -98,6 +98,36 @@ impl TrustFile {
         warnings
     }
 
+    /// In each config file of `environments` that trusts a path of
+    /// `moves`, each a path and the one it moved to, trust the new path
+    /// instead, while preserving other project settings.
+    fn rebase(
+        &self,
+        environments: &[AgentEnvironment],
+        moves: &[(PathBuf, PathBuf)],
+    ) -> Vec<String> {
+        let (configs, mut warnings) = self.configs(environments);
+        for config in configs {
+            for (from, to) in moves {
+                let trusted = (self.remove)(&config, &[trust_key(from)]);
+                let moved = trusted.and_then(|trusted| match trusted {
+                    true => (self.add)(&config, to),
+                    false => Ok(false),
+                });
+                if let Err(error) = moved {
+                    warnings.push(format!(
+                        "could not move {} trust in {} from {} to {}: {error:#}",
+                        self.tool,
+                        config.display(),
+                        from.display(),
+                        to.display()
+                    ));
+                }
+            }
+        }
+        warnings
+    }
+
     /// The distinct config files the tool reads with `environments`, and a
     /// warning for each environment that names none.
     fn configs(&self, environments: &[AgentEnvironment]) -> (Vec<std::path::PathBuf>, Vec<String>) {
@@ -117,9 +147,9 @@ impl TrustFile {
     }
 }
 
-/// Remove a deleted repository's trust entries from the configs of this
-/// process's environment and of `agent_environments`, under `home`; each
-/// failure comes back as a warning.
+/// Remove a deleted repository's trust entries from the configs of the
+/// tools' default locations under `home` and of `agent_environments`, the
+/// locations its agents ran with; each failure comes back as a warning.
 pub fn forget_repository_trust(
     home: &Path,
     repository: &Repository,
@@ -127,24 +157,44 @@ pub fn forget_repository_trust(
     agent_environments: &[BTreeMap<String, String>],
 ) -> Vec<String> {
     let paths = repository_paths(repository, workspace_paths);
-    let environments = Environments::new(home, agent_environments);
+    let environments = Environments::recorded(home, agent_environments);
     let environments = environments.each();
-    let mut cleaned: Vec<&TrustFile> = Vec::new();
-    let mut warnings = Vec::new();
+    trust_files()
+        .into_iter()
+        .flat_map(|trust| trust.forget(&environments, &paths))
+        .collect()
+}
+
+/// Carry a moved repository's trust entries to its new paths: `moves`
+/// pairs each path it had with the one it has now, in the configs
+/// [`forget_repository_trust`] cleans; each failure comes back as a
+/// warning.
+pub fn move_repository_trust(
+    home: &Path,
+    moves: &[(PathBuf, PathBuf)],
+    agent_environments: &[BTreeMap<String, String>],
+) -> Vec<String> {
+    let environments = Environments::recorded(home, agent_environments);
+    let environments = environments.each();
+    trust_files()
+        .into_iter()
+        .flat_map(|trust| trust.rebase(&environments, moves))
+        .collect()
+}
+
+/// Each distinct trust file of the integrations Shoal knows.
+fn trust_files() -> Vec<&'static TrustFile> {
     let integrations = IntegrationKind::ALL
         .iter()
         .map(|kind| integration(*kind))
         .chain(ADDED.iter().map(|added| added.integration));
-    for integration in integrations {
-        let Some(trust) = integration.trust_file() else {
-            continue;
-        };
-        if !cleaned.iter().any(|done| std::ptr::eq(*done, trust)) {
-            warnings.extend(trust.forget(&environments, &paths));
-            cleaned.push(trust);
+    let mut files: Vec<&'static TrustFile> = Vec::new();
+    for trust in integrations.filter_map(|integration| integration.trust_file()) {
+        if !files.iter().any(|known| std::ptr::eq(*known, trust)) {
+            files.push(trust);
         }
     }
-    warnings
+    files
 }
 
 /// The directories a repository's removal stops trusting: its checkout, its
@@ -158,12 +208,26 @@ fn repository_paths(
         .chain(std::iter::once(&repository.workspaces_dir))
         .chain(workspace_paths.iter())
     {
-        let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_owned());
+        let path = trust_key(path);
         if !paths.contains(&path) {
             paths.push(path);
         }
     }
     paths
+}
+
+/// `path` as a trust entry spells it: canonical, as launches trust it, or
+/// for a path that is gone, such as a removed or moved directory, its
+/// parent's canonical path with its name.
+fn trust_key(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path)
+        .or_else(|error| {
+            let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
+                return Err(error);
+            };
+            std::fs::canonicalize(parent).map(|parent| parent.join(name))
+        })
+        .unwrap_or_else(|_| path.to_owned())
 }
 
 fn claude_config(environment: &AgentEnvironment) -> Result<std::path::PathBuf> {
