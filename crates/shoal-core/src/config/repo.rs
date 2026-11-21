@@ -110,7 +110,7 @@ pub struct RepoConfig {
     #[option(section)]
     pub gate: crate::config::gate::GateConfig,
     #[option(section)]
-    pub messages: MessagesConfig,
+    pub alerts: AlertsConfig,
     #[option(section)]
     pub merge: MergeConfig,
     #[option(section)]
@@ -464,7 +464,7 @@ impl RepoConfig {
         }
         self.containers.validate()?;
         self.cleanup.validate()?;
-        self.messages.validate()?;
+        self.alerts.validate()?;
         self.gate.validate()?;
         self.conflicts.validate()?;
         self.runner.validate()?;
@@ -720,20 +720,20 @@ impl ReviewRequirement {
     }
 }
 
-/// How agent messages that arrive in quick succession are held to reach the
-/// agent together.
+/// How alerts that arrive in quick succession are held to reach the agent
+/// together.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
-#[options(resolved = Messages)]
-pub struct MessagesConfig {
+#[options(resolved = Alerts)]
+pub struct AlertsConfig {
     #[option(default = 5)]
     pub settle_seconds: Option<u64>,
 }
 
-impl MessagesConfig {
+impl AlertsConfig {
     pub fn validate(&self) -> anyhow::Result<()> {
         if let Some(seconds) = self.settle_seconds {
-            anyhow::ensure!(seconds <= 60, "messages.settle_seconds must be at most 60");
+            anyhow::ensure!(seconds <= 60, "alerts.settle_seconds must be at most 60");
         }
         Ok(())
     }

@@ -696,11 +696,11 @@ max_wait_minutes = 30   # The longest an idle agent you are engaged with waits f
 
 See [sleep](../../../../../../docs/reference.md#sleep).
 
-### Messages
+### Alerts
 
 ```toml
-[messages]
-settle_seconds = 5   # At most 60; 0 delivers each message at once
+[alerts]
+settle_seconds = 5   # At most 60; 0 delivers each alert at once
 ```
 
 `settle_seconds` holds an agent's unread alerts until none has arrived for

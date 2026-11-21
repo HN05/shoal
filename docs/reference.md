@@ -6966,7 +6966,7 @@ and `shoal alert list` deliver the chat's alerts about the workspaces it
 [coordinates](#child-workspaces) and those Shoal sends it for the user; a Codex
 chat receives them after its next tool call or prompt.
 The hooks, `shoal watch` and the prompt that wakes Codex hold a workspace's or
-chat's unread alerts until none has arrived for [`[messages] settle_seconds`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#messages), and at
+chat's unread alerts until none has arrived for [`[alerts] settle_seconds`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#alerts), and at
 most six times as long after the first, so a run of them, such as several
 approval decisions, reaches the agent in one delivery; `shoal alert list`
 shows them at once, and 0 delivers each alert as it arrives.

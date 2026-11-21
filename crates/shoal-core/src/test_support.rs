@@ -207,7 +207,7 @@ pub fn global_config(text: &str) -> crate::config::Config {
 /// tracked setup it needs, so workspaces created here are ready at once. It
 /// delivers each agent message at once, so a test reads it without waiting
 /// for a run of them to settle.
-const BASE_CONFIG: &str = "setup.copy_ignored = false\nmessages.settle_seconds = 0\n";
+const BASE_CONFIG: &str = "setup.copy_ignored = false\nalerts.settle_seconds = 0\n";
 
 /// Write global config `text` after [`BASE_CONFIG`] for the state of `paths`.
 pub fn write_global_config(paths: &Paths, text: &str) {

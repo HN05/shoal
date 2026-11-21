@@ -57,7 +57,7 @@ async fn settling_workspace(temp: &tempfile::TempDir, manager: &Manager, settle:
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let config = format!("[messages]\nsettle_seconds = {settle}\n");
+    let config = format!("[alerts]\nsettle_seconds = {settle}\n");
     manager
         .write_local_config(&repo.id, Some(config))
         .await

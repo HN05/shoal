@@ -3313,7 +3313,7 @@ async fn settling_workspace(root: &tempfile::TempDir, manager: &Manager) -> Work
         .await
         .unwrap();
     manager
-        .write_local_config(&repo.id, Some("[messages]\nsettle_seconds = 60\n".into()))
+        .write_local_config(&repo.id, Some("[alerts]\nsettle_seconds = 60\n".into()))
         .await
         .unwrap();
     manager

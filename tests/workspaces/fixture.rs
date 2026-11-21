@@ -25,7 +25,7 @@ pub(crate) const NO_GRACE: &str = "cleanup.grace_minutes = 0\n";
 
 /// Global config delivering each agent message at once, so a test reads it
 /// without waiting for a run of them to settle.
-pub(crate) const UNSETTLED: &str = "messages.settle_seconds = 0\n";
+pub(crate) const UNSETTLED: &str = "alerts.settle_seconds = 0\n";
 
 /// The scripted forges serve Forgejo's API without answering which one they
 /// serve; `tests/forge.rs` covers asking.
