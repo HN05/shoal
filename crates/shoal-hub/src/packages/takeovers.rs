@@ -5,7 +5,7 @@
 //! retire its copy once it returns.
 use std::{
     collections::HashSet,
-    io::{BufReader, Write as _},
+    io::BufReader,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -66,15 +66,11 @@ impl Hub {
         };
         let mut incoming = calls.stream(fetch).await?;
         let path = file.to_owned();
-        let mut output = off_runtime::run(move || {
+        let output = off_runtime::run(move || {
             (std::fs::File::create_new(&path)).with_context(|| format!("create {}", path.display()))
         })
         .await?;
-        while let Some(bytes) = incoming.next().await? {
-            output =
-                off_runtime::run(move || Ok(output.write_all(&bytes).map(|()| output)?)).await?;
-        }
-        off_runtime::run(move || Ok(output.sync_all()?)).await
+        incoming.write_to(output).await.map(drop)
     }
 
     /// As the hub: what it keeps of the space `id`, whose machine is

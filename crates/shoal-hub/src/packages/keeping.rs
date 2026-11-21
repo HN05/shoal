@@ -5,7 +5,6 @@
 //! drops its space on that machine.
 use std::{
     collections::HashSet,
-    io::Write as _,
     path::{Path, PathBuf},
     sync::{
         Arc,
@@ -107,13 +106,7 @@ impl Hub {
             .with_context(|| format!("create a file in {}", directory.display()))
         })
         .await?;
-        let mut file = incoming.reopen()?;
-        let mut size = 0;
-        while let Some(bytes) = up.next().await? {
-            size += bytes.len() as u64;
-            file = off_runtime::run(move || Ok(file.write_all(&bytes).map(|()| file)?)).await?;
-        }
-        off_runtime::run(move || Ok(file.sync_all()?)).await?;
+        let size = up.write_to(incoming.reopen()?).await?;
         Ok((incoming, size))
     }
 

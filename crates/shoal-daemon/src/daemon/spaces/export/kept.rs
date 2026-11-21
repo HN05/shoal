@@ -14,7 +14,7 @@ use super::Prepared;
 use crate::{
     daemon::manager::Manager,
     model::Space,
-    transfer::{ExportedSpace, Sessions},
+    transfer::{ExportedSpace, SessionSource, Sessions},
 };
 
 impl Manager {
@@ -65,20 +65,7 @@ impl Manager {
         tokio::task::spawn_blocking(move || {
             let (sources, _) =
                 crate::transfer::session_sources(&settings, &environments, &sessions);
-            sources
-                .iter()
-                .map(|source| {
-                    let metadata = std::fs::metadata(&source.source).ok();
-                    let modified = (metadata.as_ref())
-                        .and_then(|metadata| metadata.modified().ok())
-                        .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok());
-                    json!([
-                        source.source,
-                        metadata.map(|metadata| metadata.len()),
-                        modified.map(|modified| modified.as_nanos()),
-                    ])
-                })
-                .collect()
+            file_states(&sources)
         })
         .await
         .map_err(Into::into)
@@ -114,6 +101,24 @@ impl Manager {
             "queued": queued,
         }))
     }
+}
+
+/// The path, size and modification time of each of `sources`' files, as
+/// they are now.
+fn file_states(sources: &[SessionSource]) -> Vec<serde_json::Value> {
+    (sources.iter())
+        .map(|source| {
+            let metadata = std::fs::metadata(&source.source).ok();
+            let modified = (metadata.as_ref())
+                .and_then(|metadata| metadata.modified().ok())
+                .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok());
+            json!([
+                source.source,
+                metadata.map(|metadata| metadata.len()),
+                modified.map(|modified| modified.as_nanos()),
+            ])
+        })
+        .collect()
 }
 
 #[cfg(test)]

@@ -7,7 +7,7 @@
 //! carries the opener's bytes the other way, under credit of their own.
 use std::{
     collections::HashMap,
-    io::Read as _,
+    io::{Read as _, Write as _},
     path::Path,
     sync::{
         Arc, Mutex, PoisonError,
@@ -356,6 +356,18 @@ impl Incoming {
         };
         self.taken += bytes.len() as u64;
         Ok(Some(bytes))
+    }
+
+    /// Write what comes until the stream ends to `file`, then sync it,
+    /// returning how many bytes came.
+    pub async fn write_to(&mut self, mut file: std::fs::File) -> Result<u64> {
+        let mut size = 0;
+        while let Some(bytes) = self.next().await? {
+            size += bytes.len() as u64;
+            file = off_runtime::run(move || Ok(file.write_all(&bytes).map(|()| file)?)).await?;
+        }
+        off_runtime::run(move || Ok(file.sync_all()?)).await?;
+        Ok(size)
     }
 
     /// Grant the writer the bytes taken again once they come to half the
