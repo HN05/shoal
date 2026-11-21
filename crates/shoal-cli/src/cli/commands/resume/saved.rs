@@ -68,7 +68,7 @@ pub(in crate::cli::commands) async fn discardable(
 async fn stopped_work(ctx: &Context, discard: bool) -> Result<Vec<(Space, Saved)>> {
     let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let mut stopped = Vec::new();
-    for space in crate::cli::scoping::Scoping::inherited(&ctx.paths.state).reached_below(spaces) {
+    for space in crate::scoping::Scoping::inherited(&ctx.paths.state).reached_below(spaces) {
         if space.done() && !discard {
             continue;
         }

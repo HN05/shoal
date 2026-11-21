@@ -2,7 +2,7 @@
 use anyhow::{Result, ensure};
 
 use crate::{
-    cli::{client, context::Context, scoping::Scoping, ui},
+    cli::{client, context::Context, ui},
     forge::{
         ForgeRepo,
         items::{
@@ -13,6 +13,7 @@ use crate::{
     model::Repository,
     protocol::ItemContext,
     repository,
+    scoping::Scoping,
 };
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::space_names::SpaceSelector;

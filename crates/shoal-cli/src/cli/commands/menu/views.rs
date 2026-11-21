@@ -1,6 +1,6 @@
 //! The picker's views, with the keys each binds.
 use super::keys::Action;
-use crate::cli::{scoping::Scoping, ui::PickerView};
+use crate::{cli::ui::PickerView, scoping::Scoping};
 
 /// What the picker lists: what needs the user, the work going on, or what
 /// the daemon saw.

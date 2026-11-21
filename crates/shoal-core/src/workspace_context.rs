@@ -1,8 +1,8 @@
 //! Noninteractive workspace selection over a captured directory context.
 use std::path::Path;
 
-use crate::cli::scoping::Scoping;
 use crate::model::Workspace;
+use crate::scoping::Scoping;
 use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Clone, Copy)]

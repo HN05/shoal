@@ -1,5 +1,5 @@
 //! Whether a command runs in the user's own terminal or in a process that
-//! inherits a space's scope, as the CLI reads it from its environment.
+//! inherits a space's scope, as the process reads it from its environment.
 use std::path::Path;
 
 use crate::model::{Space, Spaces};

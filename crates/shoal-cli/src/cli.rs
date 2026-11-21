@@ -16,13 +16,11 @@ pub mod output;
 mod progress;
 mod reach;
 pub mod recent;
-pub mod scoping;
 pub mod shell;
 mod supervision;
 mod terminal;
 pub mod ui;
 pub mod usage;
-pub mod workspace_context;
 
 use std::{ffi::OsString, path::PathBuf};
 

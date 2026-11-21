@@ -17,10 +17,10 @@ use crate::{
         list_status::ListStatus,
         output::{Palette, Style},
         recent,
-        scoping::Scoping,
-        workspace_context::{ScopeOrder, WorkspaceContext},
     },
     model::Workspace,
+    scoping::Scoping,
+    workspace_context::{ScopeOrder, WorkspaceContext},
 };
 use shoal_protocol::hub::directory::Offered;
 use shoal_protocol::space_names::SpaceSelector;

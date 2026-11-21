@@ -48,7 +48,7 @@ pub(in crate::cli::commands) async fn of(
         Some(selectors) => (selectors.iter())
             .filter_map(|selector| spaces.find(selector).map(|space| space.id))
             .collect(),
-        None => (crate::cli::scoping::Scoping::inherited(&ctx.paths.state).reached_below(spaces))
+        None => (crate::scoping::Scoping::inherited(&ctx.paths.state).reached_below(spaces))
             .into_iter()
             .map(|space| space.id)
             .collect(),

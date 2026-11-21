@@ -11,13 +11,13 @@ use crate::{
         client,
         context::Context,
         output::{Palette, Style},
-        scoping::Scoping,
         ui,
-        workspace_context::{ScopeOrder, WorkspaceContext},
     },
     client::connection::CommandPaths,
     config::{Config, edit::Change, options::Entry, resolve::Stack},
     protocol::ConfigTarget,
+    scoping::Scoping,
+    workspace_context::{ScopeOrder, WorkspaceContext},
 };
 use shoal_protocol::space_names::SpaceSelector;
 

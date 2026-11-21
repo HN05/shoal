@@ -22,11 +22,11 @@ use crate::{
         list_status::{ListStatus, ListStatusStyle},
         output::Palette,
         recent,
-        scoping::Scoping,
-        workspace_context::{ScopeOrder, WorkspaceContext},
     },
     client::connection::CommandPaths,
     model::{Chat, Workspace},
+    scoping::Scoping,
+    workspace_context::{ScopeOrder, WorkspaceContext},
 };
 use shoal_protocol::hub::directory::Offered;
 use shoal_protocol::saved::SavedSummary;

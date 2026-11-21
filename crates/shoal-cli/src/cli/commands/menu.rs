@@ -20,9 +20,9 @@ use crate::{
         Command,
         context::Context,
         internal,
-        scoping::Scoping,
         ui::{self, Entries, ViewPicker},
     },
+    scoping::Scoping,
     workers::Worker,
 };
 use shoal_protocol::space_names::SpaceSelector;

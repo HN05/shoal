@@ -18,9 +18,7 @@ use crate::{
     cli::{
         agents,
         availability::{self, Fit, Need},
-        scoping::Scoping,
         ui,
-        workspace_context::{ScopeOrder, WorkspaceContext},
     },
     client::connection::CommandPaths,
     client::leases,
@@ -35,6 +33,8 @@ use crate::{
     model::{Chat, Workspace},
     paths::Paths,
     protocol::ConfigTarget,
+    scoping::Scoping,
+    workspace_context::{ScopeOrder, WorkspaceContext},
 };
 use shoal_ids::space_ids::SpaceNumber;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};

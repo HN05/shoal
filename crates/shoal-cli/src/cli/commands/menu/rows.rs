@@ -15,11 +15,11 @@ use crate::{
     cli::{
         context::Context,
         output::{Palette, Style},
-        scoping::Scoping,
         ui::{self, Entries, WidthLimit},
     },
     client::alerts,
     forge::items::reference::ItemRef,
+    scoping::Scoping,
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::alerts::Alert;

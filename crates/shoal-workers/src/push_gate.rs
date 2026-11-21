@@ -13,7 +13,12 @@ use std::io::{BufRead as _, Write as _};
 use anyhow::{Context as _, Result, bail};
 
 use crate::{
-    client::approvals, client::connection::CommandPaths, git, model::Workspace, tools::Tool,
+    client::approvals,
+    client::connection::CommandPaths,
+    git,
+    scoping::Scoping,
+    tools::Tool,
+    workspace_context::{ScopeOrder, WorkspaceContext},
 };
 use shoal_protocol::{
     approvals::PushSpecification, links::PushOutcome, space_names::SpaceSelector,
@@ -283,14 +288,9 @@ fn one_line(message: &str) -> String {
 async fn workspace(paths: &CommandPaths) -> Result<SpaceSelector> {
     let workspaces = crate::client::spaces::list(paths).await?.into_workspaces();
     let cwd = crate::fsutil::current_dir::current_directory()?;
-    let current = cwd.and_then(|cwd| Workspace::innermost(&workspaces, &cwd));
-    let own = || {
-        crate::env::workspace_scope()
-            .then(|| workspaces.first())
-            .flatten()
-    };
-    let workspace = current
-        .or_else(own)
+    let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
+    let workspace = context
+        .resolve(None, Scoping::of_workspace(), ScopeOrder::AfterDirectory)
         .context("the push comes from no workspace")?;
     Ok(SpaceSelector::id(&workspace.id))
 }

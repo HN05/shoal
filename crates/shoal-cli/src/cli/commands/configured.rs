@@ -14,14 +14,14 @@ use crate::{
         agents, client,
         context::Context,
         recent,
-        scoping::Scoping,
         ui::{self, Fallback},
-        workspace_context::{ScopeOrder, WorkspaceContext},
     },
     client::connection::CommandPaths,
     config::{Config, named_commands::Commands, repo::ConfigLayers, resolve::Stack},
     model::Workspace,
     protocol::ConfigTarget,
+    scoping::Scoping,
+    workspace_context::{ScopeOrder, WorkspaceContext},
 };
 
 pub(super) async fn list(ctx: &Context, workspace: Option<SpaceSelector>) -> Result<i32> {

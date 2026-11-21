@@ -82,7 +82,7 @@ pub(super) async fn spaces(
 /// The spaces of `spaces` that `--all` selects: every one the caller's
 /// scope reaches but its own.
 fn reached(ctx: &Context, spaces: Spaces) -> Vec<Space> {
-    crate::cli::scoping::Scoping::inherited(&ctx.paths.state).reached_below(spaces)
+    crate::scoping::Scoping::inherited(&ctx.paths.state).reached_below(spaces)
 }
 
 /// The spaces of `spaces` whose agent among `agents` is named `agent`, and

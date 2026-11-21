@@ -34,6 +34,7 @@ pub mod releases;
 pub mod removal;
 pub mod repository;
 pub mod reviews;
+pub mod scoping;
 pub mod secrets;
 pub mod service;
 pub mod sessions;
@@ -49,6 +50,7 @@ pub mod transfer;
 pub mod triggers;
 pub mod update;
 pub mod workers;
+pub mod workspace_context;
 
 use shoal_forge_types as forge;
 use shoal_protocol::time;

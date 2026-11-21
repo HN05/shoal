@@ -22,7 +22,8 @@ pub mod settings;
 use shoal_client as client;
 use shoal_core::{
     agent_git, agents, ai, caches, config, env, fsutil, git, hooks, installed, paths, process,
-    releases, repository, sessions, shell, start_plan, terminal, tmp_dirs, tools, workers,
+    releases, repository, scoping, sessions, shell, start_plan, terminal, tmp_dirs, tools, workers,
+    workspace_context,
 };
 use shoal_forge_types as forge;
 use shoal_protocol::{agent, model, protocol, state, time};
