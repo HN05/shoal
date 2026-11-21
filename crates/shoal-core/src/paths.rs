@@ -136,7 +136,7 @@ fn refuse_user_state(state: &Path) -> Result<()> {
 }
 
 /// Whether `a` and `b` name one directory, through symlinks when both exist.
-fn same_directory(a: &Path, b: &Path) -> bool {
+pub(crate) fn same_directory(a: &Path, b: &Path) -> bool {
     a == b
         || matches!(
             (fs::canonicalize(a), fs::canonicalize(b)),

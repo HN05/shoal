@@ -11,7 +11,7 @@ use super::{
 
 pub(crate) mod holds;
 use crate::{
-    daemon::{log, notifications::AlertKind, store},
+    daemon::{notifications::AlertKind, store},
     git,
     model::Repository,
     time::UnixTime,
@@ -57,39 +57,11 @@ impl Manager {
         // Read before the removal deletes the checkout with its remotes.
         let fork = fork_url(&repo.path).await?;
         if let Some(removal) = self.remove_finished_contribution(&repo.id).await? {
-            self.forget_trust(repo, &removal.workspace_paths).await;
             let message = removal_notice(repo, &removal.path, fork.as_deref());
             self.notify(None, AlertKind::RepositoryRemoved, message)
                 .await;
         }
         Ok(())
-    }
-
-    /// Remove the agents' trust entries for the removed repository, as
-    /// `repo rm` does: in the configs the daemon's environment names and in
-    /// those its tracked agents' `[env]` put them, which it then forgets. A
-    /// development build leaves them to the installed Shoal.
-    async fn forget_trust(&self, repo: &Repository, workspace_paths: &[std::path::PathBuf]) {
-        if !crate::build::changes_user_files() {
-            return;
-        }
-        let name = repo.display_name();
-        let environments = self.agent_environments(&repo.id).await;
-        if let Err(error) = &environments {
-            log!("contribution {name}: agent configs unknown: {error:#}");
-        }
-        let configured = environments.as_deref().unwrap_or_default();
-        let home = &self.paths.home;
-        let warnings =
-            crate::agents::forget_repository_trust(home, repo, workspace_paths, configured);
-        for warning in warnings {
-            log!("contribution {name}: {warning}");
-        }
-        if environments.is_ok()
-            && let Err(error) = self.forget_agent_environments(&repo.id).await
-        {
-            log!("contribution {name}: agent configs kept: {error:#}");
-        }
     }
 
     /// Whether the contribution's checkout holds work no remote keeps now,

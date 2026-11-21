@@ -118,6 +118,9 @@ states!(AlertKind {
     KeepAwakeFailed => "keep_awake_failed",
     /// The daemon removed a contribution repository nothing was left of.
     RepositoryRemoved => "repository_removed",
+    /// Removing or moving a repository left agents' trust entries for its
+    /// old directories, or did not trust its new ones.
+    TrustLeft => "trust_left",
     /// An API failure ended an agent's turn and Shoal does not retry it.
     TurnFailed => "turn_failed",
     /// An agent's hook could not report its turn state.

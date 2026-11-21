@@ -8,3 +8,12 @@ pub fn changes_user_files() -> bool {
     !cfg!(debug_assertions)
         || std::env::var_os(shoal_protocol::env::DEV_USER_FILES).is_some_and(|value| value == "1")
 }
+
+/// Whether this build may change the files under `home`: the user's own
+/// where [`changes_user_files`], and another home's, such as a test's
+/// temporary one, always.
+pub fn changes_files_under(home: &std::path::Path) -> bool {
+    changes_user_files()
+        || crate::fsutil::home::account_home()
+            .is_some_and(|user| !crate::paths::same_directory(home, &user))
+}

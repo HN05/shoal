@@ -1580,10 +1580,13 @@ and app use `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`). For tracked
 agents, a `CLAUDE_CONFIG_DIR` or `CODEX_HOME` set in the space's `[env]` takes
 precedence over Shoal's environment; desktop apps use Shoal's. One set
 in the tool's [`[agents.<name>]` `env`](#agents) takes precedence over both. A trust
-update failure warns and still launches the agent. Removing a repository removes
-its trust entries from these files, and from those its agents and chats ran with,
-while preserving other project settings. When the daemon removes a
-[contribution](#contributions), Shoal's environment is the daemon's.
+update failure warns and still launches the agent. Removing a repository, by any
+client or as a [contribution](#contributions), removes its trust entries from the
+default files and from those its agents, chats and app handoffs ran with, including
+a `CLAUDE_CONFIG_DIR` or `CODEX_HOME` they inherited, while preserving other project
+settings; moving it carries each entry to the new path. An entry Shoal cannot
+change is left in place with a `trust_left` alert, and the removal or move still
+completes.
 
 `shoal edit [workspace] -- <args>` runs the `edit` command, such as
 `edit = ["zed", "{path}"]`. Without one it runs `$VISUAL`, otherwise `$EDITOR`, split on whitespace,
@@ -3968,8 +3971,7 @@ one stops and restores as their agents do, and the move deletes the `.tmp`,
 refusing while an import reads a package into that root. The move is recorded before anything moves; a failed or
 interrupted move rolls back, or finishes once the directory has arrived, and the
 repository refuses other changes until the next `repo move` or daemon start
-completes it. Agent trust for the old paths is removed, and the new paths are
-trusted for the agents their workspaces keep for `shoal resume`.
+completes it. Agent trust entries for the old paths move to the new ones.
 
 ### Merge into the default branch
 

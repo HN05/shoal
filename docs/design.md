@@ -1205,8 +1205,9 @@ move is recorded before anything moves, then the records switch and Git's
 worktree links are repaired, so a stopped daemon finishes a completed move and
 rolls back an incomplete one, deleting only directories with their recorded identity. Checkouts and workspaces outside it stay.
 `repo move` stops the commands and agents running there as `shoal stop`
-does and queues the agents' restores after the move, trusting the new paths
-for them: a stop keeps sessions, which resume by ID from any directory. The
+does and queues the agents' restores after the move, whose trust entries the
+daemon carries to the new paths: a stop keeps sessions, which resume by ID from
+any directory. The
 chats without a repository, which run in `root_dir`, go with the root: their
 agents stop the same way, their temporary directories, attached files and kept session files move
 into the directory that holds the repositories, and their records name the
@@ -2830,14 +2831,17 @@ CLI instructions or a first-message prefix for Happy Codex; desktop handoffs car
 Agents always start as CLI agents; only `shoal open --app` hands a space to
 a desktop app, in the directory its agent works in. The Claude app opens through the `claude://` link that `claude --desktop`
 opens, since that command refuses a CLI signed in through an API token or gateway.
-Successful repository removal drops those trust fields for the removed workspace
-directory and worktrees, in Shoal's user config and in each one its spaces'
-`[env]` gave a tracked agent, while preserving other project settings. The daemon
-keeps each location an agent ran with, inherited variables included, from when the
-CLI trusts its space there, since a renamed or removed space, or a changed `[env]`,
-no longer resolves to it. The CLI reads
-the locations once removal has succeeded, when no agent can add one, and the
-daemon forgets them after cleanup.
+The daemon's repository removal and move, whoever requests them, update those
+trust fields through one operation: a successful removal drops them for the
+checkout, the workspaces directory and the worktrees, and a move carries each one a
+moved path held to its new path, while preserving other project settings. It edits
+the tools' default configs and each location an agent ran with, which the daemon
+keeps, inherited variables included, from when the CLI trusts its space there, since
+a renamed or removed space, or a changed `[env]`, no longer resolves to
+it; it never reads a caller's environment. A removal forgets the locations after
+cleanup, when no agent can add one. Failures are logged and alert the user, and
+never fail the removal or move. A development build changes only a home that is
+not the user's own.
 
 Issue-based workspace opening requires an open issue and persists its canonical
 URL before tracked setup or agent launch. Reopening first follows the issue

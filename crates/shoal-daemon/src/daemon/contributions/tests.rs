@@ -144,7 +144,7 @@ async fn a_contribution_goes_once_its_workspaces_and_checkpoints_are_gone() {
     let (root, manager) = manager().await;
     let repo = contribution(&manager, root.path()).await;
     let checkout = repo.path.clone();
-    // Removal forgets the checkout's trust as `repo rm` does.
+    // Removal forgets the checkout's trust.
     let claude = manager.paths.home.join(".claude.json");
     let trusted = checkout.clone();
     let projects = serde_json::json!({"projects": {trusted.to_str().unwrap(): {"hasTrustDialogAccepted": true}}});
@@ -197,10 +197,8 @@ async fn a_contribution_goes_once_its_workspaces_and_checkpoints_are_gone() {
     manager.sweep_contributions().await.unwrap();
     assert!(!registered(&manager, &repo).await);
     assert!(!checkout.exists());
-    // Debug builds, such as this test's, leave user files alone unless told.
     let config = std::fs::read_to_string(&claude).unwrap();
-    let kept = config.contains(trusted.to_str().unwrap());
-    assert_eq!(kept, !crate::build::changes_user_files(), "{config}");
+    assert!(!config.contains(trusted.to_str().unwrap()), "{config}");
     let notifications = manager.notifications.list(false, 10).await.unwrap();
     assert!(
         notifications

@@ -1,6 +1,7 @@
 //! Moving repository directories into a new `root_dir`. Intent is recorded
 //! before anything moves, so an interrupted move finishes or rolls back.
 use super::{
+    agent_trust::TrustChange,
     gates::GuardMode,
     manager::Manager,
     registry,
@@ -536,7 +537,30 @@ impl Manager {
         // resolve to it, and repair reconnects them only once it is gone.
         remove_recorded(&intent.source, &intent.source_id)?;
         self.reconnect_worktrees(id).await?;
-        self.close_move(&intent).await
+        self.close_move(&intent).await?;
+        self.move_agent_trust(&intent).await;
+        Ok(())
+    }
+
+    /// Carry the agents' trust entries for the paths the finished move of
+    /// `intent` took to the paths they have now.
+    async fn move_agent_trust(&self, intent: &Intent) {
+        let records = async {
+            let repo = self.repository(&intent.repository_id).await?;
+            let workspaces = self.repository_workspaces(&repo.id).await?;
+            anyhow::Ok((repo, workspaces))
+        };
+        match records.await {
+            Ok((repo, workspaces)) => {
+                let moves = moved_paths(intent, &repo, &workspaces);
+                self.update_agent_trust(&repo, TrustChange::Moved(moves))
+                    .await;
+            }
+            Err(error) => log!(
+                "agent trust not moved to {}: {error:#}",
+                intent.destination.display()
+            ),
+        }
     }
 
     /// Repair Git's links between the checkout and its present worktrees,
@@ -630,6 +654,34 @@ impl Manager {
             })
             .await
     }
+}
+
+/// The paths of `repo` and its `workspaces` that the move of `intent` took
+/// from its source, each as it was there with the one it has now.
+fn moved_paths(
+    intent: &Intent,
+    repo: &Repository,
+    workspaces: &[Workspace],
+) -> Vec<(PathBuf, PathBuf)> {
+    let paths = [&repo.path, &repo.workspaces_dir]
+        .into_iter()
+        .chain(workspaces.iter().map(|workspace| &workspace.path));
+    let mut moves = Vec::new();
+    for path in paths {
+        let Ok(inside) = path.strip_prefix(&intent.destination) else {
+            continue;
+        };
+        // Joining nothing would add a trailing separator.
+        let from = match inside.as_os_str().is_empty() {
+            true => intent.source.clone(),
+            false => intent.source.join(inside),
+        };
+        let moved = (from, path.clone());
+        if !moves.contains(&moved) {
+            moves.push(moved);
+        }
+    }
+    moves
 }
 
 /// Whether the repository's directory lies outside `root`.

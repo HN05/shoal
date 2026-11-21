@@ -2,6 +2,7 @@ use super::*;
 use crate::daemon::test_support;
 use crate::daemon::workspace::creation::WorkspaceSource;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn removal_waits_for_queued_workspace_creation() {

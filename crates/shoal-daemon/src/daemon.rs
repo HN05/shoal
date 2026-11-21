@@ -9,6 +9,7 @@ pub mod access;
 pub mod agent_messages;
 pub(crate) mod agent_queue;
 pub(crate) mod agent_state;
+mod agent_trust;
 mod agent_turns;
 pub(crate) mod agents;
 mod alerts;
