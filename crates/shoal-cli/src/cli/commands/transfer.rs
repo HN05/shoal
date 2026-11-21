@@ -72,13 +72,12 @@ async fn follow(ctx: &Context, order: MoveOrder) -> Result<Moved> {
         _ => Lines::Command,
     };
     let env = crate::env::without_secrets();
-    // The move runs on the machine of its spaces, where cancelling it goes.
-    let first = (order.spaces.first()).map(SpaceSelector::id);
+    let space = runs_in(ctx, &order).await?;
     let (id, mut following) = match Following::start_move(&ctx.paths, order, env).await? {
         MoveStarted::Following(id, following) => (id, following),
         MoveStarted::AfterTurn(deferred) => return Ok(Moved::AfterTurn(deferred)),
     };
-    let operation = OperationRef { id, space: first };
+    let operation = OperationRef { id, space };
     let shown = (&operation, lines);
     let ended = super::operations::show(ctx, shown, async || following.next().await).await?;
     match ended {
@@ -86,6 +85,16 @@ async fn follow(ctx: &Context, order: MoveOrder) -> Result<Moved> {
         Ended::Failed(Failure::Unconfirmed { question }) => Ok(Moved::Asks(question)),
         Ended::Failed(failure) => Err(crate::operations::error(failure)),
     }
+}
+
+/// The space whose machine runs the move `order`, where cancelling it
+/// goes: its first space's, or none for this machine, which reads another
+/// machine's space into a file here.
+async fn runs_in(ctx: &Context, order: &MoveOrder) -> Result<Option<SpaceSelector>> {
+    if shoal_workers::moves::runs_elsewhere(&ctx.paths, order).await? {
+        return Ok(None);
+    }
+    Ok((order.spaces.first()).map(SpaceSelector::id))
 }
 
 /// Report that the move starts once the turn of the agent it stops,
