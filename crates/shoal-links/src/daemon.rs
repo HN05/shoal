@@ -142,8 +142,9 @@ pub trait Spaces: Send + Sync {
     /// The registered repositories.
     fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>>;
 
-    /// The agent a request from `caller` comes from, which proposes for it.
-    fn caller_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<Agent>>;
+    /// The agent whose execution a request from `caller` runs in, which
+    /// proposes for it; none for one from outside an agent's execution.
+    fn proposing_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<Agent>>;
 
     /// Every space present on this machine.
     fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>>;

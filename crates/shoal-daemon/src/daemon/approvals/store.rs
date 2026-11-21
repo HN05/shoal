@@ -515,4 +515,13 @@ impl Manager {
             })
             .await
     }
+
+    /// The approval request numbered `number`, if any, which tests read.
+    #[cfg(test)]
+    pub(crate) async fn approval_request(
+        &self,
+        number: ItemNumber,
+    ) -> Result<Option<ApprovalRequest>> {
+        self.store.read(move |db| by_number(db, number)).await
+    }
 }

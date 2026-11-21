@@ -141,7 +141,7 @@ impl Spaces for Manager {
         Box::pin(Manager::repositories(self))
     }
 
-    fn caller_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<Agent>> {
+    fn proposing_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<Agent>> {
         Box::pin(async move { self.agent_name(caller.execution_id()?).await })
     }
 

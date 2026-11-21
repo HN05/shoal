@@ -95,7 +95,7 @@ pub async fn proposer(
 ) -> Option<Proposer> {
     let caller = caller?;
     Some(Proposer {
-        agent: daemon.caller_agent(caller).await,
+        agent: daemon.proposing_agent(caller).await,
     })
 }
 

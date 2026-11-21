@@ -160,7 +160,7 @@ impl Spaces for StandIn {
         Box::pin(async { Ok(Vec::new()) })
     }
 
-    fn caller_agent<'a>(&'a self, _: &'a Caller) -> BoxFuture<'a, Option<Agent>> {
+    fn proposing_agent<'a>(&'a self, _: &'a Caller) -> BoxFuture<'a, Option<Agent>> {
         Box::pin(async { None })
     }
 
