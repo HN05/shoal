@@ -19,6 +19,7 @@ use shoal_forge_types::{
         link::{ItemKind, Selection},
         reference::ItemRef,
     },
+    numbers::PullNumber,
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
@@ -30,7 +31,7 @@ use shoal_protocol::{
     protocol::operations::OperationSpec,
     space_names::SpaceSelector,
 };
-use shoal_refs::CommitId;
+use shoal_refs::{BranchName, CommitId};
 use tokio::sync::watch;
 
 use crate::{
@@ -100,7 +101,7 @@ impl Spaces for StandIn {
         Box::pin(async { bail!(NOT_HERE) })
     }
 
-    fn global_settings(&self) -> BoxFuture<'_, Result<Effective>> {
+    fn settings_in<'a>(&'a self, _: Option<&'a RepositoryId>) -> BoxFuture<'a, Result<Effective>> {
         Box::pin(async { bail!(NOT_HERE) })
     }
 
@@ -158,6 +159,23 @@ impl Spaces for StandIn {
 
     fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>> {
         Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn branch_owner<'a>(
+        &'a self,
+        _: &'a RepositoryId,
+        _: &'a BranchName,
+    ) -> BoxFuture<'a, Result<Option<SpaceId>>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn pull_workspace<'a>(
+        &'a self,
+        _: &'a RepositoryId,
+        _: &'a ItemRef,
+        _: PullNumber,
+    ) -> BoxFuture<'a, Result<Option<Workspace>>> {
+        Box::pin(async { Ok(None) })
     }
 
     fn proposing_agent<'a>(&'a self, _: &'a Caller) -> BoxFuture<'a, Option<Agent>> {
@@ -267,6 +285,20 @@ impl Approvals for StandIn {
 }
 
 impl Reviews for StandIn {
+    fn merge_review_required(&self, _: &Effective, _: Option<&Caller>) -> bool {
+        false
+    }
+
+    fn require_merge_review<'a>(
+        &'a self,
+        _: &'a Workspace,
+        _: &'a CommitId,
+        _: &'a ItemRef,
+        _: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
     fn pr_review_required(&self, _: &Effective, _: Option<&Caller>) -> bool {
         false
     }

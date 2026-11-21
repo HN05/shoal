@@ -12,6 +12,7 @@ pub mod linked;
 mod linking;
 mod memories;
 mod merge_path;
+mod merge_review;
 pub mod merge_warning;
 pub mod place;
 pub mod pr;

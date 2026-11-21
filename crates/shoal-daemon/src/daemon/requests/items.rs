@@ -163,7 +163,14 @@ pub(super) async fn handle(
             // A scoped caller's merge passed its gate in its scope, before
             // its permission.
             if caller.is_none() {
-                (manager.gate_pull_merge(&target, item.clone(), &mut action, None)).await?;
+                (manager.links.gate_pull_merge(
+                    &**manager,
+                    &target,
+                    item.clone(),
+                    &mut action,
+                    None,
+                ))
+                .await?;
             }
             Body::Item(match confirmed {
                 Some(confirmed) => {
@@ -182,7 +189,15 @@ pub(super) async fn handle(
         }
         ItemMethod::MergeWarning { target, item } => {
             // Before the question, which a merge its gate refuses never asks.
-            (manager.require_pull_review(&target, item.clone(), None, None, caller)).await?;
+            (manager.links.require_pull_review(
+                &**manager,
+                &target,
+                item.clone(),
+                None,
+                None,
+                caller,
+            ))
+            .await?;
             Body::MergeWarning(
                 manager
                     .links
@@ -323,7 +338,14 @@ impl Scoped for ItemMethod {
                         .links
                         .bind_merge(manager, target, item.clone(), action, caller);
                 let subject = subject.await?;
-                (manager.gate_pull_merge(target, item.clone(), action, Some(caller))).await?;
+                (manager.links.gate_pull_merge(
+                    manager,
+                    target,
+                    item.clone(),
+                    action,
+                    Some(caller),
+                ))
+                .await?;
                 let merge = permitted_actions::Action::new(PermissionKey::Merge, subject)
                     .in_repository(repository);
                 manager.authorize_action(Some(caller), merge).await?;

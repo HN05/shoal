@@ -11,14 +11,18 @@ use crate::{
     agent::Agent,
     config::Effective,
     daemon::{manager::Manager, scope::Caller},
-    forge::items::{
-        link::{ItemKind, Selection},
-        reference::ItemRef,
+    forge::{
+        items::{
+            link::{ItemKind, Selection},
+            reference::ItemRef,
+        },
+        numbers::PullNumber,
     },
     model::{ConflictCheck, Repository, Selected, Space, Workspace},
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_refs::BranchName;
 
 impl Spaces for Manager {
     fn repository<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Repository>> {
@@ -70,8 +74,8 @@ impl Spaces for Manager {
         Box::pin(Manager::repository_settings(self, id))
     }
 
-    fn global_settings(&self) -> BoxFuture<'_, Result<Effective>> {
-        Box::pin(Manager::space_settings_in(self, None))
+    fn settings_in<'a>(&'a self, id: Option<&'a RepositoryId>) -> BoxFuture<'a, Result<Effective>> {
+        Box::pin(Manager::space_settings_in(self, id))
     }
 
     fn workspace_settings<'a>(
@@ -139,6 +143,23 @@ impl Spaces for Manager {
 
     fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>> {
         Box::pin(Manager::repositories(self))
+    }
+
+    fn branch_owner<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+        branch: &'a BranchName,
+    ) -> BoxFuture<'a, Result<Option<SpaceId>>> {
+        Box::pin(Manager::branch_owner_in(self, id, branch))
+    }
+
+    fn pull_workspace<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+        url: &'a ItemRef,
+        number: PullNumber,
+    ) -> BoxFuture<'a, Result<Option<Workspace>>> {
+        Box::pin(Manager::pull_workspace(self, id, url, number))
     }
 
     fn proposing_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<Agent>> {

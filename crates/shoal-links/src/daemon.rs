@@ -26,6 +26,7 @@ use shoal_forge_types::{
         link::{ItemKind, Selection},
         reference::ItemRef,
     },
+    numbers::PullNumber,
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
@@ -37,7 +38,7 @@ use shoal_protocol::{
     protocol::operations::OperationSpec,
     space_names::SpaceSelector,
 };
-use shoal_refs::CommitId;
+use shoal_refs::{BranchName, CommitId};
 use tokio::sync::watch;
 
 use crate::space::LinkSpace;
@@ -85,9 +86,9 @@ pub trait Spaces: Send + Sync {
     /// its checkout.
     fn repository_settings<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Effective>>;
 
-    /// The global config's settings alone, for a place outside every
-    /// registered repository.
-    fn global_settings(&self) -> BoxFuture<'_, Result<Effective>>;
+    /// The settings of a place outside a worktree in the repository `id`,
+    /// or the global config's alone without one.
+    fn settings_in<'a>(&'a self, id: Option<&'a RepositoryId>) -> BoxFuture<'a, Result<Effective>>;
 
     /// The settings of `workspace`, read from its worktree.
     fn workspace_settings<'a>(
@@ -141,6 +142,22 @@ pub trait Spaces: Send + Sync {
 
     /// The registered repositories.
     fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>>;
+
+    /// The workspace of the repository `id` that owns `branch`.
+    fn branch_owner<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+        branch: &'a BranchName,
+    ) -> BoxFuture<'a, Result<Option<SpaceId>>>;
+
+    /// The workspace of the repository `id` at a commit made for, or
+    /// linked to, the fork's PR `url` numbered `number`.
+    fn pull_workspace<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+        url: &'a ItemRef,
+        number: PullNumber,
+    ) -> BoxFuture<'a, Result<Option<Workspace>>>;
 
     /// The agent whose execution a request from `caller` runs in, which
     /// proposes for it; none for one from outside an agent's execution.
@@ -264,6 +281,21 @@ pub trait Approvals: Send + Sync {
 /// The local reviews a new PR waits for, as `[review] require_for_pr`
 /// asks.
 pub trait Reviews: Send + Sync {
+    /// Whether `settings` require a review of a PR merge from `caller`.
+    fn merge_review_required(&self, settings: &Effective, caller: Option<&Caller>) -> bool;
+
+    /// Refuse merging the PR `url`, which `owner` reviews, at `head` for
+    /// `caller` until a finished review of `owner` covers it with every
+    /// finding resolved, starting one where that review would cover `head`
+    /// and `caller`'s scope reaches `owner`.
+    fn require_merge_review<'a>(
+        &'a self,
+        owner: &'a Workspace,
+        head: &'a CommitId,
+        url: &'a ItemRef,
+        caller: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<()>>;
+
     /// Whether `settings` require a review of a new PR from `caller`.
     fn pr_review_required(&self, settings: &Effective, caller: Option<&Caller>) -> bool;
 

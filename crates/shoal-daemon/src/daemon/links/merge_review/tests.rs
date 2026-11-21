@@ -1,13 +1,21 @@
 use std::sync::Arc;
 
-use super::*;
+use anyhow::Result;
+use shoal_refs::CommitId;
+
 use crate::{
     daemon::{
-        scope::Scoped,
+        manager::Manager,
+        scope::{Caller, Scoped},
         test_support::{configure, git, manager, repository},
     },
-    forge::items::action::MergeMethod,
-    protocol::{ItemContext, ItemMethod},
+    forge::items::{
+        action::{Action, MergeMethod},
+        link::ItemKind,
+        reference::ItemInput,
+    },
+    model::Workspace,
+    protocol::{ItemContext, ItemMethod, RepoTarget},
     reviews::{ReviewTarget, output::ReviewerOutput},
 };
 use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
@@ -102,8 +110,8 @@ impl Fixture {
     ) -> Result<Option<CommitId>> {
         let mut merge = merge(head);
         let pull = Some("1".parse().unwrap());
-        (self.manager)
-            .gate_pull_merge(&self.context(), pull, &mut merge, caller)
+        (self.manager.links)
+            .gate_pull_merge(&*self.manager, &self.context(), pull, &mut merge, caller)
             .await?;
         Ok(merge.merge_head().cloned())
     }
@@ -217,9 +225,10 @@ async fn all_holds_the_users_pr_merge_and_binds_it_to_the_reviewed_head() {
     let context = f.context();
     let pull = || Some("1".parse().unwrap());
     // The warning the question shows comes after the gate too.
-    let warning = f
-        .manager
-        .require_pull_review(&context, pull(), None, None, None);
+    let warning =
+        f.manager
+            .links
+            .require_pull_review(&*f.manager, &context, pull(), None, None, None);
     warning.await.unwrap_err();
     f.gate(None, None).await.unwrap_err();
     f.reviewed().await;
@@ -278,7 +287,8 @@ async fn a_caller_outside_the_owners_tree_queues_no_review_there() {
     let caller = Caller::of_space(sibling.id.clone());
     let mut merge = merge(None);
     let context = ItemContext::space(SpaceSelector::id(&sibling.id)).into();
-    let gated = f.manager.gate_pull_merge(
+    let gated = f.manager.links.gate_pull_merge(
+        &*f.manager,
         &context,
         Some("1".parse().unwrap()),
         &mut merge,
@@ -308,13 +318,17 @@ async fn a_held_auto_merge_needs_a_forge_that_keeps_it_at_the_reviewed_head() {
     };
     let (context, agent) = (f.context(), f.agent());
     let pull = || Some("1".parse().unwrap());
-    let gated = f
-        .manager
-        .gate_pull_merge(&context, pull(), &mut auto, Some(&agent));
+    let gated =
+        f.manager
+            .links
+            .gate_pull_merge(&*f.manager, &context, pull(), &mut auto, Some(&agent));
     // Forgejo's automatic merge merges whatever head the PR has later.
     gated.await.unwrap_err();
     // The user's, which the gate does not hold, goes ahead.
-    let gated = f.manager.gate_pull_merge(&context, pull(), &mut auto, None);
+    let gated = f
+        .manager
+        .links
+        .gate_pull_merge(&*f.manager, &context, pull(), &mut auto, None);
     gated.await.unwrap();
 }
 
@@ -324,9 +338,14 @@ async fn the_global_config_holds_a_pr_of_an_unregistered_repository() {
     let host = &f.server.host;
     let elsewhere: ItemInput = format!("http://{host}/team/other/pulls/1").parse().unwrap();
     let context = f.context();
-    let gated = f
-        .manager
-        .require_pull_review(&context, Some(elsewhere), None, None, None);
+    let gated = f.manager.links.require_pull_review(
+        &*f.manager,
+        &context,
+        Some(elsewhere),
+        None,
+        None,
+        None,
+    );
     let refused = gated.await.unwrap_err().to_string();
     assert!(refused.contains("not registered"), "{refused}");
 }

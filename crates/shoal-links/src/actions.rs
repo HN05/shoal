@@ -334,7 +334,7 @@ pub async fn configure_merge(
     let settings = match place {
         Some(Place::Space(space)) => daemon.acting_settings(space).await?,
         Some(place) => daemon.repository_settings(place.repository_id()).await?,
-        None => daemon.global_settings().await?,
+        None => daemon.settings_in(None).await?,
     };
     if let Some(method) = settings.merge.method {
         action.default_merge_method(method);
