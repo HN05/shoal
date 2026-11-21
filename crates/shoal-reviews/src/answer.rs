@@ -13,7 +13,7 @@ use crate::{
     Reviews,
     agent::Agent,
     config::Effective,
-    daemon::Daemon,
+    daemon::{AwaitedPost, Daemon},
     history, log,
     model::Workspace,
     reviewer::{Ended, Files},
@@ -29,10 +29,25 @@ impl Reviews {
         self.queued.notify_one();
     }
 
-    /// Have the reviewer answer the latest post of the finding's thread
-    /// `thread`, and post the answer, or why there is none, there.
-    pub(crate) async fn answer(&self, daemon: &dyn Daemon, thread: i64) {
-        let text = match self.answer_once(daemon, thread).await {
+    /// Of the posts in findings' threads that wait for an answer,
+    /// `awaited`, those the reviewer has not run for, forgetting those that
+    /// no longer wait.
+    pub(crate) fn unanswered(&self, awaited: &[AwaitedPost]) -> Vec<AwaitedPost> {
+        let mut answered = self.answered.lock().unwrap();
+        answered.retain(|post| awaited.contains(post));
+        (awaited.iter())
+            .filter(|post| !answered.contains(post))
+            .copied()
+            .collect()
+    }
+
+    /// Have the reviewer answer the post `awaited`, and post the answer, or
+    /// why there is none, in its thread, running once for it whatever comes
+    /// of it, as a thread too long for another post stays waiting.
+    pub(crate) async fn answer(&self, daemon: &dyn Daemon, awaited: AwaitedPost) {
+        self.answered.lock().unwrap().insert(awaited);
+        let thread = awaited.thread;
+        let text = match self.answer_once(daemon, awaited).await {
             Ok(Some(text)) => text,
             Ok(None) => return,
             Err(error) => {
@@ -45,11 +60,15 @@ impl Reviews {
         }
     }
 
-    /// The answer to the latest post of the finding's thread `id`, or why
-    /// the reviewer gave none; none when there is nothing to answer, or
-    /// protection stopped the run, which runs again on the next post.
-    async fn answer_once(&self, daemon: &dyn Daemon, id: i64) -> Result<Option<String>> {
-        let Some(thread) = self.awaiting(id).await? else {
+    /// The answer to the post `awaited`, or why the reviewer gave none;
+    /// none once it no longer waits, or when protection stopped the run,
+    /// which runs again for the holder's next post.
+    async fn answer_once(
+        &self,
+        daemon: &dyn Daemon,
+        awaited: AwaitedPost,
+    ) -> Result<Option<String>> {
+        let Some(thread) = self.awaiting(awaited).await? else {
             return Ok(None);
         };
         let review = self.review_of(&thread).await?;
@@ -159,17 +178,16 @@ impl Reviews {
         }
     }
 
-    /// The thread `id` while it waits for the reviewer's answer.
-    async fn awaiting(&self, id: i64) -> Result<Option<Thread>> {
+    /// The thread of the post `awaited` while it waits for the reviewer's
+    /// answer.
+    async fn awaiting(&self, awaited: AwaitedPost) -> Result<Option<Thread>> {
         let records = self.records.clone();
         let threads = (self.store)
             .run(move |db| {
-                let waiting = records.awaiting_answers(db)?.contains(&id);
-                Ok(if waiting {
-                    records.threads(db, &[id])?
-                } else {
-                    Vec::new()
-                })
+                if !records.awaiting_answers(db)?.contains(&awaited) {
+                    return Ok(Vec::new());
+                }
+                records.threads(db, &[awaited.thread])
             })
             .await?;
         Ok(threads.into_iter().next())

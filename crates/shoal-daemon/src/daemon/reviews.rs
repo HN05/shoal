@@ -15,7 +15,8 @@ use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_protocol::{item_numbers::ItemNumber, reviews::ReviewId, threads::Thread};
 use shoal_refs::CommitId;
 use shoal_reviews::daemon::{
-    Admission, Agents, FindingThread, Forge, Records, Repositories, Settings, Spaces, Threads,
+    Admission, Agents, AwaitedPost, FindingThread, Forge, Records, Repositories, Settings, Spaces,
+    Threads,
 };
 
 use super::{
@@ -263,7 +264,7 @@ impl Records for ReviewRecords {
         super::threads::findings::by_ids(db, ids)
     }
 
-    fn awaiting_answers(&self, db: &rusqlite::Connection) -> Result<Vec<i64>> {
+    fn awaiting_answers(&self, db: &rusqlite::Connection) -> Result<Vec<AwaitedPost>> {
         super::threads::findings::awaiting_answers(db)
     }
 }

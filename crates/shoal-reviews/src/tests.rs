@@ -497,6 +497,43 @@ async fn the_reviewer_answers_a_post_in_its_finding_s_thread() {
 }
 
 #[tokio::test]
+async fn an_answer_that_cannot_be_posted_is_not_asked_for_again() {
+    let script = "case \"$1\" in *'reply in `answer`'*) echo '{\"answer\":\"Yes.\"}';;\n\
+        *) cat '{review}';; esac";
+    let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
+    let thread = fixture.review().await.threads.remove(0);
+    fixture
+        .daemon
+        .answer_fails
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let mut answered = fixture.daemon.answered.subscribe();
+    fixture.records.post_as_holder(thread.number, "Really?");
+    fixture.reviews.answer_posts();
+    answered
+        .wait_for(|answered| !answered.is_empty())
+        .await
+        .unwrap();
+    // The post still waits, but the reviewer ran for it.
+    let awaited = (fixture.reviews.store)
+        .run({
+            let records = fixture.records.clone();
+            move |db| crate::daemon::Records::awaiting_answers(&*records, db)
+        })
+        .await
+        .unwrap();
+    assert_eq!(awaited.len(), 1);
+    assert!(fixture.reviews.unanswered(&awaited).is_empty());
+    // The holder's next post waits for an answer again.
+    fixture.records.post_as_holder(thread.number, "Still?");
+    let records = fixture.records.clone();
+    let awaited = (fixture.reviews.store)
+        .run(move |db| crate::daemon::Records::awaiting_answers(&*records, db))
+        .await
+        .unwrap();
+    assert_eq!(fixture.reviews.unanswered(&awaited), awaited);
+}
+
+#[tokio::test]
 async fn later_reviews_receive_a_false_positive_until_it_is_reopened() {
     let script = "printf '%s' \"$1\" > \"$(dirname '{review}')/prompt\"\ncat '{review}'";
     let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;

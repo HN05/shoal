@@ -13,7 +13,7 @@ use shoal_protocol::{
     threads::{Finding, MAX_POST_LEN, NewPost, OutcomeKind, Sender, Side, Thread, ThreadKind},
     validate::{MAX_MESSAGE_LEN, shorten},
 };
-use shoal_reviews::daemon::FindingThread;
+use shoal_reviews::daemon::{AwaitedPost, FindingThread};
 
 use super::{
     code::NewCode,
@@ -100,18 +100,24 @@ pub(in crate::daemon) fn of_review(db: &Connection, review: ReviewId) -> Result<
     records::query(db, "WHERE t.review_id=?1", [review.0])
 }
 
-/// The open `review` threads Shoal opened for a review whose last post that
-/// speaks is their holder's, which wait for the reviewer's answer.
-pub(in crate::daemon) fn awaiting_answers(db: &Connection) -> Result<Vec<i64>> {
+/// The posts of their holders that end the open `review` threads Shoal
+/// opened for a review, counting the posts that speak, which wait for the
+/// reviewer's answer.
+pub(in crate::daemon) fn awaiting_answers(db: &Connection) -> Result<Vec<AwaitedPost>> {
     Ok(db
         .prepare(
-            "SELECT t.id FROM threads t WHERE t.review_id IS NOT NULL AND t.kind='review'
-                AND t.opener='shoal' AND t.outcome IS NULL AND t.space_number IS NOT NULL
-                AND (SELECT side FROM thread_posts WHERE thread_id=t.id AND forwards=0
-                    ORDER BY id DESC LIMIT 1)='holder'
+            "SELECT t.id,p.id FROM threads t JOIN thread_posts p ON p.id=(SELECT id
+                    FROM thread_posts WHERE thread_id=t.id AND forwards=0 ORDER BY id DESC LIMIT 1)
+                WHERE t.review_id IS NOT NULL AND t.kind='review' AND t.opener='shoal'
+                AND t.outcome IS NULL AND t.space_number IS NOT NULL AND p.side='holder'
                 ORDER BY t.id",
         )?
-        .query_map([], |row| row.get(0))?
+        .query_map([], |row| {
+            Ok(AwaitedPost {
+                thread: row.get(0)?,
+                post: row.get(1)?,
+            })
+        })?
         .collect::<rusqlite::Result<_>>()?)
 }
 

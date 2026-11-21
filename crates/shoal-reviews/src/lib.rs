@@ -70,6 +70,9 @@ pub struct Reviews {
     ended: watch::Sender<u64>,
     /// One-shot agent runs whose processes may still be running.
     runs: oneshot::Runs,
+    /// The posts the reviewer ran for, which it runs for once, whatever
+    /// came of it, until a newer post waits.
+    answered: Mutex<std::collections::HashSet<daemon::AwaitedPost>>,
     gate: gate::Gatekeeper,
 }
 
@@ -92,6 +95,7 @@ impl Reviews {
             checkouts: Mutex::default(),
             ended: watch::channel(0).0,
             runs: oneshot::Runs::default(),
+            answered: Mutex::default(),
             gate: gate::Gatekeeper::default(),
         }
     }

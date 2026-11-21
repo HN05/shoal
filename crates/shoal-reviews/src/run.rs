@@ -18,7 +18,7 @@ use crate::{
     checkouts::CheckoutHold,
     code,
     config::{Effective, templates},
-    daemon::{Admission, Daemon},
+    daemon::{Admission, AwaitedPost, Daemon},
     false_positives, findings, git, history, log,
     model::{Repository, Workspace},
     oneshot,
@@ -45,7 +45,7 @@ pub async fn run(reviews: Arc<Reviews>, daemon: Arc<dyn Daemon>) {
                     running.spawn(async move {
                         match job {
                             Job::Review(id) => reviews.run_review(&*daemon, id).await,
-                            Job::Answer(thread) => reviews.answer(&*daemon, thread).await,
+                            Job::Answer(post) => reviews.answer(&*daemon, post).await,
                         }
                         job
                     });
@@ -69,17 +69,21 @@ pub async fn run(reviews: Arc<Reviews>, daemon: Arc<dyn Daemon>) {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Job {
     Review(ReviewId),
-    Answer(i64),
+    Answer(AwaitedPost),
 }
 
-/// The queued reviews, then the findings' threads that wait for an answer.
+/// The queued reviews, then the posts in findings' threads that wait for
+/// an answer the reviewer has not yet run for.
 async fn waiting(reviews: &Reviews) -> Result<Vec<Job>> {
     let records = reviews.records.clone();
-    let (queued, answers) = (reviews.store)
+    let (queued, awaited) = (reviews.store)
         .run(move |db| Ok((store::queued(db)?, records.awaiting_answers(db)?)))
         .await?;
+    let unanswered = reviews.unanswered(&awaited);
     let queued = queued.into_iter().map(Job::Review);
-    Ok(queued.chain(answers.into_iter().map(Job::Answer)).collect())
+    Ok(queued
+        .chain(unanswered.into_iter().map(Job::Answer))
+        .collect())
 }
 
 /// How one pass of a review ended.

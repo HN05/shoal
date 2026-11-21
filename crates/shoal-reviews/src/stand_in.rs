@@ -43,8 +43,8 @@ use crate::{
     Reviews,
     config::{Config, Effective, repo::ConfigLayers},
     daemon::{
-        Admission, Agents, Approvals, FindingCode, FindingThread, Forge, Records, Repositories,
-        Requesters, Requests, Settings, Spaces, Threads,
+        Admission, Agents, Approvals, AwaitedPost, FindingCode, FindingThread, Forge, Records,
+        Repositories, Requesters, Requests, Settings, Spaces, Threads,
     },
     forge::{ForgeRepo, items::reference::ItemRef, items::review::NewReview},
     git,
@@ -112,6 +112,7 @@ impl Fixture {
             notices: Mutex::default(),
             records: records.clone(),
             answered: watch::channel(Vec::new()).0,
+            answer_fails: AtomicBool::new(false),
         };
         Self {
             root,
@@ -240,6 +241,8 @@ pub(crate) struct StandIn {
     records: Arc<StandInRecords>,
     /// The answers posted, by thread record.
     pub(crate) answered: watch::Sender<Vec<(i64, String)>>,
+    /// Whether posting an answer fails, as in a thread too long for it.
+    pub(crate) answer_fails: AtomicBool,
 }
 
 impl StandIn {
@@ -460,7 +463,8 @@ impl StandInRecords {
         let thread = (threads.iter_mut())
             .find(|thread| thread.number == number)
             .unwrap();
-        let mut post = Self::shoal_post(thread.id * 100 + 1, text, Vec::new());
+        let id = thread.id * 100 + i64::try_from(thread.posts.len()).unwrap();
+        let mut post = Self::shoal_post(id, text, Vec::new());
         (post.side, post.sender) = (Side::Holder, Sender::Space);
         thread.posts.push(post);
     }
@@ -552,12 +556,19 @@ impl Records for StandInRecords {
             .collect())
     }
 
-    fn awaiting_answers(&self, _db: &Connection) -> Result<Vec<i64>> {
+    fn awaiting_answers(&self, _db: &Connection) -> Result<Vec<AwaitedPost>> {
         let threads = self.threads.lock().unwrap();
-        Ok((threads.iter())
-            .filter(|thread| thread.awaits() == Some(Side::Opener))
-            .map(|thread| thread.id)
-            .collect())
+        let waiting = threads
+            .iter()
+            .filter(|thread| thread.awaits() == Some(Side::Opener));
+        Ok((waiting.filter_map(|thread| {
+            let post = thread.last_post()?.id;
+            Some(AwaitedPost {
+                thread: thread.id,
+                post,
+            })
+        }))
+        .collect())
     }
 }
 
@@ -635,10 +646,16 @@ impl Threads for StandIn {
     }
 
     fn answer_finding(&self, thread: i64, text: String) -> BoxFuture<'_, Result<()>> {
+        if self.answer_fails.load(Ordering::SeqCst) {
+            self.answered
+                .send_modify(|answered| answered.push((thread, text)));
+            return Box::pin(async { bail!("the thread is too long") });
+        }
         let mut threads = self.records.threads.lock().unwrap();
         let answered = threads.iter_mut().find(|answered| answered.id == thread);
         if let Some(answered) = answered {
-            let post = StandInRecords::shoal_post(thread * 100 + 2, &text, Vec::new());
+            let id = thread * 100 + i64::try_from(answered.posts.len()).unwrap();
+            let post = StandInRecords::shoal_post(id, &text, Vec::new());
             answered.posts.push(post);
         }
         self.answered

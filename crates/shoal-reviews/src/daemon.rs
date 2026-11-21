@@ -323,6 +323,14 @@ pub struct FindingCode {
     pub snippet: Option<String>,
 }
 
+/// A holder's post that ends a finding's thread, which waits for the
+/// reviewer's answer: the thread's record and the post's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AwaitedPost {
+    pub thread: i64,
+    pub post: i64,
+}
+
 /// The records of the spaces reviews are of and of the threads of their
 /// findings, which reviews read and write in the connection or transaction
 /// that reads or records the reviews, so a review, its workspace and its
@@ -362,7 +370,7 @@ pub trait Records: Send + Sync {
     /// The threads whose records are `ids`, in that order.
     fn threads(&self, db: &Connection, ids: &[i64]) -> Result<Vec<Thread>>;
 
-    /// The open `review` threads Shoal opened for a review whose last post
-    /// is their holder's, which wait for the reviewer's answer.
-    fn awaiting_answers(&self, db: &Connection) -> Result<Vec<i64>>;
+    /// The posts of their holders that end the open `review` threads Shoal
+    /// opened for a review, which wait for the reviewer's answer.
+    fn awaiting_answers(&self, db: &Connection) -> Result<Vec<AwaitedPost>>;
 }
