@@ -1,24 +1,38 @@
-//! The hub's view of the other joined machines' spaces, which lists and
-//! pickers show beside this machine's.
-use shoal_protocol::hub::directory::HubView;
+//! The spaces the caller sees on every machine, as the daemon lists them:
+//! this machine's, and the other joined machines' as the hub lists them,
+//! which lists, the inbox and pickers show beside this machine's.
+use anyhow::Result;
+use shoal_protocol::{hub::directory::HubView, model::Everywhere};
 
 use crate::cli::context::Context;
 
-/// The hub's view of the other machines' spaces the caller sees; none on a
-/// machine that takes no part in a hub, and none, with a warning, while the
-/// hub cannot be asked.
-pub(in crate::cli) async fn view(ctx: &Context) -> Option<HubView> {
-    view_leaving_out(ctx, "the other machines' spaces").await
+/// The spaces on every machine, warning that the other machines' are left
+/// out while the daemon cannot ask the hub.
+pub(in crate::cli) async fn spaces(ctx: &Context) -> Result<Everywhere> {
+    let everywhere = crate::client::spaces::everywhere(&ctx.paths).await?;
+    if let Some(error) = &everywhere.unreachable {
+        eprintln!("warning: the other machines' spaces are left out: {error}");
+    }
+    Ok(everywhere)
 }
 
-/// [`view`], whose warning while the hub cannot be asked says that what
-/// the caller reads of it, `left_out`, is left out.
-pub(in crate::cli) async fn view_leaving_out(ctx: &Context, left_out: &str) -> Option<HubView> {
-    match crate::client::hub::directory(&ctx.paths).await {
-        Ok(view) => view,
-        Err(error) => {
-            eprintln!("warning: {left_out} are left out: {error:#}");
-            None
-        }
-    }
+/// The other machines' spaces, none on a machine in no hub, and none, with
+/// a warning that what the caller reads of them, `left_out`, is left out,
+/// while they cannot be listed.
+pub(in crate::cli) async fn elsewhere(ctx: &Context, left_out: &str) -> Option<HubView> {
+    let everywhere = crate::client::spaces::everywhere(&ctx.paths).await;
+    let error = match everywhere {
+        Ok(Everywhere {
+            elsewhere,
+            unreachable: None,
+            ..
+        }) => return elsewhere,
+        Ok(Everywhere {
+            unreachable: Some(error),
+            ..
+        }) => error,
+        Err(error) => format!("{error:#}"),
+    };
+    eprintln!("warning: {left_out} are left out: {error}");
+    None
 }

@@ -16,7 +16,7 @@ use crate::client::output::batch::Failure;
 use crate::{
     cli::{
         context::Context,
-        hub_view, recent,
+        recent,
         ui::{self, Fallback, NoCurrentWorkspace},
     },
     client::connection::CommandPaths,
@@ -191,8 +191,8 @@ fn chosen_elsewhere(space: SpaceId, machine: String) -> Chosen {
 /// The space whose session this terminal last left running, other than
 /// the current one, on this machine or another joined one.
 async fn previous(ctx: &Context) -> Result<Chosen> {
-    let spaces = crate::client::spaces::list(&ctx.paths).await?;
-    let view = hub_view::view(ctx).await;
+    let everywhere = crate::cli::everywhere::spaces(ctx).await?;
+    let (spaces, view) = (everywhere.here, everywhere.elsewhere);
     let elsewhere = view.as_ref().map(HubView::attachable).unwrap_or_default();
     let id = recent::previous_among(ctx, &attachable(spaces.clone()), &elsewhere)?;
     let listed = (view.as_ref()).and_then(|view| {

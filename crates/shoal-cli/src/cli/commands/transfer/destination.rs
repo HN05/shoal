@@ -137,7 +137,7 @@ fn file_destination(path: &Path, several: bool) -> Result<Chosen> {
 /// another joined machine is online, and a file only where `files`, then
 /// the machine, the host or the path, a directory for `several` spaces.
 async fn pick(ctx: &Context, several: bool, files: bool) -> Result<Named> {
-    let joined = crate::cli::hub_view::view_leaving_out(ctx, "the joined machines to move to");
+    let joined = crate::cli::everywhere::elsewhere(ctx, "the joined machines to move to");
     let view = joined.await.filter(ui::can_pick_machine);
     let mut kinds = Vec::new();
     if view.is_some() {

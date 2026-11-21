@@ -6,7 +6,7 @@ use shoal_protocol::hub::directory::{HubView, Listed};
 use crate::cli::{
     commands::{listing, queued_agents},
     context::Context,
-    hub_view,
+    everywhere,
     output::{self, Palette},
     ui,
 };
@@ -20,8 +20,8 @@ pub(in crate::cli::commands) async fn list(
     filter: &listing::ListFilter,
     chats: bool,
 ) -> Result<i32> {
-    let spaces = crate::client::spaces::list(&ctx.paths).await?;
-    let view = hub_view::view(ctx).await;
+    let everywhere = everywhere::spaces(ctx).await?;
+    let (spaces, view) = (everywhere.here, everywhere.elsewhere);
     let kept_chats = kept_chats(spaces.chats(), filter);
     let (workspaces, statuses) = match chats {
         true => (Vec::new(), ui::Statuses::default()),

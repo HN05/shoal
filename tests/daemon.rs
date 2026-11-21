@@ -1024,7 +1024,16 @@ fn inbox_reads_untracked_worktrees_failing_syncs_over_several_frames_and_failing
                 other => panic!("unexpected method {other}"),
             };
             let reply = match method.as_str() {
-                "list_spaces" => json!({"type": "spaces", "data": []}),
+                "list_spaces_everywhere" => {
+                    let frames = [
+                        json!({"type": "spaces_everywhere", "data": []}),
+                        json!({"type": "ok"}),
+                    ]
+                    .map(|reply| support::fake_daemon::frame(&request, reply))
+                    .concat();
+                    (&stream).write_all(frames.as_bytes()).unwrap();
+                    continue;
+                }
                 "list_threads" => {
                     json!({"type": "space_threads", "data": {"threads": [], "omitted": 0}})
                 }

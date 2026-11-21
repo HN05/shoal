@@ -4,7 +4,7 @@
 use shoal_protocol::hub::directory::{HubView, Offered};
 
 use super::{Entries, Machines, picker_width, remote_rows};
-use crate::cli::{availability::Need, context::Context, hub_view, output::Palette};
+use crate::cli::{availability::Need, context::Context, everywhere, output::Palette};
 
 /// The picker entries of the other machines' spaces `offered` names, for
 /// a command that acts on them; none for another command or a machine in
@@ -13,7 +13,7 @@ pub(super) async fn elsewhere_entries(ctx: &Context, offered: Offered) -> Entrie
     if !ctx.reaches_elsewhere {
         return Entries::new();
     }
-    let Some(view) = hub_view::view(ctx).await else {
+    let Some(view) = everywhere::elsewhere(ctx, "the other machines' spaces").await else {
         return Entries::new();
     };
     let palette = Palette::stderr(ctx.json);

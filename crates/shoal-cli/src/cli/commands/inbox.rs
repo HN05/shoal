@@ -17,7 +17,6 @@ use crate::{
     cli::{
         client,
         context::Context,
-        hub_view,
         list_status::{self, ListStatus},
         output::{self, Palette, Style},
         ui::{self, Cell, WidthLimit},
@@ -75,7 +74,8 @@ impl Inbox {
             crate::env::is_scoped() || !crate::process::scoped::inherits_scope(&ctx.paths.state),
             "a workspace process that cleared its scope token cannot list the inbox"
         );
-        let spaces = crate::client::spaces::list(&ctx.paths).await?;
+        let everywhere = crate::cli::everywhere::spaces(ctx).await?;
+        let (spaces, view) = (everywhere.here, everywhere.elsewhere);
         let mut workspaces = spaces.workspaces();
         let stopped = ui::stopped_workspaces(&ctx.paths).await;
         let existing: HashSet<SpaceId> = workspaces.iter().map(|w| w.id.clone()).collect();
@@ -132,7 +132,6 @@ impl Inbox {
                     .map(|sync| Item::SyncFailed { sync }),
             );
         }
-        let view = hub_view::view(ctx).await;
         items.extend(elsewhere::items(view.as_ref(), |remote| {
             filter.keeps_remote(remote)
         }));

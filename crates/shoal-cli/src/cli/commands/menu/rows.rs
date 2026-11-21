@@ -366,7 +366,8 @@ async fn space_rows(ctx: &Context, scoping: Scoping) -> Result<Entries> {
 
 /// A row per other joined machine's space, which shows its status.
 async fn elsewhere_rows(ctx: &Context, palette: Palette) -> Entries {
-    let Some(view) = crate::cli::hub_view::view(ctx).await else {
+    let Some(view) = crate::cli::everywhere::elsewhere(ctx, "the other machines' spaces").await
+    else {
         return Entries::new();
     };
     let spaces: Vec<_> = view.directory.spaces.iter().collect();
