@@ -130,12 +130,16 @@ polls their items in watches and in the background, follows the runs of
 their merges, starts, reads, reruns, cancels and approves CI runs, lists
 and deletes the forge's branches, reads failed check logs and item
 views, applies actions to linked items as the space's own changes, with
-the warnings and bindings of their merges, and delivers the activity to
-agents, or through the hub to coordinators on other machines, while the
-spaces, the forge each host serves, permission checks, the agents'
-records and messages, and the hub stay with the daemon, which its
-interface reaches; whether an idle agent is due a wake is the agent
-queue's. Its record functions read and write what spaces link, which
+the warnings and bindings of their merges, opens issues and PRs and
+reverts merged ones, or proposes them where a permission asks, decides
+those proposals and runs the pushes their approval starts, and delivers
+the activity to agents, or through the hub to coordinators on other
+machines, while the spaces, the forge each host serves, permission
+checks, the agents' records and messages, the approval requests' records
+and routing, the reviews and the hub stay with the daemon, which its
+interface reaches; the approvals subsystem calls the service to decide a
+proposal or finish its push, and whether an idle agent is due a wake is
+the agent queue's. Its record functions read and write what spaces link, which
 other subsystems call in their own transactions.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
 the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
