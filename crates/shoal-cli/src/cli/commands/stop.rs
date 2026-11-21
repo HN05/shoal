@@ -45,29 +45,23 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         targets::ensure_scoped()?;
     }
-    // Every target is resolved, and those here checked, before any stops.
-    let (here, elsewhere) = elsewhere::partition(ctx, selected).await?;
-    let selected = match here.is_empty() {
-        true => Vec::new(),
-        false => resolve(ctx, here, !skip_children).await?,
-    };
+    // Every target is found, wherever it runs, and checked before any
+    // stops.
+    let located = crate::client::stopping::selection(&ctx.paths, selected, !skip_children);
+    let (selected, elsewhere) = elsewhere::partition(located.await?);
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         ensure_below(&selected)?;
     }
-    let tree = elsewhere::stop_tree(ctx, &selected, &elsewhere, skip_children).await?;
-    if tree.len() > 1 {
-        targets::check_targets(ctx, tree).await?;
+    let checked = elsewhere::checked(&selected, &elsewhere);
+    if checked.len() > 1 {
+        targets::check_targets(ctx, checked).await?;
     }
-    elsewhere::stop(ctx, elsewhere, skip_children, yes).await?;
-    let code = match selected.as_slice() {
-        [] => return Ok(0),
-        [space] => stop_one(ctx, space, yes).await?,
-        spaces => stop_each(ctx, spaces, "", yes).await?,
-    };
-    if !skip_children {
-        elsewhere::stop_below(ctx, &selected, yes).await?;
+    elsewhere::stop(ctx, elsewhere, yes).await?;
+    match selected.as_slice() {
+        [] => Ok(0),
+        [space] => stop_one(ctx, space, yes).await,
+        spaces => stop_each(ctx, spaces, "", yes).await,
     }
-    Ok(code)
 }
 
 /// Stop `space`, reporting it alone.

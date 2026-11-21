@@ -1,202 +1,62 @@
-//! Stopping spaces other joined machines run: each stop goes through the
-//! daemon to that machine, for a space elsewhere and, unless skipped, the
-//! spaces below it the hub lists, wherever they run, this machine's among
-//! them, and for those below a space here; the hub holds a stop while its
-//! machine is offline.
-use std::collections::HashSet;
-
+//! Stopping the spaces other joined machines run, which the daemon's
+//! selection names with their machines: each stop goes to that machine
+//! through the daemon, and the hub holds it while that machine is offline.
 use anyhow::Result;
-use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
-    hub::{
-        directory::{HubView, Listed},
-        routing::Queued,
-    },
+    hub::{directory::Listed, routing::Queued},
+    model::Located,
     space_names::SpaceSelector,
 };
 
 use crate::{
-    cli::{commands::machines, context::Context, hub_view, output::Style},
+    cli::{commands::machines, context::Context, output::Style},
     client::output::agents::SpaceStopped,
     model::Space,
     protocol::{QueuedLaunches, UntrackedProcesses},
 };
 
-/// The selectors among `selected` that name spaces here, and the spaces
-/// elsewhere the others name, each with the hub's view that lists it.
-pub(super) async fn partition(
-    ctx: &Context,
-    selected: Vec<SpaceSelector>,
-) -> Result<(Vec<SpaceSelector>, Vec<(Listed, HubView)>)> {
+/// A space of another machine a stop takes.
+pub(super) struct Remote {
+    space: Listed,
+    /// Its machine's link to the hub is open, so the stop can be checked.
+    online: bool,
+}
+
+/// The spaces of this machine among `located`, and those of the others,
+/// each in the order the selection gives.
+pub(super) fn partition(located: Vec<Located>) -> (Vec<Space>, Vec<Remote>) {
     let mut here = Vec::new();
     let mut elsewhere = Vec::new();
-    for selector in selected {
-        match machines::space_elsewhere(ctx, &selector).await? {
-            Some(found) => elsewhere.push(found),
-            None => here.push(selector),
+    for located in located {
+        match located {
+            Located::Here(space) => here.push(*space),
+            Located::Elsewhere { space, online, .. } => elsewhere.push(Remote {
+                space: *space,
+                online,
+            }),
         }
     }
-    Ok((here, elsewhere))
+    (here, elsewhere)
 }
 
-/// What a stop of `here`, this machine's spaces with those below them here,
-/// and of `elsewhere` checks before it stops any: each of them and, unless
-/// `skip_children`, the spaces below them across machines, those
-/// elsewhere only on connected machines, since a stop for an offline one
-/// waits for it unchecked.
-pub(super) async fn stop_tree(
-    ctx: &Context,
-    here: &[Space],
-    elsewhere: &[(Listed, HubView)],
-    skip_children: bool,
-) -> Result<Vec<(String, SpaceSelector)>> {
-    let mut targets: Vec<(String, SpaceSelector)> = (here.iter())
-        .map(|space| (space.name.to_string(), SpaceSelector::id(&space.id)))
-        .collect();
-    let view = match elsewhere.first() {
-        Some((_, view)) => Some(view.clone()),
-        None if skip_children => None,
-        None => hub_view::view(ctx).await,
-    };
-    let Some(view) = view else {
-        return Ok(targets);
-    };
-    let mut remote: Vec<Listed> = elsewhere.iter().map(|(listed, _)| listed.clone()).collect();
-    if !skip_children {
-        let roots = Stopped {
-            here: here.to_vec(),
-            elsewhere: remote.clone(),
-        };
-        for space in tree_across(ctx, &view, roots).await? {
-            match space {
-                Across::Here(space) => {
-                    targets.push((space.name.to_string(), SpaceSelector::id(&space.id)))
-                }
-                Across::Elsewhere(listed) => remote.push(*listed),
-            }
-        }
-    }
-    let connected = |listed: &Listed| {
-        (view.directory.machine(&listed.machine)).is_some_and(|machine| machine.connected)
-    };
-    for listed in remote.iter().filter(|listed| connected(listed)) {
-        let selector = SpaceSelector::id(&listed.space.id);
-        if !targets.iter().any(|(_, known)| known == &selector) {
-            targets.push((listed.space.name.to_string(), selector));
-        }
-    }
-    Ok(targets)
+/// What a stop of `here` and `elsewhere` checks before it stops any: each
+/// space here, and those elsewhere on connected machines, since a stop for
+/// an offline one waits for it unchecked.
+pub(super) fn checked(here: &[Space], elsewhere: &[Remote]) -> Vec<(String, SpaceSelector)> {
+    let here = (here.iter()).map(|space| (space.name.to_string(), SpaceSelector::id(&space.id)));
+    let elsewhere = (elsewhere.iter().filter(|remote| remote.online)).map(|remote| {
+        let space = &remote.space.space;
+        (space.name.to_string(), SpaceSelector::id(&space.id))
+    });
+    here.chain(elsewhere).collect()
 }
 
-/// Stop `spaces`, which other machines run, and the spaces below them
-/// unless `skip_children`.
-pub(super) async fn stop(
-    ctx: &Context,
-    spaces: Vec<(Listed, HubView)>,
-    skip_children: bool,
-    yes: bool,
-) -> Result<()> {
-    for (remote, view) in spaces {
-        stop_one(ctx, &remote, yes).await?;
-        if !skip_children {
-            let stopped = Stopped {
-                here: Vec::new(),
-                elsewhere: vec![remote],
-            };
-            stop_across(ctx, &view, stopped, yes).await?;
-        }
+/// Stop `spaces`, which other machines run, each on its machine.
+pub(super) async fn stop(ctx: &Context, spaces: Vec<Remote>, yes: bool) -> Result<()> {
+    for remote in spaces {
+        stop_one(ctx, &remote.space, yes).await?;
     }
     Ok(())
-}
-
-/// Stop the spaces below each of `stopped`, spaces of this machine that
-/// stopped already, on every machine, as the hub lists them.
-pub(super) async fn stop_below(ctx: &Context, stopped: &[Space], yes: bool) -> Result<()> {
-    let Some(view) = hub_view::view(ctx).await else {
-        return Ok(());
-    };
-    let stopped = Stopped {
-        here: stopped.to_vec(),
-        elsewhere: Vec::new(),
-    };
-    stop_across(ctx, &view, stopped, yes).await
-}
-
-/// Spaces a stop starts from, here and on other machines.
-struct Stopped {
-    here: Vec<Space>,
-    elsewhere: Vec<Listed>,
-}
-
-/// A space below where a stop starts, here or on another machine.
-enum Across {
-    Here(Box<Space>),
-    Elsewhere(Box<Listed>),
-}
-
-/// Stop the spaces below `stopped` across machines, as [`tree_across`]
-/// orders them.
-async fn stop_across(ctx: &Context, view: &HubView, stopped: Stopped, yes: bool) -> Result<()> {
-    for space in tree_across(ctx, view, stopped).await? {
-        match space {
-            Across::Here(space) => drop(super::stop_one(ctx, &space, yes).await?),
-            Across::Elsewhere(listed) => stop_one(ctx, &listed, yes).await?,
-        }
-    }
-    Ok(())
-}
-
-/// The spaces below `roots` on other machines and those below them back
-/// here, crossing between machines as often as the tree does, each once
-/// and after the space above it: this machine's below one of its own are
-/// left to the caller, which resolves them with it.
-async fn tree_across(ctx: &Context, view: &HubView, mut roots: Stopped) -> Result<Vec<Across>> {
-    let mut seen: HashSet<SpaceId> = (roots.here.iter().map(|space| space.id.clone()))
-        .chain(roots.elsewhere.iter().map(|listed| listed.space.id.clone()))
-        .collect();
-    let mut found = Vec::new();
-    loop {
-        let mut elsewhere = Vec::new();
-        let parents = (roots.here.iter().map(|space| &space.id))
-            .chain(roots.elsewhere.iter().map(|listed| &listed.space.id));
-        for parent in parents.collect::<Vec<_>>() {
-            for listed in below(view, parent) {
-                if listed.machine != view.machine && seen.insert(listed.space.id.clone()) {
-                    elsewhere.push(listed);
-                }
-            }
-        }
-        let back_here: Vec<SpaceSelector> = (view.below_elsewhere.iter())
-            .filter(|(_, parent)| {
-                (elsewhere.iter().chain(&roots.elsewhere)).any(|l| &l.space.id == parent)
-            })
-            .filter(|(space, _)| !seen.contains(space))
-            .map(|(space, _)| SpaceSelector::id(space))
-            .collect();
-        let mut here = Vec::new();
-        if !back_here.is_empty() {
-            for space in super::resolve(ctx, back_here, true).await? {
-                if seen.insert(space.id.clone()) {
-                    here.push(space);
-                }
-            }
-        }
-        if here.is_empty() && elsewhere.is_empty() {
-            return Ok(found);
-        }
-        found.extend(
-            elsewhere
-                .iter()
-                .cloned()
-                .map(|listed| Across::Elsewhere(Box::new(listed))),
-        );
-        found.extend(
-            here.iter()
-                .cloned()
-                .map(|space| Across::Here(Box::new(space))),
-        );
-        roots = Stopped { here, elsewhere };
-    }
 }
 
 /// Stop `space` on its machine, reporting it, or that the hub holds the
@@ -223,23 +83,3 @@ async fn stop_one(ctx: &Context, space: &Listed, yes: bool) -> Result<()> {
     };
     ctx.emit_styled(Style::Success, &message, report)
 }
-
-/// The spaces below `id` that `view` lists, on any machine, each above
-/// those below it.
-fn below(view: &HubView, id: &SpaceId) -> Vec<Listed> {
-    let mut found: Vec<Listed> = Vec::new();
-    let mut parents = vec![id.clone()];
-    while let Some(parent) = parents.pop() {
-        let children = (view.directory.spaces.iter())
-            .filter(|listed| listed.space.parent.as_ref() == Some(&parent))
-            .filter(|listed| !found.iter().any(|known| known.space.id == listed.space.id));
-        for child in children.cloned().collect::<Vec<_>>() {
-            parents.push(child.space.id.clone());
-            found.push(child);
-        }
-    }
-    found
-}
-
-#[cfg(test)]
-mod tests;
