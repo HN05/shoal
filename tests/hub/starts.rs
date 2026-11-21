@@ -237,6 +237,48 @@ fn a_start_on_another_machine_forks_a_session_only_this_machine_keeps() {
 }
 
 #[test]
+fn a_start_on_another_machine_copies_a_workspace_s_unsaved_files_there() {
+    let machines = machines();
+    let status = machines.hub.ok(&["status", &machines.coordinator]);
+    let source = Path::new(status["workspace"]["path"].as_str().unwrap()).to_owned();
+    // A commit only this machine has, then a changed and a new file.
+    fs::write(source.join("committed.txt"), "committed\n").unwrap();
+    git(&source, &["add", "committed.txt"]);
+    git_with_identity(&source, &["commit", "-q", "-m", "Local"]);
+    let head = git(&source, &["rev-parse", "HEAD"]);
+    fs::write(source.join("committed.txt"), "changed\n").unwrap();
+    fs::write(source.join("untracked.txt"), "new\n").unwrap();
+    let args = [
+        "start",
+        "--machine",
+        "laptop",
+        "--copy",
+        &machines.coordinator,
+    ];
+    let rest = ["--agent", "pi", "--wait", "--json"];
+    let started = machines.hub.run(&[&args[..], &rest[..]].concat());
+    assert!(started.status.success(), "{}", printed(&started));
+    let mut shown = serde_json::Deserializer::from_slice(&started.stdout).into_iter::<Value>();
+    let copy = shown.next().unwrap().unwrap();
+    assert_eq!(copy["state"], "ready", "{}", printed(&started));
+    // The copy on the laptop starts at the same HEAD with the same files,
+    // unsaved as they were.
+    let path = Path::new(copy["path"].as_str().unwrap());
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), head);
+    assert_eq!(
+        fs::read_to_string(path.join("committed.txt")).unwrap(),
+        "changed\n"
+    );
+    assert_eq!(
+        fs::read_to_string(path.join("untracked.txt")).unwrap(),
+        "new\n"
+    );
+    let unsaved = git(path, &["status", "--porcelain"]);
+    assert!(unsaved.contains(" M committed.txt"), "{unsaved}");
+    assert!(unsaved.contains("?? untracked.txt"), "{unsaved}");
+}
+
+#[test]
 fn a_space_starts_a_child_chat_on_another_machine() {
     let machines = machines();
     let repo = machines.hub.repo.to_str().unwrap().to_owned();

@@ -246,6 +246,24 @@ impl Manager {
         self.record_creation(workspace, started).await
     }
 
+    /// The HEAD of the workspace `request` names, live, or removed when it
+    /// names a checkpoint, with a commit on it that keeps the files a copy
+    /// of it starts with, ignored ones excepted: those it has now, or those
+    /// its checkpoint keeps, as a copy on another machine starts from them.
+    pub(crate) async fn copy_snapshot(&self, request: &CopySource) -> Result<(CommitId, CommitId)> {
+        let source = self.copy_source(request, FilesCheck::Now).await?;
+        let files = match source.files {
+            SourceFiles::Worktree(path) => {
+                let message = format!("Shoal copy of {} for another machine", source.name);
+                git::checkpoint::snapshot(&path, &message, true)
+                    .await?
+                    .commit
+            }
+            SourceFiles::Checkpoint { commit, .. } => commit,
+        };
+        Ok((source.head, files))
+    }
+
     /// The repository of the workspace `request` names, live, or removed
     /// when it names a checkpoint, as [`Self::copy_source`] reads it.
     pub(crate) async fn copied_repository(&self, request: &CopySource) -> Result<RepositoryId> {

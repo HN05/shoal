@@ -235,11 +235,7 @@ pub struct StartArgs {
     /// shoal hub ls shows, where that machine's queue starts its agent in
     /// the background, or at once for --here and --focus, which attach this
     /// terminal to it there; defaults to this machine.
-    #[arg(
-        long,
-        value_name = "MACHINE",
-        conflicts_with_all = ["in_workspace", "copy", "checkpoint"]
-    )]
+    #[arg(long, value_name = "MACHINE", conflicts_with = "in_workspace")]
     pub machine: Option<String>,
     /// Run in this terminal instead of a new tab or detached session.
     #[arg(short = 'H', long)]

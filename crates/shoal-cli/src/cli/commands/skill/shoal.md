@@ -85,7 +85,8 @@ own agent from a fork of its session, so it needs only its task after `--`.
 the caller there too, where that machine's queue starts its agent in the
 background; it clones the repository where that machine has none, carries
 a `--base` with commits only this machine has there in a Git bundle, and
-carries the session `--fork` forks.
+carries the session `--fork` forks and the files `--copy` copies, ignored
+ones excepted.
 
 `start` returns once the daemon records a new workspace, with the workspace
 and the agent's queue entry, which waits while the daemon creates the

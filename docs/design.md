@@ -308,7 +308,12 @@ at once and attaches to it as `shoal attach` does, since the agent runs on
 the space's machine. A start that forks a session carries that session's
 files there first over a duplex stream, which that machine's CLI puts where
 its agent tool looks under the settings of the repository the start goes
-in, as an imported move's are, so the fork finds them. A start
+in, as an imported move's are, so the fork finds them. A copy goes as the
+copied HEAD, its base there, and a commit on it that keeps the copied
+files, as a checkpoint keeps them, carried as a base's commits are; its new
+branch there starts at that HEAD and writes those files in unsaved, as a
+restore writes a checkpoint's, and its pending plan keeps that commit
+until the worktree exists. A start
 below another machine's space, on whichever machine, in a repository that
 machine has not registered, clones the URL of its origin, which the
 parent's machine reports to the hub beside the key repositories match by,

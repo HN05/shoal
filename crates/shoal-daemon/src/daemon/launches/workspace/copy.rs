@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// What a launch copies, and the repository of the copied workspace.
-pub(super) struct Copied {
+pub(in crate::daemon::launches) struct Copied {
     pub creation: CopyCreation,
     pub repository: RepositoryId,
 }
@@ -21,7 +21,7 @@ impl Manager {
     /// What `launch` copies: the workspace `--copy` names by number or ID,
     /// else the one the start was made in, live, or removed for a copy of
     /// one of its checkpoints; `None` when it asks for no copy.
-    pub(super) async fn launch_copy(
+    pub(in crate::daemon::launches) async fn launch_copy(
         &self,
         launch: &Launch,
         caller: Option<&Caller>,

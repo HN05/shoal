@@ -11,9 +11,9 @@ fn a_start_on_another_machine_refuses_what_only_this_machine_has() {
         ..Default::default()
     });
     assert!(here.contains("--here"), "{here}");
-    let copy = refused(Launch {
-        copy: Some(SpaceChoice::Current),
+    let existing = refused(Launch {
+        in_workspace: Some(SpaceChoice::Current),
         ..Default::default()
     });
-    assert!(copy.contains("--copy"), "{copy}");
+    assert!(existing.contains("--in"), "{existing}");
 }

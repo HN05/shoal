@@ -38,6 +38,7 @@ impl Manager {
         ensure_carried(launch, &machine.name)?;
         let mut launch = std::mem::take(launch);
         self.forwarded_spaces(&mut launch, caller).await?;
+        self.copy_as_carried(&mut launch, caller).await?;
         let carried = self.carried(&mut launch, &machine, caller).await?;
         self.carry_forked(&launch, &machine, carried.origin.as_deref(), caller)
             .await?;
@@ -47,6 +48,24 @@ impl Manager {
         let mut launched = self.forward_launch(&machine, launch, caller).await?;
         launched.machine = Some(machine.name);
         Ok(Some(launched))
+    }
+
+    /// Turn the copy `launch` asks for `caller` into what another machine
+    /// starts it from: a new branch, the one it names or one named after
+    /// the copied workspace's, at that workspace's HEAD as its base, with a
+    /// commit that keeps the files the copy starts with, which go there
+    /// with the base's history.
+    async fn copy_as_carried(&self, launch: &mut Launch, caller: Option<&Caller>) -> Result<()> {
+        let Some(copied) = self.launch_copy(launch, caller).await? else {
+            return Ok(());
+        };
+        let (head, files) = self.copy_snapshot(&copied.creation.source).await?;
+        (launch.copy, launch.checkpoint) = (None, None);
+        launch.repository = Some(copied.repository.to_string());
+        launch.branch.get_or_insert(copied.creation.name);
+        launch.base = Some(head.to_string());
+        launch.carried_files = Some(files);
+        Ok(())
     }
 
     /// Carry the session `launch` forks to `machine` for `caller`'s start
@@ -327,11 +346,14 @@ impl Manager {
             )
         })?;
         let (mut base_branch, mut commit) = (None, None);
+        let carrying = (machine, &repository, origin.as_str());
         if let Some(base) = &launch.base {
-            let carrying = (machine, &repository, origin.as_str());
             let (found, carried) = self.clone_base(carrying, base, caller).await?;
             (launch.base, base_branch) = (Some(found.base), Some(found.branch));
             commit = carried;
+        }
+        if let Some(files) = &launch.carried_files {
+            self.carry_files(carrying, files, caller).await?;
         }
         unname_repository(launch);
         Ok(Carried {
@@ -368,6 +390,21 @@ impl Manager {
             branch: branch.to_string(),
         };
         Ok((base, Some(commit)))
+    }
+
+    /// Carry the commit `files` of `repository`, whose origin's URL is
+    /// `origin`, to `machine` for `caller`, with the history the origin's
+    /// default branch lacks, as a copy's files go there.
+    async fn carry_files(
+        &self,
+        (machine, repository, origin): (&Member, &Repository, &str),
+        files: &CommitId,
+        caller: Option<&Caller>,
+    ) -> Result<()> {
+        let lookup = crate::git::default_branch::DefaultBranchLookup::Cached;
+        let branch = crate::git::default_branch::resolve(&repository.path, lookup).await?;
+        let carried = (files, branch.as_str());
+        (self.carry_commit(machine, (repository, origin), carried, caller)).await
     }
 
     /// The registered repository `launch` would start in for `caller`: the
@@ -426,8 +463,8 @@ fn unname_repository(launch: &mut Launch) {
 }
 
 /// Refuse what `launch` asks of this machine that the machine `machine`
-/// starts it without: this terminal, files, or the existing workspace
-/// `--in` names, whose own machine starts its agents.
+/// starts it without: this terminal, or the existing workspace `--in`
+/// names, whose own machine starts its agents.
 fn ensure_carried(launch: &Launch, machine: &str) -> Result<()> {
     let local = [
         ("--here", launch.here, "it runs the agent in this terminal"),
@@ -435,11 +472,6 @@ fn ensure_carried(launch: &Launch, machine: &str) -> Result<()> {
             "--in",
             launch.in_workspace.is_some(),
             "a workspace's own machine starts its agents",
-        ),
-        (
-            "--copy",
-            launch.copy.is_some() || launch.checkpoint.is_some(),
-            "it copies this machine's files",
         ),
     ];
     match local.iter().find(|(_, set, _)| *set) {
