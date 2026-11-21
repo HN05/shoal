@@ -143,3 +143,58 @@ async fn a_machine_reads_the_hub_s_copies_before_it_sends_a_file_the_hub_never_h
         [copy(FileName::Config, Some(valid), 1)]
     );
 }
+
+#[tokio::test]
+async fn a_copy_the_machine_could_not_take_comes_again_on_its_next_round() {
+    let root = tempfile::tempdir().unwrap();
+    let (hub, daemon) = hub(&root).await;
+    let own = To::Own(hub.own_member().await.unwrap());
+    let review = FileName::Mode("review".into());
+    let sent = vec![edit(review.clone(), Some("Review it.\n"))];
+    let copies = (hub.store)
+        .write(move |tx| copies::record(tx, sent))
+        .await
+        .unwrap();
+    // A directory where the file goes fails the write.
+    let path = Shared::file(&hub.paths, &review);
+    std::fs::create_dir_all(&path).unwrap();
+    let taken = hub.take_sent_copies(&*daemon, true, copies).await;
+    assert!(taken.is_err());
+    std::fs::remove_dir(&path).unwrap();
+    hub.share_round(&daemon, &own, true).await.unwrap();
+    assert_eq!(
+        read(&hub, "shared/modes/review.md").as_deref(),
+        Some("Review it.\n")
+    );
+}
+
+#[tokio::test]
+async fn an_invalid_edit_made_again_after_a_revert_alerts_again() {
+    let root = tempfile::tempdir().unwrap();
+    let (hub, daemon) = hub(&root).await;
+    let own = To::Own(hub.own_member().await.unwrap());
+    let valid = "[cleanup.auto]\nidle_minutes = 30\n";
+    let invalid = "cleanup = 'often'\n";
+    let round = |text: &str| {
+        write_beside_global_config(&hub.paths, "shared.toml", text);
+        hub.share_round(&daemon, &own, true)
+    };
+    round(valid).await.unwrap();
+    round(invalid).await.unwrap();
+    let alerts = hub.notifications.list(false, 100).await.unwrap();
+    hub.notifications
+        .mark_read(alerts.iter().map(|alert| alert.id).collect())
+        .await
+        .unwrap();
+    round(invalid).await.unwrap();
+    assert_eq!(
+        alerts_of(&hub, AlertKind::EnvironmentProblem).await.len(),
+        1
+    );
+    round(valid).await.unwrap();
+    round(invalid).await.unwrap();
+    assert_eq!(
+        alerts_of(&hub, AlertKind::EnvironmentProblem).await.len(),
+        2
+    );
+}

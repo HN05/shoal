@@ -6,7 +6,12 @@
 //! copies. The hub keeps the last edit of each file that reached it and
 //! sends it to every other machine, which writes it. A copy that replaces an
 //! edit the hub never got leaves that edit as a backup, with an alert.
-use std::{collections::BTreeMap, convert::Infallible, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap,
+    convert::Infallible,
+    sync::{Arc, atomic::Ordering},
+    time::Duration,
+};
 
 use anyhow::{Result, anyhow, bail};
 use shoal_core::config::Shared;
@@ -41,6 +46,9 @@ pub(super) struct Sharing {
     /// The problem with the shared files the user last heard of, which
     /// keeps them from the hub.
     problem: std::sync::Mutex<Option<String>>,
+    /// Whether a copy the hub sent was not taken, so the next round reads
+    /// the hub's copies again.
+    missed: std::sync::atomic::AtomicBool,
 }
 
 /// Where a machine's edits go: over its link, or, on the hub's own
@@ -130,7 +138,8 @@ impl Hub {
 
     /// Send `hub` this machine's edits, once its files are valid, and take
     /// the copies it answers with; until the machine `knows` the hub's
-    /// copies, it reads them, sending only edits of files agreed on before.
+    /// copies, or after it missed one, it reads them, sending only edits of
+    /// files agreed on before until it knows them.
     async fn share_round(
         self: &Arc<Self>,
         daemon: &Arc<dyn Daemon>,
@@ -142,19 +151,37 @@ impl Hub {
         let agreed = self.agreed_copies(&key).await?;
         let on_disk = self.shared_files().await?;
         let mut edits = local::edits(&on_disk, &agreed, knows);
-        if !edits.is_empty() && !self.shared_files_valid(&**daemon).await {
+        if !self.shared_files_valid(&**daemon, !edits.is_empty()).await {
             edits.clear();
         }
-        if edits.is_empty() && knows {
+        let missed = self.sharing.missed.load(Ordering::SeqCst);
+        if edits.is_empty() && knows && !missed {
             return Ok(());
         }
+        let shared = self.exchange_copies(daemon, hub, &key, agreed, edits);
+        let shared = shared.await;
+        self.sharing.missed.store(shared.is_err(), Ordering::SeqCst);
+        shared
+    }
+
+    /// Send `hub` `edits` and take the copies it answers with into this
+    /// machine's files, which agreed on the copies `agreed` with the hub
+    /// whose key is `key`.
+    async fn exchange_copies(
+        self: &Arc<Self>,
+        daemon: &Arc<dyn Daemon>,
+        hub: &To<'_>,
+        key: &PublicKey,
+        agreed: BTreeMap<FileName, Copy>,
+        edits: Vec<Edit>,
+    ) -> Result<()> {
         let copies = self.share_with(daemon, hub, edits.clone()).await?;
         // Held so the daemon never exits between writing a copy and
         // recording that it agrees on it, as answering the hub's calls is.
         let Some(_operation) = self.gates.operation_unless_exiting().await else {
             bail!("the daemon is exiting");
         };
-        self.take_copies(&**daemon, &key, copies, agreed, edits)
+        self.take_copies(&**daemon, key, copies, agreed, edits)
             .await
     }
 
@@ -186,7 +213,8 @@ impl Hub {
     }
 
     /// Take the `copies` the hub sends this machine, or its own machine
-    /// when `own`.
+    /// when `own`; once that fails, the next round reads the hub's copies
+    /// again.
     pub(super) async fn take_sent_copies(
         &self,
         daemon: &dyn Daemon,
@@ -194,10 +222,17 @@ impl Hub {
         copies: Vec<Copy>,
     ) -> Result<()> {
         let _round = self.sharing.round.lock().await;
-        let key = self.shared_hub_key(own).await?;
-        let agreed = self.agreed_copies(&key).await?;
-        self.take_copies(daemon, &key, copies, agreed, Vec::new())
-            .await
+        let taken = async {
+            let key = self.shared_hub_key(own).await?;
+            let agreed = self.agreed_copies(&key).await?;
+            self.take_copies(daemon, &key, copies, agreed, Vec::new())
+                .await
+        };
+        let taken = taken.await;
+        if taken.is_err() {
+            self.sharing.missed.store(true, Ordering::SeqCst);
+        }
+        taken
     }
 
     /// Take the hub's `copies` into this machine's files, given the copies
@@ -266,9 +301,15 @@ impl Hub {
         .await;
     }
 
-    /// Whether this machine's shared files load, telling the user once of
-    /// each new problem that keeps them from the hub.
-    async fn shared_files_valid(&self, daemon: &dyn Daemon) -> bool {
+    /// Whether this machine's `edited` shared files may go to the hub: once
+    /// they load, telling the user once of each new problem that keeps them
+    /// from it. Without edits they hold the copies agreed on, which loaded,
+    /// so the problem the user last heard of is gone.
+    async fn shared_files_valid(&self, daemon: &dyn Daemon, edited: bool) -> bool {
+        if !edited {
+            *self.sharing.problem.lock().unwrap() = None;
+            return true;
+        }
         let paths = self.paths.clone();
         let loaded = tokio::task::spawn_blocking(move || Shared::load(&paths)).await;
         let problem = match loaded {
