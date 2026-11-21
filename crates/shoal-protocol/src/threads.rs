@@ -10,7 +10,7 @@ use shoal_states::states;
 
 pub use crate::alerts::Sender;
 use crate::item_numbers::ItemNumber;
-use crate::model::Located;
+use crate::model::{Located, Space};
 use crate::space_names::SpaceName;
 
 /// Longest post, in bytes; posts may span lines.
@@ -246,18 +246,24 @@ impl ThreadSpace {
         }
     }
 
+    /// The space `space` of this machine, by its number and name.
+    pub fn of(space: &Space) -> Self {
+        Self {
+            id: space.id.clone(),
+            name: Some(space.name.clone()),
+            number: Some(space.number),
+        }
+    }
+
     /// The space `located`, by the number and name it has there.
     pub fn located(located: Located) -> Self {
-        let (id, name, number) = match located {
-            Located::Here(space) => (space.id, space.name, space.number),
-            Located::Elsewhere { space, .. } => {
-                (space.space.id, space.space.name, space.space.number)
-            }
-        };
-        Self {
-            id,
-            name: Some(name),
-            number: Some(number),
+        match located {
+            Located::Here(space) => Self::of(&space),
+            Located::Elsewhere { space, .. } => Self {
+                id: space.space.id,
+                name: Some(space.space.name),
+                number: Some(space.space.number),
+            },
         }
     }
 

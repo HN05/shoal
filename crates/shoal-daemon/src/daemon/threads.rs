@@ -11,7 +11,6 @@ use anyhow::{Context as _, Result, bail, ensure};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     code::NewCodeRef,
-    model::Located,
     space_names::SpaceSelector,
     threads::{Holder, Sender, Side, Thread, ThreadKind, ThreadSpace},
 };
@@ -63,8 +62,7 @@ impl Manager {
             // Numbered in the space it is opened with, on that space's
             // machine, which takes a request for a space this one lacks.
             (None, Some(to)) => {
-                let target = Located::Here(Box::new(self.space(to).await?));
-                let target = ThreadSpace::located(target);
+                let target = ThreadSpace::of(&self.space(to).await?);
                 (Sender::User, target.id.clone(), Some(target))
             }
             (None, None) => bail!("the user opens a thread with a space; name it with --space"),

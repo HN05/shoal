@@ -206,11 +206,7 @@ impl Manager {
                 };
                 let poster = Poster {
                     side,
-                    space: Some(ThreadSpace {
-                        id: space.id.clone(),
-                        name: Some(space.name.clone()),
-                        number: Some(space.number),
-                    }),
+                    space: Some(ThreadSpace::of(&space)),
                     seen: thread.holder.clone(),
                 };
                 let (thread, delivered) =
