@@ -426,3 +426,48 @@ async fn a_thread_shows_its_changes_and_whether_its_holder_works_for_it() {
         "{told:?}"
     );
 }
+
+#[tokio::test]
+async fn a_change_s_lines_follow_its_code_and_its_version_stays_kept() {
+    let fixture = fixture().await;
+    fixture.write("lib.rs", "a\nb\n");
+    fixture.edit("lib.rs", "a\nb\n", "a\nb\nc\n").await;
+    // Lines added above it move it down, once the agent commits it too.
+    fixture.write("lib.rs", "z\na\nb\nc\n");
+    let lines = |changes: Vec<Change>| changes[0].latest.to_string();
+    let filter = ChangeFilter::default;
+    let changes = fixture
+        .manager
+        .changes(Some(&fixture.agent), filter())
+        .await
+        .unwrap();
+    assert_eq!(lines(changes), "lib.rs:4");
+    let repository = fixture.workspace.repository_id.clone().unwrap();
+    let repo = fixture.manager.repository(&repository).await.unwrap();
+    let reference = crate::git::code_versions::reference(fixture.workspace.id.as_str());
+    let kept = crate::git::code_versions::kept(&repo.path, &reference)
+        .await
+        .unwrap();
+    assert_eq!(
+        kept.len(),
+        2,
+        "the version it made and the one it was followed to"
+    );
+}
+
+#[tokio::test]
+async fn a_change_in_no_thread_expires_as_checkpoints_do() {
+    let fixture = fixture().await;
+    let thread = fixture.thread("Keep it").await;
+    fixture.write("lib.rs", "a\n");
+    fixture.switch(Some(&thread)).await;
+    fixture.edit("lib.rs", "a\n", "a\nb\n").await;
+    fixture.switch(None).await;
+    fixture.edit("lib.rs", "a\nb\n", "a\nb\nc\n").await;
+    (fixture.manager.store)
+        .write(|tx| Ok(tx.execute("UPDATE space_changes SET made_at=0", [])?))
+        .await
+        .unwrap();
+    fixture.manager.expire_checkpoints().await.unwrap();
+    assert_eq!(fixture.recorded().await, ["1 agent text lib.rs:2"]);
+}

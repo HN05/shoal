@@ -470,12 +470,20 @@ impl Manager {
             return Ok(());
         }
         let repo = &self.repository(&repo.id).await?;
+        let retention = self
+            .repository_settings(&repo.id)
+            .await?
+            .cleanup
+            .restore
+            .retention();
         let _refs = self.gates.lock_checkpoints().await;
         let repository_id = repo.id.clone();
         let kept = self
             .store
             .run(move |db| {
                 delete_expired(db, &repository_id)?;
+                let before = UnixTime::now() - retention;
+                crate::daemon::changes::records::expire(db, &repository_id, before)?;
                 kept_commits(db, &repository_id)
             })
             .await?;

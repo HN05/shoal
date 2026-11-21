@@ -33,7 +33,7 @@ mod resolving;
 
 pub(crate) use chat::{number_of, record_replies as record_chat_replies};
 pub(crate) use closing::{close, reopen};
-pub(in crate::daemon) use code::{canonical, relative};
+pub(in crate::daemon) use code::{Followed, canonical, relative};
 pub(crate) use delivery::Delivered as ThreadsDelivered;
 pub(crate) use reading::{newest_waiting_for_user, waiting_count, waiting_on_spaces};
 

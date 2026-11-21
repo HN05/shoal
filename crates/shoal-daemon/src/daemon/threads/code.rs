@@ -11,6 +11,7 @@ mod recording;
 pub(super) mod records;
 mod versions;
 
+pub(in crate::daemon) use following::Followed;
 pub(super) use recording::NewCode;
 pub(in crate::daemon) use recording::{canonical, relative};
 

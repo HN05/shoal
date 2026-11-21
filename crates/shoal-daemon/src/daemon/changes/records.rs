@@ -458,3 +458,44 @@ pub(crate) fn of_posts(db: &Connection, posts: &[i64]) -> Result<HashMap<i64, Ve
     }
     Ok(by_post)
 }
+
+/// Delete the changes of the repository `repository` made before `before`
+/// that neither a thread nor a post keeps, as checkpoints expire.
+pub(crate) fn expire(db: &Connection, repository: &RepositoryId, before: UnixTime) -> Result<()> {
+    db.execute(
+        "DELETE FROM space_changes WHERE repository_id=?1 AND thread_id IS NULL AND made_at<?2
+            AND id NOT IN (SELECT change_id FROM thread_post_changes)",
+        params![repository, before],
+    )?;
+    Ok(())
+}
+
+/// Move the lines of the change `number` of the space `space` to `latest`
+/// in `state`, unless they were followed from `from` meanwhile; whether
+/// they moved.
+pub(crate) fn follow(
+    tx: &Transaction<'_>,
+    space: &SpaceId,
+    number: u32,
+    from: &CodeAt,
+    latest: &CodeAt,
+    state: CodeState,
+) -> Result<bool> {
+    let (start, end) = latest.lines.map(|lines| (lines.start, lines.end)).unzip();
+    Ok(tx.execute(
+        "UPDATE space_changes SET latest_path=?5,latest_start=?6,latest_end=?7,latest_blob=?8,
+                state=?9
+            WHERE space_id=?1 AND number=?2 AND latest_path=?3 AND latest_blob IS ?4",
+        params![
+            space,
+            number,
+            from.path,
+            from.blob,
+            latest.path,
+            start,
+            end,
+            latest.blob,
+            state
+        ],
+    )? > 0)
+}

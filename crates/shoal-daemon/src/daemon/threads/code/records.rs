@@ -125,24 +125,30 @@ pub(super) fn follow(
     )? > 0)
 }
 
-/// Every file version the references in the worktree of the space `space`
-/// keep.
+/// Every file version the references and changes in the worktree of the
+/// space `space` keep.
 pub(super) fn kept(db: &Connection, space: &SpaceId) -> Result<Vec<String>> {
     Ok(db
         .prepare(
             "SELECT blob FROM thread_code WHERE space_id=?1 AND blob IS NOT NULL
             UNION SELECT latest_blob FROM thread_code WHERE space_id=?1 AND latest_blob IS NOT NULL
+            UNION SELECT blob FROM space_changes WHERE space_id=?1 AND blob IS NOT NULL
+            UNION SELECT latest_blob FROM space_changes
+                WHERE space_id=?1 AND latest_blob IS NOT NULL
             ORDER BY 1",
         )?
         .query_map([space], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The spaces whose references keep file versions in the repository
-/// `repository`.
+/// The spaces whose references or changes keep file versions in the
+/// repository `repository`.
 pub(super) fn spaces_in(db: &Connection, repository: &RepositoryId) -> Result<Vec<SpaceId>> {
     Ok(db
-        .prepare("SELECT DISTINCT space_id FROM thread_code WHERE repository_id=?1")?
+        .prepare(
+            "SELECT space_id FROM thread_code WHERE repository_id=?1
+            UNION SELECT space_id FROM space_changes WHERE repository_id=?1",
+        )?
         .query_map([repository], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }

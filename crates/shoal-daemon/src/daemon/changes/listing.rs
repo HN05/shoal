@@ -8,7 +8,7 @@ use shoal_protocol::changes::{Change, ChangeDiff};
 
 use super::records;
 use crate::{
-    daemon::{manager::Manager, scope::Caller},
+    daemon::{manager::Manager, scope::Caller, threads::Followed},
     protocol::ChangeFilter,
     time::UnixTime,
 };
@@ -20,28 +20,36 @@ enum Source {
 }
 
 impl Manager {
-    /// The changes `filter` keeps for `caller`, or the user without one.
+    /// The changes `filter` keeps for `caller`, or the user without one,
+    /// followed to where their code is now.
     pub async fn changes(
         &self,
         caller: Option<&Caller>,
         filter: ChangeFilter,
     ) -> Result<Vec<Change>> {
         let source = self.change_source(caller, filter).await?;
-        (self.store)
-            .read(move |tx| source.read(tx, records::change))
-            .await
+        let read = (self.store).read(move |tx| source.read(tx, records::change));
+        let mut changes = read.await?;
+        let followed = changes.iter_mut().map(|change| change as &mut dyn Followed);
+        self.follow(followed.collect()).await;
+        Ok(changes)
     }
 
-    /// The changes `filter` keeps for `caller`, with their lines.
+    /// The changes `filter` keeps for `caller`, with their lines, followed
+    /// to where their code is now.
     pub async fn change_diffs(
         &self,
         caller: Option<&Caller>,
         filter: ChangeFilter,
     ) -> Result<Vec<ChangeDiff>> {
         let source = self.change_source(caller, filter).await?;
-        (self.store)
-            .read(move |tx| source.read(tx, records::diff))
-            .await
+        let read = (self.store).read(move |tx| source.read(tx, records::diff));
+        let mut diffs = read.await?;
+        let followed = diffs
+            .iter_mut()
+            .map(|diff| &mut diff.change as &mut dyn Followed);
+        self.follow(followed.collect()).await;
+        Ok(diffs)
     }
 
     /// What `filter` reads for `caller`: the thread it names, which the
