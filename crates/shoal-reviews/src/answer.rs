@@ -98,6 +98,12 @@ impl Reviews {
         let Some(admission) = admitted.await? else {
             return Ok(None);
         };
+        // The holder may have resolved the thread or posted again while the
+        // answer waited, and the workspace moved, as a fork PR's does.
+        let Some(thread) = self.awaiting(awaited).await? else {
+            return Ok(None);
+        };
+        let workspace = daemon.workspace_by_id(&review.workspace_id).await?;
         daemon.verify_worktree(&workspace).await?;
         let settings = daemon.settings_with_templates(&workspace).await?;
         let commits = run::review_commits(daemon, &workspace, &review.target).await?;
