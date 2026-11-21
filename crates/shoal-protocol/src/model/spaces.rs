@@ -8,6 +8,28 @@ use serde::{Deserialize, Serialize};
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
 
+/// Where the space a request names runs, as the daemon finds it within the
+/// caller's scope: here, with its record, or on another joined machine, as
+/// the hub lists it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Located {
+    Here(Box<Space>),
+    Elsewhere {
+        space: Box<crate::hub::directory::Listed>,
+        machine: crate::hub::Member,
+    },
+}
+
+impl Located {
+    pub fn id(&self) -> &SpaceId {
+        match self {
+            Self::Here(space) => &space.id,
+            Self::Elsewhere { space, .. } => &space.space.id,
+        }
+    }
+}
+
 /// Another space a record refers to, with its current name, and its branch
 /// when it is a workspace.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

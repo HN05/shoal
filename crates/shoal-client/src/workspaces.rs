@@ -14,8 +14,8 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     config::hooks::HookKind,
     model::{
-        ConflictCheck, DiffBase, MergeOptions, MergePreview, OwnedPlace, Refreshed, RenamedSpace,
-        Space, SpacePlaces, SpaceTarget, UntrackedWorktree, Workspace,
+        ConflictCheck, DiffBase, Located, MergeOptions, MergePreview, OwnedPlace, Refreshed,
+        RenamedSpace, Space, SpacePlaces, SpaceTarget, UntrackedWorktree, Workspace,
     },
     protocol::{CommitStart, ConfigTarget, CreationOptions, RepositoryLayers, WorkspaceMethod},
     repository::Selector,
@@ -137,6 +137,13 @@ pub async fn fast_forward(
 /// Bring `workspace` up to date with what it was made from.
 pub async fn refresh(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Refreshed> {
     request(daemon, WorkspaceMethod::RefreshWorkspace { workspace }).await
+}
+
+/// Where the space `space` names runs: here, with its record, or on the
+/// other joined machine the hub lists it on.
+pub async fn locate(daemon: &impl Daemon, space: SpaceSelector) -> Result<Located> {
+    let located: Box<Located> = request(daemon, WorkspaceMethod::LocateSpace { space }).await?;
+    Ok(*located)
 }
 
 /// The spaces `target` selects.

@@ -280,6 +280,7 @@ response_bodies! {
     AgentSession(crate::model::AgentSession),
     SpaceStatus(Box<SpaceStatus>),
     ReportedStatus(Box<crate::status::ReportedStatus>),
+    LocatedSpace(Box<crate::model::Located>),
     SpaceSessions(crate::transcripts::SpaceSessions),
     FollowedSession(crate::transcripts::FollowedSession),
     SessionBytes(crate::transcripts::SessionBytes),

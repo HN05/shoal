@@ -54,6 +54,7 @@ pub(crate) use export::MovePacking;
 mod find;
 mod hooks;
 mod listing;
+mod location;
 pub(crate) use listing::worktrees_mut;
 mod naming;
 pub(crate) mod priority;
