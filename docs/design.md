@@ -130,7 +130,8 @@ polls their items in watches and in the background, follows the runs of
 their merges, starts, reads, reruns, cancels and approves CI runs, lists
 and deletes the forge's branches, reads failed check logs and item
 views, applies actions to linked items as the space's own changes, with
-the warnings and bindings of their merges, opens issues and PRs and
+the warnings, bindings and review gate of their merges, moves the
+workspaces stacked on a base once its work merges, opens issues and PRs and
 reverts merged ones, or proposes them where a permission asks, decides
 those proposals and runs the pushes their approval starts, and delivers
 the activity to agents, or through the hub to coordinators on other
