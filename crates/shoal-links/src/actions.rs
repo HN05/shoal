@@ -2,6 +2,8 @@
 //! scope rules apply and each change reaches the event journal.
 mod accounts;
 mod created;
+mod open_issue;
+mod opening;
 
 use anyhow::{Context, Result};
 use shoal_core::config::Effective;

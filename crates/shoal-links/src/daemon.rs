@@ -37,6 +37,7 @@ use shoal_protocol::{
     protocol::operations::OperationSpec,
     space_names::SpaceSelector,
 };
+use shoal_refs::CommitId;
 use tokio::sync::watch;
 
 use crate::space::LinkSpace;
@@ -259,6 +260,23 @@ pub trait Approvals: Send + Sync {
     fn operation_running(&self, id: &str) -> bool;
 }
 
+/// The local reviews a new PR waits for, as `[review] require_for_pr`
+/// asks.
+pub trait Reviews: Send + Sync {
+    /// Whether `settings` require a review of a new PR from `caller`.
+    fn pr_review_required(&self, settings: &Effective, caller: Option<&Caller>) -> bool;
+
+    /// Refuse a new PR of `workspace` at `head` from `caller` until a
+    /// finished review covers it with every finding resolved, starting a
+    /// review where none does.
+    fn require_pr_review<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+        head: &'a CommitId,
+        caller: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<()>>;
+}
+
 /// What the daemon records of a space's agent, which settling the agent
 /// account on its issues reads.
 pub struct SpaceAgent {
@@ -332,12 +350,20 @@ pub trait Forges: Send + Sync {
 /// Everything links need of the daemon, which each of their operations
 /// that reaches beyond them takes.
 pub trait Daemon:
-    Spaces + Watches + Messages + Elsewhere + Approvals + Forges + Permissions + Coordinators
+    Spaces + Watches + Messages + Elsewhere + Approvals + Reviews + Forges + Permissions + Coordinators
 {
 }
 
 impl<T> Daemon for T where
-    T: Spaces + Watches + Messages + Elsewhere + Approvals + Forges + Permissions + Coordinators
+    T: Spaces
+        + Watches
+        + Messages
+        + Elsewhere
+        + Approvals
+        + Reviews
+        + Forges
+        + Permissions
+        + Coordinators
 {
 }
 

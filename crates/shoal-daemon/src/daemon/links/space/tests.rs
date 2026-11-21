@@ -270,7 +270,9 @@ async fn a_chat_without_a_repository_opens_no_issue_elsewhere_unless_allowed_dir
         let config = format!("[permissions]\nissue_other_repositories = '{setting}'\n");
         crate::daemon::test_support::configure(&manager, &config).await;
         let opened = manager
+            .links
             .open_issue(
+                &*manager,
                 &RepoTarget {
                     context: Some(ItemContext::space(SpaceSelector::id(&master.id))),
                     repository: Some("https://github.com/other/unregistered".into()),

@@ -1,42 +1,45 @@
 //! Opening an issue for a space, or from a registered
 //! checkout, in its repository or another one, or recording it for the
 //! user's approval where the repository asks for that.
-use shoal_ids::repository_ids::RepositoryId;
-use shoal_links::issue::assignees::AssignerOf;
-use shoal_links::proposals::OpenOutcomeExt;
-use shoal_protocol::links::OpenOutcome;
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use anyhow::{Context as _, Result, bail};
-
-use crate::{
-    config::{
-        permissions::{Opening, OtherRepositories, Permissions},
-        resolve::Effective,
-    },
-    daemon::{
-        links::{LinkSpace, issue::Assigner},
-        manager::Manager,
-        scope::Caller,
-    },
-    forge::{
-        ForgeRepo,
-        items::{
-            create::NewIssue,
-            item::{Item, Opened},
-            link::ItemKind,
-        },
-    },
-    protocol::{ItemContext, RepoTarget},
-};
+use shoal_core::config::Effective;
+use shoal_daemon_base::callers::Caller;
 use shoal_forge::{
-    RepoRequests,
     account::Account,
     conventions,
     items::{
         attach::AttachRequests,
         create::{CreateRequests, Created},
     },
+};
+use shoal_forge_types::{
+    ForgeRepo,
+    items::{
+        create::NewIssue,
+        item::{Item, Opened},
+        link::ItemKind,
+    },
+};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::{
+    config::permissions::{Opening, OtherRepositories, Permissions},
+    links::OpenOutcome,
+    model::{Assigner, Space},
+    protocol::{ItemContext, RepoTarget},
+};
+
+use crate::{
+    Links,
+    daemon::Daemon,
+    forges,
+    issue::assignees::AssignerOf,
+    proposals::{OpenOutcomeExt, Proposer, proposer},
+    space::LinkSpace,
 };
 
 /// Why `--link` is refused outside a workspace or chat.
@@ -46,11 +49,12 @@ const LINK_NEEDS_SPACE: &str =
 const LINK_NEEDS_REPOSITORY: &str =
     "a chat without a repository links no issues; open the issue without --link";
 
-impl Manager {
+impl Links {
     /// Open an issue as the agent account in the `target` repository, and
     /// assign it to the space when `link` is set.
     pub async fn open_issue(
-        &self,
+        self: &Arc<Self>,
+        daemon: &dyn Daemon,
         target: &RepoTarget,
         issue: NewIssue,
         link: bool,
@@ -61,20 +65,28 @@ impl Manager {
         let context = match &target.context {
             Some(ItemContext::Checkout(id)) => {
                 anyhow::ensure!(!link, "{LINK_NEEDS_SPACE}");
-                let account = self.links.user_account();
-                return (self.open_checkout_issue(id, issue, repository, account)).await;
+                let account = self.user_account();
+                return (self.open_checkout_issue(daemon, id, issue, repository, account)).await;
             }
             Some(context) => context,
             None => {
                 anyhow::ensure!(!link, "{LINK_NEEDS_SPACE}");
-                return self.open_outside_issue(issue, repository, caller).await;
+                return self
+                    .open_outside_issue(daemon, issue, repository, caller)
+                    .await;
             }
         };
-        match self.issue_space(context, repository.as_deref()).await? {
-            Some(space) => (self.open_space_issue(space, issue, repository, link, caller)).await,
+        match self
+            .issue_space(daemon, context, repository.as_deref())
+            .await?
+        {
+            Some(space) => {
+                (self.open_space_issue(daemon, space, issue, repository, link, caller)).await
+            }
             None => {
                 anyhow::ensure!(!link, "{LINK_NEEDS_REPOSITORY}");
-                self.open_outside_issue(issue, repository, caller).await
+                self.open_outside_issue(daemon, issue, repository, caller)
+                    .await
             }
         }
     }
@@ -84,23 +96,25 @@ impl Manager {
     /// `named` names, which counts as its own. None for such a chat naming
     /// no registered repository.
     async fn issue_space(
-        &self,
+        self: &Arc<Self>,
+        daemon: &dyn Daemon,
         context: &ItemContext,
         named: Option<&str>,
     ) -> Result<Option<LinkSpace>> {
-        match self.outside_repositories(context).await? {
-            Some(chat) => Ok((self.registered_named(named).await?)
+        match self.outside_repositories(daemon, context).await? {
+            Some(chat) => Ok((daemon.registered_named(named).await?)
                 .map(|checkout| LinkSpace::acting_in(chat, checkout))),
-            None => self.links.context_space(self, context).await.map(Some),
+            None => self.context_space(daemon, context).await.map(Some),
         }
     }
 
     /// The space without a repository, a chat, that `context` names acting
     /// in no registered repository, if it is one.
     async fn outside_repositories(
-        &self,
+        self: &Arc<Self>,
+        daemon: &dyn Daemon,
         context: &ItemContext,
-    ) -> Result<Option<crate::model::Space>> {
+    ) -> Result<Option<Space>> {
         let ItemContext::Space {
             space,
             repository: None,
@@ -108,7 +122,7 @@ impl Manager {
         else {
             return Ok(None);
         };
-        let space = self.space(space).await.ok();
+        let space = daemon.space(space).await.ok();
         Ok(space.filter(|space| space.repository_id.is_none()))
     }
 
@@ -120,14 +134,14 @@ impl Manager {
     /// A proposal belongs to a registered repository, so a scoped `caller`
     /// that the setting would have propose one is refused.
     async fn open_outside_issue(
-        &self,
+        self: &Arc<Self>,
+        daemon: &dyn Daemon,
         issue: NewIssue,
         repository: Option<String>,
         caller: Option<&Caller>,
     ) -> Result<OpenOutcome> {
         let named = repository.context("name the repository the issue opens in with --repo")?;
-        let forge = ForgeRepo::resolve(&named, &self.forge_hosts())
-            .await
+        let forge = (daemon.resolve_forge(&named).await)
             .with_context(|| format!("{named} is not registered; name it by its URL"))?;
         let destination = IssueDestination {
             forge,
@@ -135,7 +149,7 @@ impl Manager {
         };
         if let Some(caller) = caller {
             // No registered repository's config applies, so the global one does.
-            let permissions = self.caller_permissions(caller, None).await?;
+            let permissions = daemon.caller_permissions(caller, None).await?;
             anyhow::ensure!(
                 destination.opening(&permissions)? == Opening::Direct,
                 "agents propose issues only in registered repositories from a chat without a \
@@ -146,8 +160,8 @@ impl Manager {
             );
         }
         let account = match caller {
-            Some(_) => self.links.agent_account(),
-            None => self.links.user_account(),
+            Some(_) => self.agent_account(),
+            None => self.user_account(),
         };
         let Created { item, unfinished } =
             (destination.forge).create_issue(&account, &issue).await?;
@@ -165,7 +179,8 @@ impl Manager {
     /// `issue_open` permission, or for another repository its
     /// `issue_other_repositories` permission, says so.
     async fn open_space_issue(
-        &self,
+        self: &Arc<Self>,
+        daemon: &dyn Daemon,
         space: LinkSpace,
         issue: NewIssue,
         repository: Option<String>,
@@ -173,42 +188,53 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<OpenOutcome> {
         anyhow::ensure!(!link || space.keeps_links(), "{LINK_NEEDS_REPOSITORY}");
-        let proposer = shoal_links::proposals::proposer(self, caller).await;
+        let proposer = proposer(daemon, caller).await;
         // Cleanup holds the space's gate, so it cannot remove the space
         // between opening the issue and linking it, nor a link take its
         // issue's place meanwhile.
         let _gate = self.gates.lock_prs([&space.id]).await;
-        let directory = self.issue_directory(&space).await?;
-        let settings = self.acting_settings(&space).await?;
-        let own = shoal_links::forges::origin(self, &directory).await?;
-        let destination = self.issue_destination(own, repository.as_deref()).await?;
+        let directory = self.issue_directory(daemon, &space).await?;
+        let settings = daemon.acting_settings(&space).await?;
+        let own = forges::origin(daemon, &directory).await?;
+        let destination = self
+            .issue_destination(daemon, own, repository.as_deref())
+            .await?;
         anyhow::ensure!(
             !link || !destination.elsewhere,
             "an issue in another repository cannot be linked; open it without --link"
         );
         let opening = match caller {
             Some(caller) => {
-                let permissions = self.caller_permissions(caller, Some(space.repository_id()));
+                let permissions = daemon.caller_permissions(caller, Some(space.repository_id()));
                 destination.opening(&permissions.await?)?
             }
             None => Opening::Direct,
         };
         let required = destination.required(&settings);
         if let Some(proposer) = proposer.filter(|_| opening != Opening::Direct) {
-            return (self.propose_issue_at(&space, &destination, required, issue, link, proposer))
-                .await;
+            return (self.propose_issue_at(
+                daemon,
+                &space,
+                &destination,
+                required,
+                issue,
+                link,
+                proposer,
+            ))
+            .await;
         }
-        let account = self.links.agent_account();
+        let account = self.agent_account();
         let created = destination.create(&account, &directory, &issue, required);
         let (item, warnings) = created.await?;
-        (self.keep_opened_issue(&space, item, warnings, link, caller)).await
+        (self.keep_opened_issue(daemon, &space, item, warnings, link, caller)).await
     }
 
     /// The issue the space just opened, recorded as opened there, or
     /// assigned with `link`, after `warnings` and what linking it warns of;
     /// a chat without a repository records nothing.
     async fn keep_opened_issue(
-        &self,
+        self: &Arc<Self>,
+        daemon: &dyn Daemon,
         space: &LinkSpace,
         item: Item,
         warnings: Vec<String>,
@@ -218,10 +244,8 @@ impl Manager {
         let (linked, kept) = match space.keeps_links() {
             true => {
                 let assigner = Assigner::of(caller);
-                (self
-                    .links
-                    .keep_created(self, &space.id, ItemKind::Issue, &item, link, assigner))
-                .await?
+                (self.keep_created(daemon, &space.id, ItemKind::Issue, &item, link, assigner))
+                    .await?
             }
             false => (false, Vec::new()),
         };
@@ -238,12 +262,12 @@ impl Manager {
     /// worktree, verified and able to record what it opens, or the
     /// registered checkout of the repository a chat acts in. A workspace is
     /// read again, under the gate the caller holds.
-    async fn issue_directory(&self, space: &LinkSpace) -> Result<PathBuf> {
+    async fn issue_directory(&self, daemon: &dyn Daemon, space: &LinkSpace) -> Result<PathBuf> {
         if space.worktree().is_none() {
-            return Ok(self.repository(space.repository_id()).await?.path);
+            return Ok(daemon.repository(space.repository_id()).await?.path);
         }
-        let workspace = self.workspace_by_id(&space.id).await?;
-        self.verify_worktree(&workspace).await?;
+        let workspace = daemon.workspace_by_id(&space.id).await?;
+        daemon.verify_worktree(&workspace).await?;
         // Refuse before creating anything that could not then be recorded
         // or linked.
         anyhow::ensure!(
@@ -257,22 +281,26 @@ impl Manager {
     /// `destination`, refusing it first for what opening it would refuse:
     /// a label in `required` it leaves out, or a file the forge does not
     /// take.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the issue and where it opens, beside the daemon and its proposer"
+    )]
     async fn propose_issue_at(
-        &self,
+        self: &Arc<Self>,
+        daemon: &dyn Daemon,
         space: &LinkSpace,
         destination: &IssueDestination,
         required: &[String],
         issue: NewIssue,
         link: bool,
-        proposer: shoal_links::proposals::Proposer,
+        proposer: Proposer,
     ) -> Result<OpenOutcome> {
-        let (forge, account) = (&destination.forge, self.links.agent_account());
+        let (forge, account) = (&destination.forge, self.agent_account());
         conventions::require(forge, &account, ItemKind::Issue, required, &issue.labels).await?;
         forge.check_uploads(&account, &issue.attachments).await?;
         let repository = destination.repository();
         let proposed = self
-            .links
-            .propose_issue(self, space, issue, repository, link, proposer)
+            .propose_issue(daemon, space, issue, repository, link, proposer)
             .await?;
         Ok(OpenOutcome::Proposed(proposed))
     }
@@ -281,16 +309,19 @@ impl Manager {
     /// repository's settings, as `account`. Only unscoped callers open from
     /// a checkout, so nothing is proposed.
     async fn open_checkout_issue(
-        &self,
+        self: &Arc<Self>,
+        daemon: &dyn Daemon,
         id: &RepositoryId,
         issue: NewIssue,
         repository: Option<String>,
         account: Account,
     ) -> Result<OpenOutcome> {
-        let checkout = self.repository(id).await?;
-        let settings = self.repository_settings(&checkout.id).await?;
-        let own = shoal_links::forges::of_checkout(self, &checkout).await?;
-        let destination = self.issue_destination(own, repository.as_deref()).await?;
+        let checkout = daemon.repository(id).await?;
+        let settings = daemon.repository_settings(&checkout.id).await?;
+        let own = forges::of_checkout(daemon, &checkout).await?;
+        let destination = self
+            .issue_destination(daemon, own, repository.as_deref())
+            .await?;
         let required = destination.required(&settings);
         let (item, warnings) = destination
             .create(&account, &checkout.path, &issue, required)
@@ -306,11 +337,12 @@ impl Manager {
     /// The repository `named` names for a new issue, or the workspace's
     /// repository `own` without one.
     async fn issue_destination(
-        &self,
+        self: &Arc<Self>,
+        daemon: &dyn Daemon,
         own: ForgeRepo,
         named: Option<&str>,
     ) -> Result<IssueDestination> {
-        let forge = shoal_links::forges::named(self, own.clone(), named).await?;
+        let forge = forges::named(daemon, own.clone(), named).await?;
         let elsewhere = forge != own;
         Ok(IssueDestination { forge, elsewhere })
     }

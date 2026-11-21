@@ -27,7 +27,6 @@ pub mod wait;
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension};
 use shoal_ids::space_ids::SpaceId;
-use shoal_links::space::LinkSpace;
 
 use crate::state::WorkspaceState;
 

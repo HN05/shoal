@@ -1,4 +1,4 @@
-use super::*;
+use crate::forge::items::create::PullOptions;
 use crate::{
     daemon::test_support::{manager, repository},
     state::WorkspaceState,
@@ -22,7 +22,9 @@ async fn reverts_keep_the_reverted_base_and_skip_workspaces_being_removed() {
         ..PullOptions::default()
     };
     let error = manager
+        .links
         .revert_pull(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             Some("7".parse().unwrap()),
             elsewhere,
@@ -38,7 +40,9 @@ async fn reverts_keep_the_reverted_base_and_skip_workspaces_being_removed() {
         .unwrap();
     // Refused before the forge is consulted: the repository has no origin.
     let error = manager
+        .links
         .revert_pull(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             Some("7".parse().unwrap()),
             PullOptions::default(),
@@ -72,7 +76,9 @@ async fn a_chat_reverts_from_its_repositorys_checkout() {
     // The chat reaches its checkout's forge, which this repository lacks,
     // rather than being refused as no workspace.
     let reverted = manager
+        .links
         .revert_pull(
+            &*manager,
             &SpaceSelector::id(&chat.id),
             Some("7".parse().unwrap()),
             PullOptions::default(),
@@ -80,7 +86,12 @@ async fn a_chat_reverts_from_its_repositorys_checkout() {
         )
         .await;
     let merged = manager
-        .merged_pull(&SpaceSelector::id(&chat.id), Some("7".parse().unwrap()))
+        .links
+        .merged_pull(
+            &*manager,
+            &SpaceSelector::id(&chat.id),
+            Some("7".parse().unwrap()),
+        )
         .await;
     for error in [reverted.unwrap_err(), merged.unwrap_err()] {
         assert!(

@@ -30,10 +30,13 @@ use shoal_protocol::{
     protocol::operations::OperationSpec,
     space_names::SpaceSelector,
 };
+use shoal_refs::CommitId;
 use tokio::sync::watch;
 
 use crate::{
-    daemon::{Approvals, Elsewhere, Forges, Messages, Permissions, SpaceAgent, Spaces, Watches},
+    daemon::{
+        Approvals, Elsewhere, Forges, Messages, Permissions, Reviews, SpaceAgent, Spaces, Watches,
+    },
     space::LinkSpace,
 };
 
@@ -260,6 +263,21 @@ impl Approvals for StandIn {
 
     fn operation_running(&self, _: &str) -> bool {
         false
+    }
+}
+
+impl Reviews for StandIn {
+    fn pr_review_required(&self, _: &Effective, _: Option<&Caller>) -> bool {
+        false
+    }
+
+    fn require_pr_review<'a>(
+        &'a self,
+        _: &'a Workspace,
+        _: &'a CommitId,
+        _: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
     }
 }
 

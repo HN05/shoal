@@ -1,7 +1,13 @@
-use super::*;
+use shoal_links::actions::head_repository;
+use shoal_protocol::{model::Assigner, space_names::SpaceSelector};
+
 use crate::forge::items::{
     action::Action,
     item::{Item, ItemState},
+};
+use crate::forge::{
+    ForgeRepo,
+    items::{create::PullOptions, link::ItemKind},
 };
 use shoal_links::place::Place;
 
@@ -109,7 +115,8 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
     ];
     for context in contexts {
         let error = manager
-            .open_issue(&context.into(), issue.clone(), false, None)
+            .links
+            .open_issue(&*manager, &context.into(), issue.clone(), false, None)
             .await
             .unwrap_err();
         assert!(
@@ -118,7 +125,9 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
         );
     }
     let error = manager
+        .links
         .open_pull(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             PullOptions::default(),
             false,

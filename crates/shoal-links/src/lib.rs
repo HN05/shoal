@@ -21,6 +21,7 @@ mod raw;
 pub mod reads;
 pub mod records;
 mod relink;
+mod revert;
 mod run_approval;
 pub mod runs;
 pub mod space;

@@ -29,7 +29,10 @@ pub(super) async fn handle(
             }));
         }
         ReviewMethod::CheckPrGate { workspace } => {
-            manager.check_pr_review_gate(&workspace, caller).await?;
+            manager
+                .links
+                .check_pr_review_gate(&**manager, &workspace, caller)
+                .await?;
             return Ok(Answer::Body(Body::Ok));
         }
         ReviewMethod::RunReview {

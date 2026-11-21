@@ -199,7 +199,8 @@ pub(super) async fn handle(
             push_held,
         } => Body::Opened(
             manager
-                .open_pull(&workspace, options, push_held, caller)
+                .links
+                .open_pull(&**manager, &workspace, options, push_held, caller)
                 .await?,
         ),
         ItemMethod::RevertPull {
@@ -208,18 +209,29 @@ pub(super) async fn handle(
             options,
         } => Body::Opened(
             manager
-                .revert_pull(&workspace, item, options, caller)
+                .links
+                .revert_pull(&**manager, &workspace, item, options, caller)
                 .await?,
         ),
         ItemMethod::MergedPull {
             space: workspace,
             item,
-        } => Body::MergedPull(manager.merged_pull(&workspace, item).await?),
+        } => Body::MergedPull(
+            manager
+                .links
+                .merged_pull(&**manager, &workspace, item)
+                .await?,
+        ),
         ItemMethod::OpenIssue {
             target,
             issue,
             link,
-        } => Body::Opened(manager.open_issue(&target, issue, link, caller).await?),
+        } => Body::Opened(
+            manager
+                .links
+                .open_issue(&**manager, &target, issue, link, caller)
+                .await?,
+        ),
         ItemMethod::SelectItems {
             target,
             selection,
