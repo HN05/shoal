@@ -17,7 +17,7 @@ pub enum Located {
     Here(Box<Space>),
     Elsewhere {
         space: Box<crate::hub::directory::Listed>,
-        machine: crate::hub::Member,
+        machine: crate::hub::Machine,
     },
 }
 
