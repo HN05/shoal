@@ -9,7 +9,7 @@ use crate::cli::context::Context;
 /// The spaces on every machine, warning that the other machines' are left
 /// out while the daemon cannot ask the hub.
 pub(in crate::cli) async fn spaces(ctx: &Context) -> Result<Everywhere> {
-    let everywhere = crate::client::spaces::everywhere(&ctx.paths).await?;
+    let everywhere = crate::client::spaces::everywhere(&ctx.paths, true).await?;
     if let Some(error) = &everywhere.unreachable {
         eprintln!("warning: the other machines' spaces are left out: {error}");
     }
@@ -20,7 +20,7 @@ pub(in crate::cli) async fn spaces(ctx: &Context) -> Result<Everywhere> {
 /// a warning that what the caller reads of them, `left_out`, is left out,
 /// while they cannot be listed.
 pub(in crate::cli) async fn elsewhere(ctx: &Context, left_out: &str) -> Option<HubView> {
-    let everywhere = crate::client::spaces::everywhere(&ctx.paths).await;
+    let everywhere = crate::client::spaces::everywhere(&ctx.paths, false).await;
     let error = match everywhere {
         Ok(Everywhere {
             elsewhere,

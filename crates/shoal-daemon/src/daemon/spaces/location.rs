@@ -17,10 +17,17 @@ use crate::daemon::{log, manager::Manager, scope::Caller};
 
 impl Manager {
     /// The spaces `caller` sees on every machine: this machine's as a
-    /// listing shows them, and the other machines' as the hub lists them,
-    /// or why the hub could not be asked.
-    pub(crate) async fn spaces_everywhere(&self, caller: Option<&Caller>) -> Result<Everywhere> {
-        let here = Spaces(self.listed_spaces(caller).await?);
+    /// listing shows them, unless not `here`, and the other machines' as
+    /// the hub lists them, or why the hub could not be asked.
+    pub(crate) async fn spaces_everywhere(
+        &self,
+        caller: Option<&Caller>,
+        here: bool,
+    ) -> Result<Everywhere> {
+        let here = match here {
+            true => Spaces(self.listed_spaces(caller).await?),
+            false => Spaces::default(),
+        };
         Ok(match self.hub.hub_view(self, caller).await {
             Ok(elsewhere) => Everywhere {
                 here,

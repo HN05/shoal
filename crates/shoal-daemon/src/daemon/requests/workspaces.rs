@@ -156,8 +156,8 @@ pub(super) async fn handle(
                 .await?,
         ),
         WorkspaceMethod::ListSpaces => Body::Spaces(manager.listed_spaces(caller).await?),
-        WorkspaceMethod::ListSpacesEverywhere => {
-            let everywhere = manager.spaces_everywhere(caller).await;
+        WorkspaceMethod::ListSpacesEverywhere { here } => {
+            let everywhere = manager.spaces_everywhere(caller, here).await;
             let parts = everywhere.map(Everywhere::into_parts);
             return Ok(Answer::pages(parts, Body::SpacesEverywhere));
         }
@@ -426,7 +426,7 @@ impl Scoped for WorkspaceMethod {
             } => None,
             // It finds only the spaces the caller sees.
             WorkspaceMethod::ListSpaces
-            | WorkspaceMethod::ListSpacesEverywhere
+            | WorkspaceMethod::ListSpacesEverywhere { .. }
             | WorkspaceMethod::FindSpaces { .. }
             | WorkspaceMethod::LocateSpace { .. }
             | WorkspaceMethod::SelectSpaces { .. } => None,

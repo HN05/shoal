@@ -17,11 +17,12 @@ pub async fn list(daemon: &impl Daemon) -> Result<Spaces> {
     Ok(Spaces(spaces))
 }
 
-/// The spaces the caller sees on every machine: this machine's, and the
-/// other joined machines' as the hub lists them, or why the hub could not
-/// be asked.
-pub async fn everywhere(daemon: &impl Daemon) -> Result<Everywhere> {
-    Everywhere::from_parts(pages(daemon, WorkspaceMethod::ListSpacesEverywhere).await?)
+/// The spaces the caller sees on every machine: this machine's, unless not
+/// `here`, and the other joined machines' as the hub lists them, or why the
+/// hub could not be asked.
+pub async fn everywhere(daemon: &impl Daemon, here: bool) -> Result<Everywhere> {
+    let method = WorkspaceMethod::ListSpacesEverywhere { here };
+    Everywhere::from_parts(pages(daemon, method).await?)
 }
 
 /// The spaces `spaces` name, or with `machines` every space of those joined
