@@ -1,7 +1,7 @@
 //! Starts on another joined machine: `shoal start --machine` from a space
 //! on one machine creates a child there, cloning the repository where that
 //! machine has none of it.
-use std::{fs, os::unix::fs::PermissionsExt as _, path::Path};
+use std::{fs, os::unix::fs::PermissionsExt as _, path::Path, process::Stdio};
 
 use serde_json::Value;
 
@@ -9,6 +9,7 @@ use super::{
     directory::{give_origin, hub_machine, join, workspace},
     routing::{ready_at, scope_of},
     support::{
+        self as support,
         fixture::{Base, home},
         git, git_with_identity, install_test_script, printed,
         prompt::{self, AnswerOptions},
@@ -40,10 +41,15 @@ fn machines() -> Machines {
 /// The [`machines`], with `hub` added to the hub's config and its files to
 /// its repository, and `laptop` to the laptop's config.
 fn machines_with((hub, files): (&str, &[(&str, &str)]), laptop: &str) -> Machines {
+    let laptop = Base::start(home(), &format!("{AGENT}{laptop}"), "notes", &[]);
+    machines_joining((hub, files), laptop)
+}
+
+/// The [`machines_with`] `hub` config and files, which `laptop` joins.
+fn machines_joining((hub, files): (&str, &[(&str, &str)]), laptop: Base) -> Machines {
     let config = format!("[machine.hub]\nenabled = true\nlisten = \"127.0.0.1:0\"\n{hub}");
     let hub = Base::start(home(), &config, "app", files);
     let origin = give_origin(&hub);
-    let laptop = Base::start(home(), &format!("{AGENT}{laptop}"), "notes", &[]);
     let laptop_id = join(&laptop, &hub, "laptop");
     let coordinator = workspace(&hub, "coordinator");
     ready_at(&laptop, &coordinator, &hub_machine(&hub));
@@ -165,6 +171,69 @@ fn a_start_on_another_machine_here_attaches_this_terminal_to_its_agent_there() {
     // That machine attached its terminal for this one to the agent's session.
     let calls = fs::read_to_string(laptop.join("zmx-calls")).unwrap();
     assert!(calls.contains(r#"["attach", "#), "{calls}");
+}
+
+/// Claude Code as the script `$HOME/agent.sh`, which [`forking_agent`]
+/// writes.
+const FORKING_CLAUDE: &str =
+    "[agents.claude]\ncommand = ['sh', '-c', 'exec sh \"$HOME/agent.sh\" \"$@\"', 'claude']\n";
+
+/// A Claude Code that, started from a fork, records its arguments in
+/// `$HOME/forked`, and otherwise keeps the transcript of session
+/// `parent-session`, reports it as Claude Code's hooks do, and starts a
+/// child on the laptop from a fork of it with `shoal`.
+fn forking_agent(shoal: &str) -> String {
+    format!(
+        "if [ \"$1\" = --resume ]; then printf '%s\\0' \"$@\" > \"$HOME/forked.tmp\"; mv \"$HOME/forked.tmp\" \"$HOME/forked\"; exit 0; fi\n\
+         mkdir -p \"$HOME/.claude/projects/p\"\n\
+         printf '{{\"type\":\"user\"}}\\n' > \"$HOME/.claude/projects/p/parent-session.jsonl\"\n\
+         printf '{{\"session_id\":\"parent-session\"}}' | '{shoal}' internal agent-state idle >/dev/null || exit 3\n\
+         '{shoal}' --json start --machine laptop \"$(cat \"$HOME/repo-path\")\" --branch child --fork -- 'Take the child part' > \"$HOME/split.json\" 2> \"$HOME/split.err\"\n"
+    )
+}
+
+#[test]
+fn a_start_on_another_machine_forks_a_session_only_this_machine_keeps() {
+    // The laptop puts the carried session where its Claude Code looks.
+    let config = (
+        &*format!("{AGENT}{FORKING_CLAUDE}"),
+        &[("SHOAL_DEV_USER_FILES", "1")][..],
+    );
+    let laptop = Base::start_with_env(home(), config, "notes", &[]);
+    let machines = machines_joining((FORKING_CLAUDE, &[]), laptop);
+    let (hub, laptop) = (machines.hub.root.path(), machines.laptop.root.path());
+    for home in [hub, laptop] {
+        let agent = forking_agent(support::shoal_binary());
+        fs::write(home.join("agent.sh"), agent).unwrap();
+    }
+    fs::write(hub.join("repo-path"), machines.hub.repo.to_str().unwrap()).unwrap();
+    // The laptop's queue starts the forked agent in a session of its zmx.
+    install_test_script(laptop.join("bin/zmx"), zmx::terminal_zmx());
+    fs::write(laptop.join("zmx.shoal-ownership.lock"), "").unwrap();
+    fs::write(laptop.join("zmx-keep-sessions"), "").unwrap();
+    let mut command = machines.hub.command();
+    let args = [
+        "start",
+        "--in",
+        &machines.coordinator,
+        "--here",
+        "--agent",
+        "claude",
+    ];
+    let output = machines.hub.output(command.args(args).stdin(Stdio::null()));
+    assert!(output.status.success(), "{}", printed(&output));
+    let forked = wait_for("the forked agent's start", || {
+        fs::read_to_string(laptop.join("forked")).ok()
+    });
+    let split = || fs::read_to_string(hub.join("split.err")).unwrap_or_default();
+    assert!(
+        forked.contains("--resume\0parent-session\0--fork-session"),
+        "{forked}{}",
+        split()
+    );
+    let transcript = laptop.join(".claude/projects/p/parent-session.jsonl");
+    let carried = fs::read_to_string(transcript).unwrap();
+    assert_eq!(carried, "{\"type\":\"user\"}\n");
 }
 
 #[test]

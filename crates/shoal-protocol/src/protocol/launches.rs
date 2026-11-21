@@ -50,6 +50,18 @@ pub enum LaunchMethod {
     /// refusing first what the launch would refuse there. Answers with
     /// [`super::Body::Ok`].
     TakeParentRepository { launch: Box<Launch> },
+    /// Put `files`, those of the session that another joined machine's
+    /// start here forks, where this machine's agents look for them, under
+    /// the settings of the repository whose origin is `origin`, registered
+    /// as a URL clone where there is none, else of the global config: once
+    /// the daemon answers with [`super::Body::Ok`], the caller writes each
+    /// file's contents in turn, as long as its size, and ends its side, and
+    /// the daemon answers again once they are in place.
+    ReceiveSession {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        origin: Option<String>,
+        files: Vec<crate::transcripts::SessionFile>,
+    },
 }
 
 impl LaunchMethod {
@@ -58,6 +70,8 @@ impl LaunchMethod {
             // A launch whose agent an app runs waits for the worker that
             // starts it.
             Self::Launch { .. } => Lifetime::Open,
+            // It takes the files the caller writes.
+            Self::ReceiveSession { .. } => Lifetime::Open,
             Self::CheckLaunch { .. }
             | Self::CheckCreation { .. }
             | Self::LaunchModes { .. }

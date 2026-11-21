@@ -41,6 +41,20 @@ pub(super) async fn handle(
                 .await?;
             Body::Ok
         }
+        LaunchMethod::ReceiveSession { origin, files } => {
+            let repository = match origin {
+                Some(origin) => Some(
+                    manager
+                        .register_repository(origin.into(), None, None)
+                        .await?,
+                ),
+                None => None,
+            };
+            let manager = manager.clone();
+            return Ok(Answer::connection(move |stream, request_id, guard| {
+                manager.receive_session(stream, request_id, (repository, files), guard)
+            }));
+        }
     }))
 }
 
@@ -48,7 +62,7 @@ impl Scoped for LaunchMethod {
     async fn scope(
         &mut self,
         manager: &Manager,
-        _caller: &Caller,
+        caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             // A scoped caller starts agents only in its own tree, in the
@@ -69,6 +83,13 @@ impl Scoped for LaunchMethod {
             LaunchMethod::LaunchModes { .. }
             | LaunchMethod::LabelledMode { .. }
             | LaunchMethod::TakeParentRepository { .. } => None,
+            LaunchMethod::ReceiveSession { .. } => {
+                anyhow::ensure!(
+                    caller.vouched.is_some(),
+                    "only a start from another joined machine carries a session here"
+                );
+                None
+            }
         })
     }
 }

@@ -238,7 +238,7 @@ pub struct StartArgs {
     #[arg(
         long,
         value_name = "MACHINE",
-        conflicts_with_all = ["in_workspace", "fork", "copy", "checkpoint"]
+        conflicts_with_all = ["in_workspace", "copy", "checkpoint"]
     )]
     pub machine: Option<String>,
     /// Run in this terminal instead of a new tab or detached session.

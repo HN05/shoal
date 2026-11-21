@@ -289,7 +289,10 @@ follows its preparation there, naming the operation with its space as every
 request across machines names one, at once, and a start that shows its
 agent in the caller's terminal, with `--here` or `--focus`, starts it there
 at once and attaches to it as `shoal attach` does, since the agent runs on
-the space's machine. A start
+the space's machine. A start that forks a session carries that session's
+files there first over a duplex stream, which that machine's CLI puts where
+its agent tool looks under the settings of the repository the start goes
+in, as an imported move's are, so the fork finds them. A start
 below another machine's space, on whichever machine, in a repository that
 machine has not registered, clones the URL of its origin, which the
 parent's machine reports to the hub beside the key repositories match by,

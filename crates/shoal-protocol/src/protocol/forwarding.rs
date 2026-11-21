@@ -108,6 +108,7 @@ impl Operation {
             self,
             Self::Demo(DemoMethod::OpenDemoStream { .. })
                 | Self::Repository(RepositoryMethod::ReceiveCommits { .. })
+                | Self::Launch(LaunchMethod::ReceiveSession { .. })
                 | Self::Removal(RemovalMethod::ReceiveMove { .. })
                 | Self::Workspace(WorkspaceMethod::AttachSession { .. })
         ) {

@@ -22,6 +22,7 @@ pub(crate) mod busy_cpu;
 pub(crate) mod caches;
 pub(crate) mod capacity;
 mod carried_commits;
+mod carried_sessions;
 pub(crate) mod chat_marks;
 pub(crate) mod chats;
 pub(crate) mod checkout_sync;

@@ -1128,9 +1128,10 @@ origin's default branch lacks, so nothing needs a push first.
 `--wait` follows the workspace's preparation there, and `--here` and
 `--focus` start the agent there at once and attach your terminal to it once
 the workspace is prepared, as `shoal attach` does, or leave it running there
-without a terminal. `--in`, `--copy` and
-`--fork`, which need your machine's files or sessions, do not combine with
-`--machine`. A
+without a terminal. `--fork` carries the forked session's files there first,
+where that machine's agent tool looks for them under the repository's
+settings, so its agent starts from them. `--in` and `--copy`, which need your
+machine's files, do not combine with `--machine`. A
 start from a device, such as an app, goes to the machine its launch names,
 else to the hub's
 [`[machine.hub] default_machine`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub),

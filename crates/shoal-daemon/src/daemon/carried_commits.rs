@@ -109,7 +109,7 @@ impl Manager {
 
 /// Write what `stream` reads until the caller ends its side to the new
 /// file `file`, a chunk at a time.
-async fn receive_file(stream: &mut UnixStream, file: &Path) -> Result<()> {
+pub(super) async fn receive_file(stream: &mut UnixStream, file: &Path) -> Result<()> {
     let path = file.to_owned();
     let mut output = blocking(move || std::fs::File::create(path)).await?;
     let mut chunk = vec![0; CHUNK];

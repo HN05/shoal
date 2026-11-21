@@ -55,9 +55,21 @@ impl Base {
     /// as the global config, and register repository `name` holding `files`,
     /// whose `main` is on its origin.
     pub fn start(root: TempDir, config: &str, name: &str, files: &[(&str, &str)]) -> Self {
+        Self::start_with_env(root, (config, &[]), name, files)
+    }
+
+    /// [`Self::start`], with the daemon running with `env` added.
+    pub fn start_with_env(
+        root: TempDir,
+        (config, env): (&str, &[(&str, &str)]),
+        name: &str,
+        files: &[(&str, &str)],
+    ) -> Self {
         write_global_config(root.path(), config);
         let repo = offline_repository(root.path(), name, files);
-        let daemon = DaemonGuard::start(root.path(), &mut support::cli(root.path()));
+        let mut command = support::cli(root.path());
+        command.envs(env.iter().copied());
+        let daemon = DaemonGuard::start(root.path(), &mut command);
         let base = Self {
             sessions: Sessions::default(),
             commands: CommandGroup::new(),
