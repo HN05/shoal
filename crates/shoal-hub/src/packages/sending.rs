@@ -229,6 +229,18 @@ impl Hub {
     }
 }
 
+impl Hub {
+    /// Since when each space has changes the hub's package of it lacks,
+    /// while the hub tells this machine it is intermittent, which it keeps
+    /// them for; none on any other machine.
+    pub(crate) async fn unsent_changes(&self) -> Result<HashMap<SpaceId, UnixTime>> {
+        if !self.member.has_availability(Availability::Intermittent) {
+            return Ok(HashMap::new());
+        }
+        self.store.read(unsent).await
+    }
+}
+
 /// Whether a package can hold `space`: a chat, or a workspace whose
 /// worktree is ready.
 fn packageable(space: &Space) -> bool {
@@ -267,6 +279,16 @@ fn load(tx: &Transaction<'_>, id: &SpaceId) -> Result<Recorded> {
         )
         .optional()?;
     Ok(recorded.unwrap_or_default())
+}
+
+/// Since when each space has changes the hub's package lacks, of those
+/// that have.
+fn unsent(tx: &Transaction<'_>) -> Result<HashMap<SpaceId, UnixTime>> {
+    let mut statement = tx.prepare(
+        "SELECT space_id, unsent_since FROM hub_package_states WHERE unsent_since IS NOT NULL",
+    )?;
+    let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
 /// Record that the space `id` has had changes the hub's package lacks

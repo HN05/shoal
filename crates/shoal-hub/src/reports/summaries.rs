@@ -85,6 +85,7 @@ impl Hub {
             running,
         };
         let repositories = daemon.repositories().await?;
+        let unsent = self.unsent_changes().await?;
         let mut summaries = HashMap::new();
         for space in spaces {
             let repository = (space.repository_id.as_ref())
@@ -98,6 +99,7 @@ impl Hub {
             let mut summary = summary(space, repository, &around);
             summary.permissions = permissions;
             summary.chat_modes = chat_modes;
+            summary.unsent_since = unsent.get(&summary.id).copied();
             summaries.insert(summary.id.clone(), summary);
         }
         Ok(summaries)
@@ -191,6 +193,7 @@ fn summary(space: Space, repository: Option<RepositoryOrigin>, around: &Around) 
         progress,
         threads,
         approvals,
+        unsent_since: None,
     }
 }
 

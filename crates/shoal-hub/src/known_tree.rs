@@ -117,6 +117,7 @@ fn listed(space: KnownSpace) -> Listed {
             progress: None,
             threads: Vec::new(),
             approvals: Vec::new(),
+            unsent_since: None,
         },
         reported_at: UnixTime::from_seconds(0),
     }

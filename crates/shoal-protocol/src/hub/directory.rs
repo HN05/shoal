@@ -64,6 +64,11 @@ pub struct SpaceSummary {
     /// Its pending approval requests.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub approvals: Vec<ApprovalRequest>,
+    /// On an intermittent machine, which keeps its spaces' packages on the
+    /// hub: since when it has changes the hub's package of it lacks; none
+    /// while that package is current.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unsent_since: Option<UnixTime>,
 }
 
 /// A repository as every machine tells it: by its origin, never by the ID
@@ -154,6 +159,7 @@ impl Listed {
                 progress: space.progress.clone(),
                 threads: Vec::new(),
                 approvals: Vec::new(),
+                unsent_since: space.unsent_since,
             },
             reported_at: self.reported_at,
         }

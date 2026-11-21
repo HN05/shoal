@@ -325,7 +325,18 @@ portable machine takes no lasting work before the hub has seen it behave. The
 hub keeps that history in its own state, counts its own machine from when its
 daemon ran with the machine awake, and tells each machine its availability
 when its link opens and when it changes, since a machine acts on it. The
-numbers are fixed, not settings. A machine also tells the hub which agent
+numbers are fixed, not settings. An intermittent machine keeps the latest
+package of each of its spaces on the hub, the one `shoal move --keep`
+builds but under the space's own ID, built without stopping its agents: it
+looks at a space as its agent's turn ends and at every space every 10
+minutes, sends one whose HEAD, files, agents' session files or records
+changed since its last package, at most every 5 minutes and each over a
+stream of its own, and reports with each space since when it has changes
+the hub's package lacks. The hub keeps one package per space, replacing it
+only once the new one arrived whole, until the space ends on its machine or
+the machine is revoked, and refuses new ones while its disk is below the
+overload warning threshold; the hub's own machine sends none, having
+nowhere else to keep them. These times are fixed, not settings. A machine also tells the hub which agent
 tools it has installed, when its link opens and as its config changes them,
 which the hub keeps for its open link alone, since only a connected machine
 starts work. Browser sessions are a later step.

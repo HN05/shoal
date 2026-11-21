@@ -63,3 +63,20 @@ async fn an_unchanged_space_needs_no_package_and_a_change_records_since_when() {
     assert_eq!(look, Look::Send("b".into()));
     assert_eq!(recorded_of(&hub, &id).await.unsent_since, Some(later));
 }
+
+#[tokio::test]
+async fn only_an_intermittent_machine_reports_since_when_a_package_lacks_changes() {
+    use shoal_protocol::hub::availability::{AvailabilityReason, Classified};
+    let root = tempfile::tempdir().unwrap();
+    let hub = stand_in::hub(&root, Config::from_toml("").unwrap()).await;
+    let id = SpaceId::from("plan".to_owned());
+    let now = UnixTime::now();
+    hub.record_look(&id, "a".into(), now).await.unwrap();
+    assert!(hub.unsent_changes().await.unwrap().is_empty());
+    hub.member.told(Classified {
+        availability: Availability::Intermittent,
+        reason: AvailabilityReason::Set,
+    });
+    let unsent = hub.unsent_changes().await.unwrap();
+    assert_eq!(unsent.get(&id), Some(&now));
+}

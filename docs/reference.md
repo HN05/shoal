@@ -984,6 +984,23 @@ machine with one is `intermittent` (`new, battery`) and one without
 `always_on` (`new, no battery`). The hub tells each machine its availability
 when its link opens and whenever it changes.
 
+An `intermittent` machine keeps the latest package of each of its workspaces
+and chats on the hub, so their work outlives the machine going away: what
+`shoal move --keep -o` writes, a new checkpoint of a workspace with a bundle
+of its commits, its agents' session files and its records, but under the
+space's own ID, built without stopping its agents. The machine looks at a
+space when its agent's turn ends, and at every space every 10 minutes, and
+sends each whose HEAD, branch, files, agents' session files or records, such
+as its links, threads and queued work, changed since its last package, at
+most once every 5 minutes; a space that did not change sends nothing. The
+hub keeps one package per space in its state directory, replacing it only
+once the new one arrived whole, and deletes it once the space ends on its
+machine, as by removal or a move, or the machine is revoked. While the disk
+of its state directory has less free space than
+[`[machine.overload.warning] disk_free_gib`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#overload),
+it refuses new packages and records a `hub_package_refused` alert. The hub's
+own machine sends none.
+
 A machine can also reach the hub through a command, whose standard input and
 output its daemon uses as the link, restarting it with backoff and logging its
 standard error: `shoal daemon connect` on the hub relays them to its daemon's
@@ -1030,8 +1047,10 @@ Each machine keeps its spaces and reports a summary of each to the hub as it
 changes, all of them again whenever its link opens: its number and name, its
 kind, its repository by origin, the space above it, which may run on another
 machine, its mode, what lists show it doing, whether it has an agent and
-the name of the one that runs there, its progress, and its open threads and
-approval requests. `shoal list`, `shoal inbox` and
+the name of the one that runs there, its progress, its open threads and
+approval requests, and on an `intermittent` machine since when it has changes
+the hub's package of it lacks (`unsent_since`), none while the package is
+current. `shoal list`, `shoal inbox` and
 `shoal status <space>` on any machine of the hub show the other machines'
 spaces as their machines last reported them, and once they do, every row names
 its machine; a space a scoped caller's scope reaches, through the spaces above
