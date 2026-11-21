@@ -8,10 +8,9 @@
 use shoal_links::space::LinkSpace;
 use shoal_links::wait::followed::opened_open_prs;
 use shoal_links::wait::merge_lookups::{
-    LOOKUP_WINDOW, MergeLookup, MergeTarget, Merged, PushedMerge, UNFOLLOWED_MERGE, UnseenPrs,
-    awaits_merge_runs, merge_lookups, record_merge_runs, start_lookup, unseen_prs,
+    LOOKUP_WINDOW, MergeLookup, MergeTarget, Merged, PushedMerge, UnseenPrs, awaits_merge_runs,
+    merge_lookups, record_merge_runs, start_lookup, unseen_prs,
 };
-use std::time::Duration;
 
 use anyhow::{Context, Result};
 use shoal_ids::space_ids::SpaceId;
@@ -22,14 +21,10 @@ use crate::{
         ForgeRepo,
         capability::Capability,
         ci::{run_action::Run, run_view::RunFilter},
-        items::{
-            link::{LinkKind, Selection},
-            reference::ItemRef,
-        },
-        updates::{SnapshotState, UpdateKind},
+        items::{link::Selection, reference::ItemRef},
+        updates::SnapshotState,
     },
     git::{self, default_branch::DefaultBranchLookup},
-    model::Relation,
     time::UnixTime,
 };
 use shoal_forge::{

@@ -18,8 +18,14 @@ use crate::{
     forge::items::link::Selection,
     model::{CleanupReason, Workspace},
 };
+use crate::{
+    forge::{items::link::LinkKind, updates::UpdateKind},
+    model::Relation,
+};
 use shoal_forge::test_support::Server;
+use shoal_links::wait::merge_lookups::UNFOLLOWED_MERGE;
 use shoal_protocol::{assignments::Done, space_names::SpaceSelector};
+use std::time::Duration;
 
 /// The merge commit the forge reports for the merged PR.
 const MERGED: &str = "0123456789abcdef0123456789abcdef01234567";
