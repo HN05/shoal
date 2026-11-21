@@ -79,14 +79,16 @@ impl Manager {
     ) -> Result<Vec<Update>> {
         let report = BranchReport::Conflicts;
         let now = UnixTime::now();
-        self.record_observed(
-            id,
-            observations,
-            selection,
-            report,
-            self.links.poll_start_at(now),
-        )
-        .await
+        self.links
+            .record_observed(
+                self,
+                id,
+                observations,
+                selection,
+                report,
+                self.links.poll_start_at(now),
+            )
+            .await
     }
 
     async fn pending_pr_activity(&self, id: &SpaceId) -> Result<Vec<Update>> {
@@ -102,7 +104,7 @@ impl Manager {
                 )
             })
             .await?;
-        self.pending_activity(id, &urls).await
+        self.links.pending_activity(id, &urls).await
     }
 }
 
@@ -363,7 +365,9 @@ async fn background_activity_queues_for_the_agents_hooks() {
         .await
         .unwrap();
     manager
+        .links
         .acknowledge_pr_updates(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             vec![delivered.updates[0].delivery.clone()],
         )
@@ -421,7 +425,9 @@ async fn a_chats_hooks_receive_the_activity_on_its_items() {
     assert!(!watch.is_current());
     assert_eq!(delivered.updates, woken.updates);
     manager
+        .links
         .acknowledge_pr_updates(
+            &**manager,
             &SpaceSelector::id(&chat.id),
             vec![delivered.updates[0].delivery.clone()],
         )
@@ -484,7 +490,8 @@ async fn a_chat_receives_the_activity_of_the_workspaces_below_it_without_an_agen
     // A newer watch in the workspace below keeps what the chat acknowledges.
     let worker_wait = manager.links.waits().start(&worker.id);
     manager
-        .acknowledge_pr_updates(&SpaceSelector::id(&chat.id), deliveries.clone())
+        .links
+        .acknowledge_pr_updates(&*manager, &SpaceSelector::id(&chat.id), deliveries.clone())
         .await
         .unwrap();
     assert_eq!(pending().await, 1);
@@ -492,13 +499,19 @@ async fn a_chat_receives_the_activity_of_the_workspaces_below_it_without_an_agen
     // And a newer wait in the chat keeps what the workspace acknowledges.
     let chat_wait = manager.links.waits().start(&chat.id);
     manager
-        .acknowledge_pr_updates(&SpaceSelector::id(&worker.id), deliveries.clone())
+        .links
+        .acknowledge_pr_updates(
+            &*manager,
+            &SpaceSelector::id(&worker.id),
+            deliveries.clone(),
+        )
         .await
         .unwrap();
     assert_eq!(pending().await, 1);
     drop(chat_wait);
     manager
-        .acknowledge_pr_updates(&SpaceSelector::id(&chat.id), deliveries)
+        .links
+        .acknowledge_pr_updates(&*manager, &SpaceSelector::id(&chat.id), deliveries)
         .await
         .unwrap();
     assert!(
@@ -778,7 +791,8 @@ async fn hook_delivery_does_not_wait_for_the_pr_gate() {
     assert!(delivered.updates.is_empty());
     assert_eq!(delivered.alerts[0].message, "Rebase onto main");
     manager
-        .acknowledge_pr_updates(&SpaceSelector::id(&workspace.id), vec![delivery])
+        .links
+        .acknowledge_pr_updates(&*manager, &SpaceSelector::id(&workspace.id), vec![delivery])
         .await
         .unwrap();
     drop(gate);
@@ -986,7 +1000,9 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
     assert_eq!(own.updates[1].workspace, None);
     assert_eq!(own.updates[2].workspace.as_deref(), Some("grandchild"));
     manager
+        .links
         .acknowledge_pr_updates(
+            &*manager,
             &SpaceSelector::id(&child.id),
             own.updates
                 .iter()
@@ -1058,7 +1074,12 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
     // A newer watch in the parent receives the child's updates as well.
     let parent_wait = manager.links.waits().start(&parent.id);
     manager
-        .acknowledge_pr_updates(&SpaceSelector::id(&parent.id), deliveries.clone())
+        .links
+        .acknowledge_pr_updates(
+            &*manager,
+            &SpaceSelector::id(&parent.id),
+            deliveries.clone(),
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -1073,7 +1094,12 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
     // A watch in the child starts before the parent acknowledges.
     let child_wait = manager.links.waits().start(&child.id);
     manager
-        .acknowledge_pr_updates(&SpaceSelector::id(&parent.id), deliveries.clone())
+        .links
+        .acknowledge_pr_updates(
+            &*manager,
+            &SpaceSelector::id(&parent.id),
+            deliveries.clone(),
+        )
         .await
         .unwrap();
     assert!(
@@ -1092,7 +1118,8 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
     // watch runs, leaves the parent's watch the child's updates.
     let parent_wait = manager.links.waits().start(&parent.id);
     manager
-        .acknowledge_pr_updates(&SpaceSelector::id(&child.id), deliveries.clone())
+        .links
+        .acknowledge_pr_updates(&*manager, &SpaceSelector::id(&child.id), deliveries.clone())
         .await
         .unwrap();
     assert_eq!(
@@ -1101,7 +1128,8 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
     );
     drop(parent_wait);
     manager
-        .acknowledge_pr_updates(&SpaceSelector::id(&parent.id), deliveries)
+        .links
+        .acknowledge_pr_updates(&*manager, &SpaceSelector::id(&parent.id), deliveries)
         .await
         .unwrap();
     assert!(
@@ -1221,7 +1249,9 @@ async fn a_delivery_too_large_for_one_response_arrives_in_parts() {
         assert!(!delivered.updates.is_empty() && delivered.updates.len() < 63);
         assert!(serde_json::to_vec(&delivered).unwrap().len() < crate::protocol::MAX_FRAME,);
         manager
+            .links
             .acknowledge_pr_updates(
+                &*manager,
                 &SpaceSelector::id(&parent.id),
                 delivered
                     .updates
@@ -1285,7 +1315,9 @@ async fn deliveries_left_out_of_a_response_stay_pending_whole() {
         .unwrap();
     assert!(first.updates.len() < 63);
     manager
+        .links
         .acknowledge_pr_updates(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             first
                 .updates
@@ -1537,7 +1569,9 @@ async fn passes_held_past_one_response_are_delivered_in_parts() {
             .unwrap();
         assert!(!delivered.updates.is_empty() && delivered.updates.len() < names.len());
         manager
+            .links
             .acknowledge_pr_updates(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 delivered
                     .updates
@@ -1578,7 +1612,9 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
         .await
         .unwrap();
     manager
+        .links
         .acknowledge_pr_updates(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             vec![first[0].delivery.clone()],
         )
@@ -1607,7 +1643,8 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
     .unwrap();
     let all = Selection::default();
     let report = BranchReport::Conflicts;
-    let before = manager.record_observed(
+    let before = manager.links.record_observed(
+        &*manager,
         &workspace.id,
         vec![(PR.as_str().into(), stale)],
         &all,
@@ -1647,7 +1684,8 @@ async fn edits_are_reported_except_the_workspaces_own() {
     let all = Selection::default();
     let observe = |snapshot: Snapshot, at: UnixTime| {
         let observation = vec![(PR.as_str().into(), snapshot)];
-        manager.record_observed(
+        manager.links.record_observed(
+            &*manager,
             &workspace.id,
             observation,
             &all,
@@ -1718,7 +1756,8 @@ async fn observe_issue(fixture: &Fixture, assignees: &[&str], seconds: u64) -> V
     let id = &fixture.workspaces[0].id;
     let report = BranchReport::Conflicts;
     let start = fixture.manager.links.poll_start_at(at);
-    (fixture.manager.record_observed(
+    (fixture.manager.links.record_observed(
+        &*fixture.manager,
         id,
         vec![(url, snapshot)],
         &Selection::default(),
@@ -1842,6 +1881,7 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
         async move {
             let agents = manager.tracked_agents().await;
             let edited = Edited::retarget(&from.into(), &to.into());
+            let links = manager.links.clone();
             manager
                 .store
                 .run(move |db| {
@@ -1851,7 +1891,7 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
                         state: None,
                         edited,
                     };
-                    record_received_change(db, &id, change, &agents)
+                    links.record_received_change(db, &id, change, agents.ids())
                 })
                 .await
                 .unwrap();
@@ -1870,7 +1910,9 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
     observe("main").await.unwrap();
     let first = delivered(parent.id.clone()).await;
     manager
+        .links
         .acknowledge_pr_updates(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             first.iter().map(|update| update.delivery.clone()).collect(),
         )
@@ -1999,7 +2041,8 @@ async fn polls_stop_looking_up_items_whose_activity_ended() {
         .unwrap();
     let deliveries = updates.into_iter().map(|update| update.delivery).collect();
     manager
-        .acknowledge_pr_updates(&SpaceSelector::id(&workspace.id), deliveries)
+        .links
+        .acknowledge_pr_updates(&*manager, &SpaceSelector::id(&workspace.id), deliveries)
         .await
         .unwrap();
     // A closed issue may reopen while the assignment goes on.
@@ -2208,12 +2251,15 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
         .unwrap();
     assert_eq!(updates.len(), 2);
     let pending = manager
+        .links
         .pending_activity(&workspace.id, &[PR.as_str().into()])
         .await
         .unwrap();
     assert_eq!(pending.len(), 1);
     manager
+        .links
         .acknowledge_pr_updates(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             vec![pending[0].delivery.clone()],
         )
@@ -2230,6 +2276,7 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
         .unwrap();
     assert_eq!(
         manager
+            .links
             .pending_activity(&workspace.id, &[ISSUE.as_str().into()])
             .await
             .unwrap()
@@ -2254,6 +2301,7 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
         .unwrap();
     assert!(
         manager
+            .links
             .pending_activity(&workspace.id, &[ISSUE.as_str().into()])
             .await
             .unwrap()
@@ -2375,7 +2423,9 @@ async fn acknowledgement_keeps_queued_updates_and_those_a_newer_wait_needs() {
         .unwrap();
     let newer = manager.links.waits().start(&workspace.id);
     manager
+        .links
         .acknowledge_pr_updates(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             vec![delivered[0].delivery.clone()],
         )
@@ -2387,7 +2437,9 @@ async fn acknowledgement_keeps_queued_updates_and_those_a_newer_wait_needs() {
     );
     drop(newer);
     manager
+        .links
         .acknowledge_pr_updates(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             vec![delivered[0].delivery.clone()],
         )
@@ -2442,7 +2494,9 @@ async fn cursors_survive_restart_are_workspace_owned_and_clear_on_unwatch() {
         first
     );
     restarted
+        .links
         .acknowledge_pr_updates(
+            &*restarted,
             &SpaceSelector::id(&workspace.id),
             vec!["stale-delivery".into()],
         )
@@ -2453,7 +2507,9 @@ async fn cursors_survive_restart_are_workspace_owned_and_clear_on_unwatch() {
         first
     );
     restarted
+        .links
         .acknowledge_pr_updates(
+            &*restarted,
             &SpaceSelector::id(&workspace.id),
             vec![first[0].delivery.clone()],
         )
@@ -2618,7 +2674,9 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
         "unacknowledged updates replay"
     );
     manager
+        .links
         .acknowledge_pr_updates(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             vec![updates[0].delivery.clone()],
         )
@@ -3004,7 +3062,12 @@ async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
         .unwrap();
     assert_eq!(delivered.len(), 1, "{delivered:?}");
     manager
-        .acknowledge_pr_updates(&SpaceSelector::id(&id), vec![delivered[0].delivery.clone()])
+        .links
+        .acknowledge_pr_updates(
+            &*manager,
+            &SpaceSelector::id(&id),
+            vec![delivered[0].delivery.clone()],
+        )
         .await
         .unwrap();
     let (watched, polled) = manager

@@ -83,7 +83,7 @@ impl Manager {
         let branch = branch.flatten();
         let mut keys = items.iter().map(ToString::to_string).collect::<Vec<_>>();
         keys.extend(branch.clone());
-        let mut batch = own_batch(id, self.pending_activity(id, &keys).await?);
+        let mut batch = own_batch(id, self.links.pending_activity(id, &keys).await?);
         batch.extend(self.delegated_pending(&children, selection.kind).await?);
         // A wait returns messages on their own, without updates.
         let mut pending = self.links.fit_response(batch, 0).await?;
@@ -136,7 +136,8 @@ impl Manager {
         start: PollStart,
     ) -> Result<Vec<Update>> {
         let updates = self
-            .record_observed(id, observations, selection, report, start)
+            .links
+            .record_observed(self, id, observations, selection, report, start)
             .await?;
         self.links.fit_response(own_batch(id, updates), 0).await
     }

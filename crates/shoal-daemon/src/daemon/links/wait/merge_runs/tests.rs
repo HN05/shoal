@@ -106,8 +106,9 @@ impl Following {
     /// Record a watch's read of `url` as `snapshot`, returning its updates.
     async fn observe(&self, url: &str, snapshot: Snapshot) -> Vec<crate::forge::updates::Update> {
         let observations = vec![(url.to_owned(), snapshot)];
-        (self.manager)
+        (self.manager.links)
             .record_observed(
+                &*self.manager,
                 &self.workspace.id,
                 observations,
                 &Selection::default(),
@@ -143,7 +144,11 @@ impl Following {
         .await
         .unwrap();
         let urls = [self.pr.clone()];
-        self.manager.pending_activity(id, &urls).await.unwrap()
+        self.manager
+            .links
+            .pending_activity(id, &urls)
+            .await
+            .unwrap()
     }
 
     /// Look up the runs of `commit`, which the workspace's `shoal merge`
@@ -584,8 +589,8 @@ async fn a_cursor_that_sees_the_merge_after_its_lookup_ended_starts_none() {
     // The agent takes the held comment, and the cursor then sees the merge.
     let held = following.observe(&pr, pull("merged", Some(MERGED))).await;
     let deliveries = held.into_iter().map(|update| update.delivery).collect();
-    (following.manager)
-        .acknowledge_pr_updates(&SpaceSelector::id(&id), deliveries)
+    (following.manager.links)
+        .acknowledge_pr_updates(&*following.manager, &SpaceSelector::id(&id), deliveries)
         .await
         .unwrap();
     let merged = following.observe(&pr, pull("merged", Some(MERGED))).await;
@@ -655,7 +660,7 @@ async fn the_merge_of_a_pr_linked_as_opened_reports_nothing_of_the_pr() {
     assert!(following.awaits().await);
     assert_eq!(following.events(EventKind::ItemActivity).await, 0);
     following.poll().await;
-    let pending = following.manager.pending_activity(&id, &[pr]).await;
+    let pending = following.manager.links.pending_activity(&id, &[pr]).await;
     assert!(pending.unwrap().is_empty());
 }
 

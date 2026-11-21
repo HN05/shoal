@@ -10,7 +10,7 @@ use shoal_links::space::LinkSpace;
 use shoal_links::wait::changes::OwnChange;
 use shoal_refs::BranchName;
 
-use super::{issue::Assigner, proposals::OpenOutcome, wait::record_received_change};
+use super::{issue::Assigner, proposals::OpenOutcome};
 use crate::{
     config::{permissions::Opening, resolve::Effective},
     daemon::{events, manager::Manager, scope::Caller},
@@ -342,7 +342,7 @@ impl Manager {
         own: Own,
     ) -> Result<()> {
         let id = id.to_owned();
-        let agents = self.tracked_agents().await;
+        let (agents, links) = (self.tracked_agents().await, self.links.clone());
         let Target { kind, url, .. } = target;
         let Own {
             state,
@@ -358,7 +358,7 @@ impl Manager {
                     state,
                     edited,
                 };
-                record_received_change(tx, &id, change, &agents)?;
+                links.record_received_change(tx, &id, change, agents.ids())?;
                 Ok(())
             })
             .await

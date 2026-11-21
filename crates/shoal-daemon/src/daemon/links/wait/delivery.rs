@@ -195,7 +195,7 @@ impl Manager {
                         .map(ToString::to_string),
                 )
                 .collect::<Vec<_>>();
-            let pending = self.pending_activity(&child.id, &keys).await?;
+            let pending = self.links.pending_activity(&child.id, &keys).await?;
             updates.extend(pending.into_iter().map(|mut update| {
                 update.workspace = Some(child.name.to_string());
                 (child.id.clone(), update)
@@ -225,7 +225,7 @@ impl Manager {
             .map(|url| url.to_string())
             .chain(branch.map(String::from))
             .collect::<Vec<_>>();
-        self.pending_activity(&space.id, &keys).await
+        self.links.pending_activity(&space.id, &keys).await
     }
 
     /// The unread messages once one that wakes an idle agent is queued.

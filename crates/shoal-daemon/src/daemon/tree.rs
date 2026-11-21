@@ -241,6 +241,16 @@ impl Manager {
 pub(crate) struct TrackedAgents(Vec<SpaceId>);
 
 impl TrackedAgents {
+    /// The spaces `agents` names as those whose agent the daemon tracks.
+    pub(crate) fn of(agents: &[SpaceId]) -> Self {
+        Self(agents.to_vec())
+    }
+
+    /// The spaces whose agent the daemon tracks.
+    pub(crate) fn ids(&self) -> &[SpaceId] {
+        &self.0
+    }
+
     /// The parameter `has_agent` reads.
     fn parameter(&self) -> String {
         serde_json::Value::from(self.0.iter().map(SpaceId::as_str).collect::<Vec<_>>()).to_string()

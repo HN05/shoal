@@ -2,17 +2,13 @@
 //! its agent through the space's watch cursors, and the response type a
 //! watch or hook returns; waiting does not change completion policy.
 
-pub(super) use self::activity::record_received_change;
-pub(super) use self::items::links_kind;
-use shoal_links::wait::{branch_report, cursor};
+use shoal_links::wait::branch_report;
 
 pub(crate) use shoal_protocol::links::Updates;
 
-mod activity;
 mod background;
 mod delivery;
 mod elsewhere;
-mod items;
 mod merge_runs;
 mod poll;
 mod start;

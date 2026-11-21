@@ -1,34 +1,47 @@
 //! Recording observed activity and a space's own changes on watch cursors,
 //! and acknowledging the updates delivered from them.
 use anyhow::{Result, ensure};
-use rusqlite::OptionalExtension;
-use shoal_links::wait::followed::followed_items;
-use shoal_links::wait::merge_lookups::{MergeTarget, follow_reported_merge};
-use shoal_links::wait::selection::NO_LINKED_ITEMS;
-use shoal_links::wait::starts::PollStart;
+use shoal_forge::updates::Snapshot;
+use shoal_forge_types::{
+    items::link::{LinkKind, Selection},
+    updates::Update,
+};
+use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
 
 use super::{
     branch_report::{BranchReport, branch_report, watches_branch},
+    changes::{OwnChange, acknowledge_deliveries, pending_on_cursor, record_own_change},
     cursor::{cursor_record, save_cursor_record},
-    items::links_kind,
+    followed::{followed_items, follows},
+    merge_lookups::{MergeTarget, follow_reported_merge},
+    selection::NO_LINKED_ITEMS,
+    starts::PollStart,
 };
 use crate::{
-    daemon::{links::space::require_ready_space, manager::Manager},
-    forge::{items::link::Selection, updates::Update},
-    time::UnixTime,
+    Links,
+    daemon::{Daemon, Records},
 };
-use shoal_forge::updates::Snapshot;
-use shoal_ids::space_ids::SpaceId;
-use shoal_links::wait::changes::{
-    OwnChange, acknowledge_deliveries, pending_on_cursor, record_own_change,
-};
-use shoal_protocol::space_names::SpaceSelector;
 
-impl Manager {
+impl Links {
+    /// Record `change`, which the space `id` made, on its cursor and on
+    /// those of the spaces below it whose activity its agent receives, as
+    /// [`record_received_change`] does, within the caller's transaction.
+    pub fn record_received_change(
+        &self,
+        db: &rusqlite::Connection,
+        id: &SpaceId,
+        change: OwnChange<'_>,
+        agents: &[SpaceId],
+    ) -> Result<()> {
+        record_received_change(&*self.records, db, id, change, agents)
+    }
+
     /// Record `observations` from a poll that began at `start`, which
     /// checked the branch for `report`.
-    pub(super) async fn record_observed(
+    pub async fn record_observed(
         &self,
+        daemon: &dyn Daemon,
         id: &SpaceId,
         observations: Vec<(String, Snapshot)>,
         selection: &Selection,
@@ -38,10 +51,10 @@ impl Manager {
         let _guard = self.gates.lock_prs([id]).await;
         // Checked before recording, so a change that starts later comes
         // after the poll's read, and one that ended was recorded first.
-        let changing = self.links.assignees_changing(&observations);
-        let merges = self.links.merge_target(self, id, &observations).await?;
+        let changing = self.assignees_changing(&observations);
+        let merges = self.merge_target(daemon, id, &observations).await?;
         let urls = observations.iter().map(|(url, _)| url);
-        let stale = self.links.watch_starts().stale(id, urls, start.read());
+        let stale = self.watch_starts().stale(id, urls, start.read());
         let poll = Poll {
             selection: selection.clone(),
             report,
@@ -50,47 +63,44 @@ impl Manager {
             merges,
             stale,
         };
-        let id = id.to_owned();
-        let agents = self.tracked_agents().await;
+        let (id, records) = (id.to_owned(), self.records.clone());
+        let agents = daemon.tracked_agents().await;
         self.store
-            .write(move |tx| record_observations(tx, &id, observations, &poll, &agents))
+            .write(move |tx| record_observations(&*records, tx, &id, observations, &poll, &agents))
             .await
     }
 
-    pub(super) async fn pending_activity(
-        &self,
-        id: &SpaceId,
-        urls: &[String],
-    ) -> Result<Vec<Update>> {
+    pub async fn pending_activity(&self, id: &SpaceId, urls: &[String]) -> Result<Vec<Update>> {
         let urls = urls.to_vec();
         let id = id.to_owned();
         self.store
-            .run(move |db| pending_on_cursor(db, &id, &urls))
+            .read(move |db| pending_on_cursor(db, &id, &urls))
             .await
     }
 
     pub async fn acknowledge_pr_updates(
         &self,
+        daemon: &dyn Daemon,
         selector: &SpaceSelector,
         deliveries: Vec<String>,
     ) -> Result<()> {
         // A chat without a repository has no checkout, but its own deliveries.
-        let id = self.space(selector).await?.id.to_owned();
+        let id = daemon.space(selector).await?.id.to_owned();
         // Without the PR gate: an agent's hook acknowledges within its timeout.
         // One transaction removes exactly the acknowledged deliveries, so
         // whatever a poll or a split queues meanwhile stays pending. A chat's
         // watch shares its delivery with the chat's hooks.
-        let waits = self.links.waits().clone();
-        let agents = self.tracked_agents().await;
+        let (waits, records) = (self.waits().clone(), self.records.clone());
+        let agents = daemon.tracked_agents().await;
         self.store
             // Not `write`: the commit happens inside `with_unwatched`, so no
             // wait starts before the acknowledgement lands.
             .run(move |db| {
                 let tx = db.transaction()?;
-                require_ready_space(&tx, &id)?;
+                records.require_ready_space(&tx, &id)?;
                 // The agent also received the updates of the spaces below it
                 // that it works on.
-                let delivered = crate::daemon::tree::receiving_paths(&tx, &id, &agents)?;
+                let delivered = records.receiving_paths(&tx, &id, &agents)?;
                 // A delivering wait has ended, so a wait running in one of
                 // these spaces, or in one receiving their activity above them,
                 // whatever its kind, started after it and must report their
@@ -101,7 +111,7 @@ impl Manager {
                 })
             })
             .await?;
-        self.signals.agent_changed();
+        daemon.agent_changed();
         Ok(())
     }
 }
@@ -127,15 +137,16 @@ struct Poll {
 /// transaction, and return the updates its watch reports. Observations of
 /// items the watch no longer follows are dropped.
 fn record_observations(
+    records: &dyn Records,
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
     observations: Vec<(String, Snapshot)>,
     poll: &Poll,
-    agents: &crate::daemon::tree::TrackedAgents,
+    agents: &[SpaceId],
 ) -> Result<Vec<Update>> {
     let observed_at = poll.observed_at;
-    require_ready_space(tx, id)?;
-    let followed = recorded_urls(tx, id, poll, agents)?;
+    records.require_ready_space(tx, id)?;
+    let followed = recorded_urls(records, tx, id, poll, agents)?;
     let mut updates = Vec::new();
     for (url, snapshot) in observations {
         let unfollowed = (followed.as_ref()).is_some_and(|followed| !followed.contains(&url));
@@ -163,10 +174,11 @@ fn record_observations(
 /// when it watches that. `None` for a watch of an explicit item, which
 /// records every observation.
 fn recorded_urls(
+    records: &dyn Records,
     db: &rusqlite::Connection,
     id: &SpaceId,
     poll: &Poll,
-    agents: &crate::daemon::tree::TrackedAgents,
+    agents: &[SpaceId],
 ) -> Result<Option<Vec<String>>> {
     let selection = &poll.selection;
     if selection.input.is_some() {
@@ -175,7 +187,7 @@ fn recorded_urls(
     let items = followed_items(db, id, selection.kind)?;
     if items.is_empty() {
         ensure!(
-            links_kind(db, id, selection.kind, agents)?,
+            links_kind(records, db, id, selection.kind, agents)?,
             "{NO_LINKED_ITEMS}"
         );
     }
@@ -183,7 +195,7 @@ fn recorded_urls(
     // reports, and a completion recorded since ends its check; a chat works
     // on none.
     let branch = if watches_branch(selection) && branch_report(&items) == poll.report {
-        checked_branch(db, id)?
+        records.checked_branch(db, id)?
     } else {
         None
     };
@@ -196,35 +208,42 @@ fn recorded_urls(
     ))
 }
 
-/// The branch of the workspace `id` while its conflicts are checked: a
-/// chat, a workspace at a commit and one whose assignment is done have none.
-fn checked_branch(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<String>> {
-    Ok(db
-        .query_row(
-            "SELECT branch FROM workspaces WHERE id=?1
-             AND NOT EXISTS (SELECT 1 FROM space_completion WHERE space_id=?1)",
-            [id],
-            |row| row.get::<_, Option<String>>(0),
-        )
-        .optional()?
-        .flatten())
-}
-
 /// Record `change`, which the space `id` made, on its cursor and on those of
 /// the spaces below it whose activity its agent receives and that follow the
 /// item, so none of its deliveries reports the change back. A space below
 /// with an agent of its own still hears about it. The caller holds the PR
 /// gates of these spaces from before the change.
-pub(in crate::daemon::links) fn record_received_change(
+fn record_received_change(
+    records: &dyn Records,
     db: &rusqlite::Connection,
     id: &SpaceId,
     change: OwnChange<'_>,
-    agents: &crate::daemon::tree::TrackedAgents,
+    agents: &[SpaceId],
 ) -> Result<()> {
-    for child in crate::daemon::tree::delegated(db, id, agents)? {
-        if shoal_links::wait::followed::follows(db, &child.id, change.url)? {
+    for child in records.delegated(db, id, agents)? {
+        if follows(db, &child.id, change.url)? {
             record_own_change(db, &child.id, change.clone())?;
         }
     }
     record_own_change(db, id, change)
+}
+
+/// Whether the workspace, or a child workspace whose activity its agent
+/// receives, links an item of `kind`; every workspace has items of no kind.
+pub fn links_kind(
+    records: &dyn Records,
+    db: &rusqlite::Connection,
+    id: &SpaceId,
+    kind: Option<LinkKind>,
+    agents: &[SpaceId],
+) -> Result<bool> {
+    if kind.is_none() || !followed_items(db, id, kind)?.is_empty() {
+        return Ok(true);
+    }
+    for child in records.delegated(db, id, agents)? {
+        if !followed_items(db, &child.id, kind)?.is_empty() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }

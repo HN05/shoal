@@ -161,7 +161,8 @@ impl Manager {
         // A background poll checks the branch only beside a linked PR.
         let report = BranchReport::ChangedOnBothSides;
         let updates = self
-            .record_observed(id, observations, &all, report, start)
+            .links
+            .record_observed(self, id, observations, &all, report, start)
             .await?;
         if !updates.is_empty() {
             self.signals.item_updates_queued();

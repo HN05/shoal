@@ -97,7 +97,7 @@ async fn linking_an_issue_takes_its_comments_as_seen() {
         .unwrap();
     set_state(&manager, &workspace, "ready").await;
     let urls = [issue.to_string()];
-    let pending = manager.pending_activity(&workspace, &urls).await;
+    let pending = manager.links.pending_activity(&workspace, &urls).await;
     assert!(pending.unwrap().is_empty());
     let unchanged = poll(&manager, &workspace, &issue, UnixTime::MAX).await;
     assert!(unchanged.is_empty(), "{unchanged:?}");
@@ -135,7 +135,7 @@ async fn a_restart_drops_the_comments_queued_before_it() {
 
     restart(&manager, &workspace).await;
     let urls = [issue.to_string()];
-    let pending = manager.pending_activity(&workspace, &urls).await;
+    let pending = manager.links.pending_activity(&workspace, &urls).await;
     assert!(pending.unwrap().is_empty());
 
     comments.store(3, Ordering::SeqCst);
@@ -168,11 +168,16 @@ async fn a_poll_that_began_before_a_restart_is_dropped_when_it_finishes() {
         .unwrap();
     poll(&manager, &workspace, &issue, UnixTime::now()).await;
     let urls = [issue.to_string()];
-    let pending = manager.pending_activity(&workspace, &urls).await.unwrap();
+    let pending = manager
+        .links
+        .pending_activity(&workspace, &urls)
+        .await
+        .unwrap();
     let deliveries = pending.into_iter().map(|update| update.delivery).collect();
     let space = shoal_protocol::space_names::SpaceSelector::id(&workspace);
     manager
-        .acknowledge_pr_updates(&space, deliveries)
+        .links
+        .acknowledge_pr_updates(&*manager, &space, deliveries)
         .await
         .unwrap();
     // A poll reads the issue with one comment, then a restart reads it with
@@ -187,7 +192,9 @@ async fn a_poll_that_began_before_a_restart_is_dropped_when_it_finishes() {
     comments.store(2, Ordering::SeqCst);
     restart(&manager, &workspace).await;
     let report = BranchReport::Conflicts;
-    let late = manager.record_observed(&workspace, stale, &all, report, early);
+    let late = manager
+        .links
+        .record_observed(&*manager, &workspace, stale, &all, report, early);
     assert!(late.await.unwrap().is_empty());
 
     comments.store(3, Ordering::SeqCst);
@@ -300,11 +307,16 @@ async fn a_poll_that_reads_after_a_restart_records_after_it() {
     let deliveries = updates.into_iter().map(|update| update.delivery).collect();
     let space = shoal_protocol::space_names::SpaceSelector::id(&workspace);
     manager
-        .acknowledge_pr_updates(&space, deliveries)
+        .links
+        .acknowledge_pr_updates(&*manager, &space, deliveries)
         .await
         .unwrap();
     let urls = [issue.to_string()];
-    let pending = manager.pending_activity(&workspace, &urls).await.unwrap();
+    let pending = manager
+        .links
+        .pending_activity(&workspace, &urls)
+        .await
+        .unwrap();
     assert!(pending.is_empty(), "{pending:?}");
     assert!(
         poll(&manager, &workspace, &issue, UnixTime::now())
@@ -328,7 +340,9 @@ async fn poll(
         .await;
     let report = BranchReport::Conflicts;
     let start = manager.links.poll_start_at(observed_at);
-    let recorded = manager.record_observed(id, read.unwrap(), &all, report, start);
+    let recorded = manager
+        .links
+        .record_observed(manager, id, read.unwrap(), &all, report, start);
     recorded.await.unwrap()
 }
 

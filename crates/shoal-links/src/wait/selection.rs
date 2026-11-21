@@ -10,7 +10,10 @@ use shoal_forge_types::items::{
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::model::Space;
 
-use super::followed::{LinkedItems, followed_items, shown_items};
+use super::{
+    activity::links_kind,
+    followed::{LinkedItems, followed_items, shown_items},
+};
 use crate::{Links, daemon::Daemon, forges, space::LinkSpace};
 
 pub const NO_LINKED_ITEMS: &str =
@@ -140,7 +143,10 @@ impl Links {
         id: &SpaceId,
         kind: Option<LinkKind>,
     ) -> Result<()> {
-        ensure!(daemon.links_kind(id, kind).await?, "{NO_LINKED_ITEMS}");
+        let agents = daemon.tracked_agents().await;
+        let (id, records) = (id.to_owned(), self.records.clone());
+        let links = (self.store).read(move |db| links_kind(&*records, db, &id, kind, &agents));
+        ensure!(links.await?, "{NO_LINKED_ITEMS}");
         Ok(())
     }
 

@@ -12,13 +12,13 @@ use shoal_daemon_base::{callers::Caller, notifications::Coordinators, permitted_
 use shoal_forge_types::{
     ForgeRepo,
     items::{
-        link::{ItemKind, LinkKind, Selection},
+        link::{ItemKind, Selection},
         reference::{ItemInput, ItemRef},
     },
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    model::{LinkedItem, Repository, Selected, Space, Workspace},
+    model::{LinkedItem, Repository, Selected, Space, SpaceRef, Workspace},
     space_names::SpaceSelector,
 };
 
@@ -82,14 +82,8 @@ pub trait Spaces: Send + Sync {
         named: Option<&'a str>,
     ) -> BoxFuture<'a, Result<Option<Repository>>>;
 
-    /// Whether the space `id`, or a space below it whose activity its agent
-    /// receives, links an item of `kind`; every space links items of no
-    /// kind.
-    fn links_kind<'a>(
-        &'a self,
-        id: &'a SpaceId,
-        kind: Option<LinkKind>,
-    ) -> BoxFuture<'a, Result<bool>>;
+    /// The spaces whose agent the daemon tracks.
+    fn tracked_agents(&self) -> BoxFuture<'_, Vec<SpaceId>>;
 }
 
 /// The CI runs spaces link, which the daemon reads until they move.
@@ -109,6 +103,9 @@ pub trait Runs: Send + Sync {
 pub trait Watches: Send + Sync {
     /// Wake the agents whose watches just queued updates.
     fn item_updates_queued(&self);
+
+    /// Tell those waiting on agents that one's deliveries changed.
+    fn agent_changed(&self);
 }
 
 /// What the daemon records of a space's agent, which settling the agent
@@ -172,4 +169,24 @@ pub trait Records: Send + Sync {
     /// Refuse a change to the links, cursor or marks of the space `id`
     /// while it is not ready, as a removed space is not.
     fn require_ready_space(&self, db: &Connection, id: &SpaceId) -> Result<()>;
+
+    /// The spaces below `id` whose activity its agent receives, where
+    /// `agents` are the spaces whose agent the daemon tracks.
+    fn delegated(&self, db: &Connection, id: &SpaceId, agents: &[SpaceId])
+    -> Result<Vec<SpaceRef>>;
+
+    /// The space `id` and those below it whose activity its agent
+    /// receives, each as the path down to it from the topmost space that
+    /// receives `id`'s own activity.
+    fn receiving_paths(
+        &self,
+        db: &Connection,
+        id: &SpaceId,
+        agents: &[SpaceId],
+    ) -> Result<Vec<Vec<SpaceId>>>;
+
+    /// The branch of the workspace `id` while its conflicts are checked:
+    /// none for a chat, a workspace at a commit and one whose assignment is
+    /// done.
+    fn checked_branch(&self, db: &Connection, id: &SpaceId) -> Result<Option<String>>;
 }

@@ -11,7 +11,7 @@ use crate::{
     config::Effective,
     daemon::manager::Manager,
     forge::items::{
-        link::{ItemKind, LinkKind, Selection},
+        link::{ItemKind, Selection},
         reference::ItemRef,
     },
     model::{Repository, Selected, Space, Workspace},
@@ -87,22 +87,17 @@ impl Spaces for Manager {
         Box::pin(Manager::registered_named(self, named))
     }
 
-    fn links_kind<'a>(
-        &'a self,
-        id: &'a SpaceId,
-        kind: Option<LinkKind>,
-    ) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(async move {
-            let (id, agents) = (id.to_owned(), self.tracked_agents().await);
-            (self.store)
-                .run(move |db| super::wait::links_kind(db, &id, kind, &agents))
-                .await
-        })
+    fn tracked_agents(&self) -> BoxFuture<'_, Vec<SpaceId>> {
+        Box::pin(async { self.running_agent_workspaces().await })
     }
 }
 
 impl Watches for Manager {
     fn item_updates_queued(&self) {
         self.signals.item_updates_queued();
+    }
+
+    fn agent_changed(&self) {
+        self.signals.agent_changed();
     }
 }

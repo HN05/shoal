@@ -217,7 +217,9 @@ impl Manager {
     ) -> Result<()> {
         // Item updates first: a failure then leaves both to be delivered
         // again, while deleted messages could not be.
-        self.acknowledge_pr_updates(selector, deliveries).await?;
+        self.links
+            .acknowledge_pr_updates(self, selector, deliveries)
+            .await?;
         self.mark_agent_messages_delivered(selector, messages)
             .await?;
         self.acknowledge_leftovers(selector, leftovers).await

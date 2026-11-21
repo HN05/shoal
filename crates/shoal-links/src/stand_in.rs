@@ -15,7 +15,7 @@ use shoal_daemon_base::{
 use shoal_forge_types::{
     ForgeRepo,
     items::{
-        link::{ItemKind, LinkKind, Selection},
+        link::{ItemKind, Selection},
         reference::{ItemInput, ItemRef},
     },
 };
@@ -103,12 +103,8 @@ impl Spaces for StandIn {
         Box::pin(async { Ok(None) })
     }
 
-    fn links_kind<'a>(
-        &'a self,
-        _: &'a SpaceId,
-        _: Option<LinkKind>,
-    ) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(async { Ok(false) })
+    fn tracked_agents(&self) -> BoxFuture<'_, Vec<SpaceId>> {
+        Box::pin(async { Vec::new() })
     }
 }
 
@@ -125,6 +121,8 @@ impl Runs for StandIn {
 
 impl Watches for StandIn {
     fn item_updates_queued(&self) {}
+
+    fn agent_changed(&self) {}
 }
 
 impl Coordinators for StandIn {

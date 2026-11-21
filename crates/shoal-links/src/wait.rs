@@ -2,6 +2,7 @@
 //! item's record on a space's watch cursor and what it holds back, the
 //! items it follows, its merge lookups, what a branch's local merge check
 //! reports, and how a response fits one frame.
+pub mod activity;
 pub mod branch_report;
 pub mod changes;
 pub mod cursor;
