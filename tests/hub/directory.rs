@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use super::support::{
     fixture::{Base, home},
-    git, install_test_script, printed, shoal_binary,
+    git, install_test_script, shoal_binary,
     wait::wait_for,
 };
 
@@ -233,13 +233,4 @@ fn a_move_from_another_machine_runs_on_the_machine_of_the_space() {
     let moved = hub.ok(&["move", "--ssh", "desk", &work, "--shoal", shoal_binary()]);
     assert_eq!(moved["failed"], serde_json::json!([]), "{moved}");
     listed(&hub, &work, &desk_id);
-
-    // A file the hub names is no file the laptop writes.
-    let other = workspace(&laptop, "other");
-    listed(&hub, &other, &laptop_id);
-    let file = hub.root.path().join("other.shoal");
-    let refused = hub.run(&["move", &other, "-o", file.to_str().unwrap(), "--yes"]);
-    assert!(!refused.status.success(), "{}", printed(&refused));
-    assert!(!file.exists());
-    assert_eq!(listed(&hub, &other, &laptop_id)["name"], "other");
 }

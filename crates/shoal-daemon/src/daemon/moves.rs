@@ -14,7 +14,7 @@ use super::{
 };
 use crate::protocol::operations::{Ended, OperationSpec, Outcome};
 use crate::transfer::{DeferredMove, MoveDestination, MoveLock, MoveOrder, MoveReport};
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{model::Located, space_names::SpaceSelector};
 
 /// How often the daemon looks for recorded moves whose worker went.
 const INTERRUPTED_MOVES_INTERVAL: Duration = Duration::from_secs(60);
@@ -69,23 +69,32 @@ impl Manager {
     }
 
     /// Refuse a space `id` that is not here to move to `destination`: a
-    /// file takes a removed space too, and only a move to another machine
-    /// goes to the machine that has the space, since a file would land
-    /// there rather than where the caller named it.
+    /// file takes a removed space too, and one another joined machine runs,
+    /// whose package this machine's worker reads from there; a move to
+    /// another machine, or one holding its package for this machine's, goes
+    /// to the machine that has the space.
     async fn ensure_movable(&self, id: &SpaceId, destination: &MoveDestination) -> Result<()> {
         let selector = SpaceSelector::id(id);
         let absent = match self.space(&selector).await {
             Ok(_) => return Ok(()),
             Err(absent) => absent,
         };
-        if destination.machine().is_some() {
+        if destination.machine().is_some() || *destination == MoveDestination::Held {
             return Err(absent);
         }
-        match self.removed_space(&selector).await {
-            Ok(_) => Ok(()),
-            Err(_) => anyhow::bail!(
-                "no space {id} here, where the move would write its file; a space on another machine moves from there, or with --ssh or --machine"
+        if self.removed_space(&selector).await.is_ok() {
+            return Ok(());
+        }
+        match (self.space_anywhere(&selector).await?, destination) {
+            (
+                Located::Elsewhere { .. },
+                MoveDestination::File { .. } | MoveDestination::Client { .. },
+            ) => Ok(()),
+            (Located::Elsewhere { machine, .. }, _) => anyhow::bail!(
+                "space {id} runs on machine {}; move it to a file of its own, or from that machine",
+                machine.name
             ),
+            (Located::Here(_), _) => Err(absent),
         }
     }
 

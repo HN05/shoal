@@ -70,14 +70,12 @@ fn copy_to_stdout(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// End the `moved` space here, whose package its reader took, unless it
-/// was already removed, which its record moved.
+/// End the `moved` space where it runs, whose package its reader took,
+/// unless it was a removed space here, whose record moved.
 async fn end_here(ctx: &Context, moved: &SpaceMoved) -> Result<()> {
     let selector = SpaceSelector::id(&moved.id);
-    if crate::client::spaces::present_space(&ctx.paths, &selector)
-        .await?
-        .is_none()
-    {
+    let removed = crate::client::removal::removed_space(&ctx.paths, selector.clone());
+    if removed.await.is_ok() {
         return Ok(());
     }
     let ending = crate::client::transfer::end_moved(&ctx.paths, selector);
@@ -102,6 +100,10 @@ fn exported(order: &MoveOrder, moved: &SpaceMoved) -> String {
 /// this process runs in, or a space this terminal closes with, before the
 /// package reached standard output.
 async fn ensure_survives(ctx: &Context, order: &MoveOrder) -> Result<()> {
+    // Another machine's space runs neither this process nor its terminal.
+    if moves::runs_elsewhere(&ctx.paths, order).await? {
+        return Ok(());
+    }
     for planned in moves::plan(&ctx.paths, order).await? {
         let Planned::Ending { checked, .. } = planned else {
             continue;

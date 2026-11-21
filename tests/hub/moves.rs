@@ -237,3 +237,52 @@ fn a_copy_s_agent_is_not_told_that_its_space_moved() {
     assert!(!told, "{alerts}");
     assert!(own_spaces(&laptop).iter().any(|space| space["id"] == work));
 }
+
+/// A workspace of the laptop, whose ID is `laptop_id` at `hub`, with work
+/// of its own, which the desk can clone the repository of, by its ID, once
+/// the hub lists it.
+fn laptop_work(hub: &Base, laptop: &Base, laptop_id: &str) -> String {
+    give_origin(laptop);
+    let work = workspace(laptop, "work");
+    let path = laptop.ok(&["status", &work])["workspace"]["path"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    fs::write(format!("{path}/notes"), "only the laptop has this\n").unwrap();
+    listed(hub, &work, laptop_id);
+    work
+}
+
+/// Restore on `machine` the package in `file`, which must hold `work`'s.
+fn restores(machine: &Base, file: &std::path::Path, work: &str) {
+    let file = file.to_str().unwrap();
+    let restored = machine.ok(&["restore", "--from", file, "--no-resume"]);
+    assert_eq!(restored["space"]["id"], work, "{restored}");
+}
+
+#[test]
+fn a_move_to_a_file_of_another_machine_s_space_writes_it_where_the_command_runs() {
+    let (hub, laptop, desk, laptop_id, _) = machines("");
+    let work = laptop_work(&hub, &laptop, &laptop_id);
+    let file = hub.root.path().join("work.shoal");
+
+    let moved = hub.ok(&["move", &work, "-o", file.to_str().unwrap()]);
+
+    assert_eq!(moved["failed"], json!([]), "{moved}");
+    assert!(own_spaces(&laptop).iter().all(|space| space["id"] != work));
+    restores(&desk, &file, &work);
+}
+
+#[test]
+fn a_move_to_standard_output_of_another_machine_s_space_writes_it_there() {
+    let (hub, laptop, desk, laptop_id, _) = machines("");
+    let work = laptop_work(&hub, &laptop, &laptop_id);
+
+    let moved = hub.output(hub.command().args(["move", &work, "-o", "-"]));
+
+    assert!(moved.status.success(), "{}", printed(&moved));
+    assert!(own_spaces(&laptop).iter().all(|space| space["id"] != work));
+    let file = desk.root.path().join("work.shoal");
+    fs::write(&file, &moved.stdout).unwrap();
+    restores(&desk, &file, &work);
+}

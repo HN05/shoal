@@ -13,6 +13,7 @@ mod fixtures;
 mod joined;
 mod moving;
 mod packages;
+mod relayed;
 mod ssh;
 
 use std::{io::Write as _, path::PathBuf};
@@ -133,7 +134,9 @@ fn ensure_takes(order: &MoveOrder, planned: &[Planned], refusals: &[String]) -> 
         order.checkpoint.is_none() || planned.len() == 1,
         "--checkpoint copies one workspace, whose checkpoints it numbers; name one"
     );
-    if let MoveDestination::File { .. } | MoveDestination::Client { .. } = order.destination {
+    if let MoveDestination::File { .. } | MoveDestination::Client { .. } | MoveDestination::Held =
+        order.destination
+    {
         ensure!(
             planned.len() == 1,
             "several spaces go to a file each; name a directory with -o"
@@ -174,10 +177,19 @@ async fn plan_space(
     Ok(Planned::Ending { checked, file })
 }
 
+/// Whether `order` moves to a file a space another joined machine runs,
+/// whose package that machine holds for this one to write.
+pub async fn runs_elsewhere(paths: &CommandPaths, order: &MoveOrder) -> Result<bool> {
+    relayed::elsewhere(paths, order).await
+}
+
 /// Run `order`: check its spaces, then move each, or a copy of it, going on
 /// after one fails, telling `steps` how far each got and printing a line
 /// for each.
 pub async fn run(paths: &CommandPaths, order: MoveOrder, steps: &impl Steps) -> Result<MoveReport> {
+    if runs_elsewhere(paths, &order).await? {
+        return relayed::run(paths, &order, steps).await;
+    }
     let planned = plan(paths, &order).await?;
     ensure_consent(&order, &planned)?;
     if let MoveDestination::Ssh(destination) = &order.destination {
