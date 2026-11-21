@@ -30,6 +30,59 @@ impl Located {
     }
 }
 
+/// The spaces the caller sees on every machine: this machine's, and the
+/// other joined machines' as the hub lists them, none on a machine in no
+/// hub, or why the hub could not be asked.
+#[derive(Debug, Default)]
+pub struct Everywhere {
+    pub here: Spaces,
+    pub elsewhere: Option<crate::hub::directory::HubView>,
+    pub unreachable: Option<String>,
+}
+
+/// A piece of [`Everywhere`], which a response carries in pages: this
+/// machine's spaces, then the pieces of the hub's view, or why the hub
+/// could not be asked.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant, reason = "a page holds a few spaces")]
+pub enum EverywherePart {
+    Here(Space),
+    Elsewhere(crate::hub::directory::ViewPart),
+    Unreachable(String),
+}
+
+impl Everywhere {
+    /// The spaces of `parts`, in the order [`Self::into_parts`] gives them.
+    pub fn from_parts(parts: Vec<EverywherePart>) -> anyhow::Result<Self> {
+        let (mut here, mut view, mut unreachable) = (Vec::new(), Vec::new(), None);
+        for part in parts {
+            match part {
+                EverywherePart::Here(space) => here.push(space),
+                EverywherePart::Elsewhere(part) => view.push(part),
+                EverywherePart::Unreachable(error) => unreachable = Some(error),
+            }
+        }
+        Ok(Self {
+            here: Spaces(here),
+            elsewhere: crate::hub::directory::HubView::from_parts(view)?,
+            unreachable,
+        })
+    }
+
+    /// The listing in pieces, this machine's spaces first.
+    pub fn into_parts(self) -> Vec<EverywherePart> {
+        let here = (self.here.0.into_iter()).map(EverywherePart::Here);
+        let view = self
+            .elsewhere
+            .into_iter()
+            .flat_map(|view| view.into_parts());
+        here.chain(view.map(EverywherePart::Elsewhere))
+            .chain(self.unreachable.map(EverywherePart::Unreachable))
+            .collect()
+    }
+}
+
 /// Another space a record refers to, with its current name, and its branch
 /// when it is a workspace.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

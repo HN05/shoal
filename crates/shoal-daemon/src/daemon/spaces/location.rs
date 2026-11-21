@@ -1,6 +1,5 @@
-//! Where the spaces a request names run, and the spaces below them: here,
-//! or on another joined machine of the hub, among the spaces the caller
-//! sees.
+//! The spaces the caller sees across the joined machines of the hub: every
+//! one, where those a request names run, and the spaces below them.
 use std::collections::{HashSet, VecDeque};
 
 use anyhow::{Context as _, Result};
@@ -10,13 +9,32 @@ use shoal_protocol::{
         Member,
         directory::{HubView, Listed},
     },
-    model::{Located, Space},
+    model::{Everywhere, Located, Space, Spaces},
     space_names::SpaceSelector,
 };
 
 use crate::daemon::{log, manager::Manager, scope::Caller};
 
 impl Manager {
+    /// The spaces `caller` sees on every machine: this machine's as a
+    /// listing shows them, and the other machines' as the hub lists them,
+    /// or why the hub could not be asked.
+    pub(crate) async fn spaces_everywhere(&self, caller: Option<&Caller>) -> Result<Everywhere> {
+        let here = Spaces(self.listed_spaces(caller).await?);
+        Ok(match self.hub.hub_view(self, caller).await {
+            Ok(elsewhere) => Everywhere {
+                here,
+                elsewhere,
+                unreachable: None,
+            },
+            Err(error) => Everywhere {
+                here,
+                elsewhere: None,
+                unreachable: Some(format!("{error:#}")),
+            },
+        })
+    }
+
     /// Where the space `selector` names runs, among those `caller` sees:
     /// here, with its record, else on the other joined machine the hub
     /// lists it on; refused as absent when neither has it, naming a removed

@@ -15,7 +15,9 @@ use crate::config::permissions::PermissionKey;
 use crate::protocol::{
     self, Body, ConfigTarget, ErrorCode, RepositoryLayers, Response, WorkspaceMethod,
 };
-use shoal_protocol::{events::EventCursor, scope_tokens::ScopeToken, space_names::SpaceSelector};
+use shoal_protocol::{
+    events::EventCursor, model::Everywhere, scope_tokens::ScopeToken, space_names::SpaceSelector,
+};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -154,6 +156,11 @@ pub(super) async fn handle(
                 .await?,
         ),
         WorkspaceMethod::ListSpaces => Body::Spaces(manager.listed_spaces(caller).await?),
+        WorkspaceMethod::ListSpacesEverywhere => {
+            let everywhere = manager.spaces_everywhere(caller).await;
+            let parts = everywhere.map(Everywhere::into_parts);
+            return Ok(Answer::pages(parts, Body::SpacesEverywhere));
+        }
         WorkspaceMethod::LocateSpace { space } => {
             Body::LocatedSpace(Box::new(manager.locate_space(caller, &space).await?))
         }
@@ -419,6 +426,7 @@ impl Scoped for WorkspaceMethod {
             } => None,
             // It finds only the spaces the caller sees.
             WorkspaceMethod::ListSpaces
+            | WorkspaceMethod::ListSpacesEverywhere
             | WorkspaceMethod::FindSpaces { .. }
             | WorkspaceMethod::LocateSpace { .. }
             | WorkspaceMethod::SelectSpaces { .. } => None,

@@ -1,9 +1,9 @@
 //! Spaces of either kind: every space the caller sees.
 use anyhow::Result;
 
-use crate::connection::{Daemon, request};
+use crate::connection::{Daemon, pages, request};
 use shoal_protocol::{
-    model::{Located, Space, Spaces},
+    model::{Everywhere, Located, Space, Spaces},
     protocol::WorkspaceMethod,
     scope_tokens::ScopeToken,
     space_names::SpaceSelector,
@@ -15,6 +15,13 @@ use std::collections::BTreeMap;
 pub async fn list(daemon: &impl Daemon) -> Result<Spaces> {
     let spaces: Vec<Space> = request(daemon, WorkspaceMethod::ListSpaces).await?;
     Ok(Spaces(spaces))
+}
+
+/// The spaces the caller sees on every machine: this machine's, and the
+/// other joined machines' as the hub lists them, or why the hub could not
+/// be asked.
+pub async fn everywhere(daemon: &impl Daemon) -> Result<Everywhere> {
+    Everywhere::from_parts(pages(daemon, WorkspaceMethod::ListSpacesEverywhere).await?)
 }
 
 /// The spaces `spaces` name, or with `machines` every space of those joined

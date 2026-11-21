@@ -45,6 +45,7 @@ const REQUESTS: &[&str] = &[
     r#"{"convert_to_chat":{"workspace":"fix","mode":"plan"}}"#,
     r#""untracked_worktrees""#,
     r#""list_spaces""#,
+    r#""list_spaces_everywhere""#,
     r#"{"find_spaces":{"target":{"item":{"kind":"pr","input":"7"}}}}"#,
     r#"{"locate_space":{"space":"3"}}"#,
     r#"{"select_spaces":{"spaces":["3"],"machines":["laptop"],"below":true}}"#,

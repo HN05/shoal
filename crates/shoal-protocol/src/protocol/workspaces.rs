@@ -95,6 +95,9 @@ pub enum WorkspaceMethod {
     /// Every space the caller sees, workspaces and chats, running or
     /// stopped.
     ListSpaces,
+    /// The spaces the caller sees on every machine: this machine's, then
+    /// the other joined machines' as the hub lists them, in pages.
+    ListSpacesEverywhere,
     /// The spaces that link an item or the workspaces that hold a resource.
     FindSpaces {
         target: crate::model::SpaceTarget,
@@ -430,6 +433,7 @@ impl WorkspaceMethod {
             | Self::AdoptWorkspace { .. }
             | Self::UntrackedWorktrees
             | Self::ListSpaces
+            | Self::ListSpacesEverywhere
             | Self::FindSpaces { .. }
             | Self::LocateSpace { .. }
             | Self::SelectSpaces { .. }
@@ -500,6 +504,7 @@ impl WorkspaceMethod {
             | Self::LayeredConfig { .. }
             | Self::UntrackedWorktrees
             | Self::ListSpaces
+            | Self::ListSpacesEverywhere
             | Self::FindSpaces { .. }
             | Self::HeldPermissions { .. }
             | Self::OwnedPlaces
