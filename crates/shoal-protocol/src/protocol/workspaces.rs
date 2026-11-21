@@ -117,8 +117,10 @@ pub enum WorkspaceMethod {
     RefreshWorkspace {
         workspace: SpaceSelector,
     },
-    /// Keep where an agent of the workspace keeps its configuration, before
-    /// Shoal trusts the workspace there, until the repository's removal.
+    /// Keep where an agent of the workspace keeps its configuration, the
+    /// [`AGENT_CONFIG_VARIABLES`](crate::env::AGENT_CONFIG_VARIABLES) it runs
+    /// with, inherited ones included, before Shoal trusts the workspace
+    /// there, for the repository's removal or move to clean the entries.
     KeepAgentEnvironment {
         workspace: SpaceSelector,
         environment: std::collections::BTreeMap<String, String>,

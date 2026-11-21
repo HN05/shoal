@@ -3,7 +3,6 @@
 //! removal or move cleans up.
 use std::{
     collections::BTreeMap,
-    ffi::OsString,
     path::{Path, PathBuf},
 };
 
@@ -15,7 +14,6 @@ use crate::{
         trust::{TrustFile, repository_trust_paths},
     },
     cli::{agents::environment, context::Context},
-    env,
     model::{Chat, ChatHome, Repository, Space, Workspace},
 };
 use shoal_protocol::transcripts::AgentEnvironment;
@@ -50,8 +48,8 @@ pub(super) async fn tracked(
 ) {
     let mut configured = environment::agent_environment(ctx, &Space::from(workspace.clone())).await;
     profile.layer(&mut configured, &ctx.paths.home);
-    keep_config_location(file, ctx, Holder::Workspace(workspace), &configured).await;
     let environment = AgentEnvironment::new(&ctx.paths.home, &configured);
+    keep_config_location(file, ctx, Holder::Workspace(workspace), &environment).await;
     self::workspace(file, ctx, workspace, &environment).await;
 }
 
@@ -74,15 +72,17 @@ pub(super) async fn space(
     }
 }
 
-/// Have the daemon keep where `configured` puts the config of `file`'s tool
-/// for the removal of `holder`'s repository. Failure only warns.
+/// Have the daemon keep where the config of `file`'s tool is for an agent
+/// running with `environment`, inherited variables included, for the
+/// removal or move of `holder`'s repository. Failure only warns.
 async fn keep_config_location(
     file: &TrustFile,
     ctx: &Context,
     holder: Holder<'_>,
-    configured: &BTreeMap<String, OsString>,
+    environment: &AgentEnvironment<'_>,
 ) {
-    let environment = env::agent_config_environment(configured);
+    let environment = environment.config_variables();
+    // The tools' default locations are always cleaned.
     if environment.is_empty() {
         return;
     }
@@ -106,16 +106,14 @@ async fn keep_config_location(
     };
     if let Err(error) = kept {
         eprintln!(
-            "warning: repository removal may leave {} trust entries behind: {error:#}",
+            "warning: removing or moving the repository may leave {} trust entries behind: {error:#}",
             file.tool()
         );
     }
 }
 
 /// Trust the directory of `chat` of `repository` at `home`, which runs with
-/// its `[env]` changed by `profile`, as workspace launches trust theirs;
-/// repository removal clears the entries. The `root_dir` of a chat without
-/// a repository stays trusted.
+/// its `[env]` changed by `profile`, as workspace launches trust theirs.
 pub(super) async fn chat(
     file: &TrustFile,
     ctx: &Context,
@@ -125,21 +123,24 @@ pub(super) async fn chat(
 ) {
     let mut configured = environment::agent_environment(ctx, &Space::from(chat.clone())).await;
     profile.layer(&mut configured, &ctx.paths.home);
-    if let Some(repository) = repository {
-        keep_config_location(file, ctx, Holder::Repository(repository), &configured).await;
-    }
     let environment = AgentEnvironment::new(&ctx.paths.home, &configured);
-    directory(file, &environment, repository, home.path());
+    directory(file, ctx, &environment, repository, home.path()).await;
 }
 
 /// Trust `directory` for the tool of `file` running with `environment`: the
-/// trust paths of `repository` for it, or the directory alone without one.
-pub(super) fn directory(
+/// trust paths of `repository` for it, whose removal or move cleans the
+/// entries, or the directory alone without one, such as the `root_dir` of a
+/// chat without a repository, which stays trusted.
+pub(super) async fn directory(
     file: &TrustFile,
+    ctx: &Context,
     environment: &AgentEnvironment<'_>,
     repository: Option<&Repository>,
     directory: &Path,
 ) {
+    if let Some(repository) = repository {
+        keep_config_location(file, ctx, Holder::Repository(repository), environment).await;
+    }
     let paths = match repository {
         Some(repository) => repository_trust_paths(repository, directory),
         None => vec![directory.to_owned()],

@@ -153,7 +153,7 @@ pub(in crate::cli) async fn hand_off(
     if let Some(trust) = app.trust {
         // The app runs with this process's environment, not the space's.
         let environment = AgentEnvironment::inherited(&ctx.paths.home);
-        super::trust::directory(trust, &environment, repository, directory);
+        super::trust::directory(trust, ctx, &environment, repository, directory).await;
     }
     run_launcher(app, directory, args).await
 }

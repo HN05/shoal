@@ -21,20 +21,6 @@ pub use shoal_protocol::env::*;
 /// Private socket and lock descriptors transferred across a managed update.
 pub(crate) const DAEMON_HANDOFF: &str = "SHOAL_DAEMON_HANDOFF";
 
-/// The [`AGENT_CONFIG_VARIABLES`] that `configured` sets; a value that is not
-/// UTF-8 cannot be kept.
-pub fn agent_config_environment(
-    configured: &BTreeMap<String, OsString>,
-) -> BTreeMap<String, String> {
-    AGENT_CONFIG_VARIABLES
-        .iter()
-        .filter_map(|&name| {
-            let value = configured.get(name)?.to_str()?;
-            Some((name.to_owned(), value.to_owned()))
-        })
-        .collect()
-}
-
 /// The placeholders only a workspace's worktree fills; `{port.` stands for
 /// every port's.
 const WORKTREE_FIELDS: [&str; 4] = ["{workspace}", "{workspace_path}", "{branch}", "{port."];

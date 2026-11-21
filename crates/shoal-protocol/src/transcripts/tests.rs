@@ -24,10 +24,7 @@ fn isolated(home: &Path) -> AgentEnvironment<'_> {
 /// [`super::locate`] in environments that inherit none of the user's
 /// variables.
 fn locate(home: &Path, sessions: &SpaceSessions) -> Vec<Transcript> {
-    let environments = Environments {
-        inherited: |_| None,
-        ..Environments::new(home, &sessions.environments)
-    };
+    let environments = Environments::recorded(home, &sessions.environments);
     locate_in(&environments, sessions)
 }
 
@@ -111,19 +108,54 @@ fn an_inherited_tool_directory_counts_unless_configured() {
 }
 
 #[test]
+fn an_agents_config_variables_include_inherited_ones() {
+    let home = tempfile::tempdir().unwrap();
+    let mut environment = isolated(home.path());
+    environment.inherited =
+        |name| (name == crate::env::CLAUDE_CONFIG_DIR).then(|| "/inherited".into());
+    let configured = BTreeMap::from([
+        (crate::env::CODEX_HOME.to_owned(), "/codex".into()),
+        ("OTHER".to_owned(), "/other".into()),
+    ]);
+    environment.configured = &configured;
+    assert_eq!(
+        environment.config_variables(),
+        BTreeMap::from([
+            (
+                crate::env::CLAUDE_CONFIG_DIR.to_owned(),
+                "/inherited".into()
+            ),
+            (crate::env::CODEX_HOME.to_owned(), "/codex".into()),
+        ])
+    );
+}
+
+#[test]
+fn only_this_process_environment_inherits() {
+    let home = tempfile::tempdir().unwrap();
+    let environments = Environments {
+        inherited: |name| (name == crate::env::CODEX_HOME).then(|| "/inherited".into()),
+        ..Environments::recorded(home.path(), &[BTreeMap::new()])
+    };
+    let read = environments
+        .each()
+        .iter()
+        .map(|environment| environment.variable(crate::env::CODEX_HOME))
+        .collect::<Vec<_>>();
+    assert_eq!(read, [Some("/inherited".into()), None]);
+}
+
+#[test]
 fn a_session_is_found_in_the_first_environment_that_has_it() {
     let home = tempfile::tempdir().unwrap();
     let elsewhere = home.path().join("elsewhere");
-    let environments = Environments {
-        inherited: |_| None,
-        ..Environments::new(
-            home.path(),
-            &[BTreeMap::from([(
-                crate::env::CODEX_HOME.to_owned(),
-                elsewhere.display().to_string(),
-            )])],
-        )
-    };
+    let environments = Environments::recorded(
+        home.path(),
+        &[BTreeMap::from([(
+            crate::env::CODEX_HOME.to_owned(),
+            elsewhere.display().to_string(),
+        )])],
+    );
     let environments = environments.each();
     let found = |id| find(&Codex, &environments, id).unwrap();
     assert_eq!(found("s1"), None);

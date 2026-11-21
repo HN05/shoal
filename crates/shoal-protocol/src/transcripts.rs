@@ -235,20 +235,35 @@ impl<'a> AgentEnvironment<'a> {
         let configured = self.configured.get(name).cloned();
         configured.or_else(|| (self.inherited)(name))
     }
+
+    /// The [`AGENT_CONFIG_VARIABLES`](crate::env::AGENT_CONFIG_VARIABLES)
+    /// it sets, configured or inherited, which the daemon keeps as where the
+    /// agent keeps its config; a value that is not UTF-8 cannot be kept.
+    pub fn config_variables(&self) -> BTreeMap<String, String> {
+        crate::env::AGENT_CONFIG_VARIABLES
+            .iter()
+            .filter_map(|&name| {
+                let value = self.variable(name)?.into_string().ok()?;
+                Some((name.to_owned(), value))
+            })
+            .collect()
+    }
 }
 
 /// Every environment a repository's agents may have run with: this
-/// process's under a home directory, and each `[env]` the daemon kept that
-/// its tracked agents ran with.
+/// process's under a home directory, and each set of
+/// [`AgentEnvironment::config_variables`] the daemon kept that its agents
+/// ran with, which inherits nothing.
 pub struct Environments {
     home: PathBuf,
     configured: Vec<BTreeMap<String, OsString>>,
+    /// What the first, this process's, inherits.
     inherited: Inherited,
 }
 
 impl Environments {
     /// The environments under `home` with `agent_environments`, the
-    /// `[env]` values the daemon kept.
+    /// variables the daemon kept.
     pub fn new(home: &Path, agent_environments: &[BTreeMap<String, String>]) -> Self {
         let configured = agent_environments
             .iter()
@@ -266,17 +281,29 @@ impl Environments {
         }
     }
 
+    /// [`Self::new`] with the tools' default locations under `home` in
+    /// place of this process's environment, which it never reads.
+    pub fn recorded(home: &Path, agent_environments: &[BTreeMap<String, String>]) -> Self {
+        Self {
+            inherited: |_| None,
+            ..Self::new(home, agent_environments)
+        }
+    }
+
     /// Each environment, this process's first.
     pub fn each(&self) -> Vec<AgentEnvironment<'_>> {
         static NONE: BTreeMap<String, OsString> = BTreeMap::new();
-        std::iter::once(&NONE)
-            .chain(&self.configured)
-            .map(|configured| AgentEnvironment {
-                home: &self.home,
-                configured,
-                inherited: self.inherited,
-            })
-            .collect()
+        let own = AgentEnvironment {
+            home: &self.home,
+            configured: &NONE,
+            inherited: self.inherited,
+        };
+        let kept = self.configured.iter().map(|configured| AgentEnvironment {
+            home: &self.home,
+            configured,
+            inherited: |_| None,
+        });
+        std::iter::once(own).chain(kept).collect()
     }
 }
 

@@ -121,8 +121,9 @@ pub async fn untracked_worktrees(daemon: &impl Daemon) -> Result<Vec<UntrackedWo
     pages(daemon, WorkspaceMethod::UntrackedWorktrees).await
 }
 
-/// Keep where an agent of `workspace` keeps its configuration for the
-/// repository's removal.
+/// Keep where an agent of `workspace` keeps its configuration, the agent
+/// config variables it runs with, inherited ones included, for the
+/// repository's removal or move.
 pub async fn keep_agent_environment(
     daemon: &impl Daemon,
     workspace: &SpaceId,

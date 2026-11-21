@@ -2833,8 +2833,9 @@ opens, since that command refuses a CLI signed in through an API token or gatewa
 Successful repository removal drops those trust fields for the removed workspace
 directory and worktrees, in Shoal's user config and in each one its spaces'
 `[env]` gave a tracked agent, while preserving other project settings. The daemon
-keeps each location from when the CLI trusts a space there, since a renamed or
-removed space, or a changed `[env]`, no longer resolves to it. The CLI reads
+keeps each location an agent ran with, inherited variables included, from when the
+CLI trusts its space there, since a renamed or removed space, or a changed `[env]`,
+no longer resolves to it. The CLI reads
 the locations once removal has succeeded, when no agent can add one, and the
 daemon forgets them after cleanup.
 
