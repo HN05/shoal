@@ -1,4 +1,4 @@
-//! Running a command or the editor in a workspace.
+//! `shoal edit`: opening a workspace in the editor.
 use std::ffi::OsString;
 
 use anyhow::{Context as _, Result};
@@ -12,15 +12,6 @@ use crate::{
     protocol::ConfigTarget,
 };
 use shoal_protocol::space_names::SpaceSelector;
-
-pub(in crate::cli::commands) async fn exec(
-    ctx: &Context,
-    workspace: Option<SpaceSelector>,
-    command: Vec<OsString>,
-) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    shoal_workers::execution::run_command(&ctx.paths, workspace, command).await
-}
 
 /// The configured command `shoal edit` runs instead of `$VISUAL` or `$EDITOR`.
 const EDIT: &str = "edit";

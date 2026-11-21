@@ -5,7 +5,7 @@ use crate::{cli::context::Context, model::Workspace};
 
 /// The workspace's [`shoal_workers::settings::configured_environment`] for finding its agents' files,
 /// or none with a warning when it cannot be resolved.
-pub(in crate::cli) async fn agent_environment(
+pub(super) async fn agent_environment(
     ctx: &Context,
     workspace: &Workspace,
 ) -> BTreeMap<String, OsString> {

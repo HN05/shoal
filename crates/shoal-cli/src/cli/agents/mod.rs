@@ -4,6 +4,7 @@
 //! and session files those launches prepare.
 mod desktop;
 mod detached;
+mod environment;
 mod launch;
 mod sessions;
 mod trust;

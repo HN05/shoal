@@ -44,7 +44,7 @@ pub(in crate::cli::commands) async fn adopt(
                 "Adopted"
             },
             Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
-            super::location_phrase(&workspace),
+            super::preparation::location_phrase(&workspace),
         ),
         &workspace,
     )?;

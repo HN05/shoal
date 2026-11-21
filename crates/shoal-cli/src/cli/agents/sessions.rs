@@ -12,7 +12,7 @@ use anyhow::{Result, ensure};
 
 use crate::{
     agent::Agent,
-    cli::{commands::workspaces, context::Context},
+    cli::{agents::environment, context::Context},
     config::Effective,
     model::{Chat, RemovedSpace, Workspace},
     protocol::ConfigTarget,
@@ -71,7 +71,7 @@ pub(in crate::cli) async fn install_session_files(
         SessionHome::Chat(chat) => (ConfigTarget::chat(chat), None),
     };
     let workspace_environment = match workspace {
-        Some(workspace) => workspaces::agent_environment(ctx, workspace).await,
+        Some(workspace) => environment::agent_environment(ctx, workspace).await,
         None => BTreeMap::new(),
     };
     place_session_files(ctx, (target, &workspace_environment), files, existing).await
@@ -199,7 +199,7 @@ pub(in crate::cli) async fn find_forked_session(
     };
     let workspace_environment = match space {
         crate::agents::HomeRecords::Workspace(workspace) => {
-            workspaces::agent_environment(ctx, workspace).await
+            environment::agent_environment(ctx, workspace).await
         }
         crate::agents::HomeRecords::Chat { .. } => return,
     };

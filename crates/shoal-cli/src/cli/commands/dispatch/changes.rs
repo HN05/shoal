@@ -2,7 +2,10 @@ use anyhow::Result;
 
 use crate::cli::{
     args::changes::{BranchCommand, ChangesCommand},
-    commands::{base, changes, ci, forge_branches, items, merge, review, workspaces},
+    commands::{
+        base, branch_rename, changes, ci, conflicts, diff, forge_branches, items, merge, review,
+        unmerge,
+    },
     context::Context,
 };
 
@@ -17,20 +20,20 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ChangesCommand)
             since,
             ..
         } => changes::thread_diff(&ctx, thread, since).await,
-        ChangesCommand::Diff { workspace, .. } => workspaces::diff(&ctx, workspace).await,
+        ChangesCommand::Diff { workspace, .. } => diff::diff(&ctx, workspace).await,
         ChangesCommand::Conflicts { target, workspace } => {
-            workspaces::conflicts(&ctx, workspace, target).await
+            conflicts::conflicts(&ctx, workspace, target).await
         }
         ChangesCommand::Review { command } => review::run(&ctx, command).await,
         ChangesCommand::Merge(args) => merge::run(&ctx, args).await,
-        ChangesCommand::Unmerge { space } => workspaces::unmerge(&ctx, space).await,
+        ChangesCommand::Unmerge { space } => unmerge::unmerge(&ctx, space).await,
     }
 }
 
 async fn branch(ctx: &Context, command: BranchCommand) -> Result<i32> {
     match command {
         BranchCommand::Rename { workspace, branch } => {
-            workspaces::rename_branch(ctx, workspace, branch).await
+            branch_rename::rename_branch(ctx, workspace, branch).await
         }
         BranchCommand::Base { command, workspace } => base::run(ctx, command, workspace).await,
         BranchCommand::Ls {

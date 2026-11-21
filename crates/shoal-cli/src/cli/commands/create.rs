@@ -233,10 +233,10 @@ pub(super) async fn start_child(
 /// Run the child's setup and post-setup hook; `None` when setup failed.
 pub(super) async fn prepare(ctx: &Context, child: Workspace) -> Result<Option<Workspace>> {
     if child.state != WorkspaceState::Preparing {
-        super::workspaces::run_post_setup(ctx, &child).await?;
+        super::setup::run_post_setup(ctx, &child).await?;
         return Ok(Some(child));
     }
-    match super::workspaces::setup_workspace(ctx, &child, true).await? {
+    match super::setup::setup_workspace(ctx, &child, true).await? {
         Some(set_up) => set_up.finish(ctx).await.map(Some),
         None => Ok(None),
     }
@@ -260,7 +260,7 @@ async fn follow_queuing(
     preparing: Preparing<'_, CommandPaths>,
     agent: Option<Box<QueuedLaunch>>,
 ) -> Result<Option<Prepared>> {
-    match super::workspaces::follow_setup(ctx, preparing).await? {
+    match super::setup::follow_setup(ctx, preparing).await? {
         Some(set_up) => set_up.finish_queuing(ctx, agent).await.map(Some),
         None => Ok(None),
     }
@@ -273,7 +273,7 @@ fn report(ctx: &Context, child: &Workspace) -> Result<()> {
     let text = format!(
         "Created {} {}",
         palette.paint(Style::Heading, &child.name),
-        super::workspaces::location_phrase(child),
+        super::preparation::location_phrase(child),
     );
     ctx.emit(
         &text,

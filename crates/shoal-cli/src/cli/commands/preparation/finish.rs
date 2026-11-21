@@ -9,7 +9,7 @@ use crate::{
         agents,
         commands::{
             operations,
-            workspaces::{SetUp, settle_setup},
+            setup::{SetUp, settle_setup},
         },
         context::Context,
         output::{Palette, Style},
@@ -73,7 +73,7 @@ pub(super) fn show_prepared(ctx: &Context, workspace: &Workspace, reused: bool) 
             "{} {} {}",
             if reused { "Opened" } else { "Created" },
             Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
-            crate::cli::commands::workspaces::location_phrase(workspace),
+            super::reports::location_phrase(workspace),
         );
     })
 }

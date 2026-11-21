@@ -65,7 +65,7 @@ pub(super) async fn to_workspace(
     let text = format!(
         "Converted {} into a workspace {}; its agent restarts there once its turn ends",
         Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
-        super::workspaces::location_phrase(&workspace),
+        super::preparation::location_phrase(&workspace),
     );
     report(ctx, &text, SpaceKind::Workspace, workspace)
 }

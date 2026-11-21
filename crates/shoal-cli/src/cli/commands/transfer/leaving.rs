@@ -14,7 +14,7 @@ impl Leaving {
     /// directory end.
     pub(super) async fn find(ctx: &Context) -> Result<Self> {
         for space in crate::client::spaces::list(&ctx.paths).await?.iter() {
-            let escape = super::super::workspaces::escape_destination(ctx, space).await?;
+            let escape = super::super::removal::escape_destination(ctx, space).await?;
             if escape.is_some() {
                 return Ok(Self(escape));
             }

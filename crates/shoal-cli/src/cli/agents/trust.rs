@@ -14,7 +14,7 @@ use crate::{
         AgentHome, HomeRecords, forget_repository_trust,
         trust::{TrustFile, repository_trust_paths},
     },
-    cli::{commands::workspaces, context::Context},
+    cli::{agents::environment, context::Context},
     env,
     model::{ChatHome, Repository, Workspace},
 };
@@ -48,7 +48,7 @@ pub(super) async fn tracked(
     workspace: &Workspace,
     profile: &crate::ai::Environment,
 ) {
-    let mut configured = workspaces::agent_environment(ctx, workspace).await;
+    let mut configured = environment::agent_environment(ctx, workspace).await;
     profile.layer(&mut configured, &ctx.paths.home);
     keep_config_location(file, ctx, Holder::Workspace(workspace), &configured).await;
     let environment = AgentEnvironment::new(&ctx.paths.home, &configured);

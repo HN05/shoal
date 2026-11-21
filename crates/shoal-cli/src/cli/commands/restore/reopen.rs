@@ -87,7 +87,7 @@ pub(in crate::cli::commands) async fn run_post_setup(
     reopened: &Reopened,
 ) -> Result<()> {
     match reopened.space.to_workspace() {
-        Some(workspace) => super::super::workspaces::run_post_setup(ctx, &workspace).await,
+        Some(workspace) => super::super::setup::run_post_setup(ctx, &workspace).await,
         None => Ok(()),
     }
 }
@@ -206,7 +206,7 @@ impl ReopenedExt for Reopened {
             _ => format!("; shoal resume {} resumes its stopped agents", space.number),
         };
         let location = match space.to_workspace() {
-            Some(workspace) => super::super::workspaces::location_phrase(&workspace),
+            Some(workspace) => super::super::preparation::location_phrase(&workspace),
             None => format!("as chat {}", space.number),
         };
         format!(
@@ -262,8 +262,7 @@ pub(in crate::cli::commands) async fn prepare_reopened(
     crate::cli::agents::install_kept_session_files(ctx, home, &removed, &session_files).await;
     let mut workspace = opened.workspace;
     if workspace.state == WorkspaceState::Preparing {
-        let Some(set_up) =
-            super::super::workspaces::setup_workspace(ctx, &workspace, false).await?
+        let Some(set_up) = super::super::setup::setup_workspace(ctx, &workspace, false).await?
         else {
             return Ok(None);
         };

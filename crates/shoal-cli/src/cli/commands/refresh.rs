@@ -3,7 +3,7 @@
 //! wrote.
 use anyhow::{Result, bail};
 
-use super::setup_workspace;
+use super::setup::setup_workspace;
 use crate::{
     cli::{
         context::Context,

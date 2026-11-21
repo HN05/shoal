@@ -3,7 +3,7 @@ use std::ffi::OsString;
 use anyhow::Result;
 
 use crate::cli::{
-    commands::{configured, workspaces},
+    commands::{configured, exec},
     context::Context,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -17,6 +17,6 @@ pub(in crate::cli::commands) async fn run(
     match name {
         Some(name) => configured::run(&ctx, &name, workspace, args).await,
         None if args.is_empty() => configured::list(&ctx, workspace).await,
-        None => workspaces::exec(&ctx, workspace, args).await,
+        None => exec::exec(&ctx, workspace, args).await,
     }
 }

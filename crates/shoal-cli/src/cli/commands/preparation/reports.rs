@@ -181,12 +181,24 @@ pub(super) fn report_workspace(ctx: &Context, started: StartedWorkspace) -> Resu
             "{} {} {}; `shoal status {}` shows its preparation",
             if reused { "Opened" } else { "Created" },
             Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
-            crate::cli::commands::workspaces::location_phrase(workspace),
+            location_phrase(workspace),
             workspace.number,
         );
     })?;
     match entry {
         Some(entry) => start::report_queued_in(ctx, &workspace.name, &entry),
         None => Ok(0),
+    }
+}
+
+/// Where the workspace's worktree is, for messages: `on branch <branch> at
+/// <path>`, or `at <commit> in <path>` with what a workspace at a commit was
+/// made for.
+pub(in crate::cli::commands) fn location_phrase(workspace: &crate::model::Workspace) -> String {
+    use crate::model::Head;
+    let path = workspace.path.display();
+    match &workspace.head {
+        Head::Branch(branch) => format!("on branch {branch} at {path}"),
+        Head::Commit(at) => format!("at {} in {path}", at.label()),
     }
 }
