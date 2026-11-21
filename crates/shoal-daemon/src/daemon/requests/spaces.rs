@@ -1,4 +1,5 @@
-//! The daemon's answers to [`SpaceMethod`] requests, and who may send them.
+//! The daemon's answers to [`SpaceMethod`] requests, who may send them, and
+//! what each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -8,6 +9,7 @@ use super::super::{
     answer::{Answer, OperationGuard},
     manager::Manager,
     scope::{Caller, Scoped, denied},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{self, Body, ErrorCode, Response, SpaceMethod};
 use shoal_protocol::{
@@ -108,6 +110,28 @@ pub(super) async fn handle(
             }));
         }
     }))
+}
+
+impl Checked for SpaceMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::RenameSpace { .. }
+            | Self::IssueScope { .. }
+            | Self::RevokeScope { .. }
+            | Self::SpaceEnvironment { .. }
+            | Self::SpaceStatus { .. }
+            | Self::SpaceSessions { .. }
+            | Self::FollowSession { .. }
+            | Self::AttachSession { .. }
+            | Self::SpaceLog { .. } => Some(TargetCheck::Space),
+            Self::ListSpaces
+            | Self::ListSpacesEverywhere { .. }
+            | Self::FindSpaces { .. }
+            | Self::LocateSpace { .. }
+            | Self::SelectSpaces { .. }
+            | Self::WatchSpaceEvents { .. } => None,
+        }
+    }
 }
 
 impl Scoped for SpaceMethod {

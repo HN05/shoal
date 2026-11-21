@@ -1,4 +1,5 @@
-//! The daemon's answers to [`MergingMethod`] requests, and who may send them.
+//! The daemon's answers to [`MergingMethod`] requests, who may send them, and
+//! what each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -7,6 +8,7 @@ use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{Body, MergingMethod};
 use shoal_protocol::space_names::SpaceSelector;
@@ -35,6 +37,15 @@ pub(super) async fn handle(
             Body::MergePreview(manager.preview_merge(&workspace, &options, caller).await?)
         }
     }))
+}
+
+impl Checked for MergingMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::MergePath { .. } => Some(TargetCheck::Space),
+            Self::PreviewMerge { .. } => Some(TargetCheck::Workspace),
+        }
+    }
 }
 
 impl Scoped for MergingMethod {

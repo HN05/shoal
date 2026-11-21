@@ -1,4 +1,5 @@
-//! The daemon's answers to [`ChangeMethod`] requests, and who may send them.
+//! The daemon's answers to [`ChangeMethod`] requests, who may send them, and
+//! what each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
@@ -7,6 +8,7 @@ use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{Body, ChangeMethod};
 use shoal_protocol::space_names::SpaceSelector;
@@ -46,6 +48,18 @@ pub(super) async fn handle(
             Body::Changes(unclaimed.await?)
         }
     }))
+}
+
+impl Checked for ChangeMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::ClaimChanges { .. } | Self::UnclaimChanges { .. } => Some(TargetCheck::Space),
+            Self::RecordChange { .. }
+            | Self::ListChanges { .. }
+            | Self::ChangeDiffs { .. }
+            | Self::ReportEdits { .. } => None,
+        }
+    }
 }
 
 impl Scoped for ChangeMethod {

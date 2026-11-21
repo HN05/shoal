@@ -13,6 +13,7 @@ use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::{
     config::permissions::PermissionKey,
@@ -56,6 +57,19 @@ async fn authorize(manager: &Manager, method: &HubMethod, caller: Option<&Caller
             "only the user's own terminal pairs, joins, leaves and revokes the hub's machines",
         )
         .into()),
+    }
+}
+
+impl Checked for HubMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::PairHub
+            | Self::JoinHub { .. }
+            | Self::LeaveHub
+            | Self::HubMembers
+            | Self::UpdateHub
+            | Self::RevokeHubMember { .. } => None,
+        }
     }
 }
 

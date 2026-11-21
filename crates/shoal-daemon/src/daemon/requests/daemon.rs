@@ -13,6 +13,7 @@ use super::super::{
     manager::Manager,
     scope::{self, Caller, Scoped},
     shutdown_stop::StoppedSpaces,
+    target_checks::{Checked, TargetCheck},
 };
 use crate::{
     config::permissions::PermissionKey,
@@ -31,6 +32,14 @@ pub(super) async fn handle(server: &Server, method: DaemonMethod) -> Result<Answ
             Body::Ok
         }
     }))
+}
+
+impl Checked for DaemonMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::Status | Self::ReloadConfig => None,
+        }
+    }
 }
 
 impl Scoped for DaemonMethod {

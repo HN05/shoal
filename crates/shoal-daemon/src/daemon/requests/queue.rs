@@ -1,4 +1,5 @@
-//! The daemon's answers to [`QueueMethod`] requests, and who may send them.
+//! The daemon's answers to [`QueueMethod`] requests, who may send them, and
+//! what each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -8,6 +9,7 @@ use super::super::{
     manager::Manager,
     queued_starts,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{Body, QueueMethod};
 use crate::state::QueueKind;
@@ -89,6 +91,26 @@ pub(super) async fn handle(
             })
         }
     }))
+}
+
+impl Checked for QueueMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::SetPriority { .. } | Self::QueueRestore { .. } => Some(TargetCheck::Space),
+            Self::QueueAgent { .. } => Some(TargetCheck::Workspace),
+            Self::ListQueue
+            | Self::QueuedPlan { .. }
+            | Self::OpenStart { .. }
+            | Self::QueueRemove { .. }
+            | Self::QueueStart { .. }
+            | Self::QueueClaim { .. }
+            | Self::StartedLaunch { .. }
+            | Self::QueueHold { .. }
+            | Self::QueueAttach { .. }
+            | Self::QueueFail { .. }
+            | Self::QueueRetry { .. } => None,
+        }
+    }
 }
 
 impl Scoped for QueueMethod {

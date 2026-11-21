@@ -1,4 +1,5 @@
-//! The daemon's answers to [`DemoMethod`] requests, and who may send them.
+//! The daemon's answers to [`DemoMethod`] requests, who may send them, and what
+//! each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -7,6 +8,7 @@ use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{Body, DemoMethod};
 use shoal_protocol::{demos::Running, scope_tokens::ScopeToken, space_names::SpaceSelector};
@@ -46,6 +48,17 @@ pub(super) async fn handle(
             }));
         }
     }))
+}
+
+impl Checked for DemoMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::DemoProgress { .. } | Self::StopDemos { .. } | Self::OpenDemoStream { .. } => {
+                Some(TargetCheck::Space)
+            }
+            Self::ListDemos { .. } => None,
+        }
+    }
 }
 
 impl Scoped for DemoMethod {

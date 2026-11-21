@@ -1,4 +1,5 @@
-//! The daemon's answers to [`DiffMethod`] requests, and who may send them.
+//! The daemon's answers to [`DiffMethod`] requests, who may send them, and what
+//! each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -7,6 +8,7 @@ use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{Body, DiffMethod};
 use shoal_protocol::{scope_tokens::ScopeToken, space_names::SpaceSelector};
@@ -33,6 +35,16 @@ pub(super) async fn handle(
             }));
         }
     }))
+}
+
+impl Checked for DiffMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::DiffBase { .. } | Self::Conflicts { .. } | Self::Diff { .. } => {
+                Some(TargetCheck::Workspace)
+            }
+        }
+    }
 }
 
 impl Scoped for DiffMethod {

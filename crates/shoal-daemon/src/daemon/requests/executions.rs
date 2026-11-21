@@ -1,4 +1,5 @@
-//! The daemon's answers to [`ExecutionMethod`] requests, and who may send them.
+//! The daemon's answers to [`ExecutionMethod`] requests, who may send them, and
+//! what each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::{Result, ensure};
@@ -9,6 +10,7 @@ use super::super::{
     executions::ExecutionKind,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{Body, ExecutionMethod};
 use shoal_protocol::space_names::SpaceSelector;
@@ -80,6 +82,15 @@ pub(super) async fn handle(
             Body::Ok
         }
     }))
+}
+
+impl Checked for ExecutionMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::Execute { .. } => Some(TargetCheck::Space),
+            Self::CheckMerge | Self::CheckUnmerge | Self::SessionSignalled { .. } => None,
+        }
+    }
 }
 
 impl Scoped for ExecutionMethod {

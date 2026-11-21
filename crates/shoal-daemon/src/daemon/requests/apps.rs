@@ -16,6 +16,7 @@ use super::super::{
     apps::{Holder, Keeper, Socket, Watched, Writing},
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{AppMethod, Body, ConfigTarget};
 
@@ -109,6 +110,19 @@ async fn keeper(manager: &Manager, kept: AppScope) -> Result<Keeper> {
         AppScope::Shared if manager.shares_through_hub().await? => Keeper::Hub,
         kept => Keeper::Here(Holder::own(kept)),
     })
+}
+
+impl Checked for AppMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::ReadAppConfig { .. }
+            | Self::ReadAppEntry { .. }
+            | Self::ListAppEntries { .. }
+            | Self::WriteAppEntry { .. }
+            | Self::DeleteAppEntry { .. }
+            | Self::WatchAppEntries { .. } => None,
+        }
+    }
 }
 
 impl Scoped for AppMethod {

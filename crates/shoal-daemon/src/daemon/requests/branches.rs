@@ -1,4 +1,5 @@
-//! The daemon's answers to [`BranchMethod`] requests, and who may send them.
+//! The daemon's answers to [`BranchMethod`] requests, who may send them, and
+//! what each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -7,6 +8,7 @@ use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use super::items::{change_context_space, own_context, read_context_space};
 use crate::protocol::{Body, BranchMethod};
@@ -34,6 +36,16 @@ pub(super) async fn handle(
                 .links
                 .delete_branches(&**manager, &target, &branches, force, caller);
             Ok(Answer::pages(deleted.await, Body::DeletedBranches))
+        }
+    }
+}
+
+impl Checked for BranchMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::ListForgeBranches { .. } | Self::DeleteForgeBranches { .. } => {
+                Some(TargetCheck::Space)
+            }
         }
     }
 }

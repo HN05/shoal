@@ -1,10 +1,12 @@
-//! The daemon's answers to [`LaunchMethod`] requests, and who may send them.
+//! The daemon's answers to [`LaunchMethod`] requests, who may send them, and
+//! what each requires of the space it acts on.
 use anyhow::Result;
 
 use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{Body, LaunchMethod};
 use shoal_protocol::{
@@ -56,6 +58,20 @@ pub(super) async fn handle(
             }));
         }
     }))
+}
+
+impl Checked for LaunchMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::Launch { .. }
+            | Self::CheckLaunch { .. }
+            | Self::CheckCreation { .. }
+            | Self::LaunchModes { .. }
+            | Self::LabelledMode { .. }
+            | Self::TakeParentRepository { .. }
+            | Self::ReceiveSession { .. } => None,
+        }
+    }
 }
 
 impl Scoped for LaunchMethod {

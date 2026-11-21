@@ -59,13 +59,15 @@ pub(super) async fn operation(
     Box::pin(handle(server, operation, caller, scope)).await
 }
 
-/// Forward a request to its domain's handler.
+/// Refuse a request whose space fails the check its kind declares, then
+/// forward it to its domain's handler.
 pub(super) async fn handle(
     server: &Server,
     operation: Operation,
     caller: Option<&Caller>,
     scope: Option<&ScopeToken>,
 ) -> Result<Answer> {
+    server.manager.check_target(&operation).await?;
     match operation {
         Operation::Daemon(method) => daemon::handle(server, method).await,
         Operation::Repository(method) => {

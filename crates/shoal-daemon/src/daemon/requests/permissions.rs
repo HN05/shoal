@@ -1,5 +1,5 @@
-//! The daemon's answers to [`PermissionMethod`] requests, and who may send
-//! them.
+//! The daemon's answers to [`PermissionMethod`] requests, who may send them,
+//! and what each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
@@ -8,6 +8,7 @@ use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{Body, PermissionMethod};
 use shoal_protocol::space_names::SpaceSelector;
@@ -40,6 +41,15 @@ pub(super) async fn handle(
             Body::Permissions(held.await?)
         }
     }))
+}
+
+impl Checked for PermissionMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::LaunchPermissions { .. } => Some(TargetCheck::Space),
+            Self::HeldPermissions { .. } => None,
+        }
+    }
 }
 
 impl Scoped for PermissionMethod {

@@ -1,4 +1,5 @@
-//! The daemon's answers to [`RecoveryMethod`] requests, and who may send them.
+//! The daemon's answers to [`RecoveryMethod`] requests, who may send them, and
+//! what each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -7,6 +8,7 @@ use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::execution::recovery::Saved;
 use crate::protocol::{self, Body, RecoveryMethod, SavedPiece};
@@ -55,6 +57,17 @@ fn pieces(saved: Result<Saved>) -> Result<Vec<SavedPiece>> {
         .into_iter()
         .map(SavedPiece)
         .collect())
+}
+
+impl Checked for RecoveryMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::Checkpoints { .. } | Self::Saved { .. } => Some(TargetCheck::Space),
+            Self::Checkpoint { .. } => Some(TargetCheck::CheckpointedWorkspace),
+            Self::RestoreCheckpoint { .. } | Self::Reconcile { .. } => Some(TargetCheck::Workspace),
+            Self::SavedSummaries => None,
+        }
+    }
 }
 
 /// Repairing workspaces is the `admin` permission's.

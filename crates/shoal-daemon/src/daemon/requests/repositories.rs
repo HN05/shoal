@@ -1,4 +1,5 @@
-//! The daemon's answers to [`RepositoryMethod`] requests, and who may send them.
+//! The daemon's answers to [`RepositoryMethod`] requests, who may send them,
+//! and what each requires of the space it acts on.
 use shoal_daemon_base::permitted_actions::Action;
 use std::sync::Arc;
 
@@ -9,6 +10,7 @@ use super::super::{
     contribution_holds,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::{
     config::permissions::PermissionKey,
@@ -155,6 +157,30 @@ async fn administered_repository(
         }
         _ => None,
     })
+}
+
+impl Checked for RepositoryMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::ListRepositories
+            | Self::RegisterRepository { .. }
+            | Self::RegisterContribution { .. }
+            | Self::HoldContribution { .. }
+            | Self::RenameRepository { .. }
+            | Self::LocalConfigPath { .. }
+            | Self::EditLocalConfig { .. }
+            | Self::RemoveRepository { .. }
+            | Self::PlanRepositoryMoves { .. }
+            | Self::MoveRepositories { .. }
+            | Self::SyncRepository { .. }
+            | Self::FailingSyncs
+            | Self::ListBranches { .. }
+            | Self::KeptBranches { .. }
+            | Self::DeleteKeptBranches { .. }
+            | Self::KeepRepositoryAgentEnvironment { .. }
+            | Self::ReceiveCommits { .. } => None,
+        }
+    }
 }
 
 /// A scoped caller syncs its own repository; administering repositories is

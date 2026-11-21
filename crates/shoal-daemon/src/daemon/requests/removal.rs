@@ -1,4 +1,5 @@
-//! The daemon's answers to [`RemovalMethod`] requests, and who may send them.
+//! The daemon's answers to [`RemovalMethod`] requests, who may send them, and
+//! what each requires of the space it acts on.
 use shoal_protocol::model::ByKind;
 use std::sync::Arc;
 
@@ -14,6 +15,7 @@ use super::super::{
     restore::PackageInput,
     scope::{Caller, Scoped},
     spaces::MovePacking,
+    target_checks::{Checked, TargetCheck},
 };
 use crate::{
     model::StoppedSpace,
@@ -329,6 +331,38 @@ async fn stop_space(
 /// processes spares with the processes that started it.
 fn identity_of(pid: Option<u32>) -> Option<identity::Identity> {
     pid.and_then(|pid| identity::capture(pid).ok().flatten())
+}
+
+impl Checked for RemovalMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::CheckStop { .. }
+            | Self::StopProcesses { .. }
+            | Self::CheckRemoval { .. }
+            | Self::RemoveSpace { .. }
+            | Self::StartRemoval { .. }
+            | Self::AbsorbSpace(..)
+            | Self::CopySpace { .. }
+            | Self::ExportMovingSpace { .. }
+            | Self::EndMovedSpace { .. }
+            | Self::AbandonMove { .. }
+            | Self::DeliverMove { .. }
+            | Self::DeliverCopy { .. }
+            | Self::ReadHeldPackage { .. }
+            | Self::ReleaseHeldMove { .. }
+            | Self::SettleMove { .. } => Some(TargetCheck::Space),
+            Self::StopSpace { .. } => Some(TargetCheck::RunningSpace),
+            Self::StopTargets
+            | Self::Cleanup { .. }
+            | Self::RemovedSpaces
+            | Self::RemovedSpace { .. }
+            | Self::RestoreSpace { .. }
+            | Self::DropRestoredSessions { .. }
+            | Self::ExportRemovedSpace { .. }
+            | Self::ImportPackage(..)
+            | Self::ReceiveMove { .. } => None,
+        }
+    }
 }
 
 impl Scoped for RemovalMethod {

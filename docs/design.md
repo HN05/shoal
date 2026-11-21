@@ -2643,6 +2643,11 @@ agents, which may be waiting for PR activity rather than the user.
 Completion queries the installed binary per Tab and uses read-only daemon calls
 with a 500 ms timeout for live targets, honoring state directory and scope and
 never starting a daemon or picker. Targets sort before flags, including in fzf-tab.
+Each request kind declares, with no default, the one check it makes of the space
+it names, such as a ready workspace or one where an agent runs, and the daemon
+judges the space by it before the handler runs, accepting it, refusing it with
+the check's reason, or finding it without what the request acts on, which its
+handler answers.
 Each command states what it needs of its workspace in one table; completion and
 pickers leave out a workspace without what the command acts on, and describe one
 refused for its state or a running execution by the reason, which pickers list

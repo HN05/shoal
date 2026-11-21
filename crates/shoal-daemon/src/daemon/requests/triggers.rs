@@ -1,5 +1,5 @@
-//! The daemon's answers to [`TriggerMethod`] requests, and who may send
-//! them.
+//! The daemon's answers to [`TriggerMethod`] requests, who may send them, and
+//! what each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -9,6 +9,7 @@ use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{Body, TriggerMethod};
 
@@ -40,6 +41,14 @@ pub(super) async fn handle(
             Body::TriggerFired(fired.await?)
         }
     }))
+}
+
+impl Checked for TriggerMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::ListTriggers { .. } | Self::PauseTrigger { .. } | Self::RunTrigger { .. } => None,
+        }
+    }
 }
 
 impl Scoped for TriggerMethod {

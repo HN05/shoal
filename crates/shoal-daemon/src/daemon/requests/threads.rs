@@ -1,4 +1,5 @@
-//! The daemon's answers to [`ThreadMethod`] requests, and who may send them.
+//! The daemon's answers to [`ThreadMethod`] requests, who may send them, and
+//! what each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -7,6 +8,7 @@ use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use super::acting::acting;
 use crate::protocol::{Body, ThreadMethod};
@@ -123,6 +125,28 @@ pub(super) async fn handle(
             thread: number,
         } => thread(manager.link_thread(caller, &space, number, false).await?),
     }))
+}
+
+impl Checked for ThreadMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::PostInChat { .. }
+            | Self::RepliedInChat { .. }
+            | Self::ListThreads { .. }
+            | Self::LinkThread { .. }
+            | Self::UnlinkThread { .. }
+            | Self::SwitchThread { .. }
+            | Self::CurrentThread { .. }
+            | Self::AddChanges { .. }
+            | Self::RemoveChanges { .. }
+            | Self::AwaitPost { .. } => Some(TargetCheck::Space),
+            Self::OpenThread { .. }
+            | Self::Post { .. }
+            | Self::ForwardThread { .. }
+            | Self::ResolveThread { .. }
+            | Self::ShowThread { .. } => None,
+        }
+    }
 }
 
 impl Scoped for ThreadMethod {

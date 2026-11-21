@@ -1,4 +1,5 @@
-//! The daemon's answers to [`HoldMethod`] requests, and who may send them.
+//! The daemon's answers to [`HoldMethod`] requests, who may send them, and what
+//! each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -7,6 +8,7 @@ use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::{
     model::HoldPlacer,
@@ -45,6 +47,15 @@ pub(super) async fn handle(
         }
         HoldMethod::HoldList { space } => Body::Holds(manager.holds(&space).await?),
     }))
+}
+
+impl Checked for HoldMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::HoldAcquire { .. } | Self::HoldList { .. } => Some(TargetCheck::Space),
+            Self::HoldRelease { .. } => Some(TargetCheck::HeldSpace),
+        }
+    }
 }
 
 impl Scoped for HoldMethod {

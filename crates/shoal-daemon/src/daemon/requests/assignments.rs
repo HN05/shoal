@@ -1,4 +1,5 @@
-//! The daemon's answers to [`AssignmentMethod`] requests, and who may send them.
+//! The daemon's answers to [`AssignmentMethod`] requests, who may send them,
+//! and what each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -8,6 +9,7 @@ use super::super::{
     manager::Manager,
     scope::{Caller, Scoped},
     stopped_work::PermissionTargets,
+    target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{AssignmentMethod, Body};
 use shoal_protocol::space_names::SpaceSelector;
@@ -49,6 +51,18 @@ pub(super) async fn handle(
             Body::Completion(manager.mark_space_done(&space, done, &attacher).await?)
         }
     }))
+}
+
+impl Checked for AssignmentMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::MarkDone { .. } | Self::DiscardStoppedAgent { .. } => Some(TargetCheck::Space),
+            Self::UndoDone { .. } => Some(TargetCheck::DoneSpace),
+            Self::ClearReady { .. } => Some(TargetCheck::MarkedSpace),
+            Self::MarkReady { .. } => Some(TargetCheck::ReadySpace),
+            Self::ChangeStoppedPermissions { .. } => None,
+        }
+    }
 }
 
 impl Scoped for AssignmentMethod {

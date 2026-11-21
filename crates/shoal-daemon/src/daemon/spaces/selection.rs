@@ -10,9 +10,10 @@ use crate::{
     daemon::{
         events::{self, EventDetails},
         manager::Manager,
+        target_checks::other_kind,
     },
     model::{Space, SpaceKind, Workspace},
-    refusal::{Reason, Refusal},
+    refusal::Refusal,
 };
 use shoal_protocol::{model::Located, space_names::SpaceSelector};
 
@@ -152,16 +153,6 @@ impl Manager {
         (self.space(selector).await?.into_chat())
             .map_err(|workspace| other_kind(&workspace, SpaceKind::Chat))
     }
-}
-
-/// The refusal of `space` to a request that needs a space of kind `needed`.
-fn other_kind(space: &Space, needed: SpaceKind) -> anyhow::Error {
-    let message = format!(
-        "space {space} is a {}; this command needs a {}",
-        space.kind(),
-        needed.as_str()
-    );
-    Refusal::new(Reason::NotFound, message).into()
 }
 
 /// What `removal` of a space did, for a request that names it.

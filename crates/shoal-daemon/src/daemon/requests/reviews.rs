@@ -1,4 +1,5 @@
-//! The daemon's answers to [`ReviewMethod`] requests, and who may send them.
+//! The daemon's answers to [`ReviewMethod`] requests, who may send them, and
+//! what each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -7,6 +8,7 @@ use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{self, Body, ReviewMethod, ReviewPiece};
 use shoal_protocol::space_names::SpaceSelector;
@@ -83,6 +85,19 @@ fn pieces<T: serde::Serialize>(shown: Result<T>) -> Result<Vec<ReviewPiece>> {
 /// The workspace a request without a review ID names.
 fn named(workspace: Option<SpaceSelector>) -> Result<SpaceSelector> {
     workspace.ok_or_else(|| anyhow::anyhow!("name a review or a workspace"))
+}
+
+impl Checked for ReviewMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::RunReview { .. }
+            | Self::CancelReview { .. }
+            | Self::ListReviews { .. }
+            | Self::ShowReview { .. }
+            | Self::AwaitReview { .. }
+            | Self::CheckPrGate { .. } => Some(TargetCheck::Space),
+        }
+    }
 }
 
 impl Scoped for ReviewMethod {

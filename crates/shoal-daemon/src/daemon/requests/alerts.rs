@@ -1,4 +1,5 @@
-//! The daemon's answers to [`AlertMethod`] requests, and who may send them.
+//! The daemon's answers to [`AlertMethod`] requests, who may send them, and
+//! what each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -9,6 +10,7 @@ use super::super::{
     answer::{Answer, OperationGuard},
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use super::acting::acting;
 use crate::protocol::{self, AlertMethod, AlertTarget, AlertsFor, Body, Response};
@@ -69,6 +71,20 @@ pub(super) async fn handle(
         }
         AlertMethod::ClearAlerts => Body::Cleared(manager.notifications.clear().await?),
     }))
+}
+
+impl Checked for AlertMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::ListAlerts { .. }
+            | Self::MarkAlertsRead { .. }
+            | Self::ClearAlerts
+            | Self::WatchAlerts { .. }
+            | Self::SendAlert { .. }
+            | Self::AlertInChat { .. }
+            | Self::WithdrawAlert { .. } => None,
+        }
+    }
 }
 
 /// Reading, clearing and watching the user's alerts is the `notifications`

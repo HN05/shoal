@@ -111,6 +111,7 @@ pub(crate) mod stopped_work;
 pub(crate) use shoal_store as store;
 pub(crate) mod subagents;
 mod subscriptions;
+pub(crate) mod target_checks;
 #[cfg(any(test, feature = "test-support"))]
 // Other crates' tests read most of it.
 #[cfg_attr(not(feature = "test-support"), allow(dead_code))]

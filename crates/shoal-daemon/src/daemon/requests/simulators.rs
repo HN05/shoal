@@ -1,4 +1,5 @@
-//! The daemon's answers to [`SimulatorMethod`] requests, and who may send them.
+//! The daemon's answers to [`SimulatorMethod`] requests, who may send them, and
+//! what each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -7,6 +8,7 @@ use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{Body, SimulatorMethod};
 use shoal_protocol::space_names::SpaceSelector;
@@ -58,6 +60,18 @@ pub(super) async fn handle(
                 .await?,
         ),
     }))
+}
+
+impl Checked for SimulatorMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::SimAcquire { .. } | Self::SimRelease { .. } => Some(TargetCheck::ReadyWorkspace),
+            Self::SimCatalog { .. }
+            | Self::SimOverview { .. }
+            | Self::SimList { .. }
+            | Self::SimHistory { .. } => Some(TargetCheck::Workspace),
+        }
+    }
 }
 
 impl Scoped for SimulatorMethod {

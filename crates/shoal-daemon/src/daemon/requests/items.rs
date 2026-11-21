@@ -1,4 +1,5 @@
-//! The daemon's answers to [`ItemMethod`] requests, and who may send them.
+//! The daemon's answers to [`ItemMethod`] requests, who may send them, and what
+//! each requires of the space it acts on.
 use shoal_daemon_base::permitted_actions;
 use std::sync::Arc;
 
@@ -8,6 +9,7 @@ use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::{
     config::permissions::PermissionKey,
@@ -301,6 +303,39 @@ pub(super) async fn handle(
             Body::Ok
         }
     }))
+}
+
+impl Checked for ItemMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::SetPr { .. }
+            | Self::PrWait { .. }
+            | Self::WatchItems { .. }
+            | Self::RevertPull { .. }
+            | Self::MergedPull { .. }
+            | Self::OpenIssue { .. }
+            | Self::MergeWarning { .. }
+            | Self::ItemAction { .. }
+            | Self::ListItems { .. }
+            | Self::Labels { .. }
+            | Self::Reviewers { .. }
+            | Self::ViewItems { .. }
+            | Self::ForgeApi { .. }
+            | Self::ForgeDownload { .. }
+            | Self::Capabilities { .. }
+            | Self::Reactions { .. }
+            | Self::ReviewThread { .. }
+            | Self::NumberKind { .. }
+            | Self::IssueDetails { .. }
+            | Self::IssueBlockers { .. }
+            | Self::PullRequest { .. }
+            | Self::SelectItems { .. } => Some(TargetCheck::Space),
+            Self::LinkItem { .. } | Self::RelinkSpace { .. } | Self::UnlinkItems { .. } => {
+                Some(TargetCheck::LinkingSpace)
+            }
+            Self::OpenPull { .. } => Some(TargetCheck::LinkingWorkspace),
+        }
+    }
 }
 
 impl Scoped for ItemMethod {

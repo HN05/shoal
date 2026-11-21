@@ -1,4 +1,5 @@
-//! The daemon's answers to [`FileMethod`] requests, and who may send them.
+//! The daemon's answers to [`FileMethod`] requests, who may send them, and what
+//! each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::{Result, bail, ensure};
@@ -7,6 +8,7 @@ use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{Body, FileMethod};
 use shoal_protocol::space_names::SpaceSelector;
@@ -43,6 +45,15 @@ pub(super) async fn handle(
         }
     };
     Ok(Answer::pages(files, Body::AttachedFiles))
+}
+
+impl Checked for FileMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::ListFiles { .. } | Self::AddFiles { .. } => Some(TargetCheck::Space),
+            Self::RemoveFiles { .. } => None,
+        }
+    }
 }
 
 impl Scoped for FileMethod {

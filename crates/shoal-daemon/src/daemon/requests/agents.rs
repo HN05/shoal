@@ -1,4 +1,5 @@
-//! The daemon's answers to [`AgentMethod`] requests, and who may send them.
+//! The daemon's answers to [`AgentMethod`] requests, who may send them, and
+//! what each requires of the space it acts on.
 use shoal_ids::execution_ids::ExecutionId;
 use std::sync::Arc;
 
@@ -8,6 +9,7 @@ use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::{
     protocol::{AgentMethod, Body, WaitingUpdates, WokenTurn},
@@ -211,6 +213,39 @@ pub(super) async fn handle(
             waiting: manager.updates_waiting(&space).await?,
         }),
     }))
+}
+
+impl Checked for AgentMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::SetAgentState { .. }
+            | Self::SetProgress { .. }
+            | Self::Progress { .. }
+            | Self::Sleep { .. }
+            | Self::StartWokenTurn { .. }
+            | Self::ReportTurnFailure { .. }
+            | Self::ReportSubagent { .. }
+            | Self::ReportSubagentRequest { .. }
+            | Self::ReportWakeEnd { .. }
+            | Self::ReportProxyRetry { .. }
+            | Self::ReportUpstreamReset { .. }
+            | Self::ReportUpstreamLimit { .. }
+            | Self::ReportInput { .. }
+            | Self::ReportTyping { .. }
+            | Self::ReportAttach { .. }
+            | Self::AwaitAgentWake { .. }
+            | Self::SpaceAgents { .. }
+            | Self::InterruptTurn { .. }
+            | Self::CancelRestart { .. }
+            | Self::AgentSession { .. }
+            | Self::AgentUpdates { .. }
+            | Self::WaitAgentUpdates { .. }
+            | Self::UpdatesWaiting { .. }
+            | Self::AcknowledgePrUpdates { .. } => Some(TargetCheck::Space),
+            Self::RestartAgent { .. } => Some(TargetCheck::RunningSpace),
+            Self::GitCredential { .. } | Self::ListAgents => None,
+        }
+    }
 }
 
 impl Scoped for AgentMethod {

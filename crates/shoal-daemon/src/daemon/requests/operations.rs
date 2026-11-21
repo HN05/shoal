@@ -1,4 +1,5 @@
-//! The daemon's answers to [`OperationMethod`] requests, and who may send them.
+//! The daemon's answers to [`OperationMethod`] requests, who may send them, and
+//! what each requires of the space it acts on.
 use shoal_protocol::scope_tokens::ScopeToken;
 use std::sync::Arc;
 
@@ -14,6 +15,7 @@ use super::super::{
         starts::{Child, Opening, Preparing},
     },
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
     workspace::NewWorkspace,
 };
 use crate::protocol::{Body, ErrorCode, OperationMethod, Response, operations::Started};
@@ -173,6 +175,20 @@ pub(super) async fn handle(
             Body::Ok
         }
     }))
+}
+
+impl Checked for OperationMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::FollowOperation { .. } | Self::CancelOperation { .. } => Some(TargetCheck::Space),
+            Self::StartOperation { .. }
+            | Self::StartWorkspace { .. }
+            | Self::StartCreation { .. }
+            | Self::StartChild { .. }
+            | Self::ReportProgress { .. }
+            | Self::StartMove { .. } => None,
+        }
+    }
 }
 
 /// A scoped caller starts operations in its own tree, and reaches only the

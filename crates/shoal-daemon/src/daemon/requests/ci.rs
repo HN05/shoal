@@ -1,4 +1,5 @@
-//! The daemon's answers to [`CiMethod`] requests, and who may send them.
+//! The daemon's answers to [`CiMethod`] requests, who may send them, and what
+//! each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -7,6 +8,7 @@ use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use super::items::own_context;
 use crate::protocol::{Body, CiMethod};
@@ -95,6 +97,22 @@ pub(super) async fn handle(
                 .await?,
         ),
     }))
+}
+
+impl Checked for CiMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::CheckLog { .. }
+            | Self::CiAction { .. }
+            | Self::CiRunAction { .. }
+            | Self::ViewCiRun { .. }
+            | Self::CiRunJobs { .. }
+            | Self::CiRunJobLog { .. }
+            | Self::ListCiRuns { .. }
+            | Self::ApproveCiRuns { .. }
+            | Self::StartCiRun { .. } => Some(TargetCheck::Space),
+        }
+    }
 }
 
 impl Scoped for CiMethod {

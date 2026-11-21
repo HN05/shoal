@@ -1,5 +1,5 @@
-//! The daemon's answers to [`ConversionMethod`] requests, and who may send
-//! them.
+//! The daemon's answers to [`ConversionMethod`] requests, who may send them,
+//! and what each requires of the space it acts on.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -9,6 +9,7 @@ use super::super::{
     conversions::WorkspaceConversion,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{Body, ConversionMethod};
 use shoal_protocol::space_names::SpaceSelector;
@@ -50,6 +51,15 @@ pub(super) async fn handle(
                 .await?,
         ),
     }))
+}
+
+impl Checked for ConversionMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::ConvertToWorkspace { .. } => Some(TargetCheck::Space),
+            Self::ConvertToChat { .. } => Some(TargetCheck::ReadyWorkspace),
+        }
+    }
 }
 
 /// A scoped caller converts the spaces its scope reaches.

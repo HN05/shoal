@@ -442,6 +442,10 @@ instead of the PR delivery guidance below.
   checks behind removal and cleanup decisions, or one kept across operations.
   Interactive prompts and pickers live in `cli::ui`; flag a command that runs
   fzf or reads the terminal itself, or adds a picker or prompt `ui` already offers.
+  Each request group declares the check its requests make of the space they
+  name in an exhaustive `Checked` match; flag a default arm there, and a
+  handler that refuses a space for its kind or state in words of its own
+  where the declared check covers it.
   Ancestry and exact-ref failures stop branch selection, refresh, and removal;
   only a documented negative exit status is a negative answer.
 - Explicit workspace paths override only that creation; reject overlaps with state,

@@ -1,4 +1,5 @@
-//! The daemon's answers to [`ApprovalMethod`] requests, and who may send them.
+//! The daemon's answers to [`ApprovalMethod`] requests, who may send them, and
+//! what each requires of the space it acts on.
 use shoal_daemon_base::permitted_actions::Action;
 use std::sync::Arc;
 
@@ -10,6 +11,7 @@ use super::super::{
     item_numbers::ItemNumber,
     manager::Manager,
     scope::{Caller, Scoped, denied, inspect_owner},
+    target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{ApprovalMethod, Body};
 use shoal_protocol::links::BranchPush;
@@ -91,6 +93,22 @@ pub(super) async fn handle(
                 .await?,
         )),
     }))
+}
+
+impl Checked for ApprovalMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::WithdrawApproval { .. } | Self::BranchPush { .. } | Self::RequestPush { .. } => {
+                Some(TargetCheck::Space)
+            }
+            Self::ListApprovals { .. }
+            | Self::ShowApproval { .. }
+            | Self::DecideApproval { .. }
+            | Self::EscalateApproval { .. }
+            | Self::AuthorizeAction { .. }
+            | Self::FinishPush { .. } => None,
+        }
+    }
 }
 
 impl Scoped for ApprovalMethod {

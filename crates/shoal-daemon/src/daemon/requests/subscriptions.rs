@@ -1,4 +1,5 @@
-//! The daemon's answers to [`SubscriptionMethod`] requests, and who may send them.
+//! The daemon's answers to [`SubscriptionMethod`] requests, who may send them,
+//! and what each requires of the space it acts on.
 use shoal_protocol::scope_tokens::ScopeToken;
 use std::sync::Arc;
 
@@ -9,6 +10,7 @@ use super::super::{
     manager::Manager,
     scope::{Caller, Scoped},
     subscriptions,
+    target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::SubscriptionMethod;
 use shoal_protocol::space_names::SpaceSelector;
@@ -28,6 +30,14 @@ pub(super) fn handle(
     Ok(Answer::connection(move |stream, request_id, guard| {
         subscriber.run(stream, request_id, topics, log, guard)
     }))
+}
+
+impl Checked for SubscriptionMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::Subscribe { .. } => None,
+        }
+    }
 }
 
 /// A scoped caller subscribes to what its scope reaches, which the

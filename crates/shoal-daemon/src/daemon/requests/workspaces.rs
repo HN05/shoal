@@ -1,4 +1,5 @@
-//! The daemon's answers to [`WorkspaceMethod`] requests, and who may send them.
+//! The daemon's answers to [`WorkspaceMethod`] requests, who may send them, and
+//! what each requires of the space it acts on.
 use shoal_daemon_base::permitted_actions::Action;
 use std::sync::Arc;
 
@@ -8,6 +9,7 @@ use super::super::{
     answer::Answer,
     manager::Manager,
     scope::{Caller, Scoped},
+    target_checks::{Checked, TargetCheck},
     workspace,
 };
 use crate::config::permissions::PermissionKey;
@@ -166,6 +168,31 @@ pub(super) async fn handle(
             Body::Hook(manager.selected_workspace_hook(&workspace, kind).await?)
         }
     }))
+}
+
+impl Checked for WorkspaceMethod {
+    fn target_check(&self) -> Option<TargetCheck> {
+        match self {
+            Self::SetBaseWorkspace { base: None, .. } => Some(TargetCheck::StackedWorkspace),
+            Self::SetBaseWorkspace { base: Some(_), .. } => Some(TargetCheck::Workspace),
+            Self::ReopenWorkspace { .. }
+            | Self::FastForwardWorkspace { .. }
+            | Self::RefreshWorkspace { .. } => Some(TargetCheck::ReadyWorkspace),
+            Self::RenameBranch { .. } => Some(TargetCheck::SettledWorkspace),
+            Self::InspectWorkspace { .. }
+            | Self::VerifyWorkspace { .. }
+            | Self::KeepAgentEnvironment { .. }
+            | Self::CreatePendingWorktree { .. }
+            | Self::WorkspaceHook { .. } => Some(TargetCheck::Workspace),
+            Self::OpenBranch { .. }
+            | Self::CreateWorkspace { .. }
+            | Self::CreateChild { .. }
+            | Self::CreateCommitWorkspace { .. }
+            | Self::OpenPullHead { .. }
+            | Self::AdoptWorkspace { .. }
+            | Self::UntrackedWorktrees => None,
+        }
+    }
 }
 
 impl Scoped for WorkspaceMethod {
