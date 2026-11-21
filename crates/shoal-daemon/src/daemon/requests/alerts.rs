@@ -103,7 +103,8 @@ impl Scoped for AlertMethod {
                 None
             }
             AlertMethod::SendAlert { to, .. } | AlertMethod::AlertInChat { to, .. } => {
-                manager.scoped_alert_target(caller, to).await?
+                manager.scope_alert_target(caller, to).await?;
+                None
             }
             AlertMethod::ListAlerts {
                 to: AlertsFor::Every,

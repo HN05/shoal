@@ -201,32 +201,29 @@ impl Manager {
         Ok(sent)
     }
 
-    /// `to`, where the scoped `caller` sends an alert, narrowed to what its
-    /// scope reaches: a space below its own, or the agents below it of its
-    /// own repository; the space it names, which the caller's scope must
-    /// reach too.
-    pub(in crate::daemon) async fn scoped_alert_target<'a>(
+    /// Narrow `to`, where the scoped `caller` sends an alert, to what its
+    /// scope reaches: a space below its own, here or on another machine,
+    /// by its ID, or the agents below it of its own repository.
+    pub(in crate::daemon) async fn scope_alert_target(
         &self,
         caller: &Caller,
-        to: &'a mut AlertTarget,
-    ) -> Result<Option<&'a mut SpaceSelector>> {
+        to: &mut AlertTarget,
+    ) -> Result<()> {
         const REFUSAL: &str = "scoped processes send alerts down only to the spaces below theirs";
-        Ok(match to {
-            // A space here or on another machine, whose reach this checks.
+        match to {
             AlertTarget::Space { space } => {
                 let id = self.reached_space(caller, space).await?;
                 ensure!(id != caller.space_id, "{REFUSAL}");
                 *space = SpaceSelector::id(&id);
-                None
             }
             AlertTarget::All {
                 repository: Some(repository),
             } => {
                 *repository = self.own_repository(caller, repository, REFUSAL).await?;
-                None
             }
-            AlertTarget::Up | AlertTarget::All { repository: None } => None,
-        })
+            AlertTarget::Up | AlertTarget::All { repository: None } => {}
+        }
+        Ok(())
     }
 
     /// Who an alert from `caller` comes from: its space, which it names,

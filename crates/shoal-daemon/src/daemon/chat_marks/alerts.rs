@@ -189,7 +189,7 @@ impl Manager {
             attachments,
             ..
         } = alert;
-        self.scoped_alert_target(&caller, &mut to).await?;
+        self.scope_alert_target(&caller, &mut to).await?;
         let text = alert_text(&to, message.as_deref());
         let sent = self
             .send_alert(Some(&caller), to, text, attachments)
