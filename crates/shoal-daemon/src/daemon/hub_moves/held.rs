@@ -94,25 +94,9 @@ impl Manager {
         let size = Body::HeldPackage(package.size);
         protocol::write(&mut stream, &Response::new(request_id, size)).await?;
         let HeldPackage {
-            mut file,
-            lock,
-            space,
-            ..
+            file, lock, space, ..
         } = package;
-        loop {
-            let (read, chunk) = blocking(move || {
-                let mut chunk = vec![0; CHUNK];
-                let read = file.read(&mut chunk)?;
-                chunk.truncate(read);
-                Ok((file, chunk))
-            })
-            .await?;
-            if chunk.is_empty() {
-                break;
-            }
-            file = read;
-            stream.write_all(&chunk).await?;
-        }
+        copy_package(file, &mut stream).await?;
         stream.shutdown().await?;
         // Its reader writes it where its caller named before it ends the
         // space here.
@@ -122,6 +106,24 @@ impl Manager {
         lock.release();
         drop(guard);
         Ok(())
+    }
+}
+
+/// Write what `file` holds to `stream`, reading it off the runtime.
+async fn copy_package(mut file: File, stream: &mut UnixStream) -> Result<()> {
+    loop {
+        let (read, chunk) = blocking(move || {
+            let mut chunk = vec![0; CHUNK];
+            let read = file.read(&mut chunk)?;
+            chunk.truncate(read);
+            Ok((file, chunk))
+        })
+        .await?;
+        if chunk.is_empty() {
+            return Ok(());
+        }
+        file = read;
+        stream.write_all(&chunk).await?;
     }
 }
 
