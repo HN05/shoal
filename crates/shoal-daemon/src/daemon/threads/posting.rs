@@ -8,8 +8,10 @@ use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     changes::ChangeNumber,
     code::NewCodeRef,
-    space_names::{SpaceName, SpaceSelector},
-    threads::{Holder, MAX_CHOICES, MAX_POST_LEN, NewPost, Sender, Side, Thread, ThreadNumber},
+    space_names::SpaceSelector,
+    threads::{
+        Holder, MAX_CHOICES, MAX_POST_LEN, NewPost, Sender, Side, Thread, ThreadNumber, ThreadSpace,
+    },
 };
 
 use super::{
@@ -77,7 +79,7 @@ fn picked(thread: &Thread, side: Side, mut post: NewPost) -> Result<NewPost> {
 /// the user.
 pub(super) struct Poster {
     pub(super) side: Side,
-    pub(super) space: Option<(SpaceId, SpaceName)>,
+    pub(super) space: Option<ThreadSpace>,
     /// Who held the thread when the poster's side was checked.
     pub(super) seen: Holder,
 }
@@ -90,7 +92,7 @@ impl Poster {
                 Some(_) => Sender::Space,
                 None => Sender::User,
             },
-            space: self.space.as_ref().map(|(id, name)| (id, name)),
+            space: self.space.as_ref(),
         }
     }
 }
@@ -252,7 +254,7 @@ impl Manager {
         thread: &Thread,
     ) -> Result<workspace_files::Space> {
         let own = match &poster.space {
-            Some((id, _)) => self.find_space(id).await?,
+            Some(space) => self.find_space(&space.id).await?,
             None => None,
         };
         match own {

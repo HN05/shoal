@@ -6,8 +6,8 @@
 use anyhow::{Result, bail, ensure};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
-    space_names::{SpaceName, SpaceSelector},
-    threads::{Holder, Sender, Side, Thread, ThreadNumber},
+    space_names::SpaceSelector,
+    threads::{Holder, Sender, Side, Thread, ThreadNumber, ThreadSpace},
 };
 
 use super::records;
@@ -92,17 +92,23 @@ impl Manager {
         )
     }
 
-    /// The space `caller` speaks as, by its ID and name: one of this
-    /// machine's, or one the hub lists on another machine, as a coordinator
-    /// there replying to a thread of a space here.
-    pub(super) async fn speaker(&self, caller: &Caller) -> Result<(SpaceId, SpaceName)> {
-        if let Some(space) = self.find_space(&caller.space_id).await? {
-            return Ok((space.id, space.name));
-        }
+    /// The space `caller` speaks as: one of this machine's, or one the hub
+    /// lists on another machine, as a coordinator there replying to a
+    /// thread of a space here.
+    pub(super) async fn speaker(&self, caller: &Caller) -> Result<ThreadSpace> {
         let selector = SpaceSelector::id(&caller.space_id);
-        match self.hub.machine_of(self, &selector).await {
-            Ok(Some((_, listed))) => Ok((listed.space.id, listed.space.name)),
-            _ => bail!("no space {} here or on the hub", caller.space_id),
+        Ok(ThreadSpace::located(self.space_anywhere(&selector).await?))
+    }
+
+    /// The space `id`, here or on another machine, by the number and name
+    /// it has there, or by its ID alone while the hub cannot be asked.
+    pub(super) async fn named_space(&self, id: SpaceId) -> ThreadSpace {
+        match self.space_anywhere(&SpaceSelector::id(&id)).await {
+            Ok(located) => ThreadSpace::located(located),
+            Err(error) => {
+                crate::daemon::log!("space {id} is named by its ID: {error:#}");
+                ThreadSpace::here(id)
+            }
         }
     }
 

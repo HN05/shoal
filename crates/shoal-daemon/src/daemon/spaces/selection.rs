@@ -14,7 +14,7 @@ use crate::{
     model::{Space, SpaceKind, Workspace},
     refusal::{Reason, Refusal},
 };
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{model::Located, space_names::SpaceSelector};
 
 impl Manager {
     /// The workspace or chat, running or stopped, `selector` names.
@@ -84,16 +84,25 @@ impl Manager {
         })
     }
 
-    /// The ID of the space `selector` names: one here, else one another
-    /// joined machine runs, as the hub lists it. One neither has is refused
-    /// as this machine refuses it, naming it as absent.
+    /// The ID of the space `selector` names, as [`Self::space_anywhere`]
+    /// finds it.
     pub(crate) async fn space_id_anywhere(&self, selector: &SpaceSelector) -> Result<SpaceId> {
+        Ok(self.space_anywhere(selector).await?.id().clone())
+    }
+
+    /// The space `selector` names: one here, else one another joined
+    /// machine runs, as the hub lists it. One neither has is refused as
+    /// this machine refuses it, naming it as absent.
+    pub(crate) async fn space_anywhere(&self, selector: &SpaceSelector) -> Result<Located> {
         let missing = match self.space(selector).await {
-            Ok(space) => return Ok(space.id),
+            Ok(space) => return Ok(Located::Here(Box::new(space))),
             Err(missing) => missing,
         };
         match self.hub.machine_of(self, selector).await {
-            Ok(Some((_, listed))) => Ok(listed.space.id),
+            Ok(Some((machine, listed))) => Ok(Located::Elsewhere {
+                space: Box::new(listed),
+                machine: Box::new(machine),
+            }),
             _ => Err(missing),
         }
     }

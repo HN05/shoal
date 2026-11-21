@@ -10,7 +10,9 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     item_numbers::ItemNumber,
     reviews::ReviewId,
-    threads::{Finding, MAX_POST_LEN, NewPost, OutcomeKind, Sender, Side, Thread, ThreadKind},
+    threads::{
+        Finding, MAX_POST_LEN, NewPost, OutcomeKind, Sender, Side, Thread, ThreadKind, ThreadSpace,
+    },
     validate::{MAX_MESSAGE_LEN, shorten},
 };
 use shoal_reviews::daemon::{AwaitedPost, FindingThread};
@@ -36,7 +38,7 @@ pub(in crate::daemon) fn open(tx: &Transaction<'_>, finding: &FindingThread<'_>)
         name: &name,
         opener: Sender::Shoal,
         space_id: finding.workspace,
-        holder: Some(finding.workspace),
+        holder: Some(&ThreadSpace::here(finding.workspace.clone())),
     };
     let id = records::insert_thread(tx, &new)?;
     let code = finding_code(tx, finding)?;

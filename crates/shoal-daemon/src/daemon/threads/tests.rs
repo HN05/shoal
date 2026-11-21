@@ -5,7 +5,7 @@ use shoal_protocol::{
     space_names::{SpaceName, SpaceSelector},
     threads::{
         CloseCause, NewPost, Outcome, OutcomeKind, Resolving, Sender, Side, Thread, ThreadKind,
-        ThreadNumber,
+        ThreadNumber, ThreadSpace,
     },
 };
 
@@ -15,7 +15,7 @@ use crate::{
         manager::Manager,
         notifications::AlertKind,
         scope::{Caller, ScopedExecution},
-        test_support::{caller_in, manager, repository, track_agent},
+        test_support::{away_on_offline_machine, caller_in, manager, repository, track_agent},
         workspace_files::Attacher,
     },
     model::Workspace,
@@ -460,7 +460,7 @@ async fn a_post_from_a_side_lost_meanwhile_is_refused() {
     // went up before its post was recorded.
     let poster = super::posting::Poster {
         side: Side::Holder,
-        space: Some((tree.child.id.clone(), tree.child.name.clone())),
+        space: Some(ThreadSpace::here(tree.child.id.clone())),
         seen: thread.holder.clone(),
     };
     let child = caller(&tree.child);
@@ -885,4 +885,32 @@ async fn a_marked_turn_posts_its_final_message_which_a_reply_in_the_chat_answers
         !(users(manager, AlertKind::ThreadPosted).await.iter())
             .any(|alert| alert.contains("Postgres or SQLite?"))
     );
+}
+
+#[tokio::test]
+async fn a_thread_names_a_space_on_another_machine_as_the_hub_lists_it() {
+    let tree = tree().await;
+    let manager = &tree.manager;
+    away_on_offline_machine(manager, Some(&tree.parent.id)).await;
+    let away = SpaceSelector::Number(90.into());
+    let parent = caller(&tree.parent);
+
+    let opened = (manager.open_thread(
+        Some(&parent),
+        "Which database?".into(),
+        ThreadKind::Question,
+        Some(&away),
+        Vec::new(),
+    ))
+    .await
+    .unwrap();
+    assert_eq!(opened.holder.label(), "90 away");
+
+    let given = open(manager, None, Some(&tree.parent)).await;
+    let forwarded = (manager.forward_thread(Some(&parent), full(&given), Some(&away), None))
+        .await
+        .unwrap();
+    assert_eq!(forwarded.holder.label(), "90 away");
+    let forward = forwarded.posts.last().unwrap();
+    assert_eq!(forward.forwarded_to.as_ref().unwrap().label(), "90 away");
 }

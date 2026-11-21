@@ -2,10 +2,9 @@
 //! or up to its coordinator or the user, with a note, and the new holder
 //! hears what it says so far.
 use anyhow::{Context as _, Result, bail, ensure};
-use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     space_names::SpaceSelector,
-    threads::{Holder, NewPost, Post, Sender, Side, Thread, ThreadNumber},
+    threads::{Holder, NewPost, Post, Sender, Side, Thread, ThreadNumber, ThreadSpace},
 };
 
 use super::{
@@ -85,9 +84,9 @@ impl Manager {
         &self,
         thread: &Thread,
         to: Option<&SpaceSelector>,
-    ) -> Result<Option<SpaceId>> {
+    ) -> Result<Option<ThreadSpace>> {
         let holder = match (to, &thread.holder) {
-            (Some(to), _) => Some(self.space_id_anywhere(to).await?),
+            (Some(to), _) => Some(ThreadSpace::located(self.space_anywhere(to).await?)),
             (None, Holder::Space(holder)) => self.coordinator_of(&holder.id).await?,
             (None, Holder::User) => {
                 bail!(
@@ -96,15 +95,16 @@ impl Manager {
                 )
             }
         };
+        let id = holder.as_ref().map(|holder| &holder.id);
         ensure!(
-            holder.as_ref() != thread.holder.space().map(|space| &space.id),
+            id != thread.holder.space().map(|space| &space.id),
             "{} holds thread {} already",
             thread.holder.label(),
             thread.number
         );
         let opener = match thread.opener {
-            Sender::Space => holder.as_ref() == Some(&thread.space_id),
-            Sender::User => holder.is_none(),
+            Sender::Space => id == Some(&thread.space_id),
+            Sender::User => id.is_none(),
             Sender::Shoal => false,
         };
         ensure!(

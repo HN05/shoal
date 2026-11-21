@@ -11,8 +11,9 @@ use anyhow::{Context as _, Result, bail, ensure};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     code::NewCodeRef,
+    model::Located,
     space_names::SpaceSelector,
-    threads::{Holder, Sender, Side, Thread, ThreadKind},
+    threads::{Holder, Sender, Side, Thread, ThreadKind, ThreadSpace},
 };
 
 use crate::daemon::{alerts::Recipients, manager::Manager, notifications::Source, scope::Caller};
@@ -62,16 +63,17 @@ impl Manager {
             // Numbered in the space it is opened with, on that space's
             // machine, which takes a request for a space this one lacks.
             (None, Some(to)) => {
-                let target = self.space(to).await?.id;
-                (Sender::User, target.clone(), Some(target))
+                let target = Located::Here(Box::new(self.space(to).await?));
+                let target = ThreadSpace::located(target);
+                (Sender::User, target.id.clone(), Some(target))
             }
             (None, None) => bail!("the user opens a thread with a space; name it with --space"),
             // Numbered in the opener's space here, and held by a space here
             // or on another machine.
             (Some(caller), Some(to)) => {
-                let target = self.space_id_anywhere(to).await?;
+                let target = ThreadSpace::located(self.space_anywhere(to).await?);
                 ensure!(
-                    target != caller.space_id,
+                    target.id != caller.space_id,
                     "a space opens a thread with another space"
                 );
                 (Sender::Space, caller.space_id.clone(), Some(target))
@@ -137,9 +139,9 @@ impl Manager {
 
     /// The space whose agent coordinates the space `id`, here or on another
     /// machine, or none for the user.
-    async fn coordinator_of(&self, id: &SpaceId) -> Result<Option<SpaceId>> {
+    async fn coordinator_of(&self, id: &SpaceId) -> Result<Option<ThreadSpace>> {
         Ok(match self.route_up(id, Source::Agent).await? {
-            Recipients::Coordinator(id) | Recipients::Above(id) => Some(id),
+            Recipients::Coordinator(id) | Recipients::Above(id) => Some(self.named_space(id).await),
             Recipients::User | Recipients::Spaces(_) => None,
         })
     }

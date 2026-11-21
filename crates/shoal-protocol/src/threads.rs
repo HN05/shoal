@@ -10,6 +10,7 @@ use shoal_states::states;
 
 pub use crate::alerts::Sender;
 use crate::item_numbers::ItemNumber;
+use crate::model::Located;
 use crate::space_names::SpaceName;
 
 /// Longest post, in bytes; posts may span lines.
@@ -224,7 +225,8 @@ impl ThreadKind {
 }
 
 /// A space a thread names: by its ID, and by its name and number while it
-/// exists here.
+/// exists here, or as Shoal found them when the thread named a space of
+/// another machine.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ThreadSpace {
     pub id: SpaceId,
@@ -235,6 +237,30 @@ pub struct ThreadSpace {
 }
 
 impl ThreadSpace {
+    /// The space `id` of this machine, which its record here names.
+    pub fn here(id: SpaceId) -> Self {
+        Self {
+            id,
+            name: None,
+            number: None,
+        }
+    }
+
+    /// The space `located`, by the number and name it has there.
+    pub fn located(located: Located) -> Self {
+        let (id, name, number) = match located {
+            Located::Here(space) => (space.id, space.name, space.number),
+            Located::Elsewhere { space, .. } => {
+                (space.space.id, space.space.name, space.space.number)
+            }
+        };
+        Self {
+            id,
+            name: Some(name),
+            number: Some(number),
+        }
+    }
+
     /// The space as text names it: its number and name while it has them.
     pub fn label(&self) -> String {
         match (self.number, &self.name) {

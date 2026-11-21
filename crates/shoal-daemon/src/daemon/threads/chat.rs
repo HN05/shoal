@@ -7,7 +7,7 @@ use rusqlite::{Connection, Transaction};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     item_numbers::ItemNumber,
-    threads::{Holder, NewPost, Post, Sender, Side, Thread, ThreadNumber},
+    threads::{Holder, NewPost, Post, Sender, Side, Thread, ThreadNumber, ThreadSpace},
 };
 
 use super::{
@@ -206,7 +206,11 @@ impl Manager {
                 };
                 let poster = Poster {
                     side,
-                    space: Some((space.id.clone(), space.name.clone())),
+                    space: Some(ThreadSpace {
+                        id: space.id.clone(),
+                        name: Some(space.name.clone()),
+                        number: Some(space.number),
+                    }),
                     seen: thread.holder.clone(),
                 };
                 let (thread, delivered) =

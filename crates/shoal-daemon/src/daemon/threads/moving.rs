@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use rusqlite::{Transaction, params};
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::threads::{Side, Thread};
+use shoal_protocol::threads::{Side, Thread, ThreadSpace};
 
 use super::{
     delivery::{self, Delivered, Party, Texts},
@@ -48,7 +48,7 @@ fn move_open(
             .space()
             .is_some_and(|holder| &holder.id == from)
         {
-            records::set_holder(tx, before.id, Some(to))?;
+            records::set_holder(tx, before.id, Some(&ThreadSpace::here(to.clone())))?;
         }
         repoint_files(tx, before.id, from, to, copies)?;
         let after = records::reread(tx, before.id)?;

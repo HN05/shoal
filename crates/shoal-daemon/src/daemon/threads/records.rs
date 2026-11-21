@@ -31,7 +31,8 @@ const NUMBERED: &str = "t.space_number IS NOT NULL";
 
 const THREADS: &str = "SELECT t.id,t.space_number,t.number,t.space_id,
         COALESCE(s.name,t.space_id) AS space,t.kind,t.name,t.created_at,t.opener,t.holder_id,
-        h.name AS holder_name,h.number AS holder_number,t.outcome,t.resolved_by,t.resolver_id,
+        COALESCE(h.name,t.holder_name) AS holder_name,
+        COALESCE(h.number,t.holder_number) AS holder_number,t.outcome,t.resolved_by,t.resolver_id,
         t.resolved_at,t.severity,t.review_id,EXISTS (SELECT 1 FROM space_current_thread c
             WHERE c.thread_id=t.id AND c.space_id=t.holder_id) AS working
     FROM threads t LEFT JOIN spaces s ON s.id=t.space_id LEFT JOIN spaces h ON h.id=t.holder_id";
@@ -84,9 +85,11 @@ fn thread(row: &rusqlite::Row<'_>) -> rusqlite::Result<Thread> {
 
 const POSTS: &str = concat!(
     "SELECT p.id,p.thread_id,p.created_at,p.side,p.sender,p.sender_id,
-        COALESCE(s.name,p.sender_name) AS sender_name,s.number AS sender_number,p.text,
+        COALESCE(s.name,p.sender_name) AS sender_name,
+        COALESCE(s.number,p.sender_number) AS sender_number,p.text,
         p.choices,p.recommendation,p.reason,p.choice,p.in_chat,p.forwards,p.forwarded_to,
-        f.name AS forwarded_name,f.number AS forwarded_number,p.alert_id,",
+        COALESCE(f.name,p.forwarded_name) AS forwarded_name,
+        COALESCE(f.number,p.forwarded_number) AS forwarded_number,p.alert_id,",
     sent_files!("p.files"),
     " FROM thread_posts p LEFT JOIN spaces s ON s.id=p.sender_id
         LEFT JOIN spaces f ON f.id=p.forwarded_to"
@@ -264,14 +267,15 @@ pub(super) fn linkers(db: &Connection, id: i64) -> Result<Vec<SpaceId>> {
 
 /// What a new thread is: its kind and name, who opened it, the space it is
 /// numbered in and who holds it, none for the user, and a `review` thread's
-/// finding.
+/// finding. A space it names keeps the number and name it has now, which
+/// name it while this machine has no record of it.
 pub(in crate::daemon) struct NewThread<'a> {
     pub(super) kind: ThreadKind,
     pub(super) finding: Option<Finding>,
     pub(super) name: &'a str,
     pub(super) opener: Sender,
     pub(super) space_id: &'a SpaceId,
-    pub(super) holder: Option<&'a SpaceId>,
+    pub(super) holder: Option<&'a ThreadSpace>,
 }
 
 /// Record `new` under its space's next number; the thread's record ID.
@@ -279,8 +283,8 @@ pub(super) fn insert_thread(tx: &Transaction<'_>, new: &NewThread<'_>) -> Result
     let number = item_numbers::next(tx, new.space_id)?;
     tx.execute(
         "INSERT INTO threads(space_id,space_number,number,kind,name,created_at,opener,holder_id,
-                severity,review_id)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+                holder_name,holder_number,severity,review_id)
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
         params![
             new.space_id,
             number.space,
@@ -289,14 +293,16 @@ pub(super) fn insert_thread(tx: &Transaction<'_>, new: &NewThread<'_>) -> Result
             new.name,
             crate::time::UnixTime::now(),
             new.opener,
-            new.holder,
+            new.holder.map(|holder| &holder.id),
+            new.holder.and_then(|holder| holder.name.as_ref()),
+            new.holder.and_then(|holder| holder.number),
             new.finding.map(|finding| finding.severity),
             new.finding.and_then(|finding| finding.review)
         ],
     )?;
     let id = tx.last_insert_rowid();
     if let Some(holder) = new.holder {
-        add_holder(tx, id, holder)?;
+        add_holder(tx, id, &holder.id)?;
     }
     Ok(id)
 }
@@ -305,7 +311,7 @@ pub(super) fn insert_thread(tx: &Transaction<'_>, new: &NewThread<'_>) -> Result
 pub(super) struct Author<'a> {
     pub(super) side: Side,
     pub(super) sender: Sender,
-    pub(super) space: Option<(&'a SpaceId, &'a SpaceName)>,
+    pub(super) space: Option<&'a ThreadSpace>,
 }
 
 /// A post to record in the thread `thread`: `post` with the files `files`
@@ -318,23 +324,26 @@ pub(super) struct NewRecord<'a> {
     pub(super) files: &'a [SentFile],
     pub(super) code: &'a [NewCode],
     pub(super) in_chat: bool,
-    pub(super) forwards: Option<Option<&'a SpaceId>>,
+    pub(super) forwards: Option<Option<&'a ThreadSpace>>,
 }
 
 /// Record `new`; the post's ID.
 pub(super) fn insert_post(tx: &Transaction<'_>, new: &NewRecord<'_>) -> Result<i64> {
-    let (sender_id, sender_name) = new.author.space.unzip();
+    let sender = new.author.space;
+    let forwarded_to = new.forwards.flatten();
     tx.execute(
-        "INSERT INTO thread_posts(thread_id,created_at,side,sender,sender_id,sender_name,text,
-                choices,recommendation,reason,choice,files,in_chat,forwards,forwarded_to)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+        "INSERT INTO thread_posts(thread_id,created_at,side,sender,sender_id,sender_name,
+                sender_number,text,choices,recommendation,reason,choice,files,in_chat,forwards,
+                forwarded_to,forwarded_name,forwarded_number)
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
         params![
             new.thread,
             crate::time::UnixTime::now(),
             new.author.side,
             new.author.sender,
-            sender_id,
-            sender_name,
+            sender.map(|space| &space.id),
+            sender.and_then(|space| space.name.as_ref()),
+            sender.and_then(|space| space.number),
             new.post.text,
             serde_json::to_string(&new.post.choices)?,
             new.post.recommendation,
@@ -343,7 +352,9 @@ pub(super) fn insert_post(tx: &Transaction<'_>, new: &NewRecord<'_>) -> Result<i
             sent_ids(new.files)?,
             new.in_chat,
             new.forwards.is_some(),
-            new.forwards.flatten()
+            forwarded_to.map(|space| &space.id),
+            forwarded_to.and_then(|space| space.name.as_ref()),
+            forwarded_to.and_then(|space| space.number)
         ],
     )?;
     let post = tx.last_insert_rowid();
@@ -385,13 +396,22 @@ pub(super) fn set_alert(tx: &Transaction<'_>, post: i64, alert: i64) -> Result<(
 }
 
 /// Give the thread `id` to `holder`, none for the user.
-pub(super) fn set_holder(tx: &Transaction<'_>, id: i64, holder: Option<&SpaceId>) -> Result<()> {
+pub(super) fn set_holder(
+    tx: &Transaction<'_>,
+    id: i64,
+    holder: Option<&ThreadSpace>,
+) -> Result<()> {
     tx.execute(
-        "UPDATE threads SET holder_id=?2 WHERE id=?1",
-        params![id, holder],
+        "UPDATE threads SET holder_id=?2,holder_name=?3,holder_number=?4 WHERE id=?1",
+        params![
+            id,
+            holder.map(|holder| &holder.id),
+            holder.and_then(|holder| holder.name.as_ref()),
+            holder.and_then(|holder| holder.number)
+        ],
     )?;
     if let Some(holder) = holder {
-        add_holder(tx, id, holder)?;
+        add_holder(tx, id, &holder.id)?;
     }
     Ok(())
 }

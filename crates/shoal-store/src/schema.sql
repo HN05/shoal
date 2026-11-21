@@ -837,7 +837,7 @@ CREATE TABLE threads (
     outcome TEXT,
     resolved_by TEXT CHECK(resolved_by IN ('user','space','shoal')),
     resolver_id TEXT,
-    resolved_at INTEGER, severity TEXT CHECK(severity IN ('blocker','should-fix','nit')), review_id INTEGER,
+    resolved_at INTEGER, severity TEXT CHECK(severity IN ('blocker','should-fix','nit')), review_id INTEGER, holder_name TEXT, holder_number INTEGER,
     CHECK((outcome IS NULL) = (resolved_by IS NULL)
         AND (outcome IS NULL) = (resolved_at IS NULL))
 );
@@ -860,7 +860,7 @@ CREATE TABLE thread_posts (
     forwards INTEGER NOT NULL DEFAULT 0 CHECK(forwards IN (0,1)),
     forwarded_to TEXT,
     alert_id INTEGER
-);
+, sender_number INTEGER, forwarded_name TEXT, forwarded_number INTEGER);
 
 CREATE TABLE thread_holders (
     thread_id INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
@@ -1569,20 +1569,6 @@ CREATE TRIGGER thread_opened AFTER INSERT ON threads BEGIN
     ) FROM space_event_records WHERE id=NEW.space_id;
 END;
 
-CREATE TRIGGER thread_posted AFTER INSERT ON thread_posts BEGIN
-    INSERT INTO space_events(space_id,record) SELECT r.id, json_set(r.record,
-        '$.kind',iif(NEW.forwards,'thread_forwarded','thread_posted'),
-        '$.thread',json_object('space_number',t.space_number,'item',t.number,
-            'number',t.space_number||'.'||t.number,'name',t.name,'text',NEW.text,
-            'sender',COALESCE(NEW.sender_name,
-                CASE NEW.sender WHEN 'user' THEN 'the user' ELSE 'Shoal' END),
-            'to',CASE WHEN NOT NEW.forwards THEN NULL
-                WHEN NEW.forwarded_to IS NULL THEN 'the user'
-                ELSE COALESCE((SELECT name FROM spaces WHERE id=NEW.forwarded_to),
-                    NEW.forwarded_to) END)
-    ) FROM threads t JOIN space_event_records r ON r.id=t.space_id WHERE t.id=NEW.thread_id;
-END;
-
 CREATE TRIGGER thread_resolved AFTER UPDATE OF outcome ON threads
 WHEN OLD.outcome IS NOT NEW.outcome BEGIN
     INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
@@ -1667,4 +1653,18 @@ CREATE TRIGGER space_turn_retry_restore_ended AFTER DELETE ON agent_queue
 WHEN OLD.execution_id IS NOT NULL BEGIN
     DELETE FROM space_turn_retries WHERE execution_id=OLD.execution_id AND delivered=0
         AND NOT EXISTS (SELECT 1 FROM executions WHERE id=OLD.execution_id);
+END;
+
+CREATE TRIGGER thread_posted AFTER INSERT ON thread_posts BEGIN
+    INSERT INTO space_events(space_id,record) SELECT r.id, json_set(r.record,
+        '$.kind',iif(NEW.forwards,'thread_forwarded','thread_posted'),
+        '$.thread',json_object('space_number',t.space_number,'item',t.number,
+            'number',t.space_number||'.'||t.number,'name',t.name,'text',NEW.text,
+            'sender',COALESCE(NEW.sender_name,
+                CASE NEW.sender WHEN 'user' THEN 'the user' ELSE 'Shoal' END),
+            'to',CASE WHEN NOT NEW.forwards THEN NULL
+                WHEN NEW.forwarded_to IS NULL THEN 'the user'
+                ELSE COALESCE((SELECT name FROM spaces WHERE id=NEW.forwarded_to),
+                    NEW.forwarded_name, NEW.forwarded_to) END)
+    ) FROM threads t JOIN space_event_records r ON r.id=t.space_id WHERE t.id=NEW.thread_id;
 END;

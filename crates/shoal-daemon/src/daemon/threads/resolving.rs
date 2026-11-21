@@ -38,7 +38,7 @@ impl Manager {
             Some(kind) => Some(self.resolution(caller, &thread, kind, resolving).await?),
         };
         let by = match caller {
-            Some(caller) => self.speaker(caller).await?.1.to_string(),
+            Some(caller) => self.speaker(caller).await?.label(),
             None => "the user".to_owned(),
         };
         let outcome = resolution.as_ref().map(|resolution| &resolution.outcome);
