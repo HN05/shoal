@@ -111,3 +111,32 @@ async fn a_package_its_command_took_before_it_went_leaves_the_space_stopped_here
     );
     assert!(path.exists());
 }
+
+#[tokio::test]
+async fn a_held_move_given_back_keeps_the_space_here_and_drops_its_package() {
+    isolated("a_held_move_given_back_keeps_the_space_here_and_drops_its_package_child").await;
+}
+
+#[tokio::test]
+#[ignore = "isolated helper of a_held_move_given_back_keeps_the_space_here_and_drops_its_package"]
+async fn a_held_move_given_back_keeps_the_space_here_and_drops_its_package_child() {
+    if !helper() {
+        return;
+    }
+    let daemon = TestDaemon::start().await;
+    let (paths, mut record, path) = left_move(&daemon, |_| MoveDestination::Held).await;
+    let package = (daemon.manager.paths.move_packages())
+        .join(shoal_core::transfer::package_name(&record.space));
+    assert!(package.exists());
+    // As the reader's give-back records it.
+    record.phase = MovePhase::Packing;
+
+    let report = finish(&paths, record, &Unfollowed).await.unwrap();
+
+    assert!(
+        report.failed[0].error.contains("it stays here"),
+        "{report:?}"
+    );
+    assert!(path.exists());
+    assert!(!package.exists());
+}
