@@ -6924,7 +6924,10 @@ Scoped commands read the user's alerts, clear them and follow them only as
 their space's [`notifications` permission](#permitted-actions) allows.
 Removing a space gives the user the unread alerts its agent received in the
 user's place, about the spaces below it, and deletes its alerts. Read alerts
-older than the newest 500 are dropped; unread ones stay.
+older than the newest 500 are dropped, and every alert for the user, read or
+not, expires after [`[cleanup.restore] retention_days`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup)
+of the repository of the space it is about, or the global setting's for one
+about no space or a chat without a repository.
 
 Claude Code and Codex agents Shoal starts, and their automatic or `shoal
 restore` restores, register `shoal internal deliver` for the `PostToolUse` and `UserPromptSubmit`

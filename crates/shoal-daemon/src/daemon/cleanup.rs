@@ -236,6 +236,10 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<(), SweepFa
     step("checkpoint expiry", manager.expire_checkpoints().await);
     step("result expiry", manager.expire_results().await);
     step("event expiry", manager.expire_events().await);
+    step(
+        "notification expiry",
+        manager.notifications.expire(manager).await,
+    );
     step("contributions", manager.sweep_contributions().await);
     step("carried commits", manager.release_unclaimed_carried().await);
     step(

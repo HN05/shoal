@@ -1179,9 +1179,14 @@ enabled = true       # Remove completed workspaces once every watched PR has mer
 enabled = true       # Clean up after `shoal done`; false keeps the space for review
 
 [cleanup.restore]
-retention_days = 30  # How long removed workspaces stay restorable
+retention_days = 30  # How long restores, checkpoints and alerts stay
 archive_max_mb = 50  # Unsaved files an agent's exit or stop checkpoint keeps
 ```
+
+`retention_days` is how long a removed space stays restorable and keeps its
+log and files, how long a checkpoint stays, and how long an alert for the user
+stays, read or not, by the setting of the repository of the space it is about.
+An alert about no space or a chat without a repository takes the global setting.
 
 `grace_minutes` is how long every unattended removal except for low disk space
 waits. Global changes apply on reload, repository ones on the next sweep. See

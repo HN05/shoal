@@ -3003,9 +3003,15 @@ cleanup. What a finished assignment found travels with its completion
 instead: `done --summary` records one line under the rule for an alert sent
 up and ends the completion notice with it, and longer findings are files
 handed back with it. The sender may withdraw an alert while it is unread;
-once read, it stays, because deleting it would not unsay it, and a
-correction does. `hooks.post_agent_exit` exposes a space's tracked-agent exit
-alerts to user integrations while it is a ready workspace or a chat that no
+once read, it cannot, because deleting it would not unsay it, and a
+correction does. Each cleanup sweep deletes the user's alerts, read or
+unread, recorded longer ago than `cleanup.restore.retention_days` of their
+space's repository, whoever sent them, or the global setting's for one about
+no space, a chat without a repository or a space whose repository Shoal no
+longer knows: an alert left
+unread that long no longer concerns the user, and an unread count that only
+grows hides the new ones. `hooks.post_agent_exit` exposes a space's
+tracked-agent exit alerts to user integrations while it is a ready workspace or a chat that no
 removal has, using normal configuration precedence and daemon hook rules with
 the agent name, reported code, and process-completion status. Failure notifies
 without changing the exit result or marking completion; removal uses its own
