@@ -196,10 +196,10 @@ fn built_in_modes_carry_the_work_rule_until_a_mode_leaves_it_out() {
             .system
     };
     let extended = system("[rules.work]\ntext = 'Push often.'\n");
-    assert!(extended.contains("`shoal review resolve`"), "{extended}");
+    assert!(extended.contains("`shoal thread resolve`"), "{extended}");
     assert!(extended.ends_with("Push often."), "{extended}");
     let left_out = system("[modes.worker]\nrules = ['worker']\n");
-    assert!(!left_out.contains("`shoal review resolve`"), "{left_out}");
+    assert!(!left_out.contains("`shoal thread resolve`"), "{left_out}");
 }
 
 #[test]
@@ -349,7 +349,7 @@ fn review_instructions_keep_their_fixed_part_before_any_template() {
     assert!(built_in.contains("git diff abc123...HEAD --stat"));
     assert!(!built_in.contains("<!--"));
     let replaced = review_instructions(Some("Follow .review/review.md in {path}."), &fields);
-    assert!(replaced.contains("report it in `checked`"));
+    assert!(replaced.contains("report its thread in `reopened`"));
     assert!(replaced.ends_with("Follow .review/review.md in /state/reviews/7."));
     assert!(!replaced.contains("careful senior colleague"));
     assert!(!review_instructions(None, &fields).contains("careful senior colleague"));

@@ -152,9 +152,15 @@ impl Fixture {
             let review = review?.id();
             store::start(tx, review, &head, &"base".into(), at(2))?;
             let output: ReviewerOutput = serde_json::from_value(serde_json::json!({
-                "summary": "Fine.", "verdict": "approve", "checked": [], "findings": []
+                "summary": "Fine.", "verdict": "approve", "reopened": [], "findings": []
             }))?;
-            store::finish(tx, review, &"fake".into(), &output, None, at(3))?;
+            let returned = store::Returned {
+                output: &output,
+                code: &[],
+                session: None,
+            };
+            let records = crate::daemon::reviews::ReviewRecords;
+            store::finish(tx, &records, review, &id, &"fake".into(), returned, at(3))?;
             Ok(())
         };
         self.manager.store.write(write).await.unwrap();

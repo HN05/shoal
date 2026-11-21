@@ -7,10 +7,8 @@ use shoal_refs::BranchName;
 use crate::forge::numbers::CommentId;
 use crate::{
     agent::Agent,
-    cli::args::{
-        AgentParser, BodyArgs, ConfirmationArgs, ModelArgs, issue_input, item_input, pull_input,
-    },
-    reviews::{FindingId, OutcomeKind, ReviewId},
+    cli::args::{AgentParser, BodyArgs, ConfirmationArgs, ModelArgs, item_input, pull_input},
+    reviews::ReviewId,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -119,7 +117,7 @@ pub enum ChangesCommand {
         #[arg(short = 'w', long)]
         workspace: Option<SpaceSelector>,
     },
-    /// Review a workspace's committed changes or a PR, and answer the findings.
+    /// Review a workspace's committed changes or a PR; each finding is a thread.
     Review {
         #[command(subcommand)]
         command: ReviewCommand,
@@ -207,36 +205,6 @@ pub enum ReviewCommand {
         /// the current workspace or chat, or a picker.
         #[arg(short = 's', long, conflicts_with = "id")]
         space: Option<SpaceSelector>,
-    },
-    /// Reply to a finding without resolving it.
-    Reply {
-        /// Finding ID, such as 17.2.
-        finding: FindingId,
-        /// Text of the reply.
-        #[arg(value_name = "TEXT", required_unless_present = "body_file")]
-        reply: Option<String>,
-        /// Read the reply from a file.
-        #[arg(long, value_name = "PATH", conflicts_with = "reply")]
-        body_file: Option<PathBuf>,
-    },
-    /// Resolve a finding with an outcome, or reopen it with --undo.
-    Resolve {
-        /// Finding ID, such as 17.2.
-        finding: FindingId,
-        #[arg(required_unless_present = "undo")]
-        outcome: Option<OutcomeKind>,
-        /// Why the claim is wrong (false-positive) or is not changed (wont-fix).
-        #[arg(long)]
-        reason: Option<String>,
-        /// The issue whose work fixes it (deferred).
-        #[arg(short = 'i', long, value_parser = issue_input)]
-        issue: Option<crate::forge::items::reference::ItemInput>,
-        /// The finding it repeats (duplicate).
-        #[arg(long, value_name = "FINDING")]
-        of: Option<FindingId>,
-        /// Reopen the finding.
-        #[arg(long, conflicts_with_all = ["outcome", "reason", "issue", "of"])]
-        undo: bool,
     },
 }
 

@@ -21,12 +21,12 @@ use crate::{
 /// and repository, HEAD then, where it points and the snippet of its lines.
 #[derive(Debug, Clone)]
 pub(in crate::daemon::threads) struct NewCode {
-    pub(super) space_id: SpaceId,
-    pub(super) space_name: SpaceName,
-    pub(super) repository_id: RepositoryId,
-    pub(super) commit: Option<CommitId>,
-    pub(super) at: CodeAt,
-    pub(super) snippet: Option<String>,
+    pub(in crate::daemon::threads) space_id: SpaceId,
+    pub(in crate::daemon::threads) space_name: SpaceName,
+    pub(in crate::daemon::threads) repository_id: RepositoryId,
+    pub(in crate::daemon::threads) commit: Option<CommitId>,
+    pub(in crate::daemon::threads) at: CodeAt,
+    pub(in crate::daemon::threads) snippet: Option<String>,
 }
 
 /// The version of a file a reference keeps, and the snippet of its lines.

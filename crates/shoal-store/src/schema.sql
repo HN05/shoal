@@ -136,31 +136,6 @@ CREATE TABLE "space_files" (
     created_at INTEGER NOT NULL
 , attached_by TEXT, title TEXT, root_dir TEXT);
 
-CREATE TABLE review_findings (
-    review_id INTEGER NOT NULL REFERENCES reviews(id) ON DELETE CASCADE,
-    number INTEGER NOT NULL CHECK(number > 0),
-    severity TEXT NOT NULL CHECK(severity IN ('blocker','should-fix','nit')),
-    path TEXT NOT NULL,
-    line INTEGER NOT NULL CHECK(line > 0),
-    title TEXT NOT NULL,
-    body TEXT NOT NULL,
-    -- The JSON outcome the workspace's agent resolved it with.
-    outcome TEXT,
-    check_result TEXT CHECK(check_result IN ('confirmed','still-present')),
-    checked_by INTEGER,
-    PRIMARY KEY(review_id, number),
-    CHECK((check_result IS NULL) = (checked_by IS NULL))
-);
-
-CREATE TABLE review_replies (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    review_id INTEGER NOT NULL,
-    number INTEGER NOT NULL,
-    created_at INTEGER NOT NULL,
-    body TEXT NOT NULL,
-    FOREIGN KEY(review_id, number) REFERENCES review_findings(review_id, number) ON DELETE CASCADE
-);
-
 CREATE TABLE "reviews" (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -1069,6 +1044,12 @@ CREATE TABLE "space_turn_retries" (
     delivered INTEGER NOT NULL CHECK(delivered IN (0,1))
 );
 
+CREATE TABLE review_reopens (
+    review_id INTEGER NOT NULL REFERENCES reviews(id) ON DELETE CASCADE,
+    thread_id INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+    PRIMARY KEY(review_id, thread_id)
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -1086,8 +1067,6 @@ CREATE INDEX reviews_workspace ON reviews(workspace_id, id);
 
 CREATE UNIQUE INDEX reviews_active ON reviews(workspace_id)
     WHERE state IN ('queued','running');
-
-CREATE INDEX review_replies_review ON review_replies(review_id, id);
 
 CREATE INDEX space_parents_parent ON space_parents(parent_id);
 
@@ -1211,8 +1190,6 @@ CREATE VIEW hub_held_numbers AS
 
 INSERT INTO "sqlite_sequence" VALUES ('space_events', 0);
 
-INSERT INTO "sqlite_sequence" VALUES ('review_replies', 0);
-
 INSERT INTO "sqlite_sequence" VALUES ('agent_queue', 0);
 
 INSERT INTO "sqlite_sequence" VALUES ('alerts', 0);
@@ -1220,6 +1197,8 @@ INSERT INTO "sqlite_sequence" VALUES ('alerts', 0);
 INSERT INTO "sqlite_sequence" VALUES ('thread_posts', 0);
 
 INSERT INTO "sqlite_sequence" VALUES ('threads', 0);
+
+INSERT INTO "sqlite_sequence" VALUES ('thread_code', 0);
 
 INSERT INTO "journal_pruned" VALUES (0);
 

@@ -149,7 +149,7 @@ fn review_runs_the_configured_command_or_queues_an_agent_review() {
     let result = fixture.root.path().join("review.json");
     fs::write(
         &result,
-        r#"{"summary":"One nit.","verdict":"comment","checked":[],"findings":[{"path":"tracked","line":1,"severity":"nit","title":"Name it","body":"Say what it holds."}]}"#,
+        r#"{"summary":"One nit.","verdict":"comment","reopened":[],"findings":[{"path":"tracked","start_line":1,"end_line":1,"severity":"nit","title":"Name it","body":"Say what it holds."}]}"#,
     )
     .unwrap();
     let fixture = Fixture::with_config(Some(&format!(
@@ -163,19 +163,22 @@ fn review_runs_the_configured_command_or_queues_an_agent_review() {
     let review = fixture.ok(&["watch", "review", &id]);
     assert_eq!(review["state"], "finished", "{review}");
     assert_eq!(review["reviewer"], "reviewer");
-    let finding = format!("{id}.1");
-    assert_eq!(review["findings"][0]["id"], finding);
+    // The finding is a thread the workspace holds, which resolves it.
+    let thread = &review["threads"][0];
+    assert_eq!(thread["kind"], "review", "{review}");
+    assert_eq!(thread["finding"]["severity"], "nit", "{review}");
+    let number = thread["number"].as_str().unwrap();
     let resolved = fixture.ok(&[
-        "review",
+        "thread",
         "resolve",
-        &finding,
+        number,
         "false-positive",
         "--reason",
         "The name says it",
     ]);
     assert_eq!(
-        resolved["findings"][0]["outcome"],
-        serde_json::json!({"outcome": "false-positive", "reason": "The name says it"})
+        resolved["resolution"]["outcome"], "false-positive",
+        "{resolved}"
     );
     let listed = fixture.ok(&["review", "ls", &fixture.id("agent-only")]);
     assert_eq!(listed[0]["id"].to_string(), id);
@@ -195,7 +198,7 @@ fn a_review_watch_outlasts_a_daemon_restart() {
     let result = files.path().join("review.json");
     fs::write(
         &result,
-        r#"{"summary":"No issues found.","verdict":"approve","checked":[],"findings":[]}"#,
+        r#"{"summary":"No issues found.","verdict":"approve","reopened":[],"findings":[]}"#,
     )
     .unwrap();
     // The reviewer waits for the gate, for at most a minute.

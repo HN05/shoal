@@ -5,17 +5,17 @@ use shoal_ids::space_ids::SpaceId;
 use crate::{
     checkouts::HeldCheckout,
     required::Gate,
-    reviews::{
-        FailureReason, FindingId, Outcome, Review, ReviewId, ReviewState, ReviewTarget, Severity,
-    },
+    reviews::{FailureReason, Review, ReviewId, ReviewState, ReviewTarget, Severity},
     stand_in::Fixture,
     store,
     test_support::{install_test_script, until_tests_end},
     time::UnixTime,
 };
+use shoal_protocol::threads::{Outcome, Thread};
 
-const REVIEW: &str = r#"{"summary":"One problem.","verdict":"comment","checked":[],
-"findings":[{"path":"tracked","line":1,"severity":"should-fix","title":"Unclear","body":"Name it."}]}"#;
+const REVIEW: &str = r#"{"summary":"One problem.","verdict":"comment","reopened":[],
+"findings":[{"path":"tracked","start_line":1,"end_line":3,"severity":"should-fix",
+"title":"Unclear","body":"Name it."}]}"#;
 
 /// A workspace whose reviewers are `[agents.<name>]` scripts, in which
 /// `{review}` names a file holding [`REVIEW`], with the review scheduler
@@ -108,12 +108,15 @@ impl Fixture {
         }
     }
 
-    async fn resolve(
-        &self,
-        finding: FindingId,
-        outcome: Option<Outcome>,
-    ) -> anyhow::Result<Review> {
-        self.reviews.resolve(&*self.daemon, finding, outcome).await
+    /// Resolve the finding's thread `thread` with `outcome`, or reopen it
+    /// without one, as the daemon does: its false positives first.
+    async fn resolve(&self, thread: &Thread, outcome: Option<Outcome>) -> anyhow::Result<()> {
+        let kept = self
+            .reviews
+            .keep_false_positive(&*self.daemon, thread, outcome.as_ref());
+        let _kept = kept.await?;
+        self.records.resolve(thread.number, outcome);
+        Ok(())
     }
 
     fn messages(&self) -> Vec<String> {
@@ -218,11 +221,19 @@ async fn a_review_reads_the_committed_head_and_stores_its_findings() {
     assert_eq!(review.head, Some(head.trim().into()));
     assert!(review.base.is_some());
     assert_eq!(review.outdated, Some(false));
-    assert_eq!(review.findings[0].severity, Severity::ShouldFix);
+    let thread = &review.threads[0];
     assert_eq!(
-        review.findings[0].id.to_string(),
-        format!("{}.1", review.id)
+        thread.finding_line(),
+        "1.1 should-fix at tracked:1: Unclear"
     );
+    assert_eq!(thread.finding.unwrap().severity, Severity::ShouldFix);
+    let code = thread.about().unwrap();
+    // The reviewer's lines are cut to the file's, whose version is kept.
+    assert_eq!(
+        (code.commit.as_ref(), code.snippet.as_deref()),
+        (review.head.as_ref(), Some("initial"))
+    );
+    assert!(code.original.blob.is_some());
     assert!(!fixture.run().exists());
     let worktrees = crate::git::run(&fixture.workspace.path, &["worktree", "list"])
         .await
@@ -450,33 +461,29 @@ async fn the_next_review_receives_the_history_and_checks_fixes() {
     let script = "printf '%s' \"$1\" > \"$(dirname '{review}')/prompt\"\ncat '{review}'";
     let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
     let first = fixture.review().await;
-    let finding = first.findings[0].id;
-    fixture
-        .resolve(finding, Some(Outcome::Fixed))
-        .await
-        .unwrap();
+    let thread = &first.threads[0];
+    fixture.resolve(thread, Some(Outcome::Fixed)).await.unwrap();
     fixture.review().await;
     let prompt = written(&fixture, "prompt");
     assert!(
-        prompt.contains(&format!(
-            "### Finding {finding} (should-fix) at tracked:1: Unclear"
-        )),
+        prompt.contains("### Finding 1.1 should-fix at tracked:1: Unclear"),
         "{prompt}"
     );
+    assert!(prompt.contains("Outcome: fixed; check it"), "{prompt}");
 }
 
 #[tokio::test]
 async fn later_reviews_receive_a_false_positive_until_it_is_reopened() {
     let script = "printf '%s' \"$1\" > \"$(dirname '{review}')/prompt\"\ncat '{review}'";
     let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
-    let finding = fixture.review().await.findings[0].id;
+    let thread = fixture.review().await.threads.remove(0);
     let reason = "The field's type names it.".to_owned();
     let outcome = Some(Outcome::FalsePositive { reason });
-    fixture.resolve(finding, outcome).await.unwrap();
+    fixture.resolve(&thread, outcome).await.unwrap();
     fixture.review().await;
     let listed = written(&fixture, "prompt");
     assert!(listed.contains("The field's type names it."), "{listed}");
-    fixture.resolve(finding, None).await.unwrap();
+    fixture.resolve(&thread, None).await.unwrap();
     fixture.review().await;
     let reopened = written(&fixture, "prompt");
     assert!(
@@ -488,31 +495,31 @@ async fn later_reviews_receive_a_false_positive_until_it_is_reopened() {
 #[tokio::test]
 async fn a_finding_keeps_its_outcome_when_its_false_positive_cannot_be_kept() {
     let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
-    let finding = fixture.review().await.findings[0].id;
+    let review = fixture.review().await;
     // A directory where the file belongs can be neither read nor replaced.
     std::fs::create_dir_all(fixture.false_positives()).unwrap();
     let reason = "The field's type names it.".to_owned();
     let outcome = Some(Outcome::FalsePositive { reason });
-    assert!(fixture.resolve(finding, outcome).await.is_err());
-    let review = fixture.shown(finding.review).await.unwrap();
-    assert_eq!(review.findings[0].outcome, None);
+    assert!(fixture.resolve(&review.threads[0], outcome).await.is_err());
+    let review = fixture.shown(review.id).await.unwrap();
+    assert!(review.threads[0].is_open());
 }
 
 #[tokio::test]
 async fn the_false_positives_go_back_when_the_outcome_cannot_be_stored() {
     let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
-    let finding = fixture.review().await.findings[0].id;
+    let thread = fixture.review().await.threads.remove(0);
     let reason = "The field's type names it.".to_owned();
     let outcome = Some(Outcome::FalsePositive { reason });
-    fixture.resolve(finding, outcome).await.unwrap();
+    fixture.resolve(&thread, outcome).await.unwrap();
     let path = fixture.false_positives();
     let kept = std::fs::read_to_string(&path).unwrap();
-    let missing = FindingId {
-        review: ReviewId(999),
-        number: 1,
-    };
-    let outcome = Some(Outcome::Duplicate { of: missing });
-    fixture.resolve(finding, outcome).await.unwrap_err();
+    let reopening = fixture
+        .reviews
+        .keep_false_positive(&*fixture.daemon, &thread, None);
+    let reopening = reopening.await.unwrap().unwrap();
+    assert_ne!(std::fs::read_to_string(&path).unwrap(), kept);
+    reopening.undo().await.unwrap();
     assert_eq!(std::fs::read_to_string(&path).unwrap(), kept);
 }
 
@@ -590,10 +597,7 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
 
     let review = (reviews.latest(daemon, &fixture.selector())).await.unwrap();
     let refused = require(Gate::Ready, agent).await.unwrap_err().to_string();
-    assert!(
-        refused.contains(&review.findings[0].id.to_string()),
-        "{refused}"
-    );
+    assert!(refused.contains("1.1 should-fix"), "{refused}");
     // Unresolved findings at HEAD need answers, not another review.
     let latest = (reviews.latest(daemon, &fixture.selector())).await.unwrap();
     assert_eq!(latest.id, review.id);
@@ -601,8 +605,10 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
     let outcome = Outcome::WontFix {
         reason: "The name matches the file".into(),
     };
-    let finding = review.findings[0].id;
-    fixture.resolve(finding, Some(outcome)).await.unwrap();
+    fixture
+        .resolve(&review.threads[0], Some(outcome))
+        .await
+        .unwrap();
     require(Gate::Ready, agent).await.unwrap();
 }
 

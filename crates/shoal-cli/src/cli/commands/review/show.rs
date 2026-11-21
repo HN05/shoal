@@ -11,9 +11,9 @@ use crate::{
         ui::{self, Fallback},
     },
     installed::Executable,
-    reviews::{Finding, Posted, Review, ReviewId, ReviewState, ReviewTarget, Severity},
+    reviews::{Posted, Review, ReviewId, ReviewState, ReviewTarget, Severity},
 };
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{space_names::SpaceSelector, threads::Thread};
 
 /// List the reviews of the space, a chat's those of its linked PRs, else
 /// the repository's, else every one, newest first.
@@ -183,43 +183,49 @@ pub(in crate::cli::commands) fn render(review: &Review, palette: Palette) {
         outln!();
         outln!(
             "Findings: {}, {unresolved} unresolved",
-            review.findings.len()
+            review.threads.len()
         );
-        for finding in &review.findings {
-            render_finding(finding, palette);
+        for thread in &review.threads {
+            render_thread(thread, palette);
+        }
+    }
+    if !review.reopened.is_empty() {
+        outln!();
+        outln!("Reopened, still present: {}", review.reopened.len());
+        for thread in &review.reopened {
+            render_thread(thread, palette);
         }
     }
 }
 
-fn render_finding(finding: &Finding, palette: Palette) {
-    let style = match finding.severity {
-        Severity::Blocker => Style::Error,
-        Severity::ShouldFix => Style::Warning,
-        Severity::Nit => Style::Muted,
+/// A finding's thread: its number, severity, place and outcome, its title,
+/// then each post.
+fn render_thread(thread: &Thread, palette: Palette) {
+    let severity = thread.finding.map(|finding| finding.severity);
+    let style = match severity {
+        Some(Severity::Blocker) => Style::Error,
+        Some(Severity::ShouldFix) => Style::Warning,
+        Some(Severity::Nit) | None => Style::Muted,
     };
-    let outcome = finding
-        .outcome
-        .as_ref()
-        .map_or_else(|| "unresolved".to_owned(), |outcome| outcome.describe());
-    outln!(
-        "  {} · {} · {}:{} · {outcome}",
-        finding.id,
-        palette.paint(style, finding.severity.as_str()),
-        finding.path,
-        finding.line
+    let severity = severity.map_or("", Severity::as_str);
+    let place = thread.about().map_or_else(String::new, |code| code.place());
+    let outcome = (thread.resolution.as_ref()).map_or_else(
+        || "unresolved".to_owned(),
+        |resolution| resolution.outcome.describe(),
     );
-    outln!("    {}", finding.title);
-    print_indented(&finding.body, 4);
-    for reply in &finding.replies {
-        outln!("    Reply, {}:", reply.created_at.local_minutes());
-        print_indented(&reply.body, 6);
-    }
-    if let Some(check) = finding.check {
+    outln!(
+        "  {} · {} · {place} · {outcome}",
+        thread.number,
+        palette.paint(style, severity),
+    );
+    outln!("    {}", thread.one_line());
+    for post in thread.posts.iter().filter(|post| post.speaks()) {
         outln!(
-            "    Review {} checked the fix: {}",
-            check.review,
-            check.result
+            "    {}, {}:",
+            post.author(),
+            post.created_at.local_minutes()
         );
+        print_indented(&post.post.text, 6);
     }
 }
 

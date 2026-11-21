@@ -1,64 +1,85 @@
-//! The workspace agent's answers to a review's findings: replies, and
-//! outcomes that resolve or reopen them, kept among the repository's false
-//! positives while one is resolved as one.
-use anyhow::Result;
+//! The repository's false positives as the resolutions of its findings'
+//! threads keep them: a thread resolved as one is kept there, and drops out
+//! once it is reopened or resolved otherwise.
+use anyhow::{Context, Result};
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_protocol::time::UnixTime;
+use shoal_protocol::threads::{Outcome, Thread, ThreadKind};
+use tokio::sync::MutexGuard;
 
 use crate::{
     Reviews,
     daemon::Daemon,
     false_positives::{self, FalsePositive},
-    reviews::{FindingId, Outcome, Review},
-    store, validate,
 };
 
-impl Reviews {
-    /// Add a reply to `finding`.
-    pub async fn reply(
-        &self,
-        daemon: &dyn Daemon,
-        finding: FindingId,
-        body: String,
-    ) -> Result<Review> {
-        validate::agent_message(&body)?;
-        let now = UnixTime::now();
-        self.store
-            .run(move |db| store::reply(db, finding, &body, now))
-            .await?;
-        self.review(daemon, finding.review).await
-    }
+/// A repository's false positives as a thread's resolution changed them,
+/// before the resolution is recorded. It holds the registry gate, which
+/// moves and removal take, so concurrent resolutions change the file and
+/// their threads in one order, until it is dropped once the resolution is
+/// recorded, or [`Self::undo`] puts the file back when it could not be.
+pub struct KeptFalsePositive<'a> {
+    _registry: MutexGuard<'a, ()>,
+    previous: Option<false_positives::Previous>,
+}
 
-    /// Resolve `finding` with `outcome`, or reopen it, and keep it among its
-    /// repository's false positives only while it is resolved as one. The
-    /// file changes first and goes back when the outcome cannot be stored,
-    /// so an interrupted resolve leaves the file with the newer intent.
-    pub async fn resolve(
-        &self,
-        daemon: &dyn Daemon,
-        finding: FindingId,
-        outcome: Option<Outcome>,
-    ) -> Result<Review> {
-        // Moves and removal take this gate too. Holding it over both steps
-        // keeps concurrent resolves in one order in the outcome and the file.
-        let registry = self.gates.lock_registry().await;
-        let resolved = self.stored(finding.review).await?;
-        let previous = (keep_false_positive(daemon, &resolved, finding, outcome.as_ref())).await?;
-        if let Err(error) = self.record_outcome(finding, outcome).await {
-            if let Some(previous) = previous {
-                previous.restore().await?;
-            }
-            return Err(error);
+impl KeptFalsePositive<'_> {
+    /// Put the file back as it was, for a resolution that was not recorded.
+    pub async fn undo(self) -> Result<()> {
+        match self.previous {
+            Some(previous) => previous.restore().await,
+            None => Ok(()),
         }
-        drop(registry);
-        self.review(daemon, finding.review).await
+    }
+}
+
+impl Reviews {
+    /// Keep the finding's thread `thread` in its repository's false
+    /// positives while `outcome` is one, or drop it from them. The file
+    /// changes first, so an interrupted resolution leaves it with the newer
+    /// intent. None for a thread that is no finding, or whose workspace is
+    /// gone.
+    pub async fn keep_false_positive(
+        &self,
+        daemon: &dyn Daemon,
+        thread: &Thread,
+        outcome: Option<&Outcome>,
+    ) -> Result<Option<KeptFalsePositive<'_>>> {
+        if thread.kind != ThreadKind::Review {
+            return Ok(None);
+        }
+        let Ok(workspace) = daemon.workspace_by_id(&thread.space_id).await else {
+            return Ok(None);
+        };
+        let finding = self.finding_of(thread).await?;
+        let registry = self.gates.lock_registry().await;
+        let entry = false_positives::kept(&finding, thread, outcome);
+        let repository_id = workspace.repository();
+        let path = match entry {
+            Some(_) => Some(daemon.writable_false_positives_path(repository_id).await?),
+            None => daemon.false_positives_path(repository_id).await?,
+        };
+        let previous = match path {
+            Some(path) => false_positives::keep(path, finding, entry).await?,
+            None => None,
+        };
+        Ok(Some(KeptFalsePositive {
+            _registry: registry,
+            previous,
+        }))
     }
 
-    /// Store `outcome` as `finding`'s, or reopen it without one.
-    async fn record_outcome(&self, finding: FindingId, outcome: Option<Outcome>) -> Result<()> {
-        self.store
-            .run(move |db| store::resolve(db, finding, outcome.as_ref()))
-            .await
+    /// The finding `thread` is, as false positives name it: its review and
+    /// its place among that review's findings, such as `17.2`.
+    async fn finding_of(&self, thread: &Thread) -> Result<String> {
+        let review = (thread.finding.and_then(|finding| finding.review))
+            .with_context(|| format!("thread {} names no review", thread.number))?;
+        let records = self.records.clone();
+        let threads = (self.store)
+            .run(move |db| records.review_threads(db, review))
+            .await?;
+        let place = (threads.iter().position(|found| found.id == thread.id))
+            .with_context(|| format!("review {review} did not open thread {}", thread.number))?;
+        Ok(format!("{review}.{}", place + 1))
     }
 }
 
@@ -69,27 +90,4 @@ pub(crate) async fn listed(
     repository_id: &RepositoryId,
 ) -> Result<Vec<FalsePositive>> {
     false_positives::listed(daemon.false_positives_path(repository_id).await?).await
-}
-
-/// Keep `finding` of `review` in its repository's false positives while
-/// `outcome` is one, or drop it from them, and return the file as it was
-/// when that changed it. The caller holds the registry gate, which moves and
-/// removal take, so the file stays where it was found.
-async fn keep_false_positive(
-    daemon: &dyn Daemon,
-    review: &Review,
-    finding: FindingId,
-    outcome: Option<&Outcome>,
-) -> Result<Option<false_positives::Previous>> {
-    let entry = false_positives::kept(review, finding, outcome)?;
-    let workspace = daemon.workspace_by_id(&review.workspace_id).await?;
-    let repository_id = workspace.repository();
-    let path = match entry {
-        Some(_) => Some(daemon.writable_false_positives_path(repository_id).await?),
-        None => daemon.false_positives_path(repository_id).await?,
-    };
-    let Some(path) = path else {
-        return Ok(None);
-    };
-    false_positives::keep(path, finding, entry).await
 }

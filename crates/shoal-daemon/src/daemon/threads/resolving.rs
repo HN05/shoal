@@ -14,7 +14,9 @@ use crate::daemon::{manager::Manager, scope::Caller};
 
 impl Manager {
     /// Resolve the thread `number` for `caller` as `resolving` says, or
-    /// reopen it without an outcome, telling the other side.
+    /// reopen it without an outcome, telling the other side. A finding's
+    /// thread changes its repository's false positives first, which go
+    /// back when the resolution cannot be recorded.
     pub async fn resolve_thread(
         &self,
         caller: Option<&Caller>,
@@ -39,9 +41,28 @@ impl Manager {
             Some(caller) => self.speaker(caller).await?.1.to_string(),
             None => "the user".to_owned(),
         };
+        let outcome = resolution.as_ref().map(|resolution| &resolution.outcome);
+        let kept = (self.reviews.keep_false_positive(self, &thread, outcome)).await?;
+        let recorded = self.record_resolution(&thread, side, resolution, by).await;
+        if let (Err(_), Some(kept)) = (&recorded, kept) {
+            kept.undo().await?;
+        }
+        let (thread, delivered) = recorded?;
+        self.announce_threads(delivered).await;
+        Ok(thread)
+    }
+
+    /// Record `resolution` on `thread`, or reopen it without one, and tell
+    /// the side across from `side`, which `by` resolved it for.
+    async fn record_resolution(
+        &self,
+        thread: &Thread,
+        side: Side,
+        resolution: Option<Resolution>,
+        by: String,
+    ) -> Result<(Thread, Delivered)> {
         let (id, removing) = (thread.id, self.space_removals.clone());
-        let (thread, delivered) = self
-            .store
+        self.store
             .write(move |tx| {
                 records::set_resolution(tx, id, resolution.as_ref())?;
                 let thread = records::reread(tx, id)?;
@@ -53,9 +74,7 @@ impl Manager {
                 let delivered = tell_resolution(tx, &thread, side, &by)?;
                 Ok((thread, delivered))
             })
-            .await?;
-        self.announce_threads(delivered).await;
-        Ok(thread)
+            .await
     }
 
     /// The resolution `kind` with the data `resolving` names that `caller`

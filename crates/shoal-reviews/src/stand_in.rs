@@ -18,14 +18,22 @@ use shoal_daemon_base::{callers::Caller, gates::Gates, notifications::About};
 use shoal_forge::account::Account;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_ids::space_ids::SpaceNumber;
 use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::approvals::{ApprovalRequest, DecisionStatus, GateStep};
+use shoal_protocol::code::{CodeAt, CodeRef, CodeState};
 use shoal_protocol::config::permissions::Permissions;
 use shoal_protocol::item_numbers::ItemNumber;
 use shoal_protocol::paths::Paths;
 use shoal_protocol::repository::Selector;
+use shoal_protocol::reviews::{ReviewId, Severity};
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_protocol::threads::{
+    Finding, Holder, NewPost, Outcome, Post, Resolution, Sender, Side, Thread, ThreadKind,
+    ThreadSpace,
+};
+use shoal_protocol::time::UnixTime;
 use shoal_protocol::views::Viewed;
 use shoal_refs::CommitId;
 use shoal_store::Store;
@@ -35,8 +43,8 @@ use crate::{
     Reviews,
     config::{Config, Effective, repo::ConfigLayers},
     daemon::{
-        Admission, Agents, Approvals, Forge, Records, Repositories, Requesters, Requests, Settings,
-        Spaces,
+        Admission, Agents, Approvals, FindingCode, FindingThread, Forge, Records, Repositories,
+        Requesters, Requests, Settings, Spaces, Threads,
     },
     forge::{ForgeRepo, items::reference::ItemRef, items::review::NewReview},
     git,
@@ -49,6 +57,7 @@ use crate::{
 pub(crate) struct Fixture {
     pub(crate) root: tempfile::TempDir,
     pub(crate) reviews: Arc<Reviews>,
+    pub(crate) records: Arc<StandInRecords>,
     pub(crate) daemon: Arc<StandIn>,
     pub(crate) requests: Arc<StandInRequests>,
     pub(crate) workspace: Workspace,
@@ -75,6 +84,7 @@ impl Fixture {
         let records = Arc::new(StandInRecords {
             workspace: "workspace",
             name: "fix-login",
+            threads: Mutex::default(),
         });
         let state = root.path().join("state");
         let paths = Paths {
@@ -84,7 +94,7 @@ impl Fixture {
         };
         let requests = Arc::new(StandInRequests::default());
         let gates = Arc::new(Gates::default());
-        let reviews = Reviews::new(store, gates, records, requests.clone(), paths);
+        let reviews = Reviews::new(store, gates, records.clone(), requests.clone(), paths);
         let daemon = StandIn {
             requests: requests.clone(),
             notified: Mutex::default(),
@@ -103,6 +113,7 @@ impl Fixture {
         };
         Self {
             root,
+            records,
             reviews: Arc::new(reviews),
             daemon: Arc::new(daemon),
             requests,
@@ -412,10 +423,50 @@ impl Forge for StandIn {
     }
 }
 
-/// The records of one workspace of the repository `repo`.
+/// The records of one workspace of the repository `repo`, numbered 1, and
+/// of the threads its reviews open, kept in memory.
 pub(crate) struct StandInRecords {
     pub(crate) workspace: &'static str,
     pub(crate) name: &'static str,
+    pub(crate) threads: Mutex<Vec<Thread>>,
+}
+
+impl StandInRecords {
+    /// Resolve the thread `number` with `outcome`, or reopen it without one,
+    /// as its holder.
+    pub(crate) fn resolve(&self, number: ItemNumber, outcome: Option<Outcome>) {
+        let mut threads = self.threads.lock().unwrap();
+        let thread = (threads.iter_mut())
+            .find(|thread| thread.number == number)
+            .unwrap();
+        thread.resolution = outcome.map(|outcome| Resolution {
+            outcome,
+            by: Sender::Space,
+            by_space: Some(self.workspace.into()),
+            resolved_at: UnixTime::from_seconds(1),
+        });
+    }
+
+    /// A post from Shoal saying `text`, pointing at `code`.
+    fn shoal_post(id: i64, text: &str, code: Vec<CodeRef>) -> Post {
+        Post {
+            id,
+            created_at: UnixTime::from_seconds(id),
+            side: Side::Opener,
+            sender: Sender::Shoal,
+            space: None,
+            post: NewPost {
+                text: text.to_owned(),
+                ..NewPost::default()
+            },
+            files: Vec::new(),
+            code,
+            changes: Vec::new(),
+            in_chat: false,
+            forwarded_to: None,
+            alert_id: None,
+        }
+    }
 }
 
 impl Records for StandInRecords {
@@ -430,6 +481,131 @@ impl Records for StandInRecords {
     ) -> Result<Vec<SpaceId>> {
         let listed = repository.is_none_or(|repository| repository.as_str() == "repo");
         Ok(listed.then(|| self.workspace.into()).into_iter().collect())
+    }
+
+    fn open_finding(&self, tx: &Transaction<'_>, finding: &FindingThread<'_>) -> Result<()> {
+        let mut threads = self.threads.lock().unwrap();
+        let item = u32::try_from(threads.len()).unwrap() + 1;
+        let thread = finding_thread(item, self.name, finding);
+        // Its row, which what refers to a thread names.
+        tx.execute(
+            "INSERT INTO threads(id,space_id,number,kind,name,created_at,opener)
+                VALUES (?1,?2,?3,'review',?4,0,'shoal')",
+            rusqlite::params![thread.id, thread.space_id, item, thread.name],
+        )?;
+        threads.push(thread);
+        Ok(())
+    }
+
+    fn reopen_finding(
+        &self,
+        _tx: &Transaction<'_>,
+        workspace: &SpaceId,
+        number: ItemNumber,
+        why: &str,
+    ) -> Result<Option<i64>> {
+        let mut threads = self.threads.lock().unwrap();
+        let Some(thread) = threads.iter_mut().find(|thread| thread.number == number) else {
+            return Ok(None);
+        };
+        let fixed = (thread.resolution.as_ref())
+            .is_some_and(|resolution| resolution.outcome == Outcome::Fixed);
+        if !fixed || thread.space_id != *workspace {
+            return Ok(None);
+        }
+        thread.resolution = None;
+        let post = Self::shoal_post(thread.id * 100, why, Vec::new());
+        thread.posts.push(post);
+        Ok(Some(thread.id))
+    }
+
+    fn review_threads(&self, _db: &Connection, review: ReviewId) -> Result<Vec<Thread>> {
+        let threads = self.threads.lock().unwrap();
+        Ok((threads.iter())
+            .filter(|thread| thread.finding.and_then(|finding| finding.review) == Some(review))
+            .cloned()
+            .collect())
+    }
+
+    fn threads(&self, _db: &Connection, ids: &[i64]) -> Result<Vec<Thread>> {
+        let threads = self.threads.lock().unwrap();
+        Ok((ids.iter())
+            .filter_map(|id| threads.iter().find(|thread| thread.id == *id).cloned())
+            .collect())
+    }
+}
+
+/// The thread `1.item` the stand-in's records open for `finding` in the
+/// workspace named `name`.
+fn finding_thread(item: u32, name: &str, finding: &FindingThread<'_>) -> Thread {
+    let id = i64::from(item);
+    let space = ThreadSpace {
+        id: finding.workspace.clone(),
+        name: Some(name.into()),
+        number: Some(SpaceNumber::new(1)),
+    };
+    let code = CodeRef {
+        id,
+        space: space.clone(),
+        commit: Some(finding.code.commit.clone()),
+        original: finding.code.at.clone(),
+        snippet: finding.code.snippet.clone(),
+        latest: finding.code.at.clone(),
+        state: CodeState::Unchanged,
+    };
+    Thread {
+        id,
+        number: ItemNumber {
+            space: SpaceNumber::new(1),
+            item,
+        },
+        space_id: finding.workspace.clone(),
+        space: name.into(),
+        kind: ThreadKind::Review,
+        finding: Some(Finding {
+            severity: finding.severity,
+            review: Some(finding.review),
+        }),
+        name: finding.title.to_owned(),
+        opener: Sender::Shoal,
+        holder: Holder::Space(space),
+        created_at: UnixTime::from_seconds(id),
+        posts: vec![StandInRecords::shoal_post(id, finding.body, vec![code])],
+        resolution: None,
+        working: false,
+        changes: Vec::new(),
+    }
+}
+
+/// The thread `1.item` of a finding of review 9 of the workspace `work`
+/// with `severity` on line 7 of `path`, titled `Problem <item>`, saying
+/// `body`.
+pub(crate) fn finding(item: u32, path: &str, severity: Severity, body: &str) -> Thread {
+    let code = FindingCode {
+        commit: "0123456789abcdef".into(),
+        at: CodeAt {
+            path: path.into(),
+            lines: Some(shoal_protocol::code::Lines { start: 6, end: 7 }),
+            blob: None,
+        },
+        snippet: None,
+    };
+    let title = format!("Problem {item}");
+    let finding = FindingThread {
+        review: ReviewId(9),
+        workspace: &"work".into(),
+        severity,
+        title: &title,
+        body,
+        code: &code,
+    };
+    finding_thread(item, "fix-login", &finding)
+}
+
+/// Threads change nowhere else.
+impl Threads for StandIn {
+    fn findings_recorded<'a>(&'a self, _workspace: &'a Workspace) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
     }
 }
 

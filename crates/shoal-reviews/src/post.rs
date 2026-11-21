@@ -1,6 +1,6 @@
 //! Posting a finished PR review on the PR as a comment review by the
-//! workspace's agent account: findings on lines the PR's diff shows become
-//! line comments, the rest go in the body with the summary.
+//! workspace's agent account: findings whose last line the PR's diff shows
+//! become line comments, the rest go in the body with the summary.
 use std::fmt::Write as _;
 
 use anyhow::Result;
@@ -20,9 +20,10 @@ use crate::{
     },
     log,
     model::Workspace,
-    reviews::{AUTOMATED_NOTE, Finding, Posted, Review, ReviewTarget, Severity, severity_counts},
+    reviews::{AUTOMATED_NOTE, Posted, Review, ReviewTarget, Severity, severity_counts},
     store,
 };
+use shoal_protocol::{code::CodeAt, threads::Thread};
 
 impl Reviews {
     /// Post finished review `review` on its PR when its target asks to, and
@@ -79,9 +80,9 @@ async fn submit(
         true => None,
         false => Some(forge.pr_diff(&account, &current).await?),
     };
-    let shows = |finding: &Finding| {
-        diff.as_ref()
-            .is_some_and(|diff| diff.shows(&finding.path, u64::from(finding.line)))
+    let shows = |thread: &Thread| match (reviewed(thread), &diff) {
+        (Some((path, Some(line))), Some(diff)) => diff.shows(path, line),
+        _ => false,
     };
     let url = pull.to_string();
     let posted = new_review(review, shows, moved.then_some(head));
@@ -104,11 +105,11 @@ async fn submit(
 /// reviewed commit.
 fn new_review(
     review: &Review,
-    inline: impl Fn(&Finding) -> bool,
+    inline: impl Fn(&Thread) -> bool,
     outdated: Option<&CommitId>,
 ) -> NewReview {
-    let (placed, elsewhere): (Vec<&Finding>, Vec<&Finding>) =
-        review.findings.iter().partition(|finding| inline(finding));
+    let (placed, elsewhere): (Vec<&Thread>, Vec<&Thread>) =
+        review.threads.iter().partition(|thread| inline(thread));
     let mut body = review.summary.clone().unwrap_or_default().trim().to_owned();
     if !elsewhere.is_empty() {
         let heading = match placed.is_empty() {
@@ -116,11 +117,11 @@ fn new_review(
             false => "Findings outside the diff:",
         };
         let _ = write!(body, "\n\n{heading}");
-        for finding in &elsewhere {
-            let _ = write!(body, "\n\n{}", render(finding, true));
+        for thread in &elsewhere {
+            let _ = write!(body, "\n\n{}", render(thread, true));
         }
     }
-    let tally = match severity_counts(&review.findings) {
+    let tally = match severity_counts(&review.threads) {
         counts if counts.is_empty() => "no findings".to_owned(),
         counts => counts,
     };
@@ -133,7 +134,7 @@ fn new_review(
             head.short()
         );
     }
-    if !review.findings.is_empty() {
+    if !review.threads.is_empty() {
         let _ = write!(body, "\n\n_{AUTOMATED_NOTE}_");
     }
     NewReview {
@@ -144,32 +145,47 @@ fn new_review(
         commit: review.head.clone().filter(|_| outdated.is_none()),
         comments: placed
             .into_iter()
-            .map(|finding| LineComment {
-                path: finding.path.clone(),
-                line: u64::from(finding.line),
-                side: Side::New,
-                body: render(finding, false),
+            .filter_map(|thread| {
+                let (path, line) = reviewed(thread)?;
+                Some(LineComment {
+                    path: path.to_owned(),
+                    line: line?,
+                    side: Side::New,
+                    body: render(thread, false),
+                })
             })
             .collect(),
     }
 }
 
-/// A finding as the forge shows it, with its location when it is not a
-/// comment on that line.
-fn render(finding: &Finding, located: bool) -> String {
-    let label = match finding.severity {
-        Severity::Blocker => "Blocker",
-        Severity::ShouldFix => "Should fix",
-        Severity::Nit => "Nit",
+/// The file a finding's thread is about in the reviewed commit, and the
+/// last line of its lines there, counted from 1, which a line comment
+/// takes.
+fn reviewed(thread: &Thread) -> Option<(&str, Option<u64>)> {
+    let CodeAt { path, lines, .. } = &thread.about()?.original;
+    Some((
+        path,
+        lines.map(|lines| u64::from(lines.end.max(lines.start + 1))),
+    ))
+}
+
+/// A finding's thread as the forge shows it: its severity, title and
+/// opening post, with its location when it is not a comment on that line.
+fn render(thread: &Thread, located: bool) -> String {
+    let label = match thread.finding.map(|finding| finding.severity) {
+        Some(Severity::Blocker) => "Blocker",
+        Some(Severity::ShouldFix) => "Should fix",
+        Some(Severity::Nit) | None => "Nit",
     };
-    let location = match located {
-        true => format!(" `{}:{}`", finding.path, finding.line),
-        false => String::new(),
+    let location = match (located, thread.about()) {
+        (true, Some(code)) => format!(" `{}`", code.original),
+        _ => String::new(),
     };
-    format!(
-        "**{label}**{location} — {}\n\n{}",
-        finding.title, finding.body
-    )
+    let body = thread
+        .posts
+        .first()
+        .map_or("", |post| post.post.text.as_str());
+    format!("**{label}**{location} — {}\n\n{body}", thread.name)
 }
 
 #[cfg(test)]

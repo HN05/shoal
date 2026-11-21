@@ -8,13 +8,14 @@ use super::*;
 use crate::model::Workspace;
 use crate::{
     daemon::test_support::{configure, install_test_script, manager, repository, until_tests_end},
-    reviews::{FailureReason, FindingId, Outcome, Review, ReviewId, ReviewState, ReviewTarget},
+    reviews::{FailureReason, Review, ReviewId, ReviewState, ReviewTarget},
 };
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_reviews::store;
 
-const REVIEW: &str = r#"{"summary":"One problem.","verdict":"comment","checked":[],
-"findings":[{"path":"tracked","line":1,"severity":"should-fix","title":"Unclear","body":"Name it."}]}"#;
+const REVIEW: &str = r#"{"summary":"One problem.","verdict":"comment","reopened":[],
+"findings":[{"path":"tracked","start_line":1,"end_line":1,"severity":"should-fix",
+"title":"Unclear","body":"Name it."}]}"#;
 
 struct Fixture {
     _root: tempfile::TempDir,
@@ -335,14 +336,13 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
             },
         )
         .await;
-    let resolve = |review: &Review| ReviewMethod::ResolveFinding {
+    let cancel = |review: &Review| ReviewMethod::CancelReview {
         workspace: None,
-        finding: review.findings[0].id,
-        outcome: Some(Outcome::Fixed),
+        id: Some(review.id),
     };
     // The parent's agent reaches its own and its child's reviews.
     for review in [&parent_review, &child_review] {
-        authorize(manager, Some(&"scope".into()), &mut resolve(review))
+        authorize(manager, Some(&"scope".into()), &mut cancel(review))
             .await
             .unwrap();
     }
@@ -363,7 +363,7 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
         authorize(
             manager,
             Some(&"child-scope".into()),
-            &mut resolve(&parent_review)
+            &mut cancel(&parent_review)
         )
         .await
         .is_err()
@@ -387,6 +387,117 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
     assert!(
         matches!(own, ReviewMethod::ShowReview { workspace: Some(id), .. } if id == SpaceSelector::id(&child.id))
     );
+}
+
+#[tokio::test]
+async fn a_finding_is_a_thread_its_workspace_resolves_keeping_its_false_positive() {
+    use shoal_protocol::threads::{
+        OutcomeKind, Resolving, Sender, ThreadKind, ThreadNumber, ThreadStatus,
+    };
+    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let (manager, workspace) = (&fixture.manager, &fixture.workspace);
+    let review = fixture.review().await;
+    let [thread] = review.threads.as_slice() else {
+        panic!("{:?}", review.threads);
+    };
+    assert_eq!(
+        (thread.kind, thread.opener),
+        (ThreadKind::Review, Sender::Shoal)
+    );
+    assert_eq!(thread.status(), ThreadStatus::Queued);
+    assert_eq!(thread.about().unwrap().original.to_string(), "tracked:1");
+    let agent = crate::daemon::scope::Caller {
+        space_id: workspace.id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+        vouched: None,
+    };
+    let resolving = Resolving {
+        outcome: Some(OutcomeKind::FalsePositive),
+        reason: Some("The type names it.".into()),
+        ..Resolving::default()
+    };
+    let number = ThreadNumber::Full(thread.number);
+    (manager.resolve_thread(Some(&agent), number, resolving))
+        .await
+        .unwrap();
+    let path = (manager.false_positives_path(workspace.repository()))
+        .await
+        .unwrap()
+        .unwrap();
+    let kept = std::fs::read_to_string(&path).unwrap();
+    assert!(kept.contains("The type names it."), "{kept}");
+    // It names the finding by its review and its place there.
+    let finding = format!("finding = \"{}.1\"", review.id);
+    assert!(kept.contains(&finding), "{kept}");
+    let shown = (manager.reviews.review(manager.as_ref(), review.id))
+        .await
+        .unwrap();
+    assert_eq!(shown.unresolved().count(), 0);
+
+    // Reopening it drops it from the false positives.
+    (manager.resolve_thread(Some(&agent), number, Resolving::default()))
+        .await
+        .unwrap();
+    let kept = std::fs::read_to_string(&path).unwrap();
+    assert!(!kept.contains("The type names it."), "{kept}");
+}
+
+#[tokio::test]
+async fn a_later_review_reopens_only_a_fixed_finding_of_its_workspace() {
+    use shoal_protocol::threads::{Outcome, OutcomeKind, Resolving, ThreadNumber};
+    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let (manager, workspace) = (&fixture.manager, &fixture.workspace);
+    let review = fixture.review().await;
+    let number = review.threads[0].number;
+    let reopen = |why: &'static str| {
+        let workspace = workspace.id.clone();
+        manager
+            .store
+            .write(move |tx| crate::daemon::threads::findings::reopen(tx, &workspace, number, why))
+    };
+    assert_eq!(reopen("Still.").await.unwrap(), None);
+    let fixed = Resolving {
+        outcome: Some(OutcomeKind::Fixed),
+        ..Resolving::default()
+    };
+    (manager.resolve_thread(None, ThreadNumber::Full(number), fixed))
+        .await
+        .unwrap();
+    assert!(
+        reopen("The empty case still panics.")
+            .await
+            .unwrap()
+            .is_some()
+    );
+    let thread = (manager.thread(None, ThreadNumber::Full(number)))
+        .await
+        .unwrap();
+    assert!(thread.is_open());
+    let last = thread.last_post().unwrap();
+    assert!(
+        last.post.text.ends_with("The empty case still panics."),
+        "{}",
+        last.post.text
+    );
+    // A thread of another kind, or resolved otherwise, stays as it is.
+    let wont = Resolving {
+        outcome: Some(OutcomeKind::WontFix),
+        reason: Some("Rare.".into()),
+        ..Resolving::default()
+    };
+    (manager.resolve_thread(None, ThreadNumber::Full(number), wont))
+        .await
+        .unwrap();
+    assert_eq!(reopen("Still.").await.unwrap(), None);
+    let thread = (manager.thread(None, ThreadNumber::Full(number)))
+        .await
+        .unwrap();
+    assert!(matches!(
+        thread.resolution.map(|resolution| resolution.outcome),
+        Some(Outcome::WontFix { .. })
+    ));
 }
 
 #[tokio::test]
@@ -418,12 +529,13 @@ async fn serve_pieces(manager: &Arc<Manager>, method: serde_json::Value) -> (usi
     (pages.len(), json)
 }
 
-/// Finish review after review of the workspace, each with one finding
-/// whose body is `body`, returning their IDs.
+/// Finish review after review of the workspace, each with `findings`
+/// findings whose body is `body`, returning their IDs.
 async fn finished_reviews(
     manager: &Manager,
     workspace: &SpaceId,
     count: usize,
+    findings: usize,
     body: &str,
 ) -> Vec<ReviewId> {
     let (id, body) = (workspace.to_owned(), body.to_owned());
@@ -448,19 +560,29 @@ async fn finished_reviews(
                     &"base".into(),
                     UnixTime::from_seconds(2),
                 )?;
+                let finding = serde_json::json!({"path": "a", "start_line": 1, "end_line": 1,
+                    "severity": "nit", "title": "Long", "body": body});
                 let output: crate::reviews::output::ReviewerOutput = serde_json::from_value(
-                    serde_json::json!({"summary": "Long.", "verdict": "comment", "checked": [],
-                        "findings": [{"path": "a", "line": 1, "severity": "nit",
-                            "title": "Long", "body": body}]}),
+                    serde_json::json!({"summary": "Long.", "verdict": "comment", "reopened": [],
+                        "findings": vec![finding; findings]}),
                 )?;
-                store::finish(
-                    tx,
-                    review,
-                    &"absent".into(),
-                    &output,
-                    None,
-                    UnixTime::from_seconds(3),
-                )?;
+                let code = shoal_reviews::daemon::FindingCode {
+                    commit: "head".into(),
+                    at: shoal_protocol::code::CodeAt {
+                        path: "a".into(),
+                        lines: Some(shoal_protocol::code::Lines { start: 0, end: 1 }),
+                        blob: None,
+                    },
+                    snippet: None,
+                };
+                let returned = store::Returned {
+                    output: &output,
+                    code: &vec![code; findings],
+                    session: None,
+                };
+                let now = UnixTime::from_seconds(3);
+                let records = super::ReviewRecords;
+                store::finish(tx, &records, review, &id, &"absent".into(), returned, now)?;
                 ids.push(review);
             }
             Ok(ids)
@@ -473,7 +595,7 @@ async fn finished_reviews(
 async fn a_long_listing_spans_several_frames() {
     let fixture = fixture(&[], "").await;
     let manager = fixture.manager.clone();
-    finished_reviews(&manager, &fixture.workspace.id, 30, &"x".repeat(4096)).await;
+    finished_reviews(&manager, &fixture.workspace.id, 30, 1, &"x".repeat(4096)).await;
     let method = serde_json::json!({"list_reviews": {"workspace": fixture.workspace.id}});
     let (frames, json) = serve_pieces(&manager, method).await;
     assert!(frames > 1, "{frames}");
@@ -485,27 +607,13 @@ async fn a_long_listing_spans_several_frames() {
 async fn one_review_larger_than_a_frame_is_shown_whole() {
     let fixture = fixture(&[], "").await;
     let manager = fixture.manager.clone();
-    let id = finished_reviews(&manager, &fixture.workspace.id, 1, "Long.").await[0];
-    let finding = FindingId {
-        review: id,
-        number: 1,
-    };
-    for _ in 0..9 {
-        manager
-            .reviews
-            .reply(
-                manager.as_ref(),
-                finding,
-                "y".repeat(crate::validate::MAX_AGENT_MESSAGE_LEN),
-            )
-            .await
-            .unwrap();
-    }
+    let body = "y".repeat(shoal_protocol::threads::MAX_POST_LEN);
+    let id = finished_reviews(&manager, &fixture.workspace.id, 1, 9, &body).await[0];
     let method = serde_json::json!({"show_review": {"id": id}});
     let (frames, json) = serve_pieces(&manager, method).await;
     assert!(frames > 1, "{frames}");
     let review: Review = serde_json::from_str(&json).unwrap();
-    assert_eq!(review.findings[0].replies.len(), 9);
+    assert_eq!(review.threads.len(), 9);
 }
 
 #[tokio::test]

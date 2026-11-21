@@ -1,15 +1,16 @@
-//! Local reviews: a one-shot, read-only reviewer's findings on a workspace's
-//! committed HEAD or a PR, which the daemon stores and the workspace's agent
-//! answers with typed outcomes.
+//! Local reviews: a one-shot, read-only reviewer's run over a workspace's
+//! committed HEAD or a PR, whose findings are `review` threads the
+//! workspace's agent resolves.
 use shoal_ids::space_ids::SpaceId;
 use std::{fmt, str::FromStr};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use shoal_refs::{BranchName, CommitId};
 use shoal_states::states;
 
 use crate::space_names::SpaceName;
+use crate::threads::Thread;
 
 states!(
     /// Where a review is in its run.
@@ -86,14 +87,6 @@ impl FailureReason {
     }
 }
 
-states!(
-    /// What a later review found of a finding resolved `fixed`.
-    FixCheck {
-        Confirmed => "confirmed",
-        StillPresent => "still-present",
-    }
-);
-
 /// A review's ID, which the daemon numbers from 1 and the protocol and the
 /// store carry as an integer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -132,137 +125,6 @@ impl rusqlite::types::FromSql for ReviewId {
     }
 }
 
-/// A finding by its review and its number there, written `<review>.<n>`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct FindingId {
-    pub review: ReviewId,
-    pub number: i64,
-}
-
-impl fmt::Display for FindingId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}.{}", self.review, self.number)
-    }
-}
-
-impl FromStr for FindingId {
-    type Err = anyhow::Error;
-
-    fn from_str(text: &str) -> Result<Self> {
-        let parse = || {
-            let (review, number) = text.split_once('.')?;
-            let id = Self {
-                review: review.parse().ok()?,
-                number: number.parse().ok()?,
-            };
-            (id.number > 0).then_some(id)
-        };
-        parse().with_context(|| {
-            format!("{text:?} is not a finding; findings are <review>.<n>, such as 17.2")
-        })
-    }
-}
-
-impl Serialize for FindingId {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
-    }
-}
-
-impl<'de> Deserialize<'de> for FindingId {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(serde::de::Error::custom)
-    }
-}
-
-/// How the workspace's agent answered a finding; each outcome carries what
-/// it needs.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "outcome", rename_all = "kebab-case", deny_unknown_fields)]
-pub enum Outcome {
-    /// The code was changed to address it; the next review checks it.
-    Fixed,
-    /// The claim is wrong.
-    FalsePositive { reason: String },
-    /// The claim holds, but the code is not changed.
-    WontFix { reason: String },
-    /// The claim holds and other work fixes it.
-    Deferred { issue: String },
-    /// It makes the same point as another finding.
-    Duplicate { of: FindingId },
-}
-
-states!(
-    /// An outcome's name, as `shoal review resolve` takes it.
-    OutcomeKind: ValueEnum {
-        Fixed => "fixed",
-        FalsePositive => "false-positive",
-        WontFix => "wont-fix",
-        Deferred => "deferred",
-        Duplicate => "duplicate",
-    }
-);
-
-impl Outcome {
-    /// The outcome `kind` with its data, refusing data it does not take and
-    /// missing data it needs.
-    pub fn new(
-        kind: OutcomeKind,
-        reason: Option<String>,
-        issue: Option<String>,
-        of: Option<FindingId>,
-    ) -> Result<Self> {
-        let reason = reason.filter(|reason| !reason.trim().is_empty());
-        let issue = issue.filter(|issue| !issue.trim().is_empty());
-        let outcome = match (kind, reason, issue, of) {
-            (OutcomeKind::Fixed, None, None, None) => Self::Fixed,
-            (OutcomeKind::FalsePositive, Some(reason), None, None) => {
-                Self::FalsePositive { reason }
-            }
-            (OutcomeKind::WontFix, Some(reason), None, None) => Self::WontFix { reason },
-            (OutcomeKind::Deferred, None, Some(issue), None) => Self::Deferred { issue },
-            (OutcomeKind::Duplicate, None, None, Some(of)) => Self::Duplicate { of },
-            (kind, ..) => bail!("{kind} takes {}", kind.data()),
-        };
-        Ok(outcome)
-    }
-
-    pub fn kind(&self) -> OutcomeKind {
-        match self {
-            Self::Fixed => OutcomeKind::Fixed,
-            Self::FalsePositive { .. } => OutcomeKind::FalsePositive,
-            Self::WontFix { .. } => OutcomeKind::WontFix,
-            Self::Deferred { .. } => OutcomeKind::Deferred,
-            Self::Duplicate { .. } => OutcomeKind::Duplicate,
-        }
-    }
-
-    /// The outcome with its data, as one line.
-    pub fn describe(&self) -> String {
-        match self {
-            Self::Fixed => "fixed".into(),
-            Self::FalsePositive { reason } => format!("false-positive: {reason}"),
-            Self::WontFix { reason } => format!("wont-fix: {reason}"),
-            Self::Deferred { issue } => format!("deferred to {issue}"),
-            Self::Duplicate { of } => format!("duplicate of {of}"),
-        }
-    }
-}
-
-impl OutcomeKind {
-    /// The option the outcome needs.
-    fn data(self) -> &'static str {
-        match self {
-            Self::Fixed => "no --reason, --issue or --of",
-            Self::FalsePositive | Self::WontFix => "--reason and nothing else",
-            Self::Deferred => "--issue and nothing else",
-            Self::Duplicate => "--of and nothing else",
-        }
-    }
-}
-
 /// What a review covers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -279,47 +141,8 @@ pub enum ReviewTarget {
     },
 }
 
-/// One reviewer finding and how it was answered.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Finding {
-    pub id: FindingId,
-    pub severity: Severity,
-    pub path: String,
-    /// The line in the reviewed version of the file.
-    pub line: u32,
-    pub title: String,
-    pub body: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub replies: Vec<Reply>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub outcome: Option<Outcome>,
-    /// What the review that checked a `fixed` outcome found.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub check: Option<Check>,
-}
-
-impl Finding {
-    pub fn resolved(&self) -> bool {
-        self.outcome.is_some()
-    }
-}
-
-/// A discussion reply to a finding, which does not resolve it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Reply {
-    pub created_at: crate::time::UnixTime,
-    pub body: String,
-}
-
-/// A later review's check of a finding resolved `fixed`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Check {
-    pub result: FixCheck,
-    /// The review that checked it.
-    pub review: ReviewId,
-}
-
-/// One review: what it covers, who ran it, how it ended and its findings.
+/// One review: what it covers, who ran it, how it ended, and the threads of
+/// its findings.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Review {
     pub id: ReviewId,
@@ -355,8 +178,14 @@ pub struct Review {
     pub summary: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verdict: Option<Verdict>,
+    /// The `review` thread it opened for each finding, in the reviewer's
+    /// order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub findings: Vec<Finding>,
+    pub threads: Vec<Thread>,
+    /// The earlier findings resolved `fixed` that it found still present
+    /// and reopened.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reopened: Vec<Thread>,
     /// Where a PR review was posted, or why it could not be.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub posted: Option<Posted>,
@@ -382,25 +211,29 @@ impl Review {
         Some(self.ended_at?.duration_since(self.started_at?))
     }
 
-    /// The findings no outcome resolves.
-    pub fn unresolved(&self) -> impl Iterator<Item = &Finding> {
-        self.findings.iter().filter(|finding| !finding.resolved())
-    }
-
-    /// The finding `id`, if this review has it.
-    pub fn finding(&self, id: FindingId) -> Option<&Finding> {
-        self.findings.iter().find(|finding| finding.id == id)
+    /// The threads it opened or reopened that are open.
+    pub fn unresolved(&self) -> impl Iterator<Item = &Thread> {
+        (self.threads.iter().chain(&self.reopened)).filter(|thread| thread.is_open())
     }
 
     /// The review's state in one line: queued, running, the finding counts
-    /// by severity, or why it failed or that it was cancelled.
+    /// by severity and how many it reopened, or why it failed or that it
+    /// was cancelled.
     pub fn status(&self) -> String {
         match self.state {
             ReviewState::Finished => {
-                let counts = severity_counts(&self.findings);
-                match counts.is_empty() {
+                let counts = severity_counts(&self.threads);
+                let reopened = match self.reopened.len() {
+                    0 => String::new(),
+                    count => format!("{count} reopened"),
+                };
+                let found: Vec<String> = [counts, reopened]
+                    .into_iter()
+                    .filter(|part| !part.is_empty())
+                    .collect();
+                match found.is_empty() {
                     true => "finished: no findings".into(),
-                    false => format!("finished: {counts}"),
+                    false => format!("finished: {}", found.join(", ")),
                 }
             }
             ReviewState::Failed => match self.failure {
@@ -433,16 +266,15 @@ impl From<&Review> for ReviewStatus {
     }
 }
 
-/// The findings counted by severity, most severe first as [`Severity::ALL`]
-/// lists them, such as
-/// "1 blocker, 2 should-fix"; empty without findings.
-pub fn severity_counts(findings: &[Finding]) -> String {
+/// The findings of `threads` counted by severity, most severe first as
+/// [`Severity::ALL`] lists them, such as "1 blocker, 2 should-fix"; empty
+/// without findings.
+pub fn severity_counts(threads: &[Thread]) -> String {
     Severity::ALL
         .iter()
         .filter_map(|severity| {
-            let count = findings
-                .iter()
-                .filter(|finding| finding.severity == *severity)
+            let count = (threads.iter())
+                .filter(|thread| thread.finding.is_some_and(|f| f.severity == *severity))
                 .count();
             (count > 0).then(|| format!("{count} {severity}"))
         })

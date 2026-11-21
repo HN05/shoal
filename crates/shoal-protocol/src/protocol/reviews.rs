@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 
 use super::{Forwarding, Lifetime, Target};
-use crate::reviews::{FindingId, Outcome, ReviewId, ReviewTarget};
+use crate::reviews::{ReviewId, ReviewTarget};
 use crate::space_names::SpaceSelector;
 
-/// Requests about local reviews and the answers to their findings. Reviews
-/// come back as pieces of their JSON, in as many frames as they need.
+/// Requests about local reviews, whose findings are threads. Reviews come
+/// back as pieces of their JSON, in as many frames as they need.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewMethod {
@@ -49,24 +49,9 @@ pub enum ReviewMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<ReviewId>,
     },
-    /// `workspace` is the finding's, which scope checks fill in.
-    ReplyToFinding {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        workspace: Option<SpaceSelector>,
-        finding: FindingId,
-        body: String,
-    },
     /// Refuse `shoal pr open` of a new PR before it pushes when the
     /// workspace's review gate would hold the caller.
     CheckPrGate { workspace: SpaceSelector },
-    /// Resolve a finding with `outcome`, or reopen it without one.
-    ResolveFinding {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        workspace: Option<SpaceSelector>,
-        finding: FindingId,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        outcome: Option<Outcome>,
-    },
 }
 
 impl ReviewMethod {
@@ -84,7 +69,7 @@ impl ReviewMethod {
 pub struct ReviewPiece(pub String);
 
 impl ReviewMethod {
-    /// A review runs on its workspace's machine, which keeps its findings,
+    /// A review runs on its workspace's machine, which keeps its threads,
     /// and a wait's answer comes as that machine writes it.
     pub fn forwarding(&self) -> Forwarding {
         match self {
@@ -92,9 +77,7 @@ impl ReviewMethod {
             | Self::CancelReview { .. }
             | Self::ListReviews { .. }
             | Self::ShowReview { .. }
-            | Self::ReplyToFinding { .. }
-            | Self::CheckPrGate { .. }
-            | Self::ResolveFinding { .. } => Forwarding::Online,
+            | Self::CheckPrGate { .. } => Forwarding::Online,
             Self::AwaitReview { .. } => Forwarding::Streamed,
         }
     }
@@ -107,9 +90,7 @@ impl ReviewMethod {
             Self::CancelReview { workspace, .. }
             | Self::ListReviews { workspace, .. }
             | Self::ShowReview { workspace, .. }
-            | Self::AwaitReview { workspace, .. }
-            | Self::ReplyToFinding { workspace, .. }
-            | Self::ResolveFinding { workspace, .. } => workspace.as_ref().map(Target::Space),
+            | Self::AwaitReview { workspace, .. } => workspace.as_ref().map(Target::Space),
         }
     }
 }

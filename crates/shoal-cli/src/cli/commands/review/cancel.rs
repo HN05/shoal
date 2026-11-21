@@ -1,15 +1,8 @@
-//! `shoal review cancel`, `reply` and `resolve`: act on a review and answer
-//! its findings.
-use std::path::PathBuf;
-
+//! `shoal review cancel`: cancel a queued or running review.
 use anyhow::{Context as _, Result};
 
 use crate::client::reviews;
-use crate::{
-    cli::context::Context,
-    model::Chat,
-    reviews::{FindingId, Outcome, ReviewId},
-};
+use crate::{cli::context::Context, model::Chat, reviews::ReviewId};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Cancel review `id`, else the space's queued or running one: a chat's is
@@ -48,37 +41,4 @@ async fn active_review(ctx: &Context, chat: &Chat) -> Result<ReviewId> {
         .find(|review| review.state.is_active())
         .with_context(|| format!("no review of {}'s PRs is queued or running", chat.name))?;
     Ok(active.id)
-}
-
-pub(super) async fn reply(
-    ctx: &Context,
-    finding: FindingId,
-    text: Option<String>,
-    body_file: Option<PathBuf>,
-) -> Result<i32> {
-    let body = match (text, body_file) {
-        (Some(text), _) => text,
-        (None, Some(path)) => {
-            std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?
-        }
-        (None, None) => anyhow::bail!("give the reply as text or with --body-file"),
-    };
-    let review = reviews::reply(&ctx.paths, finding, body).await?;
-    ctx.emit(&format!("Replied to finding {finding}."), &review)?;
-    Ok(0)
-}
-
-/// Resolve `finding` with `outcome`, or reopen it without one.
-pub(super) async fn resolve(
-    ctx: &Context,
-    finding: FindingId,
-    outcome: Option<Outcome>,
-) -> Result<i32> {
-    let message = match &outcome {
-        Some(_) => format!("Resolved finding {finding}."),
-        None => format!("Reopened finding {finding}."),
-    };
-    let review = reviews::resolve(&ctx.paths, finding, outcome).await?;
-    ctx.emit(&message, &review)?;
-    Ok(0)
 }

@@ -16,6 +16,7 @@ use crate::{
     Reviews,
     agent::{Agent, ModelChoice},
     checkouts::CheckoutHold,
+    code,
     config::{Effective, templates},
     daemon::{Admission, Daemon},
     false_positives, findings, git, history, log,
@@ -424,13 +425,26 @@ impl Reviews {
             let requeued = self.store.run(move |db| store::requeue(db, id)).await?;
             return Ok(if requeued { Pass::Stopped } else { Pass::Ended });
         }
+        let code = match &ended {
+            Ended::Returned { output, .. } => match self.reviewed_head(id).await? {
+                Some(head) => code::finding_code(&workspace.path, &head, &output.findings).await,
+                None => Vec::new(),
+            },
+            _ => Vec::new(),
+        };
         let reviewer = reviewer.to_owned();
+        let (records, workspace_id) = (self.records.clone(), workspace.id.clone());
         let now = UnixTime::now();
         let recorded = self
             .store
             .write(move |tx| match ended {
                 Ended::Returned { output, session } => {
-                    store::finish(tx, id, &reviewer, &output, session.as_ref(), now)
+                    let returned = store::Returned {
+                        output: &output,
+                        code: &code,
+                        session: session.as_ref(),
+                    };
+                    store::finish(tx, &*records, id, &workspace_id, &reviewer, returned, now)
                 }
                 Ended::Failed(reason) => store::fail(tx, id, Some(&reviewer), reason, now),
                 Ended::LeftRunning => {
@@ -444,10 +458,16 @@ impl Reviews {
         }
         let review = self.load(id).await?;
         if let Some(review) = review.filter(|review| review.state == ReviewState::Finished) {
+            daemon.findings_recorded(workspace).await;
             self.post(daemon, &review, workspace).await;
         }
         self.deliver(daemon, id).await;
         Ok(Pass::Ended)
+    }
+
+    /// The commit running review `id` reviews.
+    async fn reviewed_head(&self, id: ReviewId) -> Result<Option<CommitId>> {
+        Ok(self.load(id).await?.and_then(|review| review.head))
     }
 
     /// The review's instructions for its checkout, then its history.

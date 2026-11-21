@@ -9,10 +9,10 @@ fn review() -> Value {
         "summary": "One problem.",
         "verdict": "comment",
         "findings": [{
-            "path": "src/a.rs", "line": 7, "severity": "should-fix",
+            "path": "src/a.rs", "start_line": 7, "end_line": 9, "severity": "should-fix",
             "title": "Unchecked index", "body": "It panics on an empty list."
         }],
-        "checked": [{"finding": "3.1", "result": "confirmed"}]
+        "reopened": [{"thread": "3.1", "reason": "The empty case still panics."}]
     })
 }
 
@@ -43,8 +43,8 @@ fn run_as(
 #[test]
 fn output_on_the_schema_is_read() {
     let output = run(true, Some(review().to_string().as_bytes()), b"").unwrap();
-    assert_eq!(output.findings[0].line, 7);
-    assert_eq!(output.checked[0].finding.to_string(), "3.1");
+    assert_eq!(output.findings[0].lines().to_string(), "7-9");
+    assert_eq!(output.reopened[0].thread.to_string(), "3.1");
 }
 
 #[test]
@@ -54,10 +54,14 @@ fn output_off_the_schema_is_invalid() {
     let mut empty_title = review();
     empty_title["findings"][0]["title"] = json!(" ");
     let mut line_zero = review();
-    line_zero["findings"][0]["line"] = json!(0);
+    line_zero["findings"][0]["start_line"] = json!(0);
+    let mut backwards = review();
+    backwards["findings"][0]["end_line"] = json!(6);
     let mut severity = review();
     severity["findings"][0]["severity"] = json!("major");
-    for value in [extra, empty_title, line_zero, severity] {
+    let mut thread = review();
+    thread["reopened"][0]["thread"] = json!("1");
+    for value in [extra, empty_title, line_zero, backwards, severity, thread] {
         let text = value.to_string();
         assert_eq!(
             run(true, Some(text.as_bytes()), b""),

@@ -1,8 +1,8 @@
 //! The local reviews the daemon runs: queueing them, running each once in
 //! a detached checkout as a one-shot agent run, started in the background
-//! without a session or terminal, recording what the reviewer found and how
-//! the workspace's agent answered it, the review gates that wait for
-//! them, and the gate agent that decides approval requests. [`Reviews`] holds what they keep in memory and offers their
+//! without a session or terminal, opening a thread for each finding the
+//! reviewer made and keeping the repository's false positives as those
+//! threads are resolved, the review gates that wait for them, and the gate agent that decides approval requests. [`Reviews`] holds what they keep in memory and offers their
 //! operations; what they need of the rest of the daemon is the interface in
 //! [`daemon`].
 use std::{
@@ -23,10 +23,11 @@ use tokio::sync::{Notify, watch};
 use shoal_core::test_support;
 
 mod checkouts;
+mod code;
 pub mod daemon;
 mod delivery;
 pub mod false_positives;
-mod findings;
+pub mod findings;
 pub mod gate;
 pub mod history;
 pub mod oneshot;

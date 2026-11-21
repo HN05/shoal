@@ -53,7 +53,8 @@ async fn a_reviewer_whose_processes_cannot_be_proven_stopped_is_left_running() {
 async fn the_result_comes_from_the_output_file_when_the_reviewer_writes_one() {
     let (_root, files) = files();
     let (_cancel, mut cancelled) = watch::channel(false);
-    let review = r#"{"summary":"No issues found.","verdict":"approve","findings":[],"checked":[]}"#;
+    let review =
+        r#"{"summary":"No issues found.","verdict":"approve","findings":[],"reopened":[]}"#;
     let script = format!("printf '%s' '{review}' > '{}'", files.output().display());
     let mut writer = reviewer(&files, &["sh", "-c", &script]);
     writer.writes_output = true;

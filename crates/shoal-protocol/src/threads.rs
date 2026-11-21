@@ -515,6 +515,22 @@ impl Thread {
             .map_or(&[], |post| &post.post.choices)
     }
 
+    /// The place in code its opening post points at first, which a
+    /// review's finding is about.
+    pub fn about(&self) -> Option<&crate::code::CodeRef> {
+        self.posts.first()?.code.first()
+    }
+
+    /// Its number, a finding's severity, where the code it is about is now
+    /// and its name, on one line, such as
+    /// `3.2 blocker at src/a.rs:4-6: Unchecked index`.
+    pub fn finding_line(&self) -> String {
+        let severity =
+            (self.finding).map_or(String::new(), |finding| format!(" {}", finding.severity));
+        let place = (self.about()).map_or(String::new(), |code| format!(" at {}", code.place()));
+        format!("{}{severity}{place}: {}", self.number, self.one_line())
+    }
+
     /// The latest post, which a listing shows.
     pub fn last_post(&self) -> Option<&Post> {
         self.posts.iter().rev().find(|post| post.speaks())

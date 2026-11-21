@@ -1,23 +1,6 @@
 use super::*;
 
 #[test]
-fn findings_are_review_and_number() {
-    let id: FindingId = "17.2".parse().unwrap();
-    assert_eq!(
-        id,
-        FindingId {
-            review: ReviewId(17),
-            number: 2
-        }
-    );
-    assert_eq!(id.to_string(), "17.2");
-    assert_eq!(serde_json::to_string(&id).unwrap(), r#""17.2""#);
-    for text in ["17", "17.", ".2", "0.1", "17.0", "a.b", "17.2.1"] {
-        assert!(text.parse::<FindingId>().is_err(), "{text}");
-    }
-}
-
-#[test]
 fn review_ids_are_positive_integers() {
     assert_eq!("17".parse::<ReviewId>().unwrap(), ReviewId(17));
     assert_eq!(serde_json::to_string(&ReviewId(17)).unwrap(), "17");
@@ -30,89 +13,38 @@ fn review_ids_are_positive_integers() {
     }
 }
 
-#[test]
-fn every_outcome_carries_exactly_its_data() {
-    let reason = || Some("the caller checks it".to_owned());
-    let of = Some(FindingId {
-        review: ReviewId(3),
-        number: 1,
-    });
-    assert_eq!(
-        Outcome::new(OutcomeKind::Fixed, None, None, None).unwrap(),
-        Outcome::Fixed
-    );
-    assert!(matches!(
-        Outcome::new(OutcomeKind::FalsePositive, reason(), None, None).unwrap(),
-        Outcome::FalsePositive { .. }
-    ));
-    assert!(matches!(
-        Outcome::new(OutcomeKind::WontFix, reason(), None, None).unwrap(),
-        Outcome::WontFix { .. }
-    ));
-    assert!(matches!(
-        Outcome::new(OutcomeKind::Deferred, None, Some("#12".into()), None).unwrap(),
-        Outcome::Deferred { .. }
-    ));
-    assert!(matches!(
-        Outcome::new(OutcomeKind::Duplicate, None, None, of).unwrap(),
-        Outcome::Duplicate { .. }
-    ));
-    for (kind, reason, issue, of) in [
-        (OutcomeKind::Fixed, reason(), None, None),
-        (OutcomeKind::FalsePositive, None, None, None),
-        (OutcomeKind::FalsePositive, Some("  ".into()), None, None),
-        (OutcomeKind::WontFix, reason(), Some("#1".into()), None),
-        (OutcomeKind::Deferred, None, None, None),
-        (OutcomeKind::Duplicate, reason(), None, None),
-    ] {
-        assert!(Outcome::new(kind, reason, issue, of).is_err(), "{kind}");
-    }
-}
-
-#[test]
-fn outcomes_are_tagged_with_their_data() {
-    let outcome = Outcome::Duplicate {
-        of: FindingId {
-            review: ReviewId(3),
-            number: 1,
-        },
-    };
-    let json = serde_json::to_string(&outcome).unwrap();
-    assert_eq!(json, r#"{"outcome":"duplicate","of":"3.1"}"#);
-    assert_eq!(serde_json::from_str::<Outcome>(&json).unwrap(), outcome);
-    for missing in [
-        r#"{"outcome":"false-positive"}"#,
-        r#"{"outcome":"deferred"}"#,
-        r#"{"outcome":"duplicate","of":"3"}"#,
-    ] {
-        assert!(
-            serde_json::from_str::<Outcome>(missing).is_err(),
-            "{missing}"
-        );
-    }
+/// A review thread `item` of space 2 whose finding is `severity`.
+fn thread(item: u32, severity: &str) -> Thread {
+    serde_json::from_value(serde_json::json!({
+        "id": item, "space_number": 2, "item": item, "space_id": "w1", "space": "cache",
+        "kind": "review", "finding": {"severity": severity, "review": 1},
+        "name": "Unchecked index", "opener": "shoal",
+        "holder": {"kind": "space", "id": "w1"}, "created_at": 0,
+    }))
+    .unwrap()
 }
 
 #[test]
 fn status_counts_findings_by_severity() {
-    let finding = |number, severity| Finding {
-        id: FindingId {
-            review: ReviewId(1),
-            number,
-        },
-        severity,
-        path: "src/a.rs".into(),
-        line: 1,
-        title: "t".into(),
-        body: "b".into(),
-        replies: Vec::new(),
-        outcome: None,
-        check: None,
-    };
-    let findings = [
-        finding(1, Severity::ShouldFix),
-        finding(2, Severity::Blocker),
-        finding(3, Severity::ShouldFix),
+    let threads = [
+        thread(1, "should-fix"),
+        thread(2, "blocker"),
+        thread(3, "should-fix"),
     ];
-    assert_eq!(severity_counts(&findings), "1 blocker, 2 should-fix");
+    assert_eq!(severity_counts(&threads), "1 blocker, 2 should-fix");
     assert_eq!(severity_counts(&[]), "");
+}
+
+#[test]
+fn a_finished_review_counts_the_findings_it_reopened() {
+    let mut review: Review = serde_json::from_value(serde_json::json!({
+        "id": 4, "workspace_id": "w1", "workspace": "cache", "target": {"kind": "workspace"},
+        "agent": "claude", "state": "finished", "created_at": 0,
+    }))
+    .unwrap();
+    assert_eq!(review.status(), "finished: no findings");
+    review.reopened.push(thread(1, "nit"));
+    assert_eq!(review.status(), "finished: 1 reopened");
+    review.threads.push(thread(2, "blocker"));
+    assert_eq!(review.status(), "finished: 1 blocker, 1 reopened");
 }

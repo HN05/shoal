@@ -17,10 +17,14 @@ use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::approvals::ApprovalRequest;
+use shoal_protocol::code::CodeAt;
 use shoal_protocol::config::permissions::Permissions;
+use shoal_protocol::item_numbers::ItemNumber;
 use shoal_protocol::repository::Selector;
+use shoal_protocol::reviews::{ReviewId, Severity};
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_protocol::threads::Thread;
 use shoal_protocol::views::Viewed;
 use shoal_refs::CommitId;
 
@@ -102,6 +106,15 @@ pub trait Settings: Send + Sync {
     ) -> BoxFuture<'a, Result<BTreeMap<String, OsString>>>;
 }
 
+/// The threads of a review's findings, which the daemon follows once their
+/// records commit.
+pub trait Threads: Send + Sync {
+    /// Wake what waits for threads after a review of `workspace` opened or
+    /// reopened its threads, and keep the versions of the code they point
+    /// at.
+    fn findings_recorded<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, ()>;
+}
+
 /// The agent queue that admits a review's run, and the agents that hear
 /// of a review.
 pub trait Agents: Send + Sync {
@@ -178,9 +191,9 @@ pub trait Forge: Send + Sync {
 
 /// Everything reviews need of the daemon, which each of their operations
 /// that reaches beyond them takes.
-pub trait Daemon: Spaces + Repositories + Settings + Agents + Forge {}
+pub trait Daemon: Spaces + Repositories + Settings + Agents + Forge + Threads {}
 
-impl<T: Spaces + Repositories + Settings + Agents + Forge> Daemon for T {}
+impl<T: Spaces + Repositories + Settings + Agents + Forge + Threads> Daemon for T {}
 
 /// The spaces whose approval requests the gate decides.
 pub trait Requesters: Send + Sync {
@@ -284,10 +297,33 @@ pub trait Requests: Send + Sync {
     ) -> Result<Option<ApprovalRequest>>;
 }
 
-/// The records of the spaces reviews are of, which reviews read in the
-/// connection or transaction that reads the reviews, so a review and its
-/// workspace are read as one. Its methods run on the store's thread, so
-/// they are not futures.
+/// A finding's `review` thread to open: the review whose finding it is,
+/// the workspace that holds it, how much it matters, its title, which names
+/// the thread, its body, the opening post, and the code that post points
+/// at in the reviewed commit.
+pub struct FindingThread<'a> {
+    pub review: ReviewId,
+    pub workspace: &'a SpaceId,
+    pub severity: Severity,
+    pub title: &'a str,
+    pub body: &'a str,
+    pub code: &'a FindingCode,
+}
+
+/// Where a finding is in the reviewed commit `commit`: its file, lines and
+/// the blob of the file there, and the snippet of its lines.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FindingCode {
+    pub commit: CommitId,
+    pub at: CodeAt,
+    pub snippet: Option<String>,
+}
+
+/// The records of the spaces reviews are of and of the threads of their
+/// findings, which reviews read and write in the connection or transaction
+/// that reads or records the reviews, so a review, its workspace and its
+/// threads change as one. Its methods run on the store's thread, so they
+/// are not futures.
 pub trait Records: Send + Sync {
     /// The name of the space `id`, while it exists.
     fn space_name(&self, db: &Connection, id: &SpaceId) -> Result<Option<SpaceName>>;
@@ -298,4 +334,27 @@ pub trait Records: Send + Sync {
         db: &Connection,
         repository: Option<&RepositoryId>,
     ) -> Result<Vec<SpaceId>>;
+
+    /// Open the `review` thread of `finding` from Shoal, held by its
+    /// workspace, with its body as the opening post. It tells no one: the
+    /// review's own alert names its threads.
+    fn open_finding(&self, tx: &Transaction<'_>, finding: &FindingThread<'_>) -> Result<()>;
+
+    /// Reopen the thread `number` with a post from Shoal saying `why`, when
+    /// it is a `review` thread `workspace` holds resolved `fixed`; its
+    /// record's ID, none for any other thread. Like opening, it tells no
+    /// one.
+    fn reopen_finding(
+        &self,
+        tx: &Transaction<'_>,
+        workspace: &SpaceId,
+        number: ItemNumber,
+        why: &str,
+    ) -> Result<Option<i64>>;
+
+    /// The threads review `review` opened, in the order it opened them.
+    fn review_threads(&self, db: &Connection, review: ReviewId) -> Result<Vec<Thread>>;
+
+    /// The threads whose records are `ids`, in that order.
+    fn threads(&self, db: &Connection, ids: &[i64]) -> Result<Vec<Thread>>;
 }

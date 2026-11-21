@@ -1,7 +1,6 @@
-//! Local reviews: a one-shot, read-only reviewer's findings on a workspace's
-//! committed HEAD or a PR, which the daemon stores and the workspace's agent
-//! answers with typed outcomes.
-use shoal_protocol::reviews::{FindingId, Outcome, Review, ReviewId, ReviewTarget};
+//! Local reviews: a one-shot, read-only reviewer's run over a workspace's
+//! committed HEAD or a PR, whose findings are `review` threads.
+use shoal_protocol::reviews::{Review, ReviewId, ReviewTarget};
 
 use anyhow::{Context, Result};
 
@@ -73,30 +72,6 @@ pub async fn await_ended(
         id,
     };
     ReviewId::try_from(await_reply(daemon, method, false).await?)
-}
-
-/// Reply `body` to `finding`.
-pub async fn reply(daemon: &impl Daemon, finding: FindingId, body: String) -> Result<Review> {
-    let method = ReviewMethod::ReplyToFinding {
-        workspace: None,
-        finding,
-        body,
-    };
-    reassembled(daemon, method).await
-}
-
-/// Resolve `finding` with `outcome`, or reopen it without one.
-pub async fn resolve(
-    daemon: &impl Daemon,
-    finding: FindingId,
-    outcome: Option<Outcome>,
-) -> Result<Review> {
-    let method = ReviewMethod::ResolveFinding {
-        workspace: None,
-        finding,
-        outcome,
-    };
-    reassembled(daemon, method).await
 }
 
 /// Refuse a PR for `workspace` that `[review] require_for_pr` holds back

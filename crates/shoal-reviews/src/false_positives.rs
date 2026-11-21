@@ -7,10 +7,8 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, Value, value};
 
-use crate::{
-    fsutil::atomic::{self, Permissions, ReplaceOptions},
-    reviews::{FindingId, Outcome, Review},
-};
+use crate::fsutil::atomic::{self, Permissions, ReplaceOptions};
+use shoal_protocol::threads::{Outcome, Thread};
 
 /// What a new file starts with.
 const HEADER: &str = "# Claims that Shoal's reviews of this repository raised and that were\n\
@@ -20,9 +18,10 @@ const HEADER: &str = "# Claims that Shoal's reviews of this repository raised an
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FalsePositive {
-    /// The finding it was resolved from; none for one the user added.
+    /// The finding it was resolved from, by its review and its place among
+    /// that review's findings, such as `17.2`; none for one the user added.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub finding: Option<FindingId>,
+    pub finding: Option<String>,
     pub claim: String,
     pub path: String,
     pub reason: String,
@@ -56,27 +55,29 @@ pub async fn listed(path: Option<PathBuf>) -> Result<Vec<FalsePositive>> {
     listed.context(Unreadable)
 }
 
-/// The entry `outcome` keeps for `finding` of `review`: one while it is a
-/// false positive.
-pub fn kept(
-    review: &Review,
-    finding: FindingId,
-    outcome: Option<&Outcome>,
-) -> Result<Option<FalsePositive>> {
-    match outcome {
-        Some(Outcome::FalsePositive { reason }) => Ok(Some(entry(review, finding, reason)?)),
-        _ => Ok(None),
-    }
+/// The entry `outcome` keeps for `finding`, whose thread is `thread`: one
+/// while it is a false positive, of the claim its name makes about the file
+/// its opening post points at.
+pub fn kept(finding: &str, thread: &Thread, outcome: Option<&Outcome>) -> Option<FalsePositive> {
+    let Some(Outcome::FalsePositive { reason }) = outcome else {
+        return None;
+    };
+    Some(FalsePositive {
+        finding: Some(finding.to_owned()),
+        claim: thread.name.clone(),
+        path: (thread.about()).map_or_else(String::new, |code| code.original.path.clone()),
+        reason: reason.clone(),
+    })
 }
 
 /// Keep `entry` as the one of `finding` in the file at `path`, or drop it
 /// without one, and return the file as it was when that changed it.
 pub async fn keep(
     path: PathBuf,
-    finding: FindingId,
+    finding: String,
     entry: Option<FalsePositive>,
 ) -> Result<Option<Previous>> {
-    tokio::task::spawn_blocking(move || record(&path, finding, entry)).await?
+    tokio::task::spawn_blocking(move || record(&path, &finding, entry)).await?
 }
 
 /// A false positives file as it was before an edit, which [`Previous::restore`]
@@ -99,21 +100,6 @@ impl Previous {
     }
 }
 
-/// `finding` of `review` as a false positive for `reason`.
-fn entry(review: &Review, finding: FindingId, reason: &str) -> Result<FalsePositive> {
-    let resolved = review
-        .findings
-        .iter()
-        .find(|listed| listed.id == finding)
-        .with_context(|| format!("finding {finding} does not exist"))?;
-    Ok(FalsePositive {
-        finding: Some(finding),
-        claim: resolved.title.clone(),
-        path: resolved.path.clone(),
-        reason: reason.to_owned(),
-    })
-}
-
 /// The false positives in the file at `path`, newest first; none without
 /// the file.
 fn read(path: &Path) -> Result<Vec<FalsePositive>> {
@@ -128,11 +114,7 @@ fn read(path: &Path) -> Result<Vec<FalsePositive>> {
 /// Replace the entry of `finding` in the file at `path` with `entry`, or
 /// drop it without one, and return the file as it was when that changed it.
 /// A missing file is created only for an entry.
-fn record(
-    path: &Path,
-    finding: FindingId,
-    entry: Option<FalsePositive>,
-) -> Result<Option<Previous>> {
+fn record(path: &Path, finding: &str, entry: Option<FalsePositive>) -> Result<Option<Previous>> {
     let text = load(path)?;
     let edited = with_entry(text.as_deref(), finding, entry.as_ref())
         .with_context(|| format!("edit {}", path.display()))?;
@@ -151,7 +133,7 @@ fn record(
 /// none when nothing changes. Refuses an invalid result.
 fn with_entry(
     text: Option<&str>,
-    finding: FindingId,
+    finding: &str,
     entry: Option<&FalsePositive>,
 ) -> Result<Option<String>> {
     let mut document: DocumentMut = text.unwrap_or(HEADER).parse()?;
@@ -168,9 +150,9 @@ fn with_entry(
 }
 
 /// Remove the entries of `finding` from `document`, saying whether there
-/// were any. The entries are tables or an inline array of them, and comments
-/// above a removed table stay.
-fn without_finding(document: &mut DocumentMut, finding: FindingId) -> Result<bool> {
+/// were any. The entries are tables or an inline array of them, and
+/// comments above a removed table stay.
+fn without_finding(document: &mut DocumentMut, finding: &str) -> Result<bool> {
     match document.get_mut("false_positive") {
         None => Ok(false),
         Some(Item::ArrayOfTables(entries)) => {
@@ -187,7 +169,7 @@ fn without_finding(document: &mut DocumentMut, finding: FindingId) -> Result<boo
                 let id = entry
                     .as_inline_table()
                     .and_then(|table| table.get("finding"));
-                !is_of(id.and_then(Value::as_str), finding)
+                id.and_then(Value::as_str) != Some(finding)
             });
             Ok(entries.len() < listed)
         }
@@ -198,10 +180,10 @@ fn without_finding(document: &mut DocumentMut, finding: FindingId) -> Result<boo
 /// Remove the tables of `finding` from `entries`, saying whether there were
 /// any, and the comments above the last tables removed, which the next
 /// table keeps otherwise.
-fn without_table(entries: &mut ArrayOfTables, finding: FindingId) -> (bool, String) {
+fn without_table(entries: &mut ArrayOfTables, finding: &str) -> (bool, String) {
     let (mut index, mut removed, mut orphaned) = (0, false, String::new());
     while let Some(table) = entries.get(index) {
-        if !is_of(table.get("finding").and_then(Item::as_str), finding) {
+        if table.get("finding").and_then(Item::as_str) != Some(finding) {
             index += 1;
             continue;
         }
@@ -222,11 +204,6 @@ fn without_table(entries: &mut ArrayOfTables, finding: FindingId) -> (bool, Stri
     (removed, orphaned)
 }
 
-/// Whether an entry's `finding` field names `finding`.
-fn is_of(id: Option<&str>, finding: FindingId) -> bool {
-    id.and_then(|id| id.parse::<FindingId>().ok()) == Some(finding)
-}
-
 fn prefix(decor: &toml_edit::Decor) -> &str {
     decor
         .prefix()
@@ -237,8 +214,8 @@ fn prefix(decor: &toml_edit::Decor) -> &str {
 /// Add `entry` after the entries of `document`, in the form they take.
 fn append(document: &mut DocumentMut, entry: &FalsePositive) {
     let mut table = Table::new();
-    if let Some(finding) = entry.finding {
-        table.insert("finding", value(finding.to_string()));
+    if let Some(finding) = &entry.finding {
+        table.insert("finding", value(finding));
     }
     table.insert("claim", value(&entry.claim));
     table.insert("path", value(&entry.path));

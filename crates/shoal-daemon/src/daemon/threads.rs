@@ -23,6 +23,7 @@ mod chat;
 mod closing;
 mod code;
 mod delivery;
+pub(in crate::daemon) mod findings;
 mod forwarding;
 mod moving;
 mod parties;

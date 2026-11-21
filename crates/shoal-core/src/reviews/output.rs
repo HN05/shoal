@@ -3,9 +3,9 @@
 //! run reports.
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use shoal_protocol::code::Lines;
+use shoal_protocol::item_numbers::ItemNumber;
 use shoal_protocol::reviews::FailureReason;
-use shoal_protocol::reviews::FindingId;
-use shoal_protocol::reviews::FixCheck;
 use shoal_protocol::reviews::Severity;
 use shoal_protocol::reviews::Verdict;
 
@@ -23,27 +23,55 @@ pub struct ReviewerOutput {
     pub summary: String,
     pub verdict: Verdict,
     pub findings: Vec<NewFinding>,
-    /// What it found of each earlier finding resolved `fixed`.
-    pub checked: Vec<Checked>,
+    /// The earlier findings resolved `fixed` whose problem is still present.
+    pub reopened: Vec<Reopened>,
 }
 
-/// A finding as the reviewer reports it.
+/// A finding as the reviewer reports it, on lines counted from 1.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NewFinding {
     pub path: String,
-    pub line: u32,
+    pub start_line: u32,
+    pub end_line: u32,
     pub severity: Severity,
     pub title: String,
     pub body: String,
 }
 
-/// The reviewer's check of an earlier finding resolved `fixed`.
+impl NewFinding {
+    /// The lines it is about.
+    pub fn lines(&self) -> Lines {
+        Lines {
+            start: self.start_line - 1,
+            end: self.end_line,
+        }
+    }
+}
+
+/// An earlier finding resolved `fixed` whose problem the reviewer found
+/// still present, by its thread, and why.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Checked {
-    pub finding: FindingId,
-    pub result: FixCheck,
+pub struct Reopened {
+    #[serde(with = "number_text")]
+    pub thread: ItemNumber,
+    pub reason: String,
+}
+
+/// An item number as the text `3.2`, as the reviewer writes it.
+mod number_text {
+    use serde::{Deserialize as _, Deserializer, Serializer};
+    use shoal_protocol::item_numbers::ItemNumber;
+
+    pub fn serialize<S: Serializer>(number: &ItemNumber, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(number)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<ItemNumber, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        text.parse().map_err(serde::de::Error::custom)
+    }
 }
 
 /// How an AI tool's integration hands back the reviewer's result, which
@@ -163,12 +191,13 @@ fn validate(value: Value) -> Option<ReviewerOutput> {
     let output: ReviewerOutput = serde_json::from_value(value).ok()?;
     let present = |text: &str| !text.trim().is_empty();
     let findings = output.findings.iter().all(|finding| {
-        finding.line > 0
+        (1..=finding.end_line).contains(&finding.start_line)
             && [&finding.path, &finding.title, &finding.body]
                 .into_iter()
                 .all(|text| present(text))
     });
-    (present(&output.summary) && findings).then_some(output)
+    let reopened = (output.reopened.iter()).all(|reopened| present(&reopened.reason));
+    (present(&output.summary) && findings && reopened).then_some(output)
 }
 
 #[cfg(test)]

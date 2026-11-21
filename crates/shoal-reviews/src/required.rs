@@ -1,7 +1,7 @@
 //! Review gates: with `[review] require_for_pr`, `require_for_ready` or
 //! `require_for_merge` holding the caller, it opens a new PR, marks work
 //! ready or merges only once a finished review covers the commit it acts on
-//! and every finding is resolved.
+//! and every thread it opened or reopened is resolved.
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 use std::fmt::Write as _;
@@ -81,7 +81,8 @@ impl Reviews {
     }
 
     /// Refuse unless a finished review of the workspace covers `head`, the
-    /// commit a command acts on, with every finding resolved, saying what is
+    /// commit a command acts on, with every thread it opened or reopened
+    /// resolved, saying what is
     /// missing: as [`Unreviewed`] without a review of it and with none
     /// queued or running.
     pub async fn check_reviewed(
@@ -207,20 +208,16 @@ fn pending(id: ReviewId, state: ReviewState) -> String {
     format!("; review {id} is {state}, and shoal watch review {id} waits for it")
 }
 
-/// The refusal for a review of `head` whose findings are not all
-/// resolved, listing them.
+/// The refusal for a review of `head` whose threads are not all resolved,
+/// listing them.
 fn unresolved(review: &Review, head: &CommitId) -> String {
     let mut text = format!(
-        "review {} of {} has unresolved findings; resolve each with shoal review resolve:",
+        "review {} of {} has unresolved findings; resolve each with shoal thread resolve:",
         review.id,
         head.short()
     );
-    for finding in review.unresolved() {
-        let _ = write!(
-            text,
-            "\n  {} {} at {}:{}: {}",
-            finding.id, finding.severity, finding.path, finding.line, finding.title
-        );
+    for thread in review.unresolved() {
+        let _ = write!(text, "\n  {}", thread.finding_line());
     }
     text
 }

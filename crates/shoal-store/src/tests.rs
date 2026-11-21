@@ -787,6 +787,9 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
     if version >= 267 {
         db.execute_batch(include_str!("review_threads.sql"))?;
     }
+    if version >= 268 {
+        db.execute_batch(include_str!("review_findings_as_threads.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -3071,8 +3074,8 @@ fn reviews_keep_their_findings_replies_and_ids_when_they_can_fail_for_false_posi
     )?;
     migrate(&mut db)?;
     let kept: (String, String) = db.query_row(
-        "SELECT title,review_replies.body FROM review_findings
-            JOIN review_replies USING(review_id,number)",
+        "SELECT name,text FROM threads JOIN thread_posts ON thread_id=threads.id
+            WHERE side='holder'",
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
@@ -3083,6 +3086,109 @@ fn reviews_keep_their_findings_replies_and_ids_when_they_can_fail_for_false_posi
         [],
     )?;
     assert_eq!(db.last_insert_rowid(), 3);
+    Ok(())
+}
+
+#[test]
+fn review_findings_become_threads_with_their_replies_outcomes_and_checks() -> Result<()> {
+    let mut db = historical_database(267)?;
+    db.execute_batch(
+        "INSERT INTO threads(space_id,space_number,number,kind,name,created_at,opener,holder_id)
+            VALUES ('workspace',1,1,'question','Which?',1,'space',NULL);
+        INSERT INTO reviews(id,workspace_id,target,agent,state,head,created_at,ended_at)
+            VALUES (1,'workspace','{\"kind\":\"workspace\"}','codex','finished','c1',1,2),
+                (2,'workspace','{\"kind\":\"workspace\"}','codex','finished','c2',3,4);
+        INSERT INTO review_findings(review_id,number,severity,path,line,title,body,outcome,
+                check_result,checked_by)
+            VALUES (1,1,'blocker','a.rs',7,'Fixed','B1','{\"outcome\":\"fixed\"}',
+                    'confirmed',2),
+                (1,2,'nit','b.rs',3,'Wrong','B2',
+                    '{\"outcome\":\"false-positive\",\"reason\":\"Checked\"}',NULL,NULL),
+                (1,3,'should-fix','c.rs',1,'Still','B3','{\"outcome\":\"fixed\"}',
+                    'still-present',2),
+                (2,1,'nit','b.rs',4,'Again','B4',
+                    '{\"outcome\":\"duplicate\",\"of\":\"1.2\"}',NULL,NULL),
+                (2,2,'nit','d.rs',2,'Asked','B5',NULL,NULL,NULL);
+        INSERT INTO review_replies(review_id,number,created_at,body)
+            VALUES (1,2,3,'Why?'),(2,2,5,'Is it?');",
+    )?;
+    migrate(&mut db)?;
+    let threads: Vec<(u32, String, String, Option<String>, i64)> = db
+        .prepare(
+            "SELECT number,name,severity,json_extract(outcome,'$.outcome') ||
+                    COALESCE(' ' || json_extract(outcome,'$.of.number'),''),review_id
+                FROM threads WHERE kind='review' ORDER BY number",
+        )?
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let thread = |number, name: &str, severity: &str, outcome: Option<&str>, review| {
+        (
+            number,
+            name.into(),
+            severity.into(),
+            outcome.map(Into::into),
+            review,
+        )
+    };
+    assert_eq!(
+        threads,
+        [
+            thread(2, "Fixed", "blocker", Some("fixed"), 1),
+            thread(3, "Wrong", "nit", Some("false-positive"), 1),
+            thread(4, "Still", "should-fix", None, 1),
+            thread(5, "Again", "nit", Some("duplicate 1.3"), 2),
+            thread(6, "Asked", "nit", None, 2),
+        ]
+    );
+    let posts: Vec<(u32, String, String)> = db
+        .prepare(
+            "SELECT t.number,p.side,p.text FROM thread_posts p JOIN threads t ON t.id=p.thread_id
+                WHERE t.kind='review' ORDER BY t.number,p.id",
+        )?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let post = |number, side: &str, text: &str| (number, side.into(), text.into());
+    assert_eq!(
+        posts,
+        [
+            post(2, "opener", "B1"),
+            post(2, "opener", "Review 2 found it fixed."),
+            post(3, "opener", "B2"),
+            post(3, "holder", "Why?"),
+            post(4, "opener", "B3"),
+            post(4, "opener", "Review 2 found this still present."),
+            post(5, "opener", "B4"),
+            post(6, "opener", "B5"),
+            post(6, "holder", "Is it?"),
+            post(
+                6,
+                "opener",
+                "The next review read this reply; post again to ask the reviewer."
+            ),
+        ]
+    );
+    let code: (String, u32, u32, String) = db.query_row(
+        "SELECT path,start,end,commit_id FROM thread_code c JOIN thread_posts p ON p.id=c.post_id
+            JOIN threads t ON t.id=p.thread_id WHERE t.number=2",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    )?;
+    assert_eq!(code, ("a.rs".into(), 6, 7, "c1".into()));
+    let reopened: (i64, u32) = db.query_row(
+        "SELECT review_reopens.review_id,number FROM review_reopens
+            JOIN threads ON threads.id=thread_id",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    assert_eq!(reopened, (2, 4));
     Ok(())
 }
 

@@ -1,5 +1,5 @@
 //! `shoal review`: run local reviews of workspaces and PRs, list and cancel
-//! them, and answer their findings.
+//! them; their findings are threads, which `shoal thread` resolves.
 use anyhow::Result;
 
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-mod answer;
+mod cancel;
 pub(super) mod show;
 mod start;
 
@@ -37,31 +37,7 @@ pub(super) async fn run(ctx: &Context, command: ReviewCommand) -> Result<i32> {
             start::start(ctx, target, reviewer, model, args).await
         }
         ReviewCommand::Ls { space, repository } => show::list(ctx, space, repository).await,
-        ReviewCommand::Cancel { id, space } => answer::cancel(ctx, id, space).await,
-        ReviewCommand::Reply {
-            finding,
-            reply,
-            body_file,
-        } => answer::reply(ctx, finding, reply, body_file).await,
-        ReviewCommand::Resolve {
-            finding,
-            outcome,
-            reason,
-            issue,
-            of,
-            undo,
-        } => {
-            let outcome = match (outcome, undo) {
-                (Some(kind), false) => Some(crate::reviews::Outcome::new(
-                    kind,
-                    reason,
-                    issue.map(|issue| issue.to_string()),
-                    of,
-                )?),
-                _ => None,
-            };
-            answer::resolve(ctx, finding, outcome).await
-        }
+        ReviewCommand::Cancel { id, space } => cancel::cancel(ctx, id, space).await,
     }
 }
 

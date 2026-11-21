@@ -2659,14 +2659,24 @@ saved session by the directory it ran in, so the checkout has one path per
 workspace and PR. The session adds context and decides nothing: each review is
 given its instructions and history in full, and a change of agent starts a new
 session. The
-reviewer returns findings in a fixed schema, which the daemon stores, so the agent
-answers each with a typed outcome carrying its reason, issue or original finding,
-and the next review checks every `fixed` one instead of rereading free text. A finding
+reviewer returns findings in a fixed schema, each on a line range, and each becomes
+a `review` thread rather than a record of its own: the review run keeps its target,
+commit, reviewer, verdict and state, and Shoal opens a thread for each finding,
+held by the reviewed workspace, whose opening post points at the lines in the
+reviewed commit. A finding then reads, resolves, follows the code and shows in
+editors like every other thread about code, and its discussion is posts. One
+alert carries the review's summary and all its threads, so a review wakes the
+agent once. The holder resolves a thread Shoal opened, with a typed outcome
+carrying its reason or issue; `fixed` points at the changes attributed to the
+thread, which the next review receives with it, reopening it with a post saying
+why when the problem remains, instead of rereading free text. The gates count the
+threads a review opened or reopened, since a reopened finding is one that review
+raised again. A finding
 resolved `false-positive` outlives its workspace as a claim of its repository, which
 every later review receives, so a wrong claim the reviewer would raise in every change
 touching the same code is answered once. It is kept in a file beside the
 repository's local config rather than a tracked one: the outcome records it, with no
-command or commit of its own, reopening the finding withdraws it, and the user edits
+command or commit of its own, reopening the finding's thread withdraws it, and the user edits
 the file to drop or add a claim. The
 history a review receives is context, not instructions, and the verdict is shown
 but decides nothing. Failures are typed reasons classified like the bot's, so

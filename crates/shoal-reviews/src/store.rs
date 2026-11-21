@@ -1,6 +1,7 @@
-//! Review rows: queueing, the state changes of a run, and the answers to
-//! findings, each in the caller's connection or transaction.
-use anyhow::{Context, Result, bail, ensure};
+//! Review rows: queueing and the state changes of a run, which opens a
+//! thread for each finding and reopens the earlier ones still present, each
+//! in the caller's connection or transaction.
+use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -8,11 +9,10 @@ use shoal_refs::CommitId;
 
 use crate::{
     agent::{Agent, ModelChoice},
-    daemon::Records,
+    daemon::{FindingCode, FindingThread, Records},
     reviews::{
-        Check, FailureReason, Finding, FindingId, Outcome, OutcomeKind, Posted, Reply, Review,
-        ReviewId, ReviewState, ReviewStatus, ReviewTarget,
-        output::{Checked, ReviewerOutput},
+        FailureReason, Posted, Review, ReviewId, ReviewState, ReviewStatus, ReviewTarget,
+        output::ReviewerOutput,
     },
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
@@ -198,18 +198,33 @@ pub fn start(
     )? == 1)
 }
 
-/// Record the reviewer's result on a running review, numbering its findings
-/// from 1, the checks it made of earlier `fixed` findings of the same
-/// workspace, and the session it reported. False when the review is no
-/// longer running.
+/// What a finished run returned: the reviewer's output, where each of its
+/// findings is in the reviewed commit, in order, and the session it
+/// reported.
+pub struct Returned<'a> {
+    pub output: &'a ReviewerOutput,
+    pub code: &'a [FindingCode],
+    pub session: Option<&'a AgentSessionId>,
+}
+
+/// Record the reviewer's result on a running review of the workspace
+/// `workspace` by `reviewer`: a thread for each finding, and the reopening
+/// of each earlier finding of the workspace resolved `fixed` that it found
+/// still present. False when the review is no longer running.
 pub fn finish(
     tx: &rusqlite::Transaction<'_>,
+    records: &dyn Records,
     id: ReviewId,
+    workspace: &SpaceId,
     reviewer: &Agent,
-    output: &ReviewerOutput,
-    session: Option<&AgentSessionId>,
+    returned: Returned<'_>,
     now: UnixTime,
 ) -> Result<bool> {
+    let Returned {
+        output,
+        code,
+        session,
+    } = returned;
     let finished = tx.execute(
         "UPDATE reviews SET state=?6,reviewer=?2,summary=?3,verdict=?4,ended_at=?5,session=?8
             WHERE id=?1 AND state=?7",
@@ -227,23 +242,25 @@ pub fn finish(
     if !finished {
         return Ok(false);
     }
-    for (number, finding) in (1..).zip(&output.findings) {
-        tx.execute(
-            "INSERT INTO review_findings(review_id,number,severity,path,line,title,body)
-                VALUES (?1,?2,?3,?4,?5,?6,?7)",
-            params![
-                id,
-                number,
-                finding.severity,
-                finding.path,
-                finding.line,
-                finding.title,
-                finding.body
-            ],
-        )?;
+    for (finding, code) in output.findings.iter().zip(code) {
+        let finding = FindingThread {
+            review: id,
+            workspace,
+            severity: finding.severity,
+            title: &finding.title,
+            body: &finding.body,
+            code,
+        };
+        records.open_finding(tx, &finding)?;
     }
-    for checked in &output.checked {
-        record_check(tx, id, checked)?;
+    for reopened in &output.reopened {
+        let thread = records.reopen_finding(tx, workspace, reopened.thread, &reopened.reason)?;
+        if let Some(thread) = thread {
+            tx.execute(
+                "INSERT OR IGNORE INTO review_reopens(review_id,thread_id) VALUES (?1,?2)",
+                params![id, thread],
+            )?;
+        }
     }
     Ok(true)
 }
@@ -262,26 +279,6 @@ pub fn session(db: &Connection, id: ReviewId) -> Result<Option<(Agent, AgentSess
             |row| Ok((row.get(0)?, AgentSessionId::from(row.get::<_, String>(1)?))),
         )
         .optional()?)
-}
-
-/// Record a check of an earlier finding of the same workspace that is
-/// resolved `fixed`; checks of other findings are ignored.
-fn record_check(db: &Connection, id: ReviewId, checked: &Checked) -> Result<()> {
-    db.execute(
-        "UPDATE review_findings SET check_result=?3,checked_by=?4
-            WHERE review_id=?1 AND number=?2 AND json_extract(outcome,'$.outcome')=?5
-            AND review_id IN (SELECT earlier.id FROM reviews earlier JOIN reviews this
-                ON this.workspace_id=earlier.workspace_id
-                WHERE this.id=?4 AND earlier.id<?4)",
-        params![
-            checked.finding.review,
-            checked.finding.number,
-            checked.result,
-            id,
-            OutcomeKind::Fixed
-        ],
-    )?;
-    Ok(())
 }
 
 /// End an active review as failed for `reason`; false when it already ended.
@@ -344,67 +341,17 @@ pub fn set_posted(db: &Connection, id: ReviewId, posted: &Posted) -> Result<()> 
     Ok(())
 }
 
-/// Add a reply to finding `id`.
-pub fn reply(db: &Connection, id: FindingId, body: &str, now: UnixTime) -> Result<()> {
-    require_finding(db, id)?;
-    db.execute(
-        "INSERT INTO review_replies(review_id,number,created_at,body) VALUES (?1,?2,?3,?4)",
-        params![id.review, id.number, now, body],
-    )?;
-    Ok(())
-}
-
-/// Resolve finding `id` with `outcome`, or reopen it without one. A
-/// duplicate names another finding of the same workspace.
-pub fn resolve(db: &Connection, id: FindingId, outcome: Option<&Outcome>) -> Result<()> {
-    require_finding(db, id)?;
-    if let Some(Outcome::Duplicate { of }) = outcome {
-        ensure!(*of != id, "a finding cannot duplicate itself");
-        let same_workspace: bool = db.query_row(
-            "SELECT EXISTS(SELECT 1 FROM review_findings JOIN reviews ON reviews.id=review_id
-                WHERE review_id=?1 AND number=?2 AND workspace_id=
-                    (SELECT workspace_id FROM reviews WHERE id=?3))",
-            params![of.review, of.number, id.review],
-            |row| row.get(0),
-        )?;
-        ensure!(
-            same_workspace,
-            "finding {of} is not a finding of this workspace"
-        );
-    }
-    let outcome = outcome.map(serde_json::to_string).transpose()?;
-    db.execute(
-        "UPDATE review_findings SET outcome=?3 WHERE review_id=?1 AND number=?2",
-        params![id.review, id.number, outcome],
-    )?;
-    Ok(())
-}
-
-fn require_finding(db: &Connection, id: FindingId) -> Result<()> {
-    let exists: bool = db.query_row(
-        "SELECT EXISTS(SELECT 1 FROM review_findings WHERE review_id=?1 AND number=?2)",
-        params![id.review, id.number],
-        |row| row.get(0),
-    )?;
-    ensure!(
-        exists,
-        "finding {id} does not exist; shoal view review {} lists its findings",
-        id.review
-    );
-    Ok(())
-}
-
 const COLUMNS: &str = "id,workspace_id,target,agent,reviewer,state,failure,head,base,created_at,
     started_at,ended_at,summary,verdict,posted,model";
 
-/// Review `id` with its findings.
+/// Review `id` with its threads.
 pub fn load(db: &Connection, records: &dyn Records, id: ReviewId) -> Result<Option<Review>> {
     load_record(db, records, id)?
-        .map(|review| with_findings(db, review))
+        .map(|review| with_threads(db, records, review))
         .transpose()
 }
 
-/// Review `id` without its findings, while its workspace exists.
+/// Review `id` without its threads, while its workspace exists.
 fn load_record(db: &Connection, records: &dyn Records, id: ReviewId) -> Result<Option<Review>> {
     let review = db
         .query_row(
@@ -440,7 +387,7 @@ pub fn list(db: &Connection, records: &dyn Records, ids: &[SpaceId]) -> Result<V
     let mut listed = Vec::new();
     for review in reviews {
         if let Some(review) = named(db, records, review)? {
-            listed.push(with_findings(db, review)?);
+            listed.push(with_threads(db, records, review)?);
         }
     }
     Ok(listed)
@@ -476,20 +423,14 @@ pub fn latest(
     }
 }
 
-/// The workspace's newest review as lists show it, which reads no replies.
+/// The workspace's newest review as lists show it.
 pub fn latest_status(
     db: &Connection,
     records: &dyn Records,
     workspace_id: &SpaceId,
 ) -> Result<Option<ReviewStatus>> {
-    let Some(id) = latest_id(db, workspace_id)? else {
-        return Ok(None);
-    };
-    let Some(mut review) = load_record(db, records, id)? else {
-        return Ok(None);
-    };
-    review.findings = findings(db, id)?;
-    Ok(Some((&review).into()))
+    let review = latest(db, records, workspace_id)?;
+    Ok(review.as_ref().map(ReviewStatus::from))
 }
 
 fn latest_id(db: &Connection, workspace_id: &SpaceId) -> Result<Option<ReviewId>> {
@@ -540,7 +481,8 @@ fn review(row: &Row) -> rusqlite::Result<Review> {
         ended_at: row.get(11)?,
         summary: row.get(12)?,
         verdict: row.get(13)?,
-        findings: Vec::new(),
+        threads: Vec::new(),
+        reopened: Vec::new(),
         posted: posted
             .as_deref()
             .map(|posted| json(14, posted))
@@ -554,70 +496,15 @@ fn review(row: &Row) -> rusqlite::Result<Review> {
     })
 }
 
-fn with_findings(db: &Connection, mut review: Review) -> Result<Review> {
-    let mut findings = findings(db, review.id)?;
-    add_replies(db, review.id, &mut findings)?;
-    review.findings = findings;
+/// `review` with the threads it opened and those it reopened.
+fn with_threads(db: &Connection, records: &dyn Records, mut review: Review) -> Result<Review> {
+    review.threads = records.review_threads(db, review.id)?;
+    let reopened: Vec<i64> = db
+        .prepare("SELECT thread_id FROM review_reopens WHERE review_id=?1 ORDER BY rowid")?
+        .query_map([review.id], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    review.reopened = records.threads(db, &reopened)?;
     Ok(review)
-}
-
-/// Review `id`'s findings without their replies.
-fn findings(db: &Connection, id: ReviewId) -> Result<Vec<Finding>> {
-    db.prepare(
-        "SELECT number,severity,path,line,title,body,outcome,check_result,checked_by
-            FROM review_findings WHERE review_id=?1 ORDER BY number",
-    )?
-    .query_map([id], |row| {
-        let outcome: Option<String> = row.get(6)?;
-        let check = match (row.get(7)?, row.get(8)?) {
-            (Some(result), Some(review)) => Some(Check { result, review }),
-            _ => None,
-        };
-        Ok(Finding {
-            id: FindingId {
-                review: id,
-                number: row.get(0)?,
-            },
-            severity: row.get(1)?,
-            path: row.get(2)?,
-            line: row.get(3)?,
-            title: row.get(4)?,
-            body: row.get(5)?,
-            replies: Vec::new(),
-            outcome: outcome.as_deref().map(|text| json(6, text)).transpose()?,
-            check,
-        })
-    })?
-    .collect::<rusqlite::Result<Vec<_>>>()
-    .context("read review findings")
-}
-
-/// The replies to review `?1`'s findings, oldest first.
-const REPLIES: &str =
-    "SELECT number,created_at,body FROM review_replies WHERE review_id=?1 ORDER BY id";
-
-/// Add the replies of review `id` to its `findings`.
-fn add_replies(db: &Connection, id: ReviewId, findings: &mut [Finding]) -> Result<()> {
-    let mut replies = db.prepare(REPLIES)?;
-    for reply in replies.query_map([id], |row| {
-        Ok((
-            row.get::<_, i64>(0)?,
-            Reply {
-                created_at: row.get(1)?,
-                body: row.get(2)?,
-            },
-        ))
-    })? {
-        let (number, reply) = reply?;
-        match findings
-            .iter_mut()
-            .find(|finding| finding.id.number == number)
-        {
-            Some(finding) => finding.replies.push(reply),
-            None => bail!("a reply names finding {id}.{number}, which is missing"),
-        }
-    }
-    Ok(())
 }
 
 /// The JSON in column `index`, refusing what does not parse.

@@ -531,26 +531,30 @@ shoal review run                    # Or a workspace's number or ID, or a PR URL
 shoal review ls                   # Reviews, newest first, with unresolved findings
 shoal view review [<id>]
 shoal watch review [<id>]
-shoal review resolve 17.1 fixed
-shoal review resolve 17.2 false-positive --reason "The caller checks the length"
-shoal review resolve 17.3 wont-fix --reason "..."
-shoal review resolve 17.4 deferred --issue 1240
-shoal review resolve 17.5 duplicate --of 17.2
-shoal review reply 17.6 "Only on empty input?"
 shoal review cancel [<id>]
+shoal thread switch 3.1             # Your changes from now on fix finding 3.1
+shoal thread resolve 3.1 fixed
+shoal thread resolve 3.2 false-positive --reason "The caller checks the length"
+shoal thread resolve 3.3 wont-fix --reason "..."
+shoal thread resolve 3.4 deferred --issue 1240
+shoal thread resolve 3.5 duplicate --of 3.2
 ```
 
 `review run` queues a one-shot, read-only review of the committed HEAD;
 uncommitted edits stay out of it. With a PR URL, or from a chat for its linked
-PR, it reviews the PR in the workspace that owns its branch. The findings arrive at the
-workspace's agent as a message, each numbered `<review>.<n>`, and at its
-coordinator as one line. `resolve` records an outcome with its data, and
-`reply` discusses a finding without resolving it. Later reviews of the
+PR, it reviews the PR in the workspace that owns its branch. Each finding is a
+`review` [thread](#threads) Shoal opens, held by the workspace and numbered in
+its space, whose opening post points at the reviewed lines; the review's
+summary and all its threads reach the workspace's agent in one message, and its
+coordinator as one line. The holder resolves a finding's thread with
+`thread resolve` and an outcome with its data. Later reviews of the
 repository receive each `false-positive` finding's title, path and reason and
 skip that claim while the reason holds; the next review checks each `fixed`
-finding. When the repository requires a review, `pr open` of a new PR,
-`ready` and `merge`, of a PR or a branch, are refused until a finished review covers the commit they
-act on with every finding resolved. Without one, the refusal starts a review
+finding against the changes made for its thread and reopens it, with a post
+saying why, when its problem remains. When the repository requires a review,
+`pr open` of a new PR, `ready` and `merge`, of a PR or a branch, are refused until
+a finished review covers the commit they act on with every thread it opened or
+reopened resolved. Without one, the refusal starts a review
 of the workspace's HEAD where that is the commit, and otherwise names
 `shoal review run <pr-url>`.
 

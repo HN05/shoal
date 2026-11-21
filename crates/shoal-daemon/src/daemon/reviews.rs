@@ -12,8 +12,11 @@ use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::repository::Selector;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_protocol::{item_numbers::ItemNumber, reviews::ReviewId, threads::Thread};
 use shoal_refs::CommitId;
-use shoal_reviews::daemon::{Admission, Agents, Forge, Records, Repositories, Settings, Spaces};
+use shoal_reviews::daemon::{
+    Admission, Agents, FindingThread, Forge, Records, Repositories, Settings, Spaces, Threads,
+};
 
 use super::{
     agent_queue::{self, OneShotAdmission, Serving},
@@ -158,6 +161,17 @@ impl Agents for Manager {
     }
 }
 
+impl Threads for Manager {
+    fn findings_recorded<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, ()> {
+        Box::pin(async move {
+            self.signals.thread_changed();
+            let spaces = [workspace.id.clone()];
+            self.keep_code_versions(workspace.repository(), spaces)
+                .await;
+        })
+    }
+}
+
 /// A one-shot run's admission in the daemon's agent queue.
 struct QueueAdmission<'a>(OneShotAdmission<'a>);
 
@@ -202,7 +216,8 @@ impl Forge for Manager {
     }
 }
 
-/// The spaces' records, as reviews read them in their own connections.
+/// The spaces' records and their findings' threads, as reviews read and
+/// write them in their own connections and transactions.
 pub(crate) struct ReviewRecords;
 
 impl Records for ReviewRecords {
@@ -216,6 +231,32 @@ impl Records for ReviewRecords {
         repository: Option<&RepositoryId>,
     ) -> Result<Vec<SpaceId>> {
         super::spaces::workspace_ids(db, repository)
+    }
+
+    fn open_finding(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        finding: &FindingThread<'_>,
+    ) -> Result<()> {
+        super::threads::findings::open(tx, finding)
+    }
+
+    fn reopen_finding(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        workspace: &SpaceId,
+        number: ItemNumber,
+        why: &str,
+    ) -> Result<Option<i64>> {
+        super::threads::findings::reopen(tx, workspace, number, why)
+    }
+
+    fn review_threads(&self, db: &rusqlite::Connection, review: ReviewId) -> Result<Vec<Thread>> {
+        super::threads::findings::of_review(db, review)
+    }
+
+    fn threads(&self, db: &rusqlite::Connection, ids: &[i64]) -> Result<Vec<Thread>> {
+        super::threads::findings::by_ids(db, ids)
     }
 }
 

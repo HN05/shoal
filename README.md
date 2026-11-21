@@ -329,11 +329,11 @@ shoal unmerge                 # Undo your branch's latest local merge while it i
 To have an agent review a workspace's committed changes or a PR:
 
 ```sh
-shoal review run 3            # Queue a one-shot, read-only review; findings reach the agent
+shoal review run 3            # Queue a one-shot, read-only review; each finding is a thread
 shoal review run <pr-url>     # Review a PR in the workspace that owns its branch
 shoal review ls             # Reviews, newest first, with unresolved findings
 shoal view review             # The latest review in full
-shoal review resolve 17.2 false-positive --reason 'The caller checks it'
+shoal thread resolve 3.2 false-positive --reason 'The caller checks it'
 ```
 
 With `[commands] review = ["tuicr", "-r", "{diff_base}..HEAD"]` configured,

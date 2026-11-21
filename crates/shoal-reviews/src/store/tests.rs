@@ -1,6 +1,9 @@
 use super::*;
-use crate::reviews::{FixCheck, OutcomeKind, Severity, Verdict, output::NewFinding};
+use crate::reviews::{Severity, Verdict, output::NewFinding, output::Reopened};
+use crate::stand_in::StandInRecords;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::code::CodeAt;
+use shoal_protocol::threads::Outcome;
 use shoal_store::Store;
 
 /// A migrated store with one workspace, `work`, in the stand-in's records.
@@ -8,27 +11,83 @@ async fn store(directory: &tempfile::TempDir) -> Store {
     crate::stand_in::store(directory.path().join("state.sqlite3"), "work").await
 }
 
-/// The records of one workspace, `work`, named `fix-login`.
-const RECORDS: &crate::stand_in::StandInRecords = &crate::stand_in::StandInRecords {
-    workspace: "work",
-    name: "fix-login",
-};
+/// The records of one workspace, `work`, named `fix-login`, without threads.
+fn records() -> StandInRecords {
+    StandInRecords {
+        workspace: "work",
+        name: "fix-login",
+        threads: Default::default(),
+    }
+}
 
-fn output(findings: usize, checked: Vec<Checked>) -> ReviewerOutput {
+fn output(findings: u32, reopened: Vec<Reopened>) -> ReviewerOutput {
     ReviewerOutput {
         summary: "Two problems.".into(),
         verdict: Verdict::Comment,
         findings: (1..=findings)
             .map(|line| NewFinding {
                 path: "src/a.rs".into(),
-                line: line as u32,
+                start_line: line,
+                end_line: line + 1,
                 severity: Severity::ShouldFix,
                 title: format!("Problem {line}"),
                 body: "It breaks.".into(),
             })
             .collect(),
-        checked,
+        reopened,
     }
+}
+
+/// Finish running review `id` with `output` and `session`, its findings in
+/// the commit `head`.
+fn finish_with(
+    tx: &rusqlite::Transaction<'_>,
+    records: &StandInRecords,
+    id: ReviewId,
+    reviewer: &str,
+    output: &ReviewerOutput,
+    session: Option<&AgentSessionId>,
+) -> Result<bool> {
+    let code: Vec<FindingCode> = (output.findings.iter())
+        .map(|finding| FindingCode {
+            commit: "head".into(),
+            at: CodeAt {
+                path: finding.path.clone(),
+                lines: Some(finding.lines()),
+                blob: None,
+            },
+            snippet: None,
+        })
+        .collect();
+    let returned = Returned {
+        output,
+        code: &code,
+        session,
+    };
+    let workspace = SpaceId::from("work");
+    let now = UnixTime::from_seconds(3);
+    finish(tx, records, id, &workspace, &reviewer.into(), returned, now)
+}
+
+/// Queue a review of `work` and start it at `head`.
+fn started(tx: &rusqlite::Transaction<'_>, target: &ReviewTarget, head: &str) -> Result<ReviewId> {
+    let id = queue(
+        tx,
+        &SpaceId::from("work"),
+        target,
+        &"claude".into(),
+        &Default::default(),
+        UnixTime::from_seconds(1),
+    )?
+    .id();
+    start(
+        tx,
+        id,
+        &head.into(),
+        &"base".into(),
+        UnixTime::from_seconds(2),
+    )?;
+    Ok(id)
 }
 
 #[tokio::test]
@@ -43,7 +102,7 @@ async fn one_review_is_queued_or_running_per_workspace() {
             };
             let first = queue(db, &SpaceId::from("work"), &ReviewTarget::Workspace, &"claude".into(), &model, UnixTime::from_seconds(1))?;
             assert!(matches!(first, Queued::New(_)));
-            assert_eq!(load(db, RECORDS, first.id())?.unwrap().model, model);
+            assert_eq!(load(db, &records(), first.id())?.unwrap().model, model);
             let again = queue(
                 db,
                 &SpaceId::from("work"),
@@ -83,153 +142,63 @@ async fn one_review_is_queued_or_running_per_workspace() {
 }
 
 #[tokio::test]
-async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
+async fn findings_open_threads_and_a_later_review_reopens_a_fix_still_present() {
     let directory = tempfile::tempdir().unwrap();
     let store = store(&directory).await;
     store
         .write(|tx| {
-            let first = queue(
+            let records = records();
+            let first = started(tx, &ReviewTarget::Workspace, "one")?;
+            assert!(finish_with(
                 tx,
-                &SpaceId::from("work"),
-                &ReviewTarget::Workspace,
-                &"claude".into(),
-                &Default::default(),
-                UnixTime::from_seconds(1),
-            )?
-            .id();
-            start(
-                tx,
+                &records,
                 first,
-                &"one".into(),
-                &"base".into(),
-                UnixTime::from_seconds(2),
-            )?;
-            assert!(finish(
-                tx,
-                first,
-                &"claude".into(),
+                "claude",
                 &output(2, Vec::new()),
-                None,
-                UnixTime::from_seconds(3)
+                None
             )?);
-            let finding = FindingId {
-                review: first,
-                number: 1,
-            };
-            let other = FindingId {
-                review: first,
-                number: 2,
-            };
-            reply(tx, finding, "Is this reachable?", UnixTime::from_seconds(4))?;
-            resolve(tx, finding, Some(&Outcome::Fixed))?;
-            let duplicate = Outcome::new(OutcomeKind::Duplicate, None, None, Some(finding))?;
-            resolve(tx, other, Some(&duplicate))?;
-            assert!(resolve(tx, finding, Some(&Outcome::Duplicate { of: finding })).is_err());
-            assert!(
-                reply(
-                    tx,
-                    FindingId {
-                        review: first,
-                        number: 9
-                    },
-                    "x",
-                    UnixTime::from_seconds(5)
-                )
-                .is_err()
-            );
-
-            let second = queue(
-                tx,
-                &SpaceId::from("work"),
-                &ReviewTarget::Workspace,
-                &"codex".into(),
-                &Default::default(),
-                UnixTime::from_seconds(6),
-            )?
-            .id();
-            start(
-                tx,
-                second,
-                &"two".into(),
-                &"base".into(),
-                UnixTime::from_seconds(7),
-            )?;
-            let checked = vec![
-                Checked {
-                    finding,
-                    result: FixCheck::Confirmed,
-                },
-                // Not resolved fixed, so not checked.
-                Checked {
-                    finding: other,
-                    result: FixCheck::StillPresent,
-                },
-            ];
-            assert!(finish(
-                tx,
-                second,
-                &"claude".into(),
-                &output(0, checked),
-                None,
-                UnixTime::from_seconds(8)
-            )?);
-
-            let review = load(tx, RECORDS, first)?.unwrap();
+            let review = load(tx, &records, first)?.unwrap();
             assert_eq!(review.workspace, "fix-login");
             assert_eq!(review.state, ReviewState::Finished);
-            assert_eq!(review.duration(), Some(std::time::Duration::from_secs(1)));
-            assert_eq!(review.findings[0].replies[0].body, "Is this reachable?");
+            let numbers: Vec<String> = (review.threads.iter())
+                .map(|thread| thread.finding_line())
+                .collect();
             assert_eq!(
-                review.findings[0].check,
-                Some(Check {
-                    result: FixCheck::Confirmed,
-                    review: second
-                })
+                numbers,
+                [
+                    "1.1 should-fix at src/a.rs:1-2: Problem 1",
+                    "1.2 should-fix at src/a.rs:2-3: Problem 2"
+                ]
             );
-            assert_eq!(review.findings[1].outcome, Some(duplicate));
-            assert_eq!(review.findings[1].check, None);
-            assert_eq!(review.unresolved().count(), 0);
+            let [fixed, wrong] = [review.threads[0].number, review.threads[1].number];
+            records.resolve(fixed, Some(Outcome::Fixed));
+            let reason = "Checked".to_owned();
+            records.resolve(wrong, Some(Outcome::FalsePositive { reason }));
 
-            let listed = list(tx, RECORDS, &["work".into()])?;
+            let second = started(tx, &ReviewTarget::Workspace, "two")?;
+            let still = |thread| Reopened {
+                thread,
+                reason: "Still breaks.".into(),
+            };
+            // Only a thread resolved fixed reopens.
+            let checked = output(0, vec![still(fixed), still(wrong)]);
+            assert!(finish_with(tx, &records, second, "claude", &checked, None)?);
+            let review = load(tx, &records, second)?.unwrap();
+            let reopened: Vec<_> = review.reopened.iter().map(|thread| thread.number).collect();
+            assert_eq!(reopened, [fixed]);
+            assert_eq!(review.unresolved().count(), 1);
+
+            let listed = list(tx, &records, &["work".into()])?;
             assert_eq!(
                 listed.iter().map(|review| review.id).collect::<Vec<_>>(),
                 [second, first]
             );
+            let status = latest_status(tx, &records, &SpaceId::from("work"))?.unwrap();
+            assert_eq!((status.id, status.unresolved), (second, 1));
             assert_eq!(
-                latest(tx, RECORDS, &SpaceId::from("work"))?.unwrap().id,
-                second
-            );
-            let status = latest_status(tx, RECORDS, &SpaceId::from("work"))?.unwrap();
-            assert_eq!((status.id, status.unresolved), (second, 0));
-            assert_eq!(
-                earlier(tx, RECORDS, &SpaceId::from("work"), second)?.len(),
+                earlier(tx, &records, &SpaceId::from("work"), second)?.len(),
                 1
             );
-
-            resolve(tx, finding, None)?;
-            assert_eq!(load(tx, RECORDS, first)?.unwrap().unresolved().count(), 1);
-            Ok(())
-        })
-        .await
-        .unwrap();
-}
-
-#[tokio::test]
-async fn a_review_reads_its_replies_without_scanning_others() {
-    let directory = tempfile::tempdir().unwrap();
-    let store = store(&directory).await;
-    store
-        .run(|db| {
-            let plan = db
-                .prepare(&format!("EXPLAIN QUERY PLAN {REPLIES}"))?
-                .query_map([1], |row| row.get::<_, String>(3))?
-                .collect::<rusqlite::Result<Vec<_>>>()?
-                .join("; ");
-            assert!(
-                plan.contains("SEARCH review_replies USING INDEX review_replies_review"),
-                "{plan}"
-            );
-            assert!(!plan.contains("TEMP B-TREE"), "{plan}");
             Ok(())
         })
         .await
@@ -259,7 +228,7 @@ async fn failures_are_typed_and_interrupted_runs_start_over() {
                 UnixTime::from_seconds(2),
             )?;
             assert_eq!(requeue_running(db, &[])?, 1);
-            let review = load(db, RECORDS, id)?.unwrap();
+            let review = load(db, &records(), id)?.unwrap();
             assert_eq!((review.state, review.head), (ReviewState::Queued, None));
             assert_eq!(queued(db)?, [id]);
             assert!(fail(
@@ -269,7 +238,7 @@ async fn failures_are_typed_and_interrupted_runs_start_over() {
                 FailureReason::RateLimit,
                 UnixTime::from_seconds(3)
             )?);
-            let review = load(db, RECORDS, id)?.unwrap();
+            let review = load(db, &records(), id)?.unwrap();
             assert_eq!(review.failure, Some(FailureReason::RateLimit));
             Ok(())
         })
@@ -283,43 +252,27 @@ async fn removing_the_workspace_deletes_its_reviews() {
     let store = store(&directory).await;
     store
         .write(|tx| {
-            let id = queue(
+            let records = records();
+            let first = started(tx, &ReviewTarget::Workspace, "one")?;
+            finish_with(tx, &records, first, "claude", &output(1, Vec::new()), None)?;
+            let fixed = records.threads.lock().unwrap()[0].number;
+            records.resolve(fixed, Some(Outcome::Fixed));
+            let second = started(tx, &ReviewTarget::Workspace, "two")?;
+            let reopened = Reopened {
+                thread: fixed,
+                reason: "Still.".into(),
+            };
+            finish_with(
                 tx,
-                &SpaceId::from("work"),
-                &ReviewTarget::Workspace,
-                &"claude".into(),
-                &Default::default(),
-                UnixTime::from_seconds(1),
-            )?
-            .id();
-            start(
-                tx,
-                id,
-                &"head".into(),
-                &"base".into(),
-                UnixTime::from_seconds(2),
-            )?;
-            finish(
-                tx,
-                id,
-                &"claude".into(),
-                &output(1, Vec::new()),
+                &records,
+                second,
+                "claude",
+                &output(0, vec![reopened]),
                 None,
-                UnixTime::from_seconds(3),
-            )?;
-            reply(
-                tx,
-                FindingId {
-                    review: id,
-                    number: 1,
-                },
-                "Why?",
-                UnixTime::from_seconds(4),
             )?;
             tx.execute("DELETE FROM spaces WHERE id='work'", [])?;
             let left: i64 = tx.query_row(
-                "SELECT (SELECT COUNT(*) FROM reviews)+(SELECT COUNT(*) FROM review_findings)
-                    +(SELECT COUNT(*) FROM review_replies)",
+                "SELECT (SELECT COUNT(*) FROM reviews)+(SELECT COUNT(*) FROM review_reopens)",
                 [],
                 |row| row.get(0),
             )?;
@@ -347,26 +300,10 @@ async fn a_review_resumes_the_latest_session_of_its_workspace_or_pr() {
             // Each review finishes before the next is queued, as one runs at
             // a time, by `reviewer` with the session it reported.
             let review = |target: &ReviewTarget, reviewer: &str, session: Option<&str>| {
-                let id = queue(
-                    tx,
-                    &SpaceId::from("work"),
-                    target,
-                    &"claude".into(),
-                    &Default::default(),
-                    UnixTime::from_seconds(1),
-                )?
-                .id();
-                start(
-                    tx,
-                    id,
-                    &"head".into(),
-                    &"base".into(),
-                    UnixTime::from_seconds(2),
-                )?;
+                let id = started(tx, target, "head")?;
                 let session = session.map(|session| AgentSessionId::from(session.to_owned()));
                 let output = output(0, Vec::new());
-                let now = UnixTime::from_seconds(3);
-                finish(tx, id, &reviewer.into(), &output, session.as_ref(), now)?;
+                finish_with(tx, &records(), id, reviewer, &output, session.as_ref())?;
                 Ok::<_, anyhow::Error>(id)
             };
             let saved = |id| -> Result<Option<(String, String)>> {

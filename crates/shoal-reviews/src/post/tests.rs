@@ -1,25 +1,12 @@
 use super::*;
-use crate::reviews::{FindingId, ReviewId, ReviewState};
+use crate::reviews::{ReviewId, ReviewState};
 use crate::time::UnixTime;
 
-fn finding(number: i64, path: &str, severity: Severity) -> Finding {
-    Finding {
-        id: FindingId {
-            review: ReviewId(9),
-            number,
-        },
-        severity,
-        path: path.into(),
-        line: 7,
-        title: format!("Problem {number}"),
-        body: "It breaks.".into(),
-        replies: Vec::new(),
-        outcome: None,
-        check: None,
-    }
+fn finding(item: u32, path: &str, severity: Severity) -> Thread {
+    crate::stand_in::finding(item, path, severity, "It breaks.")
 }
 
-fn review(findings: Vec<Finding>) -> Review {
+fn review(threads: Vec<Thread>) -> Review {
     Review {
         id: ReviewId(9),
         workspace_id: "work".into(),
@@ -42,7 +29,8 @@ fn review(findings: Vec<Finding>) -> Review {
         ended_at: None,
         summary: Some("One blocker.".into()),
         verdict: Some(crate::reviews::Verdict::RequestChanges),
-        findings,
+        threads,
+        reopened: Vec::new(),
         posted: None,
         outdated: None,
     }
@@ -54,7 +42,8 @@ fn findings_on_diff_lines_become_line_comments_and_the_rest_go_in_the_body() {
         finding(1, "src/a.rs", Severity::Blocker),
         finding(2, "README.md", Severity::Nit),
     ]);
-    let posted = new_review(&review, |finding| finding.path == "src/a.rs", None);
+    let inline = |thread: &Thread| thread.about().unwrap().original.path == "src/a.rs";
+    let posted = new_review(&review, inline, None);
     // A verdict of any kind posts as a comment.
     assert_eq!(posted.verdict, ReviewVerdict::Comment);
     assert_eq!(posted.comments.len(), 1);

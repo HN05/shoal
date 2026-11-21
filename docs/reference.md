@@ -1643,11 +1643,12 @@ the reviewer's output.
 Findings and a verdict of any kind are results, not failures.
 
 The [`review` rule](#modes-and-rules) gives the instructions. Each review also
-receives, as context, the workspace's earlier reviews with their findings, replies,
-outcomes and fix checks, and for a PR its description, conversation and reviews.
-It checks every finding resolved `fixed` and reports it `confirmed` or
-`still-present`, and does not raise a settled claim again unless its reason no
-longer holds.
+receives, as context, the workspace's earlier reviews with the threads of their
+findings, each with its posts, outcome and, for one resolved `fixed`, the files
+the changes [attributed to it](#agents-changes) touched, and for a PR its description,
+conversation and reviews. It checks every finding resolved `fixed`, and reopens
+the thread of one whose problem is still present with a post saying why; it
+does not raise a settled claim again unless its reason no longer holds.
 
 A finding resolved `false-positive` is added to `.shoal/false-positives.toml` in the
 repository's own directory, beside its [local config](#store-repository-config-outside-git)
@@ -1661,15 +1662,21 @@ remove an entry or add one:
 
 ```toml
 [[false_positive]]
-finding = "17.2"            # Omit for an entry you add
+finding = "17.2"            # The finding's review and its place there; omit for an entry you add
 claim = "The length is unchecked"
 path = "src/parse.rs"
 reason = "The caller checks the length"
 ```
 
-When a review ends, the workspace's agents receive it as a message, waking an idle
-agent: a finished review's summary and findings, ending with a note that the
-reviewer is automated and can be wrong, or why it failed or that it was cancelled.
+Each finding is a [thread](#threads) of the `review` kind that Shoal opens for the
+review, held by the reviewed workspace and numbered in its space, such as `3.4`:
+its title names the thread, and its body is the opening post, pointing at its
+lines in the reviewed commit, which the thread follows as the code changes. Its
+severity, `blocker`, `should-fix` or `nit`, is shown with it. When a review ends, the
+workspace's agents receive it as one message, waking an idle agent: a finished
+review's summary with each thread it opened or reopened, ending with a note that
+the reviewer is automated and can be wrong, or why it failed or that it was
+cancelled; the threads' own posts announce nothing more.
 A workspace whose own process cancelled the review is not told. The agent or chat
 coordinating the workspace hears one line, such as `fix-login: review 17
 finished: 1 blocker, 2 should-fix`.
@@ -1679,18 +1686,19 @@ shoal review ls [space]       # Newest first; --repo R for a repository's
 shoal view review [ID]          # One review in full; default: the workspace's latest
 shoal watch review [ID]         # Wait until it ends, then show it
 shoal review cancel [ID]        # Default: the space's queued or running review; --space S
-shoal review reply 17.2 'It only happens on empty input'  # or --body-file F
-shoal review resolve 17.2 false-positive --reason 'The caller checks the length'
-shoal review resolve 17.2 --undo
+shoal thread switch 3.4         # Changes from now on are for the finding
+shoal thread resolve 3.4 false-positive --reason 'The caller checks the length'
+shoal thread resolve 3.4 --undo
 ```
 
 `watch review` keeps waiting through a daemon restart, and continues from the
-installed binary after an upgrade changes the protocol. Findings are numbered
-`<review>.<n>`. `review ls` marks a review outdated once
-the workspace's HEAD has moved past it and counts its unresolved findings. Plain
-`shoal view` in a workspace ends with its latest review, and `shoal list` shows each
-workspace's latest review state. `review resolve` takes one outcome with its data;
-`review reply` discusses a finding without resolving it:
+installed binary after an upgrade changes the protocol. `view review` shows the
+run with each of its threads and their posts. `review ls` marks a review
+outdated once the workspace's HEAD has moved past it and counts the threads it
+opened or reopened that are open. Plain `shoal view` in a workspace ends with
+its latest review, and `shoal list` shows each workspace's latest review state.
+The workspace's agent, or you, resolves a finding's thread with `shoal thread
+resolve` and one outcome with its data:
 
 | Outcome | Meaning | Takes |
 |---|---|---|
@@ -1698,10 +1706,14 @@ workspace's latest review state. `review resolve` takes one outcome with its dat
 | `false-positive` | The claim is wrong | `--reason` |
 | `wont-fix` | The claim holds, but the code stays | `--reason` |
 | `deferred` | The claim holds and other work fixes it | `--issue` |
-| `duplicate` | Another finding makes the same point | `--of <finding>` |
+| `duplicate` | Another thread makes the same point | `--of <thread>` |
+| `withdrawn` | It no longer applies | `--reason`, optional |
 
-A finding that needs your decision stays unresolved while the agent asks in a
-[thread](#threads), which keeps the gates below closed until you answer.
+A finding fixed after `shoal thread switch` to its thread has the changes made
+for it in the thread, which the next review checks it against. A finding that
+needs your decision stays unresolved while the agent asks in a
+[thread](#threads) of its own, which keeps the gates below closed until you
+answer.
 
 With [`[review] require_for_pr`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#reviews), a `shoal pr open` that would open a new
 PR is checked before it pushes, and before a [proposal](#approval-for-agent-issues-and-prs); linking an
@@ -1721,14 +1733,14 @@ repository's PR the global config. A merge is
 checked before the question it asks and before an agent's approval request,
 which a refused merge never makes. Each gate holds agents and the commands they run with `"agents"`,
 and your own commands too with `"all"`. A gate passes once a finished review covers HEAD exactly and every
-one of its findings is resolved, whatever the verdict. Otherwise the command is
-refused, naming what is missing and listing the unresolved findings; without a
+thread it opened or reopened is resolved, whatever the verdict. Otherwise the command is
+refused, naming what is missing and listing the unresolved threads; without a
 review of the commit and with none queued or running, it queues a review of the
 workspace's HEAD, whose findings arrive as a message, where that is the commit and
 the caller's scope reaches the workspace. A PR merge refused otherwise names
 `shoal review run <pr-url>`, which reviews the PR in the workspace that owns its
-branch. A gate's review is a workspace review, never posted. A workspace process runs, cancels and answers the reviews of
-its own workspace and those below it. Removing a workspace cancels its review and
+branch. A gate's review is a workspace review, never posted. A workspace process runs and cancels the reviews of
+its own workspace and those below it, and resolves the threads its workspace holds. Removing a workspace cancels its review and
 deletes its reviews. Every command takes `--json`.
 
 `shoal review run <pr-url>` or `--pr <number-or-url>` looks up the PR with your
@@ -1756,8 +1768,8 @@ reviewer. Workspace reviews are never posted, even with a linked PR.
 <a id="chat-reviews"></a>A [chat](#chats) has no changes of its own, so `review run` from a chat, or
 naming one, reviews the chat's one linked PR as `--pr` would. A chat's reviews
 are those of its linked PRs: `review ls` lists them, and `review cancel`
-cancels the one queued or running. `review reply` and `review resolve` name the
-finding, so they work from a chat as from anywhere else.
+cancels the one queued or running. Their threads are held by the workspace that
+owns the PR's branch.
 
 ### Agents
 
@@ -7035,7 +7047,8 @@ sides. `shoal thread open` records an empty thread with a free-text name of one
 line and a kind, `question` by default or `request`, and prints its number;
 with `--code` it also makes its opening post, whose text is the name, pointing
 at that code. A question asks for an answer, and a request asks its holder to
-do something, such as implement the code it points at. From a space it
+do something, such as implement the code it points at. Shoal alone opens a
+`review` thread, for each finding of a [local review](#local-reviews). From a space it
 goes to the space's [coordinator](#child-workspaces), else to you, or with
 `--space` to a space the caller's scope reaches; from your terminal it goes to
 the space `--space` names, else the current or a picked one. An empty thread
@@ -7113,8 +7126,9 @@ its posts from then on.
 
 `shoal thread resolve` settles a thread with an outcome its kind takes:
 `answered`, for a question, with `--choose` naming the choice it settled on;
-`done`, for a request whose work its opener accepted;
-`duplicate --of <thread>`; or `withdrawn`, with an optional `--reason`. Shoal
+`done`, for a request whose work its opener accepted; for a review's finding
+`fixed`, `false-positive` or `wont-fix` with `--reason`, or `deferred` with
+`--issue`; `duplicate --of <thread>`; or `withdrawn`, with an optional `--reason`. Shoal
 sets `closed`, with its cause, `completion` or `removal`. The opener resolves
 its thread, the holder one Shoal opened, and you any thread; `--undo` reopens
 a resolved one. Withdrawing takes back the holder's unread alerts of the

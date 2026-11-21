@@ -63,18 +63,12 @@ pub(super) async fn handle(
                 Err(error) => Err(error),
             },
         }),
-        ReviewMethod::ReplyToFinding { finding, body, .. } => {
-            pieces(reviews.reply(daemon, finding, body).await)
-        }
-        ReviewMethod::ResolveFinding {
-            finding, outcome, ..
-        } => pieces(reviews.resolve(daemon, finding, outcome).await),
     };
     Ok(Answer::pages(shown, Body::ReviewPieces))
 }
 
 /// Reviews as pieces of their JSON, each fitting a frame: one review's
-/// findings and replies may outgrow a frame of their own.
+/// threads may outgrow a frame of their own.
 fn pieces<T: serde::Serialize>(shown: Result<T>) -> Result<Vec<ReviewPiece>> {
     let json = serde_json::to_string(&shown?)?;
     Ok(protocol::text_pieces(&json)
@@ -103,15 +97,6 @@ impl Scoped for ReviewMethod {
                     *workspace = Some(SpaceSelector::id(&manager.reviews.workspace_of(*id).await?));
                 }
                 Some(caller.own_by_default(workspace))
-            }
-            ReviewMethod::ReplyToFinding {
-                workspace, finding, ..
-            }
-            | ReviewMethod::ResolveFinding {
-                workspace, finding, ..
-            } => {
-                let id = manager.reviews.workspace_of(finding.review).await?;
-                Some(workspace.insert(SpaceSelector::id(&id)))
             }
             ReviewMethod::RunReview { workspace, .. } | ReviewMethod::CheckPrGate { workspace } => {
                 Some(workspace)

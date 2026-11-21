@@ -1,6 +1,6 @@
 //! Telling a review's workspace that it ended: its agents receive the
-//! findings themselves, and whoever coordinates the workspace a one-line
-//! notice.
+//! threads of its findings in one alert, and whoever coordinates the
+//! workspace a one-line notice.
 use std::fmt::Write as _;
 
 use crate::{
@@ -11,7 +11,7 @@ use crate::{
     store,
     validate::MAX_AGENT_MESSAGE_LEN,
 };
-use shoal_protocol::alerts::AlertKind;
+use shoal_protocol::{alerts::AlertKind, threads::Thread};
 
 impl Reviews {
     /// Deliver review `id`, which has ended: to the workspace's agents,
@@ -74,29 +74,34 @@ fn agent_message(review: &Review) -> String {
 fn findings_message(review: &Review) -> String {
     let id = review.id;
     let summary = review.summary.as_deref().unwrap_or_default();
-    if review.findings.is_empty() {
+    if review.threads.is_empty() && review.reopened.is_empty() {
         return format!("Review {id} finished with no findings: {summary}");
     }
-    let mut message = format!(
-        "Review {id} finished: {}. {summary}",
-        severity_counts(&review.findings)
-    );
+    let counts = match severity_counts(&review.threads) {
+        counts if counts.is_empty() => "no new findings".to_owned(),
+        counts => counts,
+    };
+    let mut message = format!("Review {id} finished: {counts}. {summary}");
     let ending = format!(
-        "\n\nResolve each finding with shoal review resolve <finding> <outcome>, or discuss \
-         it with shoal review reply <finding>; leave one that needs the user's decision \
-         unresolved and ask in a thread with shoal thread open.\n\n{AUTOMATED_NOTE}"
+        "\n\nEach finding is a thread you hold. Before fixing one, run shoal thread switch \
+         <thread> so the changes you make are its; then resolve it with shoal thread resolve \
+         <thread> fixed, false-positive or wont-fix with --reason, or deferred with --issue. \
+         Discuss one with the reviewer with shoal send <thread>; leave one that needs the \
+         user's decision unresolved and ask in a thread with shoal thread open.\n\n\
+         {AUTOMATED_NOTE}"
     );
     let omitted = format!("\n\nshoal view review {id} shows the remaining findings.");
-    for (shown, finding) in review.findings.iter().enumerate() {
-        let entry = format!(
-            "\n\n{} {} at {}:{}: {}\n{}",
-            finding.id, finding.severity, finding.path, finding.line, finding.title, finding.body
-        );
+    let reopened = review.reopened.iter().map(|thread| (thread, true));
+    let entries: Vec<(&Thread, bool)> = (review.threads.iter().map(|thread| (thread, false)))
+        .chain(reopened)
+        .collect();
+    for (shown, (thread, reopened)) in entries.iter().enumerate() {
+        let entry = entry(thread, *reopened);
         // What is left once the ending, the pointer to the rest and the
         // count of findings left out fit.
         let room = MAX_AGENT_MESSAGE_LEN - ending.len() - omitted.len() - 64;
         if message.len() + entry.len() > room {
-            let left = review.findings.len() - shown;
+            let left = entries.len() - shown;
             let _ = write!(message, "\n\n{left} more findings are not shown.{omitted}");
             break;
         }
@@ -104,6 +109,18 @@ fn findings_message(review: &Review) -> String {
     }
     message.push_str(&ending);
     message
+}
+
+/// A finding's thread as the alert lists it: its number, severity, place
+/// and title, then its opening post, or for one `reopened` the post that
+/// reopened it.
+fn entry(thread: &Thread, reopened: bool) -> String {
+    let (label, post) = match reopened {
+        false => ("", thread.posts.first()),
+        true => (" (reopened: still present)", thread.last_post()),
+    };
+    let text = post.map_or("", |post| post.post.text.as_str());
+    format!("\n\n{}{label}\n{text}", thread.finding_line())
 }
 
 /// The coordinator's one line, such as "review 17 finished: 1 blocker".
