@@ -200,7 +200,10 @@ fn named_creation(launch: &Launch, copy: Option<crate::start_plan::CopyCreation>
 fn new_space_flag(creation: &Creation, issue: bool, parent: bool) -> Option<&'static str> {
     // A copy carried from another machine names its base itself.
     let new_space = [
-        ("--copy", creation.copy.is_some() || creation.files.is_some()),
+        (
+            "--copy",
+            creation.copy.is_some() || creation.files.is_some(),
+        ),
         ("--issue", issue),
         ("--name", creation.options.name.is_some()),
         ("--parent", parent),
