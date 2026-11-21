@@ -46,7 +46,8 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         | RemovalMethod::RemovedSpace { .. }
         | RemovalMethod::DropRestoredSessions { .. }
         | RemovalMethod::ExportRemovedSpace { .. }
-        | RemovalMethod::CopySpace { .. } => false,
+        | RemovalMethod::CopySpace { .. }
+        | RemovalMethod::ReadHeldPackage { .. } => false,
         // A move in progress finishes, which an exit that waits for it
         // waits for.
         RemovalMethod::EndMovedSpace { .. }
@@ -197,6 +198,13 @@ pub(super) async fn handle(
         }
         RemovalMethod::SettleMove { space } => {
             Body::MoveSettled(manager.settle_move(&space).await?)
+        }
+        RemovalMethod::ReadHeldPackage { space } => {
+            let package = manager.held_package(&space).await?;
+            let manager = manager.clone();
+            return Ok(Answer::connection(move |stream, request_id, guard| {
+                manager.send_held_package(stream, request_id, package, guard)
+            }));
         }
         RemovalMethod::ImportPackage(import) => {
             return import_package(manager, *import, caller).await;
@@ -385,6 +393,7 @@ impl Scoped for RemovalMethod {
             | RemovalMethod::DeliverMove { .. }
             | RemovalMethod::DeliverCopy { .. }
             | RemovalMethod::SettleMove { .. }
+            | RemovalMethod::ReadHeldPackage { .. }
             | RemovalMethod::ImportPackage(_)
             | RemovalMethod::ReceiveMove { .. } => administer(manager, caller, self).await,
         }
@@ -470,6 +479,7 @@ fn administered(method: &mut RemovalMethod) -> Option<&mut SpaceSelector> {
         | RemovalMethod::DeliverMove { space }
         | RemovalMethod::DeliverCopy { space, .. }
         | RemovalMethod::SettleMove { space }
+        | RemovalMethod::ReadHeldPackage { space }
         | RemovalMethod::DropRestoredSessions { space } => Some(space),
         _ => None,
     }

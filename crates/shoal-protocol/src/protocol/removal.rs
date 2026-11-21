@@ -172,6 +172,10 @@ pub enum RemovalMethod {
         space: SpaceSelector,
         destination: crate::transfer::MachineDestination,
     },
+    /// The package of the recorded move of `space` that holds it here for
+    /// the joined machine that started it: answered with its size, then
+    /// its bytes on the request's connection.
+    ReadHeldPackage { space: SpaceSelector },
     /// Ask the hub whether the joined machine the recorded move of `space`
     /// goes to claimed the space, which then no longer can when it did
     /// not; answered with how the hub settled it.
@@ -193,9 +197,10 @@ pub enum RemovalMethod {
 
 impl RemovalMethod {
     /// A stop goes to the space's machine, waiting for it while it is
-    /// offline, and a removal there too; an absorb needs both worktrees,
-    /// and a restore, a move's steps, an export and the caller's cleanup
-    /// run where the caller does.
+    /// offline, and a removal there too, as does the end of a move another
+    /// machine took the package of, and the read of a package it holds; an
+    /// absorb needs both worktrees, and a restore, the other steps of a
+    /// move, an export and the caller's cleanup run where the caller does.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::StopSpace { .. } => Forwarding::Queued,
@@ -203,8 +208,10 @@ impl RemovalMethod {
             | Self::StopProcesses { .. }
             | Self::CheckRemoval { .. }
             | Self::RemoveSpace { .. }
-            | Self::StartRemoval { .. } => Forwarding::Online,
-            Self::ReceiveMove { .. } => Forwarding::Duplex,
+            | Self::StartRemoval { .. }
+            | Self::EndMovedSpace { .. } => Forwarding::Online,
+            // Raw bytes follow its answer, which only a duplex stream carries.
+            Self::ReceiveMove { .. } | Self::ReadHeldPackage { .. } => Forwarding::Duplex,
             Self::StopTargets
             | Self::AbsorbSpace(_)
             | Self::Cleanup { .. }
@@ -215,7 +222,6 @@ impl RemovalMethod {
             | Self::ExportRemovedSpace { .. }
             | Self::CopySpace { .. }
             | Self::ExportMovingSpace { .. }
-            | Self::EndMovedSpace { .. }
             | Self::AbandonMove { .. }
             | Self::ImportPackage(_)
             | Self::DeliverMove { .. }
@@ -238,6 +244,7 @@ impl RemovalMethod {
             | Self::AbandonMove { space }
             | Self::DeliverMove { space }
             | Self::DeliverCopy { space, .. }
+            | Self::ReadHeldPackage { space }
             | Self::SettleMove { space } => Some(Target::Space(space)),
             Self::AbsorbSpace(absorb) => Some(Target::Space(&absorb.space)),
             // A removed space's record is this machine's, whichever runs

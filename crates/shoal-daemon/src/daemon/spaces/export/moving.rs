@@ -68,7 +68,8 @@ impl Manager {
             }
             MoveDestination::Ssh(_)
             | MoveDestination::Machine(_)
-            | MoveDestination::Client { .. } => MovePhase::Delivering,
+            | MoveDestination::Client { .. }
+            | MoveDestination::Held => MovePhase::Delivering,
         };
         let advanced = record.clone();
         (self.store)

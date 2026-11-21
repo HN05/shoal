@@ -53,7 +53,8 @@ pub(super) async fn copy_one(
         }
         MoveDestination::File { .. }
         | MoveDestination::Directory { .. }
-        | MoveDestination::Client { .. } => return Ok(moved),
+        | MoveDestination::Client { .. }
+        | MoveDestination::Held => return Ok(moved),
     };
     // The copy's package, delivered or not, is of no further use here.
     let _ = std::fs::remove_file(&file);

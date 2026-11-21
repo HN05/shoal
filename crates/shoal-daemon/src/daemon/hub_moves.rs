@@ -7,6 +7,7 @@
 mod after_turn;
 mod authorization;
 mod delivering;
+mod held;
 mod receiving;
 
 pub(crate) use authorization::moves_without_permission;

@@ -27,7 +27,7 @@ pub(super) fn reserve(
                 .with_context(|| format!("create the directory {}", path.display()))?;
             path.as_path()
         }
-        MoveDestination::Ssh(_) | MoveDestination::Machine(_) => {
+        MoveDestination::Ssh(_) | MoveDestination::Machine(_) | MoveDestination::Held => {
             let staging = paths.move_packages();
             std::fs::create_dir_all(&staging)
                 .with_context(|| format!("create {}", staging.display()))?;
@@ -87,7 +87,7 @@ pub(super) fn done(order: &MoveOrder, moved: &SpaceMoved) -> Option<String> {
         return Some(arrived(&machine, order.keep, moved));
     }
     Some(match (&order.destination, &moved.file) {
-        (MoveDestination::Client { .. }, _) => return None,
+        (MoveDestination::Client { .. } | MoveDestination::Held, _) => return None,
         (_, None) => format!("Exported {space}"),
         (_, Some(file)) => format!(
             "Exported {space} to {}; shoal restore --from opens it {opens}",
@@ -104,7 +104,8 @@ pub(super) fn other_machine(destination: &MoveDestination) -> Option<String> {
         MoveDestination::Machine(destination) => Some(format!("machine {}", destination.machine)),
         MoveDestination::File { .. }
         | MoveDestination::Directory { .. }
-        | MoveDestination::Client { .. } => None,
+        | MoveDestination::Client { .. }
+        | MoveDestination::Held => None,
     }
 }
 

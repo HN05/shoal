@@ -208,6 +208,10 @@ pub enum MoveDestination {
     /// A new file, by its absolute path, that the client which started the
     /// move copies to its standard output once the move ends.
     Client { path: PathBuf },
+    /// The package kept among those being delivered, for the joined
+    /// machine that started the move to read and write where its caller
+    /// named, which then ends the space.
+    Held,
 }
 
 /// Another machine's Shoal, which `ssh` reaches without a prompt.
@@ -240,7 +244,7 @@ impl MoveDestination {
         match self {
             Self::File { path } | Self::Client { path } => path.clone(),
             Self::Directory { path } => path.join(package_name(id)),
-            Self::Ssh(_) | Self::Machine(_) => staging.join(package_name(id)),
+            Self::Ssh(_) | Self::Machine(_) | Self::Held => staging.join(package_name(id)),
         }
     }
 
@@ -250,7 +254,7 @@ impl MoveDestination {
         match self {
             Self::Ssh(destination) => Some(&destination.host),
             Self::Machine(destination) => Some(&destination.machine),
-            Self::File { .. } | Self::Directory { .. } | Self::Client { .. } => None,
+            Self::File { .. } | Self::Directory { .. } | Self::Client { .. } | Self::Held => None,
         }
     }
 }

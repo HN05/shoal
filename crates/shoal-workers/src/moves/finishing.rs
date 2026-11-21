@@ -70,7 +70,7 @@ async fn finish_locked(
             let removal = moving::end(paths, moving, steps).await?;
             Ok(moving.moved(packed, removal, None))
         }
-        (MovePhase::Delivering, MoveDestination::Client { .. }) => {
+        (MovePhase::Delivering, MoveDestination::Client { .. } | MoveDestination::Held) => {
             let error = anyhow!("the command that took its package went before it ended it");
             let holder = "what read its package";
             Err(moving::maybe_there(paths, &moving.id, holder, error).await)
@@ -79,7 +79,7 @@ async fn finish_locked(
             let removal = moving::end(paths, moving, steps).await?;
             Ok(moving.moved(packed, removal, None))
         }
-        (MovePhase::Packing, MoveDestination::Client { .. }) => {
+        (MovePhase::Packing, MoveDestination::Client { .. } | MoveDestination::Held) => {
             let error = anyhow!("the command that would have taken its package went");
             Err(moving::stays_here(paths, &moving.id, error).await)
         }

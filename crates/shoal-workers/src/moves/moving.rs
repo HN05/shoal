@@ -63,7 +63,8 @@ pub(super) async fn move_one(
         file,
         again: false,
     };
-    if let MoveDestination::Client { .. } = moving.destination {
+    // Whoever takes its package ends it.
+    if let MoveDestination::Client { .. } | MoveDestination::Held = moving.destination {
         let exported = pack(paths, &moving, steps).await?;
         return Ok(moving.packed(exported));
     }
@@ -192,7 +193,8 @@ async fn deliver(
         }
         MoveDestination::File { .. }
         | MoveDestination::Directory { .. }
-        | MoveDestination::Client { .. } => Ok(None),
+        | MoveDestination::Client { .. }
+        | MoveDestination::Held => Ok(None),
     }
 }
 

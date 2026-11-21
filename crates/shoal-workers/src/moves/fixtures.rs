@@ -59,9 +59,10 @@ pub(super) async fn left_move(
     );
     packing.await.unwrap();
     let phase = match destination {
-        MoveDestination::Ssh(_) | MoveDestination::Machine(_) | MoveDestination::Client { .. } => {
-            MovePhase::Delivering
-        }
+        MoveDestination::Ssh(_)
+        | MoveDestination::Machine(_)
+        | MoveDestination::Client { .. }
+        | MoveDestination::Held => MovePhase::Delivering,
         _ => MovePhase::Delivered,
     };
     let record = MoveRecord {

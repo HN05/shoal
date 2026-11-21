@@ -73,6 +73,37 @@ pub async fn abandon_move(daemon: &impl Daemon, space: SpaceSelector) -> Result<
     request(daemon, RemovalMethod::AbandonMove { space }).await
 }
 
+/// Write into `into` the package the recorded move of `space` holds on the
+/// machine that runs it for the one that started it, refusing a stream that
+/// ends before the whole package arrived.
+pub async fn read_held_package(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+    into: &mut impl std::io::Write,
+) -> Result<()> {
+    let (mut stream, first) =
+        open_buffered(daemon, RemovalMethod::ReadHeldPackage { space }).await?;
+    let size = match first.into_result()? {
+        protocol::Body::HeldPackage(size) => size,
+        body => return Err(body.unexpected("HeldPackage")),
+    };
+    let mut buffer = vec![0; 64 * 1024];
+    let mut left = size;
+    while left > 0 {
+        let wanted = buffer
+            .len()
+            .min(usize::try_from(left).unwrap_or(usize::MAX));
+        let read = stream.read(&mut buffer[..wanted]).await?;
+        anyhow::ensure!(
+            read > 0,
+            "the package ended {left} of its {size} bytes early, as when its machine went offline"
+        );
+        into.write_all(&buffer[..read])?;
+        left -= read as u64;
+    }
+    Ok(())
+}
+
 /// Deliver the package of the recorded move of `space` to the joined
 /// machine it goes to, returning how the import there went; an error leaves
 /// it unknown whether that machine claimed the space.
