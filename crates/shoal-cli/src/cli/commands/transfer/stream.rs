@@ -81,7 +81,7 @@ async fn end_here(ctx: &Context, moved: &SpaceMoved) -> Result<()> {
     let ending = crate::client::transfer::end_moved(&ctx.paths, selector);
     ending.await.with_context(|| {
         format!(
-            "it now exists here and wherever its package went; once the work you want is there, shoal rm {} removes it here",
+            "it now exists where it runs and wherever its package went; once the work you want is there, shoal rm {} removes it there",
             moved.id
         )
     })?;
