@@ -981,6 +981,13 @@ CREATE TABLE hub_package_states (
     unsent_since INTEGER
 );
 
+CREATE TABLE hub_takeovers (
+    space_id TEXT PRIMARY KEY,
+    member_id TEXT NOT NULL REFERENCES hub_members(id),
+    built_at INTEGER NOT NULL,
+    taken_at INTEGER NOT NULL
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -1077,6 +1084,8 @@ CREATE INDEX thread_code_space ON thread_code(space_id);
 CREATE INDEX thread_code_repository ON thread_code(repository_id);
 
 CREATE INDEX hub_packages_member ON hub_packages(member_id);
+
+CREATE INDEX hub_takeovers_member ON hub_takeovers(member_id);
 
 CREATE VIEW space_refs AS
     SELECT spaces.id, CASE spaces.kind

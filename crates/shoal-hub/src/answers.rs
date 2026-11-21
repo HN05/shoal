@@ -14,7 +14,11 @@ use std::sync::Arc;
 use shoal_ids::member_ids::MemberId;
 use tokio::sync::OwnedRwLockReadGuard;
 
-use super::{directory, members, packages::Sent, session::Calls};
+use super::{
+    directory, members,
+    packages::{Sent, takeovers},
+    session::Calls,
+};
 use crate::{
     Hub,
     daemon::Daemon,
@@ -164,6 +168,15 @@ impl Hub {
                 self.keep_package(&**daemon, sent, streams).await?;
                 Reply::Streaming
             }
+            Call::Kept { space } => {
+                ensure_machine(member)?;
+                Reply::Kept(self.local_kept_package(&space).await?.map(Box::new))
+            }
+            Call::Fetch { space, stream } => {
+                ensure_machine(member)?;
+                self.serve_fetch(&space, (calls.streams(), stream)).await?;
+                Reply::Streaming
+            }
             Call::Serve { .. }
             | Call::ServeStream { .. }
             | Call::Expired { .. }
@@ -240,6 +253,7 @@ impl Hub {
                 members::revoke(tx, &member.id)?;
                 directory::forget(tx, &member.id)?;
                 super::queue::forget(tx, &member.id)?;
+                takeovers::forget(tx, &member.id)?;
                 Ok(member)
             })
             .await?;
@@ -259,7 +273,8 @@ impl Hub {
             .write(move |tx| {
                 members::revoke(tx, &member)?;
                 directory::forget(tx, &member)?;
-                super::queue::forget(tx, &member)
+                super::queue::forget(tx, &member)?;
+                takeovers::forget(tx, &member)
             })
             .await?;
         self.delete_ended_packages().await;

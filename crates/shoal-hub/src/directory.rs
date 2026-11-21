@@ -15,7 +15,7 @@ use shoal_protocol::hub::{
     numbering::Numbering,
 };
 
-use crate::{Hub, daemon::Daemon};
+use crate::{Hub, daemon::Daemon, packages::takeovers};
 
 mod fences;
 mod numbers;
@@ -78,7 +78,9 @@ impl Hub {
     /// Record that the machine `member` claims the space `id`, which it
     /// imports as another machine moves it there, and return the number
     /// the space keeps there, if the directory lists it; refused for the
-    /// `ticket` of a move through the hub that its source settled.
+    /// `ticket` of a move through the hub that its source settled. A claim
+    /// without one takes the space over from the package the hub keeps of
+    /// it while its machine is offline.
     pub(super) async fn record_space_claim(
         &self,
         member: &MemberId,
@@ -86,10 +88,12 @@ impl Hub {
         ticket: Option<&MoveTicket>,
     ) -> Result<Option<SpaceNumber>> {
         let (member, id, ticket) = (member.clone(), id.clone(), ticket.cloned());
+        let connected = self.links.connected();
         self.store
             .write(move |tx| {
-                if let Some(ticket) = &ticket {
-                    fences::ensure_unsettled(tx, ticket)?;
+                match &ticket {
+                    Some(ticket) => fences::ensure_unsettled(tx, ticket)?,
+                    None => takeovers::record_takeover(tx, &id, &member, &connected)?,
                 }
                 records::claim(tx, &member, &id)?;
                 numbers::keep_for_claim(tx, &member, &id)

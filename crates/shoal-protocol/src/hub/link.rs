@@ -343,6 +343,15 @@ pub enum Call {
         built_at: UnixTime,
         stream: u64,
     },
+    /// The package the hub keeps of the space `space`, whose machine is
+    /// offline, which the caller would take the space over from; none
+    /// without one, or while that machine is connected. Answered with
+    /// [`Reply::Kept`].
+    Kept { space: SpaceId },
+    /// The bytes of the package [`Call::Kept`] names, which the hub writes
+    /// on the stream `stream` the caller opened while the space's machine
+    /// stays offline. Answered with [`Reply::Streaming`].
+    Fetch { space: SpaceId, stream: u64 },
     /// The directory of every machine's spaces. Answered with
     /// [`Reply::Directory`].
     Directory,
@@ -436,6 +445,7 @@ pub enum Reply {
     Owner(Option<super::Member>),
     Claimed(Option<SpaceNumber>),
     Settled(bool),
+    Kept(Option<Box<super::packages::KeptPackage>>),
     Answered(Answered),
     /// The answer goes on the stream the call named.
     Streaming,

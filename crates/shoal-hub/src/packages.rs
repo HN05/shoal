@@ -5,6 +5,7 @@
 //! until the space ends on that machine.
 mod keeping;
 mod sending;
+pub(crate) mod takeovers;
 
 pub(crate) use keeping::{Kept, Sent};
 

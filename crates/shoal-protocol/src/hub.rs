@@ -19,6 +19,7 @@ pub mod availability;
 pub mod directory;
 pub mod link;
 pub mod numbering;
+pub mod packages;
 pub mod pairing;
 pub mod routing;
 
