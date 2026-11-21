@@ -337,23 +337,14 @@ fn not_worktree_identity() -> Vec<OsString> {
     names
 }
 
-/// The environment of the chat `chat` for a process Shoal does not track:
-/// the chat, the state directory whose daemon recorded it, which the
-/// process's Shoal commands must reach, and `tmp_dir`, its temporary
-/// directory.
-pub fn chat_environment(
-    chat: &SpaceId,
-    tmp_dir: Option<&Path>,
-    paths: &Paths,
-) -> BTreeMap<String, OsString> {
-    let mut values = BTreeMap::from([
+/// The identity of the chat `chat` for a process Shoal does not track: the
+/// chat and the state directory whose daemon recorded it, which the
+/// process's Shoal commands must reach.
+pub fn chat_environment(chat: &SpaceId, paths: &Paths) -> BTreeMap<String, OsString> {
+    BTreeMap::from([
         (SPACE.into(), chat.clone().into()),
         (STATE_DIR.into(), paths.state.as_os_str().to_owned()),
-    ]);
-    if let Some(directory) = tmp_dir {
-        values.insert(TMPDIR.into(), directory.as_os_str().to_owned());
-    }
-    values
+    ])
 }
 
 /// The workspace environment, without a scope token or a tracked execution

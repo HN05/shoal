@@ -933,11 +933,15 @@ GOCACHE = "{cache.go}"
 ```
 
 `[env]` adds variables to tracked executions, lifecycle hooks and exported
-environments. Values substitute `{workspace}`, the name of the workspace's
-directory, `{workspace_path}` (also `{path}`), `{repo}`, `{branch}`, reserved
-`{port.NAME}` and [`{cache.NAME}`](#shared-caches) once; unknown fields stay
-literal, inserted values are not expanded, and neither are inherited variables
-or shell expressions. Names are ASCII identifiers, and `SHOAL_*` names are
+environments, a chat's as a workspace's; a chat without a repository takes the
+global config's. Values substitute `{workspace}`, the name of the workspace's
+directory, `{workspace_path}`, `{path}`, the directory the space works in,
+`{repo}`, `{branch}`, reserved `{port.NAME}` and
+[`{cache.NAME}`](#shared-caches) once; unknown fields stay literal, inserted
+values are not expanded, and neither are inherited variables or shell
+expressions. A variable that names a field the space lacks stays unset: a chat
+has no workspace, worktree path, branch or ports, and one without a repository
+no `{repo}` or caches either. Names are ASCII identifiers, and `SHOAL_*` names are
 reserved; values are strings without NUL, and an empty string sets an empty
 value. Reserved port exports take precedence. See
 [scoped workspace commands](../../../../../../docs/reference.md#scoped-workspace-commands).

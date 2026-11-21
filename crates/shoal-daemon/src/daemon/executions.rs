@@ -140,6 +140,20 @@ impl ProcessDirectories {
             tmp_dir: Some(crate::tmp_dirs::directory(repository, workspace_id)?),
         })
     }
+
+    /// The directories of a chat's processes: its repository's caches,
+    /// created when missing, none without one, and `tmp_dir`.
+    fn of_chat(
+        repository: Option<&Repository>,
+        caches: &BTreeMap<String, Cache>,
+        tmp_dir: Option<PathBuf>,
+    ) -> Result<Self> {
+        let caches = match repository {
+            Some(repository) => crate::caches::directories(repository, caches)?,
+            None => BTreeMap::new(),
+        };
+        Ok(Self { caches, tmp_dir })
+    }
 }
 
 struct RegisteredExecution {

@@ -1,7 +1,8 @@
 //! What an execution takes from the space it runs in, whose records differ
 //! by kind: a workspace's verified worktree, ports, caches and configured
-//! environment, or a chat's home, its own scope token and its temporary
-//! directory. Registration asks nothing else of a space's kind.
+//! environment, or a chat's home, its own scope token, its temporary
+//! directory and its configured environment without a worktree's.
+//! Registration asks nothing else of a space's kind.
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::Transaction;
 use shoal_ids::execution_ids::ExecutionId;
@@ -32,6 +33,11 @@ pub(crate) enum Home {
     },
     Chat {
         chat: Chat,
+        /// Its repository's registered checkout; none for a chat without
+        /// one.
+        repository: Option<Repository>,
+        /// Its repository's settings, or the global config's alone.
+        settings: Effective,
         /// The directory its agent runs in.
         path: PathBuf,
         /// Its temporary directory, created when missing.
@@ -88,28 +94,36 @@ impl Manager {
                     settings,
                 }
             }
-            ByKind::Chat(chat) => {
-                let path = self.chat_path(&chat).await?;
-                ensure!(
-                    self.file_access
-                        .checked(&self.notifications, &path, off_runtime::is_dir(&path))
-                        .await?,
-                    "the directory of chat {} is missing at {}",
-                    chat.name,
-                    path.display()
-                );
-                let repository = self.chat_repository(&chat).await?;
-                let tmp_dir = self.chat_tmp_dir(repository.as_ref(), &chat)?;
-                Home::Chat {
-                    chat,
-                    path,
-                    tmp_dir,
-                    removing: self.space_removals.clone(),
-                }
-            }
+            ByKind::Chat(chat) => self.chat_execution_home(chat).await?,
         };
         self.touch(id).await;
         Ok(home)
+    }
+
+    /// The chat `chat` as a place to run its agent, or a process an
+    /// external caller starts there: its home, which must be there, its
+    /// settings and its temporary directory.
+    pub(crate) async fn chat_execution_home(&self, chat: Chat) -> Result<Home> {
+        let path = self.chat_path(&chat).await?;
+        ensure!(
+            self.file_access
+                .checked(&self.notifications, &path, off_runtime::is_dir(&path))
+                .await?,
+            "the directory of chat {} is missing at {}",
+            chat.name,
+            path.display()
+        );
+        let repository = self.chat_repository(&chat).await?;
+        let tmp_dir = self.chat_tmp_dir(repository.as_ref(), &chat)?;
+        let settings = self.space_settings(&Space::from(chat.clone())).await?;
+        Ok(Home::Chat {
+            chat,
+            repository,
+            settings,
+            path,
+            tmp_dir,
+            removing: self.space_removals.clone(),
+        })
     }
 
     /// The directory the agents of `space` run in, which tells their
@@ -162,12 +176,13 @@ impl Home {
         }
     }
 
-    /// The configured caches the execution's processes use: a workspace's;
-    /// a chat runs with Shoal's environment.
+    /// The caches the space's settings configure for the execution's
+    /// processes.
     pub(super) fn caches(&self) -> BTreeMap<String, crate::config::repo::Cache> {
         match self {
-            Self::Workspace { settings, .. } => settings.caches.clone(),
-            Self::Chat { .. } => BTreeMap::new(),
+            Self::Workspace { settings, .. } | Self::Chat { settings, .. } => {
+                settings.caches.clone()
+            }
         }
     }
 
@@ -220,7 +235,7 @@ impl Home {
 
     /// What an execution's plan reads from the space in the transaction
     /// that records it: the workspace's ports, and the directories its
-    /// processes use, created when missing.
+    /// processes use, created when missing; a chat reserves no ports.
     pub(super) fn provide(
         &self,
         tx: &Transaction<'_>,
@@ -235,19 +250,24 @@ impl Home {
                 ports: store::ports(tx, Some(&workspace.id))?,
                 directories: ProcessDirectories::prepare(repository, caches, &workspace.id)?,
             }),
-            Self::Chat { tmp_dir, .. } => Ok(Provisions {
+            Self::Chat {
+                repository,
+                tmp_dir,
+                ..
+            } => Ok(Provisions {
                 ports: Vec::new(),
-                directories: ProcessDirectories {
-                    caches: BTreeMap::new(),
-                    tmp_dir: tmp_dir.clone(),
-                },
+                directories: ProcessDirectories::of_chat(
+                    repository.as_ref(),
+                    caches,
+                    tmp_dir.clone(),
+                )?,
             }),
         }
     }
 
-    /// The environment the space gives the execution's processes: a
-    /// workspace's configured `[env]` with its ports and directories, while
-    /// a chat runs with Shoal's environment and its temporary directory.
+    /// The environment the space gives the execution's processes: its
+    /// configured `[env]` with its ports and directories, a chat's without
+    /// the variables that name a worktree.
     pub(super) fn environment(
         &self,
         ports: &[PortReservation],
@@ -266,9 +286,19 @@ impl Home {
                 &directories.caches,
                 directories.tmp_dir.as_deref(),
             ),
-            Self::Chat { .. } => (directories.tmp_dir.iter())
-                .map(|directory| (crate::env::TMPDIR.to_owned(), directory.into()))
-                .collect(),
+            Self::Chat {
+                chat,
+                repository,
+                settings,
+                ..
+            } => crate::env::render_configured_environment(
+                &settings.env,
+                chat,
+                repository.as_ref().map(Repository::display_name),
+                ports,
+                &directories.caches,
+                directories.tmp_dir.as_deref(),
+            ),
         }
     }
 }

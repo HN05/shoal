@@ -464,10 +464,11 @@ they rebuild only what their branch changed; see [seed builds](docs/reference.md
 `[setup] presets = ["cargo", "bun"]` sets that up for the tools a repository uses; see
 [build tool presets](docs/reference.md#build-tool-presets).
 
-Use `[env]` to give tracked executions and hooks workspace-specific variables. Values
-substitute `{workspace}`, `{workspace_path}`, `{repo}`, `{branch}`, reserved
-`{port.NAME}` values and [shared cache](docs/reference.md#shared-caches) directories
-`{cache.NAME}` once; inserted text is not evaluated. For example:
+Use `[env]` to give a space's tracked executions and hooks their own variables.
+Values substitute `{workspace}`, `{workspace_path}`, `{path}`, `{repo}`, `{branch}`,
+reserved `{port.NAME}` values and [shared cache](docs/reference.md#shared-caches)
+directories `{cache.NAME}` once; inserted text is not evaluated, and a chat, which
+has no worktree, leaves unset a variable that names one of its fields. For example:
 
 ```toml
 [env]

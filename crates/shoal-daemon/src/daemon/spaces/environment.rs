@@ -11,16 +11,17 @@ use std::{collections::BTreeMap, ffi::OsString};
 
 impl Manager {
     /// The variables a process of the space `selector` names runs with:
-    /// the space, the state directory and its temporary directory, and for
-    /// a workspace, whose worktree must be ready and verified, its
-    /// worktree's, ports and configured `[env]`.
+    /// the space, the state directory, its temporary directory and its
+    /// configured `[env]`, and for a workspace, whose worktree must be
+    /// ready and verified, its worktree's and ports, as its executions get
+    /// them.
     pub async fn space_environment(
         &self,
         selector: &SpaceSelector,
     ) -> Result<BTreeMap<String, String>> {
         let values = match self.space(selector).await?.by_kind() {
             ByKind::Workspace(workspace) => self.workspace_environment(workspace).await?,
-            ByKind::Chat(chat) => self.chat_environment(&chat).await?,
+            ByKind::Chat(chat) => self.chat_environment(chat).await?,
         };
         exported(values)
     }
@@ -62,14 +63,12 @@ impl Manager {
             .await
     }
 
-    async fn chat_environment(&self, chat: &Chat) -> Result<BTreeMap<String, OsString>> {
-        let repository = self.chat_repository(chat).await?;
-        let tmp_dir = self.chat_tmp_dir(repository.as_ref(), chat)?;
-        Ok(env::chat_environment(
-            &chat.id,
-            tmp_dir.as_deref(),
-            &self.paths,
-        ))
+    async fn chat_environment(&self, chat: Chat) -> Result<BTreeMap<String, OsString>> {
+        let id = chat.id.clone();
+        let home = self.chat_execution_home(chat).await?;
+        let (_, mut values, _) = self.joining_environment(home).await?;
+        values.extend(env::chat_environment(&id, &self.paths));
+        Ok(values)
     }
 }
 
