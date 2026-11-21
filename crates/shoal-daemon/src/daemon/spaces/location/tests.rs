@@ -50,7 +50,12 @@ async fn a_stop_s_selection_takes_the_spaces_below_after_the_one_above_only_when
             .map(|located| located.id().clone())
             .collect()
     };
-    let alone = manager.locate_tree(None, &selected, false).await.unwrap();
+    // Named twice, by ID and number, it is taken once.
+    let twice = [
+        SpaceSelector::id(&top.id),
+        SpaceSelector::Number(top.number),
+    ];
+    let alone = manager.locate_tree(None, &twice, false).await.unwrap();
     assert_eq!(ids(alone), std::slice::from_ref(&top.id));
     let tree = manager.locate_tree(None, &selected, true).await.unwrap();
     assert_eq!(ids(tree), [top.id.clone(), child.id.clone()]);

@@ -55,12 +55,16 @@ impl Manager {
         for selector in selectors {
             roots.push(self.locate_space(caller, selector).await?);
         }
-        if !below {
-            return Ok(roots);
-        }
-        let tree = Tree {
-            here: self.visible_spaces(caller).await?,
-            view: self.view_below(caller).await,
+        // Without the spaces below, the walk only drops repeated roots.
+        let tree = match below {
+            true => Tree {
+                here: self.visible_spaces(caller).await?,
+                view: self.view_below(caller).await,
+            },
+            false => Tree {
+                here: Vec::new(),
+                view: None,
+            },
         };
         Ok(tree.walk(roots))
     }
