@@ -22,7 +22,6 @@ pub(crate) mod space;
 mod spaces;
 pub(in crate::daemon) mod stack;
 mod verdict;
-mod view;
 pub mod wait;
 
 use anyhow::{Result, ensure};

@@ -1,9 +1,14 @@
 use std::sync::Arc;
 
-use super::*;
+use anyhow::Result;
+use shoal_protocol::space_names::SpaceSelector;
+
 use crate::{
-    daemon::test_support::{configure, git, manager, repository},
-    model::Workspace,
+    daemon::{
+        manager::Manager,
+        test_support::{configure, git, manager, repository},
+    },
+    model::{MergePath, Workspace},
 };
 
 /// A workspace on `topic` whose repository's forge serves PR 1 in `state`,
@@ -79,7 +84,10 @@ impl Fixture {
 
     async fn path(&self) -> Result<MergePath> {
         let selector = SpaceSelector::id(&self.workspace.id);
-        self.manager.merge_path(&selector).await
+        self.manager
+            .links
+            .merge_path(&*self.manager, &selector)
+            .await
     }
 }
 
@@ -123,38 +131,4 @@ async fn a_linked_pr_of_another_repository_than_origin_is_refused() {
     git(&f.repo, &["remote", "set-url", "origin", &other]);
     let refused = f.path().await.unwrap_err().to_string();
     assert!(refused.contains("different repository"), "{refused}");
-}
-
-fn pull(number: u64) -> ItemRef {
-    format!("https://forge.example/team/app/pulls/{number}")
-        .parse()
-        .unwrap()
-}
-
-#[test]
-fn one_open_pr_merges_on_the_forge() {
-    let path = choose(true, "fix", vec![pull(12)]).unwrap();
-    assert_eq!(path, MergePath::Pr { pr: pull(12) });
-    let path = choose(false, "talk", vec![pull(12)]).unwrap();
-    assert_eq!(path, MergePath::Pr { pr: pull(12) });
-}
-
-#[test]
-fn a_workspace_without_an_open_pr_merges_locally() {
-    assert_eq!(choose(true, "fix", Vec::new()).unwrap(), MergePath::Local);
-}
-
-#[test]
-fn a_chat_without_an_open_pr_is_refused() {
-    let refused = choose(false, "talk", Vec::new()).unwrap_err().to_string();
-    assert!(refused.contains("no open PR"), "{refused}");
-}
-
-#[test]
-fn several_open_prs_are_refused_naming_each() {
-    let refused = choose(true, "fix", vec![pull(12), pull(14)])
-        .unwrap_err()
-        .to_string();
-    assert!(refused.contains("/pulls/12"), "{refused}");
-    assert!(refused.contains("/pulls/14"), "{refused}");
 }

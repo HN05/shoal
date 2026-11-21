@@ -128,7 +128,8 @@ pub(super) async fn handle(
             comments,
         } => {
             let viewed = manager
-                .view_items(&target, &selection, comments, caller)
+                .links
+                .view_items(&**manager, &target, &selection, comments, caller)
                 .await
                 .and_then(|viewed| json_pieces(&viewed));
             return Ok(Answer::pages(viewed, Body::ViewPieces));
@@ -176,7 +177,9 @@ pub(super) async fn handle(
             (manager.require_pull_review(&target, item.clone(), None, None, caller)).await?;
             Body::MergeWarning(manager.merge_warning(&target, item).await?)
         }
-        ItemMethod::MergePath { space } => Body::MergePath(manager.merge_path(&space).await?),
+        ItemMethod::MergePath { space } => {
+            Body::MergePath(manager.links.merge_path(&**manager, &space).await?)
+        }
         ItemMethod::OpenPull {
             workspace,
             options,

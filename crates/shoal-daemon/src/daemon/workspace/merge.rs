@@ -217,7 +217,10 @@ impl Manager {
     /// Refuse a local merge of a workspace whose work merges through its
     /// open PR, which the merge would bypass, however the request came.
     async fn ensure_merges_locally(&self, workspace: &Workspace) -> Result<()> {
-        let path = self.merge_path(&SpaceSelector::id(&workspace.id)).await?;
+        let path = self
+            .links
+            .merge_path(self, &SpaceSelector::id(&workspace.id))
+            .await?;
         if let MergePath::Pr { pr } = path {
             bail!(
                 "{pr} is open, so shoal merge merges it on the forge; close it to merge workspace {} locally",

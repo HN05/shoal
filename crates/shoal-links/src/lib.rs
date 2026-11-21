@@ -10,6 +10,7 @@ pub mod issue;
 pub mod linked;
 mod linking;
 mod memories;
+mod merge_path;
 pub mod place;
 pub mod pr;
 mod raw;
@@ -22,6 +23,7 @@ pub mod space;
 #[cfg(test)]
 mod stand_in;
 pub mod target;
+mod view;
 pub mod wait;
 
 use std::sync::Arc;

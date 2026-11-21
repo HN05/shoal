@@ -34,7 +34,9 @@ impl Requesters for Manager {
                 kind: None,
                 input: None,
             };
-            Manager::view_items(self, &target, &selection, false, None).await
+            self.links
+                .view_items(self, &target, &selection, false, None)
+                .await
         })
     }
 

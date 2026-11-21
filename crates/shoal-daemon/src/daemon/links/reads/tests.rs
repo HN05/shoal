@@ -79,7 +79,8 @@ async fn a_view_of_nothing_needs_no_forge_behind_a_local_origin() {
     let target = ItemContext::space(SpaceSelector::id(&workspace.id)).into();
 
     let viewed = manager
-        .view_items(&target, &Selection::default(), false, None)
+        .links
+        .view_items(&*manager, &target, &Selection::default(), false, None)
         .await
         .unwrap();
     assert!(viewed.items.is_empty());
