@@ -1,7 +1,7 @@
 //! The per-user daemon: owns shared state, serves protocol requests over a
 //! Unix socket, and runs background cleanup.
 pub(crate) use shoal_daemon_base::{
-    config_state, events, file_access, gates, item_numbers, log, notifications,
+    config_state, events, file_access, gates, item_numbers, log, notifications, retention,
 };
 pub(crate) use shoal_leases::{allocation, containers, resources};
 mod absorb;
@@ -92,6 +92,7 @@ mod requests;
 mod restart_recovery;
 pub(crate) mod restarts;
 mod restore;
+mod retention_periods;
 pub(crate) mod reviews;
 pub(crate) mod runner;
 pub mod scope;

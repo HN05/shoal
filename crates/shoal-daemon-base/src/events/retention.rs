@@ -4,14 +4,15 @@
 //! a removed space's unexpired files keep them longer. Shoal's own events
 //! stay for the global retention.
 use shoal_ids::repository_ids::RepositoryId;
-use std::{collections::HashMap, time::Duration};
 
 use anyhow::Result;
 use rusqlite::{Connection, Transaction};
 
-use futures_util::future::BoxFuture;
-
-use crate::{store::Store, time::UnixTime};
+use crate::{
+    retention::{Periods, Retention},
+    store::Store,
+    time::UnixTime,
+};
 use shoal_ids::space_ids::SpaceId;
 
 /// A space that is gone, with its repository and when it went.
@@ -19,14 +20,6 @@ struct Gone {
     id: SpaceId,
     repository_id: Option<RepositoryId>,
     removed_at: UnixTime,
-}
-
-/// How long a removed space of a repository keeps what it leaves, which
-/// the daemon reads from that repository's settings.
-pub trait Retention: Send + Sync {
-    /// The retention of a removed space of `repository`, or of a chat
-    /// without one.
-    fn of<'a>(&'a self, repository: Option<&'a RepositoryId>) -> BoxFuture<'a, Duration>;
 }
 
 /// Forget the events of each space gone for longer than its `retention`,
@@ -47,15 +40,10 @@ pub async fn expire(store: &Store, retention: &dyn Retention) -> Result<()> {
 /// passed, reading each repository's retention once.
 async fn expired(gone: Vec<Gone>, retention: &dyn Retention) -> Vec<SpaceId> {
     let now = UnixTime::now();
-    let mut kept_for = HashMap::new();
+    let mut periods = Periods::new(retention);
     let mut expired = Vec::new();
     for space in gone {
-        if !kept_for.contains_key(&space.repository_id) {
-            let kept = retention.of(space.repository_id.as_ref()).await;
-            kept_for.insert(space.repository_id.clone(), kept);
-        }
-        let kept = kept_for[&space.repository_id];
-        if space.removed_at + kept <= now {
+        if space.removed_at + periods.of(space.repository_id.as_ref()).await <= now {
             expired.push(space.id);
         }
     }

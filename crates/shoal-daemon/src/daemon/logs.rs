@@ -1,13 +1,10 @@
 //! The logs requests read: a space's, by any selector or, once it is
 //! removed, by its last name or ID until its events expire, within the
-//! caller's scope, and Shoal's own; and how long a removed space's events
-//! stay.
+//! caller's scope, and Shoal's own; and the expiry of a removed space's
+//! events.
 use shoal_daemon_base::permitted_actions::Action;
-use std::time::Duration;
 
 use anyhow::{Result, ensure};
-use futures_util::future::BoxFuture;
-use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     log::{LogEntry, LogFilter, LogTopic},
@@ -16,7 +13,6 @@ use shoal_protocol::{
 
 use super::{
     events::{retention, shoal_log, space_log},
-    log,
     manager::Manager,
     scope::Caller,
 };
@@ -141,22 +137,6 @@ impl Manager {
     ) -> Result<Vec<super::events::EventItem>> {
         let (items, _) = super::events::page(&self.store, after, None, limit).await?;
         Ok(items)
-    }
-}
-
-impl retention::Retention for Manager {
-    /// Its settings' retention, or the global setting's for a chat without
-    /// a repository or when the repository's cannot be read.
-    fn of<'a>(&'a self, repository: Option<&'a RepositoryId>) -> BoxFuture<'a, Duration> {
-        Box::pin(async move {
-            let settings = self.space_settings_in(repository).await.or_else(|error| {
-                log!("events of removed spaces kept by the global retention: {error:#}");
-                self.config().resolve(&Default::default())
-            });
-            settings.map_or(Duration::ZERO, |settings| {
-                settings.cleanup.restore.retention()
-            })
-        })
     }
 }
 
