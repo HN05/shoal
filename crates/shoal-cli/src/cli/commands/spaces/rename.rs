@@ -1,10 +1,9 @@
 //! `shoal rename`: rename a workspace or a chat, a picked one with what the
 //! user types, or ask its agent to choose.
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Result, ensure};
 
 use crate::{
     cli::{
-        commands::machines,
         context::Context,
         terminal,
         ui::{self, Fallback},
@@ -16,6 +15,7 @@ use crate::{
 use shoal_ids::space_ids::SpaceNumber;
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::status::StatusAnswer;
 
 /// What `shoal rename --request` asks a space's agent.
 const NAME_REQUEST: &str = "The user asks you to rename this space: name the work as it stands now in a few words with `shoal rename \"<name>\"`.";
@@ -139,27 +139,30 @@ struct AskedSpace {
     running: bool,
 }
 
-/// The space `selector` selects, on this machine or another joined one,
-/// as `rename --request` asks it.
+/// The space `selector` selects, on whichever machine runs it, as
+/// `rename --request` asks it: as its machine reports it, or while that
+/// machine is offline, as it last reported it.
 async fn asked_space(ctx: &Context, selector: &SpaceSelector) -> Result<AskedSpace> {
-    if let Some(space) = crate::client::workspaces::present_space(&ctx.paths, selector).await? {
-        let id = SpaceSelector::id(&space.id);
-        let agents = crate::client::agents::running(&ctx.paths, id.clone()).await?;
-        return Ok(AskedSpace {
-            selector: id,
-            label: space.label(),
-            number: space.number,
-            running: !agents.is_empty(),
-        });
-    }
-    let (remote, _) = (machines::space_elsewhere(ctx, selector).await?)
-        .with_context(|| format!("no space {selector}"))?;
-    let space = remote.space;
+    let status = crate::client::workspaces::status(&ctx.paths, selector.clone()).await?;
+    let space = match status {
+        StatusAnswer::Live(status) => status.space,
+        StatusAnswer::Reported(reported) => {
+            let space = reported.space.space;
+            return Ok(AskedSpace {
+                selector: SpaceSelector::id(&space.id),
+                label: shoal_protocol::space_names::label(space.number, &space.name),
+                number: space.number,
+                running: space.agent_runs_or_sleeps(),
+            });
+        }
+    };
+    let id = SpaceSelector::id(space.id());
+    let agents = crate::client::agents::running(&ctx.paths, id.clone()).await?;
     Ok(AskedSpace {
-        selector: SpaceSelector::id(&space.id),
-        label: shoal_protocol::space_names::label(space.number, &space.name),
-        number: space.number,
-        running: space.agent_runs_or_sleeps(),
+        selector: id,
+        label: space.label(),
+        number: space.number(),
+        running: !agents.is_empty(),
     })
 }
 

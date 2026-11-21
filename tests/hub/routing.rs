@@ -164,6 +164,16 @@ fn the_user_s_terminal_renames_and_removes_a_space_on_another_machine() {
 }
 
 #[test]
+fn asking_another_machine_s_space_to_rename_itself_finds_it_there() {
+    let (hub, _laptop, there) = laptop_space();
+    // No agent runs there to ask, which only its machine knows.
+    let output = hub.run(&["rename", "--request", &there]);
+    assert!(!output.status.success(), "{}", printed(&output));
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("on-laptop has no running agent"), "{error}");
+}
+
+#[test]
 fn a_restart_and_its_cancel_go_to_the_machine_of_the_space() {
     let (hub, _laptop, there) = laptop_space();
     // The laptop decides the restart: no agent runs in its space.

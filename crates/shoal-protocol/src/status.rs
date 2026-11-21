@@ -143,6 +143,21 @@ impl SpaceDetail {
         }
     }
 
+    pub fn number(&self) -> shoal_ids::space_ids::SpaceNumber {
+        match self {
+            Self::Workspace(status) => status.workspace.number,
+            Self::Chat { chat } => chat.number,
+        }
+    }
+
+    /// Its number with its name, as text that names it does.
+    pub fn label(&self) -> String {
+        match self {
+            Self::Workspace(status) => status.workspace.label(),
+            Self::Chat { chat } => chat.label(),
+        }
+    }
+
     /// What user-facing text calls it: `workspace` or `chat`.
     pub fn kind(&self) -> &'static str {
         match self {
