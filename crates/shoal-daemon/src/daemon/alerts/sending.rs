@@ -16,9 +16,19 @@ use crate::{
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     alerts::{AlertKind, Reached, ReachedSpaces, Recipient, Refused, RefusedSpace},
-    protocol::AlertTarget,
+    hub::Member,
+    model::Located,
+    protocol::{AlertMethod, AlertTarget, Operation},
     space_names::SpaceSelector,
 };
+
+/// An alert to another machine's space `space`, which `machine` runs.
+struct AlertElsewhere<'a> {
+    space: &'a SpaceId,
+    machine: &'a Member,
+    message: String,
+    attachments: Vec<NewFile>,
+}
 
 impl Manager {
     /// Send `message` with `attachments` from `caller`, or from the user
@@ -88,9 +98,45 @@ impl Manager {
         message: String,
         attachments: Vec<NewFile>,
     ) -> Result<Sent> {
+        // Its sender's reach was checked, and it may be a space of another
+        // machine that forwarded the alert here.
+        if let Located::Elsewhere { space, machine } = self.locate_space(None, selector).await? {
+            let alert = AlertElsewhere {
+                space: &space.space.id,
+                machine: &machine,
+                message,
+                attachments,
+            };
+            return self.send_elsewhere(caller, alert).await;
+        }
         let route = Route::Space(selector);
         self.send_down(caller, route, message, attachments, true)
             .await
+    }
+
+    /// Send `alert` from `caller` to its space, which another machine runs,
+    /// as a request to send it there would: through the hub, which holds it
+    /// while that machine is offline, when it reached no one yet.
+    async fn send_elsewhere(
+        &self,
+        caller: Option<&Caller>,
+        alert: AlertElsewhere<'_>,
+    ) -> Result<Sent> {
+        let operation = Operation::Alert(AlertMethod::SendAlert {
+            to: AlertTarget::Space {
+                space: SpaceSelector::id(alert.space),
+            },
+            from: None,
+            message: alert.message,
+            attachments: alert.attachments,
+        });
+        let answer = self
+            .hub
+            .ask_machine_or_hold(self, alert.machine, operation, caller);
+        match answer.await? {
+            Some(body) => Sent::try_from(body),
+            None => Ok(Sent::default()),
+        }
     }
 
     /// Send `message` from `caller` to every workspace and chat with an
@@ -166,8 +212,12 @@ impl Manager {
     ) -> Result<Option<&'a mut SpaceSelector>> {
         const REFUSAL: &str = "scoped processes send alerts down only to the spaces below theirs";
         Ok(match to {
+            // A space here or on another machine, whose reach this checks.
             AlertTarget::Space { space } => {
-                Some(self.workspace_below(caller, space, REFUSAL).await?)
+                let id = self.reached_space(caller, space).await?;
+                ensure!(id != caller.space_id, "{REFUSAL}");
+                *space = SpaceSelector::id(&id);
+                None
             }
             AlertTarget::All {
                 repository: Some(repository),

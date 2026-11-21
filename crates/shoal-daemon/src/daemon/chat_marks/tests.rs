@@ -15,7 +15,9 @@ use crate::{
         executions::ExecutionKind,
         manager::Manager,
         scope::{Caller, ScopedExecution},
-        test_support::{caller_in, chat, manager, repository, track_agent},
+        test_support::{
+            away_on_offline_machine, caller_in, chat, held_calls, manager, repository, track_agent,
+        },
     },
     model::Repository,
     protocol::TurnEnd,
@@ -368,4 +370,31 @@ async fn a_marked_alert_that_fails_as_the_turn_ends_is_told_to_the_agent() {
         panic!("{unsent:?}");
     };
     assert!(notice.contains("report.txt"), "{notice}");
+}
+
+#[tokio::test]
+async fn a_marked_alert_reaches_a_space_below_on_another_machine_through_the_hub() {
+    let tree = tree().await;
+    let manager = &tree.manager;
+    away_on_offline_machine(manager, Some(&tree.parent.space)).await;
+    let to = AlertTarget::Space {
+        space: SpaceSelector::Number(90.into()),
+    };
+    let marked = tree.parent.mark_alert(manager, to, Vec::new()).await;
+    let ChatMark::Alert {
+        to: MarkedRecipients::Space { space },
+    } = marked.mark
+    else {
+        panic!("{marked:?}");
+    };
+    assert_eq!(space.id.as_str(), "away");
+    tree.parent.end_turn(manager, "Rebase onto main").await;
+    let held = held_calls(manager).await;
+    let [call] = held.as_slice() else {
+        panic!("the hub holds {held:?}");
+    };
+    assert!(
+        call.contains("send_alert") && call.contains("Rebase onto main"),
+        "{call}"
+    );
 }

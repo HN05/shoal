@@ -7,8 +7,10 @@ use rusqlite::Transaction;
 use serde::{Deserialize, Serialize};
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use shoal_protocol::{
+    alerts::Recipient,
     chat_marks::{ChatMarked, MarkedRecipients},
     files::NewFile,
+    model::Located,
     protocol::AlertTarget,
     space_names::SpaceSelector,
 };
@@ -118,11 +120,10 @@ impl Manager {
         Ok(match to {
             AlertTarget::Up => (AlertTarget::Up, self.recipient_up(space).await?),
             AlertTarget::Space { space } => {
-                let below = self.space(&space).await?;
+                let space = self.located_recipient(&space).await?;
                 let to = AlertTarget::Space {
-                    space: SpaceSelector::id(&below.id),
+                    space: SpaceSelector::id(&space.id),
                 };
-                let space = recipient(&below);
                 (to, MarkedRecipients::Space { space })
             }
             AlertTarget::All { repository } => {
@@ -137,6 +138,19 @@ impl Manager {
     }
 
     /// Whom an alert sent up from `space` reaches now.
+    /// The space `selector` names, here or on another machine, as an
+    /// alert names its recipient.
+    async fn located_recipient(&self, selector: &SpaceSelector) -> Result<Recipient> {
+        Ok(match self.locate_space(None, selector).await? {
+            Located::Here(space) => recipient(&space),
+            Located::Elsewhere { space, .. } => Recipient {
+                number: space.space.number,
+                id: space.space.id,
+                name: space.space.name,
+            },
+        })
+    }
+
     async fn recipient_up(&self, space: &Space) -> Result<MarkedRecipients> {
         Ok(match self.route_up(&space.id, Source::Agent).await? {
             Recipients::User => MarkedRecipients::User,
@@ -169,10 +183,7 @@ impl Manager {
             attachments,
             ..
         } = alert;
-        if let Some(below) = self.scoped_alert_target(&caller, &mut to).await? {
-            self.ensure_reaches(&caller, &self.space(below).await?)
-                .await?;
-        }
+        self.scoped_alert_target(&caller, &mut to).await?;
         let text = alert_text(&to, message.as_deref());
         let sent = self
             .send_alert(Some(&caller), to, text, attachments)

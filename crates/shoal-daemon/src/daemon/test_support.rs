@@ -212,6 +212,44 @@ pub async fn configure(manager: &Manager, text: &str) {
     manager.reload_config().await.unwrap();
 }
 
+/// Make the daemon the hub, with the space `away`, number 90, below
+/// `parent`, on its offline member machine `desk`.
+pub async fn away_on_offline_machine(manager: &Manager, parent: Option<&SpaceId>) {
+    configure(manager, "[machine.hub]\nenabled = true\n").await;
+    let away = serde_json::json!({
+        "id": "away", "number": 90, "name": "away", "kind": "chat",
+        "status": "working", "agent": true, "parent": parent,
+    });
+    (manager.store)
+        .write(move |tx| {
+            tx.execute(
+                "INSERT INTO hub_members(id, kind, name, public_key, joined_at)
+                    VALUES ('desk', 'machine', 'desk', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', 0)",
+                [],
+            )?;
+            tx.execute(
+                "INSERT INTO hub_spaces(space_id, member_id, summary, reported_at)
+                    VALUES ('away', 'desk', ?1, 0)",
+                [away.to_string()],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
+
+/// The requests the hub holds for offline machines, as their JSON.
+pub async fn held_calls(manager: &Manager) -> Vec<String> {
+    (manager.store)
+        .read(|tx| {
+            let mut rows = tx.prepare("SELECT call FROM hub_queue")?;
+            let calls = rows.query_map([], |row| row.get(0))?;
+            Ok(calls.collect::<Result<_, _>>()?)
+        })
+        .await
+        .unwrap()
+}
+
 impl Manager {
     /// Create the workspace `name` of `repository` on a new branch from
     /// `base`, with an optional Git profile and path.

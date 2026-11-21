@@ -239,6 +239,30 @@ impl Hub {
         }
     }
 
+    /// The answer `machine` gives `operation` from `caller`, which this
+    /// machine forwards there through the hub, leaving out what belongs to
+    /// this machine; none while the hub holds it for that machine, which
+    /// is offline, as messages and decisions wait.
+    pub async fn ask_machine_or_hold(
+        &self,
+        daemon: &dyn Daemon,
+        machine: &Member,
+        operation: Operation,
+        caller: Option<&Caller>,
+    ) -> Result<Option<Body>> {
+        let request = self
+            .forwarded_to(daemon, machine, operation, caller)
+            .await?;
+        match self
+            .send_forwarded(daemon, machine, request, Delivery::Queued)
+            .await?
+        {
+            Reply::Answered(answered) => answered_body(answered.frames).map(Some),
+            Reply::Queued(_) => Ok(None),
+            reply => Err(anyhow!("the hub answered with an unexpected {reply:?}")),
+        }
+    }
+
     /// The duplex stream `machine` answers `operation` from `caller` on,
     /// which this machine forwards there through the hub, with the stream
     /// that carries what this machine writes there; it fails at once while

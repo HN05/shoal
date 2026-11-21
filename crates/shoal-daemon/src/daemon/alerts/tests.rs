@@ -1,5 +1,5 @@
 use super::*;
-use crate::daemon::test_support::manager;
+use crate::daemon::test_support::{away_on_offline_machine, held_calls, manager};
 use crate::daemon::workspace_files::{FileSource, NewFile};
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -628,4 +628,21 @@ async fn an_event_named_alone_takes_no_workspace_that_shares_its_name() {
     };
     assert_eq!(notification.space.as_deref(), Some("fix"));
     assert_eq!(notification.space_id, None);
+}
+
+#[tokio::test]
+async fn a_message_to_another_machine_s_space_waits_at_the_hub_while_that_machine_is_offline() {
+    let (_temp, manager) = manager().await;
+    away_on_offline_machine(&manager, None).await;
+    let to = SpaceSelector::Number(90.into());
+    let sent = manager.send_space_message(None, &to, "Rebase onto main".into(), Vec::new());
+    assert!(sent.await.unwrap().alerts.is_empty());
+    let held = held_calls(&manager).await;
+    let [call] = held.as_slice() else {
+        panic!("the hub holds {held:?}");
+    };
+    assert!(
+        call.contains("send_alert") && call.contains("Rebase onto main"),
+        "{call}"
+    );
 }
