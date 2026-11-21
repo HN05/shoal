@@ -3,6 +3,7 @@
 //! only what changes after that: what the items held before is their
 //! history, which `shoal view` shows.
 use shoal_links::wait::followed::followed_items;
+use shoal_links::wait::merge_lookups::{MergeTarget, follow_reported_merge};
 use std::{
     collections::HashMap,
     sync::{
@@ -18,7 +19,6 @@ use tokio::sync::watch;
 use super::{
     activity::follows,
     cursor::{cursor_record, save_cursor_record},
-    merge_runs::{MergeTarget, follow_reported_merge},
 };
 use crate::{
     daemon::{log, manager::Manager},

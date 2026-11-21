@@ -3,7 +3,7 @@
 //! watch or hook returns; waiting does not change completion policy.
 
 pub(super) use self::activity::record_received_change;
-pub(crate) use self::{merge_runs::PushedMerge, start::WatchStarts};
+pub(crate) use self::start::WatchStarts;
 use crate::daemon::alerts::Alert;
 use shoal_links::wait::{branch_report, cursor};
 

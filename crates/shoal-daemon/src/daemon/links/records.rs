@@ -12,6 +12,10 @@ impl Records for LinkRecords {
         super::ensure_accepts_links(db, id)
     }
 
+    fn accepts_links(&self, db: &Connection, id: &SpaceId) -> Result<bool> {
+        super::accepts_links(db, id)
+    }
+
     fn forget_ready_marks(&self, db: &Connection, id: &SpaceId, urls: &[String]) -> Result<()> {
         crate::daemon::ready_marks::forget(db, id, urls)
     }

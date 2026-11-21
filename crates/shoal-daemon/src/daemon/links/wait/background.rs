@@ -6,10 +6,10 @@ use futures_util::{StreamExt, stream};
 use rusqlite::{OptionalExtension, params};
 use shoal_links::space::LinkSpace;
 use shoal_links::wait::followed::{opened_open_prs, polled_items};
+use shoal_links::wait::merge_lookups::{MergeTarget, follow_merge};
 
 use super::{
     branch_report::{BranchReport, branch_report},
-    merge_runs::{MergeTarget, follow_merge},
     start::PollStart,
 };
 use crate::{

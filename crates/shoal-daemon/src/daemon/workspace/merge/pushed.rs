@@ -1,12 +1,13 @@
 //! Following the default branch's CI runs for the commit a merge pushed,
 //! through the lookup that follows a merged PR's.
 use anyhow::Result;
+use shoal_links::wait::merge_lookups::PushedMerge;
 
 use super::{RecordChange, tracking_ref};
 use shoal_refs::CommitId;
 
 use crate::{
-    daemon::{links::wait::PushedMerge, log, manager::Manager},
+    daemon::{log, manager::Manager},
     git,
     model::MergePlan,
 };

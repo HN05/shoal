@@ -147,6 +147,9 @@ pub trait Records: Send + Sync {
     /// while a workspace is removed.
     fn ensure_accepts_links(&self, db: &Connection, id: &SpaceId) -> Result<()>;
 
+    /// Whether the space `id` still exists and takes link changes now.
+    fn accepts_links(&self, db: &Connection, id: &SpaceId) -> Result<bool>;
+
     /// Forget the ready marks the space `id` holds on the items at `urls`,
     /// which it no longer links.
     fn forget_ready_marks(&self, db: &Connection, id: &SpaceId, urls: &[String]) -> Result<()>;

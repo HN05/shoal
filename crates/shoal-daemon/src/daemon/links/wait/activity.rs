@@ -3,12 +3,12 @@
 use anyhow::{Result, ensure};
 use rusqlite::OptionalExtension;
 use shoal_links::wait::followed::followed_items;
+use shoal_links::wait::merge_lookups::{MergeTarget, follow_reported_merge};
 
 use super::{
     branch_report::{BranchReport, branch_report, watches_branch},
     cursor::{cursor_record, save_cursor_record},
     items::{NO_LINKED_ITEMS, links_kind},
-    merge_runs::{MergeTarget, follow_reported_merge},
     start::PollStart,
 };
 use crate::{
