@@ -57,8 +57,8 @@ impl Manager {
     /// stays here with its agents' restores queued.
     pub(crate) async fn release_held_move(&self, selector: &SpaceSelector) -> Result<()> {
         let mut record = self.held_move(selector).await?;
-        let lock = MoveLock::try_take(&self.paths, &record.space)?
-            .context("its package is being read; Shoal finishes the move once it is")?;
+        // After a read of it that broke off ends here.
+        let lock = MoveLock::take(&self.paths, &record.space).await?;
         record.phase = MovePhase::Packing;
         self.advance_move(&record).await?;
         lock.release();
@@ -100,7 +100,7 @@ impl Manager {
         stream.shutdown().await?;
         // Its reader writes it where its caller named before it ends the
         // space here.
-        if let Err(error) = self.hold_for_reader(&space).await {
+        if let Err(error) = self.held_package_read(&space).await {
             log!("the move of {space} waits for its reader no longer: {error:#}");
         }
         lock.release();

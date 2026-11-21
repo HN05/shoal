@@ -68,15 +68,16 @@ impl Manager {
         record.checkpoints = exported.manifest.checkpoints();
         // A file holds the package once written; another machine, or the
         // command that copies it to its standard output, has it once it
-        // took it.
+        // took it, and the machine a held package waits for has nothing of
+        // it until it read the whole package.
         record.phase = match destination {
             MoveDestination::File { .. } | MoveDestination::Directory { .. } => {
                 MovePhase::Delivered
             }
             MoveDestination::Ssh(_)
             | MoveDestination::Machine(_)
-            | MoveDestination::Client { .. }
-            | MoveDestination::Held => MovePhase::Delivering,
+            | MoveDestination::Client { .. } => MovePhase::Delivering,
+            MoveDestination::Held => MovePhase::Packing,
         };
         self.advance_move(&record).await?;
         if *destination == MoveDestination::Held {
@@ -170,6 +171,16 @@ impl Manager {
         let (space, until) = (space.clone(), UnixTime::now() + HELD_FOR_READER);
         (self.store)
             .write(move |tx| records::hold_until(tx, &space, until))
+            .await
+    }
+
+    /// Record that the joined machine the move of the space `space` holds
+    /// its package for read the whole package, which it may now have, and
+    /// wait for it to end the space from now on.
+    pub(crate) async fn held_package_read(&self, space: &SpaceId) -> Result<()> {
+        let (space, until) = (space.clone(), UnixTime::now() + HELD_FOR_READER);
+        (self.store)
+            .write(move |tx| records::read_whole(tx, &space, until))
             .await
     }
 

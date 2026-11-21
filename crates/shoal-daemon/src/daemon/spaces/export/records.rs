@@ -86,6 +86,18 @@ pub(super) fn held_after(db: &Connection, now: UnixTime) -> Result<HashSet<Space
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// Record that the machine the move of the space `space` holds its
+/// package for read all of it, unless that machine ended the space
+/// already, and have the move wait for it until `until`.
+pub(super) fn read_whole(tx: &Transaction<'_>, space: &SpaceId, until: UnixTime) -> Result<()> {
+    tx.execute(
+        "UPDATE space_moves SET phase=iif(phase='packing','delivering',phase),held_until=?2
+            WHERE space_id=?1",
+        params![space, until],
+    )?;
+    Ok(())
+}
+
 /// Have the move of the space `space` wait for the machine that started it
 /// until `until`.
 pub(super) fn hold_until(tx: &Transaction<'_>, space: &SpaceId, until: UnixTime) -> Result<()> {
