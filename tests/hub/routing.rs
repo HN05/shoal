@@ -412,7 +412,12 @@ fn a_child_s_thread_reaches_its_coordinator_on_another_machine() {
         format!("{}.1", listed_number(&hub, &child)),
         "the hub names the thread as its machine does"
     );
-    message_with(&hub, &coordinator, "Which database?");
+    // The agent's text, as an agent on the child's machine reads it, not
+    // the user's one line.
+    let asked = message_with(&hub, &coordinator, "Which database?");
+    let text = asked["message"].as_str().unwrap();
+    assert!(text.starts_with(&format!("Thread {number}")), "{asked}");
+    assert!(text.contains('\n'), "{asked}");
     // The coordinator replies from its own machine, which has no record of
     // the child's space.
     ok_in(&hub, &coordinator, &["send", &number, "SQLite"]);

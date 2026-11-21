@@ -199,6 +199,7 @@ impl Manager {
                     kind: alert.kind,
                     for_user,
                     message: alert.message,
+                    agent: None,
                     attachments: &alert.attachments,
                 };
                 // Boxed: on the hub, an event for its own machine's space

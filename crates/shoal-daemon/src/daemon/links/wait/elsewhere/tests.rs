@@ -212,7 +212,6 @@ async fn activity_stays_on_the_cursor_while_the_hub_cannot_be_reached() -> Resul
 }
 
 /// The text `told` tells.
-fn text(told: &shoal_protocol::hub::routing::Told) -> &str {
-    let shoal_protocol::hub::routing::ToldRecord::Alert { message, .. } = &told.record;
-    message
+fn text(told: &shoal_protocol::hub::routing::Told) -> String {
+    told.record.texts().1
 }

@@ -29,6 +29,7 @@ impl Elsewhere for Manager {
             kind: AlertKind::ItemActivity,
             for_user: false,
             message,
+            agent: None,
             attachments: &[],
         };
         Box::pin(self.hub.pass_up_now(self, above, event))

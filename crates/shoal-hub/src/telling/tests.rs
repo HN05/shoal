@@ -12,15 +12,6 @@ fn told(files: &[&str]) -> Told {
 }
 
 #[test]
-fn an_event_names_the_files_that_stay_on_its_machine() {
-    let files = ["report.md".to_owned(), "chart.png".to_owned()];
-    assert_eq!(with_files("child: done", &[]), "child: done");
-    let message = with_files("child: done", &files);
-    assert!(message.starts_with("child: done\n"), "{message}");
-    assert!(message.ends_with("report.md, chart.png"), "{message}");
-}
-
-#[test]
 fn the_outbox_sends_in_the_order_events_came() {
     let mut db = shoal_store::test_support::migrated().unwrap();
     let tx = db.transaction().unwrap();
@@ -38,8 +29,7 @@ fn the_outbox_sends_in_the_order_events_came() {
         let Call::Tell { told } = call else {
             panic!("the outbox held {call:?}");
         };
-        let ToldRecord::Alert { message, .. } = told.record;
-        sent.push(message);
+        sent.push(told.record.texts().1);
         remove_outbox(&tx, seq).unwrap();
     }
     assert_eq!(sent, ["first", "second"]);

@@ -133,6 +133,50 @@ pub enum ToldRecord {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         files: Vec<String>,
     },
+    /// A thread's post, forward or resolution of `kind`: the text the agent
+    /// that takes it reads, as an agent on the thread's machine would, and
+    /// the line the user reads when no agent takes it.
+    Thread {
+        kind: AlertKind,
+        agent: String,
+        user: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        files: Vec<String>,
+    },
+}
+
+impl ToldRecord {
+    /// Its kind of alert.
+    pub fn kind(&self) -> AlertKind {
+        match self {
+            Self::Alert { kind, .. } | Self::Thread { kind, .. } => *kind,
+        }
+    }
+
+    /// What an agent that takes it reads, and what the user reads, each
+    /// naming the files it sent, which stay on its machine.
+    pub fn texts(&self) -> (String, String) {
+        match self {
+            Self::Alert { message, files, .. } => {
+                let message = with_files(message, files);
+                (message.clone(), message)
+            }
+            Self::Thread {
+                agent, user, files, ..
+            } => (with_files(agent, files), with_files(user, files)),
+        }
+    }
+}
+
+/// `message`, naming the `files` its space sent, which stay on its machine.
+fn with_files(message: &str, files: &[String]) -> String {
+    match files.is_empty() {
+        true => message.to_owned(),
+        false => format!(
+            "{message}\nFiles it sent, which stay on its machine: {}",
+            files.join(", ")
+        ),
+    }
 }
 
 /// The space an event is about.
@@ -190,3 +234,6 @@ impl std::fmt::Display for Queued {
 }
 
 impl std::error::Error for Queued {}
+
+#[cfg(test)]
+mod tests;

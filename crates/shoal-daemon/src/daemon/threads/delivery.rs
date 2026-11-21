@@ -61,7 +61,10 @@ struct Elsewhere {
     from: SpaceId,
     name: SpaceName,
     kind: AlertKind,
+    /// The line the user reads should no agent there take it.
     message: String,
+    /// The text the agent that takes it reads, as an agent here would.
+    agent: String,
     attachments: Vec<PathBuf>,
 }
 
@@ -124,6 +127,7 @@ pub(super) fn deliver(
                 name: thread.space.clone(),
                 kind: alert.kind,
                 message: alert.message,
+                agent: texts.agent,
                 attachments: alert.attachments,
             });
             Ok(None)
@@ -444,6 +448,7 @@ impl Manager {
                 kind: elsewhere.kind,
                 for_user: true,
                 message: elsewhere.message,
+                agent: Some(elsewhere.agent),
                 attachments: &elsewhere.attachments,
             };
             let passed = Box::pin(self.hub.pass_up(self, elsewhere.to, event)).await;

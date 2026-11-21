@@ -36,6 +36,9 @@ pub struct Event<'a> {
     pub kind: AlertKind,
     pub for_user: bool,
     pub message: String,
+    /// What the agent that takes it reads, where that differs from
+    /// `message`, which the user reads, as a thread's post does.
+    pub agent: Option<String>,
     pub attachments: &'a [PathBuf],
 }
 
@@ -169,18 +172,14 @@ impl Hub {
     /// the user what is for the user.
     pub(super) async fn deliver_told(&self, daemon: &dyn Daemon, told: Told) -> Result<()> {
         let receiver = daemon.receiver_from(&told.above).await?;
-        let ToldRecord::Alert {
-            kind,
-            message,
-            files,
-        } = &told.record;
-        let (kind, message) = (*kind, with_files(message, files));
+        let kind = told.record.kind();
+        let (agent, user) = told.record.texts();
         match (receiver, told.about) {
             (Some(Receiver::Here(coordinator)), about) => {
                 let about = about.map_or_else(About::default, |about| {
                     About::space(&about.name, &about.space)
                 });
-                let alert = told_alert(kind, about, message);
+                let alert = told_alert(kind, about, agent);
                 (daemon.alert(&coordinator, alert, told.for_user)).await
             }
             (Some(Receiver::Elsewhere(next)), about) => {
@@ -194,7 +193,7 @@ impl Hub {
             (None, Some(about)) => {
                 if told.for_user {
                     let about = About::space(&about.name, &about.space);
-                    let alert = told_alert(kind, about, message);
+                    let alert = told_alert(kind, about, user);
                     self.notifications.notify_user(alert).await;
                 }
                 Ok(())
@@ -264,22 +263,19 @@ fn told_above(above: SpaceId, event: Event<'_>) -> Told {
             name: event.name.clone(),
         }),
         for_user: event.for_user,
-        record: ToldRecord::Alert {
-            kind: event.kind,
-            message: event.message,
-            files,
+        record: match event.agent {
+            Some(agent) => ToldRecord::Thread {
+                kind: event.kind,
+                agent,
+                user: event.message,
+                files,
+            },
+            None => ToldRecord::Alert {
+                kind: event.kind,
+                message: event.message,
+                files,
+            },
         },
-    }
-}
-
-/// `message`, naming the `files` its space sent, which stay on its machine.
-fn with_files(message: &str, files: &[String]) -> String {
-    match files.is_empty() {
-        true => message.to_owned(),
-        false => format!(
-            "{message}\nFiles it sent, which stay on its machine: {}",
-            files.join(", ")
-        ),
     }
 }
 
