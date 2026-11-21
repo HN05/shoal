@@ -2152,7 +2152,8 @@ for each later attempt up to an hour for rate or usage limits, or a quarter hour
 for overloaded APIs and server errors. Each wait varies randomly by ±20%.
 It then sends the idle agent an [alert](#alerts) to continue its
 unfinished work, which reaches it in a new turn of the same conversation, and
-restores an agent Shoal put to sleep meanwhile. A new
+restores an agent Shoal put to sleep meanwhile, whose stop names the rate or
+usage limit or the failure it waits out. A new
 turn before then cancels the retry, and the agent's exit, completion or the
 space's removal drops it, a workspace's or a chat's. Attempts follow one another, with no cap, until a
 turn ends normally, so an outage of any length or a daily or weekly usage limit

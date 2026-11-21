@@ -152,7 +152,7 @@ impl Manager {
         if !idle.is_empty()
             && (self.agent_updates_recorded(workspace_id).await?
                 || self.wake_timer_set(workspace_id).await?
-                || self.turn_retry_waits(workspace_id).await?)
+                || self.waiting_turn_retry(workspace_id).await?.is_some())
         {
             idle.clear();
         }

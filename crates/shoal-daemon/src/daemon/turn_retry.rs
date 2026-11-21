@@ -416,12 +416,14 @@ impl Manager {
         Ok(())
     }
 
-    /// Whether a retry not yet delivered waits for the agent of the space
-    /// `id`.
-    pub(crate) async fn turn_retry_waits(&self, id: &SpaceId) -> Result<bool> {
+    /// The failure whose retry, not yet delivered, waits for the agent of
+    /// the space `id`.
+    pub(crate) async fn waiting_turn_retry(&self, id: &SpaceId) -> Result<Option<TurnFailure>> {
         let id = id.to_owned();
         let retry = self.store.read(move |tx| get(tx, &id)).await?;
-        Ok(retry.is_some_and(|retry| !retry.delivered))
+        Ok(retry
+            .filter(|retry| !retry.delivered)
+            .map(|retry| retry.failure))
     }
 
     /// Whether the AI tool `agent` names has `retry` on in `space`.
