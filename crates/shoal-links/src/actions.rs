@@ -424,6 +424,30 @@ pub fn ensure_branch_head(workspace: &Workspace, item: &Item) -> Result<()> {
     Ok(())
 }
 
+/// `owner/repository` of the fork the branch's push remote names, or `None`
+/// when it pushes to the PR's own repository. A remote is named by where it
+/// fetches from, as `origin` is, whatever its push URL.
+pub async fn head_repository(
+    worktree: &std::path::Path,
+    branch: &BranchName,
+    forge: &ForgeRepo,
+) -> Result<Option<String>> {
+    let remote = shoal_core::git::push_remote(worktree, branch).await?;
+    let url = shoal_core::git::remote_url(worktree, &remote).await?;
+    let pushed = ForgeRepo::parse(url.trim())
+        .with_context(|| format!("the branch's push remote {remote} is not a forge repository"))?;
+    if pushed == *forge {
+        return Ok(None);
+    }
+    anyhow::ensure!(
+        pushed.host == forge.host,
+        "the branch's push remote {remote} is on {}, so a PR on {} cannot have it as its head",
+        pushed.host,
+        forge.host
+    );
+    Ok(Some(pushed.path))
+}
+
 /// The item a mark names as the forge reports it; none for a workspace mark
 /// or a failed read.
 async fn marked_item(forge: &ForgeRepo, account: &Account, mark: &ReviewMark) -> Option<Item> {

@@ -1306,6 +1306,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         .unwrap();
     manager.notify_approval(&requested).await;
     let routed = manager
+        .links
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -1448,6 +1449,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
     assert!(!requested.routed);
     manager.notify_approval(&requested).await;
     let again = manager
+        .links
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -1658,6 +1660,7 @@ async fn a_stopped_chat_leaves_its_workspaces_requests_to_the_user() {
         .unwrap();
     manager.notify_approval(&requested).await;
     let routed = manager
+        .links
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -1723,6 +1726,7 @@ async fn a_chat_whose_agent_stops_gives_the_requests_it_decides_back_to_the_user
         .unwrap();
     manager.notify_approval(&requested).await;
     let routed = manager
+        .links
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -1732,6 +1736,7 @@ async fn a_chat_whose_agent_stops_gives_the_requests_it_decides_back_to_the_user
     // Stopped after the request reached it, the chat decides it no more.
     manager.end_executions(&chat.id).await;
     let given_back = manager
+        .links
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -1817,6 +1822,7 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .unwrap();
     manager.notify_approval(&requested).await;
     let routed = manager
+        .links
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -1864,6 +1870,7 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
     // An ended chat decides nothing more; the user does.
     manager.chats().await.unwrap();
     let passed = manager
+        .links
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -1985,6 +1992,7 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
             .is_err()
     );
     let kept = manager
+        .links
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -2062,6 +2070,7 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
     assert_eq!(user_requests().await, 1);
     // It is the user's now, so their inbox lists it.
     let given_back = manager
+        .links
         .approval_request(other.number)
         .await
         .unwrap()
@@ -2146,6 +2155,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
             .unwrap();
         manager.notify_approval(&requested).await;
         let shown = manager
+            .links
             .approval_request(requested.number)
             .await
             .unwrap()
@@ -2196,6 +2206,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
         assert!(decided.is_err(), "a changed request must not be decided");
         assert_eq!(
             manager
+                .links
                 .approval_request(replacement.number)
                 .await
                 .unwrap()
@@ -2411,6 +2422,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
     };
     // The parent's agent decides it without a grant of its own.
     let routed = manager
+        .links
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -2441,6 +2453,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         .await
         .unwrap_err();
     let pending = manager
+        .links
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -2518,6 +2531,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         panic!("holding its own workspace needs approval");
     };
     let routed = manager
+        .links
         .approval_request(requested.number)
         .await
         .unwrap()

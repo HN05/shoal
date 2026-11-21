@@ -1,8 +1,9 @@
+use shoal_protocol::approvals::PushSpecification;
 use std::{path::PathBuf, sync::Arc};
 
 use super::*;
 use crate::daemon::{
-    approvals::{DecisionStatus, GateStep, PushSpecification},
+    approvals::{DecisionStatus, GateStep},
     scope::Caller,
     test_support::{configure, install_test_script, manager, repository},
 };
@@ -113,7 +114,8 @@ impl Fixture {
         let selector = SpaceSelector::id(&self.workspace.id);
         match (self
             .manager
-            .request_push(&selector, push, Some(&self.caller)))
+            .links
+            .request_push(&*self.manager, &selector, push, Some(&self.caller)))
         .await?
         {
             PushOutcome::Proposed(proposed) => Ok(*proposed.proposed),

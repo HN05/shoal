@@ -89,7 +89,11 @@ pub(super) async fn decider(
         .unwrap()
         .unwrap();
     manager.notify_approval(&requested).await;
-    let routed = manager.approval_request(requested.number).await.unwrap();
+    let routed = manager
+        .links
+        .approval_request(requested.number)
+        .await
+        .unwrap();
     routed.unwrap().decider
 }
 

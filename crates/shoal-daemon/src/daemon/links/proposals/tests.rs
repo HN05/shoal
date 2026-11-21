@@ -1,12 +1,20 @@
 use super::*;
 use crate::daemon::{
     approvals::proposals::PR,
+    manager::Manager,
     scope::Caller,
     test_support::{manager, repository},
 };
 use crate::forge::items::attach::Attachment;
-use crate::model::Repository;
+use crate::forge::items::create::NewPull;
+use crate::forge::{ForgeRepo, items::link::ItemKind};
+use crate::model::{Repository, Workspace};
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_links::{daemon::ProposalKind, proposals::proposal};
+use shoal_protocol::approvals::{
+    ApprovalRequest, DecisionStatus, Duplicate, ProposalDecision, PullSpecification, Specification,
+    Target,
+};
 use shoal_protocol::space_names::SpaceSelector;
 use std::sync::Arc;
 
@@ -46,7 +54,8 @@ pub(crate) async fn store_pull_proposal(
     });
     let request = proposal(&workspace.id, Target::PrOpen, PR, specification);
     let (request, _) = manager
-        .store_proposal(request, proposals::propose_pull)
+        .links
+        .store_proposal(request, ProposalKind::Pull)
         .await
         .unwrap();
     request
@@ -69,7 +78,14 @@ pub(crate) async fn kept_copy(
     }];
     let _files = manager.gates.lock_proposal_files().await;
     manager
-        .keep_attachments(&workspace.id, repository, &mut body, &mut attachments)
+        .links
+        .keep_attachments(
+            manager,
+            &workspace.id,
+            repository,
+            &mut body,
+            &mut attachments,
+        )
         .await
         .unwrap();
     (body, attachments.remove(0))
@@ -97,7 +113,7 @@ async fn the_sweep_keeps_only_files_pending_proposals_attach() {
     std::fs::create_dir_all(files.join("stale/0")).unwrap();
     store_pull_proposal(&manager, &workspace, String::new(), vec![kept.clone()]).await;
 
-    manager.sweep_proposal_files().await.unwrap();
+    manager.links.sweep_proposal_files(&*manager).await.unwrap();
     assert!(kept.path.exists());
     assert!(!files.join("stale").exists());
 
@@ -108,7 +124,7 @@ async fn the_sweep_keeps_only_files_pending_proposals_attach() {
         .run(|db| Ok(db.execute("DELETE FROM spaces WHERE kind='workspace'", [])?))
         .await
         .unwrap();
-    manager.sweep_proposal_files().await.unwrap();
+    manager.links.sweep_proposal_files(&*manager).await.unwrap();
     assert!(!kept.path.exists());
 }
 
@@ -118,8 +134,11 @@ async fn a_decided_proposal_takes_its_files_and_a_removed_repository_the_rest() 
     let (_, decided) = kept_copy(&manager, &workspace, &repo.id, "decided.png").await;
     let request =
         store_pull_proposal(&manager, &workspace, String::new(), vec![decided.clone()]).await;
-    manager.forget_proposal(&request).await.unwrap();
-    manager.prune_proposal_files(&request).await;
+    manager.links.forget_proposal(&request).await.unwrap();
+    manager
+        .links
+        .prune_proposal_files(&*manager, &request)
+        .await;
     assert!(!decided.path.exists());
 
     let (_, left) = kept_copy(&manager, &workspace, &repo.id, "left.png").await;
@@ -157,17 +176,13 @@ async fn a_decision_refuses_a_proposal_changed_while_it_waited() {
         duplicates: Vec::new(),
         follow_up: None,
     });
-    let request = proposal(
-        &workspace.id,
-        Target::IssueOpen,
-        proposals::ISSUE,
-        specification,
-    );
+    let request = proposal(&workspace.id, Target::IssueOpen, ISSUE, specification);
     let (chosen, _) = manager
-        .store_proposal(request, proposals::propose_issue)
+        .links
+        .store_proposal(request, ProposalKind::Issue)
         .await
         .unwrap();
-    assert!(manager.pending_proposal(chosen.clone()).await.is_ok());
+    assert!(manager.links.pending_proposal(chosen.clone()).await.is_ok());
 
     // Another approval saves its edits before this decision takes the gate.
     let mut edited = chosen.clone();
@@ -175,8 +190,8 @@ async fn a_decision_refuses_a_proposal_changed_while_it_waited() {
         title: Some("Flaky test".into()),
         ..ProposalDecision::default()
     });
-    manager.save_proposal(edited).await.unwrap();
-    assert!(manager.pending_proposal(chosen).await.is_err());
+    manager.links.save_proposal(edited).await.unwrap();
+    assert!(manager.links.pending_proposal(chosen).await.is_err());
 }
 
 #[tokio::test]
@@ -202,7 +217,7 @@ async fn a_duplicate_decision_refuses_a_number_reused_while_it_waited() {
         duplicate_of: Some(Duplicate::Approval(original.number)),
         ..ProposalDecision::default()
     };
-    let locked = manager.duplicated_proposal(&decision).await.unwrap();
+    let locked = manager.links.duplicated_proposal(&decision).await.unwrap();
     assert_eq!(
         locked.as_ref().map(|locked| &locked.key),
         Some(&original.key)
@@ -210,15 +225,17 @@ async fn a_duplicate_decision_refuses_a_number_reused_while_it_waited() {
 
     // The original is decided and its workspace's next proposal takes its
     // number while the duplicate decision waits for the gates.
-    manager.forget_proposal(original).await.unwrap();
+    manager.links.forget_proposal(original).await.unwrap();
     let workspace = manager.workspace_by_id(&original.space_id).await.unwrap();
     let reused = store_issue_proposal(&manager, &workspace.clone().into()).await;
     assert_eq!(reused.number, original.number);
     let added = manager
+        .links
         .add_to_proposal(duplicate, original.number, locked.as_ref())
         .await;
     assert!(added.is_err());
     let unchanged = manager
+        .links
         .approval_request(reused.number)
         .await
         .unwrap()
@@ -257,7 +274,7 @@ async fn a_proposal_keeps_its_number_and_reserves_its_removed_space() {
     // No new space takes the number while it waits.
     let next = create("next").await.unwrap();
     assert_ne!(next.number, proposer.number);
-    manager.forget_proposal(kept).await.unwrap();
+    manager.links.forget_proposal(kept).await.unwrap();
     let freed = create("freed").await.unwrap();
     assert_eq!(freed.number, proposer.number);
 }
@@ -289,14 +306,10 @@ async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
         duplicates: Vec::new(),
         follow_up: None,
     });
-    let request = proposal(
-        &workspace.id,
-        Target::IssueOpen,
-        proposals::ISSUE,
-        specification,
-    );
+    let request = proposal(&workspace.id, Target::IssueOpen, ISSUE, specification);
     let (proposed, _) = manager
-        .store_proposal(request, proposals::propose_issue)
+        .links
+        .store_proposal(request, ProposalKind::Issue)
         .await
         .unwrap();
     manager.notify_approval(&proposed).await;
@@ -307,7 +320,7 @@ async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
         title: Some("Flaky test".into()),
         ..ProposalDecision::default()
     });
-    manager.save_proposal(edited).await.unwrap();
+    manager.links.save_proposal(edited).await.unwrap();
 
     let withdrawn = manager
         .withdraw_approval(&SpaceSelector::id(&workspace.id), proposed.number)
@@ -324,7 +337,7 @@ async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
             .unwrap()
             .is_empty()
     );
-    assert!(manager.pending_proposal(proposed).await.is_err());
+    assert!(manager.links.pending_proposal(proposed).await.is_err());
 }
 
 #[tokio::test]
@@ -377,18 +390,15 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         duplicates: Vec::new(),
         follow_up: None,
     });
-    let request = proposal(
-        &child.id,
-        Target::IssueOpen,
-        proposals::ISSUE,
-        specification,
-    );
+    let request = proposal(&child.id, Target::IssueOpen, ISSUE, specification);
     let (proposed, _) = manager
-        .store_proposal(request, proposals::propose_issue)
+        .links
+        .store_proposal(request, ProposalKind::Issue)
         .await
         .unwrap();
     manager.notify_approval(&proposed).await;
     let routed = manager
+        .links
         .approval_request(proposed.number)
         .await
         .unwrap()
@@ -432,8 +442,9 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         .await
         .unwrap();
     assert_eq!(denied.status, DecisionStatus::Denied);
-    assert!(manager.pending_proposal(proposed).await.is_err());
+    assert!(manager.links.pending_proposal(proposed).await.is_err());
     let original = manager
+        .links
         .approval_request(original.number)
         .await
         .unwrap()
@@ -459,7 +470,11 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         )
         .await;
     assert!(decided.is_err());
-    let outside = manager.approval_request(outside.number).await.unwrap();
+    let outside = manager
+        .links
+        .approval_request(outside.number)
+        .await
+        .unwrap();
     assert!(outside.unwrap().findings().is_empty());
     let denied = manager
         .decide_routed_approval(
@@ -493,14 +508,10 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         duplicates: Vec::new(),
         follow_up: None,
     });
-    let request = proposal(
-        &child.id,
-        Target::IssueOpen,
-        proposals::ISSUE,
-        specification,
-    );
+    let request = proposal(&child.id, Target::IssueOpen, ISSUE, specification);
     let (elsewhere, _) = manager
-        .store_proposal(request, proposals::propose_issue)
+        .links
+        .store_proposal(request, ProposalKind::Issue)
         .await
         .unwrap();
     manager.notify_approval(&elsewhere).await;
@@ -518,7 +529,11 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         )
         .await;
     assert!(decided.is_err());
-    let kept = manager.approval_request(elsewhere.number).await.unwrap();
+    let kept = manager
+        .links
+        .approval_request(elsewhere.number)
+        .await
+        .unwrap();
     assert_eq!(kept.unwrap().status, DecisionStatus::Pending);
     let reason = ProposalDecision {
         reason: Some("Not ours".into()),
@@ -553,14 +568,10 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         duplicates: Vec::new(),
         follow_up: None,
     });
-    let request = proposal(
-        &child.id,
-        Target::IssueOpen,
-        proposals::ISSUE,
-        specification,
-    );
+    let request = proposal(&child.id, Target::IssueOpen, ISSUE, specification);
     let (pending, _) = manager
-        .store_proposal(request, proposals::propose_issue)
+        .links
+        .store_proposal(request, ProposalKind::Issue)
         .await
         .unwrap();
     manager.notify_approval(&pending).await;
@@ -575,6 +586,7 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
             .unwrap();
     }
     let given_back = manager
+        .links
         .approval_request(pending.number)
         .await
         .unwrap()
@@ -612,6 +624,7 @@ async fn approving_again_refuses_an_item_posted_before_the_origin_moved() {
     let moved = ForgeRepo::parse("https://forge.example/team/new").unwrap();
     let account = manager.links.user_account();
     let finished = manager
+        .links
         .finish_proposed(&mut request, &moved, &account, ItemKind::Issue)
         .await
         .unwrap_err();

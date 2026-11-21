@@ -1,13 +1,13 @@
 //! A stand-in for the rest of the daemon, which the links' tests build
 //! their operations over: the issues and PRs a test assigns to each space,
 //! and nothing else.
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use anyhow::{Result, bail};
 use futures_util::future::BoxFuture;
 use shoal_core::config::Effective;
 use shoal_daemon_base::{
-    alerts::{Alert, NewAlert, Sent, Unread},
+    alerts::{About, Alert, AlertKind, NewAlert, Sent, Unread},
     callers::Caller,
     notifications::{Coordinators, Source},
     permitted_actions::Action,
@@ -22,15 +22,18 @@ use shoal_forge_types::{
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    config::permissions::PermissionKey,
+    agent::Agent,
+    approvals::ApprovalRequest,
+    config::permissions::{self, PermissionKey},
     model::{ConflictCheck, Repository, Selected, Space, SpaceRef, Workspace},
     processes::Leftover,
+    protocol::operations::OperationSpec,
     space_names::SpaceSelector,
 };
 use tokio::sync::watch;
 
 use crate::{
-    daemon::{Elsewhere, Forges, Messages, Permissions, SpaceAgent, Spaces, Watches},
+    daemon::{Approvals, Elsewhere, Forges, Messages, Permissions, SpaceAgent, Spaces, Watches},
     space::LinkSpace,
 };
 
@@ -134,6 +137,30 @@ impl Spaces for StandIn {
         Box::pin(async { bail!(NOT_HERE) })
     }
 
+    fn workspace<'a>(&'a self, _: &'a SpaceSelector) -> BoxFuture<'a, Result<Workspace>> {
+        Box::pin(async { bail!(NOT_HERE) })
+    }
+
+    fn workspace_by_id<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<Workspace>> {
+        Box::pin(async { bail!(NOT_HERE) })
+    }
+
+    fn find_workspace<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<Option<Workspace>>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn verify_worktree<'a>(&'a self, _: &'a Workspace) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn caller_agent<'a>(&'a self, _: &'a Caller) -> BoxFuture<'a, Option<Agent>> {
+        Box::pin(async { None })
+    }
+
     fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>> {
         Box::pin(async { Ok(Vec::new()) })
     }
@@ -206,6 +233,36 @@ impl Elsewhere for StandIn {
     }
 }
 
+impl Approvals for StandIn {
+    fn announce<'a>(&'a self, _: &'a ApprovalRequest) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
+
+    fn ensure_gate_hears<'a>(&'a self, _: &'a ApprovalRequest) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn tell_space<'a>(&'a self, _: &'a SpaceId, _: AlertKind, _: String) -> BoxFuture<'a, bool> {
+        Box::pin(async { false })
+    }
+
+    fn notify_about(&self, _: About, _: AlertKind, _: String) -> BoxFuture<'_, ()> {
+        Box::pin(async {})
+    }
+
+    fn start_operation(
+        &self,
+        _: OperationSpec,
+        _: Option<BTreeMap<String, String>>,
+    ) -> BoxFuture<'_, Result<String>> {
+        Box::pin(async { bail!(NOT_HERE) })
+    }
+
+    fn operation_running(&self, _: &str) -> bool {
+        false
+    }
+}
+
 impl Coordinators for StandIn {
     fn tell<'a>(&'a self, _: NewAlert, _: bool, _: Source) -> BoxFuture<'a, Option<Sent>> {
         Box::pin(async { None })
@@ -244,6 +301,14 @@ impl Permissions for StandIn {
         _: Action,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { Ok(()) })
+    }
+
+    fn caller_permissions<'a>(
+        &'a self,
+        _: &'a Caller,
+        _: Option<&'a RepositoryId>,
+    ) -> BoxFuture<'a, Result<permissions::Permissions>> {
+        Box::pin(async { bail!(NOT_HERE) })
     }
 
     fn authorize_actions<'a>(

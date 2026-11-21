@@ -85,7 +85,7 @@ impl Approvals for Manager {
     }
 
     fn prune_proposal_files<'a>(&'a self, denied: &'a ApprovalRequest) -> BoxFuture<'a, ()> {
-        Box::pin(Manager::prune_proposal_files(self, denied))
+        Box::pin(self.links.prune_proposal_files(self, denied))
     }
 }
 

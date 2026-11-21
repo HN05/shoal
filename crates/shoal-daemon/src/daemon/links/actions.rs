@@ -1,12 +1,13 @@
 //! Opening a workspace's PR, or proposing it, and the review gate a new
 //! PR waits for.
-use crate::daemon::links::proposals::OpenOutcomeExt;
 use anyhow::{Context, Result};
 use shoal_links::actions::ensure_branch_head;
 use shoal_links::issue::assignees::AssignerOf;
+use shoal_links::proposals::OpenOutcomeExt;
+use shoal_protocol::links::OpenOutcome;
 use shoal_refs::BranchName;
 
-use super::{issue::Assigner, proposals::OpenOutcome};
+use super::issue::Assigner;
 use crate::{
     config::permissions::Opening,
     daemon::{manager::Manager, scope::Caller},
@@ -45,7 +46,7 @@ impl Manager {
         push_held: bool,
         caller: Option<&Caller>,
     ) -> Result<OpenOutcome> {
-        let proposer = self.proposer(caller).await;
+        let proposer = shoal_links::proposals::proposer(self, caller).await;
         // Cleanup holds the workspace's gate, so it cannot remove the
         // workspace between opening the PR and linking it.
         let (workspace, _gate) = self.lock_pr_gate(selector).await?;
@@ -54,7 +55,8 @@ impl Manager {
         let head = shoal_links::pr::current_head(&workspace).await?;
         let push = match push_held {
             true => Some(
-                self.held_push(&workspace, proposer.as_ref(), caller)
+                self.links
+                    .held_push(self, &workspace, proposer.as_ref(), caller)
                     .await?,
             ),
             false => None,
@@ -76,8 +78,10 @@ impl Manager {
                 // The PR is linked now; approving the push updates it.
                 if let Some(push) = push {
                     self.links.link_open_pull(self, &workspace, &item).await?;
-                    self.ensure_workspace_not_pushing(&workspace).await?;
-                    let proposed = self.propose_push(&workspace, push).await?;
+                    self.links
+                        .ensure_workspace_not_pushing(self, &workspace)
+                        .await?;
+                    let proposed = self.links.propose_push(self, &workspace, push).await?;
                     return Ok(OpenOutcome::Proposed(proposed));
                 }
                 (item, None, None)
@@ -97,9 +101,12 @@ impl Manager {
                 let proposes = push.is_some() || self.proposes_pull(&workspace, caller).await?;
                 if let Some(proposer) = proposer.filter(|_| proposes) {
                     forge.check_uploads(&account, &pull.attachments).await?;
-                    self.ensure_workspace_not_pushing(&workspace).await?;
+                    self.links
+                        .ensure_workspace_not_pushing(self, &workspace)
+                        .await?;
                     let proposed = self
-                        .propose_pull(&workspace, pull, head, push, proposer)
+                        .links
+                        .propose_pull(self, &workspace, pull, head, push, proposer)
                         .await?;
                     return Ok(OpenOutcome::Proposed(proposed));
                 }

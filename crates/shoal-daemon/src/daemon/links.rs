@@ -1,6 +1,7 @@
 //! What the daemon keeps of the issues, PRs and CI runs spaces link until
 //! it moves into `shoal-links`, and whether a space takes link changes.
 mod actions;
+mod approvals;
 mod elsewhere;
 mod forges;
 pub mod issue;

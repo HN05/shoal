@@ -896,20 +896,6 @@ impl Manager {
             .collect()
     }
 
-    /// A scoped caller as a proposer, naming the agent whose execution it
-    /// runs in; unscoped callers open directly.
-    pub(crate) async fn proposer(
-        &self,
-        caller: Option<&crate::daemon::scope::Caller>,
-    ) -> Option<crate::daemon::links::proposals::Proposer> {
-        let caller = caller?;
-        let agent = match caller.execution_id() {
-            Some(id) => self.agent_name(id).await,
-            None => None,
-        };
-        Some(crate::daemon::links::proposals::Proposer { agent })
-    }
-
     /// The agent a request from `caller` comes from: the one its execution
     /// runs, else the one whose process tree registered it.
     pub(crate) async fn caller_agent(

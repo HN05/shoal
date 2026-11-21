@@ -1,12 +1,20 @@
-use super::*;
 use crate::{
     daemon::{
         approvals::proposals::PR,
+        manager::Manager,
+        scope::Caller,
         test_support::{chat, commit, manager, repository, working_below},
     },
     forge::items::create::NewPull,
+    model::Workspace,
 };
+use shoal_links::pushes::branch_push;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{
+    approvals::{ApprovalRequest, DecisionStatus, PushSpecification, Target},
+    links::PushOutcome,
+};
+use shoal_refs::CommitId;
 
 /// A workspace whose repository holds its agents' pushes back, and its
 /// agent as a scoped caller.
@@ -70,14 +78,22 @@ async fn only_scoped_pushes_wait_where_the_repository_asks() {
     let (_root, manager, workspace, caller) = setup().await;
     let push = branch(&workspace).await;
     let outcome = manager
-        .request_push(&SpaceSelector::id(&workspace.id), push.clone(), None)
+        .links
+        .request_push(
+            &*manager,
+            &SpaceSelector::id(&workspace.id),
+            push.clone(),
+            None,
+        )
         .await
         .unwrap();
     assert!(matches!(outcome, PushOutcome::Direct));
 
     let request = proposed(
         manager
+            .links
             .request_push(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 push.clone(),
                 Some(&caller),
@@ -95,7 +111,9 @@ async fn only_scoped_pushes_wait_where_the_repository_asks() {
     // Pushing the same again names the same request.
     let again = proposed(
         manager
+            .links
             .request_push(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 push.clone(),
                 Some(&caller),
@@ -112,7 +130,9 @@ async fn only_scoped_pushes_wait_where_the_repository_asks() {
     commit(&workspace.path, "tracked");
     let newer = proposed(
         manager
+            .links
             .request_push(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 branch(&workspace).await,
                 Some(&caller),
@@ -135,7 +155,9 @@ async fn a_pr_proposal_that_pushes_takes_the_place_of_its_push_request() {
     let push = branch(&workspace).await;
     let separate = proposed(
         manager
+            .links
             .request_push(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 push.clone(),
                 Some(&caller),
@@ -150,7 +172,9 @@ async fn a_pr_proposal_that_pushes_takes_the_place_of_its_push_request() {
     };
     let commit = push.commit.clone().unwrap();
     let pull = manager
+        .links
         .propose_pull(
+            &*manager,
             &workspace,
             pull,
             commit.clone(),
@@ -175,7 +199,13 @@ async fn a_pr_proposal_that_pushes_takes_the_place_of_its_push_request() {
     // Pushing the branch again while the PR waits names the PR's request.
     let again = proposed(
         manager
-            .request_push(&SpaceSelector::id(&workspace.id), push, Some(&caller))
+            .links
+            .request_push(
+                &*manager,
+                &SpaceSelector::id(&workspace.id),
+                push,
+                Some(&caller),
+            )
             .await
             .unwrap(),
     );
@@ -187,7 +217,9 @@ async fn approving_a_push_runs_it_and_its_end_decides_the_request() {
     let (_root, manager, workspace, caller) = setup().await;
     let request = proposed(
         manager
+            .links
             .request_push(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 branch(&workspace).await,
                 Some(&caller),
@@ -210,12 +242,18 @@ async fn approving_a_push_runs_it_and_its_end_decides_the_request() {
     std::fs::write(workspace.path.join("tracked"), "changed\n").unwrap();
     commit(&workspace.path, "tracked");
     let selected = SpaceSelector::id(&workspace.id);
-    let replaced = manager.request_push(&selected, branch(&workspace).await, Some(&caller));
+    let replaced = manager.links.request_push(
+        &*manager,
+        &selected,
+        branch(&workspace).await,
+        Some(&caller),
+    );
     assert!(replaced.await.is_err());
 
     // A failed push leaves the request to approve again.
     manager
-        .finish_approved_push(&request.key, Some("rejected".into()))
+        .links
+        .finish_approved_push(&*manager, &request.key, Some("rejected".into()))
         .await
         .unwrap_err();
     let kept = manager
@@ -227,7 +265,8 @@ async fn approving_a_push_runs_it_and_its_end_decides_the_request() {
     assert!(kept.operation.is_none());
 
     let decided = manager
-        .finish_approved_push(&request.key, None)
+        .links
+        .finish_approved_push(&*manager, &request.key, None)
         .await
         .unwrap();
     assert_eq!(decided.status, DecisionStatus::Approved);
@@ -252,7 +291,12 @@ async fn approving_a_push_runs_it_and_its_end_decides_the_request() {
 async fn an_exit_that_waits_keeps_an_approved_push_pending() {
     let (_root, manager, workspace, caller) = setup().await;
     let selected = SpaceSelector::id(&workspace.id);
-    let requested = manager.request_push(&selected, branch(&workspace).await, Some(&caller));
+    let requested = manager.links.request_push(
+        &*manager,
+        &selected,
+        branch(&workspace).await,
+        Some(&caller),
+    );
     let request = proposed(requested.await.unwrap());
     let approve = || manager.decide_approval(request.number, true, None, Default::default(), None);
     let held = manager.gates.hold_back(crate::protocol::Exit::Restart);
@@ -278,7 +322,9 @@ async fn approving_a_push_of_a_branch_that_moved_outdates_it() {
     let (_root, manager, workspace, caller) = setup().await;
     let request = proposed(
         manager
+            .links
             .request_push(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 branch(&workspace).await,
                 Some(&caller),
@@ -320,19 +366,25 @@ async fn deny_refuses_scoped_pushes_and_lets_the_user_push() {
     );
     let push = branch(&workspace).await;
     let selected = SpaceSelector::id(&workspace.id);
-    let requested = manager.request_push(&selected, push.clone(), Some(&caller));
+    let requested = manager
+        .links
+        .request_push(&*manager, &selected, push.clone(), Some(&caller));
     assert!(requested.await.is_err());
     let selected = SpaceSelector::id(&workspace.id);
-    let held = manager.branch_push_held(&selected, Some(&caller));
+    let held = manager
+        .links
+        .branch_push_held(&*manager, &selected, Some(&caller));
     assert!(held.await.is_err());
     let outcome = manager
-        .request_push(&SpaceSelector::id(&workspace.id), push, None)
+        .links
+        .request_push(&*manager, &SpaceSelector::id(&workspace.id), push, None)
         .await
         .unwrap();
     assert!(matches!(outcome, PushOutcome::Direct));
     assert!(
         !manager
-            .branch_push_held(&SpaceSelector::id(&workspace.id), None)
+            .links
+            .branch_push_held(&*manager, &SpaceSelector::id(&workspace.id), None)
             .await
             .unwrap()
     );
@@ -362,12 +414,20 @@ async fn a_parent_approves_a_push_only_with_its_own_push_permission() {
         vouched: None,
     };
     let selected = SpaceSelector::id(&child.id);
-    let outcome = manager.request_push(&selected, branch(&child).await, Some(&caller));
+    let outcome =
+        manager
+            .links
+            .request_push(&*manager, &selected, branch(&child).await, Some(&caller));
     let request = proposed(outcome.await.unwrap());
     let decider = |number| {
         let manager = manager.clone();
         async move {
-            let request = manager.approval_request(number).await.unwrap().unwrap();
+            let request = manager
+                .links
+                .approval_request(number)
+                .await
+                .unwrap()
+                .unwrap();
             (request.decider, request.status)
         }
     };

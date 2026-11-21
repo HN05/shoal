@@ -137,7 +137,7 @@ pub(super) fn write_record(db: &Connection, request: &ApprovalRequest) -> Result
     Ok(())
 }
 
-fn by_number(db: &Connection, number: ItemNumber) -> Result<Option<ApprovalRequest>> {
+pub(crate) fn by_number(db: &Connection, number: ItemNumber) -> Result<Option<ApprovalRequest>> {
     lookup(db, BY_NUMBER, params![number.space, number.item])
 }
 
@@ -196,7 +196,10 @@ pub(crate) fn oldest_for_user(
 
 /// Every request, or those the space `space` made, proposed or decides, in
 /// the order they were made: what the space lists.
-fn list_of_space(db: &Connection, space: Option<&SpaceId>) -> Result<Vec<ApprovalRequest>> {
+pub(crate) fn list_of_space(
+    db: &Connection,
+    space: Option<&SpaceId>,
+) -> Result<Vec<ApprovalRequest>> {
     db.prepare(&format!(
         "{COLUMNS} WHERE ?1 IS NULL OR space_id=?1 OR {REPOSITORY_OWNED} OR {DECIDED_BY}
         ORDER BY rowid"
@@ -427,34 +430,6 @@ impl Manager {
             .await
     }
 
-    /// Record a proposal with `record` in its own transaction.
-    pub(crate) async fn store_proposal(
-        &self,
-        request: ApprovalRequest,
-        record: fn(&Transaction<'_>, ApprovalRequest) -> Result<proposals::Recorded>,
-    ) -> Result<proposals::Recorded> {
-        self.store.write(move |tx| record(tx, request)).await
-    }
-
-    /// [`proposals::save`] in its own transaction.
-    pub(crate) async fn save_proposal(&self, request: ApprovalRequest) -> Result<()> {
-        self.store
-            .write(move |tx| proposals::save(tx, &request))
-            .await
-    }
-
-    /// [`proposals::remove`] in its own transaction, once `request` is
-    /// decided, recording the decision in its space's log.
-    pub(crate) async fn forget_proposal(&self, request: &ApprovalRequest) -> Result<()> {
-        let request = request.clone();
-        self.store
-            .write(move |tx| {
-                events::record_approval(tx, EventKind::ApprovalDecided, &request)?;
-                proposals::remove(tx, &request.key)
-            })
-            .await
-    }
-
     /// Withdraw the pending request `number` of the space `selector`
     /// names, which its agent no longer needs, and take back its
     /// notification while unread; once shown, its decider is told instead.
@@ -476,12 +451,12 @@ impl Manager {
             false => None,
         };
         if let Some(current) = self.approval_by_key(&selected.key).await? {
-            self.ensure_not_pushing(&current)?;
+            self.links.ensure_not_pushing(self, &current)?;
         }
         let _announcement = self.gates.lock_announcements().await;
         let (request, retracted) = self.record_withdrawal(selected).await?;
         if request.target.is_proposal() {
-            self.prune_proposal_files(&request).await;
+            self.links.prune_proposal_files(self, &request).await;
         }
         if !retracted {
             self.announce_withdrawal(&request).await;
@@ -539,14 +514,5 @@ impl Manager {
                 None => Err(item_numbers::unknown(db, ItemKind::Approval, number)?),
             })
             .await
-    }
-
-    /// A request's target never changes, so it can be read before taking the
-    /// gate its decision needs.
-    pub(crate) async fn approval_request(
-        &self,
-        number: ItemNumber,
-    ) -> Result<Option<ApprovalRequest>> {
-        self.store.run(move |db| by_number(db, number)).await
     }
 }

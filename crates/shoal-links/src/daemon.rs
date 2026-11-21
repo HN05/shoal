@@ -6,13 +6,16 @@
 //! each host serves, the permission a scoped caller acts with, the
 //! coordinators alerts about a space reach, and the spaces' state links
 //! check in their own transactions.
+use std::collections::BTreeMap;
+
 use anyhow::Result;
 use futures_util::future::BoxFuture;
-use rusqlite::Connection;
+use rusqlite::{Connection, Transaction};
 use shoal_core::config::Effective;
 use shoal_daemon_base::{
-    alerts::{Alert, Unread},
+    alerts::{About, Alert, AlertKind, Unread},
     callers::Caller,
+    item_numbers::ItemNumber,
     notifications::Coordinators,
     permitted_actions::Action,
 };
@@ -26,9 +29,12 @@ use shoal_forge_types::{
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    config::permissions::PermissionKey,
+    agent::Agent,
+    approvals::ApprovalRequest,
+    config::permissions::{self, PermissionKey},
     model::{ChangedOnBothSides, ConflictCheck, Repository, Selected, Space, SpaceRef, Workspace},
     processes::Leftover,
+    protocol::operations::OperationSpec,
     space_names::SpaceSelector,
 };
 use tokio::sync::watch;
@@ -119,6 +125,25 @@ pub trait Spaces: Send + Sync {
     /// Whether `caller`'s scope reaches the space `id`.
     fn reaches<'a>(&'a self, caller: &'a Caller, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;
 
+    /// The workspace `selector` names, refusing a chat.
+    fn workspace<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Workspace>>;
+
+    /// The workspace `id`, as it is now.
+    fn workspace_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Workspace>>;
+
+    /// The workspace `id`, while it exists.
+    fn find_workspace<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Workspace>>>;
+
+    /// Prove that the worktree of `workspace` is still its own, before a
+    /// request relies on it.
+    fn verify_worktree<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<()>>;
+
+    /// The registered repositories.
+    fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>>;
+
+    /// The agent a request from `caller` comes from, which proposes for it.
+    fn caller_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<Agent>>;
+
     /// Every space present on this machine.
     fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>>;
 
@@ -198,6 +223,42 @@ pub trait Elsewhere: Send + Sync {
     ) -> BoxFuture<'a, Result<()>>;
 }
 
+/// The approval requests that proposals and pushes wait for, which the
+/// daemon's approvals subsystem routes and decides, and the operations that
+/// run the pushes it approves.
+pub trait Approvals: Send + Sync {
+    /// Tell whoever decides the pending `request` about it.
+    fn announce<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, ()>;
+
+    /// Refuse `request` where its governing permission is `gate` and the
+    /// gate agent cannot hear it.
+    fn ensure_gate_hears<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, Result<()>>;
+
+    /// Tell the agent of the space `id` how its request went, wherever the
+    /// space runs; whether the message was queued.
+    fn tell_space<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        kind: AlertKind,
+        message: String,
+    ) -> BoxFuture<'a, bool>;
+
+    /// Tell the user, or the coordinator of the space `about` names, of a
+    /// problem with a request.
+    fn notify_about(&self, about: About, kind: AlertKind, message: String) -> BoxFuture<'_, ()>;
+
+    /// Start the operation `spec` describes in `env`, or the daemon's
+    /// environment, returning its ID.
+    fn start_operation(
+        &self,
+        spec: OperationSpec,
+        env: Option<BTreeMap<String, String>>,
+    ) -> BoxFuture<'_, Result<String>>;
+
+    /// Whether the operation `id` still runs.
+    fn operation_running(&self, id: &str) -> bool;
+}
+
 /// What the daemon records of a space's agent, which settling the agent
 /// account on its issues reads.
 pub struct SpaceAgent {
@@ -217,6 +278,14 @@ pub trait Permissions: Send + Sync {
         caller: Option<&'a Caller>,
         action: Action,
     ) -> BoxFuture<'a, Result<()>>;
+
+    /// The permissions of `caller`'s space in `repository`, or under the
+    /// global config without one.
+    fn caller_permissions<'a>(
+        &'a self,
+        caller: &'a Caller,
+        repository: Option<&'a RepositoryId>,
+    ) -> BoxFuture<'a, Result<permissions::Permissions>>;
 
     /// Let `caller` take each of `actions` together: none is taken until
     /// all may be.
@@ -263,13 +332,21 @@ pub trait Forges: Send + Sync {
 /// Everything links need of the daemon, which each of their operations
 /// that reaches beyond them takes.
 pub trait Daemon:
-    Spaces + Watches + Messages + Elsewhere + Forges + Permissions + Coordinators
+    Spaces + Watches + Messages + Elsewhere + Approvals + Forges + Permissions + Coordinators
 {
 }
 
 impl<T> Daemon for T where
-    T: Spaces + Watches + Messages + Elsewhere + Forges + Permissions + Coordinators
+    T: Spaces + Watches + Messages + Elsewhere + Approvals + Forges + Permissions + Coordinators
 {
+}
+
+/// Which kind of proposal a request records.
+#[derive(Clone, Copy)]
+pub enum ProposalKind {
+    Issue,
+    Pull,
+    Push,
 }
 
 /// What links check of a space in their own transactions. Its methods run
@@ -319,6 +396,41 @@ pub trait Records: Send + Sync {
     /// Each workspace's last conflict check that lists files changed on
     /// both sides.
     fn changed_on_both_sides(&self, db: &Connection) -> Result<Vec<(SpaceId, ChangedOnBothSides)>>;
+
+    /// Record `request` as the proposal of `kind`, or find the identical
+    /// one still pending, returning it and whether this recorded it.
+    fn record_proposal(
+        &self,
+        tx: &Transaction<'_>,
+        request: ApprovalRequest,
+        kind: ProposalKind,
+    ) -> Result<(ApprovalRequest, bool)>;
+
+    /// Store the changes made to the pending proposal `request`.
+    fn save_proposal(&self, tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()>;
+
+    /// Journal the decided proposal `request` and forget it.
+    fn forget_proposal(&self, tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()>;
+
+    /// Keep `request` as outdated, so it is no longer decided.
+    fn retire_approval(&self, tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()>;
+
+    /// The approval request numbered `number`, if any.
+    fn approval_by_number(
+        &self,
+        db: &Connection,
+        number: ItemNumber,
+    ) -> Result<Option<ApprovalRequest>>;
+
+    /// The approval request whose key is `key`, if any.
+    fn approval_by_key(&self, db: &Connection, key: &str) -> Result<Option<ApprovalRequest>>;
+
+    /// The approval requests of the space `space`, or of every space.
+    fn approval_requests(
+        &self,
+        db: &Connection,
+        space: Option<&SpaceId>,
+    ) -> Result<Vec<ApprovalRequest>>;
 
     /// The space `id` and every space below it.
     fn subtree(&self, db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>>;

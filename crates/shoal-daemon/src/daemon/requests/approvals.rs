@@ -49,11 +49,17 @@ pub(super) async fn handle(
                 .await?,
         )),
         ApprovalMethod::BranchPush { workspace } => Body::BranchPush(BranchPush {
-            held: manager.branch_push_held(&workspace, caller).await?,
+            held: manager
+                .links
+                .branch_push_held(&**manager, &workspace, caller)
+                .await?,
         }),
-        ApprovalMethod::RequestPush { workspace, push } => {
-            Body::Push(manager.request_push(&workspace, push, caller).await?)
-        }
+        ApprovalMethod::RequestPush { workspace, push } => Body::Push(
+            manager
+                .links
+                .request_push(&**manager, &workspace, push, caller)
+                .await?,
+        ),
         ApprovalMethod::AuthorizeAction {
             key,
             action,
@@ -69,9 +75,12 @@ pub(super) async fn handle(
             };
             Body::Granted(manager.grant_action(caller, action).await?)
         }
-        ApprovalMethod::FinishPush { key, failure } => {
-            Body::ApprovalRequest(Box::new(manager.finish_approved_push(&key, failure).await?))
-        }
+        ApprovalMethod::FinishPush { key, failure } => Body::ApprovalRequest(Box::new(
+            manager
+                .links
+                .finish_approved_push(&**manager, &key, failure)
+                .await?,
+        )),
         ApprovalMethod::EscalateApproval {
             space,
             number,

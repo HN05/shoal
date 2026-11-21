@@ -15,6 +15,8 @@ mod merge_path;
 pub mod merge_warning;
 pub mod place;
 pub mod pr;
+pub mod proposals;
+pub mod pushes;
 mod raw;
 pub mod reads;
 pub mod records;

@@ -495,6 +495,7 @@ async fn pending_proposals_follow_their_copies_to_the_new_root() -> Result<()> {
 
     manager.move_repositories(Layout::Regular).await?;
     let moved = manager
+        .links
         .approval_request(pull.number)
         .await?
         .context("no proposal")?;

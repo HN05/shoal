@@ -1,12 +1,17 @@
 //! What links read of a space in their own transactions: whether it takes
 //! link changes, its place in the space tree and its checked branch.
 use anyhow::Result;
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, Transaction};
 use shoal_ids::space_ids::SpaceId;
-use shoal_links::daemon::Records;
+use shoal_links::daemon::{ProposalKind, Records};
 use shoal_protocol::model::{ChangedOnBothSides, SpaceRef};
 
-use crate::daemon::tree::{self, TrackedAgents};
+use crate::daemon::{
+    approvals::{self, ApprovalRequest, proposals},
+    events::{self, EventKind},
+    item_numbers::ItemNumber,
+    tree::{self, TrackedAgents},
+};
 
 /// The space records links read, which the daemon keeps.
 pub(crate) struct LinkRecords;
@@ -56,6 +61,52 @@ impl Records for LinkRecords {
 
     fn changed_on_both_sides(&self, db: &Connection) -> Result<Vec<(SpaceId, ChangedOnBothSides)>> {
         crate::daemon::workspace::conflicts::recorded::listing_files(db)
+    }
+
+    fn record_proposal(
+        &self,
+        tx: &Transaction<'_>,
+        request: ApprovalRequest,
+        kind: ProposalKind,
+    ) -> Result<(ApprovalRequest, bool)> {
+        match kind {
+            ProposalKind::Issue => proposals::propose_issue(tx, request),
+            ProposalKind::Pull => proposals::propose_pull(tx, request),
+            ProposalKind::Push => proposals::propose_push(tx, request),
+        }
+    }
+
+    fn save_proposal(&self, tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()> {
+        proposals::save(tx, request)
+    }
+
+    fn forget_proposal(&self, tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()> {
+        events::record_approval(tx, EventKind::ApprovalDecided, request)?;
+        proposals::remove(tx, &request.key)
+    }
+
+    fn retire_approval(&self, tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()> {
+        approvals::retire(tx, request)
+    }
+
+    fn approval_by_number(
+        &self,
+        db: &Connection,
+        number: ItemNumber,
+    ) -> Result<Option<ApprovalRequest>> {
+        approvals::by_number(db, number)
+    }
+
+    fn approval_by_key(&self, db: &Connection, key: &str) -> Result<Option<ApprovalRequest>> {
+        approvals::by_key(db, key)
+    }
+
+    fn approval_requests(
+        &self,
+        db: &Connection,
+        space: Option<&SpaceId>,
+    ) -> Result<Vec<ApprovalRequest>> {
+        approvals::list_of_space(db, space)
     }
 
     fn subtree(&self, db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>> {

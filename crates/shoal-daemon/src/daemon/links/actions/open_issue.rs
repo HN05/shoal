@@ -1,9 +1,10 @@
 //! Opening an issue for a space, or from a registered
 //! checkout, in its repository or another one, or recording it for the
 //! user's approval where the repository asks for that.
-use crate::daemon::links::proposals::OpenOutcomeExt;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_links::issue::assignees::AssignerOf;
+use shoal_links::proposals::OpenOutcomeExt;
+use shoal_protocol::links::OpenOutcome;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
@@ -14,11 +15,7 @@ use crate::{
         resolve::Effective,
     },
     daemon::{
-        links::{
-            LinkSpace,
-            issue::Assigner,
-            proposals::{OpenOutcome, Proposer},
-        },
+        links::{LinkSpace, issue::Assigner},
         manager::Manager,
         scope::Caller,
     },
@@ -176,7 +173,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<OpenOutcome> {
         anyhow::ensure!(!link || space.keeps_links(), "{LINK_NEEDS_REPOSITORY}");
-        let proposer = self.proposer(caller).await;
+        let proposer = shoal_links::proposals::proposer(self, caller).await;
         // Cleanup holds the space's gate, so it cannot remove the space
         // between opening the issue and linking it, nor a link take its
         // issue's place meanwhile.
@@ -267,14 +264,15 @@ impl Manager {
         required: &[String],
         issue: NewIssue,
         link: bool,
-        proposer: Proposer,
+        proposer: shoal_links::proposals::Proposer,
     ) -> Result<OpenOutcome> {
         let (forge, account) = (&destination.forge, self.links.agent_account());
         conventions::require(forge, &account, ItemKind::Issue, required, &issue.labels).await?;
         forge.check_uploads(&account, &issue.attachments).await?;
         let repository = destination.repository();
         let proposed = self
-            .propose_issue(space, issue, repository, link, proposer)
+            .links
+            .propose_issue(self, space, issue, repository, link, proposer)
             .await?;
         Ok(OpenOutcome::Proposed(proposed))
     }

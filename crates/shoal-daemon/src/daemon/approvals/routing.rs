@@ -249,7 +249,8 @@ impl Manager {
         )?;
         if request.target.is_proposal() {
             return self
-                .decide_proposal(request, approve, details, env, None)
+                .links
+                .decide_proposal(self, request, approve, details, env, None)
                 .await;
         }
         ensure!(
@@ -291,7 +292,15 @@ impl Manager {
         }
         if request.target.is_proposal() {
             return self
-                .decide_proposal(request, approve, details, None, Some(&coordinator.space_id))
+                .links
+                .decide_proposal(
+                    self,
+                    request,
+                    approve,
+                    details,
+                    None,
+                    Some(&coordinator.space_id),
+                )
                 .await;
         }
         ensure!(

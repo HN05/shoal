@@ -238,7 +238,10 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<(), SweepFa
     step("event expiry", manager.expire_events().await);
     step("contributions", manager.sweep_contributions().await);
     step("carried commits", manager.release_unclaimed_carried().await);
-    step("proposal files", manager.sweep_proposal_files().await);
+    step(
+        "proposal files",
+        manager.links.sweep_proposal_files(manager).await,
+    );
     step("temporary directories", manager.sweep_tmp_dirs().await);
     step("release copies", manager.sweep_releases().await);
     step("leftovers", manager.find_leftovers().await);

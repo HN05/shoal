@@ -2,37 +2,35 @@
 //! or a coordinator decides, since the agent's own may be gone by then. They
 //! live in the `.proposals` directory of the repository the proposal is
 //! for.
-use anyhow::{Context, Result};
-use shoal_ids::repository_ids::RepositoryId;
-use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::BTreeSet,
     ffi::OsString,
     path::{Path, PathBuf},
 };
 
-use crate::{
-    daemon::{
-        approvals::{ApprovalRequest, DecisionStatus},
-        log,
-        manager::Manager,
-    },
-    forge::items::attach::Attachment,
-    model::Repository,
-    shoal_dirs::{Contents, ShoalDir},
-};
-use shoal_daemon_base::file_copies::keep_copies;
+use anyhow::{Context, Result};
+use shoal_core::shoal_dirs::{Contents, ShoalDir};
+use shoal_daemon_base::{file_copies::keep_copies, log};
 use shoal_forge::items::attach;
+use shoal_forge_types::items::attach::Attachment;
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_protocol::{
+    approvals::{ApprovalRequest, DecisionStatus},
+    model::Repository,
+};
 
-impl Manager {
+use crate::{Links, daemon::Daemon};
+
+impl Links {
     /// Copy the files a proposal for the repository `repository` attaches
     /// into its directory of proposal files and point `body` at the copies.
     /// The directory is named by the proposal's content, files included, so
     /// proposing it again reuses the copies and finds the same request, and
     /// copies never change. The caller holds the `proposal_files` gate until
     /// the proposal is stored, since pruning takes it too.
-    pub(super) async fn keep_attachments(
+    pub async fn keep_attachments(
         &self,
+        daemon: &dyn Daemon,
         owner: &SpaceId,
         repository: &RepositoryId,
         body: &mut String,
@@ -41,7 +39,7 @@ impl Manager {
         if attachments.is_empty() {
             return Ok(());
         }
-        let repository = self.repository(repository).await?;
+        let repository = daemon.repository(repository).await?;
         let dir = ShoalDir::of(&repository, Contents::ProposalFiles);
         let (owner, text, originals) = (owner.to_owned(), body.clone(), attachments.clone());
         let copies = tokio::task::spawn_blocking(move || {
@@ -55,7 +53,7 @@ impl Manager {
     }
 
     /// Delete the repository's copies with its registration.
-    pub(crate) async fn delete_proposal_files(&self, repository: &Repository) -> Result<()> {
+    pub async fn delete_proposal_files(&self, repository: &Repository) -> Result<()> {
         let _files = self.gates.lock_proposal_files().await;
         let dir = ShoalDir::of(repository, Contents::ProposalFiles);
         tokio::task::spawn_blocking(move || dir.remove()).await?
@@ -64,9 +62,9 @@ impl Manager {
     /// [`Self::prune_proposal_files`] for the cleanup sweep, over every
     /// repository's copies, which also catches proposals removed with their
     /// workspace or repository.
-    pub(crate) async fn sweep_proposal_files(&self) -> Result<()> {
+    pub async fn sweep_proposal_files(&self, daemon: &dyn Daemon) -> Result<()> {
         let _files = self.gates.lock_proposal_files().await;
-        let dirs = (self.repositories().await?.iter())
+        let dirs = (daemon.repositories().await?.iter())
             .map(|repository| ShoalDir::of(repository, Contents::ProposalFiles))
             .collect();
         self.remove_unattached_files(dirs).await
@@ -74,12 +72,12 @@ impl Manager {
 
     /// Delete the copies no pending proposal attaches any more, among those
     /// of the repository `request` is for. Failure only logs.
-    pub(crate) async fn prune_proposal_files(&self, request: &ApprovalRequest) {
+    pub async fn prune_proposal_files(&self, daemon: &dyn Daemon, request: &ApprovalRequest) {
         let _files = self.gates.lock_proposal_files().await;
         let pruned = async {
-            let dirs = match self.proposal_repository(request).await {
+            let dirs = match self.proposal_repository(daemon, request).await {
                 Some(id) => vec![ShoalDir::of(
-                    &self.repository(&id).await?,
+                    &daemon.repository(&id).await?,
                     Contents::ProposalFiles,
                 )],
                 None => Vec::new(),
@@ -93,10 +91,14 @@ impl Manager {
 
     /// The repository `request` is for: an issue proposal's own, or the
     /// proposing workspace's while it exists.
-    async fn proposal_repository(&self, request: &ApprovalRequest) -> Option<RepositoryId> {
+    async fn proposal_repository(
+        &self,
+        daemon: &dyn Daemon,
+        request: &ApprovalRequest,
+    ) -> Option<RepositoryId> {
         match &request.repository_id {
             Some(repository) => Some(repository.clone()),
-            None => (self.workspace_by_id(&request.space_id).await.ok())
+            None => (daemon.workspace_by_id(&request.space_id).await.ok())
                 .and_then(|workspace| workspace.repository_id),
         }
     }

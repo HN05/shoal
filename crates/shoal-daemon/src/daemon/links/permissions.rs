@@ -7,7 +7,7 @@ use shoal_links::daemon::Permissions;
 use shoal_ids::repository_ids::RepositoryId;
 
 use crate::{
-    config::permissions::PermissionKey,
+    config::permissions::{self, PermissionKey},
     daemon::{manager::Manager, scope::Caller},
 };
 
@@ -18,6 +18,14 @@ impl Permissions for Manager {
         action: Action,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(Manager::authorize_action(self, caller, action))
+    }
+
+    fn caller_permissions<'a>(
+        &'a self,
+        caller: &'a Caller,
+        repository: Option<&'a RepositoryId>,
+    ) -> BoxFuture<'a, Result<permissions::Permissions>> {
+        Box::pin(Manager::caller_permissions(self, caller, repository))
     }
 
     fn authorize_actions<'a>(
