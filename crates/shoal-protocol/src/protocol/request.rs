@@ -1,12 +1,12 @@
 //! The request envelope and the method each request carries.
 use super::{
     AgentMethod, AlertMethod, AppMethod, ApprovalMethod, AssignmentMethod, BranchMethod,
-    ChangeMethod, ChatMethod, CiMethod, ConfigMethod, ContainerMethod, DaemonMethod, DemoMethod,
-    DiffMethod, ExecutionMethod, ExitRequest, FileMethod, HoldMethod, HubMethod, ItemMethod,
-    LaunchMethod, MergingMethod, OperationMethod, PermissionMethod, PlaceMethod, PortMethod,
-    QueueMethod, Reattach, RecoveryMethod, RemovalMethod, RepositoryMethod, ResourceMethod,
-    ReviewMethod, SecretMethod, SimulatorMethod, SpaceMethod, SubscriptionMethod, ThreadMethod,
-    TriggerMethod, VERSION, WorkspaceMethod,
+    ChangeMethod, ChatMethod, CiMethod, ConfigMethod, ContainerMethod, ConversionMethod,
+    DaemonMethod, DemoMethod, DiffMethod, ExecutionMethod, ExitRequest, FileMethod, HoldMethod,
+    HubMethod, ItemMethod, LaunchMethod, MergingMethod, OperationMethod, PermissionMethod,
+    PlaceMethod, PortMethod, QueueMethod, Reattach, RecoveryMethod, RemovalMethod,
+    RepositoryMethod, ResourceMethod, ReviewMethod, SecretMethod, SimulatorMethod, SpaceMethod,
+    SubscriptionMethod, ThreadMethod, TriggerMethod, VERSION, WorkspaceMethod,
 };
 use serde::{Deserialize, Serialize};
 
@@ -74,6 +74,7 @@ pub enum Operation {
     Assignment(AssignmentMethod),
     Agent(AgentMethod),
     Chat(ChatMethod),
+    Conversion(ConversionMethod),
     Launch(LaunchMethod),
     Queue(QueueMethod),
     Hold(HoldMethod),
@@ -180,6 +181,7 @@ impl Operation {
             | Self::Config(_)
             | Self::Merging(_)
             | Self::Chat(_)
+            | Self::Conversion(_)
             | Self::Removal(_)
             | Self::Recovery(_)
             | Self::Assignment(_)
@@ -245,6 +247,7 @@ from_domains!(
     Assignment(AssignmentMethod),
     Agent(AgentMethod),
     Chat(ChatMethod),
+    Conversion(ConversionMethod),
     Launch(LaunchMethod),
     Queue(QueueMethod),
     Hold(HoldMethod),

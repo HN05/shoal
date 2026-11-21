@@ -11,6 +11,7 @@ mod chats;
 mod ci;
 mod config;
 mod containers;
+mod conversions;
 pub(super) mod daemon;
 mod demos;
 mod diffs;
@@ -83,6 +84,7 @@ pub(super) async fn handle(
         Operation::Assignment(method) => assignments::handle(&server.manager, method, caller).await,
         Operation::Agent(method) => agents::handle(&server.manager, method, caller).await,
         Operation::Chat(method) => chats::handle(&server.manager, method, caller).await,
+        Operation::Conversion(method) => conversions::handle(&server.manager, method, caller).await,
         Operation::Launch(method) => launches::handle(&server.manager, method, caller).await,
         Operation::Queue(method) => queue::handle(&server.manager, method, caller).await,
         Operation::Hold(method) => holds::handle(&server.manager, method, caller).await,

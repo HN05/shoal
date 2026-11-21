@@ -130,11 +130,6 @@ pub(super) async fn handle(
                 .rename_branch(&workspace, &branch, caller.and_then(|c| c.execution_id()))
                 .await?,
         ),
-        WorkspaceMethod::ConvertToChat { workspace, mode } => Body::Workspace(
-            manager
-                .convert_to_chat(&workspace, mode.unwrap_or_else(crate::model::chat_mode))
-                .await?,
-        ),
         WorkspaceMethod::UntrackedWorktrees => {
             let listed = manager.untracked_worktrees().await;
             return Ok(Answer::pages(listed, Body::UntrackedWorktrees));
@@ -201,7 +196,6 @@ impl Scoped for WorkspaceMethod {
             }
             WorkspaceMethod::SetBaseWorkspace { workspace, .. }
             | WorkspaceMethod::RenameBranch { workspace, .. }
-            | WorkspaceMethod::ConvertToChat { workspace, .. }
             | WorkspaceMethod::CreateChild {
                 parent: workspace, ..
             }

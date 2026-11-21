@@ -7,7 +7,7 @@ use crate::{
         test_support::{chat, manager, repository},
     },
     model::Repository,
-    protocol::OperationMethod,
+    protocol::ConversionMethod,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -75,7 +75,7 @@ async fn an_agent_converts_the_spaces_its_scope_reaches() {
     manager.executions.issue_scope("lead".into(), caller).await;
 
     for (chat, allowed) in [(&lead, true), (&talk, true), (&other, false)] {
-        let mut convert = OperationMethod::ConvertToWorkspace {
+        let mut convert = ConversionMethod::ConvertToWorkspace {
             chat: SpaceSelector::id(&chat.id),
             branch: "fix-login".into(),
             issue: None,

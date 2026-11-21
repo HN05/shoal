@@ -40,7 +40,6 @@ const REQUESTS: &[&str] = &[
     r#"{"create_child":{"parent":"fix","name":"part","base":null}}"#,
     r#"{"adopt_workspace":{"repository":"app","path":"/work/fix","copy":false}}"#,
     r#"{"rename_branch":{"workspace":"fix","branch":"fix-2"}}"#,
-    r#"{"convert_to_chat":{"workspace":"fix","mode":"plan"}}"#,
     r#""untracked_worktrees""#,
     r#""list_spaces""#,
     r#"{"list_spaces_everywhere":{"here":true}}"#,
@@ -306,7 +305,9 @@ const REQUESTS: &[&str] = &[
     r#"{"start_workspace":{"repository":"app","name":"fix","issue":"https://forge.example/team/app/issues/42","agent":{"agent":"claude","prompt":null}}}"#,
     r#"{"start_creation":{"launch":{"target":"app","branch":"fix","parent":"3"},"below":"4"}}"#,
     r#"{"start_child":{"parent":"fix","name":"part","base":"HEAD"}}"#,
+    // Conversions.
     r#"{"convert_to_workspace":{"chat":"app-chat","branch":"fix","issue":"https://forge.example/team/app/issues/42"}}"#,
+    r#"{"convert_to_chat":{"workspace":"fix","mode":"plan"}}"#,
 ];
 
 #[test]
@@ -362,6 +363,7 @@ fn every_request_has_its_json_above() {
         variants::<AssignmentMethod>(),
         variants::<AgentMethod>(),
         variants::<ChatMethod>(),
+        variants::<ConversionMethod>(),
         variants::<LaunchMethod>(),
         variants::<QueueMethod>(),
         variants::<HoldMethod>(),

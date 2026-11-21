@@ -1,5 +1,6 @@
 //! Converting a chat into a workspace, which the daemon then prepares in an
-//! operation, and a workspace into a chat.
+//! operation, and a workspace into a chat: the requests of
+//! [`ConversionMethod`].
 use std::collections::BTreeMap;
 
 use anyhow::Result;
@@ -9,7 +10,7 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     config::modes::ModeName,
     model::Workspace,
-    protocol::{CreationOptions, OperationMethod, WorkspaceMethod, operations::StartedWorkspace},
+    protocol::{ConversionMethod, CreationOptions, operations::StartedWorkspace},
 };
 
 /// The workspace a chat becomes.
@@ -42,7 +43,7 @@ pub async fn to_workspace(
         options,
         mode,
     } = new;
-    let method = OperationMethod::ConvertToWorkspace {
+    let method = ConversionMethod::ConvertToWorkspace {
         chat,
         branch,
         issue,
@@ -61,5 +62,5 @@ pub async fn to_chat(
     workspace: SpaceSelector,
     mode: Option<ModeName>,
 ) -> Result<Workspace> {
-    connection::request(daemon, WorkspaceMethod::ConvertToChat { workspace, mode }).await
+    connection::request(daemon, ConversionMethod::ConvertToChat { workspace, mode }).await
 }

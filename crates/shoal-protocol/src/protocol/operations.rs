@@ -122,24 +122,6 @@ pub enum OperationMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         env: Option<BTreeMap<String, String>>,
     },
-    /// Turn the chat `chat` into a workspace on `branch`, an existing branch
-    /// or a new one from `base`, linked to `issue` when given, and start
-    /// preparing it; its agent restarts there in `mode`, `worker` by
-    /// default, once its turn ends.
-    ConvertToWorkspace {
-        chat: SpaceSelector,
-        branch: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        issue: Option<crate::forge::items::reference::ItemInput>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        base: Option<String>,
-        #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
-        options: CreationOptions,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        mode: Option<crate::config::modes::ModeName>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        env: Option<BTreeMap<String, String>>,
-    },
     /// The worker's report of a step of operation `id`, or of its end.
     ReportProgress { id: String, report: Report },
     /// Long-lived: start `order`, a move, under the caller's scope on the
@@ -693,13 +675,13 @@ impl Failure {
 }
 
 impl OperationMethod {
-    /// A conversion goes to the chat's machine, and a move to that of its
-    /// spaces, as an operation the caller names with its space goes to that
-    /// space's, whose events come on a stream; the rest create spaces where
-    /// the caller runs or report the caller's own operations.
+    /// A move goes to the machine of its spaces, as an operation the caller
+    /// names with its space goes to that space's, whose events come on a
+    /// stream; the rest create spaces where the caller runs or report the
+    /// caller's own operations.
     pub fn forwarding(&self) -> Forwarding {
         match self {
-            Self::ConvertToWorkspace { .. } | Self::CancelOperation { .. } => Forwarding::Online,
+            Self::CancelOperation { .. } => Forwarding::Online,
             Self::StartMove { .. } | Self::FollowOperation { .. } => Forwarding::Streamed,
             Self::StartOperation { .. }
             | Self::StartWorkspace { .. }
@@ -711,7 +693,6 @@ impl OperationMethod {
 
     pub fn target(&self) -> Option<Target<'_>> {
         match self {
-            Self::ConvertToWorkspace { chat, .. } => Some(Target::Space(chat)),
             Self::FollowOperation { operation, .. } | Self::CancelOperation { operation } => {
                 operation.space.as_ref().map(Target::Space)
             }

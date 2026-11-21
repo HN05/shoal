@@ -7,7 +7,6 @@ use tokio::net::UnixStream;
 
 use super::super::{
     answer::{Answer, OperationGuard},
-    conversions::WorkspaceConversion,
     manager::Manager,
     moves::MoveStart,
     operations::{
@@ -29,8 +28,7 @@ fn starts_work(method: &OperationMethod) -> bool {
         | OperationMethod::StartMove { .. }
         | OperationMethod::StartWorkspace { .. }
         | OperationMethod::StartCreation { .. }
-        | OperationMethod::StartChild { .. }
-        | OperationMethod::ConvertToWorkspace { .. } => true,
+        | OperationMethod::StartChild { .. } => true,
         OperationMethod::FollowOperation { .. }
         | OperationMethod::CancelOperation { .. }
         | OperationMethod::ReportProgress { .. } => false,
@@ -166,28 +164,6 @@ pub(super) async fn handle(
                     .await?,
             )
         }
-        OperationMethod::ConvertToWorkspace {
-            chat,
-            branch,
-            issue,
-            base,
-            options,
-            mode,
-            env,
-        } => {
-            let conversion = WorkspaceConversion {
-                branch,
-                issue,
-                base,
-                options,
-                mode: mode.unwrap_or(crate::config::modes::ModeName::DEFAULT),
-            };
-            Body::WorkspaceStarted(
-                manager
-                    .convert_to_workspace(&chat, conversion, env, caller)
-                    .await?,
-            )
-        }
         OperationMethod::CancelOperation { operation } => {
             (manager.named_operation(&operation, caller).await?).interrupt();
             Body::Ok
@@ -239,7 +215,6 @@ impl Scoped for OperationMethod {
                 }
                 None
             }
-            OperationMethod::ConvertToWorkspace { chat, .. } => Some(chat),
             // One this machine runs is checked here; one named with a space
             // is that space's, wherever it runs.
             OperationMethod::FollowOperation { operation, .. }

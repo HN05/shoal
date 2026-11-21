@@ -11,8 +11,8 @@ use crate::{
 };
 
 use super::{
-    ApprovalMethod, ItemContext, LaunchMethod, Operation, OperationMethod, RemovalMethod,
-    RepoTarget,
+    ApprovalMethod, ConversionMethod, ItemContext, LaunchMethod, Operation, OperationMethod,
+    RemovalMethod, RepoTarget,
 };
 
 /// What a daemon does with a request for another machine's space.
@@ -110,10 +110,8 @@ impl Operation {
                 launch.forwarded.get_or_insert_default();
             }
             // Its worker runs in that machine's daemon's environment.
-            Self::Operations(
-                OperationMethod::StartMove { env, .. }
-                | OperationMethod::ConvertToWorkspace { env, .. },
-            ) => *env = None,
+            Self::Operations(OperationMethod::StartMove { env, .. })
+            | Self::Conversion(ConversionMethod::ConvertToWorkspace { env, .. }) => *env = None,
             // A process of this machine, which that machine has none of.
             Self::Removal(RemovalMethod::StopProcesses { requester, .. }) => *requester = None,
             _ => {}
@@ -169,6 +167,7 @@ impl Operation {
             Self::Assignment(method) => method.forwarding(),
             Self::Agent(method) => method.forwarding(),
             Self::Chat(method) => method.forwarding(),
+            Self::Conversion(method) => method.forwarding(),
             Self::Launch(method) => method.forwarding(),
             Self::Queue(method) => method.forwarding(),
             Self::Hold(method) => method.forwarding(),
@@ -215,6 +214,7 @@ impl Operation {
             Self::Assignment(method) => method.target(),
             Self::Agent(method) => method.target(),
             Self::Chat(method) => method.target(),
+            Self::Conversion(method) => method.target(),
             Self::Launch(method) => method.target(),
             Self::Queue(method) => method.target(),
             Self::Hold(method) => method.target(),
