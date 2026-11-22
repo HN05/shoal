@@ -210,9 +210,11 @@ async fn confirm(ctx: &Context, targets: &[Target], confirmed: bool) -> Result<(
     Ok(())
 }
 
-/// Remove each of `targets` in turn; one that fails names those removed
-/// before it.
-async fn remove_each(ctx: &Context, targets: Vec<Target>) -> Result<Vec<RemovedRepository>> {
+/// Remove each of `targets` in turn, this machine's last, so another
+/// machine that refuses its removal stops it before anything here goes;
+/// one that fails names those removed before it.
+async fn remove_each(ctx: &Context, mut targets: Vec<Target>) -> Result<Vec<RemovedRepository>> {
+    targets.sort_by_key(|target| matches!(target, Target::Here(_)));
     let mut removed: Vec<RemovedRepository> = Vec::new();
     for target in targets {
         match remove_one(ctx, &target).await {
