@@ -221,12 +221,14 @@ pub(super) async fn watch(
     resumed: bool,
 ) -> Result<i32> {
     let selection = items.selection()?;
-    let space = ui::select_space(
-        ctx,
-        items.space,
-        ui::Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-    )
-    .await?;
+    let watching = {
+        let selection = selection.clone();
+        Acting::request(move |space| {
+            crate::client::items::watch(space, selection.clone(), None, None)
+        })
+    };
+    let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory(&watching));
+    let space = space.await?;
     let (context, repository) = watch_context(ctx, &space, repo.as_deref()).await?;
     let selection = resolve_kind(ctx, context.into(), selection).await?;
     spaces::watch_items(ctx, space, selection, repository, timeout, resumed).await

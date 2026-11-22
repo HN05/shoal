@@ -1,3 +1,4 @@
+use crate::cli::ui::Acting;
 use crate::config_file::ConfigExt;
 use anyhow::{Context as _, Result, ensure};
 use std::path::PathBuf;
@@ -217,13 +218,10 @@ async fn target(ctx: &Context, explicit: Option<SpaceSelector>) -> Result<Config
     Ok(match repository {
         Some(repository) => ConfigTarget::Repository(repository.id.clone().into()),
         None => {
-            let picked = ui::pick_workspace(
-                ctx,
-                workspaces,
-                "workspace",
-                &crate::cli::ui::Acting::Unconverted,
-            )
-            .await?;
+            let reading = Acting::request(|space| {
+                crate::client::config::layered_config(ConfigTarget::Space(space))
+            });
+            let picked = ui::pick_workspace(ctx, workspaces, "workspace", &reading).await?;
             ConfigTarget::Space(SpaceSelector::id(&picked))
         }
     })

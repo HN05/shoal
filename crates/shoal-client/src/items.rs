@@ -4,7 +4,7 @@ use anyhow::Result;
 use tokio::time::Instant;
 
 use crate::{
-    connection::{Daemon, Prepared, await_reply, request},
+    connection::{Daemon, Prepared, Sendable as _, await_reply, request},
     forge::items::{
         action::Action,
         create::{NewIssue, PullOptions},
@@ -65,6 +65,22 @@ pub fn unlink(
     })
 }
 
+/// What [`await_updates`] asks, waiting up to `timeout_secs`, as the picker
+/// that chooses the space whose items it watches judges it.
+pub fn watch(
+    space: SpaceSelector,
+    selection: Selection,
+    repository: Option<RepositoryId>,
+    timeout_secs: Option<u64>,
+) -> Prepared<Updates> {
+    Prepared::new(ItemMethod::WatchItems {
+        space,
+        selection,
+        repository,
+        timeout_secs,
+    })
+}
+
 /// The next activity on the items of `space` that `selection` selects, an
 /// item of the registered `repository` for a chat without a repository,
 /// waiting across daemon restarts until `deadline`, when the updates come
@@ -78,11 +94,15 @@ pub async fn await_updates(
     deadline: Option<Instant>,
     restarted: bool,
 ) -> Result<Updates> {
-    let method = || ItemMethod::WatchItems {
-        space: space.clone(),
-        selection: selection.clone(),
-        repository: repository.clone(),
-        timeout_secs: seconds_left(deadline),
+    let method = || {
+        let timeout = seconds_left(deadline);
+        watch(
+            space.clone(),
+            selection.clone(),
+            repository.clone(),
+            timeout,
+        )
+        .into_operation()
     };
     let reply = await_reply(daemon, method, restarted);
     let body = match deadline {
