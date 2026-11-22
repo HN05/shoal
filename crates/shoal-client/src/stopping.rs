@@ -25,20 +25,18 @@ pub fn check(space: SpaceSelector) -> Prepared<()> {
 /// their sessions, and do with its queued launches as `launches` says and
 /// with its untracked processes as `processes` says; `acknowledge_unproven`
 /// accepts processes whose exit cannot be proven.
-pub async fn stop_space(
-    daemon: &impl Daemon,
+pub fn stop_space(
     space: SpaceSelector,
     acknowledge_unproven: bool,
     launches: QueuedLaunches,
     processes: UntrackedProcesses,
-) -> Result<StoppedSpace> {
-    let method = RemovalMethod::StopSpace {
+) -> Prepared<StoppedSpace> {
+    Prepared::new(RemovalMethod::StopSpace {
         space,
         acknowledge_unproven,
         launches,
         processes,
-    };
-    request(daemon, method).await
+    })
 }
 
 /// Stop the untracked processes of `space` that `selection` selects, other

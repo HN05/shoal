@@ -35,8 +35,10 @@ pub(super) async fn acquire(
     kind: AcquireKind,
     space: Option<SpaceSelector>,
 ) -> Result<i32> {
-    let holds = matches!(kind, AcquireKind::Hold { .. });
-    let workspace = select_target(ctx, holds, space).await?;
+    let holding = matches!(kind, AcquireKind::Hold { .. }).then(|| {
+        Acting::request(|space| crate::client::leases::acquire_hold(space, String::new(), None))
+    });
+    let workspace = select_target(ctx, holding, space).await?;
     match kind {
         AcquireKind::Hold { name, reason } => {
             super::holds::acquire(ctx, workspace, name, reason).await
@@ -135,21 +137,20 @@ fn resource_request(
 }
 
 /// The space a lease goes to, which `explicit` names or the current space
-/// or a picker chooses: any space for a hold, `holds`, which a chat takes
-/// too, else a workspace, as a lease of its worktree.
+/// or a picker chooses: any space for a hold, which `holding` sends and a
+/// chat takes too, else a workspace, as a lease of its worktree.
 async fn select_target(
     ctx: &Context,
-    holds: bool,
+    holding: Option<Acting>,
     explicit: Option<SpaceSelector>,
 ) -> Result<SpaceSelector> {
-    match holds {
-        true => {
-            let holding = Acting::request(crate::client::leases::holds);
+    match holding {
+        Some(holding) => {
             ui::select_space(ctx, explicit, Fallback::CurrentDirectory(&holding)).await
         }
         // Every other lease is taken and given back on this machine, where
         // the worktree is.
-        false => {
+        None => {
             let leasing = Acting::here();
             ui::select_workspace(ctx, explicit, Fallback::CurrentDirectory(&leasing)).await
         }
@@ -162,8 +163,10 @@ pub(super) async fn release(
     kind: Option<ReleaseKind>,
     space: Option<SpaceSelector>,
 ) -> Result<i32> {
-    let holds = matches!(kind, Some(ReleaseKind::Hold { .. }));
-    let workspace = select_target(ctx, holds, space).await?;
+    let holding = matches!(kind, Some(ReleaseKind::Hold { .. })).then(|| {
+        Acting::request(|space| crate::client::leases::release_hold(space, String::new()))
+    });
+    let workspace = select_target(ctx, holding, space).await?;
     if let Some(ReleaseKind::Hold { name }) = kind {
         return super::holds::release(ctx, workspace, name).await;
     }

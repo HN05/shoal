@@ -23,8 +23,17 @@ pub(super) async fn run(
         Some(BaseCommand::Clear { workspace }) => (workspace, Some(Change::Clear)),
         None => (workspace, None),
     };
-    let setting = Acting::request(|space| crate::client::workspaces::set_base(space, None));
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&setting));
+    let acting = match &change {
+        Some(Change::Set(_)) => Acting::request(|space| {
+            let base = Some(String::new());
+            crate::client::workspaces::set_base(space, base)
+        }),
+        Some(Change::Clear) => {
+            Acting::request(|space| crate::client::workspaces::set_base(space, None))
+        }
+        None => Acting::request(crate::client::workspaces::inspect),
+    };
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&acting));
     let workspace = workspace.await?;
     let workspace = match change {
         Some(change) => {

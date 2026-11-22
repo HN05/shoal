@@ -364,22 +364,21 @@ pub async fn secret_catalog(
 }
 
 /// Hold `space` against cleanup as `name`, for `reason`.
-pub async fn acquire_hold(
-    daemon: &impl Daemon,
+pub fn acquire_hold(
     space: SpaceSelector,
     name: String,
     reason: Option<String>,
-) -> Result<Acquisition<SpaceHold>> {
-    let method = HoldMethod::HoldAcquire {
+) -> Prepared<Acquisition<SpaceHold>> {
+    Prepared::new(HoldMethod::HoldAcquire {
         space,
         name,
         reason,
-    };
-    request(daemon, method).await
+    })
 }
 
-pub async fn release_hold(daemon: &impl Daemon, space: SpaceSelector, name: String) -> Result<()> {
-    request(daemon, HoldMethod::HoldRelease { space, name }).await
+/// Release the hold `name` on `space`.
+pub fn release_hold(space: SpaceSelector, name: String) -> Prepared<()> {
+    Prepared::new(HoldMethod::HoldRelease { space, name })
 }
 
 /// The holds on `space`.

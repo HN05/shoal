@@ -45,9 +45,11 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
     {
         return Ok(code);
     }
-    // What a stop asks first of each space it takes.
-    let checking = Acting::request(crate::client::stopping::check);
-    let selected = ui::select_spaces(ctx, targets.space, false, &checking).await?;
+    let stopping = Acting::request(|space| {
+        let processes = UntrackedProcesses::Stop { requester: None };
+        crate::client::stopping::stop_space(space, false, QueuedLaunches::Cancel, processes)
+    });
+    let selected = ui::select_spaces(ctx, targets.space, false, &stopping).await?;
     // A process of a space that cleared its token is still that space's.
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         targets::ensure_scoped()?;
@@ -215,13 +217,13 @@ pub(super) async fn stop_confirming(
     confirm: impl FnOnce(&RemoteError) -> Result<bool>,
 ) -> Result<StoppedSpace> {
     let request_stop = |acknowledge_unproven| {
-        crate::client::stopping::stop_space(
-            &ctx.paths,
+        let stop = crate::client::stopping::stop_space(
             space.clone(),
             acknowledge_unproven,
             launches,
             processes,
-        )
+        );
+        stop.send(&ctx.paths)
     };
     let error = match request_stop(false).await {
         Ok(cancelled) => return Ok(cancelled),

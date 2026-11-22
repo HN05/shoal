@@ -24,7 +24,9 @@ pub(super) async fn acquire(
     name: String,
     reason: Option<String>,
 ) -> Result<i32> {
-    let outcome = leases::acquire_hold(&ctx.paths, space, name, reason).await?;
+    let outcome = leases::acquire_hold(space, name, reason)
+        .send(&ctx.paths)
+        .await?;
     outcome.finish(
         ctx,
         |hold| {
@@ -50,7 +52,7 @@ pub(super) async fn release(
         Some(name) => name,
         None => pick(ctx, &space).await?,
     };
-    leases::release_hold(&ctx.paths, space, name).await?;
+    leases::release_hold(space, name).send(&ctx.paths).await?;
     ctx.emit_styled(Style::Success, "Hold released", Released { released: true })?;
     Ok(0)
 }
