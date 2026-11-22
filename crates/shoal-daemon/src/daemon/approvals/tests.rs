@@ -204,7 +204,8 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
             .await?;
         assert_eq!(decision.status, status);
         let messages = manager
-            .agent_messages(&manager.named("worker").await)
+            .agents
+            .agent_messages(&*manager, &manager.named("worker").await)
             .await?;
         let ids: Vec<_> = messages.iter().map(|m| m.id).collect();
         assert_eq!(
@@ -212,7 +213,8 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
             [decision.decision_message()]
         );
         manager
-            .mark_agent_messages_delivered(&manager.named("worker").await, ids)
+            .agents
+            .mark_agent_messages_delivered(&*manager, &manager.named("worker").await, ids)
             .await?;
         let retry = manager
             .decide_approval(id, approve, None, Default::default(), None)
@@ -224,7 +226,8 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
         // Repeating a decision does not tell the agent again.
         assert!(
             manager
-                .agent_messages(&manager.named("worker").await)
+                .agents
+                .agent_messages(&*manager, &manager.named("worker").await)
                 .await?
                 .is_empty()
         );

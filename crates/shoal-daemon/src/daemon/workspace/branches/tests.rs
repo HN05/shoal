@@ -1667,7 +1667,8 @@ async fn scoped_merge_waits_for_approval_of_its_commit() {
     );
     let messages = f
         .manager
-        .agent_messages(&f.manager.named("worker").await)
+        .agents
+        .agent_messages(&*f.manager, &f.manager.named("worker").await)
         .await
         .unwrap();
     assert!(
@@ -1724,7 +1725,8 @@ async fn approving_a_merge_request_keeps_it_when_the_branch_cannot_be_read() {
     );
     assert!(
         f.manager
-            .agent_messages(&f.manager.named("worker").await)
+            .agents
+            .agent_messages(&*f.manager, &f.manager.named("worker").await)
             .await
             .unwrap()
             .is_empty()

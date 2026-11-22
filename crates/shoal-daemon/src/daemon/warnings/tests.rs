@@ -46,7 +46,8 @@ async fn running_agents_are_warned_once_per_signal_until_the_repeat_interval() {
         let manager = manager.clone();
         async move {
             manager
-                .agent_messages(&manager.named(name).await)
+                .agents
+                .agent_messages(&*manager, &manager.named(name).await)
                 .await
                 .unwrap()
                 .len()
@@ -60,11 +61,17 @@ async fn running_agents_are_warned_once_per_signal_until_the_repeat_interval() {
         .warn(&manager, start, Signal::Memory, &memory(&settings, false))
         .await;
     let delivered = manager
-        .agent_messages(&manager.named("first").await)
+        .agents
+        .agent_messages(&*manager, &manager.named("first").await)
         .await
         .unwrap();
     manager
-        .mark_agent_messages_delivered(&manager.named("first").await, vec![delivered[0].id])
+        .agents
+        .mark_agent_messages_delivered(
+            &*manager,
+            &manager.named("first").await,
+            vec![delivered[0].id],
+        )
         .await
         .unwrap();
     // Within the interval, only an agent started since is warned again,
@@ -130,7 +137,14 @@ async fn only_disk_warnings_wake_an_idle_agent() {
         .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
-    let wakes = || async { manager.unread_messages(&workspace.id).await.unwrap().wakes };
+    let wakes = || async {
+        manager
+            .agents
+            .unread_messages(&workspace.id)
+            .await
+            .unwrap()
+            .wakes
+    };
     let settings = Overload::default();
     let mut warnings = Warnings::default();
     let now = Instant::now();
@@ -140,7 +154,15 @@ async fn only_disk_warnings_wake_an_idle_agent() {
     warnings
         .warn(&manager, now, Signal::Cpu, &cpu(&settings))
         .await;
-    assert_eq!(manager.agent_messages(&busy).await.unwrap().len(), 2);
+    assert_eq!(
+        manager
+            .agents
+            .agent_messages(&*manager, &busy)
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
     assert!(!wakes().await);
     // An agent can free disk space without running anything.
     warnings

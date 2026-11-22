@@ -139,7 +139,9 @@ async fn a_chats_status_shows_its_agents_retries() {
         .unwrap();
     let failure = TurnFailure::ServerError;
     manager
+        .agents
         .report_turn_failure(
+            &*manager,
             &selector,
             failure,
             Some(execution),

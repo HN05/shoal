@@ -19,9 +19,8 @@ use super::{
 };
 use crate::{
     daemon::{
-        agent_messages,
         approvals::{ApprovalRequest, release_decided_by},
-        events, links,
+        events, links, messages,
         notifications::AlertKind,
         spaces, threads, workspace_files,
     },
@@ -328,7 +327,7 @@ impl Manager {
     /// recovery records and session logs, and a workspace's state.
     pub(crate) async fn forget_removed_space(&self, space: &Space) {
         self.close_space_places(&space.id, &space.name).await;
-        self.report_times.forget(&space.id);
+        self.agents.forget_reports(&space.id);
         if space.worktree().is_some() {
             self.forget_workspace(&space.id).await;
         }
@@ -385,7 +384,7 @@ fn delete_record(
         "spaces were opened below it during removal; retaining it"
     );
     events::record(tx, id, events::EventKind::Removed, cause, None)?;
-    let notification = agent_messages::hand_to_user(tx, id)?;
+    let notification = messages::hand_to_user(tx, id)?;
     workspace_files::keep_removed(tx, id, expires_at)?;
     // With the record, so no request is left with a removed decider.
     let released = release_decided_by(tx, id)?;

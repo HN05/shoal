@@ -181,7 +181,8 @@ async fn a_chat_keeps_the_session_its_agent_reports() {
         .clone();
     let selector = SpaceSelector::id(&chat.id);
     let report = |session: Option<&str>| {
-        manager.set_agent_state(
+        manager.agents.set_agent_state(
+            &*manager,
             &selector,
             crate::state::AgentState::Idle,
             Some(execution.clone()),
@@ -219,7 +220,11 @@ async fn a_chat_shows_its_agents_turn_state_until_it_stops() {
     let agent = manager.workspace_executions(&chat.id).await.unwrap()[0]
         .id
         .clone();
-    let report = |state| manager.set_agent_state(&selected, state, Some(agent.clone()), None);
+    let report = |state| {
+        manager
+            .agents
+            .set_agent_state(&*manager, &selected, state, Some(agent.clone()), None)
+    };
     report(crate::state::AgentState::Waiting).await.unwrap();
     assert_eq!(shown().await, Some(crate::state::AgentState::Waiting));
 

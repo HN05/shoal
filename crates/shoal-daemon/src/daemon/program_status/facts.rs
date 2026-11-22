@@ -6,7 +6,7 @@ use shoal_protocol::item_numbers::ItemNumber;
 
 use crate::{
     daemon::{
-        agent_queue, agent_state, approvals, progress, ready_marks, spaces, threads, turn_retry,
+        agent_queue, approvals, progress, ready_marks, spaces, threads, turn_retry, turn_state,
     },
     state::{AgentState, TurnFailure},
 };
@@ -78,7 +78,7 @@ pub(super) fn read(
         ready: (ready_marks::list(db, id)?.into_iter().next())
             .map(|mark| mark.url.map(|url| url.url().to_owned())),
         asleep: agent_queue::asleep::current(db, id)?.map(|asleep| asleep.reason),
-        turn: agent_state::current(db, id)?.map(|status| status.state),
+        turn: turn_state::current(db, id)?.map(|status| status.state),
         progress: progress::current(db, id)?.map_or_else(Steps::default, |progress| Steps {
             done: progress.done(),
             total: progress.steps.len(),

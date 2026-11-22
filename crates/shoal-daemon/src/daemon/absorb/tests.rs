@@ -393,7 +393,8 @@ async fn a_child_the_taking_branch_builds_on_goes_onto_what_the_absorbed_one_bui
     assert_eq!(leaf.base_workspace, None, "onto the default branch");
     // The taker builds on it and holds the absorbed work, which it keeps.
     let told = manager
-        .agent_messages(&SpaceSelector::id(&leaf.id))
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&leaf.id))
         .await
         .unwrap();
     assert!(!told.is_empty());
@@ -449,7 +450,8 @@ async fn an_absorber_built_on_the_absorbed_branch_takes_its_base_instead() {
     assert_eq!(taker.base_workspace, None, "never its own base");
     // Its branch has the absorbed work, which a rebase past it would drop.
     let told = manager
-        .agent_messages(&SpaceSelector::id(&taker.id))
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&taker.id))
         .await
         .unwrap();
     assert!(!told.is_empty());

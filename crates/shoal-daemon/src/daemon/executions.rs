@@ -848,7 +848,7 @@ impl Manager {
     ) -> Result<bool> {
         let issue = self.execution_completion_issue(&id, scan).await?;
         let complete = issue.is_none();
-        self.keep_stopped_turn(&id, None).await;
+        self.agents.keep_stopped_turn(self, &id, None).await;
         // Before its record goes, so a demo that replaces it waits for them.
         if complete {
             self.leases.release_execution_leases(self, &id).await;
@@ -1070,7 +1070,7 @@ impl Manager {
         let spawning = self.viewers.spawn_lock(id);
         let _spawning = spawning.lock().await;
         self.retire_execution_viewer(id).await?;
-        self.keep_stopped_turn(id, None).await;
+        self.agents.keep_stopped_turn(self, id, None).await;
         self.leases.release_execution_leases(self, id).await;
         let demo = self.delete_execution_record(id).await?;
         self.close_demo_session(demo).await;

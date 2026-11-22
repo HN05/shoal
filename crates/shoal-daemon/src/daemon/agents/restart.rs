@@ -8,8 +8,8 @@ use shoal_ids::execution_ids::ExecutionId;
 use tokio::sync::oneshot;
 
 use super::{Agent, Manager, stops};
-use crate::daemon::agent_state;
 use crate::daemon::log;
+use crate::daemon::turn_state;
 use crate::{
     config::permissions::PermissionChange,
     daemon::store,
@@ -37,11 +37,7 @@ impl Manager {
         let (executions, reported, stops) = (self.store)
             .read(|db| {
                 let executions = store::all_executions(db)?;
-                Ok((
-                    executions,
-                    agent_state::reported_turns(db)?,
-                    stops::all(db)?,
-                ))
+                Ok((executions, turn_state::reported_turns(db)?, stops::all(db)?))
             })
             .await?;
         Ok(connections
@@ -107,7 +103,7 @@ impl Manager {
             .with_restarts(|_, renewals| renewal::current(renewals, id))
             .await;
         let stopped = self.agent_overload(&current).await;
-        let turn = self.reported_turn(&current).await;
+        let turn = self.agents.reported_turn(&current).await;
         self.executions
             .with_restarts(|agents, renewals| {
                 let id = renewal::current(renewals, id);

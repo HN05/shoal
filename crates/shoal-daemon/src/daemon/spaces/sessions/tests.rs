@@ -139,7 +139,8 @@ async fn a_chat_lists_the_session_its_hooks_reported() -> Result<()> {
     let selector = manager.named("planning").await;
     let chat = manager.chat(&selector).await?;
     let execution = manager.workspace_executions(&chat.id).await?[0].id.clone();
-    (manager.set_agent_state(
+    (manager.agents.set_agent_state(
+        &*manager,
         &selector,
         AgentState::Idle,
         Some(execution.clone()),

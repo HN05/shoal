@@ -164,9 +164,11 @@ async fn working(
         .unwrap();
     track(manager, &workspace, &execution.plan.id, "claude", true).await;
     let space = SpaceSelector::id(&workspace.id);
-    (manager.set_agent_state(&space, AgentState::Working, None, None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .set_agent_state(manager, &space, AgentState::Working, None, None))
+    .await
+    .unwrap();
     (workspace, execution)
 }
 
@@ -209,9 +211,11 @@ async fn a_restart_waiting_for_the_turn_is_recorded_until_the_turn_ends() {
     manager.restart_finished_turns().await.unwrap();
     assert!(!*execution.stop.borrow());
 
-    (manager.set_agent_state(&space, AgentState::Idle, None, None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .set_agent_state(&*manager, &space, AgentState::Idle, None, None))
+    .await
+    .unwrap();
     manager.restart_finished_turns().await.unwrap();
     let mut stop = execution.stop.clone();
     stop.wait_for(|stopping| *stopping).await.unwrap();
@@ -237,9 +241,11 @@ async fn a_restart_the_line_took_waits_for_the_turn_a_newer_request_waits_for() 
         ..Default::default()
     };
     // The agent idles, so the sequential restart joins the line at once.
-    (manager.set_agent_state(&space, AgentState::Idle, None, None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .set_agent_state(&*manager, &space, AgentState::Idle, None, None))
+    .await
+    .unwrap();
     let in_line = (manager.restart_space(None, &space, sequential))
         .await
         .unwrap();
@@ -254,9 +260,11 @@ async fn a_restart_the_line_took_waits_for_the_turn_a_newer_request_waits_for() 
         ),
         "{in_line:?}"
     );
-    (manager.set_agent_state(&space, AgentState::Working, None, None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .set_agent_state(&*manager, &space, AgentState::Working, None, None))
+    .await
+    .unwrap();
     (manager.restart_space(None, &space, waiting()))
         .await
         .unwrap();
@@ -318,9 +326,11 @@ async fn fail_after_the_turn(
     (manager.restart_space(caller, &space, waiting()))
         .await
         .unwrap();
-    (manager.set_agent_state(&space, AgentState::Idle, None, None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .set_agent_state(&**manager, &space, AgentState::Idle, None, None))
+    .await
+    .unwrap();
     let acting = tokio::spawn({
         let (manager, id) = (manager.clone(), workspace.id.clone());
         async move { manager.act_on_restart(&id).await }
@@ -366,7 +376,11 @@ async fn a_deferred_restart_that_fails_reaches_the_coordinator_that_asked() {
     };
     fail_after_the_turn(&manager, &workspace, &execution, Some(&caller)).await;
     let coordinator = SpaceSelector::id(&coordinator.id);
-    let messages = manager.agent_messages(&coordinator).await.unwrap();
+    let messages = manager
+        .agents
+        .agent_messages(&*manager, &coordinator)
+        .await
+        .unwrap();
     assert!(
         messages
             .iter()
@@ -541,9 +555,11 @@ async fn the_end_of_a_recorded_restart_keeps_an_identical_newer_one() {
     (manager.restart_space(None, &space, waiting()))
         .await
         .unwrap();
-    (manager.set_agent_state(&space, AgentState::Idle, None, None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .set_agent_state(&*manager, &space, AgentState::Idle, None, None))
+    .await
+    .unwrap();
     manager.restart_finished_turns().await.unwrap();
     let mut stop = execution.stop.clone();
     stop.wait_for(|stopping| *stopping).await.unwrap();
@@ -613,9 +629,11 @@ async fn a_recorded_restart_goes_with_its_agent_rather_than_restart_the_next() {
         .await
         .unwrap();
     track(&manager, &workspace, &next.plan.id, "claude", true).await;
-    (manager.set_agent_state(&space, AgentState::Idle, None, None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .set_agent_state(&*manager, &space, AgentState::Idle, None, None))
+    .await
+    .unwrap();
     assert!(!manager.act_on_restart(&workspace.id).await);
     assert!(!*next.stop.borrow());
     assert!(recorded(&manager).await.is_empty());
@@ -648,9 +666,11 @@ async fn wrapped_agent(
         .unwrap();
     track(manager, &workspace, &id, "claude", true).await;
     let space = SpaceSelector::id(&workspace.id);
-    (manager.set_agent_state(&space, AgentState::Working, None, None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .set_agent_state(manager, &space, AgentState::Working, None, None))
+    .await
+    .unwrap();
     let request = Reattach {
         narrowing: Default::default(),
         mode: None,
@@ -699,9 +719,11 @@ async fn waiting_for_processes(
     (manager.restart_space(None, &space, restart))
         .await
         .unwrap();
-    (manager.set_agent_state(&space, AgentState::Idle, None, None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .set_agent_state(&**manager, &space, AgentState::Idle, None, None))
+    .await
+    .unwrap();
     let acting = tokio::spawn({
         let (manager, space) = (manager.clone(), workspace.id.clone());
         async move { manager.act_on_restart(&space).await }

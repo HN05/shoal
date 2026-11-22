@@ -507,7 +507,9 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
 
     // A coordinating agent receives the files with the message.
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &SpaceSelector::id(&child.id),
             AgentState::Working,
             None,
@@ -516,7 +518,9 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
         .await
         .unwrap();
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             AgentState::Working,
             None,
@@ -537,7 +541,8 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
         .unwrap();
     assert!(!sent.user);
     let received = manager
-        .agent_messages(&SpaceSelector::id(&parent.id))
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&parent.id))
         .await
         .unwrap();
     let [message] = received.as_slice() else {

@@ -237,7 +237,7 @@ impl Manager {
         recorded: &Recorded,
     ) -> Result<(Requested, String)> {
         if recorded.asked_by.is_none() {
-            self.record_agent_interaction(execution).await;
+            self.agents.record_agent_interaction(execution).await;
         }
         let generation = self.record_begun_restart(recorded).await?;
         let restart = recorded.restart.clone();

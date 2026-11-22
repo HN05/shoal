@@ -471,7 +471,7 @@ impl Manager {
             .write(move |tx| {
                 let records = records::record_all(tx, &id, source, &attacher, &copies)?;
                 let paths: Vec<_> = copies.iter().map(|copy| copy.path.clone()).collect();
-                crate::daemon::agent_messages::ensure_holders_fit(tx, &paths)?;
+                crate::daemon::messages::ensure_holders_fit(tx, &paths)?;
                 Ok(records)
             })
             .await

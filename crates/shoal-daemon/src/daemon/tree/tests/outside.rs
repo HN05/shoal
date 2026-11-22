@@ -76,7 +76,9 @@ async fn worked(
         .await
         .unwrap();
     manager
+        .agents
         .set_agent_state(
+            manager,
             &SpaceSelector::id(&workspace.id),
             AgentState::Working,
             None,
@@ -222,8 +224,13 @@ async fn activity_reaches_a_chat_without_a_repository_only_from_below_it() {
         .map(|update| update.delivery.clone())
         .collect();
     let messages = delivered.alerts.iter().map(|message| message.id).collect();
-    manager
-        .acknowledge_space_delivery(&SpaceSelector::id(&master.id), deliveries, messages, &[])
+    let master_selector = SpaceSelector::id(&master.id);
+    (manager.links)
+        .acknowledge_pr_updates(&*manager, &master_selector, deliveries)
+        .await
+        .unwrap();
+    (manager.agents)
+        .mark_agent_messages_delivered(&*manager, &master_selector, messages)
         .await
         .unwrap();
     let again = manager

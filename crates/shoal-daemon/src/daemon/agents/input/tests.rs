@@ -44,7 +44,7 @@ async fn agent(manager: &Manager, root: &std::path::Path) -> (Workspace, Workspa
 }
 
 async fn interacted_at(manager: &Manager, workspace: &Workspace) -> Option<UnixTime> {
-    let interactions = manager.interactions().await.unwrap();
+    let interactions = manager.agents.interactions().await.unwrap();
     interactions.get(&workspace.id).copied()
 }
 

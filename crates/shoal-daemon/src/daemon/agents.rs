@@ -16,11 +16,11 @@ use tokio::sync::{OwnedRwLockReadGuard, watch};
 
 use super::{
     agent_queue::{Grant, RestoreLink},
-    agent_turns::Turn,
     capacity::Activity,
     gates::GuardMode,
     manager::Manager,
     overload::Pressure,
+    turns::Turn,
 };
 pub(crate) use crate::model::Protection;
 
@@ -649,7 +649,7 @@ impl Manager {
                 .await?
                 .ok_or_else(|| anyhow::anyhow!("execution no longer exists"))?;
             let scan = scan_processes(&record).await?;
-            self.keep_stopped_turn(id, Some(&scan)).await;
+            self.agents.keep_stopped_turn(self, id, Some(&scan)).await;
             self.inspect_execution(&record, &scan)
                 .await?
                 .stop_owned()
@@ -1031,7 +1031,7 @@ impl Manager {
     /// The agents' turns as protection reads them; without them every agent
     /// counts as working, as one without hooks does.
     pub(crate) async fn protection_turns(&self) -> HashMap<ExecutionId, Turn> {
-        self.agent_turns().await.unwrap_or_else(|error| {
+        self.agents.agent_turns(self).await.unwrap_or_else(|error| {
             log!("agent turns unavailable to protection: {error:#}");
             HashMap::new()
         })

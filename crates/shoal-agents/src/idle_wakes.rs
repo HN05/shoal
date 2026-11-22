@@ -1,0 +1,144 @@
+//! Wake an agent that has stayed idle as long as its mode's
+//! `idle_wake_minutes`, as a backup to the wakes its updates bring: a
+//! message asks it to continue or to sleep. An agent whose space is done,
+//! or that sleeps, is left idle.
+use std::{collections::HashMap, sync::Arc, time::Duration};
+
+use anyhow::Result;
+use rusqlite::Connection;
+
+use crate::{Agents, daemon::Daemon, log, messages, model::Space, time::UnixTime, turn_state};
+use shoal_ids::space_ids::SpaceId;
+
+pub mod sleep;
+
+/// How often Shoal looks for agents due a wake.
+const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
+
+pub async fn run(agents: Arc<Agents>, daemon: Arc<dyn Daemon>) {
+    let mut woken = Woken::default();
+    loop {
+        tokio::time::sleep(SWEEP_INTERVAL).await;
+        let _operation = agents.gates.operation().await;
+        let woke = agents.wake_idle_agents(&*daemon, &mut woken, UnixTime::now());
+        if let Err(error) = woke.await {
+            log!("idle wakes: {error:#}");
+        }
+    }
+}
+
+/// When Shoal last woke each idle agent, so one that stays idle is woken
+/// again only after another period.
+#[derive(Debug, Default)]
+pub struct Woken(HashMap<SpaceId, UnixTime>);
+
+impl Woken {
+    /// Whether an agent of the space `id`, idle since `since`, is due a wake
+    /// at `now` after `period`: it has been idle that long, and that long
+    /// has passed since its last wake.
+    fn due(&self, id: &SpaceId, since: UnixTime, period: Duration, now: UnixTime) -> bool {
+        let from = self.0.get(id).map_or(since, |woken| since.max(*woken));
+        now.duration_since(from) >= period
+    }
+}
+
+impl Agents {
+    /// Wake each idle agent due a wake at `now`.
+    pub async fn wake_idle_agents(
+        &self,
+        daemon: &dyn Daemon,
+        woken: &mut Woken,
+        now: UnixTime,
+    ) -> Result<()> {
+        let idle = self.store.read(|db| turn_state::idle(db)).await?;
+        woken
+            .0
+            .retain(|id, _| idle.iter().any(|idle| idle.space == *id));
+        for idle in idle {
+            if let Err(error) = self.wake_if_due(daemon, &idle, woken, now).await {
+                log!("idle wake of space {}: {error:#}", idle.space);
+            }
+        }
+        Ok(())
+    }
+
+    /// Wake the `idle` agent when its mode wakes it and it is due at `now`,
+    /// unless the space is done or the agent sleeps. The transaction that
+    /// queues the wake checks all of that again, since a turn, a sleep or
+    /// `shoal done` may have come while the mode's settings were read.
+    async fn wake_if_due(
+        &self,
+        daemon: &dyn Daemon,
+        idle: &turn_state::Idle,
+        woken: &mut Woken,
+        now: UnixTime,
+    ) -> Result<()> {
+        let id = &idle.space;
+        let space = daemon.space_by_id(id).await?;
+        if space.done() || space.sleep.is_some() {
+            return Ok(());
+        }
+        let Some(minutes) = self.idle_wake_minutes(daemon, &space).await? else {
+            return Ok(());
+        };
+        if !woken.due(id, idle.since, Duration::from_secs(minutes * 60), now) {
+            return Ok(());
+        }
+        let (space, turn, message) = (id.to_owned(), idle.turn, wake_message(minutes));
+        let queued = (self.store)
+            .write(move |tx| match still_idle(tx, &space, turn)? {
+                true => {
+                    let kind = shoal_daemon_base::alerts::AlertKind::IdleWake;
+                    messages::queue_shoal_message(tx, &space, kind, &message)
+                }
+                false => Ok(None),
+            })
+            .await?;
+        if queued.is_some() {
+            self.signals.message_queued();
+        }
+        woken.0.insert(id.to_owned(), now);
+        Ok(())
+    }
+
+    /// How many minutes the agent of `space` may stay idle before Shoal
+    /// wakes it, as its mode sets; none when it never does or the space has
+    /// had no agent.
+    pub async fn idle_wake_minutes(
+        &self,
+        daemon: &dyn Daemon,
+        space: &Space,
+    ) -> Result<Option<u64>> {
+        let Some(mode) = space.space_mode() else {
+            return Ok(None);
+        };
+        Ok(daemon.space_settings(space).await?.idle_wake_minutes(mode))
+    }
+}
+
+/// Whether the agent of the space `id` is still idle in the turn
+/// generation `turn`, neither sleeping nor in a space whose work is done.
+fn still_idle(db: &Connection, id: &SpaceId, turn: i64) -> Result<bool> {
+    let idle = turn_state::idle_in(db, id, turn)?;
+    Ok(idle && sleep::current(db, id)?.is_none() && !done(db, id)?)
+}
+
+/// Whether `shoal done` recorded that the work of the space `id` is
+/// finished, as its record reads it.
+fn done(db: &Connection, id: &SpaceId) -> Result<bool> {
+    Ok(db.query_row(
+        "SELECT EXISTS (SELECT 1 FROM space_completion WHERE space_id=?1)",
+        [id],
+        |row| row.get(0),
+    )?)
+}
+
+/// What a wake tells an agent idle for `minutes`.
+fn wake_message(minutes: u64) -> String {
+    format!(
+        "You have been idle for {minutes} minutes. Continue your work if any remains; otherwise run `shoal sleep`."
+    )
+}
+
+#[cfg(test)]
+mod tests;

@@ -48,12 +48,18 @@ pub(super) async fn handle(
             // each agent it reaches.
             let to_all = matches!(to, AlertTarget::All { .. });
             if let AlertTarget::Space { space } = &to {
-                manager.record_user_interaction(caller, space).await;
+                manager
+                    .agents
+                    .record_user_interaction(&**manager, caller, space)
+                    .await;
             }
             let acting = acting(manager, caller, from).await?;
             let sent = (manager.send_alert(acting.as_ref(), to, message, attachments)).await?;
             if to_all {
-                manager.record_users_message(caller, &sent.reached).await;
+                manager
+                    .agents
+                    .record_users_message(&**manager, caller, &sent.reached)
+                    .await;
             }
             Body::Sent(sent)
         }

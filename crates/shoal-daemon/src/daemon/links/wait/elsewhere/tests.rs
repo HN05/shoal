@@ -163,7 +163,10 @@ async fn a_space_with_its_own_agent_keeps_its_activity() -> Result<()> {
     let (child, grandchild) = below_elsewhere(&manager, root.path()).await;
     queue_comment(&manager, &grandchild.id, &GRANDCHILD_PR, "mine".into()).await;
     let selector = SpaceSelector::id(&grandchild.id);
-    (manager.set_agent_state(&selector, AgentState::Working, None, None)).await?;
+    (manager
+        .agents
+        .set_agent_state(&*manager, &selector, AgentState::Working, None, None))
+    .await?;
     queue_comment(&manager, &child.id, &CHILD_PR, "theirs".into()).await;
 
     manager.links.pass_up_delegated_activity(&*manager).await?;

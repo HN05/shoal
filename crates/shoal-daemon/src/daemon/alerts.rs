@@ -7,7 +7,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 pub(crate) use shoal_daemon_base::alerts::{
-    About, Alert, AlertKind, COLUMNS, FROM, NewAlert, Sender, Sent, insert, rebase_attachments, row,
+    About, Alert, AlertKind, COLUMNS, FROM, NewAlert, Sender, Sent, rebase_attachments, row,
 };
 
 use super::{

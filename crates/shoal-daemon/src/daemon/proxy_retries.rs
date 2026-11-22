@@ -39,7 +39,9 @@ impl Manager {
         resets_at: Option<crate::time::UnixTime>,
     ) -> Result<()> {
         self.space(selector).await?;
-        self.record_upstream_reset(execution, resets_at).await
+        self.agents
+            .record_upstream_reset(execution, resets_at)
+            .await
     }
 
     /// Forget the retry `execution`'s proxy waits to make and the limit it
@@ -53,7 +55,10 @@ impl Manager {
         if !ended {
             return;
         }
-        let forgot = self.record_upstream_reset(execution.to_owned(), None).await;
+        let forgot = self
+            .agents
+            .record_upstream_reset(execution.to_owned(), None)
+            .await;
         if let Err(error) = forgot {
             crate::daemon::log!("forget the upstream reset of an ended execution: {error:#}");
         }

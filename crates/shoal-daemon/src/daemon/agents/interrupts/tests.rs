@@ -66,7 +66,11 @@ async fn an_interrupt_leaves_the_agent_idle_until_a_turn_starts_or_ends() {
     let workspace = workspace(&manager, temp.path(), "fix").await;
     let id = agent(&manager, &workspace, "claude").await;
     let selected = SpaceSelector::id(&workspace.id);
-    let report = |state| manager.set_agent_state(&selected, state, Some(id.clone()), None);
+    let report = |state| {
+        manager
+            .agents
+            .set_agent_state(&*manager, &selected, state, Some(id.clone()), None)
+    };
     report(AgentState::Working).await.unwrap();
     assert_eq!(
         turn(&manager, &workspace).await,
@@ -98,7 +102,9 @@ async fn an_interrupt_leaves_the_agent_idle_until_a_turn_starts_or_ends() {
         .await
         .unwrap();
     manager
+        .agents
         .end_agent_turn(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             Some(id.clone()),
             None,
@@ -131,7 +137,9 @@ async fn an_interrupted_agent_alone_is_due_a_wake_for_its_interruption() {
     let workspace = workspace(&manager, temp.path(), "fix").await;
     let id = agent(&manager, &workspace, "claude").await;
     manager
+        .agents
         .end_agent_turn(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             Some(id.clone()),
             None,
@@ -159,7 +167,9 @@ async fn an_interrupted_agent_alone_is_due_a_wake_for_its_interruption() {
     // Its hook wakes an agent whose turn ended normally.
     wait(false).await.expect("wait ended").unwrap();
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             AgentState::Working,
             Some(id.clone()),
@@ -183,7 +193,14 @@ async fn a_chats_interrupted_agent_is_due_its_wrappers_wake_for_a_message() {
         .id
         .clone();
     manager
-        .end_agent_turn(&selected, Some(id.clone()), None, TurnEnd::default())
+        .agents
+        .end_agent_turn(
+            &*manager,
+            &selected,
+            Some(id.clone()),
+            None,
+            TurnEnd::default(),
+        )
         .await
         .unwrap();
     manager
@@ -202,7 +219,14 @@ async fn a_chats_interrupted_agent_is_due_its_wrappers_wake_for_a_message() {
     wait(false, Some(&id)).await.expect("wait ended").unwrap();
     wait(true, None).await.expect("wait ended").unwrap();
     manager
-        .set_agent_state(&selected, AgentState::Working, Some(id.clone()), None)
+        .agents
+        .set_agent_state(
+            &*manager,
+            &selected,
+            AgentState::Working,
+            Some(id.clone()),
+            None,
+        )
         .await
         .unwrap();
     manager.interrupt_turn(&selected, id.clone()).await.unwrap();
@@ -210,13 +234,18 @@ async fn a_chats_interrupted_agent_is_due_its_wrappers_wake_for_a_message() {
     // prompts it, until it takes the message.
     wait(true, Some(&id)).await.expect("wait ended").unwrap();
     let messages = manager
-        .agent_messages(&SpaceSelector::id(&chat.id))
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&chat.id))
         .await
         .unwrap();
     let delivered = messages.iter().map(|message| message.id).collect();
-    (manager.mark_agent_messages_delivered(&SpaceSelector::id(&chat.id), delivered))
-        .await
-        .unwrap();
+    (manager.agents.mark_agent_messages_delivered(
+        &*manager,
+        &SpaceSelector::id(&chat.id),
+        delivered,
+    ))
+    .await
+    .unwrap();
     wait(false, Some(&id)).await.expect("wait ended").unwrap();
 }
 
@@ -255,7 +284,11 @@ async fn an_interrupt_leaves_a_chats_agent_idle_until_a_turn_starts() {
     let agent = manager.workspace_executions(&chat.id).await.unwrap()[0]
         .id
         .clone();
-    let report = |state| manager.set_agent_state(&selected, state, Some(agent.clone()), None);
+    let report = |state| {
+        manager
+            .agents
+            .set_agent_state(&*manager, &selected, state, Some(agent.clone()), None)
+    };
     report(AgentState::Working).await.unwrap();
     let (state, interrupted, execution) = listed(&manager, &chat.id).await;
     assert_eq!((state, interrupted), (Some(AgentState::Working), false));

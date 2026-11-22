@@ -10,9 +10,9 @@ use rusqlite::Connection;
 use shoal_ids::space_ids::SpaceId;
 
 use super::{
-    agent_state,
     manager::Manager,
     tree::{self, TrackedAgents},
+    turn_state,
 };
 use crate::{
     daemon::{spaces::worktrees_mut, store},
@@ -78,7 +78,7 @@ fn coordinator_state(
     let Working::Here(coordinator) = working_coordinator(db, id, agents)? else {
         return Ok(None);
     };
-    Ok(agent_state::current(db, &coordinator)?.map(|status| status.state))
+    Ok(turn_state::current(db, &coordinator)?.map(|status| status.state))
 }
 
 /// Who does the work of a space.

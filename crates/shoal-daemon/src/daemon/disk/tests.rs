@@ -485,7 +485,8 @@ async fn low_space_warns_running_agents_before_cleanup_starts() {
         .unwrap();
     assert!(
         manager
-            .agent_messages(&SpaceSelector::id(&workspace.id))
+            .agents
+            .agent_messages(&*manager, &SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .is_empty()
@@ -496,7 +497,8 @@ async fn low_space_warns_running_agents_before_cleanup_starts() {
         .await
         .unwrap();
     let messages = manager
-        .agent_messages(&SpaceSelector::id(&workspace.id))
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert_eq!(messages.len(), 1);

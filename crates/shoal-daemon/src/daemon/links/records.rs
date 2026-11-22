@@ -7,11 +7,11 @@ use shoal_links::daemon::{ProposalKind, Records};
 use shoal_protocol::model::{ChangedOnBothSides, SpaceRef};
 
 use crate::daemon::{
-    agent_messages,
     alerts::AlertKind,
     approvals::{self, ApprovalRequest, proposals},
     events::{self, EventKind},
     item_numbers::ItemNumber,
+    messages,
     tree::{self, TrackedAgents},
     workspace::record_base_changed,
 };
@@ -149,7 +149,7 @@ impl Records for LinkRecords {
         kind: AlertKind,
         message: &str,
     ) -> Result<()> {
-        agent_messages::queue_shoal_message(tx, id, kind, message).map(drop)
+        messages::queue_shoal_message(tx, id, kind, message).map(drop)
     }
 
     fn subtree(&self, db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>> {

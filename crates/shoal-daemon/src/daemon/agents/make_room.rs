@@ -16,7 +16,7 @@ use super::{
     Manager, Protection, ProtectionExt,
     idle_stop::{Candidate, Chosen},
 };
-use crate::daemon::agent_turns::Turn;
+use crate::daemon::turns::Turn;
 use crate::{
     config::MachineLimit, daemon::engagement::FLOOR, model::HeldBy, state::QueueState,
     time::UnixTime,
@@ -146,7 +146,7 @@ impl Manager {
             if chosen.contains_key(&candidate.execution) || candidate.light || settling || below {
                 continue;
             }
-            if !self.engaged(&candidate.workspace_id).await? {
+            if !self.agents.engaged(&candidate.workspace_id).await? {
                 eligible.push(candidate);
             }
         }

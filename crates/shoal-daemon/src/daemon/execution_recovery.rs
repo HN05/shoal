@@ -353,7 +353,7 @@ async fn interrupted(
                 ExecutionEvent::Finished { exit_code, .. } => return Ok(Action::Finished(exit_code)),
                 ExecutionEvent::Wake => {
                     // A key on the agent's sleep screen is the user's.
-                    manager.record_agent_interaction(execution_id).await;
+                    manager.agents.record_agent_interaction(execution_id).await;
                     woken = !wake_restore(manager, execution_id).await;
                 }
                 _ => return Err(anyhow::anyhow!("unexpected event while the agent waits for its restore")),

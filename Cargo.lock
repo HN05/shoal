@@ -2427,6 +2427,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "shoal-agents"
+version = "0.20.4"
+dependencies = [
+ "anyhow",
+ "futures-util",
+ "rusqlite",
+ "serde_json",
+ "shoal-core",
+ "shoal-daemon-base",
+ "shoal-ids",
+ "shoal-protocol",
+ "shoal-store",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "shoal-cli"
 version = "0.20.5"
 dependencies = [
@@ -2546,6 +2564,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "shoal-agents",
  "shoal-core",
  "shoal-daemon-base",
  "shoal-forge",

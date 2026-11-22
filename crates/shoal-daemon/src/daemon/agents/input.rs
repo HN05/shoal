@@ -40,7 +40,7 @@ impl Manager {
             .await
             .flatten();
         match shoals {
-            Some(false) => self.record_interaction(&space.id, at).await,
+            Some(false) => self.agents.record_interaction(&space.id, at).await,
             Some(true) | None => Ok(()),
         }
     }

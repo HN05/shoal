@@ -54,7 +54,9 @@ async fn mixed_tree(
         .unwrap();
     for workspace in [&root, &worker] {
         manager
+            .agents
             .set_agent_state(
+                &**manager,
                 &SpaceSelector::id(&workspace.id),
                 AgentState::Working,
                 None,
@@ -140,7 +142,8 @@ async fn a_chat_below_a_workspace_decides_and_coordinates_for_the_spaces_below_i
         .await
         .unwrap();
     let told = manager
-        .agent_messages(&SpaceSelector::id(&chat.id))
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&chat.id))
         .await
         .unwrap();
     assert_eq!(
@@ -169,7 +172,8 @@ async fn a_chat_below_a_workspace_decides_and_coordinates_for_the_spaces_below_i
         .await
         .unwrap();
     let received = manager
-        .agent_messages(&SpaceSelector::id(&root.id))
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&root.id))
         .await
         .unwrap();
     assert_eq!(

@@ -55,7 +55,7 @@ impl Manager {
     pub async fn stop_idle_agents(&self, now: UnixTime) -> Result<()> {
         // The process scan that tells agents with work in flight waits until
         // some agent would stop.
-        let turns = self.reported_turns().await?;
+        let turns = self.agents.reported_turns().await?;
         let candidates = self.idle_candidates(&turns).await?;
         let mut chosen = HashMap::new();
         let mut failed = crate::daemon::cleanup::SpaceFailures::default();
@@ -75,7 +75,7 @@ impl Manager {
         self.sleep_for_waiting_retries(&candidates, &mut chosen)
             .await;
         if !chosen.is_empty() {
-            let turns = self.agent_turns().await?;
+            let turns = self.agents.agent_turns(self).await?;
             self.stop_idle(turns, chosen).await;
         }
         failed.into_result()
@@ -84,7 +84,7 @@ impl Manager {
     /// The running agents with a restore command that `turns` shows idle.
     async fn idle_candidates(&self, turns: &HashMap<ExecutionId, Turn>) -> Result<Vec<Candidate>> {
         let light = self.light().await?;
-        let interactions = self.interactions().await?;
+        let interactions = self.agents.interactions().await?;
         Ok(self
             .executions
             .with_agents(|agents| {
@@ -114,7 +114,11 @@ impl Manager {
         let protection = if self.space_blocked(id).await? {
             Protection::blocked()
         } else if !candidate.light
-            && (self.sleeps_at(id, candidate.turn.since).await?).is_some_and(|at| at <= now)
+            && (self
+                .agents
+                .sleeps_at(self, id, candidate.turn.since)
+                .await?)
+                .is_some_and(|at| at <= now)
         {
             Protection::away()
         } else {
@@ -143,7 +147,11 @@ impl Manager {
             if stop.protection.is_blocked() {
                 continue;
             }
-            match self.waiting_turn_retry(&candidate.workspace_id).await {
+            match self
+                .agents
+                .waiting_turn_retry(&candidate.workspace_id)
+                .await
+            {
                 Ok(Some(failure)) => stop.protection = Protection::retrying(failure),
                 Ok(None) => {}
                 Err(error) => {
@@ -186,7 +194,11 @@ impl Manager {
     async fn leave_blocked_message(&self, agent: &StoppedAgent) {
         let message = crate::daemon::blockers::STOPPED_BLOCKED.to_owned();
         let kind = crate::daemon::alerts::AlertKind::SpaceBlocked;
-        if let Err(error) = (self.queue_agent_message(&agent.workspace_id, kind, message)).await {
+        if let Err(error) = (self
+            .agents
+            .queue_agent_message(&agent.workspace_id, kind, message))
+        .await
+        {
             crate::daemon::log!("blocked agent {} untold: {error:#}", agent.id);
         }
     }

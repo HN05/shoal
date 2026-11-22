@@ -160,7 +160,9 @@ impl Manager {
 
     /// Tell the agent of `space`, which asked for a move, `text`.
     async fn tell_mover(&self, space: &SpaceId, text: String) {
-        let told = self.queue_agent_message(space, AlertKind::MoveFinished, text);
+        let told = self
+            .agents
+            .queue_agent_message(space, AlertKind::MoveFinished, text);
         if let Err(error) = told.await {
             log!("the move of space {space} is untold: {error:#}");
         }

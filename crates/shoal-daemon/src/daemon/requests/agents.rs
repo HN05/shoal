@@ -62,9 +62,7 @@ pub(super) async fn handle(
             messages,
             leftovers,
         } => {
-            manager
-                .acknowledge_space_delivery(&space, deliveries, messages, &leftovers)
-                .await?;
+            acknowledge_delivery(manager, &space, deliveries, messages, &leftovers).await?;
             Body::Ok
         }
         AgentMethod::SetAgentState {
@@ -80,7 +78,9 @@ pub(super) async fn handle(
             );
             Body::AgentStatus(
                 manager
+                    .agents
                     .report_agent_state(
+                        &**manager,
                         &workspace,
                         state,
                         execution(caller),
@@ -99,10 +99,16 @@ pub(super) async fn handle(
             space,
             sleep,
             timer,
-        } => Body::Slept(manager.sleep(&space, sleep, timer).await?),
+        } => Body::Slept(
+            manager
+                .agents
+                .sleep(&**manager, &space, sleep, timer)
+                .await?,
+        ),
         AgentMethod::StartWokenTurn { workspace } => Body::WokenTurn(WokenTurn {
             starts: manager
-                .start_woken_turn(&workspace, execution(caller))
+                .agents
+                .start_woken_turn(&**manager, &workspace, execution(caller))
                 .await?,
         }),
         AgentMethod::ReportTurnFailure {
@@ -114,7 +120,9 @@ pub(super) async fn handle(
             made,
         } => Body::AgentStatus(
             manager
+                .agents
                 .report_turn_failure(
+                    &**manager,
                     &workspace,
                     failure,
                     execution(caller).or(reported),
@@ -126,13 +134,21 @@ pub(super) async fn handle(
         ),
         AgentMethod::ReportSubagent { space, change } => {
             manager
-                .report_subagent(&space, execution(caller), change, UnixTime::now())
+                .agents
+                .report_subagent(
+                    &**manager,
+                    &space,
+                    execution(caller),
+                    change,
+                    UnixTime::now(),
+                )
                 .await?;
             Body::Ok
         }
         AgentMethod::ReportSubagentRequest { space, execution } => {
             manager
-                .report_subagent_request(&space, execution, UnixTime::now())
+                .agents
+                .report_subagent_request(&**manager, &space, execution, UnixTime::now())
                 .await?;
             Body::Ok
         }
@@ -189,7 +205,10 @@ pub(super) async fn handle(
             Body::Ok
         }
         AgentMethod::ReportAttach { space } => {
-            manager.record_user_interaction(caller, &space).await;
+            manager
+                .agents
+                .record_user_interaction(&**manager, caller, &space)
+                .await;
             Body::Ok
         }
         AgentMethod::RestartAgent { space, restart } => {
@@ -345,4 +364,24 @@ impl Scoped for AgentMethod {
 /// The tracked execution a report comes from.
 fn execution(caller: Option<&Caller>) -> Option<ExecutionId> {
     caller.and_then(Caller::execution_id).cloned()
+}
+
+/// Acknowledge the item updates, messages and leftovers the agent of the
+/// space `selector` names received.
+async fn acknowledge_delivery(
+    manager: &Arc<Manager>,
+    selector: &SpaceSelector,
+    deliveries: Vec<String>,
+    messages: Vec<i64>,
+    leftovers: &[u32],
+) -> Result<()> {
+    // Item updates first: a failure then leaves both to be delivered
+    // again, while deleted messages could not be.
+    (manager.links)
+        .acknowledge_pr_updates(&**manager, selector, deliveries)
+        .await?;
+    (manager.agents)
+        .mark_agent_messages_delivered(&**manager, selector, messages)
+        .await?;
+    manager.acknowledge_leftovers(selector, leftovers).await
 }

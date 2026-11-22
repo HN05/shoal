@@ -495,7 +495,9 @@ async fn overload_stops_idle_agents_lowest_rank_first_before_working_ones() {
             )
             .await;
         manager
+            .agents
             .set_agent_state(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 state,
                 Some(execution.plan.id.clone()),
@@ -591,7 +593,9 @@ async fn overload_stops_the_agent_the_user_interacted_with_longest_ago_first() {
             _ => AgentState::Idle,
         };
         manager
+            .agents
             .set_agent_state(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 state,
                 Some(id.clone()),
@@ -601,7 +605,11 @@ async fn overload_stops_the_agent_the_user_interacted_with_longest_ago_first() {
             .unwrap();
         if let Some(at) = interacted {
             let at = UnixTime::from_seconds(at);
-            manager.record_interaction(&workspace.id, at).await.unwrap();
+            manager
+                .agents
+                .record_interaction(&workspace.id, at)
+                .await
+                .unwrap();
         }
         executions.push(execution);
     }
@@ -647,9 +655,13 @@ async fn a_turn_reported_after_protection_read_the_turns_counts_as_working() {
         )
         .await;
     let selected = SpaceSelector::id(&workspace.id);
-    let report = |state| manager.set_agent_state(&selected, state, Some(id.clone()), None);
+    let report = |state| {
+        manager
+            .agents
+            .set_agent_state(&*manager, &selected, state, Some(id.clone()), None)
+    };
     report(AgentState::Idle).await.unwrap();
-    let turns = manager.agent_turns().await.unwrap();
+    let turns = manager.agents.agent_turns(&*manager).await.unwrap();
     assert!(turns[&id].idle());
     // The agent starts a turn while protection scans its processes.
     report(AgentState::Working).await.unwrap();
@@ -836,9 +848,15 @@ async fn agent_in(
     ))
     .await;
     let selected = SpaceSelector::id(&workspace.id);
-    (manager.set_agent_state(&selected, state, Some(execution.plan.id.clone()), None))
-        .await
-        .unwrap();
+    (manager.agents.set_agent_state(
+        manager,
+        &selected,
+        state,
+        Some(execution.plan.id.clone()),
+        None,
+    ))
+    .await
+    .unwrap();
     execution
 }
 
@@ -880,6 +898,7 @@ async fn load_stops_a_coordinator_only_after_the_agents_below_it() {
     let coordinator = agent_in(&manager, &parent, "worker", AgentState::Idle).await;
     let worker = agent_in(&manager, &child, "worker", AgentState::Working).await;
     manager
+        .agents
         .record_interaction(&child.id, crate::time::UnixTime::now())
         .await
         .unwrap();
@@ -905,7 +924,7 @@ async fn load_stops_a_light_agent_below_the_heavy_one_it_stops() {
     let stopped = (manager.stop_agents_by_turn(
         &Protection::load("critical memory pressure"),
         Select::One(crate::daemon::overload::Pressure::Memory),
-        manager.agent_turns().await.unwrap(),
+        manager.agents.agent_turns(&*manager).await.unwrap(),
     ))
     .await;
     let order: Vec<_> = stopped.iter().map(|agent| agent.id.clone()).collect();

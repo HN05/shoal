@@ -430,7 +430,9 @@ async fn a_session_an_agent_reports_reaches_a_subscription() {
         .await;
     for session in ["s1", "s2"] {
         manager
+            .agents
             .set_agent_state(
+                &**manager,
                 &SpaceSelector::id(&workspace.id),
                 AgentState::Idle,
                 Some(execution.clone()),
@@ -445,7 +447,9 @@ async fn a_session_an_agent_reports_reaches_a_subscription() {
         .id
         .clone();
     manager
+        .agents
         .set_agent_state(
+            &**manager,
             &SpaceSelector::id(&chat.id),
             AgentState::Idle,
             Some(execution),

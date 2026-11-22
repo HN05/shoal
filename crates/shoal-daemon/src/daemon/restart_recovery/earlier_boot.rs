@@ -54,7 +54,7 @@ impl Manager {
             narrowing: execution.narrowing,
             new_session: false,
         };
-        let turn = self.reported_turn(&execution.id).await;
+        let turn = self.agents.reported_turn(&execution.id).await;
         self.keep_agent_session(&execution.space_id, &agent, &execution.id, turn)
             .await
     }

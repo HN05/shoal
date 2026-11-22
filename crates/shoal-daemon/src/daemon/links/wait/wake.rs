@@ -59,8 +59,11 @@ impl Manager {
         loop {
             // One reading decides both whether messages are due and when
             // held ones settle, which no signal announces.
-            let unread = self.unread_messages(&space.id).await?;
-            let hold = self.message_hold(&space, &unread.alerts).await?;
+            let unread = self.agents.unread_messages(&space.id).await?;
+            let hold = self
+                .agents
+                .message_hold(self, &space, &unread.alerts)
+                .await?;
             let messages_due = wake_messages_due(unread.wakes, hold, phase);
             if self
                 .agent_wake_due(&space, hooked, messages_due, phase)
@@ -75,7 +78,7 @@ impl Manager {
                 Ok(()) = messages.changed() => {}
                 Ok(()) = queued.changed() => {}
                 Ok(()) = changed.changed() => {}
-                () = self.settle_clock.wait_out(hold) => {}
+                () = self.agents.settle_clock().wait_out(hold) => {}
                 () = tokio::time::sleep(POLL_INTERVAL) => {}
             }
         }
@@ -87,7 +90,7 @@ impl Manager {
     /// as in a hook delivery.
     pub(crate) async fn updates_waiting(&self, selector: &SpaceSelector) -> Result<bool> {
         let space = self.space(selector).await?;
-        if self.unread_messages(&space.id).await?.wakes {
+        if self.agents.unread_messages(&space.id).await?.wakes {
             return Ok(true);
         }
         self.links.updates_deliverable(self, &space).await
@@ -99,7 +102,7 @@ impl Manager {
     /// queued.
     pub(crate) async fn agent_updates_recorded(&self, id: &SpaceId) -> Result<bool> {
         let space = self.space(&SpaceSelector::id(id)).await?;
-        if self.unread_messages(id).await?.wakes {
+        if self.agents.unread_messages(id).await?.wakes {
             return Ok(true);
         }
         self.links.updates_recorded(self, &space).await
@@ -138,7 +141,7 @@ impl Manager {
         let space = id.clone();
         let state = self
             .store
-            .run(move |db| crate::daemon::agent_state::get(db, &space))
+            .run(move |db| crate::daemon::turn_state::get(db, &space))
             .await?;
         let Some(idle) = state.filter(|status| status.state == crate::state::AgentState::Idle)
         else {

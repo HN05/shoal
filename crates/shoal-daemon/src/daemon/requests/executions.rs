@@ -41,7 +41,10 @@ pub(super) async fn handle(
             // A restore the user runs in their own terminal is their
             // interaction with its agent, as one they queue is.
             if recover && source == Some(shoal_protocol::launches::LaunchSource::Manual) {
-                manager.record_user_interaction(caller, &space).await;
+                manager
+                    .agents
+                    .record_user_interaction(&**manager, caller, &space)
+                    .await;
             }
             let manager = manager.clone();
             let context = execution_connection::ExecutionContext {

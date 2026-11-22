@@ -38,7 +38,10 @@ impl Manager {
             "no connected agent of {} runs execution {execution}",
             space.name
         );
-        (self.end_interrupted_turn(&SpaceSelector::id(&space.id), Some(execution))).await
+        (self
+            .agents
+            .end_interrupted_turn(self, &SpaceSelector::id(&space.id), Some(execution)))
+        .await
     }
 
     /// Whether the agent of `execution` idles after an interrupt ended its
@@ -46,7 +49,7 @@ impl Manager {
     pub(crate) async fn turn_interrupted(&self, execution: &ExecutionId) -> bool {
         let id = execution.to_owned();
         let interrupted = (self.store)
-            .read(move |db| crate::daemon::agent_state::interrupted(db, &id))
+            .read(move |db| crate::daemon::turn_state::interrupted(db, &id))
             .await;
         interrupted.unwrap_or_else(|error| {
             crate::daemon::log!("interrupt of execution {execution} unreadable: {error:#}");

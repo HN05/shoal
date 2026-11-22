@@ -117,6 +117,7 @@ impl Manager {
         );
         let kind = crate::daemon::alerts::AlertKind::ApprovalDecided;
         if let Err(error) = self
+            .agents
             .queue_agent_message(&request.space_id, kind, message)
             .await
         {

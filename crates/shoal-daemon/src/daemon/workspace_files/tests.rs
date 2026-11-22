@@ -362,7 +362,8 @@ async fn added_files_need_no_message() {
     assert_eq!(sources, [FileSource::Added, FileSource::Message]);
     assert!(
         manager
-            .agent_messages(&SpaceSelector::id(&workspace.id))
+            .agents
+            .agent_messages(&*manager, &SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .iter()

@@ -4,7 +4,7 @@ use shoal_ids::space_ids::SpaceId;
 use std::{collections::HashMap, time::Duration};
 use tokio::time::Instant;
 
-use super::{agent_messages::Delivery, manager::Manager};
+use super::{manager::Manager, messages::Delivery};
 use crate::{config::overload::Overload, daemon::log, shoal_dirs::Contents};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -54,6 +54,7 @@ impl Warnings {
                 continue;
             }
             if let Err(error) = manager
+                .agents
                 .queue_agent_message_delivered(
                     &key.0,
                     crate::daemon::alerts::AlertKind::LoadWarning,

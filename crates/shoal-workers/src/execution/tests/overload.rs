@@ -944,7 +944,9 @@ async fn an_idle_agent_waiting_for_an_update_lets_a_daemon_update_through() {
         .id
         .clone();
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             crate::state::AgentState::Idle,
             Some(id.clone()),
@@ -1013,7 +1015,9 @@ async fn a_waiting_agent_whose_terminal_closes_leaves_its_restore_to_the_queue()
         .executions
         .remove(0);
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             crate::state::AgentState::Idle,
             Some(execution.id.clone()),

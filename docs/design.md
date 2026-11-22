@@ -97,7 +97,8 @@ elsewhere never changes what an old migration does. Over the store,
 `shoal-daemon-base` holds what every part of the daemon uses: its log, who
 sends a request, the approval requests it makes, the global config it runs
 under, the gates that order conflicting changes, the journal of events, the
-alert record and the user's alerts, the numbers of threads and approval requests,
+signals that wake waits once what they read changes, the alert record and
+the user's alerts, the numbers of threads and approval requests,
 the checks of file access that can stall and of directories the daemon writes,
 and the proof of the directories Shoal owns. What these read of the rest of
 the daemon, such as a space's coordinator or a repository's retention, is an
@@ -159,6 +160,16 @@ paths stay with the daemon, which its interface reaches; so do the hooks'
 executables and environments, which read ports and temporary directories,
 fetching and fast-forwarding a default branch, which the refresh of a
 workspace's branch shares, and whether the host has headroom for a build.
+`shoal-agents` holds the agents the daemon runs: its `Agents` service
+records the turn state their hooks report, with the reports a hook left
+behind, and the subagents they run, retries the turns an API error ended,
+queues and delivers the alerts for an agent once a run of them settles,
+follows the user's engagement with each agent, wakes the agents idle for
+their mode's period and fires the timers of `shoal sleep`. The spaces
+agents run in and their settings, the alerts that tell of them, what else
+ends with a turn, such as a marked final message, and what attaching files
+to an alert copies stay with the daemon, which its interface reaches, as
+do, until they move into the crate, the executions and the agent queue.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
 the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
 `shoal-workers` neither the daemon nor its tests: the daemon depends on no

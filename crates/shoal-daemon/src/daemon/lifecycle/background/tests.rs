@@ -102,7 +102,8 @@ async fn a_failure_reaches_the_requesting_agent() {
     drop(manager.gates.quiesce().await);
 
     let messages = manager
-        .agent_messages(&SpaceSelector::id(&requester.id))
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&requester.id))
         .await
         .unwrap();
     assert!(

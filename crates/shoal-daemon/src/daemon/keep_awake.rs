@@ -14,10 +14,11 @@ use tokio::{
 };
 
 use super::{
-    agent_state, log,
+    log,
     manager::Manager,
     notifications::AlertKind,
     tree::{TrackedAgents, delegated},
+    turn_state,
 };
 use crate::{config::Config, state::AgentState};
 
@@ -111,7 +112,7 @@ impl Manager {
 /// Whether an agent is working on a turn, or has finished one while an open
 /// PR whose activity Shoal delivers to it as its next turn is watched.
 fn agents_have_work(db: &Connection, agents: &TrackedAgents) -> Result<bool> {
-    for (id, state) in agent_state::all(db)? {
+    for (id, state) in turn_state::all(db)? {
         let work = match state {
             AgentState::Working => true,
             AgentState::Idle => receives_open_pr_activity(db, &id, agents)?,

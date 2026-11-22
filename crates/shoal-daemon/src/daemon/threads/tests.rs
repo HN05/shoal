@@ -131,7 +131,8 @@ async fn send(manager: &Manager, from: Option<&Caller>, thread: &Thread, text: &
 /// The unread alerts of `workspace`'s agent about threads.
 pub(super) async fn alerts(manager: &Manager, workspace: &Workspace) -> Vec<String> {
     let unread = manager
-        .agent_messages(&SpaceSelector::id(&workspace.id))
+        .agents
+        .agent_messages(manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     (unread.into_iter())
@@ -440,9 +441,15 @@ async fn a_marked_turn_posts_nothing_in_a_thread_that_went_elsewhere() {
         final_message: Some("SQLite".into()),
         ..TurnEnd::default()
     };
-    (manager.end_agent_turn(&selector, Some(tree.agent.clone()), None, ending))
-        .await
-        .unwrap();
+    (manager.agents.end_agent_turn(
+        &**manager,
+        &selector,
+        Some(tree.agent.clone()),
+        None,
+        ending,
+    ))
+    .await
+    .unwrap();
     let kept = manager.thread(None, full(&thread)).await.unwrap();
     assert!(
         !kept.posts.iter().any(|post| post.in_chat),
@@ -849,7 +856,14 @@ async fn a_marked_turn_posts_its_final_message_which_a_reply_in_the_chat_answers
             ..TurnEnd::default()
         };
         manager
-            .end_agent_turn(&selector, Some(tree.agent.clone()), None, ending)
+            .agents
+            .end_agent_turn(
+                &**manager,
+                &selector,
+                Some(tree.agent.clone()),
+                None,
+                ending,
+            )
             .await
             .unwrap();
     };

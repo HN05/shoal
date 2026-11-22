@@ -60,7 +60,7 @@ async fn a_restore_the_user_runs_here_engages_them() {
         .map(drop)
         .unwrap();
 
-    let interactions = manager.interactions().await.unwrap();
+    let interactions = manager.agents.interactions().await.unwrap();
     assert!(interactions.contains_key(&focused));
     assert!(!interactions.contains_key(&other));
 }

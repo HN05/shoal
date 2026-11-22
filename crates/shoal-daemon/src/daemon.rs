@@ -1,15 +1,17 @@
 //! The per-user daemon: owns shared state, serves protocol requests over a
 //! Unix socket, and runs background cleanup.
+pub(crate) use shoal_agents::{
+    engagement, idle_wakes, lost_reports, messages, subagents, turn_retry, turn_state, turns,
+    wake_timers,
+};
 pub(crate) use shoal_daemon_base::{
     config_state, events, file_access, gates, item_numbers, log, notifications, retention, signals,
 };
 pub(crate) use shoal_leases::{allocation, containers, resources};
 mod absorb;
-pub mod agent_messages;
 pub(crate) mod agent_queue;
-pub(crate) mod agent_state;
+mod agent_service;
 mod agent_trust;
-mod agent_turns;
 pub(crate) mod agents;
 mod alerts;
 mod answer;
@@ -34,7 +36,6 @@ mod daemon_exit;
 pub(crate) mod demos;
 pub(crate) mod disk;
 mod elsewhere;
-pub(crate) mod engagement;
 pub mod environment;
 mod execution_connection;
 mod execution_recovery;
@@ -49,7 +50,6 @@ mod hook_settings;
 pub(crate) mod hub;
 mod hub_moves;
 mod idle_sleep;
-pub(crate) mod idle_wakes;
 mod imported_sessions;
 mod keep_awake;
 mod launches;
@@ -58,7 +58,6 @@ pub mod leftovers;
 mod lifecycle;
 pub mod links;
 mod logs;
-pub(crate) mod lost_reports;
 pub mod manager;
 mod moves;
 #[cfg(target_os = "linux")]
@@ -101,7 +100,6 @@ mod startup;
 mod startup_audit;
 pub(crate) mod stopped_work;
 pub(crate) use shoal_store as store;
-pub(crate) mod subagents;
 mod subscriptions;
 pub(crate) mod target_checks;
 #[cfg(any(test, feature = "test-support"))]
@@ -117,11 +115,9 @@ mod tmp_dirs;
 mod tree;
 
 mod turn_ends;
-pub(crate) mod turn_retry;
 mod untracked;
 pub(crate) mod upstream_limits;
 mod viewer_terminals;
-pub(crate) mod wake_timers;
 mod warnings;
 mod work_memory;
 pub mod workspace;
@@ -247,9 +243,13 @@ pub async fn run(
         workspace_usage::run,
     );
     spawn_supervised(&mut background, &manager, "keep awake", keep_awake::run);
-    spawn_supervised(&mut background, &manager, "idle wakes", idle_wakes::run);
+    spawn_supervised(&mut background, &manager, "idle wakes", |manager| {
+        idle_wakes::run(manager.agents.clone(), manager)
+    });
     spawn_supervised(&mut background, &manager, "idle sleep", idle_sleep::run);
-    spawn_supervised(&mut background, &manager, "wake timers", wake_timers::run);
+    spawn_supervised(&mut background, &manager, "wake timers", |manager| {
+        wake_timers::run(manager.agents.clone())
+    });
     spawn_supervised(
         &mut background,
         &manager,
@@ -263,19 +263,18 @@ pub async fn run(
     spawn_supervised(&mut background, &manager, "webhooks", |manager| {
         shoal_runner::triggers::serve_webhooks(manager.runner.clone(), manager)
     });
-    spawn_supervised(&mut background, &manager, "turn retries", turn_retry::run);
+    spawn_supervised(&mut background, &manager, "turn retries", |manager| {
+        turn_retry::run(manager.agents.clone())
+    });
     spawn_supervised(
         &mut background,
         &manager,
         "interrupted moves",
         moves::finish_interrupted,
     );
-    spawn_supervised(
-        &mut background,
-        &manager,
-        "lost hook reports",
-        lost_reports::run,
-    );
+    spawn_supervised(&mut background, &manager, "lost hook reports", |manager| {
+        lost_reports::run(manager.agents.clone(), manager)
+    });
     spawn_supervised(&mut background, &manager, "turn ends", turn_ends::run);
     spawn_supervised(
         &mut background,

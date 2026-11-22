@@ -85,7 +85,10 @@ impl Manager {
             self.notifications.mark_read(users).await?;
         }
         for (space, ids) in spaces {
-            (self.mark_agent_messages_delivered(&SpaceSelector::id(&space), ids)).await?;
+            (self
+                .agents
+                .mark_agent_messages_delivered(self, &SpaceSelector::id(&space), ids))
+            .await?;
         }
         Ok(())
     }

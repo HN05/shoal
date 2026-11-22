@@ -1157,7 +1157,9 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
     let idle = create(&manager, &repo, "idle").await;
     let (execution, _stop) = connected_agent(&manager, &idle).await;
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &SpaceSelector::id(&idle.id),
             crate::state::AgentState::Idle,
             Some(execution.clone()),
@@ -1237,7 +1239,9 @@ async fn a_message_to_every_agent_restores_an_idle_stopped_agent() {
     let idle = create(&manager, &repo, "idle").await;
     let (execution, _stop) = connected_agent(&manager, &idle).await;
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &SpaceSelector::id(&idle.id),
             crate::state::AgentState::Idle,
             Some(execution.clone()),
@@ -1316,7 +1320,11 @@ async fn a_restored_agent_ends_its_turn_and_an_update_reaches_it() {
     let space = SpaceSelector::id(&loaded.id);
     let (execution, _stop) = connected_agent(&manager, &loaded).await;
     let working = crate::state::AgentState::Working;
-    let report = |state| manager.set_agent_state(&space, state, Some(execution.clone()), None);
+    let report = |state| {
+        manager
+            .agents
+            .set_agent_state(&*manager, &space, state, Some(execution.clone()), None)
+    };
     report(working).await.unwrap();
     assert!(
         manager
@@ -1336,12 +1344,15 @@ async fn a_restored_agent_ends_its_turn_and_an_update_reaches_it() {
 
     report(working).await.unwrap();
     let turn_end = crate::protocol::TurnEnd::default();
-    let ended = manager.end_agent_turn(&space, Some(execution.clone()), None, turn_end);
+    let ended =
+        manager
+            .agents
+            .end_agent_turn(&*manager, &space, Some(execution.clone()), None, turn_end);
     assert_eq!(ended.await.unwrap().state, crate::state::AgentState::Idle);
     let id = loaded.id.clone();
     let current = manager
         .store
-        .read(move |db| crate::daemon::agent_state::current(db, &id))
+        .read(move |db| crate::daemon::turn_state::current(db, &id))
         .await
         .unwrap();
     assert_eq!(
@@ -1367,7 +1378,9 @@ async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
     let idle = create(&manager, &repo, "idle").await;
     let (execution, _stop) = connected_agent(&manager, &idle).await;
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &SpaceSelector::id(&idle.id),
             crate::state::AgentState::Idle,
             Some(execution.clone()),

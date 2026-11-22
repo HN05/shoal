@@ -730,7 +730,7 @@ fn recorded(db: &Connection, owner: &Path, root: Option<&SpaceId>) -> Result<Vec
         chat.holds = crate::daemon::holds::list(db, &chat.id)?;
         chat.parent = super::tree::parent(db, &chat.id)?;
         chat.children = super::tree::children(db, &chat.id)?;
-        chat.agent_state = super::agent_state::current(db, &chat.id)?;
+        chat.agent_state = super::turn_state::current(db, &chat.id)?;
         chat.progress = crate::daemon::progress::current(db, &chat.id)?;
         chat.sleep = crate::daemon::idle_wakes::sleep::current(db, &chat.id)?;
         chat.wake_at = crate::daemon::wake_timers::due_at(db, &chat.id)?;

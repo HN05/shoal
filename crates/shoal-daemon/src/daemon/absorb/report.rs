@@ -26,7 +26,9 @@ impl Manager {
         }
         let message = taken_over(absorbed);
         let kind = crate::daemon::alerts::AlertKind::SpaceAbsorbed;
-        let queued = self.queue_agent_message(&absorbed.into.id, kind, message);
+        let queued = self
+            .agents
+            .queue_agent_message(&absorbed.into.id, kind, message);
         if let Err(error) = queued.await {
             log!("absorb of {} not told: {error:#}", absorbed.space.id);
         }

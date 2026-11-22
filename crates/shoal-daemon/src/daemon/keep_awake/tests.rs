@@ -36,7 +36,14 @@ async fn workspace(manager: &Manager, temp: &tempfile::TempDir) -> crate::model:
 
 async fn report(manager: &Manager, workspace: &crate::model::Workspace, state: AgentState) {
     manager
-        .set_agent_state(&SpaceSelector::id(&workspace.id), state, None, None)
+        .agents
+        .set_agent_state(
+            manager,
+            &SpaceSelector::id(&workspace.id),
+            state,
+            None,
+            None,
+        )
         .await
         .unwrap();
 }
@@ -192,7 +199,8 @@ async fn a_chats_agent_has_work_as_a_workspaces_does() {
         .unwrap();
     for (state, work) in [(AgentState::Working, true), (AgentState::Idle, false)] {
         manager
-            .set_agent_state(&SpaceSelector::id(&chat.id), state, None, None)
+            .agents
+            .set_agent_state(&*manager, &SpaceSelector::id(&chat.id), state, None, None)
             .await
             .unwrap();
         assert_eq!(has_work(&manager).await, work, "{state}");

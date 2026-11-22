@@ -277,7 +277,9 @@ async fn the_coordinating_agent_hears_one_line() {
         .unwrap();
     for workspace in [&parent.id, &child.id] {
         manager
+            .agents
             .set_agent_state(
+                &**manager,
                 &SpaceSelector::from(workspace.as_str()),
                 AgentState::Working,
                 None,
@@ -288,7 +290,8 @@ async fn the_coordinating_agent_hears_one_line() {
     }
     fixture.review_of(&child.id).await;
     let received: Vec<String> = manager
-        .agent_messages(&SpaceSelector::id(&parent.id))
+        .agents
+        .agent_messages(&**manager, &SpaceSelector::id(&parent.id))
         .await
         .unwrap()
         .into_iter()

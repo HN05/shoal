@@ -4,7 +4,7 @@
 use shoal_protocol::chat_marks::ChatMark;
 
 use crate::{
-    daemon::{agent_messages::Delivery, alerts::AlertKind, manager::Manager},
+    daemon::{alerts::AlertKind, manager::Manager, messages::Delivery},
     model::Space,
 };
 
@@ -26,7 +26,9 @@ impl Manager {
             destination(mark)
         );
         let kind = AlertKind::ChatMessageUnsent;
-        let told = self.queue_agent_message_delivered(&space.id, kind, message, Delivery::NextTurn);
+        let told =
+            self.agents
+                .queue_agent_message_delivered(&space.id, kind, message, Delivery::NextTurn);
         if let Err(error) = told.await {
             crate::daemon::log!("unsent final message of {} not told: {error:#}", space.name);
         }

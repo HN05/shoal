@@ -50,7 +50,12 @@ pub(super) async fn handle(
             if entry.kind == QueueKind::Restore
                 && let Some(space) = entry.space()
             {
-                (manager.record_user_interaction(caller, &SpaceSelector::id(space))).await;
+                (manager.agents.record_user_interaction(
+                    &**manager,
+                    caller,
+                    &SpaceSelector::id(space),
+                ))
+                .await;
             }
             Body::QueueEntry(entry)
         }
@@ -71,7 +76,12 @@ pub(super) async fn handle(
             // A restore the user makes is their interaction with its agent,
             // as a stopped agent's is.
             if let Some(space) = entry.space() {
-                (manager.record_user_interaction(caller, &SpaceSelector::id(space))).await;
+                (manager.agents.record_user_interaction(
+                    &**manager,
+                    caller,
+                    &SpaceSelector::id(space),
+                ))
+                .await;
             }
             Body::QueueEntry(entry)
         }
@@ -84,7 +94,10 @@ pub(super) async fn handle(
             env,
             now,
         } => {
-            manager.record_user_interaction(caller, &workspace).await;
+            manager
+                .agents
+                .record_user_interaction(&**manager, caller, &workspace)
+                .await;
             Body::QueueEntry(match now {
                 false => (manager.queue_stopped_restore(&workspace, &execution, env)).await?,
                 true => (manager.start_stopped_restore(&workspace, &execution, env)).await?,

@@ -41,8 +41,6 @@ pub struct Manager {
     /// a system shutdown is cancelled, so later ones leave the work alone.
     pub(crate) shutdown_stopped: tokio::sync::Mutex<bool>,
     pub(crate) signals: Arc<super::signals::Signals>,
-    /// The time runs of agent messages settle by.
-    pub(crate) settle_clock: crate::daemon::agent_messages::SettleClock,
     pub(crate) usage: super::workspace::usage::Usage,
     pub(crate) leftovers: crate::daemon::leftovers::Leftovers,
     /// Held while a converted space's agent is handed over to the new place,
@@ -60,6 +58,8 @@ pub struct Manager {
     /// The completed spaces whose completion a removal of a space below
     /// them goes by, which keep the workspaces below them meanwhile.
     pub(crate) completed_owners: crate::daemon::spaces::Removing,
+    /// The agents.
+    pub agents: Arc<shoal_agents::Agents>,
     /// The registered repositories.
     pub repositories: Arc<shoal_repositories::Repositories>,
     /// The issues, PRs and CI runs the spaces link.
@@ -74,8 +74,6 @@ pub struct Manager {
     pub(super) upstream_limits: std::sync::Mutex<
         std::collections::HashMap<ExecutionId, super::upstream_limits::UpstreamLimit>,
     >,
-    /// When each space's agent state was last reported.
-    pub(super) report_times: Arc<super::lost_reports::ReportTimes>,
     /// Directories whose file access stalls, shared with startup's status answer.
     pub(crate) file_access: Arc<crate::daemon::file_access::FileAccess>,
     /// The hub role, or this machine's membership of a hub.
@@ -138,6 +136,14 @@ impl Manager {
             paths.clone(),
             Arc::new(super::repositories::RepositoryRecords),
         ));
+        let signals = Arc::new(super::signals::Signals::default());
+        let agents = Arc::new(shoal_agents::Agents::new(
+            store.clone(),
+            gates.clone(),
+            signals.clone(),
+            paths.clone(),
+            Arc::new(super::agent_service::AgentRecords),
+        ));
         let reviews = Arc::new(shoal_reviews::Reviews::new(
             store.clone(),
             gates.clone(),
@@ -172,8 +178,7 @@ impl Manager {
             operations: Default::default(),
             grants: Default::default(),
             shutdown_stopped: Default::default(),
-            signals: Default::default(),
-            settle_clock: Default::default(),
+            signals,
             usage: Default::default(),
             leftovers: Default::default(),
             conversion_handovers: Default::default(),
@@ -181,12 +186,12 @@ impl Manager {
             agent_admissions: Default::default(),
             space_removals: Default::default(),
             completed_owners: Default::default(),
+            agents,
             repositories,
             links,
             reviews,
             proxy_retries: Default::default(),
             upstream_limits: Default::default(),
-            report_times: Default::default(),
             file_access,
             hub,
             apps: Default::default(),

@@ -93,7 +93,7 @@ impl Manager {
         if let Some(requester) = requester {
             let about = About::space(&space.name, &space.id);
             let alert = NewAlert::shoal(kind, about, message.clone());
-            let queued = self.queue_alert(requester, alert, true);
+            let queued = self.agents.queue_alert(requester, alert, true);
             match queued.await {
                 Ok(_) => return,
                 Err(error) => log!("removal failure not sent to {requester}: {error:#}"),

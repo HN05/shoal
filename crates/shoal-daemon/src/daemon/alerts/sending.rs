@@ -8,7 +8,7 @@ use crate::{
     daemon::{
         manager::Manager,
         scope::Caller,
-        workspace_files::{FileSource, NewFile, SentFile},
+        workspace_files::{self, Attacher, FileSource, NewFile, SentFile},
     },
     model::{Space, SpaceKind},
     repository::Selector,
@@ -196,6 +196,48 @@ impl Manager {
             crate::daemon::events::record_alert(&self.store, id, message, alerts).await;
         }
         Ok(sent)
+    }
+
+    /// Queue `message` from `sender` for the agent of `space`, with copies
+    /// of the files `attachments`, attached by `attacher`; without text,
+    /// the files are the message. An identical unread alert is not
+    /// repeated. Returns the alert's ID.
+    async fn send_to(
+        &self,
+        space: Space,
+        sender: &(Sender, About),
+        message: String,
+        attachments: Vec<NewFile>,
+        attacher: &Attacher,
+    ) -> Result<i64> {
+        if !message.is_empty() || attachments.is_empty() {
+            crate::validate::agent_message(&message)?;
+        }
+        let id = space.id.clone();
+        let alert = NewAlert {
+            kind: AlertKind::Message,
+            sender: sender.0,
+            about: sender.1.clone(),
+            message,
+            attachments: Vec::new(),
+        };
+        if attachments.is_empty() {
+            return self.agents.queue_alert(&id, alert, false).await;
+        }
+        let text = alert.message.clone();
+        self.queue_attached(space.into(), &text, attachments, |copies| {
+            let alert = NewAlert {
+                attachments: copies.iter().map(|copy| copy.path.clone()).collect(),
+                ..alert
+            };
+            let attacher = attacher.clone();
+            let record = Box::new(move |tx: &Transaction<'_>, id: &SpaceId| {
+                let source = FileSource::Message;
+                workspace_files::record(tx, id, source, &attacher, &copies)
+            });
+            self.agents.queue_copied(&id, alert, record)
+        })
+        .await
     }
 
     /// Narrow `to`, where the scoped `caller` sends an alert, to what its

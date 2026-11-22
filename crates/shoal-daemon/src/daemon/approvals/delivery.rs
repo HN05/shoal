@@ -49,7 +49,7 @@ impl Manager {
     pub(crate) async fn tell_space(&self, id: &SpaceId, kind: AlertKind, message: String) -> bool {
         let here = self.find_space(id).await.is_ok_and(|space| space.is_some());
         let queued = match here || !self.hub.runs_elsewhere(self, id).await {
-            true => self.queue_agent_message(id, kind, message).await,
+            true => self.agents.queue_agent_message(id, kind, message).await,
             false => self.hub.message_elsewhere(self, id, kind, message).await,
         };
         match queued {

@@ -91,7 +91,9 @@ impl Manager {
     /// not theirs.
     async fn record_launch_interaction(&self, launched: &Launched, caller: Option<&Caller>) {
         let space = SpaceSelector::id(&launched.space.id);
-        self.record_user_interaction(caller, &space).await;
+        self.agents
+            .record_user_interaction(self, caller, &space)
+            .await;
     }
 
     /// Register the repository of the space `launch` goes below for

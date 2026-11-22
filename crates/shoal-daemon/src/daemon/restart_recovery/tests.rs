@@ -186,7 +186,10 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
     // The reboot ended its agent mid-turn, which its last session keeps.
     let unrecorded = Some(ExecutionId::from("unrecorded"));
     let selector = SpaceSelector::id(&workspace.id);
-    let working = manager.set_agent_state(&selector, AgentState::Working, unrecorded, None);
+    let working =
+        manager
+            .agents
+            .set_agent_state(&*manager, &selector, AgentState::Working, unrecorded, None);
     working.await.unwrap();
     let reopened = restart(&manager).await;
     reopened.reconcile_interrupted_agents().await.unwrap();

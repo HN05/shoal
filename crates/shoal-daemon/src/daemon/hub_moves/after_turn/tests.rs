@@ -80,17 +80,21 @@ async fn a_move_that_left_its_space_here_tells_its_agent_once_it_ended() {
 
     manager.tell_move_after_turn("op", &ended).await;
 
-    let told = (manager.agent_messages(&SpaceSelector::id(&chat.id)))
-        .await
-        .unwrap();
+    let told = (manager
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&chat.id)))
+    .await
+    .unwrap();
     assert!(told[0].message.contains("--yes"), "{}", told[0].message);
     let waiting = manager.store.read(waiting_moves).await.unwrap();
     assert!(waiting.is_empty());
     // A move that ran no recorded move tells no one.
     manager.tell_move_after_turn("other", &ended).await;
-    let told = (manager.agent_messages(&SpaceSelector::id(&chat.id)))
-        .await
-        .unwrap();
+    let told = (manager
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&chat.id)))
+    .await
+    .unwrap();
     assert_eq!(told.len(), 1);
 }
 
@@ -129,8 +133,10 @@ async fn a_move_whose_operation_a_restart_cut_off_is_forgotten_and_told() {
     manager.finish_interrupted_moves().await.unwrap();
 
     assert!(manager.store.read(started_moves).await.unwrap().is_empty());
-    let told = (manager.agent_messages(&SpaceSelector::id(&chat.id)))
-        .await
-        .unwrap();
+    let told = (manager
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&chat.id)))
+    .await
+    .unwrap();
     assert_eq!(told.len(), 1);
 }

@@ -270,7 +270,8 @@ impl Manager {
     }
 
     async fn forget_stopped_agent(&self, interrupted: &Interrupted) -> Result<()> {
-        self.keep_stopped_turn(&interrupted.execution.id, None)
+        self.agents
+            .keep_stopped_turn(self, &interrupted.execution.id, None)
             .await;
         let id = interrupted.execution.id.clone();
         let forgotten = (self.store)

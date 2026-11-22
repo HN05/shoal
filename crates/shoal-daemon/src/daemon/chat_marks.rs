@@ -191,7 +191,7 @@ impl Manager {
         execution: Option<&ExecutionId>,
         prompt: Option<String>,
     ) -> Result<()> {
-        self.note_interaction(selector).await;
+        self.agents.note_interaction(self, selector).await;
         let space = self.space(selector).await?;
         let (turn, id) = (execution.cloned(), space.id.clone());
         let (dropped, delivered) = self

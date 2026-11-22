@@ -70,7 +70,9 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
     manager.detach_execution(&gone.plan.id).await;
     // A report from the agent is its own state, unlike one from a command.
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             AgentState::Idle,
             Some(agent.plan.id.clone()),
@@ -157,7 +159,9 @@ async fn a_shared_workspace_keeps_the_turn_of_the_agent_that_reported_last() {
     // agent's turn unknown, as one that never reported.
     for (id, state) in ids.iter().zip([AgentState::Idle, AgentState::Working]) {
         manager
+            .agents
             .set_agent_state(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 state,
                 Some(id.clone()),

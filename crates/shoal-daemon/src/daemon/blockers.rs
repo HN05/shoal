@@ -94,7 +94,7 @@ impl Manager {
         let sent = async {
             let id = self.space(selector).await?.id;
             let kind = crate::daemon::alerts::AlertKind::BlockersChanged;
-            self.queue_agent_message(&id, kind, text).await
+            self.agents.queue_agent_message(&id, kind, text).await
         };
         if let Err(error) = sent.await {
             log!("blockers of {selector} untold: {error:#}");

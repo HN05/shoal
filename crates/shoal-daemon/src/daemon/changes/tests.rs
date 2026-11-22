@@ -400,7 +400,11 @@ async fn a_thread_shows_its_changes_and_whether_its_holder_works_for_it() {
     (manager.post_to_thread(None, number, asked, Vec::new(), Vec::new(), Vec::new()))
         .await
         .unwrap();
-    let delivered = manager.agent_messages(&to).await.unwrap();
+    let delivered = manager
+        .agents
+        .agent_messages(&**manager, &to)
+        .await
+        .unwrap();
     let switch = format!("shoal thread switch {}", thread.number);
     assert!(delivered[0].message.contains(&switch), "{delivered:?}");
 

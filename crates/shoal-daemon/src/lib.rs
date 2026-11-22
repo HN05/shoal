@@ -7,7 +7,7 @@ use shoal_core::reviews;
 #[cfg(any(test, feature = "test-support"))]
 use shoal_core::test_support;
 use shoal_core::{
-    agents, ai, build, caches, config, config_file, daemon_handoff, daemon_owner, env, execution,
+    agents, build, caches, config, config_file, daemon_handoff, daemon_owner, env, execution,
     fsutil, git, git_profile, hooks, installed, launches, paths, presets, process, profile,
     refusal, releases, removal, repository, service, sessions, shoal_dirs, start_plan, terminal,
     tmp_dirs, tools, transfer, workers,

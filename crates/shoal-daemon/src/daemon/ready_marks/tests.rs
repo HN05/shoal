@@ -837,7 +837,14 @@ async fn a_chats_ready_mark_reaches_the_agent_above_it() {
         .unwrap();
     for id in [&coordinator.id, &chat.id] {
         manager
-            .set_agent_state(&SpaceSelector::id(id), AgentState::Working, None, None)
+            .agents
+            .set_agent_state(
+                &*manager,
+                &SpaceSelector::id(id),
+                AgentState::Working,
+                None,
+                None,
+            )
             .await
             .unwrap();
     }
@@ -852,12 +859,14 @@ async fn a_chats_ready_mark_reaches_the_agent_above_it() {
         .mark_ready(&SpaceSelector::id(&chat.id), Selection::default(), None)
         .await
         .unwrap();
-    let received: Vec<_> = (manager.agent_messages(&SpaceSelector::id(&coordinator.id)))
-        .await
-        .unwrap()
-        .into_iter()
-        .map(|message| message.text())
-        .collect();
+    let received: Vec<_> = (manager
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&coordinator.id)))
+    .await
+    .unwrap()
+    .into_iter()
+    .map(|message| message.text())
+    .collect();
     assert_eq!(
         received,
         [format!(

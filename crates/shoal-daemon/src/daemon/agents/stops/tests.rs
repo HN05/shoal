@@ -33,7 +33,9 @@ async fn idle_agent(manager: &Manager, root: &tempfile::TempDir) -> StartedExecu
         )
         .await;
     manager
+        .agents
         .set_agent_state(
+            manager,
             &SpaceSelector::id(&workspace.id),
             AgentState::Idle,
             Some(execution.plan.id.clone()),

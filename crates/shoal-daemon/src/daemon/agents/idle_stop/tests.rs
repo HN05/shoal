@@ -41,7 +41,7 @@ fn later() -> UnixTime {
 /// When the turn of the agent `execution` runs ended, as its idle report
 /// recorded it.
 async fn turn_end(manager: &Manager, execution: &StartedExecution) -> UnixTime {
-    manager.reported_turns().await.unwrap()[&execution.plan.id].since
+    manager.agents.reported_turns().await.unwrap()[&execution.plan.id].since
 }
 
 /// A workspace named `name` whose agent `setup` describes.
@@ -74,7 +74,9 @@ async fn agent(
         )
         .await;
     manager
+        .agents
         .set_agent_state(
+            manager,
             &SpaceSelector::id(&workspace.id),
             setup.state,
             Some(execution.plan.id.clone()),
@@ -180,12 +182,14 @@ async fn a_turn_that_starts_between_the_choice_and_the_stop_keeps_the_agent() {
     let (workspace, execution) = agent(&manager, &repo.id, "idle", IDLE).await;
     let id = execution.plan.id.clone();
     let chosen = chosen_away(&manager, &id).await;
-    let turns = manager.agent_turns().await.unwrap();
+    let turns = manager.agents.agent_turns(&*manager).await.unwrap();
     // A whole turn passes after the turns were read, so they show the agent
     // idle as it was when it was chosen.
     for state in [AgentState::Working, AgentState::Idle] {
         manager
+            .agents
             .set_agent_state(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 state,
                 Some(id.clone()),
@@ -211,10 +215,12 @@ async fn an_interaction_between_the_choice_and_the_stop_keeps_the_agent() {
     let (workspace, execution) = agent(&manager, &repo.id, "idle", IDLE).await;
     let id = execution.plan.id.clone();
     let chosen = chosen_away(&manager, &id).await;
-    let turns = manager.agent_turns().await.unwrap();
-    (manager.record_interaction(&workspace.id, UnixTime::now()))
-        .await
-        .unwrap();
+    let turns = manager.agents.agent_turns(&*manager).await.unwrap();
+    (manager
+        .agents
+        .record_interaction(&workspace.id, UnixTime::now()))
+    .await
+    .unwrap();
     manager.stop_idle(turns, chosen).await;
     assert!(!*execution.stop.borrow(), "the user came back");
     assert!(manager.agent_overload(&id).await.is_none());
@@ -230,9 +236,11 @@ async fn subagent(
 ) {
     let space = SpaceSelector::id(&workspace.id);
     let now = crate::time::UnixTime::now();
-    (manager.report_subagent(&space, Some(execution.clone()), change, now))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .report_subagent(manager, &space, Some(execution.clone()), change, now))
+    .await
+    .unwrap();
 }
 
 #[tokio::test]
@@ -278,7 +286,7 @@ async fn a_subagent_that_starts_between_the_choice_and_the_stop_keeps_the_agent(
     let (workspace, execution) = agent(&manager, &repo.id, "held", IDLE).await;
     let id = execution.plan.id.clone();
     let chosen = chosen_away(&manager, &id).await;
-    let turns = manager.agent_turns().await.unwrap();
+    let turns = manager.agents.agent_turns(&*manager).await.unwrap();
     let started = crate::protocol::SubagentChange::Started {
         agent_id: "a1".into(),
     };
@@ -304,7 +312,8 @@ async fn a_wake_after_an_idle_stop_leaves_its_update_for_the_restore() {
     let path = crate::execution::recovery::record_path(&manager.paths, &workspace.id, &id);
     assert!(!Record::load(&path).unwrap().unwrap().for_load);
     let woken = manager
-        .start_woken_turn(&SpaceSelector::id(&workspace.id), Some(id))
+        .agents
+        .start_woken_turn(&*manager, &SpaceSelector::id(&workspace.id), Some(id))
         .await
         .unwrap();
     assert!(!woken, "the stop came first");
@@ -321,7 +330,7 @@ async fn a_wake_after_a_recorded_stop_records_no_turn() {
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "held", IDLE).await;
     let id = execution.plan.id.clone();
-    let before = manager.reported_turns().await.unwrap()[&id];
+    let before = manager.agents.reported_turns().await.unwrap()[&id];
     // The stop is recorded but has not reached the wrapper yet.
     let protection = Protection::away();
     assert!(
@@ -331,11 +340,16 @@ async fn a_wake_after_a_recorded_stop_records_no_turn() {
             .unwrap()
     );
     let woken = manager
-        .start_woken_turn(&SpaceSelector::id(&workspace.id), Some(id.clone()))
+        .agents
+        .start_woken_turn(
+            &*manager,
+            &SpaceSelector::id(&workspace.id),
+            Some(id.clone()),
+        )
         .await
         .unwrap();
     assert!(!woken, "the update waits for the restore");
-    assert_eq!(manager.reported_turns().await.unwrap()[&id], before);
+    assert_eq!(manager.agents.reported_turns().await.unwrap()[&id], before);
 }
 
 #[tokio::test]
@@ -350,9 +364,10 @@ async fn an_idle_stop_after_a_wake_keeps_the_agent() {
     let (workspace, execution) = agent(&manager, &repo.id, "held", IDLE).await;
     let id = execution.plan.id.clone();
     let chosen = chosen_away(&manager, &id).await;
-    let turns = manager.agent_turns().await.unwrap();
+    let turns = manager.agents.agent_turns(&*manager).await.unwrap();
     let woken = manager
-        .start_woken_turn(&SpaceSelector::id(&workspace.id), Some(id))
+        .agents
+        .start_woken_turn(&*manager, &SpaceSelector::id(&workspace.id), Some(id))
         .await
         .unwrap();
     assert!(woken);
@@ -365,7 +380,7 @@ async fn an_idle_stop_after_a_wake_keeps_the_agent() {
 async fn chosen_away(manager: &Manager, execution: &ExecutionId) -> HashMap<ExecutionId, Chosen> {
     let stop = Chosen {
         protection: Protection::away(),
-        turn: manager.reported_turns().await.unwrap()[execution],
+        turn: manager.agents.reported_turns().await.unwrap()[execution],
         interacted_at: None,
     };
     HashMap::from([(execution.to_owned(), stop)])
@@ -403,7 +418,9 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
     );
 
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &selector,
             AgentState::Idle,
             Some(execution.plan.id.clone()),
@@ -419,7 +436,11 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
     assert!(manager.restore_waits_for_unblock(&workspace.id, &execution.plan.id));
     // A message waits for its restore, which starts its turn however the
     // space clears.
-    let waiting = manager.agent_messages(&selector).await.unwrap();
+    let waiting = manager
+        .agents
+        .agent_messages(&*manager, &selector)
+        .await
+        .unwrap();
     assert!(
         waiting
             .iter()
@@ -436,7 +457,8 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
     // agent's, even with no update left waiting for it.
     let ids = waiting.iter().map(|message| message.id).collect();
     manager
-        .mark_agent_messages_delivered(&selector, ids)
+        .agents
+        .mark_agent_messages_delivered(&*manager, &selector, ids)
         .await
         .unwrap();
     let agent = crate::agent::Agent::from("claude");
@@ -458,6 +480,7 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
         "[machine.overload.disk]\nenabled = false",
     ));
     manager
+        .agents
         .queue_agent_message(
             &workspace.id,
             crate::daemon::alerts::AlertKind::Message,
@@ -478,7 +501,11 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
         .queue_stopped_restore(&selector, &execution.plan.id, Default::default())
         .await
         .unwrap();
-    let messages = manager.agent_messages(&selector).await.unwrap();
+    let messages = manager
+        .agents
+        .agent_messages(&*manager, &selector)
+        .await
+        .unwrap();
     assert!(
         messages
             .iter()
@@ -543,7 +570,9 @@ async fn idle_chat(
         )
         .await;
     manager
+        .agents
         .set_agent_state(
+            &**manager,
             &SpaceSelector::id(&chat.id),
             AgentState::Idle,
             Some(execution.plan.id.clone()),
@@ -611,9 +640,15 @@ async fn stop_reason(manager: &Manager, execution: &StartedExecution) -> Option<
 async fn turn(manager: &Manager, workspace: &Workspace, execution: &StartedExecution) {
     for state in [AgentState::Working, AgentState::Idle] {
         let id = Some(execution.plan.id.clone());
-        (manager.set_agent_state(&SpaceSelector::id(&workspace.id), state, id, None))
-            .await
-            .unwrap();
+        (manager.agents.set_agent_state(
+            manager,
+            &SpaceSelector::id(&workspace.id),
+            state,
+            id,
+            None,
+        ))
+        .await
+        .unwrap();
     }
 }
 
@@ -631,7 +666,7 @@ async fn an_engaged_user_keeps_the_agent_until_they_stop_replying() {
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "engaged", IDLE).await;
     let earlier = UnixTime::now() - Duration::from_secs(100);
-    (manager.record_interaction(&workspace.id, earlier))
+    (manager.agents.record_interaction(&workspace.id, earlier))
         .await
         .unwrap();
     turn(&manager, &workspace, &execution).await;
@@ -643,7 +678,7 @@ async fn an_engaged_user_keeps_the_agent_until_they_stop_replying() {
 
     // A turn an update starts finds the user still away.
     let (workspace, execution) = agent(&manager, &repo.id, "updated", IDLE).await;
-    (manager.record_interaction(&workspace.id, earlier))
+    (manager.agents.record_interaction(&workspace.id, earlier))
         .await
         .unwrap();
     turn(&manager, &workspace, &execution).await;
@@ -689,9 +724,11 @@ async fn an_asleep_agents_timer_keeps_its_workspace_and_restores_it() {
     let selector = SpaceSelector::id(&workspace.id);
     let at = UnixTime::now() + std::time::Duration::from_secs(20 * 60);
     let timer = shoal_protocol::sleep::WakeTimer { at, message: None };
-    (manager.sleep(&selector, Some(Sleep::Turn), Some(timer)))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .sleep(&*manager, &selector, Some(Sleep::Turn), Some(timer)))
+    .await
+    .unwrap();
     manager.stop_idle_agents(later()).await.unwrap();
     assert!(*execution.stop.borrow());
     let agent = crate::agent::Agent::from("claude");
@@ -705,7 +742,7 @@ async fn an_asleep_agents_timer_keeps_its_workspace_and_restores_it() {
     let due = manager.restore_due(&workspace.id, &execution.plan.id);
     assert!(!due.await.unwrap());
 
-    manager.fire_wake_timers(at).await.unwrap();
+    manager.agents.fire_wake_timers(at).await.unwrap();
     let due = manager.restore_due(&workspace.id, &execution.plan.id);
     assert!(due.await.unwrap());
 }
@@ -730,9 +767,11 @@ async fn a_light_agent_that_sleeps_keeps_running() {
     };
     let (workspace, execution) = agent(&manager, &repo.id, "sleeps", light).await;
     let selector = SpaceSelector::id(&workspace.id);
-    (manager.sleep(&selector, Some(Sleep::Turn), None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .sleep(&*manager, &selector, Some(Sleep::Turn), None))
+    .await
+    .unwrap();
 
     manager.stop_idle_agents(later()).await.unwrap();
 
@@ -799,9 +838,11 @@ async fn an_agent_the_user_is_away_from_sleeps_to_make_room_for_queued_work() {
         .set_priority(None, &SpaceSelector::id(&urgent.id), Priority::URGENT)
         .await
         .unwrap();
-    (manager.record_interaction(&engaged.id, UnixTime::now()))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .record_interaction(&engaged.id, UnixTime::now()))
+    .await
+    .unwrap();
     // Without queued work, nothing sleeps for room.
     manager.stop_idle_agents(later()).await.unwrap();
     assert!(!*away.stop.borrow());

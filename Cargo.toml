@@ -18,6 +18,7 @@ libc = "0.2"
 rusqlite = "0.43.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+shoal-agents = { path = "crates/shoal-agents" }
 shoal-cli = { path = "crates/shoal-cli" }
 shoal-client = { path = "crates/shoal-client" }
 shoal-config-derive = { path = "crates/shoal-config-derive" }

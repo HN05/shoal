@@ -186,7 +186,7 @@ impl Manager {
         };
         let told = match self.route_up(&id, source).await {
             Ok(Recipients::Coordinator(coordinator)) => {
-                let queued = self.queue_alert(&coordinator, alert, for_user).await;
+                let queued = self.agents.queue_alert(&coordinator, alert, for_user).await;
                 queued.map(|id| Sent {
                     alerts: vec![id],
                     ..Sent::default()

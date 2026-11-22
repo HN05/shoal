@@ -15,11 +15,11 @@ use crate::{
 
 impl Messages for Manager {
     fn unread_messages<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Unread>> {
-        Box::pin(Manager::unread_messages(self, id))
+        Box::pin(self.agents.unread_messages(id))
     }
 
     fn deliverable_messages<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<Vec<Alert>>> {
-        Box::pin(Manager::deliverable_messages(self, space))
+        Box::pin(self.agents.deliverable_messages(self, space))
     }
 
     fn settled_messages<'a>(
@@ -27,7 +27,7 @@ impl Messages for Manager {
         space: &'a Space,
         messages: Vec<Alert>,
     ) -> BoxFuture<'a, Result<Vec<Alert>>> {
-        Box::pin(Manager::settled_messages(self, space, messages))
+        Box::pin(self.agents.settled_messages(self, space, messages))
     }
 
     fn undelivered_leftovers(&self, id: &SpaceId, room: usize) -> Result<Vec<Leftover>> {

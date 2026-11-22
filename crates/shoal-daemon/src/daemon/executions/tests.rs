@@ -702,7 +702,9 @@ async fn an_idle_agent_with_work_outside_its_group_keeps_a_working_turn() {
             .unwrap();
         let id = started.plan.id;
         manager
+            .agents
             .set_agent_state(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 AgentState::Idle,
                 Some(id.clone()),

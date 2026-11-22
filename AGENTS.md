@@ -157,8 +157,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `shoal-ids`, `shoal-protocol` and `shoal-refs`.
 - `crates/shoal-daemon-base` holds what every subsystem of the daemon uses:
   its log, a request's caller, the approval requests subsystems make, the
-  actions permissions govern, config state, gates, events, alerts, item
-  numbers, file access, the proof of the directories Shoal owns and the
+  actions permissions govern, config state, gates, events, the signals that
+  wake waits, alerts, item numbers, file access, the proof of the directories Shoal owns and the
   kept copies of attached files. What it needs of a subsystem is an interface it declares, a trait whose methods
   return a `Send` `BoxFuture`, which the daemon implements; its code is no
   method of `Manager`. It depends on no Shoal crate but `shoal-core`,
@@ -169,8 +169,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   and the one-shot agent runs they start, `crates/shoal-hub` for the hub
   role and membership of a hub, `crates/shoal-runner` for triggers and
   the CI jobs this machine runs, `crates/shoal-links` for the issues,
-  PRs and CI runs spaces link, and `crates/shoal-repositories` for the
-  registered repositories, their config layers, seeds and caches.
+  PRs and CI runs spaces link, `crates/shoal-repositories` for the
+  registered repositories, their config layers, seeds and caches, and
+  `crates/shoal-agents` for the agents the daemon runs.
   Its service, a field of `Manager`, holds what the subsystem
   keeps in memory and offers its operations; what it needs of other
   subsystems is an interface it declares, as the base does, which the daemon
@@ -186,7 +187,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `shoal-ids`, `shoal-protocol`, `shoal-schedule` and `shoal-store`;
   `shoal-runner`, `shoal-links` and `shoal-repositories` on none but
   `shoal-core`, `shoal-daemon-base`, `shoal-forge`, `shoal-forge-types`,
-  `shoal-ids`, `shoal-protocol`, `shoal-refs` and `shoal-store`.
+  `shoal-ids`, `shoal-protocol`, `shoal-refs` and `shoal-store`; and
+  `shoal-agents` on none but `shoal-core`, `shoal-daemon-base`, `shoal-ids`,
+  `shoal-protocol` and `shoal-store`.
 - `crates/shoal-time` holds the wall-clock timestamp type,
   `crates/shoal-refs` the commit and branch name types, `crates/shoal-ids`
   the record IDs and numbers, and `crates/shoal-states` the macros that

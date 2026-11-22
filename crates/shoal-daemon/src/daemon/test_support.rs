@@ -115,7 +115,8 @@ pub(crate) async fn track_agent(
         )
         .await;
     let working = crate::state::AgentState::Working;
-    (manager.set_agent_state(
+    (manager.agents.set_agent_state(
+        manager,
         &shoal_protocol::space_names::SpaceSelector::id(&workspace.id),
         working,
         Some(id.clone()),
@@ -200,9 +201,11 @@ pub async fn working_below(
     let workspace = workspace_below(manager, repository, name, parent, Some(mode.into())).await;
     let selector = shoal_protocol::space_names::SpaceSelector::id(&workspace.id);
     let working = crate::state::AgentState::Working;
-    (manager.set_agent_state(&selector, working, None, None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .set_agent_state(manager, &selector, working, None, None))
+    .await
+    .unwrap();
     workspace
 }
 

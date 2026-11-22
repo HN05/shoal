@@ -8,7 +8,7 @@ use shoal_schedule::stopping::{Running, RunningAgent, RunningDemo, RunningJob, S
 use std::collections::{HashMap, HashSet};
 
 use super::Manager;
-use crate::{daemon::agent_turns::Turn, daemon::log, time::UnixTime};
+use crate::{daemon::log, daemon::turns::Turn, time::UnixTime};
 
 impl Manager {
     /// The running work in the order it stops, its agents idle or working
@@ -64,7 +64,7 @@ impl Manager {
             log!("agent weights unavailable to the stop order: {error:#}");
             Default::default()
         });
-        let interactions = self.interactions().await.unwrap_or_else(|error| {
+        let interactions = self.agents.interactions().await.unwrap_or_else(|error| {
             log!("interactions unavailable to the stop order: {error:#}");
             Default::default()
         });

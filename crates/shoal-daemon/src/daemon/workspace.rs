@@ -215,7 +215,7 @@ fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<
         &crate::daemon::reviews::ReviewRecords,
         &workspace.id,
     )?;
-    workspace.agent_state = super::agent_state::current(db, &workspace.id)?;
+    workspace.agent_state = super::turn_state::current(db, &workspace.id)?;
     workspace.progress = crate::daemon::progress::current(db, &workspace.id)?;
     workspace.sleep = crate::daemon::idle_wakes::sleep::current(db, &workspace.id)?;
     workspace.wake_at = crate::daemon::wake_timers::due_at(db, &workspace.id)?;

@@ -538,7 +538,8 @@ async fn messages_and_files_follow_their_copies_to_the_new_root() -> Result<()> 
         .context("no completion")?;
     assert_eq!(completion.results[0].name, "crash.log");
     let messages = manager
-        .agent_messages(&SpaceSelector::id(&workspace.id))
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&workspace.id))
         .await?;
     let attachments = messages[0].attachments();
     let [copy] = attachments.as_slice() else {
@@ -624,7 +625,8 @@ async fn a_move_waits_for_a_send_keeping_attached_files() -> Result<()> {
         )
         .await?;
     let messages = manager
-        .agent_messages(&SpaceSelector::id(&workspace.id))
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&workspace.id))
         .await?;
     let copy = &messages[0].attachments()[0];
     assert!(copy.starts_with(root.join("origin")), "{copy:?}");

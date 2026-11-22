@@ -293,7 +293,9 @@ pub async fn report_session(manager: &Manager, workspace: &crate::model::Workspa
         .id
         .clone();
     manager
+        .agents
         .set_agent_state(
+            manager,
             &SpaceSelector::id(&workspace.id),
             crate::state::AgentState::Idle,
             Some(execution),

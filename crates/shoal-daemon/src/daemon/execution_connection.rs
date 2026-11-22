@@ -810,7 +810,7 @@ async fn finish(
     let renewed = agent.is_some() && manager.restart_continues_elsewhere(&execution_id).await;
     // Its last session keeps the turn it ended in, which goes with its record.
     let turn = match agent {
-        Some(_) => manager.reported_turn(&execution_id).await,
+        Some(_) => manager.agents.reported_turn(&execution_id).await,
         None => None,
     };
     // A demo's viewer that spawns from here on would outlive the final

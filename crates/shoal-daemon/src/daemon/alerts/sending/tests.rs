@@ -54,7 +54,12 @@ async fn an_alert_names_its_sender_who_alone_withdraws_it_until_read() {
     let (parent, child, sibling) = tree(&temp, &manager).await;
     let from_user = send(&manager, None, &child, "Rebase onto main").await;
     let from_parent = send(&manager, Some(&parent), &child, "Stop the dev server").await;
-    let unread = manager.unread_messages(&child.id).await.unwrap().alerts;
+    let unread = manager
+        .agents
+        .unread_messages(&child.id)
+        .await
+        .unwrap()
+        .alerts;
     let senders: Vec<_> = (unread.iter())
         .map(|alert| (alert.sender, alert.space_id.as_ref()))
         .collect();
@@ -137,6 +142,7 @@ async fn a_scoped_caller_reads_and_marks_only_the_alerts_its_scope_reaches() {
         .unwrap();
     assert!(
         manager
+            .agents
             .unread_messages(&child.id)
             .await
             .unwrap()
@@ -152,9 +158,15 @@ async fn files_alone_go_up_as_an_alert_and_text_alone_must_not_be_empty() {
     // Both run agents, so the child's alert goes to its coordinator.
     for space in [&parent, &child] {
         let working = crate::state::AgentState::Working;
-        (manager.set_agent_state(&SpaceSelector::id(&space.id), working, None, None))
-            .await
-            .unwrap();
+        (manager.agents.set_agent_state(
+            &*manager,
+            &SpaceSelector::id(&space.id),
+            working,
+            None,
+            None,
+        ))
+        .await
+        .unwrap();
     }
     let file = temp.path().join("report.txt");
     std::fs::write(&file, "findings").unwrap();
@@ -164,7 +176,12 @@ async fn files_alone_go_up_as_an_alert_and_text_alone_must_not_be_empty() {
     };
     assert!(up(Vec::new()).await.is_err());
     let sent = up(vec![file.clone().into()]).await.unwrap();
-    let unread = manager.unread_messages(&parent.id).await.unwrap().alerts;
+    let unread = manager
+        .agents
+        .unread_messages(&parent.id)
+        .await
+        .unwrap()
+        .alerts;
     let [alert] = unread.as_slice() else {
         panic!("{unread:?}");
     };

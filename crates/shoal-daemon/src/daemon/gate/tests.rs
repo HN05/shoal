@@ -148,11 +148,18 @@ impl Fixture {
         let selector = SpaceSelector::id(&self.workspace.id);
         let mut changed = self.manager.store.watch_changes();
         loop {
-            let received = self.manager.agent_messages(&selector).await.unwrap();
+            let received = self
+                .manager
+                .agents
+                .agent_messages(&*self.manager, &selector)
+                .await
+                .unwrap();
             if let Some(next) = received.into_iter().next() {
-                (self
-                    .manager
-                    .mark_agent_messages_delivered(&selector, vec![next.id]))
+                (self.manager.agents.mark_agent_messages_delivered(
+                    &*self.manager,
+                    &selector,
+                    vec![next.id],
+                ))
                 .await
                 .unwrap();
                 return next.message;

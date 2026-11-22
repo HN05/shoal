@@ -29,7 +29,7 @@ use shoal_protocol::{
 };
 use shoal_schedule::priority::Priority;
 
-use super::{agent_messages, approvals, manager::Manager, scope::Caller, tree};
+use super::{approvals, manager::Manager, messages, scope::Caller, tree};
 
 pub(crate) use shoal_hub::{Elsewhere, Event, Incoming, Named, Outgoing, Unanswered, numbering};
 
@@ -153,7 +153,7 @@ impl Messages for Manager {
         kind: AlertKind,
         message: String,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(self.queue_agent_message(id, kind, message))
+        Box::pin(self.agents.queue_agent_message(id, kind, message))
     }
 
     fn message_next_turn<'a>(
@@ -162,8 +162,11 @@ impl Messages for Manager {
         kind: AlertKind,
         message: String,
     ) -> BoxFuture<'a, Result<()>> {
-        let next_turn = agent_messages::Delivery::NextTurn;
-        Box::pin(self.queue_agent_message_delivered(id, kind, message, next_turn))
+        let next_turn = messages::Delivery::NextTurn;
+        Box::pin(
+            self.agents
+                .queue_agent_message_delivered(id, kind, message, next_turn),
+        )
     }
 
     fn alert<'a>(
@@ -172,7 +175,7 @@ impl Messages for Manager {
         alert: NewAlert,
         for_user: bool,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async move { self.queue_alert(id, alert, for_user).await.map(drop) })
+        Box::pin(async move { self.agents.queue_alert(id, alert, for_user).await.map(drop) })
     }
 }
 

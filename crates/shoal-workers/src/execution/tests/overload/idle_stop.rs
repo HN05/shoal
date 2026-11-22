@@ -21,7 +21,9 @@ async fn idle_in_held_done_workspace(
         .id
         .clone();
     manager
+        .agents
         .set_agent_state(
+            manager,
             &SpaceSelector::id(&workspace.id),
             AgentState::Idle,
             Some(id.clone()),

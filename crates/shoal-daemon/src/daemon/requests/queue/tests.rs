@@ -36,6 +36,6 @@ async fn the_users_restore_of_a_failed_launch_engages_them() {
         .map(drop)
         .unwrap();
 
-    let interactions = manager.interactions().await.unwrap();
+    let interactions = manager.agents.interactions().await.unwrap();
     assert!(interactions.contains_key(&workspace.id));
 }

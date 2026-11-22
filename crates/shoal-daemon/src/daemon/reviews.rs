@@ -147,7 +147,7 @@ impl Agents for Manager {
         kind: AlertKind,
         message: String,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(self.queue_agent_message(id, kind, message))
+        Box::pin(self.agents.queue_agent_message(id, kind, message))
     }
 
     fn tell_coordinator<'a>(

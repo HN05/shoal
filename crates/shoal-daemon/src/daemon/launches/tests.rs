@@ -33,7 +33,12 @@ fn chat_launch(repo: &Repository) -> Launch {
 
 /// Whether the user interacted with the agent of the space `id`.
 async fn engaged(manager: &Manager, id: &SpaceId) -> bool {
-    manager.interactions().await.unwrap().contains_key(id)
+    manager
+        .agents
+        .interactions()
+        .await
+        .unwrap()
+        .contains_key(id)
 }
 
 /// A detached start of an existing workspace's agent that the user makes

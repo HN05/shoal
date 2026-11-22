@@ -381,7 +381,14 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         .unwrap();
     for id in [&parent.id, &child.id] {
         manager
-            .set_agent_state(&SpaceSelector::id(id), AgentState::Working, None, None)
+            .agents
+            .set_agent_state(
+                &*manager,
+                &SpaceSelector::id(id),
+                AgentState::Working,
+                None,
+                None,
+            )
             .await
             .unwrap();
     }

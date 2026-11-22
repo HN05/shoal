@@ -273,7 +273,7 @@ async fn alerts(
     visible: &Visible,
 ) -> Result<Vec<Record>> {
     let mut alerts: Vec<Record> = (manager.store)
-        .read(|db| crate::daemon::agent_messages::every_unread(db))
+        .read(|db| crate::daemon::messages::every_unread(db))
         .await?
         .into_iter()
         .filter(|alert| {

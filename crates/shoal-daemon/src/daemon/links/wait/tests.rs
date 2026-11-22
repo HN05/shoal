@@ -154,7 +154,9 @@ async fn agent_messages_end_a_watch_before_item_activity() {
     assert!(updates.updates.is_empty() && !updates.timed_out);
     assert_eq!(updates.alerts[0].message, "Rebase onto main");
     manager
+        .agents
         .mark_agent_messages_delivered(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             vec![updates.alerts[0].id],
         )
@@ -385,7 +387,9 @@ async fn background_activity_queues_for_the_agents_hooks() {
     assert_eq!(delivered.updates[0].kind, UpdateKind::Comment);
     assert_eq!(delivered.alerts[0].message, "Rebase onto main");
     manager
+        .agents
         .mark_agent_messages_delivered(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             vec![delivered.alerts[0].id],
         )
@@ -1069,7 +1073,9 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
 
     // An agent of the child's own takes over the child's subtree.
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &SpaceSelector::id(&child.id),
             crate::state::AgentState::Working,
             None,
@@ -1478,7 +1484,11 @@ async fn agent_wakes_are_due_while_an_idle_agent_has_updates() {
             .unwrap();
     };
     let selected = SpaceSelector::id(&workspace.id);
-    let state = |state| manager.set_agent_state(&selected, state, None, None);
+    let state = |state| {
+        manager
+            .agents
+            .set_agent_state(&**manager, &selected, state, None, None)
+    };
     state(crate::state::AgentState::Working).await.unwrap();
     manager
         .send_space_message(
@@ -1494,11 +1504,17 @@ async fn agent_wakes_are_due_while_an_idle_agent_has_updates() {
     finish(due).await;
     let taken = wait(false);
     let messages = manager
-        .agent_messages(&SpaceSelector::id(&workspace.id))
+        .agents
+        .agent_messages(&**manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     manager
-        .mark_agent_messages_delivered(&SpaceSelector::id(&workspace.id), vec![messages[0].id])
+        .agents
+        .mark_agent_messages_delivered(
+            &**manager,
+            &SpaceSelector::id(&workspace.id),
+            vec![messages[0].id],
+        )
         .await
         .unwrap();
     finish(taken).await;
@@ -1518,7 +1534,9 @@ async fn a_hooked_agent_is_due_a_wake_once_no_wait_has_run_for_a_while() {
         .await
         .unwrap();
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             crate::state::AgentState::Idle,
             None,
@@ -2066,7 +2084,9 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
 
     // Once the child has an agent of its own, that agent hears of it.
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &SpaceSelector::id(&child.id),
             crate::state::AgentState::Working,
             None,
@@ -2238,11 +2258,12 @@ async fn messages_for_the_next_turn_come_with_the_next_updates() {
         .unwrap();
     register_watch(&manager, &workspace.id, PR.as_str()).await;
     manager
+        .agents
         .queue_agent_message_delivered(
             &workspace.id,
             crate::daemon::alerts::AlertKind::Message,
             "Memory is low".into(),
-            crate::daemon::agent_messages::Delivery::NextTurn,
+            crate::daemon::messages::Delivery::NextTurn,
         )
         .await
         .unwrap();
@@ -2317,11 +2338,12 @@ async fn messages_queued_during_a_wait_come_with_its_updates() {
     .await
     .expect("the wait polls");
     manager
+        .agents
         .queue_agent_message_delivered(
             &parent.id,
             crate::daemon::alerts::AlertKind::Message,
             "Memory is low".into(),
-            crate::daemon::agent_messages::Delivery::NextTurn,
+            crate::daemon::messages::Delivery::NextTurn,
         )
         .await
         .unwrap();
@@ -3362,11 +3384,12 @@ async fn updates_leave_settling_messages_for_a_later_delivery() {
     let workspace = settling_workspace(&root, &manager).await;
     register_watch(&manager, &workspace.id, PR.as_str()).await;
     manager
+        .agents
         .queue_agent_message_delivered(
             &workspace.id,
             crate::daemon::alerts::AlertKind::Message,
             "Memory is low".into(),
-            crate::daemon::agent_messages::Delivery::NextTurn,
+            crate::daemon::messages::Delivery::NextTurn,
         )
         .await
         .unwrap();
@@ -3384,7 +3407,8 @@ async fn updates_leave_settling_messages_for_a_later_delivery() {
     assert_eq!(updates.updates.len(), 1);
     assert!(updates.alerts.is_empty(), "{updates:?}");
     let unread = manager
-        .agent_messages(&SpaceSelector::id(&workspace.id))
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert_eq!(unread.len(), 1);
@@ -3419,7 +3443,8 @@ async fn a_watch_times_out_while_its_messages_settle() {
         "{updates:?}"
     );
     let unread = manager
-        .agent_messages(&SpaceSelector::id(&workspace.id))
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert_eq!(unread.len(), 1);

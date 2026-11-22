@@ -106,7 +106,8 @@ impl Manager {
             let told = async {
                 let space = self.space(&SpaceSelector::id(id)).await?;
                 let text = arrived_message(&space, from);
-                self.queue_agent_message(id, AlertKind::SpaceMoved, text)
+                self.agents
+                    .queue_agent_message(id, AlertKind::SpaceMoved, text)
                     .await
             };
             if let Err(error) = told.await {

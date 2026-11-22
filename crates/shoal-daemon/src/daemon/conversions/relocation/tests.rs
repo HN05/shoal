@@ -39,9 +39,11 @@ async fn converted(
     let process = crate::daemon::test_support::agent_process(manager, &talk.id).await;
     let selector = SpaceSelector::id(&talk.id);
     let working = AgentState::Working;
-    (manager.set_agent_state(&selector, working, None, None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .set_agent_state(&**manager, &selector, working, None, None))
+    .await
+    .unwrap();
     crate::daemon::test_support::report_session(manager, &talk.id, "s1").await;
     let talk = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
     let token = manager.chat_scope(&talk.id).await.unwrap();
@@ -66,9 +68,11 @@ async fn the_agent_restarts_in_the_worktree_once_its_turn_ends() {
     assert!(manager.caller(&token).await.unwrap().is_some());
 
     let idle = AgentState::Idle;
-    (manager.set_agent_state(&selector, idle, None, None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .set_agent_state(&*manager, &selector, idle, None, None))
+    .await
+    .unwrap();
     manager.relocate_finished_turns().await.unwrap();
 
     process.wait().unwrap();
@@ -133,9 +137,11 @@ async fn an_agent_waits_where_it_runs_while_the_workspaces_setup_failed() {
         .await
         .unwrap();
     let selector = SpaceSelector::id(&workspace.id);
-    (manager.set_agent_state(&selector, AgentState::Idle, None, None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .set_agent_state(&*manager, &selector, AgentState::Idle, None, None))
+    .await
+    .unwrap();
 
     manager.relocate_finished_turns().await.unwrap();
 
@@ -201,9 +207,11 @@ async fn the_relocation_restarts_no_agent_a_stop_handed_over() {
     let (root, manager) = manager().await;
     let (workspace, _process, _token, _issued) = converted(root.path(), &manager).await;
     let selector = SpaceSelector::id(&workspace.id);
-    (manager.set_agent_state(&selector, AgentState::Idle, None, None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .set_agent_state(&*manager, &selector, AgentState::Idle, None, None))
+    .await
+    .unwrap();
     let keep = crate::protocol::QueuedLaunches::Keep;
     (manager.stop_space_manually(&selector, false, keep))
         .await
@@ -394,9 +402,11 @@ async fn the_hand_over_continues_the_session_reported_after_the_conversion() {
     let idle = AgentState::Idle;
 
     crate::daemon::test_support::report_session(&manager, &workspace.id, "s3").await;
-    (manager.set_agent_state(&selector, idle, None, None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .set_agent_state(&*manager, &selector, idle, None, None))
+    .await
+    .unwrap();
     manager.relocate_finished_turns().await.unwrap();
 
     process.wait().unwrap();
@@ -500,9 +510,11 @@ async fn the_agent_waits_for_its_workspaces_post_setup_hook() {
     let (workspace, _process, token, _issued) = converted(root.path(), &manager).await;
     let (_operation, _worker) = record_preparation(&manager, &workspace).await;
     let selector = SpaceSelector::id(&workspace.id);
-    (manager.set_agent_state(&selector, AgentState::Idle, None, None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .set_agent_state(&*manager, &selector, AgentState::Idle, None, None))
+    .await
+    .unwrap();
 
     manager.relocate_finished_turns().await.unwrap();
 
@@ -530,9 +542,11 @@ async fn a_failed_post_setup_hook_stops_the_agent_for_shoal_resume() {
         changed.changed().await.unwrap();
     }
     let selector = SpaceSelector::id(&workspace.id);
-    (manager.set_agent_state(&selector, AgentState::Idle, None, None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .set_agent_state(&*manager, &selector, AgentState::Idle, None, None))
+    .await
+    .unwrap();
 
     manager.relocate_finished_turns().await.unwrap();
 
@@ -565,9 +579,11 @@ async fn a_failed_hook_outlasts_its_operations_record() {
         .await
         .unwrap();
     let selector = SpaceSelector::id(&workspace.id);
-    (manager.set_agent_state(&selector, AgentState::Idle, None, None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .set_agent_state(&*manager, &selector, AgentState::Idle, None, None))
+    .await
+    .unwrap();
 
     manager.relocate_finished_turns().await.unwrap();
 

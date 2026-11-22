@@ -88,7 +88,14 @@ async fn parent_working(manager: &Manager, workspace: &Workspace) -> bool {
 
 async fn report(manager: &Manager, workspace: &Workspace, state: AgentState) {
     manager
-        .set_agent_state(&SpaceSelector::id(&workspace.id), state, None, None)
+        .agents
+        .set_agent_state(
+            manager,
+            &SpaceSelector::id(&workspace.id),
+            state,
+            None,
+            None,
+        )
         .await
         .unwrap();
 }
@@ -284,7 +291,8 @@ async fn a_blocked_child_tells_its_coordinator_rather_than_the_user() {
         .unwrap();
 
     let messages = manager
-        .agent_messages(&SpaceSelector::id(&parent.id))
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&parent.id))
         .await
         .unwrap();
     assert!(

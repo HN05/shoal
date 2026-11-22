@@ -873,7 +873,8 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
     };
     let received = || async {
         manager
-            .agent_messages(&SpaceSelector::id(&parent.id))
+            .agents
+            .agent_messages(&*manager, &SpaceSelector::id(&parent.id))
             .await
             .unwrap()
             .into_iter()
@@ -881,7 +882,9 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
             .collect::<Vec<_>>()
     };
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &SpaceSelector::id(&child.id),
             AgentState::Working,
             None,
@@ -904,7 +907,9 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
     assert_eq!(user().await, ["first"]);
 
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             AgentState::Working,
             None,
@@ -978,7 +983,9 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
         .unwrap();
     for workspace in [&parent, &child] {
         manager
+            .agents
             .set_agent_state(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 AgentState::Working,
                 None,
@@ -993,7 +1000,8 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
     let beside = ask(&manager, &sibling.id, "Rename it?").await;
     // Only the thread opened below the parent reaches it.
     let messages = manager
-        .agent_messages(&SpaceSelector::id(&parent.id))
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&parent.id))
         .await
         .unwrap();
     assert_eq!(messages.len(), 1, "{messages:?}");
@@ -1117,7 +1125,8 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
         .await
         .unwrap();
     let received = manager
-        .agent_messages(&SpaceSelector::id(&parent.id))
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&parent.id))
         .await
         .unwrap();
     assert_eq!(
@@ -1283,7 +1292,9 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         .unwrap();
     for workspace in [&root, &parent, &child] {
         manager
+            .agents
             .set_agent_state(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 AgentState::Working,
                 None,
@@ -1354,7 +1365,8 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         let manager = &manager;
         async move {
             manager
-                .agent_messages(&SpaceSelector::id(&id))
+                .agents
+                .agent_messages(&**manager, &SpaceSelector::id(&id))
                 .await
                 .unwrap()
                 .into_iter()
@@ -1508,7 +1520,9 @@ async fn a_request_passed_up_to_a_full_inbox_reports_the_user_deciding() {
         .unwrap();
     for workspace in [&root, &parent, &child] {
         manager
+            .agents
             .set_agent_state(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 AgentState::Working,
                 None,
@@ -1576,7 +1590,9 @@ async fn a_request_withdrawn_once_given_back_notifies_nobody() {
         .await
         .unwrap();
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &SpaceSelector::id(&worker.id),
             AgentState::Working,
             None,
@@ -1650,7 +1666,9 @@ async fn a_stopped_chat_leaves_its_workspaces_requests_to_the_user() {
         .await
         .unwrap();
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &SpaceSelector::id(&worker.id),
             AgentState::Working,
             None,
@@ -1718,7 +1736,9 @@ async fn a_chat_whose_agent_stops_gives_the_requests_it_decides_back_to_the_user
         .await
         .unwrap();
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &SpaceSelector::id(&worker.id),
             AgentState::Working,
             None,
@@ -1813,7 +1833,9 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .await
         .unwrap();
     manager
+        .agents
         .set_agent_state(
+            &*manager,
             &SpaceSelector::id(&child.id),
             AgentState::Working,
             None,
@@ -1844,7 +1866,8 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .unwrap();
     assert_eq!(routed.decider.as_ref(), Some(&chat.id));
     let told = manager
-        .agent_messages(&SpaceSelector::id(&chat.id))
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&chat.id))
         .await
         .unwrap();
     assert!(!told.is_empty());
@@ -1932,7 +1955,9 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
         .unwrap();
     for workspace in [&parent, &child] {
         manager
+            .agents
             .set_agent_state(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 AgentState::Working,
                 None,
@@ -2119,7 +2144,9 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
         .unwrap();
     for workspace in [&parent, &child] {
         manager
+            .agents
             .set_agent_state(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 AgentState::Working,
                 None,
@@ -2389,7 +2416,9 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         .unwrap();
     for workspace in [&parent, &child] {
         manager
+            .agents
             .set_agent_state(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 AgentState::Working,
                 None,

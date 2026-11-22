@@ -79,7 +79,8 @@ async fn a_space_moves_below_its_grandparent_and_its_branch_past_its_old_base() 
     );
     // Without a linked item, its agent hears of the rebase as a message.
     let messages = manager
-        .agent_messages(&SpaceSelector::id(&leaf.id))
+        .agents
+        .agent_messages(&*manager, &SpaceSelector::id(&leaf.id))
         .await
         .unwrap();
     let rebase = format!("git rebase --onto root {head}");

@@ -174,7 +174,9 @@ async fn stop_agent_in(
         .id
         .clone();
     manager
+        .agents
         .set_agent_state(
+            manager,
             &SpaceSelector::id(&workspace.id),
             turn,
             Some(id.clone()),

@@ -94,7 +94,10 @@ pub(super) async fn handle(
             // Following an agent is the user's interaction with it, as
             // attaching is.
             if !resumed {
-                manager.record_user_interaction(caller, &space).await;
+                manager
+                    .agents
+                    .record_user_interaction(&**manager, caller, &space)
+                    .await;
             }
             let manager = manager.clone();
             return Ok(Answer::connection(move |stream, request_id, guard| {

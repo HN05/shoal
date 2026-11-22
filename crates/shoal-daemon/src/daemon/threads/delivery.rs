@@ -15,10 +15,9 @@ use shoal_protocol::{
 };
 
 use crate::daemon::{
-    agent_messages,
     alerts::{About, AlertKind, NewAlert},
     manager::Manager,
-    notifications,
+    messages, notifications,
 };
 
 /// Whom an alert about a thread goes to.
@@ -134,7 +133,7 @@ pub(super) fn deliver(
         }
         Party::Space(id) => {
             let alert = alert(thread, post, texts.kind, texts.agent);
-            match agent_messages::queue_in(tx, id, &alert) {
+            match messages::queue_in(tx, id, &alert) {
                 Ok(queued) => {
                     delivered.spaces |= queued.new;
                     Ok(Some(queued.id))

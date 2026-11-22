@@ -49,9 +49,15 @@ impl Agent {
             ..TurnEnd::default()
         };
         let selector = SpaceSelector::id(&self.space);
-        (manager.end_agent_turn(&selector, Some(self.execution.clone()), None, ending))
-            .await
-            .unwrap();
+        (manager.agents.end_agent_turn(
+            manager,
+            &selector,
+            Some(self.execution.clone()),
+            None,
+            ending,
+        ))
+        .await
+        .unwrap();
     }
 
     /// Mark the agent's turn as sending its final message to `to` with
@@ -174,7 +180,12 @@ impl Tree {
 
     /// The unread alerts of `agent`'s space.
     async fn unread(&self, agent: &Agent) -> Vec<Alert> {
-        let unread = self.manager.unread_messages(&agent.space).await.unwrap();
+        let unread = self
+            .manager
+            .agents
+            .unread_messages(&agent.space)
+            .await
+            .unwrap();
         unread.alerts
     }
 }
