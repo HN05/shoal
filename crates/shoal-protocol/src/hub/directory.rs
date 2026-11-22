@@ -248,7 +248,6 @@ pub enum ViewPart {
     Conflict(Conflict),
     /// One of this machine's spaces and its parent on another machine.
     BelowElsewhere(SpaceId, SpaceId),
-    Repository(ListedRepository),
 }
 
 impl HubView {
@@ -258,7 +257,7 @@ impl HubView {
             machines,
             spaces,
             conflicts,
-            repositories,
+            repositories: _,
         } = self.directory;
         let below = self.below_elsewhere.into_iter();
         (std::iter::once(ViewPart::Here(self.machine)))
@@ -266,7 +265,6 @@ impl HubView {
             .chain(spaces.into_iter().flat_map(space_parts))
             .chain(conflicts.into_iter().map(ViewPart::Conflict))
             .chain(below.map(|(space, parent)| ViewPart::BelowElsewhere(space, parent)))
-            .chain(repositories.into_iter().map(ViewPart::Repository))
             .collect()
     }
 
@@ -294,7 +292,6 @@ impl HubView {
                     .push(request),
                 ViewPart::Conflict(conflict) => directory.conflicts.push(conflict),
                 ViewPart::BelowElsewhere(space, parent) => below_elsewhere.push((space, parent)),
-                ViewPart::Repository(listed) => directory.repositories.push(listed),
             }
         }
         Ok(Some(Self {

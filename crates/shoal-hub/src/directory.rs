@@ -122,17 +122,15 @@ impl Hub {
 
     /// The directory this daemon keeps as the hub: its machines, with
     /// whether each is connected and when it was last seen, and their
-    /// spaces and repositories.
+    /// spaces, without the repositories [`Self::local_repositories`] lists.
     pub(super) async fn local_directory(&self, daemon: &dyn Daemon) -> Result<Directory> {
         let machines = self.local_machines(daemon).await?;
-        let ((spaces, conflicts), repositories) = (self.store)
-            .read(|tx| Ok((records::read(tx)?, repositories::read(tx)?)))
-            .await?;
+        let (spaces, conflicts) = self.store.read(records::read).await?;
         Ok(Directory {
             machines,
             spaces,
             conflicts,
-            repositories,
+            ..Directory::default()
         })
     }
 

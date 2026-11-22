@@ -1,8 +1,7 @@
 //! What a machine's callers see of the hub's directory: the other machines'
-//! repositories and spaces, from the hub itself or through this machine's
-//! link, the spaces as far as a scoped caller's scope reaches them, and
-//! which of this machine's spaces are below them; or the repositories
-//! alone, without any space.
+//! spaces, from the hub itself or through this machine's link, as far as a
+//! scoped caller's scope reaches them, and which of this machine's spaces
+//! are below them; or, apart, the other machines' repositories.
 use shoal_daemon_base::callers::Caller;
 use std::collections::{HashMap, HashSet};
 
@@ -17,8 +16,8 @@ use super::membership;
 use crate::{Hub, daemon::Daemon};
 
 impl Hub {
-    /// The other machines' repositories and the spaces `caller` sees; none
-    /// on a machine that is not the hub and joined none.
+    /// The other machines' spaces `caller` sees; none on a machine that is
+    /// not the hub and joined none.
     pub async fn hub_view(
         &self,
         daemon: &dyn Daemon,
@@ -28,9 +27,6 @@ impl Hub {
             return Ok(None);
         };
         directory.spaces.retain(|listed| listed.machine != machine);
-        directory
-            .repositories
-            .retain(|listed| listed.machine != machine);
         if let Some(root) = daemon.reach_root(caller).await? {
             let reached = daemon.spaces_within(Some(&root)).await?;
             let reached = reached.into_iter().map(|space| space.id).collect();
