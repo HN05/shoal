@@ -140,6 +140,7 @@ impl Manager {
         let agents = Arc::new(shoal_agents::Agents::new(
             store.clone(),
             gates.clone(),
+            config_state.clone(),
             signals.clone(),
             paths.clone(),
             Arc::new(super::agent_service::AgentRecords),

@@ -1,11 +1,12 @@
 //! What the daemon gives the agents' service: the spaces agents run in and
-//! their settings, the executions that run them, the alerts that tell of
+//! their settings, the repositories whose paths they trust, the executions that run them, the alerts that tell of
 //! them, what else ends with an agent's turn, the agent queue, and the
 //! records of other subsystems it reads and writes.
 mod alerts;
 mod executions;
 mod queue;
 mod records;
+mod repositories;
 mod spaces;
 mod turns;
 

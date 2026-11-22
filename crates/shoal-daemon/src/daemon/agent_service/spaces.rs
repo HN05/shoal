@@ -5,7 +5,12 @@ use shoal_agents::daemon::Spaces;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
-use crate::{agent::Agent, config::Effective, daemon::manager::Manager, model::Space};
+use crate::{
+    agent::Agent,
+    config::Effective,
+    daemon::manager::Manager,
+    model::{Space, Workspace},
+};
 
 impl Spaces for Manager {
     fn space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>> {
@@ -26,5 +31,9 @@ impl Spaces for Manager {
 
     fn space_settings<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<Effective>> {
         Box::pin(self.repositories.space_settings(self, space))
+    }
+
+    fn workspace<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Workspace>> {
+        Box::pin(self.workspace(selector))
     }
 }

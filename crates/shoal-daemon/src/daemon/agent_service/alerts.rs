@@ -8,6 +8,10 @@ use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use crate::daemon::{manager::Manager, notifications::AlertKind};
 
 impl Alerts for Manager {
+    fn notify_user(&self, kind: AlertKind, message: String) -> BoxFuture<'_, ()> {
+        Box::pin(self.notify(None, kind, message))
+    }
+
     fn notify_space<'a>(
         &'a self,
         name: &'a SpaceName,

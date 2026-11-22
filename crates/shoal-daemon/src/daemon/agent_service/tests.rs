@@ -2,6 +2,7 @@
 //! spaces, chats, alerts, executions and queue do with the agents' service.
 mod engagement;
 mod idle_wakes;
+mod keep_awake;
 mod lost_reports;
 mod messages;
 mod settle;

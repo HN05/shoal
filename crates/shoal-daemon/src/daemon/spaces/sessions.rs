@@ -39,7 +39,7 @@ impl Manager {
             sessions,
             integrations,
             environments: match space.repository_id.as_ref() {
-                Some(repository) => self.agent_environments(repository).await?,
+                Some(repository) => self.agents.agent_environments(repository).await?,
                 None => Vec::new(),
             },
         })

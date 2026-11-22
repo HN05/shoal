@@ -12,15 +12,13 @@ use rusqlite::params;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::space_names::SpaceSelector;
 
-use super::manager::Manager;
-use crate::{
-    daemon::{log, notifications::AlertKind, store},
-    model::Repository,
-};
+use shoal_daemon_base::alerts::AlertKind;
+
+use crate::{Agents, daemon::Daemon, log, model::Repository};
 
 /// What happened to a repository's directories.
 #[derive(Clone)]
-pub(super) enum TrustChange {
+pub enum TrustChange {
     /// The repository is removed, with the workspaces at these paths.
     Removed(Vec<PathBuf>),
     /// Its directories moved: each path it had, with the one it has now.
@@ -58,19 +56,20 @@ impl TrustChange {
     }
 }
 
-impl Manager {
+impl Agents {
     /// Make `change` to the agents' trust entries for `repository`'s
     /// directories, in the tools' default configs and in those its agents
     /// ran with; whether it read those, which a removal then forgets.
     /// Failures go to the log and in an alert to the user, never to the
     /// caller; a development build leaves the user's own files to the
     /// installed Shoal.
-    pub(super) async fn update_agent_trust(
+    pub async fn update_agent_trust(
         &self,
+        daemon: &dyn Daemon,
         repository: &Repository,
         change: TrustChange,
     ) -> bool {
-        if !crate::build::changes_files_under(&self.paths.home) {
+        if !shoal_core::build::changes_files_under(&self.paths.home) {
             return false;
         }
         let environments = self.agent_environments(&repository.id).await;
@@ -83,7 +82,7 @@ impl Manager {
         let kept = environments.as_ref().map(Vec::clone).unwrap_or_default();
         let kept = self.editable_locations(kept);
         warnings.extend(self.edit_trust(repository, &change, kept).await);
-        self.report_trust_left(repository, &change, warnings).await;
+        (self.report_trust_left(daemon, repository, &change, warnings)).await;
         environments.is_ok()
     }
 
@@ -95,7 +94,7 @@ impl Manager {
         &self,
         mut kept: Vec<BTreeMap<String, String>>,
     ) -> Vec<BTreeMap<String, String>> {
-        if crate::build::changes_user_files() {
+        if shoal_core::build::changes_user_files() {
             return kept;
         }
         let home = &self.paths.home;
@@ -128,6 +127,7 @@ impl Manager {
     /// Log each of `warnings` and alert the user to them.
     async fn report_trust_left(
         &self,
+        daemon: &dyn Daemon,
         repository: &Repository,
         change: &TrustChange,
         warnings: Vec<String>,
@@ -144,29 +144,30 @@ impl Manager {
             change.left_behind(repository),
             warnings.join("; ")
         );
-        self.notify(None, AlertKind::TrustLeft, message).await;
+        daemon.notify_user(AlertKind::TrustLeft, message).await;
     }
 
     /// [`Self::forget_agent_environments`] for the unregistered
     /// `repository`, logging a failure, which only keeps rows no agent adds
     /// to again.
-    pub(super) async fn forget_agent_environments_logged(&self, repository: &Repository) {
+    pub async fn forget_agent_environments_logged(&self, repository: &Repository) {
         if let Err(error) = self.forget_agent_environments(&repository.id).await {
             let name = repository.display_name();
             log!("repository {name}: its agents' config locations stay recorded: {error:#}");
         }
     }
 
-    /// Keep `environment`, the [`crate::env::AGENT_CONFIG_VARIABLES`] an
+    /// Keep `environment`, the [`shoal_core::env::AGENT_CONFIG_VARIABLES`] an
     /// agent of the workspace runs with, for the repository's removal or
     /// move to update the agent's trust entries where they point. Other
     /// variables are ignored.
     pub async fn keep_agent_environment(
         &self,
+        daemon: &dyn Daemon,
         selector: &SpaceSelector,
         environment: BTreeMap<String, String>,
     ) -> Result<()> {
-        let workspace = self.workspace(selector).await?;
+        let workspace = daemon.workspace(selector).await?;
         self.keep_environment(workspace.repository(), environment)
             .await
     }
@@ -174,10 +175,11 @@ impl Manager {
     /// [`Self::keep_agent_environment`] for a chat agent of the repository.
     pub async fn keep_repository_agent_environment(
         &self,
+        daemon: &dyn Daemon,
         repository_id: &RepositoryId,
         environment: BTreeMap<String, String>,
     ) -> Result<()> {
-        let repository = self.repositories.repository(repository_id).await?;
+        let repository = daemon.repository(repository_id).await?;
         self.keep_environment(&repository.id, environment).await
     }
 
@@ -186,7 +188,8 @@ impl Manager {
         repository_id: &RepositoryId,
         mut environment: BTreeMap<String, String>,
     ) -> Result<()> {
-        environment.retain(|name, _| crate::env::AGENT_CONFIG_VARIABLES.contains(&name.as_str()));
+        environment
+            .retain(|name, _| shoal_core::env::AGENT_CONFIG_VARIABLES.contains(&name.as_str()));
         if environment.is_empty() {
             return Ok(());
         }
@@ -241,7 +244,7 @@ impl Manager {
         self.store
             .write(move |tx| {
                 ensure!(
-                    !store::exists(tx, "SELECT 1 FROM repositories WHERE id=?1", [&id])?,
+                    !shoal_store::exists(tx, "SELECT 1 FROM repositories WHERE id=?1", [&id])?,
                     "the repository is still registered"
                 );
                 tx.execute(

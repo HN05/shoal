@@ -157,7 +157,8 @@ pub(super) async fn handle(
             environment,
         } => {
             manager
-                .keep_agent_environment(&workspace, environment)
+                .agents
+                .keep_agent_environment(&**manager, &workspace, environment)
                 .await?;
             Body::Ok
         }

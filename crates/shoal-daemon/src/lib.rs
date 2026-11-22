@@ -16,7 +16,6 @@ use shoal_core::{
 use shoal_forge_types as forge;
 use shoal_protocol::time;
 use shoal_protocol::{agent, demos, model, protocol, state, validate};
-use shoal_subprocess as subprocess;
 
 /// A daemon on the socket of a temporary state directory, which other
 /// crates' tests connect to the way the CLI and apps do, with the fixtures

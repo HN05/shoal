@@ -277,7 +277,7 @@ impl Manager {
         // Only a repository records the environments its agents ran in.
         let mut environments = Vec::new();
         for repo in repos {
-            match self.agent_environments(&repo.id).await {
+            match self.agents.agent_environments(&repo.id).await {
                 Ok(recorded) => environments.extend(recorded),
                 Err(error) => warnings.push(format!(
                     "agents' session files are looked up in the default places only: {error:#}"

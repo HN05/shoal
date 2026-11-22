@@ -3,24 +3,24 @@
 //! suspend it. The inhibitor lasts only as long as a pipe the daemon holds
 //! open, so it ends with the daemon however that stops.
 use shoal_ids::space_ids::SpaceId;
-use shoal_links::wait::followed::watches_open_pr;
 use std::{process::Stdio, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result, anyhow};
 use rusqlite::Connection;
+use shoal_core::config::Config;
+use shoal_daemon_base::alerts::AlertKind;
 use tokio::{
     io::AsyncReadExt,
     process::{Child, ChildStderr, ChildStdin, Command},
 };
 
-use super::{
+use crate::{
+    Agents,
+    daemon::{Daemon, Records},
     log,
-    manager::Manager,
-    notifications::AlertKind,
-    tree::{TrackedAgents, delegated},
+    state::AgentState,
     turn_state,
 };
-use crate::{config::Config, state::AgentState};
 
 /// Rechecks without a store change, such as after a failed lookup.
 const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
@@ -61,14 +61,14 @@ impl Hold {
     }
 }
 
-pub(super) async fn run(manager: Arc<Manager>) {
-    let mut changed = manager.store.watch_changes();
-    let mut reloaded = manager.config_state.watch();
+pub async fn run(agents: Arc<Agents>, daemon: Arc<dyn Daemon>) {
+    let mut changed = agents.store.watch_changes();
+    let mut reloaded = agents.config.watch();
     let mut hold = Hold::Released;
     loop {
-        let config = manager.config();
-        if let Some(wanted) = wanted(&manager, &config).await {
-            hold = update(&manager, hold, wanted, &config, INHIBITOR).await;
+        let config = agents.config.current();
+        if let Some(wanted) = wanted(&agents, &*daemon, &config).await {
+            hold = update(&*daemon, hold, wanted, &config, INHIBITOR).await;
         }
         let ended = tokio::select! {
             _ = changed.changed() => None,
@@ -77,7 +77,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
             () = tokio::time::sleep(SWEEP_INTERVAL) => None,
         };
         if let Some(error) = ended {
-            hold = failed(&manager, error, config).await;
+            hold = failed(&*daemon, error, config).await;
         }
         tokio::time::sleep(SETTLE).await;
         changed.borrow_and_update();
@@ -87,11 +87,11 @@ pub(super) async fn run(manager: Arc<Manager>) {
 
 /// Whether to hold the inhibitor under `config`, or `None` when the lookup
 /// failed and the current hold should stay.
-async fn wanted(manager: &Manager, config: &Config) -> Option<bool> {
+async fn wanted(agents: &Agents, daemon: &dyn Daemon, config: &Config) -> Option<bool> {
     if !config.machine.keep_awake {
         return Some(false);
     }
-    match manager.agents_have_work().await {
+    match agents.agents_have_work(daemon).await {
         Ok(work) => Some(work),
         Err(error) => {
             log!("keep awake: {error:#}");
@@ -100,22 +100,24 @@ async fn wanted(manager: &Manager, config: &Config) -> Option<bool> {
     }
 }
 
-impl Manager {
-    async fn agents_have_work(&self) -> Result<bool> {
-        let agents = self.tracked_agents().await;
+impl Agents {
+    pub async fn agents_have_work(&self, daemon: &dyn Daemon) -> Result<bool> {
+        let running = daemon.running_agent_spaces().await;
+        let records = self.records.clone();
         self.store
-            .run(move |db| agents_have_work(db, &agents))
+            .run(move |db| agents_have_work(db, &*records, &running))
             .await
     }
 }
 
 /// Whether an agent is working on a turn, or has finished one while an open
-/// PR whose activity Shoal delivers to it as its next turn is watched.
-fn agents_have_work(db: &Connection, agents: &TrackedAgents) -> Result<bool> {
+/// PR whose activity Shoal delivers to it as its next turn is watched, the
+/// agents of the spaces `running` its own.
+fn agents_have_work(db: &Connection, records: &dyn Records, running: &[SpaceId]) -> Result<bool> {
     for (id, state) in turn_state::all(db)? {
         let work = match state {
             AgentState::Working => true,
-            AgentState::Idle => receives_open_pr_activity(db, &id, agents)?,
+            AgentState::Idle => records.receives_open_pr_activity(db, &id, running)?,
             AgentState::Waiting => false,
         };
         if work {
@@ -125,24 +127,8 @@ fn agents_have_work(db: &Connection, agents: &TrackedAgents) -> Result<bool> {
     Ok(false)
 }
 
-/// Whether the workspace, or a child workspace whose activity its agent
-/// receives, watches an open PR.
-fn receives_open_pr_activity(
-    db: &Connection,
-    id: &SpaceId,
-    agents: &TrackedAgents,
-) -> Result<bool> {
-    let children = delegated(db, id, agents)?.into_iter().map(|child| child.id);
-    for workspace in std::iter::once(id.to_owned()).chain(children) {
-        if watches_open_pr(db, &workspace)? {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
 async fn update(
-    manager: &Manager,
+    daemon: &dyn Daemon,
     hold: Hold,
     wanted: bool,
     config: &Arc<Config>,
@@ -152,18 +138,18 @@ async fn update(
         (Hold::Failed(failed), true) if Arc::ptr_eq(&failed, config) => Hold::Failed(failed),
         (Hold::Released | Hold::Failed(_), true) => match Inhibitor::start(inhibitor) {
             Ok(inhibitor) => Hold::Held(Box::new(inhibitor)),
-            Err(error) => failed(manager, error, config.clone()).await,
+            Err(error) => failed(daemon, error, config.clone()).await,
         },
         (hold @ Hold::Held(_), true) => hold,
         (_, false) => Hold::Released,
     }
 }
 
-async fn failed(manager: &Manager, error: anyhow::Error, config: Arc<Config>) -> Hold {
+async fn failed(daemon: &dyn Daemon, error: anyhow::Error, config: Arc<Config>) -> Hold {
     let message = format!("Shoal could not keep this machine awake: {error:#}");
     log!("keep awake: {error:#}");
-    manager
-        .notify(None, AlertKind::KeepAwakeFailed, message)
+    daemon
+        .notify_user(AlertKind::KeepAwakeFailed, message)
         .await;
     Hold::Failed(config)
 }
@@ -219,7 +205,7 @@ impl Inhibitor {
             Ok(status) => status,
             Err(error) => return anyhow!(error).context(format!("wait for {}", self.program)),
         };
-        match crate::subprocess::diagnostic(&self.said).trim() {
+        match shoal_subprocess::diagnostic(&self.said).trim() {
             "" => anyhow!("{} ended ({status})", self.program),
             said => anyhow!("{} ended ({status}): {said}", self.program),
         }
@@ -238,7 +224,7 @@ impl Inhibitor {
         match read {
             Ok(0) | Err(_) => self.stderr = None,
             Ok(read) => {
-                let room = crate::subprocess::MAX_DIAGNOSTIC_CHARS.saturating_sub(self.said.len());
+                let room = shoal_subprocess::MAX_DIAGNOSTIC_CHARS.saturating_sub(self.said.len());
                 self.said.extend_from_slice(&chunk[..read.min(room)]);
             }
         }

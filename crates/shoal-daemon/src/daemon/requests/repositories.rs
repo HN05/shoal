@@ -111,7 +111,8 @@ pub(super) async fn handle(
             environment,
         } => {
             manager
-                .keep_repository_agent_environment(&repository, environment)
+                .agents
+                .keep_repository_agent_environment(&**manager, &repository, environment)
                 .await?;
             Body::Ok
         }

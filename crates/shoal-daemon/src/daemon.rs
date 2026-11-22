@@ -11,7 +11,6 @@ pub(crate) use shoal_leases::{allocation, containers, resources};
 mod absorb;
 pub(crate) mod agent_queue;
 mod agent_service;
-mod agent_trust;
 pub(crate) mod agents;
 mod alerts;
 mod answer;
@@ -51,7 +50,6 @@ pub(crate) mod hub;
 mod hub_moves;
 mod idle_sleep;
 mod imported_sessions;
-mod keep_awake;
 mod launches;
 mod leases;
 pub mod leftovers;
@@ -242,7 +240,9 @@ pub async fn run(
         "workspace usage",
         workspace_usage::run,
     );
-    spawn_supervised(&mut background, &manager, "keep awake", keep_awake::run);
+    spawn_supervised(&mut background, &manager, "keep awake", |manager| {
+        shoal_agents::keep_awake::run(manager.agents.clone(), manager)
+    });
     spawn_supervised(&mut background, &manager, "idle wakes", |manager| {
         idle_wakes::run(manager.agents.clone(), manager)
     });

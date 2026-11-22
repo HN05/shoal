@@ -105,7 +105,12 @@ async fn removing_a_repository_cleans_its_trust_where_its_agents_kept_configs() 
     for config in [&home, &inherited] {
         assert_eq!(projects_in(config), serde_json::json!({"/keep": trusted()}));
     }
-    let kept = daemon.manager.agent_environments(&repo.id).await.unwrap();
+    let kept = daemon
+        .manager
+        .agents
+        .agent_environments(&repo.id)
+        .await
+        .unwrap();
     assert!(kept.is_empty(), "{kept:?}");
 }
 

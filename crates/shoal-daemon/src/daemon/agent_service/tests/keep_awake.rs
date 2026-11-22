@@ -1,9 +1,15 @@
-use super::*;
-use crate::daemon::test_support::{manager, repository};
 use shoal_protocol::space_names::SpaceSelector;
 
+use crate::{
+    daemon::{
+        manager::Manager,
+        test_support::{manager, repository},
+    },
+    state::AgentState,
+};
+
 async fn has_work(manager: &Manager) -> bool {
-    manager.agents_have_work().await.unwrap()
+    manager.agents.agents_have_work(manager).await.unwrap()
 }
 
 async fn watch_pr(manager: &Manager, workspace: &crate::model::Workspace) {
@@ -46,17 +52,6 @@ async fn report(manager: &Manager, workspace: &crate::model::Workspace, state: A
         )
         .await
         .unwrap();
-}
-
-#[tokio::test]
-async fn a_working_agent_has_work() {
-    let (temp, manager) = manager().await;
-    let workspace = workspace(&manager, &temp).await;
-    assert!(!has_work(&manager).await);
-    for (state, work) in [(AgentState::Working, true), (AgentState::Idle, false)] {
-        report(&manager, &workspace, state).await;
-        assert_eq!(has_work(&manager).await, work, "{state}");
-    }
 }
 
 #[tokio::test]
@@ -120,68 +115,6 @@ async fn an_idle_agent_has_work_from_a_child_without_its_own_agent() {
     // Once the child reports its own agent, that agent receives the PR.
     report(&manager, &child, AgentState::Waiting).await;
     assert!(!has_work(&manager).await);
-}
-
-#[tokio::test]
-async fn a_failed_inhibitor_is_retried_under_another_config() {
-    let (_temp, manager) = manager().await;
-    // `cat` holds, reading the input the daemon keeps open.
-    let holds: &[&str] = &["sh", "-c", "$0"];
-    let config = manager.config();
-    let hold = Hold::Failed(config.clone());
-    let hold = update(&manager, hold, true, &config, holds).await;
-    assert!(matches!(hold, Hold::Failed(_)));
-    let reloaded = Arc::new(Config::default());
-    let hold = update(&manager, hold, true, &reloaded, holds).await;
-    assert!(matches!(hold, Hold::Held(_)));
-    let hold = update(&manager, hold, false, &reloaded, holds).await;
-    assert!(matches!(hold, Hold::Released));
-    // A failure to start notifies and waits for the next config.
-    let missing: &[&str] = &["/nonexistent/shoal-inhibitor"];
-    let hold = update(&manager, hold, true, &reloaded, missing).await;
-    assert!(matches!(hold, Hold::Failed(ref failed) if Arc::ptr_eq(failed, &reloaded)));
-    let notifications = manager.notifications.list(false, 10).await.unwrap();
-    assert_eq!(notifications[0].kind, AlertKind::KeepAwakeFailed);
-}
-
-#[tokio::test]
-async fn an_inhibitor_lasts_until_its_input_closes() {
-    // `cat` reads the input the daemon holds, then the script reports its end.
-    let mut inhibitor = Inhibitor::start(&["sh", "-c", "$0; echo released >&2"]).unwrap();
-    assert!(inhibitor.child.try_wait().unwrap().is_none());
-    drop(inhibitor._input.take());
-    let ended = inhibitor.ended().await.to_string();
-    assert!(ended.contains("released"), "{ended}");
-}
-
-#[tokio::test]
-async fn a_failed_inhibitor_reports_why() {
-    let mut inhibitor = Inhibitor::start(&["sh", "-c", "echo denied >&2; exit 1"]).unwrap();
-    let ended = inhibitor.ended().await.to_string();
-    assert!(ended.contains("denied"), "{ended}");
-    let missing = Inhibitor::start(&["/nonexistent/shoal-inhibitor"])
-        .err()
-        .unwrap();
-    assert!(
-        format!("{missing:#}").contains("/nonexistent/shoal-inhibitor"),
-        "{missing:#}"
-    );
-}
-
-#[tokio::test]
-async fn an_inhibitor_writing_past_the_pipe_is_drained_and_bounded() {
-    // More than a pipe holds: an undrained inhibitor would block before exiting.
-    let script = "yes denied | head -c 1000000 >&2; exit 3";
-    let mut inhibitor = Inhibitor::start(&["sh", "-c", script]).unwrap();
-    let ended = tokio::time::timeout(Duration::from_secs(60), inhibitor.ended())
-        .await
-        .expect("the inhibitor's exit is seen")
-        .to_string();
-    assert!(
-        ended.len() < crate::subprocess::MAX_DIAGNOSTIC_CHARS + 100,
-        "{}",
-        ended.len()
-    );
 }
 
 #[tokio::test]

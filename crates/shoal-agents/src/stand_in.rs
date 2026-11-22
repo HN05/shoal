@@ -16,18 +16,20 @@ use shoal_core::{
     paths::StateFiles,
     process::identity::AgentTrees,
 };
-use shoal_daemon_base::{alerts::AlertKind, gates::Gates, signals::Signals};
-use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
+use shoal_daemon_base::{
+    alerts::AlertKind, config_state::ConfigState, gates::Gates, signals::Signals,
+};
+use shoal_ids::{execution_ids::ExecutionId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     agent::Agent,
-    model::{Space, SpacePart, Workspace},
+    model::{ByKind, Repository, Space, SpacePart, Workspace},
     paths::Paths,
     space_names::{SpaceName, SpaceSelector},
 };
 
 use crate::{
     Agents,
-    daemon::{Alerts, Executions, Queue, Records, Spaces, Turns},
+    daemon::{Alerts, Executions, Queue, Records, Repositories, Spaces, Turns},
 };
 
 /// The service over a stand-in daemon.
@@ -35,6 +37,7 @@ pub(crate) struct Fixture {
     pub(crate) root: tempfile::TempDir,
     pub(crate) agents: Agents,
     pub(crate) daemon: StandIn,
+    pub(crate) records: Arc<StandInRecords>,
 }
 
 impl Fixture {
@@ -51,10 +54,15 @@ impl Fixture {
             config: shoal_core::test_support::global_config(text),
             ..StandIn::default()
         };
+        let records = Arc::new(StandInRecords::default());
+        let config = Arc::new(ConfigState::new(shoal_core::test_support::global_config(
+            text,
+        )));
         Self {
             root,
-            agents: service(paths).await,
+            agents: service(paths, config, records.clone()).await,
             daemon,
+            records,
         }
     }
 
@@ -62,9 +70,10 @@ impl Fixture {
     /// knowing only what it recorded there.
     pub(crate) async fn restart(self) -> Self {
         let paths = self.agents.paths.clone();
+        let config = self.agents.config.clone();
         drop(self.agents);
         Self {
-            agents: service(paths).await,
+            agents: service(paths, config, self.records.clone()).await,
             ..self
         }
     }
@@ -177,16 +186,17 @@ impl Fixture {
 }
 
 /// The service over the state directory of `paths`.
-async fn service(paths: Paths) -> Agents {
+async fn service(paths: Paths, config: Arc<ConfigState>, records: Arc<StandInRecords>) -> Agents {
     let store = shoal_store::test_support::unsynced_store(paths.database())
         .await
         .unwrap();
     Agents::new(
         store,
         Arc::new(Gates::default()),
+        config,
         Arc::new(Signals::default()),
         paths,
-        Arc::new(StandInRecords),
+        records,
     )
 }
 
@@ -196,6 +206,8 @@ pub(crate) struct StandIn {
     /// The config every space's settings resolve under.
     pub(crate) config: Config,
     pub(crate) spaces: Mutex<Vec<Space>>,
+    /// The registered repositories.
+    pub(crate) repositories: Mutex<Vec<Repository>>,
     /// The agent each execution registered.
     pub(crate) agents: Mutex<HashMap<ExecutionId, Agent>>,
     /// The executions whose agents Shoal is stopping.
@@ -245,6 +257,25 @@ impl Spaces for StandIn {
         let settings = self.config.resolve(&ConfigLayers::default());
         Box::pin(async { settings })
     }
+
+    fn workspace<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Workspace>> {
+        let workspace = self.selected(selector).and_then(|space| {
+            let ByKind::Workspace(workspace) = space.by_kind() else {
+                anyhow::bail!("{selector} is a chat");
+            };
+            Ok(workspace)
+        });
+        Box::pin(async { workspace })
+    }
+}
+
+impl Repositories for StandIn {
+    fn repository<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Repository>> {
+        let repositories = self.repositories.lock().unwrap();
+        let found = repositories.iter().find(|repository| repository.id == *id);
+        let found = found.cloned().context(NOT_HERE);
+        Box::pin(async { found })
+    }
 }
 
 impl Executions for StandIn {
@@ -261,9 +292,18 @@ impl Executions for StandIn {
     fn agent_trees(&self) -> BoxFuture<'_, Result<AgentTrees>> {
         Box::pin(async { Ok(AgentTrees::default()) })
     }
+
+    fn running_agent_spaces(&self) -> BoxFuture<'_, Vec<SpaceId>> {
+        Box::pin(async { Vec::new() })
+    }
 }
 
 impl Alerts for StandIn {
+    fn notify_user(&self, kind: AlertKind, message: String) -> BoxFuture<'_, ()> {
+        self.notified.lock().unwrap().push((kind, message));
+        Box::pin(async {})
+    }
+
     fn notify_space<'a>(
         &'a self,
         _: &'a SpaceName,
@@ -302,8 +342,12 @@ impl Queue for StandIn {
 }
 
 /// Records without the other subsystems' tables: no commands an agent
-/// left, and no restores Shoal queued.
-struct StandInRecords;
+/// left, no restores Shoal queued, and the spaces a test makes watch an
+/// open PR.
+#[derive(Default)]
+pub(crate) struct StandInRecords {
+    pub(crate) open_prs: Mutex<HashSet<SpaceId>>,
+}
 
 impl Records for StandInRecords {
     fn end_commands(&self, _: &Transaction<'_>, _: &SpaceId) -> Result<()> {
@@ -320,5 +364,14 @@ impl Records for StandInRecords {
 
     fn wake_asleep(&self, _: &Connection, _: &SpaceId) -> Result<()> {
         Ok(())
+    }
+
+    fn receives_open_pr_activity(
+        &self,
+        _: &Connection,
+        id: &SpaceId,
+        _: &[SpaceId],
+    ) -> Result<bool> {
+        Ok(self.open_prs.lock().unwrap().contains(id))
     }
 }

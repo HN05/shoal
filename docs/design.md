@@ -156,7 +156,7 @@ directories into a new root. The spaces a removal or move
 takes, whether a workspace's worktree may go or move with it, where the
 chats without a repository keep their files, the subsystems that work and
 keep files in a repository's directories and the agents that trust its
-paths stay with the daemon, which its interface reaches; so do the hooks'
+paths stay outside the crate, which its interface reaches; so do the hooks'
 executables and environments, which read ports and temporary directories,
 fetching and fast-forwarding a default branch, which the refresh of a
 workspace's branch shares, and whether the host has headroom for a build.
@@ -165,7 +165,9 @@ records the turn state their hooks report, with the reports a hook left
 behind, and the subagents they run, retries the turns an API error ended,
 queues and delivers the alerts for an agent once a run of them settles,
 follows the user's engagement with each agent, wakes the agents idle for
-their mode's period and fires the timers of `shoal sleep`. The spaces
+their mode's period, fires the timers of `shoal sleep`, keeps the agents'
+tools' trust in a repository's paths as it moves or goes, and holds the
+machine awake while agents have work. The spaces
 agents run in and their settings, the alerts that tell of them, what else
 ends with a turn, such as a marked final message, and what attaching files
 to an alert copies stay with the daemon, which its interface reaches, as

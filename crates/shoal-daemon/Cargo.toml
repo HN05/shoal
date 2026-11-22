@@ -49,7 +49,6 @@ shoal-reviews.workspace = true
 shoal-runner.workspace = true
 shoal-schedule = { workspace = true, features = ["rusqlite"] }
 shoal-store.workspace = true
-shoal-subprocess.workspace = true
 tempfile.workspace = true
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake", "__rustls-tls"] }
 tokio = { workspace = true, features = ["macros", "net", "io-util", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }
