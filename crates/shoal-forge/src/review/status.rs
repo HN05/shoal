@@ -3,14 +3,27 @@ use std::collections::BTreeMap;
 
 use anyhow::{Result, bail};
 
-use crate::{
-    backends::Activity, ci::approval::ApprovalRequests, transport::account::Account,
-    updates::Snapshot,
-};
+use crate::{ci::approval::ApprovalRequests, transport::account::Account, updates::Snapshot};
 use shoal_forge_types::{
     ForgeRepo,
+    backends::ForgeKind,
+    items::reference::ItemRef,
+    numbers::PullNumber,
     review::status::{PrStatus, ReviewState},
 };
+
+/// How the forge reads a PR's status.
+#[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
+pub(crate) trait Statuses {
+    /// A PR's state, mergeability, checks and review state.
+    async fn pr_status(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: PullNumber,
+        pull: &ItemRef,
+    ) -> Result<PrStatus>;
+}
 
 /// Recording what a PR's status lookups found.
 #[shoal_forge_derive::extension(pub(crate) StatusRecords)]

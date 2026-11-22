@@ -3,13 +3,13 @@
 use anyhow::{Result, bail, ensure};
 
 use crate::{
-    backends::Activity,
     items::{
         Items,
         action::{Acted, ActionRequests},
         attach::{AttachSteps, Holder},
         reaction::Subject,
     },
+    review::view::Views,
     transport::{account::Account, api::TransportRequests},
     updates::Edited,
 };

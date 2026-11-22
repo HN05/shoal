@@ -7,20 +7,19 @@ use serde_json::{Value, json};
 
 use super::GitHub;
 use crate::{
-    backends::{Activity, rest::read_pull},
+    backends::rest::read_pull,
     items::action::ActionRequests,
     review::{
-        status::{StatusRecords, github_reviews},
-        view::login,
+        status::{StatusRecords, Statuses, github_reviews},
+        view::{Views, login},
     },
     transport::{
         account::Account,
         api::{Request, TransportRequests},
         backend::LoginHint,
     },
-    updates::{Check, DISCUSSION, Entry, Snapshot, id_text},
+    updates::{Activity, Check, DISCUSSION, Entry, Snapshot, id_text},
 };
-use shoal_forge_types::review::view::{Details, Review};
 use shoal_forge_types::{
     ForgeRepo,
     ci::check_state::CheckState,
@@ -29,7 +28,10 @@ use shoal_forge_types::{
         link::ItemKind,
     },
     numbers::{IssueNumber, PullNumber},
-    review::status::{PrState, PrStatus},
+    review::{
+        status::{PrState, PrStatus},
+        view::{Details, Review},
+    },
 };
 
 mod view;
@@ -52,7 +54,9 @@ impl Activity for GitHub {
     ) -> Result<Snapshot> {
         pr_activity(repo, account, number).await
     }
+}
 
+impl Statuses for GitHub {
     async fn pr_status(
         &self,
         repo: &ForgeRepo,
@@ -64,7 +68,9 @@ impl Activity for GitHub {
             .await
             .hint_login(self)
     }
+}
 
+impl Views for GitHub {
     async fn view_details(
         &self,
         repo: &ForgeRepo,

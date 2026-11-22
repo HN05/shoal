@@ -4,25 +4,27 @@ use serde_json::Value;
 
 use super::{Bitbucket, listed, roots};
 use crate::{
-    backends::{
-        Activity,
-        rest::{self, RestCheck, RestReads, fingerprints},
-    },
+    backends::rest::{self, RestCheck, RestReads, fingerprints},
     items::{
         action::ActionSteps,
         item::{ItemRequests, text},
     },
-    review::status::Verdict,
+    review::{
+        status::{Statuses, Verdict},
+        view::Views,
+    },
     transport::{account::Account, api::TransportRequests, backend::LoginHint},
-    updates::{Entry, Snapshot},
+    updates::{Activity, Entry, Snapshot},
 };
-use shoal_forge_types::review::view::{Comment, Details, PrDetails, Review, ReviewComment};
 use shoal_forge_types::{
     ForgeRepo,
     ci::check_state::CheckState,
     items::{item::Current, link::ItemKind},
     numbers::{CommentId, IssueNumber, PullNumber},
-    review::status::PrStatus,
+    review::{
+        status::PrStatus,
+        view::{Comment, Details, PrDetails, Review, ReviewComment},
+    },
 };
 
 impl Activity for Bitbucket {
@@ -43,7 +45,9 @@ impl Activity for Bitbucket {
     ) -> Result<Snapshot> {
         rest::pr_activity(self, repo, account, number).await
     }
+}
 
+impl Statuses for Bitbucket {
     async fn pr_status(
         &self,
         repo: &ForgeRepo,
@@ -53,7 +57,9 @@ impl Activity for Bitbucket {
     ) -> Result<PrStatus> {
         rest::pr_status(self, repo, account, number, pull).await
     }
+}
 
+impl Views for Bitbucket {
     async fn view_details(
         &self,
         repo: &ForgeRepo,

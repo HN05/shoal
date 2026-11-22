@@ -4,7 +4,6 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 
 use crate::{
-    backends::Activity,
     capability::CapabilityRequests,
     items::{merging::Merging, reaction::ReactionRequests},
     review::status::StatusRequests,
@@ -12,11 +11,39 @@ use crate::{
 };
 use shoal_forge_types::{
     ForgeRepo,
+    backends::ForgeKind,
     capability::Capability,
     items::link::ItemKind,
     numbers::{CommentId, PullNumber},
-    review::view::{Details, ItemView, ReviewComment},
+    review::view::{Details, ItemView, Review, ReviewComment},
 };
+
+/// How the forge reads an item's content and discussion for a view.
+#[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
+pub(crate) trait Views {
+    /// The item's content for a view, with its comments when `comments` is
+    /// set and the forge reads them with the item.
+    async fn view_details(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        comments: bool,
+    ) -> Result<Details>;
+
+    /// Fills the comments `details` lacks and returns a PR's reviews,
+    /// recording in `errors` the parts it could not read.
+    async fn view_discussion(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        details: &mut Details,
+        errors: &mut Vec<String>,
+    ) -> Result<Option<Vec<Review>>>;
+}
 
 /// Reading items as views.
 #[shoal_forge_derive::extension(pub ViewRequests, pub(crate) ViewSteps)]

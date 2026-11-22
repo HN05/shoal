@@ -11,7 +11,7 @@ use shoal_refs::CommitId;
 use shoal_time::UnixTime;
 
 use crate::{
-    backends::{Activity, rest::RestCheck},
+    backends::rest::RestCheck,
     ci::run_view::RunViewRequests,
     transport::{
         account::Account,
@@ -20,12 +20,33 @@ use crate::{
 };
 use shoal_forge_types::{
     ForgeRepo,
+    backends::ForgeKind,
     ci::check_state::{self, CheckState},
     items::{item::Current, link::LinkKind, reference::ItemNumber},
     numbers::{IssueNumber, PullNumber},
     review::status::CheckResult,
     updates::{SnapshotKind, SnapshotState, Update, UpdateKind},
 };
+
+/// How the forge reads an item's activity.
+#[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
+pub(crate) trait Activity {
+    /// An issue's state and discussion.
+    async fn issue_activity(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: IssueNumber,
+    ) -> Result<Snapshot>;
+
+    /// A PR's state, discussion, reviews, mergeability and checks.
+    async fn pr_activity(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: PullNumber,
+    ) -> Result<Snapshot>;
+}
 
 /// How long after a source's failure was reported another is not, however its
 /// error changes or it passes in between, so a source failing intermittently
