@@ -2,7 +2,7 @@
 //! them, so a client can offer the choices without knowing the forge.
 use anyhow::Result;
 
-use crate::{backends::Reviews, items::action::ActionRequests, transport::account::Account};
+use crate::{items::action::ActionRequests, review::Reviews, transport::account::Account};
 use shoal_forge_types::{
     ForgeRepo, items::link::ItemKind, numbers::PullNumber, review::reviewers::Reviewer,
 };

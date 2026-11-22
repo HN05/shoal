@@ -2,11 +2,14 @@
 //! are checked against it before anything is posted.
 use anyhow::{Context, Result, bail, ensure};
 
-use crate::{backends::Reviews, items::action::ActionRequests, transport::account::Account};
+use crate::{items::action::ActionRequests, review::Reviews, transport::account::Account};
 use shoal_forge_types::{
     ForgeRepo,
-    items::review::{LineComment, Side},
-    items::{item::Current, link::ItemKind},
+    items::{
+        item::Current,
+        link::ItemKind,
+        review::{LineComment, Side},
+    },
 };
 
 /// The files a PR's diff changes.

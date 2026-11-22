@@ -12,4 +12,4 @@ pub(crate) mod gitlab;
 pub(crate) mod rest;
 
 mod area;
-pub(crate) use area::{Activity, BranchFields, Branches, Conventions, Reviews};
+pub(crate) use area::{Activity, BranchFields, Branches, Conventions};

@@ -3,7 +3,7 @@
 use anyhow::{Context, Result, ensure};
 
 use crate::{
-    backends::Reviews,
+    review::Reviews,
     transport::{account::Account, api::Request},
 };
 use shoal_forge_types::{

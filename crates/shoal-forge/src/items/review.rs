@@ -9,8 +9,8 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 use shoal_refs::CommitId;
 
+use crate::review::Reviews;
 use crate::{
-    backends::Reviews,
     items::Items as _,
     items::action::{Acted, ActionRequests, after_post},
     review::diff::{Bases, Diff, DiffRequests, Placed},
@@ -20,8 +20,10 @@ use crate::{
 };
 use shoal_forge_types::{
     ForgeRepo,
-    items::link::ItemKind,
-    items::review::{NewReview, ReviewVerdict},
+    items::{
+        link::ItemKind,
+        review::{NewReview, ReviewVerdict},
+    },
     numbers::PullNumber,
 };
 

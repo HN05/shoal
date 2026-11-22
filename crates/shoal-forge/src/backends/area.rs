@@ -3,9 +3,7 @@
 mod activity;
 mod branches;
 mod conventions;
-mod reviews;
 
 pub(crate) use activity::Activity;
 pub(crate) use branches::{BranchFields, Branches};
 pub(crate) use conventions::Conventions;
-pub(crate) use reviews::Reviews;

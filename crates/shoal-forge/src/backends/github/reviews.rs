@@ -6,12 +6,14 @@ use serde_json::{Value, json};
 
 use super::{GitHub, threads};
 use crate::{
-    backends::Reviews,
     items::{
         item::text,
         review::{PlacedReview, Submission},
     },
-    review::diff::{Diff, FileDiff},
+    review::{
+        Reviews,
+        diff::{Diff, FileDiff},
+    },
     transport::{
         account::Account,
         api::{Request, TransportRequests},
@@ -20,12 +22,17 @@ use crate::{
 };
 use shoal_forge_types::{
     ForgeRepo,
-    items::item::Current,
+    items::{
+        item::Current,
+        review::{ReviewVerdict, Side},
+    },
     numbers::{CommentId, PullNumber},
-    review::{reviewers::Reviewer, thread::Thread},
+    raw::HttpMethod,
+    review::{
+        reviewers::Reviewer,
+        thread::{Target, Thread},
+    },
 };
-use shoal_forge_types::{items::review::ReviewVerdict, review::thread::Target};
-use shoal_forge_types::{items::review::Side, raw::HttpMethod};
 
 mod reviewers;
 
