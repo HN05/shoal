@@ -47,6 +47,7 @@ pub(crate) fn workspace_ids(
         .collect::<rusqlite::Result<_>>()?)
 }
 
+mod directories;
 pub(crate) mod done;
 mod environment;
 mod export;

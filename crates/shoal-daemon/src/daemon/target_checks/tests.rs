@@ -191,3 +191,18 @@ fn attaching_leaves_out_a_space_without_an_agent_session() {
     };
     assert!(matches!(attach.judge(&space, &sessions), Verdict::Accepted));
 }
+
+#[test]
+fn entering_leaves_out_a_space_whose_directory_is_missing() {
+    let space = workspace(WorkspaceState::Ready);
+    let enter = TargetCheck::DirectorySpace;
+    assert!(matches!(enter.judge_alone(&space), Verdict::Lacking(None)));
+    let directories = Facts {
+        directories: [space.id.clone()].into(),
+        ..Facts::default()
+    };
+    assert!(matches!(
+        enter.judge(&space, &directories),
+        Verdict::Accepted
+    ));
+}

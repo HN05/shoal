@@ -33,10 +33,12 @@ pub(in crate::cli::commands) async fn open(
         ctx,
         space,
         // The app the space opens in runs on this machine.
-        Fallback::CurrentDirectory(&Acting::here(crate::client::spaces::status)),
+        Fallback::CurrentDirectory(&Acting::here(crate::client::spaces::enter)),
     )
     .await?;
-    let space = read(ctx, &selector).await?;
+    let space = crate::client::spaces::enter(selector)
+        .send(&ctx.paths)
+        .await?;
     let app = agents::app(match name {
         Some(name) => name,
         None => default_app(ctx, &space.id).await?,
@@ -44,14 +46,6 @@ pub(in crate::cli::commands) async fn open(
     shoal_workers::launch::ensure_opens(app, &args)?;
     let repository = repository(ctx, &space).await?;
     shoal_workers::launch::hand_off(&ctx.paths, &space, repository.as_ref(), app, args).await
-}
-
-/// The space `selector` names, among those the caller sees.
-async fn read(ctx: &Context, selector: &SpaceSelector) -> Result<Space> {
-    let spaces = crate::client::spaces::list(&ctx.paths).await?;
-    spaces
-        .find(selector)
-        .with_context(|| format!("no space {selector}"))
 }
 
 /// The registered repository `space` belongs to; none for a chat without

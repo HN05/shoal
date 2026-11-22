@@ -126,3 +126,9 @@ pub async fn find_spaces(daemon: &impl Daemon, target: SpaceTarget) -> Result<Ve
 pub fn status(space: SpaceSelector) -> Prepared<StatusAnswer> {
     Prepared::new(SpaceMethod::SpaceStatus { space })
 }
+
+/// `space` once the directory its agent works in is found on this machine,
+/// for a shell or an app to enter it.
+pub fn enter(space: SpaceSelector) -> Prepared<Box<Space>> {
+    Prepared::new(SpaceMethod::EnterSpace { space })
+}

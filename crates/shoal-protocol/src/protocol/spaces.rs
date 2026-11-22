@@ -58,6 +58,9 @@ pub enum SpaceMethod {
     SpaceEnvironment { space: SpaceSelector },
     /// The status of a workspace or chat, running or stopped.
     SpaceStatus { space: SpaceSelector },
+    /// The workspace or chat `space` names once the directory its agent
+    /// works in is found on this machine, for a shell or an app to enter.
+    EnterSpace { space: SpaceSelector },
     /// The sessions the agents of a workspace or chat reported.
     SpaceSessions { space: SpaceSelector },
     /// Follow the session `session` of an agent of a workspace or chat, or
@@ -131,6 +134,7 @@ impl SpaceMethod {
             | Self::RevokeScope { .. }
             | Self::SpaceEnvironment { .. }
             | Self::SpaceSessions { .. }
+            | Self::EnterSpace { .. }
             | Self::WatchSpaceEvents { .. } => Forwarding::Never,
         }
     }
@@ -142,6 +146,7 @@ impl SpaceMethod {
             | Self::RevokeScope { space, .. }
             | Self::SpaceEnvironment { space }
             | Self::SpaceStatus { space }
+            | Self::EnterSpace { space }
             | Self::SpaceSessions { space }
             | Self::FollowSession { space, .. }
             | Self::AttachSession { space, .. } => Some(Target::Space(space)),

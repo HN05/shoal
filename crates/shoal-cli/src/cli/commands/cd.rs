@@ -1,5 +1,5 @@
 //! Moving the shell into a workspace.
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
 use crate::cli::{
     context::Context,
@@ -17,18 +17,14 @@ pub(in crate::cli::commands) async fn cd(
         Some(workspace) => ui::explicit_workspace(ctx, workspace).await?,
         // The shell goes on in the worktree on this machine.
         None => SpaceSelector::Id(
-            ui::workspace_picker(ctx, &Acting::here(crate::client::workspaces::inspect)).await?,
+            ui::workspace_picker(ctx, &Acting::here(crate::client::spaces::enter)).await?,
         ),
     };
-    let inspection = crate::client::workspaces::inspect(workspace)
+    let workspace = crate::client::spaces::enter(workspace)
         .send(&ctx.paths)
         .await?;
-    ensure!(
-        inspection.workspace.path.is_dir(),
-        "workspace directory is missing"
-    );
-    recent::record_move(ctx, &SpaceSelector::id(&inspection.workspace.id)).await;
-    navigate(ctx, &inspection.workspace.path)?;
+    recent::record_move(ctx, &SpaceSelector::id(&workspace.id)).await;
+    navigate(ctx, workspace.workdir.path())?;
     Ok(0)
 }
 

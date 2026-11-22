@@ -58,6 +58,9 @@ pub(crate) enum TargetCheck {
     /// A space with an agent session to attach to, where this machine's
     /// terminal hosts keep it.
     SessionSpace,
+    /// A space whose agent's directory is found on this machine, for a
+    /// shell or an app to enter.
+    DirectorySpace,
 }
 
 /// What a check reads besides the space it judges, which
@@ -69,6 +72,8 @@ pub(crate) struct Facts {
     pub(crate) busy: HashSet<SpaceId>,
     /// The spaces with an agent session.
     pub(crate) sessions: HashSet<SpaceId>,
+    /// The spaces whose agent's directory is found.
+    pub(crate) directories: HashSet<SpaceId>,
 }
 
 /// How a request's check judges one space.
@@ -164,7 +169,8 @@ impl TargetCheck {
             | Self::HeldSpace
             | Self::MarkedSpace
             | Self::StackedWorkspace
-            | Self::SessionSpace => false,
+            | Self::SessionSpace
+            | Self::DirectorySpace => false,
             Self::ReadyWorkspace
             | Self::ReadySpace
             | Self::AwaitedReadySpace
@@ -196,6 +202,7 @@ impl TargetCheck {
             Self::MarkedSpace => present(!space.review.is_empty()),
             Self::StackedWorkspace => workspace(space, |w| present(w.base_workspace.is_some())),
             Self::SessionSpace => present(facts.sessions.contains(&space.id)),
+            Self::DirectorySpace => present(facts.directories.contains(&space.id)),
         }
     }
 }
@@ -378,6 +385,10 @@ impl Manager {
             },
             sessions: match check {
                 TargetCheck::SessionSpace => self.session_spaces(spaces).await,
+                _ => HashSet::new(),
+            },
+            directories: match check {
+                TargetCheck::DirectorySpace => self.directory_spaces(spaces).await,
                 _ => HashSet::new(),
             },
         }

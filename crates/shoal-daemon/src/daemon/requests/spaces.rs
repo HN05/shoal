@@ -82,6 +82,9 @@ pub(super) async fn handle(
         SpaceMethod::SpaceSessions { space } => {
             Body::SpaceSessions(manager.space_sessions(&space).await?)
         }
+        SpaceMethod::EnterSpace { space } => {
+            Body::EnteredSpace(Box::new(manager.entered_space(&space).await?))
+        }
         SpaceMethod::FollowSession {
             space,
             session,
@@ -132,6 +135,7 @@ impl Checked for SpaceMethod {
             | Self::FollowSession { .. }
             | Self::SpaceLog { .. } => Some(TargetCheck::Space),
             Self::AttachSession { .. } => Some(TargetCheck::SessionSpace),
+            Self::EnterSpace { .. } => Some(TargetCheck::DirectorySpace),
             Self::ListSpaces
             | Self::JudgeSpaces { .. }
             | Self::ListSpacesEverywhere { .. }
@@ -164,6 +168,7 @@ impl Scoped for SpaceMethod {
             | SpaceMethod::SelectSpaces { .. } => None,
             SpaceMethod::RenameSpace { space, .. }
             | SpaceMethod::SpaceStatus { space }
+            | SpaceMethod::EnterSpace { space }
             | SpaceMethod::SpaceSessions { space }
             | SpaceMethod::FollowSession { space, .. } => Some(space),
             // A token for a space its scope reaches acts for no more than

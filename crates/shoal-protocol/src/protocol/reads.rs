@@ -115,6 +115,7 @@ impl Operation {
                         | SpaceMethod::SelectSpaces { .. }
                         | SpaceMethod::FindSpaces { .. }
                         | SpaceMethod::SpaceStatus { .. }
+                        | SpaceMethod::EnterSpace { .. }
                         | SpaceMethod::SpaceSessions { .. }
                         | SpaceMethod::FollowSession { .. }
                         | SpaceMethod::SpaceLog { .. }

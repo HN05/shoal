@@ -279,6 +279,7 @@ response_bodies! {
     WaitingUpdates(WaitingUpdates),
     AgentSession(crate::model::AgentSession),
     SpaceStatus(Box<SpaceStatus>),
+    EnteredSpace(Box<crate::model::Space>),
     ReportedStatus(Box<crate::status::ReportedStatus>),
     LocatedSpace(Box<crate::model::Located>),
     LocatedSpaces(Vec<crate::model::Located>),
