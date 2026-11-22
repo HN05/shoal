@@ -167,8 +167,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   and secrets, `crates/shoal-reviews` for local reviews, the gate agent
   and the one-shot agent runs they start, `crates/shoal-hub` for the hub
   role and membership of a hub, `crates/shoal-runner` for triggers and
-  the CI jobs this machine runs, and `crates/shoal-links` for the issues,
-  PRs and CI runs spaces link.
+  the CI jobs this machine runs, `crates/shoal-links` for the issues,
+  PRs and CI runs spaces link, and `crates/shoal-repositories` for the
+  registered repositories, their config layers, seeds and caches.
   Its service, a field of `Manager`, holds what the subsystem
   keeps in memory and offers its operations; what it needs of other
   subsystems is an interface it declares, as the base does, which the daemon
@@ -182,11 +183,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `shoal-forge-types`, `shoal-ids`, `shoal-protocol`, `shoal-refs` and
   `shoal-store`; `shoal-hub` on none but `shoal-core`, `shoal-daemon-base`,
   `shoal-ids`, `shoal-protocol`, `shoal-schedule` and `shoal-store`;
-  `shoal-runner` on none but `shoal-core`, `shoal-daemon-base`,
-  `shoal-forge`, `shoal-forge-types`, `shoal-ids`, `shoal-protocol`,
-  `shoal-refs` and `shoal-store`; `shoal-links` on none but `shoal-core`,
-  `shoal-daemon-base`, `shoal-forge`, `shoal-forge-types`, `shoal-ids`,
-  `shoal-protocol`, `shoal-refs` and `shoal-store`.
+  `shoal-runner`, `shoal-links` and `shoal-repositories` on none but
+  `shoal-core`, `shoal-daemon-base`, `shoal-forge`, `shoal-forge-types`,
+  `shoal-ids`, `shoal-protocol`, `shoal-refs` and `shoal-store`.
 - `crates/shoal-time` holds the wall-clock timestamp type,
   `crates/shoal-refs` the commit and branch name types, `crates/shoal-ids`
   the record IDs and numbers, and `crates/shoal-states` the macros that

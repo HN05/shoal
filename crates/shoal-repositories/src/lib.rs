@@ -1,6 +1,7 @@
 //! The daemon's registered repositories: registering and looking them up,
-//! their configuration layers, moving their directories, removing them and
-//! the contribution clones Shoal removes on its own. [`Repositories`] holds
+//! their configuration layers, their seeds and shared caches, moving their
+//! directories, removing them and the contribution clones Shoal removes on
+//! its own. [`Repositories`] holds
 //! what they keep in memory and offers their operations; what they need of
 //! the rest of the daemon is the interface in [`daemon`].
 use std::sync::Arc;

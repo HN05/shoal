@@ -46,8 +46,8 @@ instead of the PR delivery guidance below.
   migration that calls code outside the store instead of a frozen copy.
 - `crates/shoal-daemon-base` holds the daemon's log, a request's caller, the
   approval requests subsystems make, the actions permissions govern, config
-  state, gates, events, notifications, item numbers, file access and the
-  kept copies of attached files, and
+  state, gates, events, notifications, item numbers, file access, the proof
+  of the directories Shoal owns and the kept copies of attached files, and
   depends on no Shoal crate but `shoal-core`, `shoal-forge-types`,
   `shoal-ids`, `shoal-protocol` and `shoal-store`. Flag code there that is a method of `Manager`, or that calls
   a subsystem other than through an interface it declares.
@@ -59,10 +59,8 @@ instead of the PR delivery guidance below.
   `shoal-core`, `shoal-daemon-base`, `shoal-forge`, `shoal-forge-types`,
   `shoal-ids`, `shoal-protocol`, `shoal-refs` and `shoal-store`, and
   `shoal-hub` on none but `shoal-core`, `shoal-daemon-base`, `shoal-ids`,
-  `shoal-protocol`, `shoal-schedule` and `shoal-store`, and `shoal-runner`
-  on none but `shoal-core`, `shoal-daemon-base`, `shoal-forge`,
-  `shoal-forge-types`, `shoal-ids`, `shoal-protocol`, `shoal-refs` and
-  `shoal-store`, and `shoal-links` on none but `shoal-core`,
+  `shoal-protocol`, `shoal-schedule` and `shoal-store`, and `shoal-runner`,
+  `shoal-links` and `shoal-repositories` on none but `shoal-core`,
   `shoal-daemon-base`, `shoal-forge`, `shoal-forge-types`, `shoal-ids`,
   `shoal-protocol`, `shoal-refs` and `shoal-store`. Flag a `Manager` method that does a
   subsystem's work, a subsystem crate that reads another's tables or calls it
