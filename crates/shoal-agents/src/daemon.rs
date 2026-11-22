@@ -128,4 +128,20 @@ pub trait Records: Send + Sync {
         id: &SpaceId,
         running: &[SpaceId],
     ) -> Result<bool>;
+
+    /// Whether `shoal done` recorded that the work of the space `id` is
+    /// finished.
+    fn space_done(&self, db: &Connection, id: &SpaceId) -> Result<bool>;
+
+    /// Whether the space `id` is a workspace, which takes its agent's state
+    /// reports whether an agent of it runs or not.
+    fn space_is_workspace(&self, db: &Connection, id: &SpaceId) -> Result<bool>;
+
+    /// Refuse an alert for the agent of the space `id` once the space is
+    /// gone or being removed, since its removal decides from the alerts it
+    /// has.
+    fn ensure_takes_alerts(&self, db: &Connection, id: &SpaceId) -> Result<()>;
+
+    /// Whether the repository `id` is registered.
+    fn repository_registered(&self, db: &Connection, id: &RepositoryId) -> Result<bool>;
 }

@@ -7,6 +7,7 @@ use shoal_links::daemon::{ProposalKind, Records};
 use shoal_protocol::model::{ChangedOnBothSides, SpaceRef};
 
 use crate::daemon::{
+    agent_service::AgentRecords,
     alerts::AlertKind,
     approvals::{self, ApprovalRequest, proposals},
     events::{self, EventKind},
@@ -149,7 +150,7 @@ impl Records for LinkRecords {
         kind: AlertKind,
         message: &str,
     ) -> Result<()> {
-        messages::queue_shoal_message(tx, id, kind, message).map(drop)
+        messages::queue_shoal_message(tx, &AgentRecords, id, kind, message).map(drop)
     }
 
     fn subtree(&self, db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>> {

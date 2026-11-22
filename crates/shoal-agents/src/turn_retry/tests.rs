@@ -450,6 +450,7 @@ async fn usage_limits_keep_retrying_beyond_a_week_and_survive_reopen() -> Result
     report(&fixture, &workspace, execution.as_str(), AgentState::Idle).await;
     let id = workspace.id.clone();
     let scheduling_execution = execution.clone();
+    let records = fixture.agents.records.clone();
     let pending = fixture
         .agents
         .store
@@ -462,7 +463,7 @@ async fn usage_limits_keep_retrying_beyond_a_week_and_survive_reopen() -> Result
                 record_failure(tx, &id, &scheduling_execution, failure, now, 0.5)?;
                 let pending = get(tx, &id)?.context("pending usage-limit retry")?;
                 assert!(pending.due_at > now);
-                assert!(deliver(tx, &id, pending.due_at)?);
+                assert!(deliver(tx, &*records, &id, pending.due_at)?);
                 tx.execute("DELETE FROM alerts WHERE recipient_id=?1", [&id])?;
                 now = pending.due_at;
             }

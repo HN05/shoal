@@ -1,15 +1,18 @@
 //! The records of other subsystems the agents read and write in their own
 //! transactions.
-use anyhow::Result;
-use rusqlite::{Connection, Transaction};
+use anyhow::{Result, ensure};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use shoal_agents::daemon::Records;
-use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
+use shoal_ids::{execution_ids::ExecutionId, repository_ids::RepositoryId, space_ids::SpaceId};
 
 use shoal_links::wait::followed::watches_open_pr;
 
-use crate::daemon::{
-    agent_queue, agents, changes,
-    tree::{self, TrackedAgents},
+use crate::{
+    daemon::{
+        agent_queue, agents, changes, store,
+        tree::{self, TrackedAgents},
+    },
+    state::WorkspaceState,
 };
 
 pub(crate) struct AgentRecords;
@@ -43,5 +46,34 @@ impl Records for AgentRecords {
             }
         }
         Ok(false)
+    }
+
+    fn space_done(&self, db: &Connection, id: &SpaceId) -> Result<bool> {
+        store::exists(db, "SELECT 1 FROM space_completion WHERE space_id=?1", [id])
+    }
+
+    fn space_is_workspace(&self, db: &Connection, id: &SpaceId) -> Result<bool> {
+        store::exists(
+            db,
+            "SELECT 1 FROM spaces WHERE id=?1 AND kind='workspace'",
+            [id],
+        )
+    }
+
+    fn ensure_takes_alerts(&self, db: &Connection, id: &SpaceId) -> Result<()> {
+        let present: Option<bool> = db
+            .query_row(
+                "SELECT state IS NOT ?2 FROM spaces LEFT JOIN workspaces USING(id) WHERE id=?1",
+                params![id, WorkspaceState::Removing],
+                |row| row.get(0),
+            )
+            .optional()?;
+        ensure!(present.is_some(), "no space {id}");
+        ensure!(present == Some(true), "the workspace is being removed");
+        Ok(())
+    }
+
+    fn repository_registered(&self, db: &Connection, id: &RepositoryId) -> Result<bool> {
+        store::exists(db, "SELECT 1 FROM repositories WHERE id=?1", [id])
     }
 }

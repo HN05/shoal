@@ -240,11 +240,11 @@ impl Agents {
     /// Forget what [`Self::keep_agent_environment`] kept for the removed
     /// repository with `id`, which no agent can add to again.
     async fn forget_agent_environments(&self, id: &RepositoryId) -> Result<()> {
-        let id = id.to_owned();
+        let (id, records) = (id.to_owned(), self.records.clone());
         self.store
             .write(move |tx| {
                 ensure!(
-                    !shoal_store::exists(tx, "SELECT 1 FROM repositories WHERE id=?1", [&id])?,
+                    !records.repository_registered(tx, &id)?,
                     "the repository is still registered"
                 );
                 tx.execute(

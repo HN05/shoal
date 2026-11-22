@@ -15,6 +15,7 @@ use shoal_protocol::{
 };
 
 use crate::daemon::{
+    agent_service::AgentRecords,
     alerts::{About, AlertKind, NewAlert},
     manager::Manager,
     messages, notifications,
@@ -133,7 +134,7 @@ pub(super) fn deliver(
         }
         Party::Space(id) => {
             let alert = alert(thread, post, texts.kind, texts.agent);
-            match messages::queue_in(tx, id, &alert) {
+            match messages::queue_in(tx, &AgentRecords, id, &alert) {
                 Ok(queued) => {
                     delivered.spaces |= queued.new;
                     Ok(Some(queued.id))

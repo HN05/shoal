@@ -10,7 +10,7 @@ use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use crate::time::UnixTime;
-use crate::{Agents, log, messages};
+use crate::{Agents, daemon::Records, log, messages};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::sleep::WakeTimer;
 
@@ -68,7 +68,7 @@ fn next_due(db: &Connection) -> Result<Option<UnixTime>> {
 /// Fire the timer of the space `id` when it is still due at `now`: queue
 /// its message and delete it together, so a timer set meanwhile is kept.
 /// Whether a message was queued.
-fn fire(tx: &Transaction<'_>, id: &SpaceId, now: UnixTime) -> Result<bool> {
+fn fire(tx: &Transaction<'_>, records: &dyn Records, id: &SpaceId, now: UnixTime) -> Result<bool> {
     let message: Option<Option<String>> = tx
         .query_row(
             "DELETE FROM space_wake_timers WHERE space_id=?1 AND due_at<=?2 RETURNING message",
@@ -80,7 +80,8 @@ fn fire(tx: &Transaction<'_>, id: &SpaceId, now: UnixTime) -> Result<bool> {
         return Ok(false);
     };
     let kind = shoal_daemon_base::alerts::AlertKind::WakeTimer;
-    let queued = messages::queue_shoal_message(tx, id, kind, &delivery(message.as_deref()))?;
+    let queued =
+        messages::queue_shoal_message(tx, records, id, kind, &delivery(message.as_deref()))?;
     Ok(queued.is_some())
 }
 
@@ -129,7 +130,12 @@ impl Agents {
     /// queued.
     async fn fire_wake_timer(&self, id: SpaceId, now: UnixTime) -> Result<bool> {
         let space = id.clone();
-        match self.store.write(move |tx| fire(tx, &space, now)).await {
+        let records = self.records.clone();
+        match self
+            .store
+            .write(move |tx| fire(tx, &*records, &space, now))
+            .await
+        {
             Ok(queued) => Ok(queued),
             Err(error) => {
                 log!("wake timer of space {id}: {error:#}");

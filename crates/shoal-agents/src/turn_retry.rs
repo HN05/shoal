@@ -17,7 +17,7 @@ pub use shoal_protocol::executions::TurnRetry;
 use self::unretried::Unretried;
 use crate::{
     Agents,
-    daemon::Daemon,
+    daemon::{Daemon, Records},
     log, messages,
     model::Space,
     state::{AgentState, QueueKind, TurnFailure},
@@ -261,15 +261,18 @@ fn due_spaces(db: &Connection, now: UnixTime) -> Result<Vec<SpaceId>> {
 }
 
 /// The space's retry when it is still due at `now`.
-fn due(db: &Connection, space_id: &SpaceId, now: UnixTime) -> Result<Option<Due>> {
-    Ok(db
+fn due(
+    db: &Connection,
+    records: &dyn Records,
+    space_id: &SpaceId,
+    now: UnixTime,
+) -> Result<Option<Due>> {
+    let due = db
         .query_row(
             "SELECT r.failure,r.attempt,
-                (s.state IS 'idle' AND s.execution_id IS r.execution_id
+                s.state IS 'idle' AND s.execution_id IS r.execution_id
                     OR EXISTS (SELECT 1 FROM agent_queue q
-                        WHERE q.kind=?3 AND q.execution_id=r.execution_id))
-                AND NOT EXISTS (SELECT 1 FROM space_completion c
-                    WHERE c.space_id=r.space_id)
+                        WHERE q.kind=?3 AND q.execution_id=r.execution_id)
              FROM space_turn_retries r
              LEFT JOIN space_agent_state s ON s.space_id=r.space_id
              WHERE r.space_id=?1 AND r.delivered=0 AND r.due_at<=?2",
@@ -282,7 +285,12 @@ fn due(db: &Connection, space_id: &SpaceId, now: UnixTime) -> Result<Option<Due>
                 })
             },
         )
-        .optional()?)
+        .optional()?;
+    let Some(mut due) = due else {
+        return Ok(None);
+    };
+    due.deliverable &= !records.space_done(db, space_id)?;
+    Ok(Some(due))
 }
 
 /// What delivering the due retries did.
@@ -299,11 +307,11 @@ struct Delivered {
 /// Deliver each retry due at `now`, each space's on its own, so one
 /// that cannot be delivered, such as to a full message queue, holds up no
 /// other and waits the first delay again.
-fn deliver_due(db: &mut Connection, now: UnixTime) -> Result<Delivered> {
+fn deliver_due(db: &mut Connection, records: &dyn Records, now: UnixTime) -> Result<Delivered> {
     let mut queued = false;
     let mut failed = Vec::new();
     for space_id in due_spaces(db, now)? {
-        match shoal_store::write_transaction(db, |tx| deliver(tx, &space_id, now)) {
+        match shoal_store::write_transaction(db, |tx| deliver(tx, records, &space_id, now)) {
             Ok(delivered) => queued |= delivered,
             Err(error) => {
                 postpone(db, &space_id, now + Duration::from_secs(FIRST_DELAY_SECS))?;
@@ -328,14 +336,19 @@ fn deliver_due(db: &mut Connection, now: UnixTime) -> Result<Delivered> {
 /// delivered together, or drop a retry that may not be. One transaction
 /// checks and delivers, so a turn that starts meanwhile never receives a
 /// cancelled retry. Whether a message was queued.
-fn deliver(tx: &Transaction<'_>, space_id: &SpaceId, now: UnixTime) -> Result<bool> {
-    let Some(due) = due(tx, space_id, now)? else {
+fn deliver(
+    tx: &Transaction<'_>,
+    records: &dyn Records,
+    space_id: &SpaceId,
+    now: UnixTime,
+) -> Result<bool> {
+    let Some(due) = due(tx, records, space_id, now)? else {
         return Ok(false);
     };
     if due.deliverable {
         let message = continuation(due.failure, due.attempt);
         let kind = shoal_daemon_base::alerts::AlertKind::TurnRetried;
-        messages::queue_shoal_message(tx, space_id, kind, &message)?;
+        messages::queue_shoal_message(tx, records, space_id, kind, &message)?;
         tx.execute(
             "UPDATE space_turn_retries SET delivered=1 WHERE space_id=?1",
             [space_id],
@@ -454,7 +467,10 @@ impl Agents {
     /// Deliver the retries due at `now`, as [`deliver_due`] does; when the
     /// next one is due.
     pub async fn deliver_turn_retries(&self, now: UnixTime) -> Result<Option<UnixTime>> {
-        let delivered = self.store.run(move |db| deliver_due(db, now)).await?;
+        let records = self.records.clone();
+        let delivered = (self.store)
+            .run(move |db| deliver_due(db, &*records, now))
+            .await?;
         for (workspace, error) in &delivered.failed {
             log!("turn retry for {workspace} not delivered: {error:#}");
         }

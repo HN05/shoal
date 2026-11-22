@@ -374,4 +374,26 @@ impl Records for StandInRecords {
     ) -> Result<bool> {
         Ok(self.open_prs.lock().unwrap().contains(id))
     }
+
+    fn space_done(&self, db: &Connection, id: &SpaceId) -> Result<bool> {
+        shoal_store::exists(db, "SELECT 1 FROM space_completion WHERE space_id=?1", [id])
+    }
+
+    fn space_is_workspace(&self, db: &Connection, id: &SpaceId) -> Result<bool> {
+        shoal_store::exists(
+            db,
+            "SELECT 1 FROM spaces WHERE id=?1 AND kind='workspace'",
+            [id],
+        )
+    }
+
+    fn ensure_takes_alerts(&self, db: &Connection, id: &SpaceId) -> Result<()> {
+        let present = shoal_store::exists(db, "SELECT 1 FROM spaces WHERE id=?1", [id])?;
+        anyhow::ensure!(present, "no space {id}");
+        Ok(())
+    }
+
+    fn repository_registered(&self, db: &Connection, id: &RepositoryId) -> Result<bool> {
+        shoal_store::exists(db, "SELECT 1 FROM repositories WHERE id=?1", [id])
+    }
 }

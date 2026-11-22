@@ -171,7 +171,10 @@ machine awake while agents have work. The spaces
 agents run in and their settings, the alerts that tell of them, what else
 ends with a turn, such as a marked final message, and what attaching files
 to an alert copies stay with the daemon, which its interface reaches, as
-do, until they move into the crate, the executions and the agent queue.
+do, until they move into the crate, the code of the executions and the
+agent queue. The crate owns the agents' records, the executions' and the
+queue's among them, and reads what the spaces and repositories record
+through its interface.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
 the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
 `shoal-workers` neither the daemon nor its tests: the daemon depends on no

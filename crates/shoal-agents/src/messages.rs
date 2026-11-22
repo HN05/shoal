@@ -9,7 +9,10 @@ use shoal_ids::space_ids::SpaceId;
 use anyhow::Result;
 use rusqlite::Transaction;
 
-use crate::{Agents, daemon::Daemon};
+use crate::{
+    Agents,
+    daemon::{Daemon, Records},
+};
 use shoal_daemon_base::alerts::{About, AlertKind, NewAlert, Unread};
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -48,12 +51,13 @@ pub type RecordCopies = dyn Fn(&Transaction<'_>, &SpaceId) -> Result<()> + Send;
 /// alert is unread. The caller wakes the waits for alerts after committing.
 pub fn queue_shoal_message(
     tx: &Transaction<'_>,
+    records: &dyn Records,
     id: &SpaceId,
     kind: AlertKind,
     message: &str,
 ) -> Result<Option<i64>> {
     let alert = NewAlert::shoal(kind, About::default(), message.to_owned());
-    let queued = queue_in(tx, id, &alert)?;
+    let queued = queue_in(tx, records, id, &alert)?;
     Ok(queued.new.then_some(queued.id))
 }
 
@@ -61,8 +65,13 @@ pub fn queue_shoal_message(
 /// agent of the space `id` in the caller's transaction, waking an idle
 /// agent, as [`Agents::queue_alert`] queues one. The caller wakes the
 /// waits for alerts after committing.
-pub fn queue_in(tx: &Transaction<'_>, id: &SpaceId, alert: &NewAlert) -> Result<Queued> {
-    store::insert(tx, id, alert, Delivery::Wake, false, None)
+pub fn queue_in(
+    tx: &Transaction<'_>,
+    records: &dyn Records,
+    id: &SpaceId,
+    alert: &NewAlert,
+) -> Result<Queued> {
+    store::insert(tx, records, id, alert, Delivery::Wake, false, None)
 }
 
 impl Agents {
@@ -122,10 +131,13 @@ impl Agents {
         delivery: Delivery,
         copied: Option<Box<RecordCopies>>,
     ) -> Result<i64> {
-        let id = id.to_owned();
+        let (id, records) = (id.to_owned(), self.records.clone());
         let queued = self
             .store
-            .write(move |tx| store::insert(tx, &id, &alert, delivery, for_user, copied.as_deref()))
+            .write(move |tx| {
+                let copied = copied.as_deref();
+                store::insert(tx, &*records, &id, &alert, delivery, for_user, copied)
+            })
             .await?;
         if queued.new {
             self.signals.message_queued();

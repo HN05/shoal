@@ -7,7 +7,7 @@ use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use super::{Delivery, Queued, RecordCopies};
-use crate::state::WorkspaceState;
+use crate::daemon::Records;
 use shoal_daemon_base::{
     alerts::{self, About, Alert, COLUMNS, FROM, MAX_UNREAD, MAX_UNREAD_BYTES, NewAlert, Unread},
     notifications,
@@ -26,6 +26,7 @@ use shoal_ids::space_ids::SpaceId;
 /// transaction rolls back what it recorded.
 pub(crate) fn insert(
     tx: &Transaction<'_>,
+    records: &dyn Records,
     space_id: &SpaceId,
     alert: &NewAlert,
     delivery: Delivery,
@@ -33,15 +34,7 @@ pub(crate) fn insert(
     copied: Option<&RecordCopies>,
 ) -> Result<Queued> {
     let attachments = alert.attachments_column()?;
-    let present: Option<bool> = tx
-        .query_row(
-            "SELECT state IS NOT ?2 FROM spaces LEFT JOIN workspaces USING(id) WHERE id=?1",
-            params![space_id, WorkspaceState::Removing],
-            |row| row.get(0),
-        )
-        .optional()?;
-    ensure!(present.is_some(), "no space {space_id}");
-    ensure!(present == Some(true), "the workspace is being removed");
+    records.ensure_takes_alerts(tx, space_id)?;
     let wakes = delivery == Delivery::Wake;
     // Names repeat: an alert names the space its ID names, and is the same
     // as another only when both name that space.
