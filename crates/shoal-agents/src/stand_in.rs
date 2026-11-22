@@ -374,11 +374,13 @@ impl Spaces for StandIn {
     }
 
     fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>> {
-        Box::pin(async { Ok(Default::default()) })
+        let spaces = self.spaces.lock().unwrap().clone();
+        Box::pin(async { Ok(spaces) })
     }
 
     fn visible_spaces<'a>(&'a self, _: Option<&'a Caller>) -> BoxFuture<'a, Result<Vec<Space>>> {
-        Box::pin(async { Ok(Default::default()) })
+        let spaces = self.spaces.lock().unwrap().clone();
+        Box::pin(async { Ok(spaces) })
     }
 
     fn workspace_below<'a>(

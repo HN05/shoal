@@ -119,3 +119,6 @@ pub fn disk(settings: &Overload, available: &str) -> String {
         Contents::Seed.directory(),
     )
 }
+
+#[cfg(test)]
+mod tests;

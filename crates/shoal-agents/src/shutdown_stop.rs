@@ -286,3 +286,6 @@ pub fn continuation(waiting: &[&Space]) -> String {
         format!("continue it with {}", commands.join(" and "))
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -270,3 +270,6 @@ pub fn owned(db: &Connection, space: Option<&SpaceId>) -> Result<Vec<(SpaceId, O
     })
     .collect()
 }
+
+#[cfg(test)]
+mod tests;

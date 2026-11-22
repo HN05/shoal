@@ -414,3 +414,6 @@ impl std::fmt::Display for RestartWaits {
 }
 
 impl std::error::Error for RestartWaits {}
+
+#[cfg(test)]
+mod tests;

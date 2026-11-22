@@ -4,7 +4,6 @@ use crate::daemon::{
     executions::ExecutionKind,
     test_support::{manager, repository},
 };
-use shoal_protocol::space_names::SpaceSelector;
 use std::time::Duration;
 use tokio::time::Instant;
 
@@ -123,111 +122,4 @@ async fn running_agents_are_warned_once_per_signal_until_the_repeat_interval() {
         )
         .await;
     assert_eq!(count("first").await, 2);
-}
-
-#[tokio::test]
-async fn only_disk_warnings_wake_an_idle_agent() {
-    let (root, manager) = manager().await;
-    let repo = repository(root.path(), "repo");
-    let repo = manager
-        .repositories
-        .register(repo.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "busy".into(), None, None, None)
-        .await
-        .unwrap();
-    let agent = manager
-        .agents
-        .begin_execution(
-            &*manager,
-            workspace.id.as_str(),
-            None,
-            ExecutionKind::Command,
-            None,
-        )
-        .await
-        .unwrap();
-    manager
-        .agents
-        .track_agent(
-            &*manager,
-            &agent.plan.id,
-            &shoal_protocol::executions::TrackedAgent::named("claude"),
-            &workspace.id,
-            &workspace.name,
-            false,
-            Duration::ZERO,
-        )
-        .await;
-    let busy = SpaceSelector::id(&workspace.id);
-    // A tracked command runs beside the agent.
-    let _command = manager
-        .agents
-        .begin_execution(
-            &*manager,
-            workspace.id.as_str(),
-            None,
-            ExecutionKind::Command,
-            None,
-        )
-        .await
-        .unwrap();
-    let wakes = || async {
-        manager
-            .agents
-            .unread_messages(&workspace.id)
-            .await
-            .unwrap()
-            .wakes
-    };
-    let settings = Overload::default();
-    let mut warnings = Warnings::default();
-    let now = Instant::now();
-    warnings
-        .warn(
-            &manager.agents,
-            now,
-            Signal::Memory,
-            &memory(&settings, false),
-        )
-        .await;
-    warnings
-        .warn(&manager.agents, now, Signal::Cpu, &cpu(&settings))
-        .await;
-    assert_eq!(
-        manager
-            .agents
-            .agent_messages(&*manager, &busy)
-            .await
-            .unwrap()
-            .len(),
-        2
-    );
-    assert!(!wakes().await);
-    // An agent can free disk space without running anything.
-    warnings
-        .warn(
-            &manager.agents,
-            now,
-            Signal::Disk,
-            &disk(&settings, "1.0 GiB available at /"),
-        )
-        .await;
-    assert!(wakes().await);
-}
-
-#[test]
-fn warnings_are_single_lines_within_the_message_limit() {
-    let settings = Overload::default();
-    let path = format!("/{}", "x".repeat(200));
-    for message in [
-        memory(&settings, false),
-        memory(&settings, true),
-        cpu(&settings),
-        disk(&settings, &format!("3.2 GiB available at {path}")),
-    ] {
-        crate::validate::message(&message).unwrap();
-    }
 }

@@ -66,3 +66,6 @@ impl Agents {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;
