@@ -245,16 +245,14 @@ async fn remove(ctx: &Context, workspace: &Workspace) -> Result<()> {
 /// once its PR merges.
 async fn finish(ctx: &Context, workspace: &Workspace) -> Result<()> {
     let space = workspace.id.clone();
-    crate::client::assignments::mark_done(
-        &ctx.paths,
-        SpaceSelector::id(&space),
-        shoal_protocol::assignments::Done {
-            cleanup: true,
-            ..Default::default()
-        },
-    )
-    .await
-    .map(drop)
+    let done = shoal_protocol::assignments::Done {
+        cleanup: true,
+        ..Default::default()
+    };
+    (crate::client::assignments::mark_done(SpaceSelector::id(&space), done))
+        .send(&ctx.paths)
+        .await
+        .map(drop)
 }
 
 fn report(ctx: &Context, outcome: OpenOutcome, workspace: Option<&Workspace>) -> Result<i32> {

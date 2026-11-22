@@ -3,7 +3,7 @@ use anyhow::Result;
 
 use crate::cli::{
     context::Context,
-    ui::{self, Fallback},
+    ui::{self, Acting, Fallback},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -12,14 +12,15 @@ pub(in crate::cli::commands) async fn conflicts(
     workspace: Option<SpaceSelector>,
     target: Option<String>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(
-        ctx,
-        workspace,
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
-    )
-    .await?;
-    let check = crate::client::diffs::conflicts(&ctx.paths, workspace.clone(), target).await?;
+    let checking = {
+        let target = target.clone();
+        Acting::request(move |space| crate::client::diffs::conflicts(space, target.clone()))
+    };
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory, &checking);
+    let workspace = workspace.await?;
+    let check = (crate::client::diffs::conflicts(workspace.clone(), target))
+        .send(&ctx.paths)
+        .await?;
     ctx.show(&check, |check| {
         if check.clean() {
             outln!("No conflicts with {}", check.target);

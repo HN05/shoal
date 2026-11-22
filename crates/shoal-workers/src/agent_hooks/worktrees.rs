@@ -62,7 +62,9 @@ pub async fn remove(paths: &CommandPaths, json: bool) -> Result<i32> {
         Some(child) if done_at_head(paths, child).await? => Ok(0),
         Some(child) => {
             let child = SpaceSelector::id(&child.id);
-            let completion = assignments::mark_done(paths, child, Default::default()).await?;
+            let completion = assignments::mark_done(child, Default::default())
+                .send(paths)
+                .await?;
             let message = workspace_done(&completion);
             shoal_core::outln!("{}", output::line(json, &message, &completion)?);
             Ok(0)

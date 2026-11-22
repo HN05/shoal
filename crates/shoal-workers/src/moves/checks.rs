@@ -141,7 +141,8 @@ async fn check_workspace_export(
     workspace: &SpaceId,
     file: Option<&Path>,
 ) -> Result<SpaceRemovalCheck> {
-    let check = crate::client::removal::check(paths, SpaceSelector::id(workspace), true).await?;
+    let checking = crate::client::removal::check(SpaceSelector::id(workspace), true);
+    let check = *checking.send(paths).await?;
     let worktree = (check.worktree.as_ref()).context("the workspace has no worktree")?;
     // Its removal keeps no record, which the package is built from.
     ensure!(

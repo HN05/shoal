@@ -4,7 +4,13 @@ use anyhow::{Result, ensure};
 use super::super::removal::{ensure_batch_removable, leaving};
 use crate::client::output::removal::{BackgroundRemoval, Removals, Removed};
 use crate::{
-    cli::{args::lifecycle::RmArgs, commands::queued_agents, context::Context, output::Style, ui},
+    cli::{
+        args::lifecycle::RmArgs,
+        commands::queued_agents,
+        context::Context,
+        output::Style,
+        ui::{self, Acting},
+    },
     removal::{RemovalCheck, RemovalResult, SpaceRemovalCheck, UnsavedWork},
 };
 use shoal_ids::space_ids::SpaceId;
@@ -23,8 +29,9 @@ pub(in crate::cli::commands) async fn remove(ctx: &Context, args: RmArgs) -> Res
     {
         return Ok(code);
     }
-    let selected =
-        ui::select_spaces(ctx, names, true, &crate::cli::ui::Acting::Unconverted).await?;
+    // What a removal asks first of each space it takes.
+    let checking = Acting::request(|space| crate::client::removal::check(space, false));
+    let selected = ui::select_spaces(ctx, names, true, &checking).await?;
     let checks = check_removals(ctx, selected, yes).await?;
     if !yes {
         confirm_removals(ctx, &checks)?;
@@ -47,8 +54,8 @@ async fn check_removals(
     let several = names.len() > 1;
     for name in names {
         let include_changes = ctx.interactive() && !yes;
-        let checked =
-            crate::client::removal::check(&ctx.paths, name.clone(), include_changes).await;
+        let checking = crate::client::removal::check(name.clone(), include_changes);
+        let checked = checking.send(&ctx.paths).await.map(|check| *check);
         if !several {
             checks.push(checked?);
             continue;

@@ -8,7 +8,7 @@ use anyhow::{Context as _, Result};
 use crate::{
     cli::{
         context::Context,
-        ui::{self, Fallback},
+        ui::{self, Acting, Fallback},
     },
     execution, git,
 };
@@ -18,14 +18,13 @@ pub(in crate::cli::commands) async fn diff(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(
-        ctx,
-        workspace,
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
-    )
-    .await?;
-    let base = crate::client::diffs::diff_base(&ctx.paths, workspace).await?;
+    // The base it diffs against, which another machine's workspace's
+    // machine reads.
+    let reading = Acting::request(crate::client::diffs::diff_base);
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory, &reading);
+    let base = (crate::client::diffs::diff_base(workspace.await?))
+        .send(&ctx.paths)
+        .await?;
     // Another machine has the worktree, so its Git writes the diff.
     if base.machine.is_some() {
         return elsewhere::diff(ctx, SpaceSelector::Id(base.workspace_id)).await;

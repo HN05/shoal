@@ -10,21 +10,17 @@ use shoal_protocol::{
 };
 use tokio::{io::BufReader, net::UnixStream};
 
-use crate::connection::{Daemon, open_buffered, request};
+use crate::connection::{Daemon, Prepared, open_buffered};
 
 /// The commit `workspace`'s changes are counted from.
-pub async fn diff_base(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<DiffBase> {
-    request(daemon, DiffMethod::DiffBase { workspace }).await
+pub fn diff_base(workspace: SpaceSelector) -> Prepared<DiffBase> {
+    Prepared::new(DiffMethod::DiffBase { workspace })
 }
 
 /// The files where `workspace`'s committed HEAD conflicts with `target`, by
 /// default its base.
-pub async fn conflicts(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    target: Option<String>,
-) -> Result<ConflictCheck> {
-    request(daemon, DiffMethod::Conflicts { workspace, target }).await
+pub fn conflicts(workspace: SpaceSelector, target: Option<String>) -> Prepared<ConflictCheck> {
+    Prepared::new(DiffMethod::Conflicts { workspace, target })
 }
 
 /// A diff's frames, as the Git of the workspace's machine writes them.

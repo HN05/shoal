@@ -4,7 +4,7 @@ use anyhow::Result;
 use shoal_protocol::assignments::Done;
 
 use crate::{
-    connection::{Daemon, request},
+    connection::{Daemon, Prepared, request},
     forge::items::link::Selection,
 };
 use shoal_ids::execution_ids::ExecutionId;
@@ -16,18 +16,13 @@ use shoal_protocol::{
 };
 
 /// Mark `space`'s assignment done as `done` describes.
-pub async fn mark_done(
-    daemon: &impl Daemon,
-    space: SpaceSelector,
-    done: Done,
-) -> Result<Completion> {
-    let method = AssignmentMethod::MarkDone { space, done };
-    request(daemon, method).await
+pub fn mark_done(space: SpaceSelector, done: Done) -> Prepared<Completion> {
+    Prepared::new(AssignmentMethod::MarkDone { space, done })
 }
 
 /// Withdraw `space`'s completion.
-pub async fn undo_done(daemon: &impl Daemon, space: SpaceSelector) -> Result<Completion> {
-    request(daemon, AssignmentMethod::UndoDone { space }).await
+pub fn undo_done(space: SpaceSelector) -> Prepared<Completion> {
+    Prepared::new(AssignmentMethod::UndoDone { space })
 }
 
 /// Mark the items of `space` that `selection` selects ready for review.

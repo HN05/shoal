@@ -139,6 +139,7 @@ async fn diff_base(
     if !argv.is_some_and(|argv| uses_diff_base(argv)) {
         return Ok(None);
     }
-    let base = crate::client::diffs::diff_base(daemon, SpaceSelector::id(&workspace.id)).await?;
+    let base = crate::client::diffs::diff_base(SpaceSelector::id(&workspace.id));
+    let base = base.send(daemon).await?;
     Ok(Some(base.commit))
 }

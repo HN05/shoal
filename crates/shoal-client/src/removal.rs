@@ -3,7 +3,7 @@
 use anyhow::{Context as _, Result};
 use shoal_protocol::removal::{RemovalResult, SpaceRemovalCheck, UnsavedWork};
 
-use crate::connection::{Daemon, pages, request};
+use crate::connection::{Daemon, Prepared, pages, request};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     absorb::{Absorb, Absorbed},
@@ -14,17 +14,11 @@ use shoal_protocol::{
 
 /// What removing the workspace or chat `space` would do, with its
 /// worktree's changes when `include_changes`.
-pub async fn check(
-    daemon: &impl Daemon,
-    space: SpaceSelector,
-    include_changes: bool,
-) -> Result<SpaceRemovalCheck> {
-    let method = RemovalMethod::CheckRemoval {
+pub fn check(space: SpaceSelector, include_changes: bool) -> Prepared<Box<SpaceRemovalCheck>> {
+    Prepared::new(RemovalMethod::CheckRemoval {
         space,
         include_changes,
-    };
-    let check: Box<SpaceRemovalCheck> = request(daemon, method).await?;
-    Ok(*check)
+    })
 }
 
 /// Remove the workspace or chat `space`, stopping its agent, deleting only
