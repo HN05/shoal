@@ -37,13 +37,13 @@ pub(super) async fn run(
                 .send(&ctx.paths)
                 .await?
         }
-        None => find(
-            &crate::client::spaces::list(&ctx.paths)
+        // Its machine reads it, wherever it runs.
+        None => {
+            (crate::client::workspaces::inspect(workspace))
+                .send(&ctx.paths)
                 .await?
-                .into_workspaces(),
-            &workspace,
-        )?
-        .clone(),
+                .workspace
+        }
     };
     let value = Bases {
         base_workspace: workspace.base_workspace.clone(),
@@ -64,11 +64,13 @@ enum Change {
     Clear,
 }
 
+/// The workspace `selector` selects among this machine's `workspaces`,
+/// which a picked base is one of.
 fn find<'a>(workspaces: &'a [Workspace], selector: &SpaceSelector) -> Result<&'a Workspace> {
-    workspaces
-        .iter()
+    let message = format!("{selector} runs on another machine, so name its base workspace");
+    (workspaces.iter())
         .find(|w| selector.selects(&w.id, w.number))
-        .ok_or_else(|| Refusal::new(Reason::NotFound, format!("no space {selector}")).into())
+        .ok_or_else(|| Refusal::new(Reason::NotFound, message).into())
 }
 
 /// Choose another workspace of the same repository as the base.
