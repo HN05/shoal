@@ -49,7 +49,9 @@ pub(super) async fn in_context(
 ) -> Result<(RepoTarget, Selection)> {
     let selection = items.selection()?;
     let input = selection.input.as_ref();
-    let target = super::items::select_item_target(ctx, items.space, repo, input).await?;
+    let reading =
+        super::items::in_context(|target| crate::client::forge_reads::number_kind(target, 1));
+    let target = super::items::select_item_target(ctx, items.space, repo, input, &reading).await?;
     Ok((target, selection))
 }
 
@@ -92,7 +94,9 @@ async fn resolve_kind(
     let (None, Some(ItemInput::Number(number))) = (selection.kind, &selection.input) else {
         return Ok(selection);
     };
-    let kind = client::number_kind(&ctx.paths, target, *number).await?;
+    let kind = client::number_kind(target, *number)
+        .send(&ctx.paths)
+        .await?;
     Ok(Selection {
         kind: Some(kind),
         ..selection

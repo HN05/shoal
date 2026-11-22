@@ -58,7 +58,16 @@ async fn workflow_target(
             repository: None,
         });
     }
-    select_item_target(ctx, space, repo, None).await
+    select_item_target(
+        ctx,
+        space,
+        repo,
+        None,
+        &crate::cli::commands::items::in_context(|target| {
+            crate::client::ci::run(target, crate::forge::items::reference::ItemInput::Number(1))
+        }),
+    )
+    .await
 }
 
 /// What `view` and `status` say of the `waiting` runs on the head of the PR

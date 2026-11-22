@@ -52,7 +52,8 @@ async fn confirm_unanswered(
     selector: &ItemSelector,
     comment: CommentId,
 ) -> Result<()> {
-    let target = item_target(ctx, selector).await?;
+    let reading = super::in_context(|target| crate::client::forge_reads::number_kind(target, 1));
+    let target = item_target(ctx, selector, &reading).await?;
     let read = client::review_thread(&ctx.paths, target, selector.item.clone(), comment);
     let thread = ctx.progress("Reading thread", read).await?;
     if thread.replies == 0 {

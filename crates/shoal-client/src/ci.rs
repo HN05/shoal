@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 
 use crate::{
-    connection::{Daemon, pages, request},
+    connection::{Daemon, Prepared, PreparedPages, request},
     forge::{
         ci::{
             CiActed, CiAction,
@@ -23,18 +23,13 @@ use shoal_protocol::protocol::{CiMethod, RepoTarget};
 
 /// The newest runs in the `target` repository that `filter` selects, or
 /// those on the head of the PR `pr`.
-pub async fn runs(
-    daemon: &impl Daemon,
-    target: RepoTarget,
-    pr: Option<ItemInput>,
-    filter: RunFilter,
-) -> Result<Vec<Run>> {
-    pages(daemon, CiMethod::ListCiRuns { target, pr, filter }).await
+pub fn runs(target: RepoTarget, pr: Option<ItemInput>, filter: RunFilter) -> PreparedPages<Run> {
+    PreparedPages::new(CiMethod::ListCiRuns { target, pr, filter })
 }
 
 /// The run `run` names.
-pub async fn run(daemon: &impl Daemon, target: RepoTarget, run: ItemInput) -> Result<Run> {
-    request(daemon, CiMethod::ViewCiRun { target, run }).await
+pub fn run(target: RepoTarget, run: ItemInput) -> Prepared<Run> {
+    Prepared::new(CiMethod::ViewCiRun { target, run })
 }
 
 /// Start `workflow`, or the only one, on `branch` with `inputs`.

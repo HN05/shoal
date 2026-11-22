@@ -34,7 +34,13 @@ pub(in crate::cli::commands) async fn view(
     web: bool,
 ) -> Result<i32> {
     let run = (items.selection()?.input).context("view ci needs a run's number or URL")?;
-    let target = select_item_target(ctx, items.space, repo, Some(&run)).await?;
+    let reading = {
+        let run = run.clone();
+        crate::cli::commands::items::in_context(move |target| {
+            crate::client::ci::run(target, run.clone())
+        })
+    };
+    let target = select_item_target(ctx, items.space, repo, Some(&run), &reading).await?;
     if web {
         return open(ctx, target, run).await;
     }
@@ -54,7 +60,7 @@ pub(in crate::cli::commands) async fn view(
 /// Open the run in the browser, by its URL the forge reports.
 async fn open(ctx: &Context, target: RepoTarget, run: ItemInput) -> Result<i32> {
     items_view::may_open_browser(ctx)?;
-    let run = crate::client::ci::run(&ctx.paths, target, run).await?;
+    let run = crate::client::ci::run(target, run).send(&ctx.paths).await?;
     items_view::open_urls(ctx, vec![run.url])
 }
 
@@ -67,8 +73,16 @@ pub(super) async fn list(
     filter: RunFilter,
 ) -> Result<i32> {
     validate_filter(&filter)?;
-    let target = select_item_target(ctx, space, repo, pr.as_ref()).await?;
-    let runs = crate::client::ci::runs(&ctx.paths, target, pr, filter).await?;
+    let listing = {
+        let (pr, filter) = (pr.clone(), filter.clone());
+        crate::cli::commands::items::in_context(move |target| {
+            crate::client::ci::runs(target, pr.clone(), filter.clone())
+        })
+    };
+    let target = select_item_target(ctx, space, repo, pr.as_ref(), &listing).await?;
+    let runs = crate::client::ci::runs(target, pr, filter)
+        .send(&ctx.paths)
+        .await?;
     ctx.show(&runs, render_runs)?;
     Ok(0)
 }

@@ -32,8 +32,11 @@ pub(super) async fn list(
     repo: TargetRepo,
     filter: MergedFilter,
 ) -> Result<i32> {
-    let target = select_item_target(ctx, space, repo.name, None).await?;
-    let listing = crate::client::branches::list(&ctx.paths, target, filter.state());
+    let listing = crate::cli::commands::items::in_context(|target| {
+        crate::client::branches::list(target, None)
+    });
+    let target = select_item_target(ctx, space, repo.name, None, &listing).await?;
+    let listing = crate::client::branches::list(target, filter.state()).send(&ctx.paths);
     let listed = ctx.progress("Reading branches", listing).await?;
     ctx.show(&listed, |listed| render(listed))?;
     Ok(0)
@@ -46,7 +49,10 @@ pub(super) async fn delete(
     branches: Vec<String>,
     force: bool,
 ) -> Result<i32> {
-    let target = select_item_target(ctx, space, repo.name, None).await?;
+    let listing = crate::cli::commands::items::in_context(|target| {
+        crate::client::branches::list(target, None)
+    });
+    let target = select_item_target(ctx, space, repo.name, None, &listing).await?;
     let deletion = crate::client::branches::delete(&ctx.paths, target, branches, force);
     let deleted = ctx.progress("Deleting branches", deletion).await?;
     ctx.show(&deleted, |deleted| {

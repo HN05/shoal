@@ -78,8 +78,16 @@ pub(super) async fn open_issue(
     repository: Option<String>,
     link: bool,
 ) -> Result<i32> {
-    let target = select_open_context(ctx, space, repository).await?;
-    let outcome = crate::client::items::open_issue(&ctx.paths, target, issue, link).await?;
+    let opening = {
+        let issue = issue.clone();
+        super::in_context(move |target| {
+            crate::client::items::open_issue(target, issue.clone(), link)
+        })
+    };
+    let target = select_open_context(ctx, space, repository, &opening).await?;
+    let outcome = (crate::client::items::open_issue(target, issue, link))
+        .send(&ctx.paths)
+        .await?;
     let opened = match outcome {
         OpenOutcome::Opened(opened) => *opened,
         OpenOutcome::Proposed(proposed) => return report_proposed(ctx, "Issue", &proposed),

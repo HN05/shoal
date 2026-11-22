@@ -297,7 +297,6 @@ pub(crate) async fn run(cli: Cli, daemon: RunDaemon) -> Result<i32> {
     }
     let mut ctx = Context::new(Paths::of_command(cli.state_dir)?, cli.json);
     ctx.need = cli.need;
-    ctx.reaches_elsewhere = cli.reaches_elsewhere;
     ctx.command = cli.path;
     // The daemon pins its own config's forges and keeps them across a
     // reload that fails, which a loader reading the file later would not.

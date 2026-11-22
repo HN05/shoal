@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use shoal_protocol::progress::Blocker;
 
 use crate::{
-    connection::{Daemon, joined, pages, request},
+    connection::{Daemon, Prepared, joined, pages, request},
     forge::{
         PullRequest,
         capability::Capabilities,
@@ -107,12 +107,8 @@ pub async fn select_items(
 /// The kind of the item numbered `number` in the `target` repository: in a
 /// space's own, that of the linked item with that number, otherwise the
 /// kind the forge reports.
-pub async fn number_kind(
-    daemon: &impl Daemon,
-    target: RepoTarget,
-    number: u64,
-) -> Result<LinkKind> {
-    request(daemon, ItemMethod::NumberKind { target, number }).await
+pub fn number_kind(target: RepoTarget, number: u64) -> Prepared<LinkKind> {
+    Prepared::new(ItemMethod::NumberKind { target, number })
 }
 
 /// The open issue `item` names in `context`'s repository, by number or

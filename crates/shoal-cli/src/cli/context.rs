@@ -22,9 +22,6 @@ pub struct Context {
     pub json: bool,
     /// What the command needs of the workspace a picker offers.
     pub(in crate::cli) need: Need,
-    /// Whether the command's pickers offer the other joined machines'
-    /// spaces, as [`super::reach::reaches_elsewhere`] decides.
-    pub(in crate::cli) reaches_elsewhere: bool,
     /// The name under which the command remembers the workspaces it acts on,
     /// for `-`; `None` for commands without that history.
     pub(in crate::cli) recent: Option<String>,
@@ -61,7 +58,6 @@ impl Context {
             json,
             place: None,
             need: Need::Any,
-            reaches_elsewhere: false,
             recent: None,
             command: Vec::new(),
         }
@@ -75,7 +71,6 @@ impl Context {
             json: self.json,
             place: None,
             need: Need::Any,
-            reaches_elsewhere: false,
             recent: None,
             command: self.command.clone(),
         }

@@ -34,7 +34,10 @@ async fn merge_named(ctx: &Context, args: &MergeArgs, item: Option<ItemInput>) -
     };
     args.ensure_pull_flags(&named)?;
     let (space, repo) = (args.space.clone(), args.repo.name.clone());
-    let target = select_item_target(ctx, space, repo, item.as_ref()).await?;
+    let reading = crate::cli::commands::items::in_context(|target| {
+        crate::client::forge_reads::number_kind(target, 1)
+    });
+    let target = select_item_target(ctx, space, repo, item.as_ref(), &reading).await?;
     pull::merge(ctx, target, item, args).await
 }
 

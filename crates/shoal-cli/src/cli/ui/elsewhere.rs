@@ -11,13 +11,8 @@ use crate::cli::{availability::Need, context::Context, everywhere, output::Palet
 /// on a machine in no hub, and none, with a warning, while the hub cannot
 /// be asked.
 pub(super) async fn elsewhere_entries(ctx: &Context, offered: Offered, acting: &Acting) -> Entries {
-    const LEFT_OUT: &str = "the other machines' spaces";
-    let view = match acting {
-        Acting::Request(request) => everywhere::offered(ctx, request(), LEFT_OUT).await,
-        Acting::Unconverted if ctx.reaches_elsewhere => everywhere::elsewhere(ctx, LEFT_OUT).await,
-        Acting::Unconverted => None,
-    };
-    let Some(view) = view else {
+    let offered_view = everywhere::offered(ctx, acting.operation(), "the other machines' spaces");
+    let Some(view) = offered_view.await else {
         return Entries::new();
     };
     let palette = Palette::stderr(ctx.json);

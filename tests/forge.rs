@@ -569,7 +569,7 @@ fn apps_read_forge_items_through_the_daemon() {
         .unwrap();
     assert_eq!(reactions.names, ["+1", "heart"]);
     let kind = runtime
-        .block_on(forge_reads::number_kind(&app, checkout().into(), 8))
+        .block_on(forge_reads::number_kind(checkout().into(), 8).send(&app))
         .unwrap();
     assert_eq!(kind, LinkKind::Pr);
     let selected = runtime

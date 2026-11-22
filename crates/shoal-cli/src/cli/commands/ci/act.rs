@@ -67,7 +67,16 @@ pub(super) async fn approve(ctx: &Context, subject: Subject) -> Result<i32> {
 async fn subject_target(ctx: &Context, subject: &Subject) -> Result<RepoTarget> {
     let item = subject.run.as_ref().or(subject.pr.as_ref());
     let (space, repo) = (subject.space.clone(), subject.repo.name.clone());
-    select_item_target(ctx, space, repo, item).await
+    select_item_target(
+        ctx,
+        space,
+        repo,
+        item,
+        &crate::cli::commands::items::in_context(|target| {
+            crate::client::ci::run(target, crate::forge::items::reference::ItemInput::Number(1))
+        }),
+    )
+    .await
 }
 
 /// One line per approved run.

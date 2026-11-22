@@ -1144,10 +1144,10 @@ on there, which `shoal status <space>` shows. Commands that need the
 machine they run on, such as `setup`, acquiring and releasing leases,
 starting a demo and an agent's hooks, are refused for a space elsewhere,
 naming its machine, as is a command that attaches files, which that
-machine cannot read. Without a target, the
-picker of a command this covers, outside `resume` and the issue, PR and CI
-groups, offers the other machines' spaces after this machine's where the
-hub's listing shows what the command needs, such as an agent for
+machine cannot read. Without a target, a
+command's picker offers the other machines' spaces that the request it
+sends for the picked space reaches, after this machine's, where the hub's
+listing shows what the command needs, such as an agent for
 `attach`, but none where it does not, such as a hold for `release hold`,
 each naming its machine, and an offline one with when the hub last saw
 it; choosing one acts as naming it does.

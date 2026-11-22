@@ -143,18 +143,12 @@ pub fn open_pull(
 
 /// Open `issue` in the `target` repository, linking it to the space when
 /// `link`.
-pub async fn open_issue(
-    daemon: &impl Daemon,
-    target: RepoTarget,
-    issue: NewIssue,
-    link: bool,
-) -> Result<OpenOutcome> {
-    let method = ItemMethod::OpenIssue {
+pub fn open_issue(target: RepoTarget, issue: NewIssue, link: bool) -> Prepared<OpenOutcome> {
+    Prepared::new(ItemMethod::OpenIssue {
         target,
         issue,
         link,
-    };
-    request(daemon, method).await
+    })
 }
 
 /// Have the forge open a PR that reverts the merged PR `item`, by default
@@ -173,21 +167,19 @@ pub fn revert_pull(
 
 /// Carry out `action` on `item` in the `target` repository, or on the
 /// space's linked item of `kind`.
-pub async fn act(
-    daemon: &impl Daemon,
+pub fn act(
     target: RepoTarget,
     kind: ItemKind,
     item: Option<ItemInput>,
     action: Action,
-) -> Result<Item> {
-    let method = ItemMethod::ItemAction {
+) -> Prepared<Item> {
+    Prepared::new(ItemMethod::ItemAction {
         target,
         kind,
         item,
         action,
         confirmed: None,
-    };
-    request(daemon, method).await
+    })
 }
 
 /// Carry out `action`, a merge of the PR `item` names or of the linked

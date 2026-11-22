@@ -4,7 +4,11 @@
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
-    cli::{context::Context, ui},
+    cli::{
+        context::Context,
+        ui::{self, Acting},
+    },
+    client::connection::Sendable,
     forge::{ForgeRepo, items::reference::ItemInput},
     model::Repository,
     protocol::{ItemContext, RepoTarget},
@@ -28,10 +32,11 @@ pub(in crate::cli::commands) async fn select_space_item_context(
     ctx: &Context,
     space: Option<SpaceSelector>,
     item: Option<&ItemInput>,
+    acting: &Acting,
 ) -> Result<ItemContext> {
     match known_item_context(ctx, space, item).await? {
         Some(context) => Ok(context),
-        None => picked_space(ctx).await,
+        None => picked_space(ctx, acting).await,
     }
 }
 
@@ -44,6 +49,7 @@ pub(in crate::cli::commands) async fn select_item_target(
     space: Option<SpaceSelector>,
     repo: Option<String>,
     item: Option<&ItemInput>,
+    acting: &Acting,
 ) -> Result<RepoTarget> {
     if repo.is_some() {
         return select_repo_context(ctx, repo).await;
@@ -51,7 +57,7 @@ pub(in crate::cli::commands) async fn select_item_target(
     let context = match known_item_context(ctx, space, item).await? {
         Some(context) => Some(context),
         None if matches!(item, Some(ItemInput::Url(_))) => None,
-        None => Some(picked_space(ctx).await?),
+        None => Some(picked_space(ctx, acting).await?),
     };
     Ok(RepoTarget {
         context,
@@ -85,16 +91,24 @@ async fn known_item_context(
     item_checkout(ctx, item).await
 }
 
-/// A space the user picks.
-async fn picked_space(ctx: &Context) -> Result<ItemContext> {
+/// A space the user picks, for what the command does in its context.
+async fn picked_space(ctx: &Context, acting: &Acting) -> Result<ItemContext> {
     ensure!(ctx.interactive(), "{NO_CONTEXT}");
-    let space = ui::select_space(
-        ctx,
-        None,
-        ui::Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-    )
-    .await?;
+    let space = ui::select_space(ctx, None, ui::Fallback::CurrentDirectory(acting)).await?;
     Ok(ItemContext::space(space))
+}
+
+/// What a command sends in the context of a space its picker picks, which
+/// `request` builds for that space's repository target.
+pub(in crate::cli::commands) fn in_context<R: Sendable>(
+    request: impl Fn(RepoTarget) -> R + Send + Sync + 'static,
+) -> Acting {
+    Acting::request(move |space| {
+        request(RepoTarget {
+            context: Some(ItemContext::space(space)),
+            repository: None,
+        })
+    })
 }
 
 /// The repository a command whose `--repo` names any repository acts in.
@@ -142,6 +156,7 @@ pub(in crate::cli::commands) async fn select_open_context(
     ctx: &Context,
     space: Option<SpaceSelector>,
     repo: Option<String>,
+    acting: &Acting,
 ) -> Result<RepoTarget> {
     if space.is_none()
         && let Some(target) = registered_target(ctx, repo.as_deref()).await?
@@ -156,7 +171,7 @@ pub(in crate::cli::commands) async fn select_open_context(
             repository: repo,
         });
     }
-    let context = select_space_item_context(ctx, space, None).await?;
+    let context = select_space_item_context(ctx, space, None, acting).await?;
     Ok(RepoTarget {
         context: Some(context),
         repository: repo,

@@ -13,7 +13,6 @@ pub mod internal;
 pub mod list_status;
 pub mod output;
 mod progress;
-mod reach;
 pub mod recent;
 pub mod shell;
 mod supervision;
@@ -63,10 +62,6 @@ pub struct Cli {
     /// The subcommand path, such as `["repo", "rm"]`.
     #[arg(skip)]
     pub(crate) path: Vec<String>,
-    /// Whether the command's pickers offer the other joined machines'
-    /// spaces, from its subcommand path and flags.
-    #[arg(skip)]
-    pub(crate) reaches_elsewhere: bool,
     /// Override Shoal's state directory (also isolates the daemon).
     #[arg(long, global = true, env = crate::env::STATE_DIR)]
     pub state_dir: Option<PathBuf>,
@@ -161,7 +156,6 @@ impl Cli {
         let names: Vec<_> = path.iter().map(String::as_str).collect();
         let need =
             availability::Need::of_matches(&names, leaf).unwrap_or(availability::Need::Ready);
-        let reaches_elsewhere = reach::reaches_elsewhere(&names, leaf);
         let mut cli = <Self as clap::FromArgMatches>::from_arg_matches_mut(&mut matches)
             .unwrap_or_else(|error| {
                 error
@@ -169,7 +163,6 @@ impl Cli {
                     .exit()
             });
         cli.need = need;
-        cli.reaches_elsewhere = reaches_elsewhere;
         cli.path = path;
         cli.resolve_output(std::env::var_os(crate::env::OUTPUT).as_deref())
             .unwrap_or_else(|error| {

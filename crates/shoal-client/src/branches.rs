@@ -2,7 +2,7 @@
 //! listing them with what decides whether each can go, and deleting them.
 use anyhow::Result;
 
-use crate::connection::{Daemon, pages};
+use crate::connection::{Daemon, PreparedPages, pages};
 use shoal_protocol::{
     branches::{DeletedBranch, ListedBranch},
     protocol::{BranchMethod, RepoTarget},
@@ -10,12 +10,8 @@ use shoal_protocol::{
 
 /// The branches on the forge of the `target` repository, only those whose
 /// merged state is known to be `merged` when it is given.
-pub async fn list(
-    daemon: &impl Daemon,
-    target: RepoTarget,
-    merged: Option<bool>,
-) -> Result<Vec<ListedBranch>> {
-    pages(daemon, BranchMethod::ListForgeBranches { target, merged }).await
+pub fn list(target: RepoTarget, merged: Option<bool>) -> PreparedPages<ListedBranch> {
+    PreparedPages::new(BranchMethod::ListForgeBranches { target, merged })
 }
 
 /// Delete `branches` on the forge of the `target` repository, those whose

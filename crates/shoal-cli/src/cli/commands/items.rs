@@ -33,7 +33,7 @@ use self::{
 };
 pub(crate) use content::read_body;
 pub(super) use context::{
-    current_context, named_repository, select_item_target, select_repo_context,
+    current_context, in_context, named_repository, select_item_target, select_repo_context,
 };
 
 pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
@@ -145,14 +145,24 @@ async fn act(
     outcome: &str,
 ) -> Result<i32> {
     action.validate(kind)?;
-    let target = item_target(ctx, &selector).await?;
+    let acting = {
+        let (item, action) = (selector.item.clone(), action.clone());
+        in_context(move |target| {
+            crate::client::items::act(target, kind, item.clone(), action.clone())
+        })
+    };
+    let target = item_target(ctx, &selector, &acting).await?;
     act_in(ctx, target, selector.item, kind, action, outcome).await
 }
 
 /// The repository `selector` names an item in.
-async fn item_target(ctx: &Context, selector: &ItemSelector) -> Result<RepoTarget> {
+async fn item_target(
+    ctx: &Context,
+    selector: &ItemSelector,
+    acting: &crate::cli::ui::Acting,
+) -> Result<RepoTarget> {
     let (space, repo) = (selector.space.clone(), selector.repo.name.clone());
-    select_item_target(ctx, space, repo, selector.item.as_ref()).await
+    select_item_target(ctx, space, repo, selector.item.as_ref(), acting).await
 }
 
 /// Carry out `action`, which the caller validated, on `item` in the
@@ -166,7 +176,9 @@ pub(super) async fn act_in(
     action: Action,
     outcome: &str,
 ) -> Result<i32> {
-    let item = crate::client::items::act(&ctx.paths, target, kind, item, action).await?;
+    let item = (crate::client::items::act(target, kind, item, action))
+        .send(&ctx.paths)
+        .await?;
     report(ctx, &item, outcome)
 }
 
