@@ -11,7 +11,7 @@ use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{manager::Manager, notifications::Source};
-use crate::daemon::alerts::{Recipients, Sent};
+use crate::daemon::alerts::{NewAlert, Recipients, Sent};
 use crate::{
     model::{RefPart, Repository, Space, SpaceKind, SpaceRef, Workspace},
     protocol::CopySource,
@@ -177,7 +177,7 @@ impl Manager {
     /// instead.
     pub(crate) async fn tell_coordinator(
         &self,
-        alert: crate::daemon::alerts::NewAlert,
+        alert: NewAlert,
         for_user: bool,
         source: Source,
     ) -> Option<Sent> {
@@ -193,19 +193,7 @@ impl Manager {
                 })
             }
             Ok(Recipients::Above(above)) => {
-                let event = crate::daemon::hub::Event {
-                    name: &name,
-                    space: &id,
-                    kind: alert.kind,
-                    for_user,
-                    message: alert.message,
-                    agent: None,
-                    attachments: &alert.attachments,
-                };
-                // Boxed: on the hub, an event for its own machine's space
-                // comes back here when no space there takes it.
-                let passed = Box::pin(self.hub.pass_up(self, above, event)).await;
-                passed.map(|()| Sent {
+                (self.pass_up_alert(above, alert, for_user).await).map(|()| Sent {
                     passed_up: true,
                     ..Sent::default()
                 })
@@ -220,6 +208,28 @@ impl Manager {
                 None
             }
         }
+    }
+
+    /// Pass `alert`, about the space it names, up to the space `above`,
+    /// which another machine runs, with the records of its files.
+    async fn pass_up_alert(&self, above: SpaceId, alert: NewAlert, for_user: bool) -> Result<()> {
+        let (Some(name), Some(id)) = (&alert.about.name, &alert.about.id) else {
+            bail!("an alert passed up names its space");
+        };
+        let mut files = self.sent_files(alert.attachments.clone()).await?;
+        files.extend(alert.relayed.iter().cloned());
+        let event = crate::daemon::hub::Event {
+            name,
+            space: id,
+            kind: alert.kind,
+            for_user,
+            message: alert.message.clone(),
+            agent: None,
+            files: &files,
+        };
+        // Boxed: on the hub, an event for its own machine's space comes back
+        // here when no space there takes it.
+        Box::pin(self.hub.pass_up(self, above, event)).await
     }
 
     /// The spaces below `id` whose activity its agent receives: children

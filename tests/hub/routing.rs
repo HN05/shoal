@@ -66,6 +66,14 @@ fn tree_across_machines() -> Tree {
 /// [`tree_across_machines`] with the hub's global config `extra` besides
 /// its role.
 fn tree_below_hub_config(extra: &str) -> Tree {
+    let tree = tree_without_coordinator(extra);
+    working(&tree.hub, &tree.coordinator);
+    tree
+}
+
+/// [`tree_below_hub_config`] whose space on the hub has no agent, so what
+/// the child passes up reaches the user there.
+fn tree_without_coordinator(extra: &str) -> Tree {
     let config = format!("[machine.hub]\nenabled = true\nlisten = \"127.0.0.1:0\"\n{extra}");
     let hub = Base::start(home(), &config, "app", &[]);
     let laptop = machine(false, "app");
@@ -93,7 +101,6 @@ fn tree_below_hub_config(extra: &str) -> Tree {
         below.is_some(),
         "the hub never listed the child below its coordinator: {moved}"
     );
-    working(&hub, &coordinator);
     Tree {
         hub,
         laptop,
@@ -390,6 +397,63 @@ fn a_process_acting_as_its_space_sends_and_withdraws_an_alert_on_another_machine
         json!({"withdraw_alert": {"id": id, "space": there, "from": sender}}),
     );
     assert_eq!(withdrawn["data"]["id"], id, "{withdrawn}");
+}
+
+/// Have the agent of the tree's child send a chart up to its coordinator;
+/// the chart's text.
+fn send_chart(tree: &Tree) -> &'static str {
+    let chart = tree.laptop.root.path().join("chart.txt");
+    std::fs::write(&chart, "latency by region").unwrap();
+    working(&tree.laptop, &tree.child);
+    let attach = chart.to_str().unwrap();
+    ok_in(
+        &tree.laptop,
+        &tree.child,
+        &["send", "--attach", attach, "See the chart"],
+    );
+    "latency by region"
+}
+
+/// Check that `file`, a record of the chart the tree's child sent, names
+/// the laptop and the child, and that `machine` reads the chart's text
+/// `text` through it.
+fn reads_chart(tree: &Tree, machine: &Base, file: &Value, text: &str) {
+    assert_eq!(
+        (&file["name"], &file["machine"], &file["space"]),
+        (&json!("chart.txt"), &json!("laptop"), &json!(tree.child)),
+        "{file}"
+    );
+    assert!(file.get("path").is_none(), "{file}");
+    let space = shoal_protocol::space_names::SpaceSelector::id(&tree.child.as_str().into());
+    let id = file["id"].as_i64().unwrap();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let app = super::following::app(machine);
+    let bytes = runtime.block_on(async {
+        let read = shoal_client::files::read(&app, space, id).await.unwrap();
+        read.to_end().await.unwrap()
+    });
+    assert_eq!(bytes, text.as_bytes());
+}
+
+#[test]
+fn a_child_s_files_reach_the_user_on_another_machine_as_records_to_read() {
+    let tree = tree_without_coordinator("");
+    let text = send_chart(&tree);
+    let alert = wait_for("the alert at the hub", || {
+        let alerts = tree.hub.ok(&["alert", "list", "--all"]);
+        (alerts.as_array().unwrap().iter())
+            .find(|alert| alert["message"] == "See the chart")
+            .cloned()
+    });
+    reads_chart(&tree, &tree.hub, &alert["files"][0], text);
+}
+
+#[test]
+fn a_child_s_files_reach_its_coordinator_on_another_machine_as_records_to_read() {
+    let tree = tree_across_machines();
+    let text = send_chart(&tree);
+    let alert = message_with(&tree.hub, &tree.coordinator, "See the chart");
+    reads_chart(&tree, &tree.hub, &alert["files"][0], text);
 }
 
 #[test]

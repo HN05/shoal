@@ -6,10 +6,11 @@ use rusqlite::Connection;
 
 use super::{
     chat_names, consumed_upgrades, frozen, place_owners, place_servers, queue_plans, record_shapes,
+    relayed_files,
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-pub const SCHEMA_VERSION: i64 = 273;
+pub const SCHEMA_VERSION: i64 = 274;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -557,6 +558,11 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (271, include_str!("held_moves.sql"), None),
     (272, include_str!("shared_items.sql"), None),
     (273, include_str!("shared_repositories.sql"), None),
+    (
+        274,
+        include_str!("relayed_files.sql"),
+        Some(relayed_files::summaries_name_their_machine),
+    ),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their

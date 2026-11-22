@@ -5,13 +5,12 @@
 //! tells the user at the top. While a machine's link is down, what its
 //! spaces pass up waits in its outbox and goes in order once the link
 //! opens again; the hub holds what it cannot deliver yet.
-use std::path::PathBuf;
-
 use anyhow::{Context as _, Result};
 use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     alerts::AlertKind,
+    files::SentFile,
     hub::{
         link::Call,
         routing::{Expired, HeldOutcome, Told, ToldAbout, ToldRecord},
@@ -29,7 +28,7 @@ const OUTBOX_LOOK: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// An event a space passes up: the space it is about, the kind of alert it
 /// is, whether the user receives it when no space above takes it, its
-/// message and the files it sent.
+/// message and the records of the files it sent.
 pub struct Event<'a> {
     pub name: &'a SpaceName,
     pub space: &'a SpaceId,
@@ -39,7 +38,7 @@ pub struct Event<'a> {
     /// What the agent that takes it reads, where that differs from
     /// `message`, which the user reads, as a thread's post does.
     pub agent: Option<String>,
-    pub attachments: &'a [PathBuf],
+    pub files: &'a [SentFile],
 }
 
 impl Hub {
@@ -50,7 +49,8 @@ impl Hub {
         above: SpaceId,
         event: Event<'_>,
     ) -> Result<()> {
-        self.send_told(daemon, told_above(above, event)).await
+        let told = told_above(above, event, &self.machine_name(daemon).await);
+        self.send_told(daemon, told).await
     }
 
     /// Pass `event` up to the space `above`, which another machine runs,
@@ -63,7 +63,7 @@ impl Hub {
         above: SpaceId,
         event: Event<'_>,
     ) -> Result<()> {
-        let told = told_above(above, event);
+        let told = told_above(above, event, &self.machine_name(daemon).await);
         if self.is_hub(daemon) {
             return (self
                 .route_told(daemon, &self.own_member().await?, told)
@@ -174,12 +174,13 @@ impl Hub {
         let receiver = daemon.receiver_from(&told.above).await?;
         let kind = told.record.kind();
         let (agent, user) = told.record.texts();
+        let files = told.record.files().to_vec();
         match (receiver, told.about) {
             (Some(Receiver::Here(coordinator)), about) => {
                 let about = about.map_or_else(About::default, |about| {
                     About::space(&about.name, &about.space)
                 });
-                let alert = told_alert(kind, about, agent);
+                let alert = told_alert(kind, about, agent, files);
                 (daemon.alert(&coordinator, alert, told.for_user)).await
             }
             (Some(Receiver::Elsewhere(next)), about) => {
@@ -193,7 +194,7 @@ impl Hub {
             (None, Some(about)) => {
                 if told.for_user {
                     let about = About::space(&about.name, &about.space);
-                    let alert = told_alert(kind, about, user);
+                    let alert = told_alert(kind, about, user, files);
                     self.notifications.notify_user(alert).await;
                 }
                 Ok(())
@@ -236,25 +237,30 @@ impl Hub {
     }
 }
 
-/// The alert of `kind` with `message` about the space `about` that a told
-/// event becomes: that space's own message, which it may withdraw, or else
-/// Shoal's alert about it.
-fn told_alert(kind: AlertKind, about: About, message: String) -> NewAlert {
+/// The alert of `kind` with `message` about the space `about`, with the
+/// `files` another machine keeps, that a told event becomes: that space's
+/// own message, which it may withdraw, or else Shoal's alert about it.
+fn told_alert(kind: AlertKind, about: About, message: String, files: Vec<SentFile>) -> NewAlert {
     let sender = match kind {
         AlertKind::Message if about.id.is_some() => Sender::Space,
         _ => Sender::Shoal,
     };
     NewAlert {
         sender,
+        relayed: files,
         ..NewAlert::shoal(kind, about, message)
     }
 }
 
-/// What tells the space `above` of `event`, naming the files it sent.
-fn told_above(above: SpaceId, event: Event<'_>) -> Told {
-    let files = (event.attachments.iter())
-        .filter_map(|path| path.file_name())
-        .map(|name| name.to_string_lossy().into_owned())
+/// What tells the space `above` of `event`, whose files `machine`, this
+/// one, keeps.
+fn told_above(above: SpaceId, event: Event<'_>, machine: &str) -> Told {
+    let files = (event.files.iter())
+        .map(|file| {
+            let mut file = file.clone();
+            file.copy.kept_on(machine);
+            file
+        })
         .collect();
     Told {
         above,

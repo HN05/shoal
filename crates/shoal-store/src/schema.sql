@@ -811,7 +811,7 @@ CREATE TABLE alerts (
     attachments TEXT NOT NULL DEFAULT '[]',
     wakes INTEGER NOT NULL DEFAULT 1 CHECK(wakes IN (0,1)),
     for_user INTEGER NOT NULL DEFAULT 0 CHECK(for_user IN (0,1)),
-    read INTEGER NOT NULL DEFAULT 0 CHECK(read IN (0,1)), in_chat INTEGER NOT NULL DEFAULT 0 CHECK(in_chat IN (0,1)),
+    read INTEGER NOT NULL DEFAULT 0 CHECK(read IN (0,1)), in_chat INTEGER NOT NULL DEFAULT 0 CHECK(in_chat IN (0,1)), relayed_files TEXT NOT NULL DEFAULT '[]',
     CHECK(sender <> 'space' OR space_id IS NOT NULL)
 );
 

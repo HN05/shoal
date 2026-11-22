@@ -43,7 +43,8 @@ pub(crate) fn insert(
         .query_row(
             "SELECT id,wakes FROM alerts
                 WHERE recipient_id=?1 AND read=0 AND message=?2 AND attachments=?3
-                    AND space IS ?4 AND space_id IS ?5 AND kind=?6 AND sender=?7",
+                    AND space IS ?4 AND space_id IS ?5 AND kind=?6 AND sender=?7
+                    AND relayed_files=?8",
             params![
                 space_id,
                 alert.message,
@@ -51,7 +52,8 @@ pub(crate) fn insert(
                 about.name,
                 about.id,
                 alert.kind,
-                alert.sender
+                alert.sender,
+                alert.relayed_column()?
             ],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
@@ -183,7 +185,7 @@ pub(crate) fn mark_delivered(tx: &Transaction<'_>, space_id: &SpaceId, id: i64) 
 pub fn hand_to_user(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<Option<i64>> {
     let unread = tx
         .prepare(
-            "SELECT kind,sender,space,space_id,message,attachments FROM alerts
+            "SELECT kind,sender,space,space_id,message,attachments,relayed_files FROM alerts
                 WHERE recipient_id=?1 AND read=0 AND for_user=1 ORDER BY id",
         )?
         .query_map([space_id], |row| {
@@ -197,6 +199,7 @@ pub fn hand_to_user(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<Option<i
                 },
                 message: row.get("message")?,
                 attachments: shoal_store::json_column(row, "attachments")?.unwrap_or_default(),
+                relayed: shoal_store::json_column(row, "relayed_files")?.unwrap_or_default(),
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;

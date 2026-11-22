@@ -66,10 +66,7 @@ impl Manager {
         message: String,
         files: &[SentFile],
     ) {
-        let alert = NewAlert {
-            attachments: shoal_protocol::files::paths_here(files),
-            ..NewAlert::shoal(kind, about, message)
-        };
+        let alert = NewAlert::shoal(kind, about, message).with_files(files);
         self.notifications.notify(self, alert).await;
     }
 

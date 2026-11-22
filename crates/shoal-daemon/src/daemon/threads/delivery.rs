@@ -3,7 +3,6 @@
 //! user, a space's agent or, for a holder on another machine, passed up
 //! there once it commits. Every alert about a thread names it as its
 //! subject, so withdrawing the thread takes back those still unread.
-use std::path::PathBuf;
 
 use anyhow::Result;
 use rusqlite::{Transaction, params};
@@ -65,7 +64,7 @@ struct Elsewhere {
     message: String,
     /// The text the agent that takes it reads, as an agent here would.
     agent: String,
-    attachments: Vec<PathBuf>,
+    files: Vec<crate::daemon::workspace_files::SentFile>,
 }
 
 /// The subject that names `thread` on its alerts.
@@ -84,18 +83,15 @@ fn alert(thread: &Thread, post: Option<&Post>, kind: AlertKind, message: String)
         Some((sender, None)) => (sender, About::default()),
         None => (Sender::Shoal, About::default()),
     };
-    NewAlert {
-        kind,
+    let alert = NewAlert {
         sender,
         about: About {
             subject: Some(subject(thread)),
             ..about
         },
-        message,
-        attachments: post
-            .map(|post| shoal_protocol::files::paths_here(&post.files))
-            .unwrap_or_default(),
-    }
+        ..NewAlert::shoal(kind, About::default(), message)
+    };
+    alert.with_files(post.map_or(&[], |post| &post.files))
 }
 
 /// Deliver `message` of `kind` about `thread` from `post` to `party`, the
@@ -128,7 +124,7 @@ pub(super) fn deliver(
                 kind: alert.kind,
                 message: alert.message,
                 agent: texts.agent,
-                attachments: alert.attachments,
+                files: post.map(|post| post.files.clone()).unwrap_or_default(),
             });
             Ok(None)
         }
@@ -449,7 +445,7 @@ impl Manager {
                 for_user: true,
                 message: elsewhere.message,
                 agent: Some(elsewhere.agent),
-                attachments: &elsewhere.attachments,
+                files: &elsewhere.files,
             };
             let passed = Box::pin(self.hub.pass_up(self, elsewhere.to, event)).await;
             if let Err(error) = passed {

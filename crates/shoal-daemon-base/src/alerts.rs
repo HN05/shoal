@@ -8,6 +8,7 @@ use anyhow::Result;
 use rusqlite::{Transaction, params};
 use shoal_ids::space_ids::SpaceId;
 pub use shoal_protocol::alerts::{Alert, AlertKind, Recipient, Sender, Sent};
+use shoal_protocol::files::SentFile;
 
 use shoal_protocol::space_names::SpaceName;
 
@@ -60,7 +61,8 @@ impl About {
 }
 
 /// An alert to record: its kind, who sends it, what it names, its text and
-/// Shoal's copies of the files attached to it.
+/// Shoal's copies of the files attached to it: those this machine keeps, by
+/// path, and the records of those another machine keeps, which relayed it.
 #[derive(Debug, Clone)]
 pub struct NewAlert {
     pub kind: AlertKind,
@@ -68,6 +70,7 @@ pub struct NewAlert {
     pub about: About,
     pub message: String,
     pub attachments: Vec<PathBuf>,
+    pub relayed: Vec<SentFile>,
 }
 
 impl NewAlert {
@@ -79,12 +82,30 @@ impl NewAlert {
             about,
             message,
             attachments: Vec::new(),
+            relayed: Vec::new(),
+        }
+    }
+
+    /// The alert with `files` attached: by path those this machine keeps,
+    /// and by record those another machine keeps.
+    pub fn with_files(self, files: &[SentFile]) -> Self {
+        let relayed = files.iter().filter(|file| file.path().is_none());
+        Self {
+            attachments: shoal_protocol::files::paths_here(files),
+            relayed: relayed.cloned().collect(),
+            ..self
         }
     }
 
     /// Its files as the `attachments` column stores them.
     pub fn attachments_column(&self) -> Result<String> {
         Ok(serde_json::to_string(&self.attachments)?)
+    }
+
+    /// The records of its files another machine keeps, as the
+    /// `relayed_files` column stores them.
+    pub fn relayed_column(&self) -> Result<String> {
+        Ok(serde_json::to_string(&self.relayed)?)
     }
 }
 
@@ -96,7 +117,7 @@ pub const COLUMNS: &str = concat!(
     "(SELECT json_group_array(json(file)) FROM (
         SELECT json_object('id',f.id,'space',f.space_id,'name',f.name,'title',f.title,'path',f.path) AS file
         FROM json_each(a.attachments) j JOIN space_files f ON f.path=j.value
-        ORDER BY j.key)) AS files"
+        ORDER BY j.key)) AS files,a.relayed_files"
 );
 
 /// The alerts [`COLUMNS`] reads from.
@@ -124,8 +145,17 @@ pub fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Alert> {
         number: row.get("number")?,
         message: row.get("message")?,
         read: row.get("read")?,
-        files: crate::store::json_column(row, "files")?.unwrap_or_default(),
+        files: files(row)?,
     })
+}
+
+/// The files of the alert a row of [`COLUMNS`] holds: those this machine
+/// keeps, then those another machine keeps.
+fn files(row: &rusqlite::Row<'_>) -> rusqlite::Result<Vec<SentFile>> {
+    let mut files: Vec<SentFile> = crate::store::json_column(row, "files")?.unwrap_or_default();
+    let relayed: Option<Vec<SentFile>> = crate::store::json_column(row, "relayed_files")?;
+    files.extend(relayed.unwrap_or_default());
+    Ok(files)
 }
 
 /// Record `alert` for the space `recipient`, or for the user without one,
@@ -140,8 +170,8 @@ pub fn insert(
 ) -> Result<i64> {
     tx.execute(
         "INSERT INTO alerts(created_at,kind,sender,recipient_id,space,space_id,subject,message,
-                attachments,wakes,for_user)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+                attachments,relayed_files,wakes,for_user)
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
         params![
             crate::time::UnixTime::now(),
             alert.kind,
@@ -152,6 +182,7 @@ pub fn insert(
             alert.about.subject,
             alert.message,
             alert.attachments_column()?,
+            alert.relayed_column()?,
             wakes,
             for_user,
         ],

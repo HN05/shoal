@@ -805,6 +805,9 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
     if version >= 273 {
         db.execute_batch(include_str!("shared_repositories.sql"))?;
     }
+    if version >= 274 {
+        db.execute_batch(include_str!("relayed_files.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -4376,8 +4379,10 @@ fn held_events_carry_their_alert_as_a_record() -> Result<()> {
     let calls: Vec<serde_json::Value> = (calls.iter())
         .map(|call| serde_json::from_str(call))
         .collect::<serde_json::Result<_>>()?;
+    // A later migration names the files in the text.
     let record = serde_json::json!({"alert": {
-        "kind": "workspace_done", "message": "child: done", "files": ["report.md"],
+        "kind": "workspace_done",
+        "message": "child: done\nFiles it sent, which stay on its machine: report.md",
     }});
     assert_eq!(
         calls[0],
@@ -4385,6 +4390,91 @@ fn held_events_carry_their_alert_as_a_record() -> Result<()> {
     );
     assert_eq!(calls[1]["record"]["alert"]["files"], serde_json::json!([]));
     assert_eq!(calls[2], calls[0]);
+    Ok(())
+}
+
+#[test]
+fn held_events_name_the_files_they_sent_in_their_text() -> Result<()> {
+    let mut db = historical_database(273)?;
+    let alert = r#"{"tell":{"told":{"above":"coordinator","for_user":true,"record":{"alert":{
+        "kind":"message","message":"See the charts","files":["a.png","b.png"]}}}}}"#;
+    let post = r#"{"tell":{"told":{"above":"coordinator","for_user":true,"record":{"thread":{
+        "kind":"thread_post","agent":"1.2: done","user":"done","files":["c.md"]}}}}}"#;
+    db.execute(
+        "INSERT INTO hub_members(id,kind,name,public_key,joined_at)
+            VALUES ('desk','machine','desk','key',0)",
+        [],
+    )?;
+    db.execute(
+        "INSERT INTO hub_outbox(seq,call,queued_at) VALUES (1,?1,0)",
+        [alert],
+    )?;
+    db.execute(
+        "INSERT INTO hub_queue(seq,member_id,sender_id,call,summary,queued_at,expires_at)
+            VALUES (1,'desk','hub',?1,'',0,1)",
+        [post],
+    )?;
+    migrate(&mut db)?;
+    let record = |table: &str| -> Result<serde_json::Value> {
+        let sql = format!("SELECT json_extract(call,'$.tell.told.record') FROM {table}");
+        let record: String = db.query_row(&sql, [], |row| row.get(0))?;
+        Ok(serde_json::from_str(&record)?)
+    };
+    let named = |text: &str, files: &str| {
+        format!("{text}\nFiles it sent, which stay on its machine: {files}")
+    };
+    assert_eq!(
+        record("hub_outbox")?,
+        serde_json::json!({"alert": {
+            "kind": "message", "message": named("See the charts", "a.png, b.png"),
+        }})
+    );
+    assert_eq!(
+        record("hub_queue")?,
+        serde_json::json!({"thread": {
+            "kind": "thread_post", "agent": named("1.2: done", "c.md"), "user": named("done", "c.md"),
+        }})
+    );
+    Ok(())
+}
+
+#[test]
+fn hub_summaries_name_the_machine_that_keeps_their_threads_files() -> Result<()> {
+    let mut db = historical_database(273)?;
+    db.execute(
+        "INSERT INTO hub_members(id,kind,name,public_key,joined_at)
+            VALUES ('m1','machine','laptop','key',0)",
+        [],
+    )?;
+    // The opener elsewhere kept its file in the thread's space; the
+    // holder, which the laptop runs, in its own.
+    let summary = serde_json::json!({"id": "w1", "threads": [{"space_id": "w1", "posts": [
+        {"space": {"id": "hub-space"},
+            "files": [{"id": 3, "name": "chart.png", "path": "/repo/.attachments/chart.png"}]},
+        {"space": {"id": "w2"},
+            "files": [{"id": 4, "name": "notes.md", "path": "/repo/.attachments/notes.md"}]},
+    ]}]});
+    db.execute(
+        "INSERT INTO hub_spaces(space_id,member_id,summary,reported_at)
+            VALUES ('w1','m1',?1,0), ('w2','m1','{}',0)",
+        [summary.to_string()],
+    )?;
+    migrate(&mut db)?;
+    let summary: String = db.query_row(
+        "SELECT summary FROM hub_spaces WHERE space_id='w1'",
+        [],
+        |row| row.get(0),
+    )?;
+    let summary: serde_json::Value = serde_json::from_str(&summary)?;
+    let posts = &summary["threads"][0]["posts"];
+    assert_eq!(
+        posts[0]["files"][0],
+        serde_json::json!({"id": 3, "name": "chart.png", "space": "w1", "machine": "laptop"})
+    );
+    assert_eq!(
+        posts[1]["files"][0],
+        serde_json::json!({"id": 4, "name": "notes.md", "space": "w2", "machine": "laptop"})
+    );
     Ok(())
 }
 

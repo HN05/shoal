@@ -230,6 +230,13 @@ impl Manager {
         self.store.run(move |db| records::list(db, &space.id)).await
     }
 
+    /// The records of the copies at `paths`, which this machine keeps, as
+    /// an alert sends them.
+    pub(crate) async fn sent_files(&self, paths: Vec<PathBuf>) -> Result<Vec<SentFile>> {
+        let records = self.store.read(move |db| records::at(db, &paths)).await?;
+        Ok(records.iter().map(SentFile::from).collect())
+    }
+
     /// The workspace or chat `selector` names, or else the removed space of
     /// that ID whose files are kept.
     pub(crate) async fn file_space(&self, selector: &SpaceSelector) -> Result<Space> {

@@ -76,7 +76,7 @@ pub fn insert(tx: &rusqlite::Transaction<'_>, alert: &NewAlert) -> Result<Record
             .query_row(
                 "SELECT id FROM alerts WHERE recipient_id IS NULL AND read=0 AND space IS ?1
                     AND space_id IS ?2 AND subject IS ?3 AND kind=?4 AND message=?5
-                    AND attachments=?6 AND sender=?7",
+                    AND attachments=?6 AND sender=?7 AND relayed_files=?8",
                 params![
                     about.name,
                     about.id,
@@ -84,7 +84,8 @@ pub fn insert(tx: &rusqlite::Transaction<'_>, alert: &NewAlert) -> Result<Record
                     alert.kind,
                     alert.message,
                     alert.attachments_column()?,
-                    alert.sender
+                    alert.sender,
+                    alert.relayed_column()?
                 ],
                 |row| row.get(0),
             )

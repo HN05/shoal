@@ -220,6 +220,7 @@ impl Manager {
             about: sender.1.clone(),
             message,
             attachments: Vec::new(),
+            relayed: Vec::new(),
         };
         if attachments.is_empty() {
             return self.agents.queue_alert(&id, alert, false).await;
@@ -310,13 +311,11 @@ impl Manager {
 /// The message `message` the space `about` sends with Shoal's copies
 /// `files`.
 pub(crate) fn sent_alert(about: About, message: String, files: &[SentFile]) -> NewAlert {
-    NewAlert {
-        kind: AlertKind::Message,
+    let alert = NewAlert {
         sender: Sender::Space,
-        about,
-        message,
-        attachments: shoal_protocol::files::paths_here(files),
-    }
+        ..NewAlert::shoal(AlertKind::Message, about, message)
+    };
+    alert.with_files(files)
 }
 
 /// The alert `id` that the space `sender` sent, or the user without one,

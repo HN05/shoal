@@ -123,6 +123,20 @@ pub(super) fn record_all(
     Ok(records)
 }
 
+/// The records of the copies at `paths`, in their order; a copy whose
+/// record is gone drops out.
+pub(super) fn at(db: &Connection, paths: &[PathBuf]) -> Result<Vec<AttachedFile>> {
+    let mut statement = db.prepare(&format!("SELECT {COLUMNS} FROM space_files WHERE path=?1"))?;
+    let mut records = Vec::new();
+    for path in paths {
+        let found = statement
+            .query_row([path.to_string_lossy()], row)
+            .optional()?;
+        records.extend(found);
+    }
+    Ok(records)
+}
+
 /// The files of the space `space_id`, oldest first.
 pub(super) fn list(db: &Connection, space_id: &SpaceId) -> Result<Vec<AttachedFile>> {
     Ok(db

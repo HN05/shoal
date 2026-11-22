@@ -7,6 +7,7 @@ use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
 use crate::{
     alerts::AlertKind,
     config::permissions::{PermissionKey, Permissions},
+    files::SentFile,
     space_names::SpaceName,
     time::UnixTime,
 };
@@ -125,13 +126,13 @@ pub struct Told {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToldRecord {
-    /// An alert of `kind` with its text, naming what the sending machine
-    /// kept of the files sent, which stay there.
+    /// An alert of `kind` with its text and the records of the files it
+    /// sent, which the sending machine keeps.
     Alert {
         kind: AlertKind,
         message: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        files: Vec<String>,
+        files: Vec<SentFile>,
     },
     /// A thread's post, forward or resolution of `kind`: the text the agent
     /// that takes it reads, as an agent on the thread's machine would, and
@@ -141,7 +142,7 @@ pub enum ToldRecord {
         agent: String,
         user: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        files: Vec<String>,
+        files: Vec<SentFile>,
     },
 }
 
@@ -153,29 +154,19 @@ impl ToldRecord {
         }
     }
 
-    /// What an agent that takes it reads, and what the user reads, each
-    /// naming the files it sent, which stay on its machine.
+    /// What an agent that takes it reads, and what the user reads.
     pub fn texts(&self) -> (String, String) {
         match self {
-            Self::Alert { message, files, .. } => {
-                let message = with_files(message, files);
-                (message.clone(), message)
-            }
-            Self::Thread {
-                agent, user, files, ..
-            } => (with_files(agent, files), with_files(user, files)),
+            Self::Alert { message, .. } => (message.clone(), message.clone()),
+            Self::Thread { agent, user, .. } => (agent.clone(), user.clone()),
         }
     }
-}
 
-/// `message`, naming the `files` its space sent, which stay on its machine.
-fn with_files(message: &str, files: &[String]) -> String {
-    match files.is_empty() {
-        true => message.to_owned(),
-        false => format!(
-            "{message}\nFiles it sent, which stay on its machine: {}",
-            files.join(", ")
-        ),
+    /// The records of the files it sent.
+    pub fn files(&self) -> &[SentFile] {
+        match self {
+            Self::Alert { files, .. } | Self::Thread { files, .. } => files,
+        }
     }
 }
 
@@ -234,6 +225,3 @@ impl std::fmt::Display for Queued {
 }
 
 impl std::error::Error for Queued {}
-
-#[cfg(test)]
-mod tests;

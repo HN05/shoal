@@ -39,6 +39,7 @@ mod place_owners;
 mod place_servers;
 mod queue_plans;
 mod record_shapes;
+mod relayed_files;
 pub mod sent_files;
 mod space_titles;
 #[cfg(any(test, feature = "test-support"))]

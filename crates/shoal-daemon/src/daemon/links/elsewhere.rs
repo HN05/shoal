@@ -30,7 +30,7 @@ impl Elsewhere for Manager {
             for_user: false,
             message,
             agent: None,
-            attachments: &[],
+            files: &[],
         };
         Box::pin(self.hub.pass_up_now(self, above, event))
     }
