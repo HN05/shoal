@@ -4422,7 +4422,8 @@ fetch, by its age alone: this machine cannot always learn when the source's
 space goes, and a fetch happens only while it exists, so the copy never
 outlives the source's retention, while a later fetch of a living space's file
 makes it again. Disk space cleanup deletes such copies first, since their
-source machine keeps them.
+source machine keeps them, except one the user changed since its fetch,
+whose changes exist nowhere else, and one a fetch is still writing.
 Files are keyed by their owner's ID, which a workspace and a
 chat never share, so no kind tells them apart: an owner is gone when neither
 has the ID, and a record of its own says how long its files stay, apart from

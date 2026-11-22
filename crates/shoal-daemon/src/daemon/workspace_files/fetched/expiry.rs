@@ -1,14 +1,14 @@
 //! How long fetched copies stay: `cleanup.restore.retention_days` after
 //! their fetch, the longest their source stays once its space is removed,
-//! or until disk space cleanup needs their space, since the machine that
-//! keeps the source keeps them too; and every one goes with the repository
+//! or, when nobody changed them, until disk space cleanup needs their
+//! space, since the machine that keeps the source keeps them too; and every one goes with the repository
 //! it is kept beside.
 use std::{path::Path, time::SystemTime};
 
 use anyhow::{Result, ensure};
 use shoal_ids::repository_ids::RepositoryId;
 
-use super::copies::remove_written_before;
+use super::copies::{remove_unchanged, remove_written_before};
 use crate::{
     daemon::{log, manager::Manager},
     fsutil::off_runtime,
@@ -50,8 +50,9 @@ impl Manager {
         Ok(())
     }
 
-    /// Delete every fetched copy where `on` selects, as on a filesystem low
-    /// on space, returning whether any went. A failure is logged and keeps
+    /// Delete every fetched copy where `on` selects that loses nothing, as
+    /// on a filesystem low on space, returning whether any went: one a fetch
+    /// is writing, or the user changed since, stays for its expiry. A failure is logged and keeps
     /// the rest of that directory.
     pub(crate) async fn delete_fetched_in(&self, on: impl Fn(&Path) -> bool) -> bool {
         let homes = match self.fetched_homes().await {
@@ -63,8 +64,7 @@ impl Manager {
         };
         let mut deleted = false;
         for Fetched { name, dir, .. } in homes.into_iter().filter(|home| on(home.dir.root())) {
-            let now = SystemTime::now();
-            match off_runtime::run(move || remove_written_before(&dir, now)).await {
+            match off_runtime::run(move || remove_unchanged(&dir)).await {
                 Ok(removed) => deleted |= removed,
                 Err(error) => log!("fetched copies of {name} kept: {error:#}"),
             }

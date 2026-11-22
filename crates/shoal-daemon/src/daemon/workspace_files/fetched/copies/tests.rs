@@ -3,8 +3,8 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use super::remove_written_before;
-use crate::shoal_dirs::{Contents, ShoalDir};
+use super::{remove_unchanged, remove_written_before};
+use crate::shoal_dirs::{Contents, FETCHING, ShoalDir};
 
 /// A day ago, before which copies go in these tests.
 fn cutoff() -> SystemTime {
@@ -72,4 +72,25 @@ fn a_directory_shoal_did_not_create_stays() {
 
     assert!(!remove_written_before(&dir, SystemTime::now()).unwrap());
     assert!(theirs.exists());
+}
+
+#[test]
+fn only_copies_nobody_changed_since_their_fetch_lose_nothing() {
+    let temp = tempfile::tempdir().unwrap();
+    let dir = marked(temp.path());
+    let fetched_at = SystemTime::now() - Duration::from_secs(3600);
+    let unchanged = copy(&dir, "space", "1", fetched_at);
+    let edited = copy(&dir, "space", "2", fetched_at);
+    touch(&edited, SystemTime::now());
+    let refetching = copy(&dir, "space", "3", fetched_at);
+    let partial = refetching.parent().unwrap().join(FETCHING);
+    std::fs::write(&partial, "<ht").unwrap();
+    touch(&partial, fetched_at);
+    touch(refetching.parent().unwrap(), fetched_at);
+
+    assert!(remove_unchanged(&dir).unwrap());
+
+    assert!(!unchanged.parent().unwrap().exists());
+    assert!(edited.exists());
+    assert!(refetching.exists());
 }

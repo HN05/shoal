@@ -10,7 +10,7 @@ use anyhow::{Context as _, Result};
 
 use crate::{
     fsutil::marked_dirs::OWNER_MARKER,
-    shoal_dirs::{ShoalDir, remove_dir, remove_file, remove_if_empty},
+    shoal_dirs::{FETCHING, ShoalDir, remove_dir, remove_file, remove_if_empty},
 };
 
 /// Delete the copies in `dir` last written before `cutoff`, and the
@@ -18,6 +18,21 @@ use crate::{
 /// a fetch under way writes below; whether any went. A directory Shoal did
 /// not create stays.
 pub(super) fn remove_written_before(dir: &ShoalDir, cutoff: SystemTime) -> Result<bool> {
+    remove_copies(dir, |path| Ok(last_written(path)? < cutoff))
+}
+
+/// Delete the copies in `dir` that lose nothing, as [`remove_written_before`]
+/// deletes: each a fetch finished writing and nobody changed since, which
+/// the machine that keeps its source can give again.
+pub(super) fn remove_unchanged(dir: &ShoalDir) -> Result<bool> {
+    remove_copies(dir, |path| {
+        Ok(!is_fetching(path) && !changed_since_fetch(path)?)
+    })
+}
+
+/// Delete the copies in `dir` that `goes` selects, with the directories of
+/// spaces they leave empty, keeping `dir` and its mark; whether any went.
+fn remove_copies(dir: &ShoalDir, goes: impl Fn(&Path) -> Result<bool>) -> Result<bool> {
     if !dir.is_own() {
         return Ok(false);
     }
@@ -27,21 +42,21 @@ pub(super) fn remove_written_before(dir: &ShoalDir, cutoff: SystemTime) -> Resul
             continue;
         }
         if !is_real_dir(&space)? {
-            removed |= remove_if_written_before(&space, cutoff)?;
+            removed |= remove_if(&space, &goes)?;
             continue;
         }
         for copy in entries(&space)? {
-            removed |= remove_if_written_before(&copy, cutoff)?;
+            removed |= remove_if(&copy, &goes)?;
         }
         remove_if_empty(&space)?;
     }
     Ok(removed)
 }
 
-/// Delete `path`, a copy's directory or anything else left there, when it
-/// was last written before `cutoff`; whether it did.
-fn remove_if_written_before(path: &Path, cutoff: SystemTime) -> Result<bool> {
-    if last_written(path)? >= cutoff {
+/// Delete `path`, a copy's directory or anything else left there, when
+/// `goes` selects it; whether it did.
+fn remove_if(path: &Path, goes: impl Fn(&Path) -> Result<bool>) -> Result<bool> {
+    if !goes(path)? {
         return Ok(false);
     }
     match is_real_dir(path)? {
@@ -49,6 +64,27 @@ fn remove_if_written_before(path: &Path, cutoff: SystemTime) -> Result<bool> {
         false => remove_file(path)?,
     }
     Ok(true)
+}
+
+/// Whether a fetch is writing into the copy's directory `path`.
+fn is_fetching(path: &Path) -> bool {
+    path.join(FETCHING).symlink_metadata().is_ok()
+}
+
+/// Whether something in the copy's directory `path` changed after the fetch
+/// that wrote the copy last changed the directory, as when the user edits
+/// the copy in place.
+fn changed_since_fetch(path: &Path) -> Result<bool> {
+    if !is_real_dir(path)? {
+        return Ok(false);
+    }
+    let fetched = modified(path)?;
+    for entry in entries(path)? {
+        if modified(&entry)? > fetched {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// When `path`, or anything directly in it, last changed, as a copy's

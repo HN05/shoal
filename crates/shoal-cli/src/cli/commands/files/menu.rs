@@ -148,7 +148,7 @@ async fn fetch(ctx: &Context, file: &AttachedFile) -> Result<PathBuf> {
 async fn write_whole(path: &Path, mut read: FileRead) -> Result<()> {
     let parent = path.parent().context("a fetched file has a directory")?;
     std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
-    let partial = parent.join(".partial");
+    let partial = parent.join(shoal_core::shoal_dirs::FETCHING);
     let mut out =
         std::fs::File::create(&partial).with_context(|| format!("create {}", partial.display()))?;
     while let Some(bytes) = read.next().await? {
