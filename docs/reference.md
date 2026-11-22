@@ -1018,6 +1018,19 @@ and sends those the hub lacks. When a copy replaces an edit the hub never
 got, the machine keeps that edit as `<file>.backup`, such as
 `shared.toml.backup`, and alerts you naming it.
 
+They also share the repositories you mark shared: `shoal repo add <url>
+--shared`, or `shoal repo share [repo]` for a registered one, which needs an
+origin, and `shoal repo ls` shows them. Every other machine registers each
+one as `shoal repo add <url>` would, matched by origin, cloning it at once in
+the background under its own `root_dir` and under the same name where no
+repository there has it; a repository it already has, whatever its name,
+keeps that registration and becomes shared. A clone that fails records a
+`shared_repository_failed` alert and is tried again when the link next
+opens. `shoal repo unshare [repo]`, or removing a shared repository, stops
+sharing it on every machine, which keeps its registration. Machines clone
+from the origin, never through the hub. A repository that is not shared stays
+on its machine, and `shoal start --machine` clones it there on demand.
+
 A machine can also reach the hub through a command, whose standard input and
 output its daemon uses as the link, restarting it with backoff and logging its
 standard error: `shoal daemon connect` on the hub relays them to its daemon's
@@ -1343,6 +1356,8 @@ links do, and launches an agent only with `--agent`.
 shoal repo add /path/to/repo             # Or a Git clone URL; register once
 shoal repo add /path/to/repo --name my-project
 shoal repo rename my-project new-name
+shoal repo share my-project              # Every machine of the hub clones it
+shoal repo unshare my-project
 shoal repo ls
 shoal repo                               # Interactive repository menu
 shoal start my-project --branch fix-login

@@ -3840,7 +3840,19 @@ sends its edits of files it agreed on before, which an offline edit is, then
 takes the hub's copies, so a file it never agreed on, as on joining, gives
 way to the hub's. A copy that replaces an edit the hub never got leaves it as
 `<file>.backup` with one alert, so a local edit is either on the hub or in
-that backup. A worktree file the current format rejects counts as absent,
+that backup. The same sync, over items of any kind under keys of their own,
+shares repositories too: a registration is shared under its origin's URL,
+which the store records, and each machine's items are its shared
+registrations by origin, holding
+the URL and name the copy it agreed on has, so another name or URL of its own
+is no edit. A member takes a shared copy by sharing its registration of that
+origin, whatever its name, or by registering a URL clone under its own
+`root_dir` in the background, with no registered-but-uncloned state and no
+setting for it, agreeing on the copy once the clone is registered, so a
+failed clone, which alerts, is tried again when the link next opens. A copy
+without a value, from `repo unshare` or a removal anywhere, leaves every
+registration, no longer shared. Machines clone from the origin; the hub
+carries no Git data. A worktree file the current format rejects counts as absent,
 since a branch from before a format change keeps its old file and must not stop
 cleanup or anything else the other layers settle. The layers name the
 rejection, which `config show` warns about, and the daemon tells the log and the
