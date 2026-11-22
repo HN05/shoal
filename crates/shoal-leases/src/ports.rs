@@ -155,9 +155,7 @@ impl Leases {
         selector: &SpaceSelector,
     ) -> Result<PortOverview> {
         let workspace = daemon.workspace(selector).await?;
-        let reserved = self
-            .list_ports(daemon, Some(&SpaceSelector::id(&workspace.id)))
-            .await?;
+        let reserved = self.reserved_ports(Some(&workspace.id)).await?;
         Ok(PortOverview {
             workspace,
             reserved,
@@ -182,14 +180,12 @@ impl Leases {
         })
     }
 
-    pub async fn list_ports(
-        &self,
-        daemon: &dyn Daemon,
-        selector: Option<&SpaceSelector>,
-    ) -> Result<Vec<PortReservation>> {
-        let workspace_id = self.workspace_filter(daemon, selector).await?;
+    /// The ports the space `space` reserved, or every space's for `None`.
+    /// Only a workspace reserves any, so a chat has none.
+    pub async fn reserved_ports(&self, space: Option<&SpaceId>) -> Result<Vec<PortReservation>> {
+        let space = space.cloned();
         self.store
-            .run(move |db| store::ports(db, workspace_id.as_ref()))
+            .run(move |db| store::ports(db, space.as_ref()))
             .await
     }
 

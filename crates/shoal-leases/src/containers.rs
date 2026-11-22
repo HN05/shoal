@@ -184,7 +184,7 @@ impl Leases {
                     None => compose::find_runtime(config.machine.containers.runtime)?,
                 };
                 let starting = starting_project(workspace, compose, runtime, starter);
-                self.run_project(daemon, workspace, starting).await?
+                self.run_project(workspace, starting).await?
             }
         };
         Ok(ContainerAcquisition::Started(Box::new(
@@ -196,18 +196,13 @@ impl Leases {
     /// it went, returning the running project.
     async fn run_project(
         &self,
-        daemon: &dyn Daemon,
         workspace: &Workspace,
         mut recorded: Recorded,
     ) -> Result<ContainerProject> {
         // The record comes first, so whatever `up` leaves has one.
         self.save_containers(&recorded).await?;
         let worktree = Some(workspace.path.as_path());
-        let up = self
-            .compose(daemon, &recorded.project, worktree)
-            .await?
-            .up()
-            .await;
+        let up = self.compose(&recorded.project, worktree).await?.up().await;
         recorded.project.state = match &up {
             Ok(()) => ContainerState::Running,
             Err(_) => ContainerState::Failed,
@@ -310,7 +305,7 @@ impl Leases {
         if recorded.project.state == ContainerState::Stopped {
             return Ok(());
         }
-        let compose = (self.compose(daemon, &recorded.project, Some(&workspace.path))).await?;
+        let compose = (self.compose(&recorded.project, Some(&workspace.path))).await?;
         compose.stop().await?;
         recorded.project.state = ContainerState::Stopped;
         recorded.project.acquirer = Acquirer::User;
@@ -322,16 +317,12 @@ impl Leases {
     /// while the worktree has it, then by its name alone, so a deleted
     /// worktree or a broken Compose file still removes it. A failure keeps
     /// the record, and with it the workspace.
-    pub async fn remove_containers(
-        &self,
-        daemon: &dyn Daemon,
-        workspace: &Workspace,
-    ) -> Result<()> {
+    pub async fn remove_containers(&self, workspace: &Workspace) -> Result<()> {
         let _gate = self.gates.lock_containers(&workspace.id).await;
         let Some(recorded) = self.container_project(&workspace.id).await? else {
             return Ok(());
         };
-        let compose = (self.compose(daemon, &recorded.project, Some(&workspace.path))).await?;
+        let compose = (self.compose(&recorded.project, Some(&workspace.path))).await?;
         (compose.down().await).with_context(|| {
             format!(
                 "the containers of {} were not removed; retaining it",
@@ -356,7 +347,7 @@ impl Leases {
                 return Ok(());
             }
             let worktree = daemon.workspace_by_id(workspace).await?.part.path;
-            self.compose(daemon, &recorded.project, Some(&worktree))
+            self.compose(&recorded.project, Some(&worktree))
                 .await?
                 .stop()
                 .await?;
@@ -383,12 +374,10 @@ impl Leases {
     /// ports in their variables, as the file reads them.
     async fn compose<'a>(
         &self,
-        daemon: &dyn Daemon,
         project: &'a ContainerProject,
         worktree: Option<&'a Path>,
     ) -> Result<Compose<'a>> {
-        let ports =
-            (self.list_ports(daemon, Some(&SpaceSelector::id(&project.workspace_id)))).await?;
+        let ports = self.reserved_ports(Some(&project.workspace_id)).await?;
         Ok(Compose::at(project, worktree, ports).await)
     }
 
@@ -410,12 +399,7 @@ impl Leases {
             .as_ref()
             .ok()
             .map(|workspace| workspace.path.as_path());
-        let listed = async {
-            self.compose(daemon, &project, worktree)
-                .await?
-                .services()
-                .await
-        };
+        let listed = async { self.compose(&project, worktree).await?.services().await };
         let (services, services_error) = match listed.await {
             Ok(services) => (services, None),
             Err(error) => (Vec::new(), Some(format!("{error:#}"))),

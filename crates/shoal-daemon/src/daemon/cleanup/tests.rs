@@ -129,7 +129,7 @@ async fn deleted_parent_sweep_releases_leases_and_keeps_a_branch_with_work() {
         assert!(
             manager
                 .leases
-                .list_ports(&*manager, None)
+                .reserved_ports(None)
                 .await
                 .unwrap()
                 .is_empty()
@@ -583,7 +583,7 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
     assert!(
         manager
             .leases
-            .list_ports(&*manager, None)
+            .reserved_ports(None)
             .await
             .unwrap()
             .is_empty()

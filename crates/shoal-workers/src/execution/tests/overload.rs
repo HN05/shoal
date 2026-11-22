@@ -11,8 +11,9 @@ use shoal_core::execution::recovery::SavedExt as _;
 use shoal_daemon::test_daemon::{
     Manager, StopRequest,
     overload::{
-        bounded, configure_disk_fixture, configure_fixture, execution_agent, fixture, record_group,
-        report_session, serve_fixture, wait_launched, wait_paused, wait_started,
+        Site, bounded, chat_fixture, configure_disk_fixture, configure_fixture, execution_agent,
+        fixture, record_group, report_session, serve_fixture, wait_launched, wait_paused,
+        wait_started,
     },
 };
 use shoal_ids::execution_ids::ExecutionId;
@@ -808,6 +809,38 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
             .unwrap()
             .iter()
             .any(|event| event.kind == AlertKind::AgentResumed)
+    );
+    serving.abort();
+}
+
+#[tokio::test]
+async fn overload_restores_a_chats_agent_as_a_workspaces() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let (chat, checkout) = chat_fixture(&manager, &workspace).await;
+    let site = Site {
+        id: &chat.id,
+        dir: &checkout,
+    };
+    let mut command = crate::test_support::isolated_test(
+        &manager.paths.home,
+        "execution::tests::overload::tracked_agent_child",
+    );
+    command.env("SHOAL_TEST_WORKSPACE", &chat.id);
+    let launched = run_child(command);
+    wait_started(&manager, site).await;
+    assert!(
+        manager
+            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
+            .await
+    );
+    wait_paused(&manager, site).await;
+    wait_restore_queued(&manager).await;
+    let epoch = manager.overload_recovery.epoch();
+    manager.overload_recovery.publish(Some(epoch));
+    assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
+    assert_eq!(
+        fs::read_to_string(checkout.join("restored")).unwrap(),
+        "restored"
     );
     serving.abort();
 }

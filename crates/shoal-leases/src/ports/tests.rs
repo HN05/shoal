@@ -114,7 +114,7 @@ async fn release(fixture: &Fixture) {
 }
 
 async fn reserved(fixture: &Fixture) -> Vec<u16> {
-    let listed = fixture.leases.list_ports(&fixture.daemon, None).await;
+    let listed = fixture.leases.reserved_ports(None).await;
     listed.unwrap().into_iter().map(|port| port.port).collect()
 }
 

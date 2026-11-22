@@ -24,7 +24,6 @@ use crate::{
     model::PortReservation,
     protocol::{Control, ExecutionEvent, timing},
 };
-use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) enum Action {
     Resume(Resumed),
@@ -443,10 +442,7 @@ impl Resumes<'_> {
             workspace_id,
             ..
         } = self;
-        let ports = manager
-            .leases
-            .list_ports(manager, Some(&SpaceSelector::id(workspace_id)))
-            .await?;
+        let ports = manager.leases.reserved_ports(Some(workspace_id)).await?;
         let (claim, narrowing) = self.saved_narrowing().await?;
         if !manager.resume_agent_execution(execution_id, grant).await? {
             return Ok(Action::Stop(requested_cancel(manager, execution_id).await));

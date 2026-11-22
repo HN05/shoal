@@ -1,9 +1,11 @@
 //! The overload tests' fixture: a manager serving its socket, with a
-//! workspace whose agent restores through a configured command, and the
-//! tracked agents and commands the tests start in it.
+//! workspace, and on request a chat, whose agents restore through a
+//! configured command, and the tracked agents and commands the tests start
+//! in them.
 use std::{
     fs::{self, OpenOptions},
     future::Future,
+    path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -17,6 +19,7 @@ use crate::daemon::{
 use crate::execution::recovery::{Record, RecordExt as _, record_path};
 use crate::model::Execution;
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// A hang guard, not a deadline for process scans on a shared CI host. Its
@@ -158,12 +161,65 @@ pub fn serve_fixture(manager: Arc<Manager>) -> tokio::task::JoinHandle<()> {
     })
 }
 
+/// Record a chat without an agent in the checkout of the fixture's
+/// repository, whose agent restores through the configured command as the
+/// fixture's workspace's does, returning it with the checkout.
+pub async fn chat_fixture(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+) -> (crate::model::Chat, PathBuf) {
+    let repository = workspace.repository().clone();
+    let checkout = (manager.repositories.repository(repository.clone()))
+        .await
+        .unwrap()
+        .path;
+    install_test_script(
+        checkout.join("resume.sh"),
+        "#!/bin/sh\nprintf restored > restored\n",
+    );
+    fs::write(
+        checkout.join(".shoal.toml"),
+        "[agents.fixture]\nresume_command = ['./resume.sh']\n",
+    )
+    .unwrap();
+    let new = crate::daemon::chats::NewChat {
+        name: "talk".into(),
+        agent: "fixture".into(),
+        mode: crate::model::chat_mode(),
+        narrowing: Default::default(),
+        origin: None,
+        parent: None,
+        priority: None,
+    };
+    let chat = (manager.start_new_chat(Some(repository.into()), None, new))
+        .await
+        .unwrap();
+    (chat, checkout)
+}
+
+/// Where a fixture's agent runs: its space, and the directory it starts in,
+/// where it writes its markers.
+#[derive(Clone, Copy)]
+pub struct Site<'a> {
+    pub id: &'a SpaceId,
+    pub dir: &'a Path,
+}
+
+impl<'a> From<&'a crate::model::Workspace> for Site<'a> {
+    fn from(workspace: &'a crate::model::Workspace) -> Self {
+        Self {
+            id: &workspace.id,
+            dir: &workspace.path,
+        }
+    }
+}
+
 #[track_caller]
 pub fn wait_started<'a>(
     manager: &'a Manager,
-    workspace: &'a crate::model::Workspace,
+    site: impl Into<Site<'a>>,
 ) -> impl Future<Output = ()> + 'a {
-    wait_launched(manager, workspace, "started", 1)
+    wait_launched(manager, site.into(), "started", 1)
 }
 
 /// Waits until the child has written `marker`, so its TERM trap is set, and
@@ -174,13 +230,14 @@ pub fn wait_started<'a>(
 #[track_caller]
 pub fn wait_launched<'a>(
     manager: &'a Manager,
-    workspace: &'a crate::model::Workspace,
+    site: impl Into<Site<'a>>,
     marker: &'a str,
     executions: usize,
 ) -> impl Future<Output = ()> + 'a {
+    let site = site.into();
     bounded(async move {
         loop {
-            let id = workspace.id.clone();
+            let id = site.id.clone();
             let recorded = manager
                 .store
                 .run(move |db| {
@@ -191,7 +248,7 @@ pub fn wait_launched<'a>(
                 })
                 .await
                 .unwrap();
-            if workspace.path.join(marker).is_file() && recorded >= executions {
+            if site.dir.join(marker).is_file() && recorded >= executions {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -203,11 +260,12 @@ pub fn wait_launched<'a>(
 #[track_caller]
 pub fn wait_paused<'a>(
     manager: &'a Manager,
-    workspace: &'a crate::model::Workspace,
+    site: impl Into<Site<'a>>,
 ) -> impl Future<Output = ()> + 'a {
+    let site = site.into();
     bounded(async move {
         loop {
-            let id = workspace.id.clone();
+            let id = site.id.clone();
             let paused = manager
                 .store
                 .run(move |db| {
