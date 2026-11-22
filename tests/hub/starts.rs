@@ -260,11 +260,10 @@ fn a_copy_on_another_machine_forks_the_copied_workspace_s_agent() {
             .hub
             .output(create.args(["create", "--branch", "kid"]));
         assert!(created.status.success(), "{}", printed(&created));
+        // The laptop decides the start, by the hub's directory, which
+        // learns that the child is ready after the hub's own state does.
         let kid = machines.hub.id("kid");
-        wait_for("the child's preparation", || {
-            let status = machines.hub.ok(&["status", &kid]);
-            (status["workspace"]["state"] == "ready").then_some(())
-        });
+        ready_at(&machines.laptop, &kid, &hub_machine(&machines.hub));
         format!("--copy --fork --parent {kid} -- 'Take a copy'")
     });
     let listed = machines.laptop.ok(&["list"]);
