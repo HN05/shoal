@@ -69,6 +69,16 @@ pub async fn select_spaces(
     Ok(selected)
 }
 
+/// The spaces `names` select, as [`select_spaces`] takes named ones, never
+/// offering a picker.
+pub async fn named_spaces(ctx: &Context, names: Vec<SpaceSelector>) -> Result<Vec<SpaceSelector>> {
+    let selected = named_workspaces(ctx, names).await?;
+    for space in &selected {
+        recent::record(ctx, space).await;
+    }
+    Ok(selected)
+}
+
 /// The workspaces `names` select, each once and in order by its ID, so a
 /// workspace named both by its name and by its ID is acted on once. A name
 /// no workspace has stays as given, for the daemon to refuse.

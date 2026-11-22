@@ -1,4 +1,5 @@
 //! Checkpoints of workspaces: taking one, and returning a workspace to one.
+use crate::cli::ui::Acting;
 use anyhow::{Context as _, Result, ensure};
 use shoal_refs::BranchName;
 
@@ -20,18 +21,14 @@ pub(in crate::cli::commands) async fn checkpoint(
     workspace: Option<SpaceSelector>,
     name: Option<String>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(
-        ctx,
-        workspace,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-    )
-    .await?;
-    let checkpoint: Checkpoint = ctx
-        .progress(
-            "Taking checkpoint",
-            recovery::checkpoint(&ctx.paths, workspace.clone(), name),
-        )
-        .await?;
+    let taking = {
+        let name = name.clone();
+        Acting::request(move |space| recovery::checkpoint(space, name.clone()))
+    };
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&taking));
+    let workspace = workspace.await?;
+    let taking = recovery::checkpoint(workspace.clone(), name).send(&ctx.paths);
+    let checkpoint: Checkpoint = ctx.progress("Taking checkpoint", taking).await?;
     let files = if checkpoint.files_omitted {
         "; unsaved files include a repository or a changed submodule and were not kept"
     } else {
@@ -54,12 +51,12 @@ pub(super) async fn run(
 ) -> Result<i32> {
     ensure!(spaces.len() <= 1, "--checkpoint takes one workspace");
     let workspace = spaces.into_iter().next();
-    let workspace = ui::select_workspace(
-        ctx,
-        workspace,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-    )
-    .await?;
+    // The checkpoint, which may be picked next, decides nothing of which
+    // spaces a return reaches.
+    let returning =
+        Acting::request(|space| recovery::restore_checkpoint(space, CheckpointNumber::new(1)));
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&returning));
+    let workspace = workspace.await?;
     match checkpoint {
         Some(checkpoint) => restore(ctx, workspace, checkpoint).await,
         None => choose(ctx, workspace).await,
@@ -100,7 +97,7 @@ async fn restore(
     let restored: RestoredCheckpoint = ctx
         .progress(
             "Restoring checkpoint",
-            recovery::restore_checkpoint(&ctx.paths, workspace, checkpoint),
+            recovery::restore_checkpoint(workspace, checkpoint).send(&ctx.paths),
         )
         .await?;
     let files = if restored.checkpoint.files_omitted {

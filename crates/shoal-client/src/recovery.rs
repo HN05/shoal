@@ -3,7 +3,7 @@ use shoal_protocol::recovery::{ReconcileOptions, Report};
 
 use anyhow::Result;
 
-use crate::connection::{Daemon, request};
+use crate::connection::{Daemon, Prepared, request};
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
@@ -12,12 +12,8 @@ use shoal_protocol::{
 };
 
 /// Keep `workspace`'s HEAD and unsaved files as a checkpoint named `name`.
-pub async fn checkpoint(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    name: Option<String>,
-) -> Result<Checkpoint> {
-    request(daemon, RecoveryMethod::Checkpoint { workspace, name }).await
+pub fn checkpoint(workspace: SpaceSelector, name: Option<String>) -> Prepared<Checkpoint> {
+    Prepared::new(RecoveryMethod::Checkpoint { workspace, name })
 }
 
 /// Every checkpoint of `workspace`, read page by page; `None` when the
@@ -47,16 +43,14 @@ pub async fn checkpoints(
 
 /// Return `workspace` to its checkpoint `checkpoint`, keeping the current
 /// state in a new one first.
-pub async fn restore_checkpoint(
-    daemon: &impl Daemon,
+pub fn restore_checkpoint(
     workspace: SpaceSelector,
     checkpoint: CheckpointNumber,
-) -> Result<RestoredCheckpoint> {
-    let method = RecoveryMethod::RestoreCheckpoint {
+) -> Prepared<RestoredCheckpoint> {
+    Prepared::new(RecoveryMethod::RestoreCheckpoint {
         workspace,
         checkpoint,
-    };
-    request(daemon, method).await
+    })
 }
 
 /// Inspect `workspace`, or every workspace, and repair what `options` asks.
