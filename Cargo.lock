@@ -2542,7 +2542,6 @@ dependencies = [
  "libc",
  "ring",
  "rusqlite",
- "rustix",
  "rustls",
  "serde",
  "serde_json",
