@@ -2,7 +2,8 @@
 //! connected machines by the policy `[machine.hub] placement` names, from
 //! a snapshot of the start and each machine as it last described itself
 //! and reported its capacity, which the hub keeps in memory for as long as
-//! it runs. A machine that joined the hub asks it over its link.
+//! it runs, or asks the app registered as the placer. A machine that
+//! joined the hub asks it over its link.
 use std::{collections::HashMap, sync::Mutex};
 
 use anyhow::{Result, anyhow};
@@ -18,7 +19,17 @@ use shoal_schedule::placement::{
     snapshot::{Capacity, Machine, Request, Snapshot},
 };
 
-use crate::{Hub, daemon::Daemon, log};
+use crate::{
+    Hub,
+    daemon::Daemon,
+    log,
+    refusal::{Reason, Refusal},
+};
+
+mod placer;
+
+pub(crate) use placer::Placers;
+pub use placer::Registration;
 
 /// The capacity each machine last reported.
 #[derive(Default)]
@@ -75,8 +86,39 @@ impl Hub {
         match self.config.current().machine.hub.placement {
             Policy::Local => (Local.place(snapshot), (Policy::Local, None)),
             Policy::Balanced => (Balanced.place(snapshot), (Policy::Balanced, None)),
-            Policy::External => balanced_instead(snapshot, Unanswered::NoPlacer),
+            Policy::External => self.place_externally(snapshot).await,
         }
+    }
+
+    /// The registered placer's placement of `snapshot`, else the
+    /// `balanced` one.
+    async fn place_externally(&self, snapshot: &Snapshot) -> (Placement, Decided) {
+        let placed = self.placers.ask(snapshot).await;
+        match placed.and_then(|placement| among(placement, snapshot)) {
+            Ok(placement) => (placement, (Policy::External, None)),
+            Err(unanswered) => balanced_instead(snapshot, unanswered),
+        }
+    }
+
+    /// Register the caller as the placer an `external` policy asks, in
+    /// place of the one before, for as long as it keeps the registration;
+    /// refused off the hub's machine, which asks it.
+    pub fn serve_placement(&self, daemon: &dyn Daemon) -> Result<Registration> {
+        if !self.is_hub(daemon) {
+            let message = "the placer registers on the hub's machine, which asks it";
+            return Err(Refusal::new(Reason::NotReady, message).into());
+        }
+        Ok(self.placers.register())
+    }
+
+    /// Take `placement` as the placer's answer to the snapshot `number`;
+    /// refused once the hub no longer waits for it.
+    pub fn answer_placement(&self, number: u64, placement: Placement) -> Result<()> {
+        if !self.placers.answer(number, placement) {
+            let message = format!("the hub no longer waits for an answer to placement {number}");
+            return Err(Refusal::new(Reason::NotFound, message).into());
+        }
+        Ok(())
     }
 
     /// Give each connected machine among `members` the capacity it last
@@ -100,6 +142,18 @@ fn balanced_instead(snapshot: &Snapshot, unanswered: Unanswered) -> (Placement, 
         Balanced.place(snapshot),
         (Policy::Balanced, Some(unanswered)),
     )
+}
+
+/// `placement`, where it chooses a machine of `snapshot`; else the placer
+/// that made it failed.
+fn among(placement: Placement, snapshot: &Snapshot) -> Result<Placement, Unanswered> {
+    let chosen = placement.chosen().map(|placed| &placed.machine);
+    let known = chosen
+        .is_some_and(|chosen| (snapshot.machines.iter()).any(|machine| &machine.id == chosen));
+    match known {
+        true => Ok(placement),
+        false => Err(Unanswered::Failed),
+    }
 }
 
 /// The connected machines among `members`, as placement reads them.

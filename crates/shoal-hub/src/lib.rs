@@ -24,6 +24,7 @@ use shoal_store::Store;
 pub use forwarding::{Elsewhere, Unanswered, files_stay_here};
 pub use machines::Named;
 pub use owners::ClaimFailure;
+pub use placement::Registration;
 pub use streams::{Incoming, Outgoing};
 pub use telling::Event;
 
@@ -123,6 +124,8 @@ pub struct Hub {
     sharing: shared_config::Sharing,
     /// As the hub: the capacity each machine last reported.
     capacities: placement::Capacities,
+    /// As the hub: the app registered as the placer.
+    placers: placement::Placers,
 }
 
 impl Hub {
@@ -157,6 +160,7 @@ impl Hub {
             reported: Default::default(),
             sharing: Default::default(),
             capacities: Default::default(),
+            placers: Default::default(),
         }
     }
 }

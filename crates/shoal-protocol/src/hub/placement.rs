@@ -37,7 +37,15 @@ shoal_states::states! {
         NoPlacer => "no_placer",
         /// The placer did not answer in time.
         Late => "late",
-        /// The placer answered with an error, or a machine it cannot go to.
+        /// The placer chose no machine the start can go to.
         Failed => "failed",
     }
+}
+
+/// A snapshot the hub asks the registered placer to place, which it
+/// answers by `number`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Asked {
+    pub number: u64,
+    pub snapshot: shoal_schedule::placement::snapshot::Snapshot,
 }
