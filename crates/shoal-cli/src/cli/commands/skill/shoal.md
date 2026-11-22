@@ -588,7 +588,8 @@ asking, and affects neither completion nor cleanup. `--space`, `--all` and
 send your space alerts, such as a request to free memory or disk space. Hooks
 deliver them with PR activity; a new one also ends `shoal watch pr` with an
 `alerts` array, and `shoal alert list` shows them. Each is shown once, and
-lists each file attached to it as an `Attached file:` path. `shoal send`
+lists each file attached to it as an `Attached file:` line with its path, or
+its name and machine for one another machine keeps. `shoal send`
 prints each alert's number, by which its sender withdraws it until it is
 read; `--space` names the space it went to, as for one on another machine.
 `--in-chat` sends your turn's final message as the alert once the turn

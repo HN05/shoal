@@ -313,7 +313,15 @@ appends, unread: apps parse each tool's format, so a tool changing it changes
 only the app. A diff of another machine's workspace streams what that
 machine's Git writes under its own config for the repository, run as a plain
 read that is no use of the workspace, while the caller's Git decides its
-colour, width and pager, as it would for a diff run there. Attaching to
+colour, width and pager, as it would for a diff run there. An attached
+file's copy stays on the machine that keeps it: a record that crosses
+machines names that machine instead of a path, which means nothing
+elsewhere, and a client reads the copy by its space and record ID, streamed
+from that machine as a diff is. What a space passes up to another machine
+carries its files' records, so the user or coordinator there reads them the
+same way, and a terminal there opens one only after fetching it into a
+directory marked as Shoal's, its repository's where that machine has it,
+else `root_dir`'s. Attaching to
 another machine's session runs Shoal's own attach there, as the user, on a
 terminal that machine makes at the viewer's size, so waking, restoring,
 choosing a session and the host's attach stay one code path; a host callback

@@ -863,6 +863,10 @@ revoked.
 Shoal copies the bytes unread, so
 the app parses each tool's format itself and sends input through the requests
 the protocol has.
+`files::read` reads the bytes of a space's [attached file](#attached-files) by
+the space and the file's record ID, which an alert's or a post's file record
+gives with its `space`, on whichever machine of the hub keeps its copy, under
+the scope that lists it; it fails at once while that machine is offline.
 `demos::open_stream` opens a stream to a running [demo](#demos) of a space on
 whichever machine of the hub it runs, by the space and the demo's name: it
 returns the demo, then its connection carries the demo's bytes both ways until
@@ -1164,8 +1168,11 @@ permissions, which its machine vouches for, so an agent acts on the spaces
 below its own on every machine and is refused the rest, and a device's go as
 yours. An action a space's permission sets to `propose` is refused from another
 machine, since its approval request would belong to that space's machine. This covers every command
-that reads or changes a space's state, and following an agent's session,
-whose bytes come back as its machine reads them. The link to the hub carries such answers as byte streams beside
+that reads or changes a space's state, and following an agent's session and
+reading an attached file, whose bytes come back as its machine reads them. An
+attached file stays on the machine that keeps its copy: a record of it from
+another machine, in `shoal files`, an alert or a thread, names that machine
+where it would give the copy's path. The link to the hub carries such answers as byte streams beside
 its other traffic, each held to what its reader has taken, so a reader that
 falls behind holds up nothing else. A machine that received a request but
 did not answer it in time fails the command, saying that the request may go
@@ -6977,8 +6984,9 @@ output that is not a terminal lists them, oldest first: the newest `--limit`
 it came in, its number, its sender, its recipient and its text: the local
 time for today's, otherwise whole days, weeks, months or years ago, such as
 `1 day ago` or `2 weeks ago`, followed by an `Attached file:` line with the
-path of each file sent with it; `--json` gives each file's record `id`,
-`name`, `title` and `path`. Showing the alerts of one recipient marks them
+path of each file sent with it, or its name and the machine that keeps it for
+one a space on another machine sent; `--json` gives each file's record `id`,
+`space`, `name`, `title` and `path`, or `machine` in place of `path`. Showing the alerts of one recipient marks them
 read unless `--keep-unread`; `--all` marks none. On a terminal, `--follow` also sends each of the user's
 alerts as an OSC 9 terminal notification, which iTerm2, Ghostty, WezTerm, and
 Kitty show as a desktop notification (tmux needs `allow-passthrough`); other
@@ -7063,10 +7071,14 @@ shoal files rm --all                      # Delete the files of every idle works
 ```
 
 `shoal files` lists the files attached to a space, a workspace or
-[chat](#chats), or on a terminal opens a picker over them with a `+ Add file` row: Enter prints a text file, Ctrl-Y its
+[chat](#chats), here or on another joined machine, or on a terminal opens a
+picker over them with a `+ Add file` row: Enter prints a text file, Ctrl-Y its
 copy's path, Ctrl-O opens it in the application the desktop chooses and prints
 its path, Ctrl-D deletes that copy as `rm` does, and Ctrl-A, or Enter on the
-add row, asks for a file to add. Workspace processes cannot open files.
+add row, asks for a file to add. Ctrl-O first fetches a file another machine
+keeps into `.fetched` beside the workspaces of its repository, where this
+machine has the repository, else in `root_dir`, replacing the copy an earlier
+Ctrl-O fetched. Workspace processes cannot open files.
 `-p`/`--print`, like `--json`, `--path` or output that is not a
 terminal, lists them: each one's name, title, size,
 how it came (`message` for a file sent down with `shoal send --attach`,
@@ -7074,17 +7086,19 @@ how it came (`message` for a file sent down with `shoal send --attach`,
 `shoal done --attach`, `alert` and `thread` for one sent with
 `shoal send --attach` up and with a post in a thread), when, and the path of Shoal's copy in the repository
 directory's `.attachments`, or for a chat without a repository that of the
-`root_dir` it started in.
+`root_dir` it started in, or for another machine's space that machine;
+`--path` lists only the paths of the copies this machine keeps.
 A space's files outlive it: they stay for `cleanup.restore.retention_days`
 after its removal, like a workspace's
-[checkpoints](#checkpoints-and-restore), and `shoal files <id>` still lists
-them, with when they go, and deletes them with `rm`. `shoal restore` gives
+[checkpoints](#checkpoints-and-restore), and `shoal files <id>` on its
+machine still lists them, with when they go, and deletes them with `rm`;
+another machine neither lists nor reads them once the space is removed. `shoal restore` gives
 them back to the space it reopens, where they were. Disk space cleanup
 deletes them sooner when nothing else frees enough space. A space is named by
 the workspace's or chat's number or ID, a removed one's by ID; run from a chat's agent outside any workspace, `shoal files`, `add`
 and `rm` act on its chat.
 `--json` gives each as a record with `space`, what it is attached to, by its
-`id`, its `name` then or its last once removed, and its `kind`, `source`, `path`, `bytes`, `title` when it has one, and
+`id`, its `name` then or its last once removed, and its `kind`, `source`, `path`, or `machine` for a copy another machine keeps, `bytes`, `title` when it has one, and
 `attached_by`:
 `{"kind": "user"}` for a file attached from outside any agent,
 or `{"kind": "agent"}` with the agent's name as `agent`, a workspace's or a
