@@ -94,8 +94,10 @@ instead of the PR delivery guidance below.
   scope, approvals, identity choice and workspace records stay in the daemon.
   Flag a request, or a dependency that sends one, in `shoal-forge-types`, a
   re-export of its types from `shoal-forge`, and a match on the forge kind
-  outside a forge's implementation of `Routes`, `Backend` or an area trait
-  over it, a backend `impl` that spans several areas, and a match that picks
+  outside a forge's implementation of `Routes` or of a `shoal-forge`
+  module's trait for what forges do their own way, a backend `impl` that
+  spans several of those traits, a `shoal-forge` module outside `backends`
+  that names it, and a match that picks
   `issue`, `pull` or `run` by an item's kind outside `ForgeRepo`'s one
   operation for it.
 - The minimum Rust version follows current stable; keep the manifest and CI

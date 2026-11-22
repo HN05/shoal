@@ -121,11 +121,12 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `shoal-forge-types` and `shoal-subprocess`. It takes the account to act
   as, while scope, approvals, identity choice and workspace records stay in
   the daemon. What one forge does its own way belongs in its implementation
-  of `Routes` in `shoal-forge-types`, where reading a URL needs it, or of
-  `Backend` or the area trait over it that covers it, such as `Runs`, in
-  that area's module of `shoal-forge`, never in a match on the forge kind,
-  and reading an issue, PR or run by its kind goes through `ForgeRepo`'s one
-  operation for it.
+  of `Routes` in `shoal-forge-types`, where reading a URL needs it, or else
+  of the trait of the `shoal-forge` module that covers it, such as
+  `transport`'s `Backend` or `ci`'s `Runs`, which each forge implements in
+  its module under `backends`, never in a match on the forge kind; no other
+  module names `backends`, and reading an issue, PR or run by its kind
+  goes through `ForgeRepo`'s one operation for it.
 - Apps use Shoal's protocol through the `shoal-client` crate, with no
   compatibility promise: the protocol changes freely and only the exact
   version match protects a client. `crates/shoal-protocol` holds the types
