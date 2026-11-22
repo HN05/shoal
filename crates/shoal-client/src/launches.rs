@@ -11,13 +11,19 @@ use shoal_protocol::{
     protocol::Launched,
 };
 
-use crate::connection::{Daemon, request};
+use crate::connection::{Daemon, Prepared, request};
 
 /// Start an agent as `launch` asks, and return where it starts once its
 /// space has it.
 pub async fn launch(daemon: &impl Daemon, launch: Launch) -> Result<Launched> {
+    launch_request(launch).send(daemon).await
+}
+
+/// What [`launch`] sends for `launch`, as the picker that chooses the space
+/// it starts in judges it.
+pub fn launch_request(launch: Launch) -> Prepared<Launched> {
     let launch = Box::new(launch);
-    request(daemon, LaunchMethod::Launch { launch }).await
+    Prepared::new(LaunchMethod::Launch { launch })
 }
 
 /// Refuse what the daemon would refuse of the new workspace `launch`

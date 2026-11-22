@@ -136,6 +136,6 @@ pub async fn git_credential(daemon: &impl Daemon, host: String) -> Result<Option
 }
 
 /// The session of the agent in `space`, which a fork starts from.
-pub async fn session(daemon: &impl Daemon, space: SpaceSelector) -> Result<AgentSession> {
-    request(daemon, AgentMethod::AgentSession { space }).await
+pub fn session(space: SpaceSelector) -> Prepared<AgentSession> {
+    Prepared::new(AgentMethod::AgentSession { space })
 }

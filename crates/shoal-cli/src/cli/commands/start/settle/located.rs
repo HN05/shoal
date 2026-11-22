@@ -1,6 +1,7 @@
 //! The launch a start's arguments ask for, made where the start is made:
 //! the spaces it names by ID, the copy it copies, the session `--fork`
 //! forks, its task, and the terminal it is made in.
+use crate::cli::ui::Acting;
 use std::ffi::OsString;
 
 use anyhow::Result;
@@ -30,12 +31,18 @@ pub(super) async fn launch(ctx: &Context, args: &StartArgs) -> Result<Launch> {
         launch.parent = Some(SpaceSelector::Id(space_id(ctx, parent).await?));
     }
     if let Some(workspace) = args.in_workspace.clone() {
-        let selected = ui::select_workspace(
-            ctx,
-            workspace,
-            Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-        )
-        .await?;
+        let starting = {
+            let launch = launch.clone();
+            Acting::request(move |space| {
+                let launch = shoal_protocol::launches::Launch {
+                    in_workspace: Some(Some(space).into()),
+                    ..launch.clone()
+                };
+                crate::client::launches::launch_request(launch)
+            })
+        };
+        let selected = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&starting));
+        let selected = selected.await?;
         launch.in_workspace = Some(Some(selected).into());
     }
     let copied = copies::source(ctx, args.copy.clone()).await?;
@@ -112,17 +119,15 @@ async fn forked(
     space: Option<SpaceSelector>,
     agent: Option<Agent>,
 ) -> Result<(SpaceSelector, Agent, AgentSessionId)> {
-    let space = ui::select_space(
-        ctx,
-        space,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-    )
-    .await?;
+    let reading = Acting::request(crate::client::agents::session);
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&reading)).await?;
     let AgentSession {
         agent: running,
         session,
         ..
-    } = crate::client::agents::session(&ctx.paths, space.clone()).await?;
+    } = crate::client::agents::session(space.clone())
+        .send(&ctx.paths)
+        .await?;
     let agent = match agent {
         Some(agent) => agent,
         None => running.name().parse()?,

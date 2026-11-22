@@ -4,6 +4,7 @@
 //! on another machine attaches through a terminal the space's machine
 //! makes for them.
 
+use crate::cli::ui::Acting;
 use anyhow::{Result, ensure};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::attaching::Viewer;
@@ -266,7 +267,9 @@ async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Chosen> {
         &chats,
         Offered::Spaces,
         "workspace",
-        &crate::cli::ui::Acting::Unconverted,
+        &Acting::request(|space| {
+            crate::client::attaching::attach_request(space, Default::default())
+        }),
     )
     .await?;
     match crate::client::spaces::locate(&ctx.paths, SpaceSelector::id(&id)).await? {

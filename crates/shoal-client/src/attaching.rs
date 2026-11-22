@@ -14,7 +14,7 @@ use tokio::{
     net::UnixStream,
 };
 
-use crate::connection::{Daemon, open_buffered};
+use crate::connection::{Daemon, Prepared, Sendable as _, open_buffered};
 
 type Connection = BufReader<UnixStream>;
 
@@ -32,13 +32,19 @@ pub async fn attach(
     space: SpaceSelector,
     viewer: Viewer,
 ) -> Result<(Screen, Keys)> {
-    let method = SpaceMethod::AttachSession { space, viewer };
+    let method = attach_request(space, viewer).into_operation();
     let (connection, body) = open_buffered(daemon, method).await?;
     match body.into_result()? {
         Body::Ok => {}
         body => return Err(body.unexpected("Ok")),
     }
     Ok(split(connection))
+}
+
+/// What [`attach`] sends for `viewer` to attach to `space`, as the picker
+/// that chooses the space judges it.
+pub fn attach_request(space: SpaceSelector, viewer: Viewer) -> Prepared<()> {
+    Prepared::new(SpaceMethod::AttachSession { space, viewer })
 }
 
 /// The two ways of a connection that carries a terminal's frames.
