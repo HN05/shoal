@@ -282,8 +282,9 @@ impl Packages for Manager {
         &'a self,
         id: &'a SpaceId,
         from: &'a str,
+        departure: shoal_protocol::hub::packages::Departure,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(Manager::continue_handed_over(self, id, from))
+        Box::pin(Manager::continue_handed_over(self, id, from, departure))
     }
 }
 

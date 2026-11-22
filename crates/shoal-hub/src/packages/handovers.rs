@@ -16,6 +16,7 @@ use shoal_protocol::{
     alerts::AlertKind,
     hub::{
         link::{Call, Reply},
+        packages::Departure,
         placement::Decision,
     },
 };
@@ -60,7 +61,7 @@ impl Hub {
                 (Ok(()), Some(workspace), _) => {
                     (hub.handovers.placed_workspace(workspace, &from)).map(Some)
                 }
-                (Ok(()), None, Some(start)) => hub.place_handover(&*daemon, &from, start).await,
+                (Ok(()), None, Some(start)) => hub.place_elsewhere(&*daemon, &from, start).await,
                 (Ok(()), None, None) => Ok(None),
                 (Err(error), _, _) => Err(error),
             };
@@ -77,10 +78,9 @@ impl Hub {
         Ok(())
     }
 
-    /// Where a space that the machine `from` hands over goes for `start`,
-    /// among the connected machines but `from`, the hub's own as the
-    /// caller's.
-    async fn place_handover(
+    /// Where a space that leaves the machine `from` goes for `start`, among
+    /// the connected machines but `from`, the hub's own as the caller's.
+    pub(super) async fn place_elsewhere(
         &self,
         daemon: &dyn Daemon,
         from: &MemberId,
@@ -102,7 +102,8 @@ impl Hub {
         decision: &Decision,
     ) {
         self.handovers.start(id, &decision.machine);
-        let continued = self.ask_to_continue(daemon, id, from, &decision.machine);
+        let departure = Departure::ShutDown;
+        let continued = self.ask_to_continue(daemon, id, (from, &decision.machine), departure);
         let continued = continued.await;
         self.handovers.end(id);
         if continued.is_ok() {
@@ -110,9 +111,8 @@ impl Hub {
         }
         if let Err(error) = continued {
             log!("hub: space {id} handed over did not continue: {error:#}");
-            let message = self
-                .failed_message(daemon, id, from, decision, &error)
-                .await;
+            let failed = (decision, departure);
+            let message = self.failed_message(daemon, id, from, failed, &error).await;
             let about = About::named(None);
             (self.notify(daemon, about, AlertKind::HandoverFailed, message)).await;
         }
@@ -160,19 +160,21 @@ impl Hub {
         }
     }
 
-    /// Ask the machine `to` to continue the space `id`, which the machine
-    /// `from` handed over, answering the call here for the hub's own.
-    async fn ask_to_continue(
+    /// Ask the machine `to` to continue the space `id`, which leaves the
+    /// machine `from` for `departure`, answering the call here for the
+    /// hub's own.
+    pub(super) async fn ask_to_continue(
         &self,
         daemon: &dyn Daemon,
         id: &SpaceId,
-        from: &MemberId,
-        to: &MemberId,
+        (from, to): (&MemberId, &MemberId),
+        departure: Departure,
     ) -> Result<()> {
         let from = self.hub_machine(daemon, from).await?.name;
         let call = Call::Continue {
             space: id.clone(),
             from,
+            departure,
         };
         let reply = if to == &self.own_member().await? {
             self.answer_hub_call(daemon, call).await?
@@ -187,25 +189,40 @@ impl Hub {
         }
     }
 
-    /// What the user reads of the space `id`, which the machine `from`
-    /// handed over and which did not continue on the machine `decision`
-    /// names, failing with `error`.
-    async fn failed_message(
+    /// What the user reads of the space `id`, which left the machine
+    /// `from` for `departure` and did not continue on the machine
+    /// `decision` names, failing with `error`.
+    pub(super) async fn failed_message(
         &self,
         daemon: &dyn Daemon,
         id: &SpaceId,
         from: &MemberId,
-        decision: &Decision,
+        (decision, departure): (&Decision, Departure),
         error: &anyhow::Error,
     ) -> String {
-        let from = match self.hub_machine(daemon, from).await {
-            Ok(machine) => machine.name,
-            Err(_) => from.to_string(),
+        let from = self.member_name(daemon, from).await;
+        let (left, back) = match departure {
+            Departure::ShutDown => (
+                format!("which machine {from} handed over as it shut down"),
+                format!("where shoal resume {id} continues it once that machine is back"),
+            ),
+            Departure::Slept => (
+                format!("which the hub took over from machine {from} as it slept"),
+                "where it goes on once that machine wakes".to_owned(),
+            ),
         };
         format!(
-            "Space {id}, which machine {from} handed over as it shut down, did not continue on machine {}: {error:#}; it stays on {from}, where shoal resume {id} continues it once that machine is back, while shoal restore {id} takes it over from the hub's package meanwhile",
+            "Space {id}, {left}, did not continue on machine {}: {error:#}; it stays on {from}, {back}, while shoal restore {id} takes it over from the hub's package meanwhile",
             decision.name
         )
+    }
+
+    /// The name of the machine `member`, its ID where the hub lists none.
+    pub(super) async fn member_name(&self, daemon: &dyn Daemon, member: &MemberId) -> String {
+        match self.hub_machine(daemon, member).await {
+            Ok(machine) => machine.name,
+            Err(_) => member.to_string(),
+        }
     }
 }
 

@@ -420,10 +420,14 @@ pub enum Call {
     /// [`Reply::Delivered`].
     Stay,
     /// The hub's call to the machine its placement chose for the space
-    /// `space`, which the machine named `from` handed over as it shut
-    /// down: it continues the space from the package the hub keeps of it.
-    /// Answered with [`Reply::Delivered`] once the space continues there.
-    Continue { space: SpaceId, from: String },
+    /// `space`, which leaves the machine named `from` for `departure`: it
+    /// continues the space from the package the hub keeps of it. Answered
+    /// with [`Reply::Delivered`] once the space continues there.
+    Continue {
+        space: SpaceId,
+        from: String,
+        departure: super::packages::Departure,
+    },
     /// The directory of every machine's spaces. Answered with
     /// [`Reply::Directory`].
     Directory,

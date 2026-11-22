@@ -204,8 +204,14 @@ impl Hub {
                 Ok(Reply::Delivered)
             }
             Call::Retire { spaces } => Ok(Reply::Retired(self.retire(daemon, spaces).await)),
-            Call::Continue { space, from } => {
-                daemon.continue_handed_over(&space, &from).await?;
+            Call::Continue {
+                space,
+                from,
+                departure,
+            } => {
+                daemon
+                    .continue_handed_over(&space, &from, departure)
+                    .await?;
                 Ok(Reply::Delivered)
             }
             _ => bail!("a machine answers only what the hub passes it from other machines"),

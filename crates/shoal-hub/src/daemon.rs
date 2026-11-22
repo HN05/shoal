@@ -20,7 +20,7 @@ use shoal_protocol::{
     approvals::ApprovalRequest,
     config::permissions::Permissions,
     files::SentFile,
-    hub::{Member, routing::ChainedMode},
+    hub::{Member, packages::Departure, routing::ChainedMode},
     model::{QueueEntry, RemovedSpace, Repository, RunningAgent, Space},
     protocol::{AppMethod, Request},
     saved::SavedSummary,
@@ -247,13 +247,14 @@ pub trait Packages: Send + Sync {
         packaged: &'a RemovedSpace,
     ) -> BoxFuture<'a, Result<shoal_schedule::placement::snapshot::Request>>;
 
-    /// Continue here the space `id`, which the machine named `from` handed
-    /// over as it shut down, from the package the hub keeps of it: import
-    /// it under its ID, taking it over, and queue its agents' restores.
+    /// Continue here the space `id`, which left the machine named `from`
+    /// for `departure`, from the package the hub keeps of it: import it
+    /// under its ID, taking it over, and queue its agents' restores.
     fn continue_handed_over<'a>(
         &'a self,
         id: &'a SpaceId,
         from: &'a str,
+        departure: Departure,
     ) -> BoxFuture<'a, Result<()>>;
 }
 

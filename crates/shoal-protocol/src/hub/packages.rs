@@ -2,6 +2,7 @@
 //! which another machine takes a space over while its own is gone, and
 //! where a machine shutting down hands its spaces over to.
 use serde::{Deserialize, Serialize};
+use shoal_states::states;
 
 use crate::{model::RemovedSpace, time::UnixTime};
 
@@ -33,5 +34,16 @@ impl Handed {
     /// there, whether or not the hub confirmed it.
     pub fn left(&self) -> bool {
         matches!(self, Self::Went(_) | Self::Unconfirmed(_))
+    }
+}
+
+states! {
+    /// Why the hub continues a space on another machine than its own.
+    Departure {
+        /// Its machine handed it over as it shut down.
+        ShutDown => "shut_down",
+        /// Its machine slept with work to do, long enough for the hub to
+        /// take it over.
+        Slept => "slept",
     }
 }

@@ -396,7 +396,12 @@ impl Packages for StandIn {
         Box::pin(async { bail!("the stand-in daemon hands no spaces over") })
     }
 
-    fn continue_handed_over<'a>(&'a self, _: &'a SpaceId, _: &'a str) -> BoxFuture<'a, Result<()>> {
+    fn continue_handed_over<'a>(
+        &'a self,
+        _: &'a SpaceId,
+        _: &'a str,
+        _: shoal_protocol::hub::packages::Departure,
+    ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { bail!("the stand-in daemon continues no spaces") })
     }
 }
