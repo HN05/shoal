@@ -9,7 +9,6 @@ use crate::{
     agent::Agent,
     agents::HomeRecords,
     cli::{
-        agents::{self, LaunchOptions, ModelRequest, Opening},
         commands::{issues, preparation, queued_agents::Hold},
         context::Context,
     },
@@ -21,6 +20,7 @@ use crate::{
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_workers::launch::{LaunchOptions, ModelRequest, Opening};
 
 /// Run here the agent of the starting launch `entry`, which this process
 /// holds, in the space it names, the place it runs in named as
@@ -150,7 +150,7 @@ async fn launch(
         ..Default::default()
     };
     let args = args.into_iter().map(OsString::from).collect();
-    agents::launch_agent(ctx, agent, space, opening, args, options).await
+    shoal_workers::launch::launch_agent(ctx.caller(), agent, space, opening, args, options).await
 }
 
 /// The scope a scoped process issues itself for the space whose agent it

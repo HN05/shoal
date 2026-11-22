@@ -7,7 +7,6 @@ use crate::client::preparation::{self, Preparing, Unprepared};
 use crate::{
     agent::Agent,
     cli::{
-        agents,
         commands::{
             operations,
             setup::{SetUp, settle_setup},
@@ -149,5 +148,5 @@ async fn enters(ctx: &Context, workspace: &Workspace, agent: Option<&Agent>) -> 
         ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
     )
     .await?;
-    Ok(!agents::runs_in_session(chosen, &settings))
+    Ok(!shoal_workers::launch::runs_in_session(chosen, &settings))
 }

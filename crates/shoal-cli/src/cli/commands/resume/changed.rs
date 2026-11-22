@@ -71,23 +71,24 @@ async fn launch_in(ctx: &Context, space: &Space, start: ChangedStart) -> Result<
         .name()
         .parse()
         .with_context(|| format!("cannot start agent {agent} of {}", space.name))?;
-    let options = crate::cli::agents::LaunchOptions {
+    let options = shoal_workers::launch::LaunchOptions {
         replaces: records,
         fork,
-        model: crate::cli::agents::ModelRequest::Kept(session.model.clone()),
+        model: shoal_workers::launch::ModelRequest::Kept(session.model.clone()),
         narrowing: session.narrowing,
     };
     let mode = session.mode.clone();
     let opening = match change {
-        Change::Converted => crate::cli::agents::Opening::New {
+        Change::Converted => shoal_workers::launch::Opening::New {
             mode,
             subject: Some(told),
         },
-        Change::Copied(_) | Change::Moved => crate::cli::agents::Opening::Told {
+        Change::Copied(_) | Change::Moved => shoal_workers::launch::Opening::Told {
             mode,
             message: told.text,
         },
     };
     let records = shoal_workers::homes::records(&ctx.paths, &SpaceSelector::id(&space.id)).await?;
-    crate::cli::agents::launch_agent(ctx, launch, records, opening, vec![], options).await
+    shoal_workers::launch::launch_agent(ctx.caller(), launch, records, opening, vec![], options)
+        .await
 }

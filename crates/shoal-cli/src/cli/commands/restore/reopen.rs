@@ -105,8 +105,9 @@ async fn reopened_chat(ctx: &Context, restored: RestoredChat) -> Result<Reopened
     for warning in &warnings {
         eprintln!("warning: {warning}");
     }
-    let home = crate::cli::agents::SessionHome::Chat(&chat);
-    crate::cli::agents::install_kept_session_files(ctx, home, &removed, &session_files).await;
+    let home = shoal_workers::launch::SessionHome::Chat(&chat);
+    shoal_workers::launch::install_kept_session_files(&ctx.paths, home, &removed, &session_files)
+        .await;
     for pr in &removed.links.prs {
         let url = pr.url.clone().into();
         crate::opened_pull::link_or_warn(&ctx.paths, &chat.id, &url, pr.title.clone()).await;
@@ -258,9 +259,10 @@ pub(in crate::cli::commands) async fn prepare_reopened(
     for warning in &warnings {
         eprintln!("warning: {warning}");
     }
-    crate::cli::agents::trust_resumed(ctx, &opened.workspace, &removed).await;
-    let home = crate::cli::agents::SessionHome::Workspace(&opened.workspace);
-    crate::cli::agents::install_kept_session_files(ctx, home, &removed, &session_files).await;
+    shoal_workers::launch::trust_resumed(&ctx.paths, &opened.workspace, &removed).await;
+    let home = shoal_workers::launch::SessionHome::Workspace(&opened.workspace);
+    shoal_workers::launch::install_kept_session_files(&ctx.paths, home, &removed, &session_files)
+        .await;
     let mut workspace = opened.workspace;
     if workspace.state == WorkspaceState::Preparing {
         let Some(set_up) = super::super::setup::setup_workspace(ctx, &workspace, false).await?

@@ -27,7 +27,7 @@ pub(in crate::cli::commands) async fn open(
 ) -> Result<i32> {
     // A named app that cannot open is refused before a space is picked.
     if let Some(name) = name {
-        agents::ensure_opens(agents::app(name), &args)?;
+        shoal_workers::launch::ensure_opens(agents::app(name), &args)?;
     }
     let selector = ui::select_space(
         ctx,
@@ -41,9 +41,9 @@ pub(in crate::cli::commands) async fn open(
         Some(name) => name,
         None => default_app(ctx, &space.id).await?,
     });
-    agents::ensure_opens(app, &args)?;
+    shoal_workers::launch::ensure_opens(app, &args)?;
     let repository = repository(ctx, &space).await?;
-    agents::hand_off(ctx, &space, repository.as_ref(), app, args).await
+    shoal_workers::launch::hand_off(&ctx.paths, &space, repository.as_ref(), app, args).await
 }
 
 /// The space `selector` names, among those the caller sees.

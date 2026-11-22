@@ -11,6 +11,7 @@ pub mod git_credential;
 pub mod history;
 pub mod homes;
 pub mod hosting;
+pub mod launch;
 pub mod moves;
 pub mod opened_pull;
 pub mod operations;

@@ -12,8 +12,9 @@ use anyhow::{Result, ensure};
 
 use crate::{
     agent::Agent,
-    cli::{agents::environment, context::Context},
+    client::connection::CommandPaths,
     config::Effective,
+    launch::environment,
     model::{Chat, RemovedSpace, Space, Workspace},
     protocol::ConfigTarget,
 };
@@ -21,7 +22,7 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::transcripts::{self, AgentEnvironment};
 
 /// Whose agents an import's session files go to.
-pub(in crate::cli) enum SessionHome<'a> {
+pub enum SessionHome<'a> {
     /// The workspace the import or restore opened.
     Workspace(&'a Workspace),
     /// The chat the import or restore opened.
@@ -30,7 +31,7 @@ pub(in crate::cli) enum SessionHome<'a> {
 
 /// What an import does with a session file already where it goes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(in crate::cli) enum Existing {
+pub enum Existing {
     /// Replace it with one that continues it, as a session that went to
     /// another machine and came back does.
     Continued,
@@ -41,7 +42,7 @@ pub(in crate::cli) enum Existing {
 
 impl Existing {
     /// What the import of a space does, a `copy` or not.
-    pub(in crate::cli) fn of_copy(copy: bool) -> Self {
+    pub fn of_copy(copy: bool) -> Self {
         match copy {
             true => Self::Kept,
             false => Self::Continued,
@@ -54,8 +55,8 @@ impl Existing {
 /// development build leaves them to the installed Shoal. Failures only
 /// warn; that agent's resume then fails to find its session. Returns
 /// whether every file is in place.
-pub(in crate::cli) async fn install_session_files(
-    ctx: &Context,
+pub async fn install_session_files(
+    paths: &CommandPaths,
     home: SessionHome<'_>,
     files: &[CarriedSessionFile],
     existing: Existing,
@@ -67,9 +68,9 @@ pub(in crate::cli) async fn install_session_files(
         SessionHome::Workspace(workspace) => Space::from(workspace.clone()),
         SessionHome::Chat(chat) => Space::from(chat.clone()),
     };
-    let space_environment = environment::agent_environment(ctx, &space).await;
+    let space_environment = environment::agent_environment(paths, &space).await;
     let target = ConfigTarget::space(&space);
-    place_session_files(ctx, (target, &space_environment), files, existing).await
+    place_session_files(paths, (target, &space_environment), files, existing).await
 }
 
 /// Put `files` where the agents look for them under the settings of
@@ -78,16 +79,16 @@ pub(in crate::cli) async fn install_session_files(
 /// build leaves them to the installed Shoal. Failures only warn; that
 /// agent's start from the session then fails to find it. Returns whether
 /// every file is in place.
-pub(in crate::cli) async fn place_session_files(
-    ctx: &Context,
+pub async fn place_session_files(
+    paths: &CommandPaths,
     (target, space_environment): (ConfigTarget, &BTreeMap<String, OsString>),
     files: &[CarriedSessionFile],
     existing: Existing,
 ) -> bool {
-    if !crate::build::changes_user_files() {
+    if !shoal_core::build::changes_user_files() {
         return false;
     }
-    let settings = match shoal_workers::settings::of(&ctx.paths, target).await {
+    let settings = match crate::settings::of(paths, target).await {
         Ok(settings) => settings,
         Err(error) => {
             eprintln!("warning: cannot place the agents' session files: {error:#}");
@@ -100,7 +101,7 @@ pub(in crate::cli) async fn place_session_files(
         let agent = &imported.file.agent;
         let directory = directories
             .entry(agent.clone())
-            .or_insert_with(|| session_dir(&settings, space_environment, &ctx.paths.home, agent));
+            .or_insert_with(|| session_dir(&settings, space_environment, &paths.home, agent));
         let placed = match directory {
             Ok(Some(directory)) => place(directory, imported, existing),
             Ok(None) => Err(anyhow::anyhow!("{agent} keeps no session files")),
@@ -125,12 +126,12 @@ pub(in crate::cli) async fn place_session_files(
 /// continue. Exits 1 when a file could not be placed, so the fork that
 /// needs it is refused; a development build leaves them to the installed
 /// Shoal.
-pub(in crate::cli) async fn place_forked_sessions(
-    ctx: &Context,
+pub async fn place_forked_sessions(
+    paths: &CommandPaths,
     repository: Option<shoal_ids::repository_ids::RepositoryId>,
 ) -> Result<i32> {
     let files: Vec<CarriedSessionFile> = serde_json::from_reader(std::io::stdin().lock())?;
-    if !crate::build::changes_user_files() {
+    if !shoal_core::build::changes_user_files() {
         eprintln!(
             "warning: a development build leaves the forked session's files to the installed Shoal"
         );
@@ -142,7 +143,7 @@ pub(in crate::cli) async fn place_forked_sessions(
     };
     let under = (target, &BTreeMap::new());
     Ok(
-        match place_session_files(ctx, under, &files, Existing::Continued).await {
+        match place_session_files(paths, under, &files, Existing::Continued).await {
             true => 0,
             false => 1,
         },
@@ -152,8 +153,8 @@ pub(in crate::cli) async fn place_forked_sessions(
 /// Put `files`, which the daemon kept with the removal record `restored`,
 /// where the agents of `space` that restores it look for them, then have
 /// the daemon delete them once they all are.
-pub(in crate::cli) async fn install_kept_session_files(
-    ctx: &Context,
+pub async fn install_kept_session_files(
+    paths: &CommandPaths,
     space: SessionHome<'_>,
     restored: &RemovedSpace,
     files: &[CarriedSessionFile],
@@ -167,10 +168,10 @@ pub(in crate::cli) async fn install_kept_session_files(
     };
     let existing = Existing::of_copy(restored.is_copy());
     // Left behind, the space's next removal record lists them again.
-    if !install_session_files(ctx, space, files, existing).await {
+    if !install_session_files(paths, space, files, existing).await {
         return;
     }
-    if let Err(error) = crate::client::removal::drop_restored_sessions(&ctx.paths, selector).await {
+    if let Err(error) = crate::client::removal::drop_restored_sessions(paths, selector).await {
         eprintln!("warning: cannot delete the kept session files: {error:#}");
     }
 }
@@ -180,13 +181,13 @@ pub(in crate::cli) async fn install_kept_session_files(
 /// space's `[env]`, from where it keeps them without it, as for a
 /// session another machine carried here. A failure only warns; the fork
 /// then starts from what that directory has.
-pub(in crate::cli) async fn find_forked_session(
-    ctx: &Context,
+pub async fn find_forked_session(
+    paths: &CommandPaths,
     space: &crate::agents::HomeRecords,
     (settings, name): (&Effective, &Agent),
     session: &shoal_ids::agent_session_ids::AgentSessionId,
 ) {
-    if !crate::build::changes_user_files() {
+    if !shoal_core::build::changes_user_files() {
         return;
     }
     let Some(store) = transcripts::store(settings.integration(name)) else {
@@ -194,13 +195,13 @@ pub(in crate::cli) async fn find_forked_session(
     };
     let space_environment = match space {
         crate::agents::HomeRecords::Workspace(workspace) => {
-            environment::agent_environment(ctx, &Space::from(workspace.clone())).await
+            environment::agent_environment(paths, &Space::from(workspace.clone())).await
         }
         crate::agents::HomeRecords::Chat { chat, .. } => {
-            environment::agent_environment(ctx, &Space::from(chat.clone())).await
+            environment::agent_environment(paths, &Space::from(chat.clone())).await
         }
     };
-    let home = &ctx.paths.home;
+    let home = &paths.home;
     let directories = (
         session_dir(settings, &space_environment, home, name),
         session_dir(settings, &BTreeMap::new(), home, name),

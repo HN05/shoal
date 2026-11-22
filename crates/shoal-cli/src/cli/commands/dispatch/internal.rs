@@ -135,7 +135,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             super::super::restore::import::import_moved(&ctx, ticket, !no_resume).await
         }
         InternalCommand::PlaceSessions { repository } => {
-            crate::cli::agents::place_forked_sessions(&ctx, repository).await
+            shoal_workers::launch::place_forked_sessions(&ctx.paths, repository).await
         }
         InternalCommand::Launch { file } => crate::terminal::run_launch(&file),
         InternalCommand::TakeOver {

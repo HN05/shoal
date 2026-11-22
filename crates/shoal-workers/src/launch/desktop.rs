@@ -10,8 +10,8 @@ use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     agents::trust::{CLAUDE_CODE, CODEX, TrustFile},
-    cli::{args::space::DesktopApp, context::Context},
-    env, execution,
+    client::connection::CommandPaths,
+    env,
     model::{Repository, Space},
 };
 use shoal_protocol::transcripts::AgentEnvironment;
@@ -20,7 +20,7 @@ use shoal_protocol::transcripts::AgentEnvironment;
 mod tests;
 
 /// A desktop app and how its launcher opens a directory in it.
-pub(in crate::cli) struct App {
+pub struct App {
     /// What messages call the app.
     pub name: &'static str,
     /// The launcher that opens it.
@@ -47,18 +47,9 @@ impl App {
     }
 }
 
-/// The app `shoal open --app` names.
-pub(in crate::cli) fn app(name: DesktopApp) -> &'static App {
-    match name {
-        DesktopApp::Claude => &CLAUDE,
-        DesktopApp::Codex => &CODEX_APP,
-        DesktopApp::T3 => &T3,
-    }
-}
-
 /// The Claude app, opened with the link `claude --desktop` opens, which needs
 /// no Claude account sign-in of the CLI.
-pub(in crate::cli) static CLAUDE: App = App {
+pub static CLAUDE: App = App {
     name: "Claude app",
     program: "open",
     bundle: Some("/Applications/Claude.app"),
@@ -68,7 +59,7 @@ pub(in crate::cli) static CLAUDE: App = App {
 };
 
 /// The Codex app, which `codex app` offers to install when it is missing.
-pub(in crate::cli) static CODEX_APP: App = App {
+pub static CODEX_APP: App = App {
     name: "codex app",
     program: "codex",
     bundle: None,
@@ -78,7 +69,7 @@ pub(in crate::cli) static CODEX_APP: App = App {
 };
 
 /// The T3 Code app, which must already be running.
-pub(in crate::cli) static T3: App = App {
+pub static T3: App = App {
     name: "t3 app",
     program: "t3",
     bundle: None,
@@ -135,8 +126,8 @@ fn percent_encode(bytes: &[u8]) -> String {
 /// Hand `space` to desktop `app` with `args`, untracked, in the directory
 /// its agent works in. An app with a trust file trusts that directory
 /// first, as `repository`'s agents do when the space has one.
-pub(in crate::cli) async fn hand_off(
-    ctx: &Context,
+pub async fn hand_off(
+    paths: &CommandPaths,
     space: &Space,
     repository: Option<&Repository>,
     app: &App,
@@ -152,15 +143,15 @@ pub(in crate::cli) async fn hand_off(
     let args = (app.args)(directory, args);
     if let Some(trust) = app.trust {
         // The app runs with this process's environment, not the space's.
-        let environment = AgentEnvironment::inherited(&ctx.paths.home);
-        super::trust::directory(trust, ctx, &environment, repository, directory).await;
+        let environment = AgentEnvironment::inherited(&paths.home);
+        super::trust::directory(trust, paths, &environment, repository, directory).await;
     }
     run_launcher(app, directory, args).await
 }
 
 /// Refuse an `app` that cannot open with `args`: its check refuses them or
 /// its launcher is missing.
-pub(in crate::cli) fn ensure_opens(app: &App, args: &[OsString]) -> Result<()> {
+pub fn ensure_opens(app: &App, args: &[OsString]) -> Result<()> {
     (app.check)(args)?;
     crate::tools::ensure_program(app.name, app.program)
 }
@@ -177,5 +168,5 @@ async fn run_launcher(app: &App, directory: &Path, args: Vec<OsString>) -> Resul
         .status()
         .await
         .with_context(|| format!("launch {}", app.name))?;
-    Ok(execution::exit_code(status))
+    Ok(shoal_core::execution::exit_code(status))
 }

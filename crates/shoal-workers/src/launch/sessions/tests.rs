@@ -1,7 +1,7 @@
 use std::fs;
 
 use super::*;
-use crate::transfer::ImportedSessionFile;
+use shoal_core::transfer::ImportedSessionFile;
 
 fn imported(path: &str, contents: &str) -> ImportedSessionFile {
     let file = tempfile::NamedTempFile::new().unwrap();

@@ -2,7 +2,7 @@
 //! it skips the queue there because the user waits for it.
 use super::detached::leaves_caller;
 use crate::{
-    cli::{agents, context::Context},
+    cli::context::Context,
     config::{Effective, modes::ModeName},
 };
 use shoal_protocol::launches::{Launch, StartTarget};
@@ -62,7 +62,7 @@ impl Attach {
             return None;
         }
         let own_way = !crate::env::is_scoped()
-            && agent.is_some_and(|agent| agents::runs_its_own_way(agent, settings));
+            && agent.is_some_and(|agent| shoal_workers::launch::runs_its_own_way(agent, settings));
         if leaves_caller(ctx, options.here) {
             return own_way.then_some(Self::Here);
         }

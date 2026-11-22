@@ -11,7 +11,7 @@ use shoal_ids::space_ids::SpaceId;
 
 use crate::client::output::agents::{Agent, Continued, Interrupted};
 use crate::{
-    cli::{agents, context::Context, ui},
+    cli::{context::Context, ui},
     model::{RunningAgent, Space},
     protocol::ConfigTarget,
     sessions::Origin,
@@ -69,7 +69,7 @@ async fn running_turns(ctx: &Context, spaces: &[Space]) -> Result<Vec<Interrupti
         for agent in agents.into_iter().filter(|agent| runs_turn(agent.state)) {
             let target = Target::of(space, agent)?;
             let key = (target.agent.as_ref())
-                .and_then(|agent| agents::interrupt_key(&settings, agent))
+                .and_then(|agent| shoal_workers::launch::interrupt_key(&settings, agent))
                 .with_context(|| {
                     format!(
                         "Shoal knows no key that interrupts {}",

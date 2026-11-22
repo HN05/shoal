@@ -1,6 +1,5 @@
 //! Tracked terminal launches, the agent's configured command with Shoal's
 //! instructions, hooks and prompt, run through the execution wrapper.
-use shoal_workers::hosting;
 use std::ffi::{OsStr, OsString};
 
 use anyhow::Result;
@@ -9,15 +8,15 @@ use super::Launch;
 use crate::{
     agent::Agent,
     agents::{Integration, ensure_available},
-    cli::context::Context,
     config::Effective,
+    hosting::{self, Caller},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Run `launch` as a tracked agent in its space, in a session this
 /// terminal attaches to where the terminal keeps agents in sessions.
 pub(super) async fn tracked(
-    ctx: &Context,
+    caller: Caller<'_>,
     integration: &dyn Integration,
     launch: Launch,
 ) -> Result<i32> {
@@ -25,9 +24,9 @@ pub(super) async fn tracked(
     let model_args = crate::agents::model_args(&launch.settings, &launch.name, &launch.model)?;
     if let Some(trust) = integration.trust_file() {
         let profile = &launch.settings.launch(&launch.name).environment;
-        super::trust::space(trust, ctx, &launch.space, profile).await;
+        super::trust::space(trust, caller.paths, &launch.space, profile).await;
     }
-    let command = command(ctx, &launch, model_args).await?;
+    let command = command(caller, &launch, model_args).await?;
     let Launch {
         name,
         space: records,
@@ -48,7 +47,7 @@ pub(super) async fn tracked(
     };
     let space = hosting::AgentSpace::of_home(records.home()?);
     if let Some(code) = hosting::run_agent(
-        ctx.caller(),
+        caller,
         &settings,
         &space,
         &agent,
@@ -59,20 +58,20 @@ pub(super) async fn tracked(
     {
         return Ok(code);
     }
-    hosting::label_current(&ctx.paths, space.owner()).await?;
+    hosting::label_current(caller.paths, space.owner()).await?;
     let selector = SpaceSelector::id(space.owner().id());
     if replaces.is_empty() {
-        return shoal_workers::execution::run(&ctx.paths, selector, command, Some(agent)).await;
+        return crate::execution::run(caller.paths, selector, command, Some(agent)).await;
     }
     let records = (replaces, None);
-    shoal_workers::execution::run_recovery(&ctx.paths, selector, command, agent, records).await
+    crate::execution::run_recovery(caller.paths, selector, command, agent, records).await
 }
 
 /// The agent's configured command with the arguments that fork a session,
 /// Shoal's instructions, `model_args`, its space's arguments, the prompt
 /// and the forwarded arguments.
 async fn command(
-    ctx: &Context,
+    caller: Caller<'_>,
     launch: &Launch,
     model_args: Vec<OsString>,
 ) -> Result<Vec<OsString>> {
@@ -87,7 +86,7 @@ async fn command(
         ..
     } = launch;
     let home = space.home()?;
-    let space_args = shoal_workers::homes::args(&ctx.paths, home, settings, name).await?;
+    let space_args = crate::homes::args(caller.paths, home, settings, name).await?;
     let (args, prompt) = input(
         settings,
         name,
@@ -97,8 +96,8 @@ async fn command(
         args.clone(),
     );
     let args = fork.iter().cloned().chain(args).collect();
-    shoal_workers::homes::expand(
-        &ctx.paths,
+    crate::homes::expand(
+        caller.paths,
         home,
         &settings.launchers,
         name.name(),

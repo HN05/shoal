@@ -10,7 +10,8 @@ use crate::{
         AgentHome, HomeRecords,
         trust::{TrustFile, repository_trust_paths},
     },
-    cli::{agents::environment, context::Context},
+    client::connection::CommandPaths,
+    launch::environment,
     model::{Chat, ChatHome, Repository, Space, Workspace},
 };
 use shoal_protocol::transcripts::AgentEnvironment;
@@ -26,11 +27,11 @@ enum Holder<'a> {
 /// running with `environment`.
 pub(super) async fn workspace(
     file: &TrustFile,
-    ctx: &Context,
+    paths: &CommandPaths,
     workspace: &Workspace,
     environment: &AgentEnvironment<'_>,
 ) {
-    let paths = workspace_trust_paths(ctx, workspace, file.tool()).await;
+    let paths = workspace_trust_paths(paths, workspace, file.tool()).await;
     warn(file.trust(environment, &paths));
 }
 
@@ -39,15 +40,16 @@ pub(super) async fn workspace(
 /// tool's config for repository removal.
 pub(super) async fn tracked(
     file: &TrustFile,
-    ctx: &Context,
+    paths: &CommandPaths,
     workspace: &Workspace,
     profile: &crate::ai::Environment,
 ) {
-    let mut configured = environment::agent_environment(ctx, &Space::from(workspace.clone())).await;
-    profile.layer(&mut configured, &ctx.paths.home);
-    let environment = AgentEnvironment::new(&ctx.paths.home, &configured);
-    keep_config_location(file, ctx, Holder::Workspace(workspace), &environment).await;
-    self::workspace(file, ctx, workspace, &environment).await;
+    let mut configured =
+        environment::agent_environment(paths, &Space::from(workspace.clone())).await;
+    profile.layer(&mut configured, &paths.home);
+    let environment = AgentEnvironment::new(&paths.home, &configured);
+    keep_config_location(file, paths, Holder::Workspace(workspace), &environment).await;
+    self::workspace(file, paths, workspace, &environment).await;
 }
 
 /// Trust the directories of `space`, a workspace or a chat, for a tracked
@@ -55,14 +57,14 @@ pub(super) async fn tracked(
 /// [`chat`] trust each kind's.
 pub(super) async fn space(
     file: &TrustFile,
-    ctx: &Context,
+    paths: &CommandPaths,
     space: &HomeRecords,
     profile: &crate::ai::Environment,
 ) {
     match (space, space.home()) {
-        (HomeRecords::Workspace(workspace), _) => tracked(file, ctx, workspace, profile).await,
+        (HomeRecords::Workspace(workspace), _) => tracked(file, paths, workspace, profile).await,
         (HomeRecords::Chat { repository, .. }, Ok(AgentHome::Chat { chat, home, .. })) => {
-            self::chat(file, ctx, (chat, repository.as_ref()), home, profile).await;
+            self::chat(file, paths, (chat, repository.as_ref()), home, profile).await;
         }
         // A chat without a home runs nowhere to trust.
         (HomeRecords::Chat { .. }, _) => {}
@@ -74,7 +76,7 @@ pub(super) async fn space(
 /// removal or move of `holder`'s repository. Failure only warns.
 async fn keep_config_location(
     file: &TrustFile,
-    ctx: &Context,
+    paths: &CommandPaths,
     holder: Holder<'_>,
     environment: &AgentEnvironment<'_>,
 ) {
@@ -85,20 +87,12 @@ async fn keep_config_location(
     }
     let kept = match holder {
         Holder::Workspace(workspace) => {
-            crate::client::workspaces::keep_agent_environment(
-                &ctx.paths,
-                &workspace.id,
-                environment,
-            )
-            .await
+            crate::client::workspaces::keep_agent_environment(paths, &workspace.id, environment)
+                .await
         }
         Holder::Repository(repository) => {
-            crate::client::repositories::keep_agent_environment(
-                &ctx.paths,
-                &repository.id,
-                environment,
-            )
-            .await
+            crate::client::repositories::keep_agent_environment(paths, &repository.id, environment)
+                .await
         }
     };
     if let Err(error) = kept {
@@ -113,15 +107,15 @@ async fn keep_config_location(
 /// its `[env]` changed by `profile`, as workspace launches trust theirs.
 pub(super) async fn chat(
     file: &TrustFile,
-    ctx: &Context,
+    paths: &CommandPaths,
     (chat, repository): (&Chat, Option<&Repository>),
     home: ChatHome<'_>,
     profile: &crate::ai::Environment,
 ) {
-    let mut configured = environment::agent_environment(ctx, &Space::from(chat.clone())).await;
-    profile.layer(&mut configured, &ctx.paths.home);
-    let environment = AgentEnvironment::new(&ctx.paths.home, &configured);
-    directory(file, ctx, &environment, repository, home.path()).await;
+    let mut configured = environment::agent_environment(paths, &Space::from(chat.clone())).await;
+    profile.layer(&mut configured, &paths.home);
+    let environment = AgentEnvironment::new(&paths.home, &configured);
+    directory(file, paths, &environment, repository, home.path()).await;
 }
 
 /// Trust `directory` for the tool of `file` running with `environment`: the
@@ -130,13 +124,13 @@ pub(super) async fn chat(
 /// chat without a repository, which stays trusted.
 pub(super) async fn directory(
     file: &TrustFile,
-    ctx: &Context,
+    paths: &CommandPaths,
     environment: &AgentEnvironment<'_>,
     repository: Option<&Repository>,
     directory: &Path,
 ) {
     if let Some(repository) = repository {
-        keep_config_location(file, ctx, Holder::Repository(repository), environment).await;
+        keep_config_location(file, paths, Holder::Repository(repository), environment).await;
     }
     let paths = match repository {
         Some(repository) => repository_trust_paths(repository, directory),
@@ -147,8 +141,12 @@ pub(super) async fn directory(
 
 /// The workspace's repository trust paths, or the workspace alone when its
 /// repository cannot be resolved.
-async fn workspace_trust_paths(ctx: &Context, workspace: &Workspace, tool: &str) -> Vec<PathBuf> {
-    match crate::client::repositories::list(&ctx.paths)
+async fn workspace_trust_paths(
+    paths: &CommandPaths,
+    workspace: &Workspace,
+    tool: &str,
+) -> Vec<PathBuf> {
+    match crate::client::repositories::list(paths)
         .await
         .and_then(|repos| {
             repos

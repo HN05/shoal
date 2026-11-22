@@ -12,15 +12,17 @@ use anyhow::Result;
 use futures_util::future::BoxFuture;
 
 use super::Launch;
+use shoal_core::execution::{self, DetachedExecution, DetachedLaunch};
+
 use crate::{
     agent::{Agent, ModelChoice},
     agents::{
         AgentHome, Integration,
         detached::{App, Delivered, Prepared, Session, model_args},
     },
-    cli::context::Context,
+    client::output,
     config::Effective,
-    execution::{self, DetachedExecution, DetachedLaunch},
+    hosting::Caller,
     model::Space,
     paths::Paths,
 };
@@ -32,7 +34,7 @@ use shoal_protocol::protocol::{DetachedRun, Launched};
 /// launch is recorded; the session's output goes to a log under Shoal's
 /// state.
 pub(super) async fn start(
-    ctx: &Context,
+    caller: Caller<'_>,
     integration: &dyn Integration,
     app: &dyn App,
     launch: Launch,
@@ -53,15 +55,15 @@ pub(super) async fn start(
     crate::agents::ensure_available(&name, &settings)?;
     let home = space.home()?;
     let model_args = model_args(app, &settings, &name, &model)?;
-    let directories = dir_args(ctx, app, &settings, home).await;
+    let directories = dir_args(caller, app, &settings, home).await;
     let directories = [model_args, directories].concat();
     let (prompt, args) = session_input(app, &settings, instructions, directories, prompt, args);
     if let Some(trust) = integration.trust_file() {
-        super::trust::space(trust, ctx, &space, &Default::default()).await;
+        super::trust::space(trust, caller.paths, &space, &Default::default()).await;
     }
-    let files = session_files(&ctx.paths, home.id(), &name);
+    let files = session_files(caller.paths, home.id(), &name);
     let session = Session {
-        paths: &ctx.paths,
+        paths: caller.paths,
         directory: home.path(),
         branch: match home {
             AgentHome::Workspace(workspace) => workspace.branch().map(BranchName::as_str),
@@ -79,7 +81,7 @@ pub(super) async fn start(
         new_session,
     };
     let (execution, prepared) = launch_session(
-        ctx,
+        caller,
         &agent,
         &execution_space(home),
         &files,
@@ -88,7 +90,7 @@ pub(super) async fn start(
     )
     .await?;
     let (launch, delivered) = deliver_first_message(execution, prepared).await?;
-    report_session(ctx, app, home, &launch, delivered)?;
+    report_session(caller, app, home, &launch, delivered)?;
     Ok(0)
 }
 
@@ -105,7 +107,7 @@ fn execution_space(home: AgentHome<'_>) -> crate::model::ExecutionSpace {
 /// this process its app must not inherit, discarding the preparation when
 /// it cannot start.
 async fn launch_session(
-    ctx: &Context,
+    caller: Caller<'_>,
     agent: &shoal_protocol::executions::TrackedAgent,
     space: &crate::model::ExecutionSpace,
     files: &Path,
@@ -118,7 +120,7 @@ async fn launch_session(
         env: &env,
     };
     let launched = execution::launch_detached(
-        &ctx.paths,
+        caller.paths,
         space,
         files.with_extension(crate::paths::SESSION_LOG),
         prepared.command(),
@@ -158,7 +160,7 @@ async fn deliver_first_message(
 /// Report the session `launch` started at `home`, with what `delivered`
 /// says of its first message.
 fn report_session(
-    ctx: &Context,
+    caller: Caller<'_>,
     app: &dyn App,
     home: AgentHome<'_>,
     launch: &DetachedLaunch,
@@ -181,20 +183,19 @@ fn report_session(
         }),
         machine: None,
     };
-    ctx.emit(
-        &format!(
-            "Started {} {} session in {} (execution {}, pid {}); open it in {}\nOutput: {}{}",
-            app.name(),
-            app.agent(),
-            name,
-            launch.execution_id,
-            launch.pid,
-            app.place(),
-            launch.log.display(),
-            delivered.note,
-        ),
-        report,
-    )
+    let message = format!(
+        "Started {} {} session in {} (execution {}, pid {}); open it in {}\nOutput: {}{}",
+        app.name(),
+        app.agent(),
+        name,
+        launch.execution_id,
+        launch.pid,
+        app.place(),
+        launch.log.display(),
+        delivered.note,
+    );
+    shoal_core::outln!("{}", output::line(caller.json, &message, &report)?);
+    Ok(())
 }
 
 /// Where a session of agent `name` keeps its files: under its space's
@@ -222,7 +223,7 @@ fn session_input(
 ) -> (Option<String>, Vec<OsString>) {
     let instruction_args = instruction_args(app, settings, &instructions);
     let (instruction_args, prompt) =
-        super::launch::separate_instructions(instruction_args, instructions, prompt);
+        super::tracked::separate_instructions(instruction_args, instructions, prompt);
     let prompt = Some(prompt).filter(|prompt| !prompt.is_empty());
     let args = instruction_args
         .into_iter()
@@ -301,13 +302,13 @@ pub(super) fn takes_instructions(app: &dyn App, settings: &Effective) -> bool {
 /// The arguments that give `app`'s agent the directories its agent works
 /// in at `home`, when it takes arguments.
 async fn dir_args(
-    ctx: &Context,
+    caller: Caller<'_>,
     app: &dyn App,
     settings: &Effective,
     home: AgentHome<'_>,
 ) -> Vec<OsString> {
     match app.takes_agent_args() {
-        true => shoal_workers::homes::dir_args(&ctx.paths, home, settings, &app.agent()).await,
+        true => crate::homes::dir_args(caller.paths, home, settings, &app.agent()).await,
         false => Vec::new(),
     }
 }
