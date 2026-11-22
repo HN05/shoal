@@ -10,10 +10,12 @@ mod handovers;
 mod keeping;
 mod retiring;
 mod sending;
+mod sleeps;
 pub(crate) mod takeovers;
 
 pub(crate) use handovers::Handovers;
 pub(crate) use keeping::{Continuation, Kept, Sent, forget};
+pub(crate) use sleeps::Sleeps;
 
 #[cfg(test)]
 mod tests;

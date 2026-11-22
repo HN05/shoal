@@ -365,6 +365,16 @@ pub enum Call {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         within: Option<SpaceId>,
     },
+    /// A machine's notice that it goes to sleep now, sent before any
+    /// package it sends for the sleep: the spaces whose packages the hub
+    /// keeps lack changes, each with since when. The hub takes the
+    /// machine's spaces with work over once it stays away long enough, and
+    /// forgets the sleep once its link opens again. Answered with
+    /// [`Reply::Delivered`].
+    Sleeping {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        lagging: Vec<super::sleep::Lagging>,
+    },
     /// The package the hub keeps of the space `space`, whose machine is
     /// offline, which the caller would take the space over from; none
     /// without one, or while that machine is connected. Answered with

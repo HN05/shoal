@@ -116,6 +116,9 @@ pub struct Hub {
     /// As the hub: the spaces handed over that their new machine has not
     /// claimed yet.
     handovers: packages::Handovers,
+    /// As the hub: how its machines are powered, and what it tried to take
+    /// over from those asleep.
+    sleeps: packages::Sleeps,
     /// As a member: the tree across machines it last learned, as its store
     /// keeps it.
     known_tree: std::sync::Mutex<Option<known_tree::Known>>,
@@ -166,6 +169,7 @@ impl Hub {
             deliveries: Default::default(),
             packages: Default::default(),
             handovers: Default::default(),
+            sleeps: Default::default(),
             known_tree: Default::default(),
             parent_permissions: Default::default(),
             reported: Default::default(),

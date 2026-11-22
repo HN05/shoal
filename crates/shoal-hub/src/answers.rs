@@ -102,9 +102,10 @@ impl Hub {
                 kept_files,
                 capacity,
                 repositories,
-                power: _,
+                power,
             } => {
                 ensure_machine(member)?;
+                self.sleeps.powered(&member.id, power);
                 self.capacities.keep(&member.id, &report, capacity);
                 let held = directory::Held {
                     reserved,
@@ -218,6 +219,11 @@ impl Hub {
             Call::Release { space } => {
                 ensure_machine(member)?;
                 self.hear_release(daemon, &member.id, &space)?;
+                Reply::Delivered
+            }
+            Call::Sleeping { lagging } => {
+                ensure_machine(member)?;
+                self.hear_sleep(&member.id, lagging).await?;
                 Reply::Delivered
             }
             Call::Stay => {

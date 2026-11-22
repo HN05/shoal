@@ -600,7 +600,7 @@ CREATE TABLE hub_members (
     last_seen INTEGER,
     revoked_at INTEGER
 , battery INTEGER CHECK(battery IN (0,1)), availability TEXT NOT NULL DEFAULT 'auto'
-    CHECK(availability IN ('auto','always_on','intermittent')), present_since INTEGER, drop_alerted INTEGER);
+    CHECK(availability IN ('auto','always_on','intermittent')), present_since INTEGER, drop_alerted INTEGER, asleep_at INTEGER);
 
 CREATE TABLE hub_membership (
     id INTEGER PRIMARY KEY CHECK(id = 1),
@@ -947,6 +947,12 @@ CREATE TABLE hub_package_states (
     unsent_since INTEGER
 );
 
+CREATE TABLE hub_sleep_lags (
+    space_id TEXT PRIMARY KEY,
+    member_id TEXT NOT NULL REFERENCES hub_members(id),
+    since INTEGER
+);
+
 CREATE TABLE hub_takeovers (
     space_id TEXT PRIMARY KEY,
     member_id TEXT NOT NULL REFERENCES hub_members(id),
@@ -1161,6 +1167,7 @@ CREATE INDEX thread_code_repository ON thread_code(repository_id);
 CREATE INDEX hub_packages_member ON hub_packages(member_id);
 
 CREATE INDEX hub_takeovers_member ON hub_takeovers(member_id);
+CREATE INDEX hub_sleep_lags_member ON hub_sleep_lags(member_id);
 
 CREATE INDEX space_changes_thread ON space_changes(thread_id);
 

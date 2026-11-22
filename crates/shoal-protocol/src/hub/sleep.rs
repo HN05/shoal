@@ -2,6 +2,9 @@
 //! reports, and the notice it sends as it goes to sleep, after which the
 //! hub may take its spaces over once it has stayed away long enough.
 use serde::{Deserialize, Serialize};
+use shoal_ids::space_ids::SpaceId;
+
+use crate::time::UnixTime;
 
 /// How a machine is powered as it reports.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -22,4 +25,14 @@ impl Power {
     pub fn nearly_empty(&self) -> bool {
         self.on_battery && self.percent < Self::NEARLY_EMPTY
     }
+}
+
+/// A space whose package the hub keeps lacks changes as its machine goes
+/// to sleep: since when, none where the machine cannot tell, as one that
+/// keeps no packages current.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Lagging {
+    pub space: SpaceId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since: Option<UnixTime>,
 }

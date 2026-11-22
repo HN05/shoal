@@ -422,6 +422,7 @@ impl Hub {
             calls.clone(),
         ));
         self.handovers.stays(&member.id);
+        self.hear_awake(&member.id).await;
         tokio::spawn((self.clone()).retire_taken_over(member.id.clone(), calls.clone()));
         let answer = |call| {
             let (hub, daemon, member, calls) =
@@ -431,6 +432,10 @@ impl Hub {
         let end = session::serve(channel, &calls, answer, registration.stopped()).await;
         drop(registration);
         self.member_seen(&member.id, &version).await;
+        // A link that another of the same installation replaced did not drop.
+        if !self.links.connected().contains(&member.id) {
+            self.hear_drop(&**daemon, &member.id).await;
+        }
         match end {
             End::Closed | End::Stopped => log!("hub: {} {} disconnected", member.kind, member.name),
             End::Lost(error) => {

@@ -267,7 +267,7 @@ fn record(
             continuation.within,
         ],
     )?;
-    Ok(())
+    super::sleeps::caught_up(tx, member, id, built_at)
 }
 
 /// Forget every package `member` sent, as once the hub revoked it.
