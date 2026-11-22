@@ -155,6 +155,8 @@ pub struct Hub {
     /// none, on the hub; none sends it where the device sent it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_machine: Option<String>,
+    /// The policy that places a start which names no machine, on the hub.
+    pub placement: shoal_schedule::placement::Policy,
     /// The local address the hub forwards the requests of paired members
     /// under each path prefix to, such as an app's own server.
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
@@ -174,6 +176,7 @@ impl Default for Hub {
             auto_update: true,
             escalate_after_minutes: 30,
             default_machine: None,
+            placement: Default::default(),
             forward: Default::default(),
         }
     }

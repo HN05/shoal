@@ -1,12 +1,24 @@
-//! The capacity each machine of the hub reports with its spaces, which the
-//! hub keeps in memory, for as long as it runs, and lists with its members.
+//! Where a new space starts among the hub's machines: the hub ranks its
+//! connected machines by the policy `[machine.hub] placement` names, from
+//! a snapshot of the start and each machine as it last described itself
+//! and reported its capacity, which the hub keeps in memory for as long as
+//! it runs. A machine that joined the hub asks it over its link.
 use std::{collections::HashMap, sync::Mutex};
 
+use anyhow::{Result, anyhow};
 use shoal_ids::member_ids::MemberId;
-use shoal_protocol::hub::Member;
-use shoal_schedule::placement::snapshot::Capacity;
+use shoal_protocol::hub::{
+    Member, MemberKind,
+    availability::Availability,
+    link::{Call, Reply},
+    placement::{Decision, Skipped, Unanswered},
+};
+use shoal_schedule::placement::{
+    Balanced, Local, Placement, Placer, Policy,
+    snapshot::{Capacity, Machine, Request, Snapshot},
+};
 
-use crate::Hub;
+use crate::{Hub, daemon::Daemon, log};
 
 /// The capacity each machine last reported.
 #[derive(Default)]
@@ -27,6 +39,46 @@ impl Capacities {
 }
 
 impl Hub {
+    /// Where a start of `request`, made on this machine, goes among the
+    /// hub's machines, as the hub decides; none where no machine can take
+    /// it. It fails while the hub cannot be asked.
+    pub async fn place(&self, daemon: &dyn Daemon, request: Request) -> Result<Option<Decision>> {
+        if self.is_hub(daemon) {
+            return self.place_for(daemon, request).await;
+        }
+        match self.through_hub(Call::Place { request }).await? {
+            Reply::Placed(decision) => Ok(decision),
+            reply => Err(anyhow!("the hub answered with an unexpected {reply:?}")),
+        }
+    }
+
+    /// As the hub: where a start of `request` goes among the connected
+    /// machines, by the configured policy.
+    pub(super) async fn place_for(
+        &self,
+        daemon: &dyn Daemon,
+        request: Request,
+    ) -> Result<Option<Decision>> {
+        let members = self.local_hub_overview(daemon).await?.members;
+        let snapshot = Snapshot {
+            request,
+            machines: placed_machines(&members),
+        };
+        let (placement, decided) = self.rank(&snapshot).await;
+        Ok(decision(placement, decided, &members))
+    }
+
+    /// The placement of `snapshot` by the configured policy, with the
+    /// policy that made it and why the placer an `external` one asks did
+    /// not, where it did not.
+    async fn rank(&self, snapshot: &Snapshot) -> (Placement, Decided) {
+        match self.config.current().machine.hub.placement {
+            Policy::Local => (Local.place(snapshot), (Policy::Local, None)),
+            Policy::Balanced => (Balanced.place(snapshot), (Policy::Balanced, None)),
+            Policy::External => balanced_instead(snapshot, Unanswered::NoPlacer),
+        }
+    }
+
     /// Give each connected machine among `members` the capacity it last
     /// reported.
     pub(super) fn with_capacity(&self, members: &mut [Member]) {
@@ -34,4 +86,63 @@ impl Hub {
             member.capacity = self.capacities.of(&member.id);
         }
     }
+}
+
+/// The policy that made a placement, and why the placer an `external` one
+/// asks did not, where it did not.
+type Decided = (Policy, Option<Unanswered>);
+
+/// The `balanced` placement of `snapshot`, which the hub's log records, in
+/// place of the external placer's, which left it `unanswered`.
+fn balanced_instead(snapshot: &Snapshot, unanswered: Unanswered) -> (Placement, Decided) {
+    log!("hub: placed a start by balanced, since the external placer did not: {unanswered}");
+    (
+        Balanced.place(snapshot),
+        (Policy::Balanced, Some(unanswered)),
+    )
+}
+
+/// The connected machines among `members`, as placement reads them.
+fn placed_machines(members: &[Member]) -> Vec<Machine> {
+    (members.iter())
+        .filter(|member| member.kind == MemberKind::Machine && member.connected)
+        .map(|member| Machine {
+            id: member.id.clone(),
+            name: member.name.clone(),
+            always_on: (member.availability)
+                .is_some_and(|classified| classified.availability == Availability::AlwaysOn),
+            agents: (member.agents.iter())
+                .map(|agent| agent.name().to_owned())
+                .collect(),
+            capacity: member.capacity.clone(),
+        })
+        .collect()
+}
+
+/// The decision `placement` makes, which the policy `decided` made, after
+/// the placer it names left it `unanswered`, naming the machines by their
+/// names among `members`; none without a machine to go to.
+fn decision(
+    placement: Placement,
+    (decided, unanswered): Decided,
+    members: &[Member],
+) -> Option<Decision> {
+    let name = |id: &MemberId| {
+        let member = members.iter().find(|member| &member.id == id);
+        member.map_or_else(|| id.to_string(), |member| member.name.clone())
+    };
+    let chosen = placement.chosen()?;
+    Some(Decision {
+        machine: chosen.machine.clone(),
+        name: name(&chosen.machine),
+        reason: chosen.reason,
+        policy: decided,
+        unanswered,
+        skipped: (placement.skipped.iter())
+            .map(|skipped| Skipped {
+                name: name(&skipped.machine),
+                why: skipped.why,
+            })
+            .collect(),
+    })
 }

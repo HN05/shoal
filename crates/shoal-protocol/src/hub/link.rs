@@ -365,6 +365,12 @@ pub enum Call {
     /// The machine that owns the space `space`, if any, and none while the
     /// caller claims it. Answered with [`Reply::Owner`].
     Owner { space: SpaceId },
+    /// Where a start of `request`, made on the calling machine, goes among
+    /// the hub's machines; the hub takes the caller's machine as its own.
+    /// Answered with [`Reply::Placed`], none where no machine can take it.
+    Place {
+        request: shoal_schedule::placement::snapshot::Request,
+    },
     /// A machine's claim of the space `space`, which it imports as another
     /// machine moves it here: its report of the space takes the ID over.
     /// One that carries the `ticket` of a move through the hub is refused
@@ -461,6 +467,7 @@ pub enum Reply {
     Availability(Classified),
     Directory(Directory),
     Owner(Option<super::Member>),
+    Placed(Option<super::placement::Decision>),
     Claimed(Option<SpaceNumber>),
     Settled(bool),
     Kept(Option<Box<super::packages::KeptPackage>>),
