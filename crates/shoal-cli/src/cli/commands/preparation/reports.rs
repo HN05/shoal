@@ -9,7 +9,7 @@ use super::{
 use crate::{
     cli::{
         commands::{
-            links, operations, queued_agents,
+            links, queued_agents,
             start::{self, Attach, StartOptions},
         },
         context::Context,
@@ -111,7 +111,7 @@ pub(in crate::cli::commands) async fn prepared_on(
     machine: Option<&str>,
 ) -> Result<Prepared> {
     let preparing = Preparing::follow(&ctx.paths, started).await?;
-    match operations::follow_preparation(ctx, preparing).await? {
+    match shoal_workers::preparation::follow(&ctx.paths, ctx, preparing).await? {
         Ok(prepared) => Ok(prepared),
         Err(Unprepared { workspace, failure }) => {
             let number = workspace.number;

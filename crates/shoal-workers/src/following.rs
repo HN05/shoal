@@ -8,8 +8,11 @@ use anyhow::Result;
 use tokio::signal::unix::{SignalKind, signal};
 
 use crate::{
-    client::{connection::CommandPaths, operations::Followed},
-    protocol::operations::{OperationRef, Progress, Step, Stream},
+    client::{
+        connection::CommandPaths,
+        operations::{Followed, Following},
+    },
+    protocol::operations::{Ended, OperationRef, OperationSpec, Outcome, Progress, Step, Stream},
 };
 
 /// What shows an operation's steps while it is followed, such as a
@@ -56,6 +59,46 @@ pub struct Shown<'a> {
     pub lines: Lines,
     /// Whether the process prints JSON, which its lines leave to stdout.
     pub json: bool,
+}
+
+/// Start `spec` in this process's environment, without its secrets, and
+/// follow it to its end below `display`, returning what it did. `json` says
+/// whether the process prints JSON.
+pub async fn run<T>(
+    paths: &CommandPaths,
+    json: bool,
+    display: &mut impl Display,
+    spec: OperationSpec,
+) -> Result<T>
+where
+    T: TryFrom<Outcome, Error = anyhow::Error>,
+{
+    let env = crate::env::without_secrets();
+    let id = crate::client::operations::start(paths, spec, env).await?;
+    follow_started(paths, json, display, OperationRef::here(id)).await
+}
+
+/// Follow `operation`, which the daemon started for a request of this
+/// process, to its end below `display`, returning what it did.
+pub async fn follow_started<T>(
+    paths: &CommandPaths,
+    json: bool,
+    display: &mut impl Display,
+    operation: OperationRef,
+) -> Result<T>
+where
+    T: TryFrom<Outcome, Error = anyhow::Error>,
+{
+    let mut following = Following::open(paths, operation.clone(), 0).await?;
+    let shown = Shown {
+        operation: &operation,
+        lines: Lines::Command,
+        json,
+    };
+    match show(paths, shown, display, async || following.next().await).await? {
+        Ended::Succeeded(outcome) => T::try_from(*outcome),
+        Ended::Failed(failure) => Err(crate::operations::error(failure)),
+    }
 }
 
 /// Show the output of the operation that `next` reports, its lines where

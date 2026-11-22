@@ -13,12 +13,3 @@ pub(super) async fn reconcile(
     crate::client::recovery::reconcile(&ctx.paths, Some(SpaceSelector::id(&workspace.id)), options)
         .await
 }
-
-/// The problems `reports` leave, joined for a message.
-pub(super) fn issues(reports: &[Report]) -> String {
-    reports
-        .iter()
-        .flat_map(|report| report.issues.iter().map(String::as_str))
-        .collect::<Vec<_>>()
-        .join("; ")
-}

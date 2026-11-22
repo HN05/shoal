@@ -1,5 +1,6 @@
 //! Prompts on the terminal: confirmations, questions with a few answers,
 //! and free text.
+use shoal_workers::preparation::Settling;
 use std::{
     io::{self, Write},
     path::Path,
@@ -144,17 +145,9 @@ fn ask_yes_no(
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum SetupFailureChoice {
-    Retry,
-    Delete,
-    Ignore,
-    Cancel,
-}
-
 /// What to do with a workspace whose setup failed, or did not start unless
 /// `ran`, which leaves nothing to delete or ignore.
-pub fn setup_failure_choice(ran: bool) -> Result<SetupFailureChoice> {
+pub fn setup_failure_choice(ran: bool) -> Result<Settling> {
     setup_failure_with_io(ran, &mut io::stdin().lock(), &mut io::stderr().lock())
 }
 
@@ -162,7 +155,7 @@ fn setup_failure_with_io(
     ran: bool,
     input: &mut impl io::BufRead,
     output: &mut impl Write,
-) -> Result<SetupFailureChoice> {
+) -> Result<Settling> {
     loop {
         if ran {
             write!(
@@ -177,10 +170,10 @@ fn setup_failure_with_io(
         }
         output.flush()?;
         match read_answer(input)?.as_deref() {
-            None | Some("" | "c" | "cancel") => return Ok(SetupFailureChoice::Cancel),
-            Some("r" | "retry") => return Ok(SetupFailureChoice::Retry),
-            Some("d" | "delete") if ran => return Ok(SetupFailureChoice::Delete),
-            Some("i" | "ignore") if ran => return Ok(SetupFailureChoice::Ignore),
+            None | Some("" | "c" | "cancel") => return Ok(Settling::Cancel),
+            Some("r" | "retry") => return Ok(Settling::Retry),
+            Some("d" | "delete") if ran => return Ok(Settling::Delete),
+            Some("i" | "ignore") if ran => return Ok(Settling::Ignore),
             Some(_) if ran => writeln!(output, "Please enter r, d, i, or c.")?,
             Some(_) => writeln!(output, "Please enter r or c.")?,
         }

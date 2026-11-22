@@ -51,3 +51,14 @@ pub struct Report {
     pub changes: Vec<String>,
     pub issues: Vec<String>,
 }
+
+impl Report {
+    /// The problems `reports` leave, joined for a message.
+    pub fn issues_of(reports: &[Self]) -> String {
+        reports
+            .iter()
+            .flat_map(|report| report.issues.iter().map(String::as_str))
+            .collect::<Vec<_>>()
+            .join("; ")
+    }
+}

@@ -7,10 +7,6 @@ use crate::client::preparation::{self, Preparing, Unprepared};
 use crate::{
     agent::Agent,
     cli::{
-        commands::{
-            operations,
-            setup::{SetUp, settle_setup},
-        },
         context::Context,
         output::{Palette, Style},
         shell,
@@ -23,6 +19,7 @@ use crate::{
     },
 };
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_workers::preparation::SetUp;
 
 /// Follow the preparation of the started workspace, which sets it up, links
 /// its PR and queues its agent, before reporting it, unless the start
@@ -90,8 +87,8 @@ async fn followed_setup(
         post_setup: !preparing.reused(),
         ..Default::default()
     };
-    let prepared = operations::follow_preparation(ctx, preparing).await?;
-    settle_setup(ctx, prepared, Some(retry)).await
+    let prepared = shoal_workers::preparation::follow(&ctx.paths, ctx, preparing).await?;
+    shoal_workers::preparation::settle_setup(&ctx.paths, ctx, prepared, Some(retry)).await
 }
 
 /// Run what preparation leaves after setup once the user ignored its
@@ -108,7 +105,7 @@ async fn prepare_after_setup(
     };
     let env = crate::env::without_secrets();
     let preparing = preparation::prepare(&ctx.paths, &workspace, steps, env).await?;
-    let ended = operations::follow_preparation(ctx, preparing).await?;
+    let ended = shoal_workers::preparation::follow(&ctx.paths, ctx, preparing).await?;
     Ok(match ended {
         Ok(prepared) => (prepared, Ok(())),
         Err(Unprepared { workspace, failure }) => {

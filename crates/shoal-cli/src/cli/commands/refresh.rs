@@ -3,7 +3,6 @@
 //! wrote.
 use anyhow::{Result, bail};
 
-use super::setup::setup_workspace;
 use crate::{
     cli::{
         context::Context,
@@ -29,10 +28,17 @@ pub(in crate::cli::commands) async fn refresh(
         .send(&ctx.paths)
         .await?;
     if refreshed.setup {
-        let Some(set_up) = setup_workspace(ctx, &refreshed.workspace, true).await? else {
+        let Some(set_up) = shoal_workers::preparation::setup_workspace(
+            &ctx.paths,
+            ctx,
+            &refreshed.workspace,
+            true,
+        )
+        .await?
+        else {
             return Ok(1);
         };
-        refreshed.workspace = set_up.finish(ctx).await?;
+        refreshed.workspace = set_up.finish(&ctx.paths, ctx).await?;
     }
     ctx.emit_styled(Style::Success, &summary(&refreshed), &refreshed)?;
     Ok(0)

@@ -60,14 +60,14 @@ fn refusals_name_the_argument_a_prompt_asks_for() {
 #[test]
 fn a_setup_that_did_not_start_offers_only_a_retry() {
     for (ran, answers, expected) in [
-        (true, "\n", SetupFailureChoice::Cancel),
-        (true, "r\n", SetupFailureChoice::Retry),
-        (true, "d\n", SetupFailureChoice::Delete),
-        (true, "i\n", SetupFailureChoice::Ignore),
-        (false, "\n", SetupFailureChoice::Cancel),
-        (false, "retry\n", SetupFailureChoice::Retry),
+        (true, "\n", Settling::Cancel),
+        (true, "r\n", Settling::Retry),
+        (true, "d\n", Settling::Delete),
+        (true, "i\n", Settling::Ignore),
+        (false, "\n", Settling::Cancel),
+        (false, "retry\n", Settling::Retry),
         // Nothing ran to delete or ignore, so it asks again.
-        (false, "d\ni\nr\n", SetupFailureChoice::Retry),
+        (false, "d\ni\nr\n", Settling::Retry),
     ] {
         let mut output = Vec::new();
         let choice = setup_failure_with_io(ran, &mut answers.as_bytes(), &mut output).unwrap();

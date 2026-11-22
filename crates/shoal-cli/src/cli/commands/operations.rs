@@ -9,12 +9,8 @@ use shoal_workers::following::{self, Display, Lines, Shown};
 
 use crate::{
     cli::{context::Context, progress::Spinner},
-    client::connection::CommandPaths,
-    client::{
-        operations::{Followed, Following},
-        preparation::{Preparing, Unprepared},
-    },
-    protocol::operations::{Ended, OperationRef, OperationSpec, Outcome, Prepared, Step},
+    client::operations::Followed,
+    protocol::operations::{OperationRef, OperationSpec, Outcome, Step},
 };
 
 /// Start `spec` in this process's environment, without its secrets, and
@@ -23,9 +19,7 @@ pub(super) async fn run<T>(ctx: &Context, spec: OperationSpec) -> Result<T>
 where
     T: TryFrom<Outcome, Error = anyhow::Error>,
 {
-    let id =
-        crate::client::operations::start(&ctx.paths, spec, crate::env::without_secrets()).await?;
-    follow_started(ctx, OperationRef::here(id)).await
+    following::run(&ctx.paths, ctx.json, &mut steps(ctx), spec).await
 }
 
 /// Follow `operation`, which the daemon started for a request of this
@@ -34,29 +28,7 @@ pub(super) async fn follow_started<T>(ctx: &Context, operation: OperationRef) ->
 where
     T: TryFrom<Outcome, Error = anyhow::Error>,
 {
-    T::try_from(follow(ctx, operation).await?)
-}
-
-/// Follow `operation` to its end, as [`show`] shows it, returning how it
-/// did.
-async fn follow(ctx: &Context, operation: OperationRef) -> Result<Outcome> {
-    let mut following = Following::open(&ctx.paths, operation.clone(), 0).await?;
-    let shown = (&operation, Lines::Command);
-    match show(ctx, shown, async || following.next().await).await? {
-        Ended::Succeeded(outcome) => Ok(*outcome),
-        Ended::Failed(failure) => Err(crate::operations::error(failure)),
-    }
-}
-
-/// Follow a workspace's preparation to its end, as [`show`] shows it, after
-/// what assigning its issue on the forge warned of, returning the prepared
-/// workspace or how preparing it failed.
-pub(super) async fn follow_preparation(
-    ctx: &Context,
-    preparing: Preparing<'_, CommandPaths>,
-) -> Result<Result<Prepared, Unprepared>> {
-    let mut steps = steps(ctx);
-    shoal_workers::preparation::follow(&ctx.paths, ctx.json, &mut steps, preparing).await
+    following::follow_started(&ctx.paths, ctx.json, &mut steps(ctx), operation).await
 }
 
 /// Show the output of `operation` that `next` reports, its lines where
@@ -76,12 +48,12 @@ pub(super) async fn show<E>(
 }
 
 /// The spinner of an operation this command follows.
-fn steps(ctx: &Context) -> Steps {
+pub(super) fn steps(ctx: &Context) -> Steps {
     Steps(Spinner::stderr(ctx.json, doing(None)))
 }
 
 /// A spinner naming what the operation does.
-struct Steps(Spinner<Stderr>);
+pub(super) struct Steps(Spinner<Stderr>);
 
 impl Display for Steps {
     fn step(&mut self, step: Step) {

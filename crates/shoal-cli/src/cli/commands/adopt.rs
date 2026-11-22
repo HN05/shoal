@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, ensure};
 
-use super::recovery::{issues, reconcile};
+use super::recovery::reconcile;
 use crate::{
     cli::{
         commands::repositories,
@@ -100,7 +100,7 @@ async fn reclaim(ctx: &Context, workspace: Workspace) -> Result<i32> {
         ..Default::default()
     };
     let reports = reconcile(ctx, &workspace, options).await?;
-    let issues = issues(&reports);
+    let issues = shoal_protocol::recovery::Report::issues_of(&reports);
     ensure!(
         issues.is_empty(),
         "could not reclaim {}: {issues}",

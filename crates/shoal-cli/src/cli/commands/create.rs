@@ -234,11 +234,11 @@ pub(super) async fn start_child(
 /// Run the child's setup and post-setup hook; `None` when setup failed.
 pub(super) async fn prepare(ctx: &Context, child: Workspace) -> Result<Option<Workspace>> {
     if child.state != WorkspaceState::Preparing {
-        super::setup::run_post_setup(ctx, &child).await?;
+        shoal_workers::preparation::run_post_setup(&ctx.paths, ctx, &child).await?;
         return Ok(Some(child));
     }
-    match super::setup::setup_workspace(ctx, &child, true).await? {
-        Some(set_up) => set_up.finish(ctx).await.map(Some),
+    match shoal_workers::preparation::setup_workspace(&ctx.paths, ctx, &child, true).await? {
+        Some(set_up) => set_up.finish(&ctx.paths, ctx).await.map(Some),
         None => Ok(None),
     }
 }
@@ -261,8 +261,11 @@ async fn follow_queuing(
     preparing: Preparing<'_, CommandPaths>,
     agent: Option<Box<QueuedLaunch>>,
 ) -> Result<Option<Prepared>> {
-    match super::setup::follow_setup(ctx, preparing).await? {
-        Some(set_up) => set_up.finish_queuing(ctx, agent).await.map(Some),
+    match shoal_workers::preparation::follow_setup(&ctx.paths, ctx, preparing).await? {
+        Some(set_up) => set_up
+            .finish_queuing(&ctx.paths, ctx, agent)
+            .await
+            .map(Some),
         None => Ok(None),
     }
 }
