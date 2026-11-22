@@ -6,10 +6,7 @@ use anyhow::Result;
 use shoal_workers::{hosting::Caller, places::Launcher, resume::Starter};
 
 use crate::{
-    cli::{
-        availability::Need,
-        output::{Palette, Style},
-    },
+    cli::output::{Palette, Style},
     client::connection::CommandPaths,
     paths::Paths,
 };
@@ -20,8 +17,6 @@ pub struct Context {
     pub(in crate::cli) place: Option<shoal_workers::hosting::Place>,
     /// Emit machine-readable output and never prompt.
     pub json: bool,
-    /// What the command needs of the workspace a picker offers.
-    pub(in crate::cli) need: Need,
     /// The name under which the command remembers the workspaces it acts on,
     /// for `-`; `None` for commands without that history.
     pub(in crate::cli) recent: Option<String>,
@@ -57,7 +52,6 @@ impl Context {
             paths: paths.into(),
             json,
             place: None,
-            need: Need::Any,
             recent: None,
             command: Vec::new(),
         }
@@ -70,7 +64,6 @@ impl Context {
             paths: self.paths.clone(),
             json: self.json,
             place: None,
-            need: Need::Any,
             recent: None,
             command: self.command.clone(),
         }

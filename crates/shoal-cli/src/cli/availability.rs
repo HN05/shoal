@@ -1,6 +1,6 @@
-//! What each CLI command needs of its workspace, so completion and pickers
-//! can say why a workspace would be refused instead of offering it as if it
-//! would work, and the facts the CLI judges its workspaces against.
+//! What each CLI command needs of its workspace, so completion can say why
+//! a workspace would be refused instead of offering it as if it would
+//! work, and the facts the CLI judges its workspaces against.
 use std::collections::{HashMap, HashSet};
 
 use crate::{

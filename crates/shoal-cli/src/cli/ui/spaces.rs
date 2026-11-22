@@ -398,7 +398,7 @@ async fn space_entries(
     offered: Offered,
     acting: &Acting,
 ) -> Entries {
-    let offers = Offers::of(ctx, acting, &workspaces, chats).await;
+    let offers = Offers::of(ctx, acting).await;
     let mut entries = workspace_entries(ctx, workspaces, true, &offers).await;
     let chats: Vec<Chat> = (chats.iter())
         .filter(|chat| offers.shown(&chat.id).is_some())

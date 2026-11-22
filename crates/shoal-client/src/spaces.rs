@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::connection::{Daemon, Prepared, pages, request};
 use shoal_protocol::{
-    model::{Everywhere, Located, RenamedSpace, Space, SpaceTarget, Spaces},
+    model::{Everywhere, Located, RenamedSpace, Space, SpaceOffer, SpaceTarget, Spaces},
     protocol::{Operation, SpaceMethod},
     scope_tokens::ScopeToken,
     space_names::{SpaceName, SpaceSelector},
@@ -47,6 +47,13 @@ pub async fn offered(daemon: &impl Daemon, acting: Operation) -> Result<Everywhe
         acting,
     };
     Everywhere::from_parts(pages(daemon, method).await?)
+}
+
+/// How `acting`, the request of a picker whose command acts on this
+/// machine's spaces itself, judges each of them.
+pub async fn judged_here(daemon: &impl Daemon, acting: Operation) -> Result<Vec<SpaceOffer>> {
+    let acting = Box::new(acting);
+    pages(daemon, SpaceMethod::JudgeSpaces { acting }).await
 }
 
 /// What stands for the space a picker is about to pick in the request it

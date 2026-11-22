@@ -113,7 +113,7 @@ async fn pick_workspace_or_all(
     workspaces: Vec<Workspace>,
     acting: &Acting,
 ) -> Result<Option<SpaceId>> {
-    let offers = Offers::of(ctx, acting, &workspaces, &[]).await;
+    let offers = Offers::of(ctx, acting).await;
     let mut entries = workspace_entries(ctx, workspaces, true, &offers).await;
     entries.extend(elsewhere_entries(ctx, Offered::Workspaces, &offers));
     entries.push((ALL_ID.to_owned(), ALL_WORKSPACES.to_owned()));
@@ -184,7 +184,7 @@ pub async fn pick_workspace(
     argument: &str,
     acting: &Acting,
 ) -> Result<SpaceId> {
-    let offers = Offers::of(ctx, acting, &workspaces, &[]).await;
+    let offers = Offers::of(ctx, acting).await;
     let mut entries = workspace_entries(ctx, workspaces, true, &offers).await;
     entries.extend(elsewhere_entries(ctx, Offered::Workspaces, &offers));
     ensure!(!entries.is_empty(), "{NO_WORKSPACE}");
@@ -204,7 +204,7 @@ pub async fn pick_listed_workspace(
     argument: &str,
     acting: &Acting,
 ) -> Result<SpaceId> {
-    let offers = Offers::of(ctx, acting, &workspaces, &[]).await;
+    let offers = Offers::of(ctx, acting).await;
     let entries = workspace_entries(ctx, workspaces, true, &offers).await;
     ensure!(!entries.is_empty(), "{NO_WORKSPACE}");
     require_argument(ctx, "workspace", argument)?;

@@ -36,7 +36,7 @@ pub(super) async fn list(
     let menu = listing == Listing::Menu && ctx.interactive_output();
     // The menu prints and opens the kept copies from this machine's disk.
     let listing_files = match menu {
-        true => Acting::here(),
+        true => Acting::here(crate::client::files::list),
         false => Acting::request(crate::client::files::list),
     };
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&listing_files)).await?;

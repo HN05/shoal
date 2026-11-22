@@ -49,7 +49,7 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
         ctx,
         args.copy.flatten(),
         // The new space copies the worktree on this machine.
-        Fallback::CurrentDirectory(&Acting::here()),
+        Fallback::CurrentDirectory(&Acting::here(crate::client::workspaces::inspect)),
     )
     .await?;
     let workspaces = crate::client::spaces::list(&ctx.paths)

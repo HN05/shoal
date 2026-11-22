@@ -16,7 +16,9 @@ pub(in crate::cli::commands) async fn cd(
     let workspace = match workspace {
         Some(workspace) => ui::explicit_workspace(ctx, workspace).await?,
         // The shell goes on in the worktree on this machine.
-        None => SpaceSelector::Id(ui::workspace_picker(ctx, &Acting::here()).await?),
+        None => SpaceSelector::Id(
+            ui::workspace_picker(ctx, &Acting::here(crate::client::workspaces::inspect)).await?,
+        ),
     };
     let inspection = crate::client::workspaces::inspect(workspace)
         .send(&ctx.paths)

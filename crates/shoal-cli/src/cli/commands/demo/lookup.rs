@@ -23,7 +23,7 @@ pub(super) async fn named(
         workspace,
         // A demo's screen is read, and its keys typed, through this
         // machine's terminal host.
-        Fallback::CurrentDirectory(&Acting::here()),
+        Fallback::CurrentDirectory(&Acting::here(crate::client::workspaces::inspect)),
     )
     .await?;
     let workspace = crate::client::workspaces::inspect(id.clone())

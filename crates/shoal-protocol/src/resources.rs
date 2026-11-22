@@ -187,7 +187,7 @@ pub struct ResourceLease {
     pub acquirer: crate::acquirers::Acquirer,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ResourceRequest {
     #[serde(default)]
     pub mode: Option<LockMode>,

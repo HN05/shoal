@@ -27,6 +27,7 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     approvals::{ApprovalRequest, Specification, Target},
     resources::{LockMode, ResourceKind, ResourceRequest},
+    secrets::SecretRequest,
     sim::SimRequest,
 };
 
@@ -35,10 +36,8 @@ pub(super) async fn acquire(
     kind: AcquireKind,
     space: Option<SpaceSelector>,
 ) -> Result<i32> {
-    let holding = matches!(kind, AcquireKind::Hold { .. }).then(|| {
-        Acting::request(|space| crate::client::leases::acquire_hold(space, String::new(), None))
-    });
-    let workspace = select_target(ctx, holding, space).await?;
+    let holds = matches!(kind, AcquireKind::Hold { .. });
+    let workspace = select_target(ctx, acquiring(&kind), holds, space).await?;
     match kind {
         AcquireKind::Hold { name, reason } => {
             super::holds::acquire(ctx, workspace, name, reason).await
@@ -137,22 +136,67 @@ fn resource_request(
 }
 
 /// The space a lease goes to, which `explicit` names or the current space
-/// or a picker chooses: any space for a hold, which `holding` sends and a
-/// chat takes too, else a workspace, as a lease of its worktree.
+/// or a picker chooses for `leasing`: any space for a hold, which a chat
+/// takes too, else a workspace, as a lease of its worktree.
 async fn select_target(
     ctx: &Context,
-    holding: Option<Acting>,
+    leasing: Acting,
+    holds: bool,
     explicit: Option<SpaceSelector>,
 ) -> Result<SpaceSelector> {
-    match holding {
-        Some(holding) => {
-            ui::select_space(ctx, explicit, Fallback::CurrentDirectory(&holding)).await
+    let fallback = Fallback::CurrentDirectory(&leasing);
+    match holds {
+        true => ui::select_space(ctx, explicit, fallback).await,
+        false => ui::select_workspace(ctx, explicit, fallback).await,
+    }
+}
+
+/// What acquiring `kind` sends for the space a picker picks. Every lease
+/// but a hold is taken on this machine, where the worktree is.
+fn acquiring(kind: &AcquireKind) -> Acting {
+    match kind {
+        AcquireKind::Hold { .. } => {
+            Acting::request(|space| leases::acquire_hold(space, String::new(), None))
         }
-        // Every other lease is taken and given back on this machine, where
-        // the worktree is.
-        None => {
-            let leasing = Acting::here();
-            ui::select_workspace(ctx, explicit, Fallback::CurrentDirectory(&leasing)).await
+        AcquireKind::Port { .. } => {
+            Acting::here(|space| leases::acquire_port(space, String::new(), PortRequest::default()))
+        }
+        AcquireKind::Sim { .. } => {
+            Acting::here(|space| leases::acquire_simulator(space, SimRequest::new(String::new())))
+        }
+        AcquireKind::Containers { .. } => {
+            Acting::here(|space| leases::acquire_containers(space, None))
+        }
+        AcquireKind::Resource { .. } | AcquireKind::Repo { .. } => {
+            Acting::here(|space| leases::acquire_resource(space, ResourceRequest::default()))
+        }
+        AcquireKind::Secret { .. } => Acting::here(|space| {
+            leases::acquire_secret(space, String::new(), SecretRequest::default())
+        }),
+    }
+}
+
+/// What releasing `kind` sends for the space a picker picks; a release of
+/// any kind sends a port's, which needs what every release but a hold's
+/// needs. Every lease but a hold is given back on this machine, where the
+/// worktree is.
+fn releasing(kind: Option<&ReleaseKind>) -> Acting {
+    match kind {
+        Some(ReleaseKind::Hold { .. }) => {
+            Acting::request(|space| leases::release_hold(space, String::new()))
+        }
+        Some(ReleaseKind::Port { .. }) | None => {
+            Acting::here(|space| leases::release_port(space, String::new()))
+        }
+        Some(ReleaseKind::Sim { .. }) => {
+            Acting::here(|space| leases::release_simulator(space, String::new()))
+        }
+        Some(ReleaseKind::Containers) => Acting::here(leases::release_containers),
+        Some(ReleaseKind::Resource { .. } | ReleaseKind::Repo { .. }) => {
+            Acting::here(|space| leases::release_resource(space, String::new(), String::new()))
+        }
+        Some(ReleaseKind::Secret { .. }) => {
+            Acting::here(|space| leases::release_secret(space, String::new()))
         }
     }
 }
@@ -163,10 +207,8 @@ pub(super) async fn release(
     kind: Option<ReleaseKind>,
     space: Option<SpaceSelector>,
 ) -> Result<i32> {
-    let holding = matches!(kind, Some(ReleaseKind::Hold { .. })).then(|| {
-        Acting::request(|space| crate::client::leases::release_hold(space, String::new()))
-    });
-    let workspace = select_target(ctx, holding, space).await?;
+    let holds = matches!(kind, Some(ReleaseKind::Hold { .. }));
+    let workspace = select_target(ctx, releasing(kind.as_ref()), holds, space).await?;
     if let Some(ReleaseKind::Hold { name }) = kind {
         return super::holds::release(ctx, workspace, name).await;
     }

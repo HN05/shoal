@@ -33,7 +33,7 @@ pub(in crate::cli::commands) async fn open(
         ctx,
         space,
         // The app the space opens in runs on this machine.
-        Fallback::CurrentDirectory(&Acting::here()),
+        Fallback::CurrentDirectory(&Acting::here(crate::client::spaces::status)),
     )
     .await?;
     let space = read(ctx, &selector).await?;

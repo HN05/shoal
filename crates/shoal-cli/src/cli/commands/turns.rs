@@ -23,7 +23,9 @@ use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 /// `selected` spaces, workspaces or chats, leaving agents without one alone.
 pub(super) async fn interrupt(ctx: &Context, selected: Vec<SpaceSelector>) -> Result<i32> {
     // Shoal types the interrupt key into a place on this machine.
-    let typing = Acting::here();
+    let typing = Acting::here(|space| {
+        crate::client::agents::interrupt_turn(space, ExecutionId::from(String::new()))
+    });
     let selected = ui::select_spaces(ctx, selected, false, &typing).await?;
     let spaces = super::stop::resolve(ctx, selected, false).await?;
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {

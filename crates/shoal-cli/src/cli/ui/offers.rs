@@ -7,14 +7,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{hub::directory::HubView, model::Offer};
 
 use super::Acting;
-use crate::{
-    cli::{
-        availability::{self, Fit},
-        context::Context,
-        everywhere,
-    },
-    model::{Chat, Workspace},
-};
+use crate::cli::{context::Context, everywhere};
 
 /// The daemons' verdicts on the spaces a picker could offer, and the other
 /// machines' spaces as the hub lists them, for a command that reaches them.
@@ -33,46 +26,32 @@ pub(super) enum Shown<'a> {
 }
 
 impl Offers {
-    /// What the daemons say of the request `acting` sends; for a command
-    /// that acts here, what the command's need says of this machine's
-    /// `workspaces` and `chats`.
-    pub(super) async fn of(
-        ctx: &Context,
-        acting: &Acting,
-        workspaces: &[Workspace],
-        chats: &[Chat],
-    ) -> Self {
-        let Some(acting) = acting.operation() else {
-            return Self::needed(ctx, workspaces, chats).await;
-        };
-        let everywhere = everywhere::offered(ctx, acting).await;
+    /// What the daemons say of the request `acting` sends: this machine's
+    /// alone for a command that acts here.
+    pub(super) async fn of(ctx: &Context, acting: &Acting) -> Self {
+        if acting.acts_here() {
+            return Self::here(ctx, acting).await;
+        }
+        let everywhere = everywhere::offered(ctx, acting.operation()).await;
         Self {
             judged: everywhere.offers,
             elsewhere: everywhere.elsewhere,
         }
     }
 
-    /// What the command's need says of `workspaces` and `chats`, for a
-    /// command that acts on this machine's spaces itself.
-    async fn needed(ctx: &Context, workspaces: &[Workspace], chats: &[Chat]) -> Self {
-        let availability = availability::load(ctx.need, &ctx.paths, workspaces).await;
-        let workspaces = workspaces.iter().map(|workspace| {
-            let offer = match availability.fit(workspace) {
-                Fit::Accepted => Offer::Accepted,
-                Fit::Refused(reason) => Offer::Refused { reason },
-                Fit::Hidden => Offer::Lacking,
-            };
-            (workspace.id.clone(), offer)
-        });
-        let chats = chats.iter().map(|chat| {
-            let offer = match ctx.need.offers_chat(chat) {
-                true => Offer::Accepted,
-                false => Offer::Lacking,
-            };
-            (chat.id.clone(), offer)
+    /// What this machine's daemon says of the request `acting` sends, for a
+    /// command that acts on this machine's spaces itself; every space is
+    /// offered, with a warning, while it cannot say.
+    async fn here(ctx: &Context, acting: &Acting) -> Self {
+        let judged = crate::client::spaces::judged_here(&ctx.paths, acting.operation()).await;
+        let judged = judged.unwrap_or_else(|error| {
+            eprintln!("warning: the daemon cannot say which spaces this command takes: {error:#}");
+            Vec::new()
         });
         Self {
-            judged: workspaces.chain(chats).collect(),
+            judged: (judged.into_iter())
+                .map(|judged| (judged.space, judged.offer))
+                .collect(),
             elsewhere: None,
         }
     }

@@ -270,14 +270,15 @@ impl Checked for AgentMethod {
             | Self::ReportAttach { .. }
             | Self::AwaitAgentWake { .. }
             | Self::SpaceAgents { .. }
-            | Self::InterruptTurn { .. }
             | Self::CancelRestart { .. }
             | Self::AgentSession { .. }
             | Self::AgentUpdates { .. }
             | Self::WaitAgentUpdates { .. }
             | Self::UpdatesWaiting { .. }
             | Self::AcknowledgePrUpdates { .. } => Some(TargetCheck::Space),
-            Self::RestartAgent { .. } => Some(TargetCheck::RunningSpace),
+            Self::RestartAgent { .. } | Self::InterruptTurn { .. } => {
+                Some(TargetCheck::RunningSpace)
+            }
             Self::GitCredential { .. } | Self::ListAgents => None,
         }
     }

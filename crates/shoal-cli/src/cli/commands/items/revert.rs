@@ -41,7 +41,7 @@ pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs
     let options = revert_args(args)?;
     // A revert is opened from a worktree it verifies here, or a chat's
     // checkout here.
-    let reverting = Acting::here();
+    let reverting = Acting::here(crate::client::spaces::status);
     let space = ui::select_space(
         ctx,
         selector.space,

@@ -2710,9 +2710,9 @@ the daemon of each machine judges that machine's spaces by that request's check,
 including facts only it has, such as where its terminal hosts keep agent
 sessions; the picker leaves out a space without what the request acts on and
 lists one the request refuses last, with the refusal's reason. A command that
-acts on this machine's spaces in its own process, and completion, still state
-what the command needs of a workspace in one table of the CLI's, which judges
-them alike.
+acts on this machine's spaces in its own process asks this machine's daemon
+alone. Completion still states what the command needs of a workspace in one
+table of the CLI's.
 
 Named `[commands]` are executable/argument arrays resolved per name from saved
 repository config, worktree config, then global config and built-in defaults at

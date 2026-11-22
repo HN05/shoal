@@ -400,7 +400,7 @@ async fn run(
         Reviewer::Agent(_) => {
             Acting::request(|space| crate::client::reviews::show(Some(space), None))
         }
-        Reviewer::Ask | Reviewer::Manual => Acting::here(),
+        Reviewer::Ask | Reviewer::Manual => Acting::here(crate::client::executions::command_run),
     };
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&reviewing));
     let workspace = workspace.await?;

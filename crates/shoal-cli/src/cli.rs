@@ -55,9 +55,6 @@ use shoal_protocol::space_names::SpaceSelector;
 pub struct Cli {
     #[arg(skip)]
     pub(crate) daemon_handoff: Option<crate::daemon_handoff::Handoff>,
-    /// What the command needs of its workspace, from its subcommand path.
-    #[arg(skip)]
-    pub(crate) need: availability::Need,
     /// The subcommand path, such as `["repo", "rm"]`.
     #[arg(skip)]
     pub(crate) path: Vec<String>,
@@ -140,8 +137,8 @@ pub enum Command {
 }
 
 impl Cli {
-    /// Parse the process arguments as `Cli::parse` does, recording what the
-    /// command needs of its workspace and resolving its output format.
+    /// Parse the process arguments as `Cli::parse` does, recording the
+    /// subcommand path and resolving its output format.
     pub fn from_args() -> Self {
         let mut matches = <Self as clap::CommandFactory>::command()
             .try_get_matches()
@@ -152,16 +149,12 @@ impl Cli {
             path.push(name.to_owned());
             leaf = child;
         }
-        let names: Vec<_> = path.iter().map(String::as_str).collect();
-        let need =
-            availability::Need::of_matches(&names, leaf).unwrap_or(availability::Need::Ready);
         let mut cli = <Self as clap::FromArgMatches>::from_arg_matches_mut(&mut matches)
             .unwrap_or_else(|error| {
                 error
                     .format(&mut <Self as clap::CommandFactory>::command())
                     .exit()
             });
-        cli.need = need;
         cli.path = path;
         cli.resolve_output(std::env::var_os(crate::env::OUTPUT).as_deref())
             .unwrap_or_else(|error| {

@@ -111,7 +111,7 @@ async fn pick(ctx: &Context, selector: &SpaceSelector) -> Result<String> {
         "no other workspace in this repository"
     );
     // No request names the base it builds on.
-    let choosing = Acting::here();
+    let choosing = Acting::here(crate::client::workspaces::inspect);
     Ok(
         ui::pick_listed_workspace(ctx, candidates, "base", &choosing)
             .await?

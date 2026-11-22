@@ -18,7 +18,8 @@ pub(in crate::cli::commands) async fn processes(
 ) -> Result<i32> {
     // Unlike what ends a space, a stop of its processes may take the chat it
     // runs in. The spaces it takes are checked among this machine's.
-    let stopping = Acting::here();
+    let stopping =
+        Acting::here(move |space| crate::client::stopping::stop_processes(space, selection, None));
     let selectors = match ui::current_chat(&None) {
         Some(_) if selectors.is_empty() => {
             let fallback = ui::Fallback::CurrentDirectory(&stopping);
