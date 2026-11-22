@@ -346,7 +346,11 @@ file's copy stays on the machine that keeps it: a record read on any
 other machine names that machine instead of a path, which means nothing
 there, while one that comes back to it gives the path again; a client
 reads the copy by its space and record ID, streamed from that machine as a
-diff is. What a space passes up to another machine
+diff is. Each machine reports the removed spaces whose files it keeps with
+its spaces, since the hub's directory drops a space once it is removed, and
+a request for a space's files that no machine lists goes to the one that
+keeps them, which checks the caller's scope as for its other removed
+spaces. What a space passes up to another machine
 carries its files' records, so the user or coordinator there reads them the
 same way, and a terminal there opens one only after fetching it into a
 directory marked as Shoal's, its repository's where that machine has it,

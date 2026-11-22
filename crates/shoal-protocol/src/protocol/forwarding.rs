@@ -49,6 +49,9 @@ pub enum Forwarding {
 pub enum Target<'a> {
     /// A space, a workspace or a chat.
     Space(&'a SpaceSelector),
+    /// A space's attached files, which outlive it: a removed space's are
+    /// read where a machine keeps them.
+    Files(&'a SpaceSelector),
     /// A thread or an approval request, numbered in the space its number
     /// begins with.
     Item(&'a ItemNumber),

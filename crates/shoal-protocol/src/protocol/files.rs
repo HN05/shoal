@@ -67,10 +67,10 @@ impl FileMethod {
         match self {
             Self::ListFiles { space }
             | Self::ReadFile { space, .. }
-            | Self::AddFiles { space, .. }
             | Self::RemoveFiles {
                 space: Some(space), ..
-            } => Some(Target::Space(space)),
+            } => Some(Target::Files(space)),
+            Self::AddFiles { space, .. } => Some(Target::Space(space)),
             // Where this machine keeps what a caller here fetches.
             Self::RemoveFiles { space: None, .. } | Self::FetchedDirectory { .. } => None,
         }

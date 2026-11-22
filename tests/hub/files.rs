@@ -54,6 +54,50 @@ fn another_machine_lists_and_reads_a_spaces_files_by_the_machine_that_keeps_them
     assert_eq!(bytes, b"plan");
 }
 
+/// A laptop joined to `hub` that removed a workspace with `notes.md`
+/// attached, with the workspace's ID and the record ID of its file, once
+/// the hub no longer lists the workspace.
+fn laptop_that_removed_notes(hub: &Base) -> (Base, String, i64) {
+    let (laptop, space) = laptop_with_notes(hub);
+    laptop.ok(&["rm", &space, "--wait", "--yes"]);
+    wait_for("the hub to drop the removed space", || {
+        let spaces = hub.ok(&["list"]);
+        let mut spaces = spaces.as_array().unwrap().iter();
+        (!spaces.any(|listed| listed["id"] == space)).then_some(())
+    });
+    let listed = hub.ok(&["files", &space]);
+    assert_eq!(listed[0]["machine"], "laptop", "{listed}");
+    let id = listed[0]["id"].as_i64().unwrap();
+    (laptop, space, id)
+}
+
+#[test]
+fn another_machine_lists_and_reads_the_files_a_removed_space_left() {
+    let hub = machine(true, "app");
+    let (_laptop, space, id) = laptop_that_removed_notes(&hub);
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let selected = SpaceSelector::id(&space.as_str().into());
+    let bytes = runtime.block_on(async {
+        let read = read(&app(&hub), selected, id).await.unwrap();
+        read.to_end().await.unwrap()
+    });
+    assert_eq!(bytes, b"plan");
+}
+
+#[test]
+fn a_removed_spaces_files_on_another_machine_stay_outside_a_scope_that_misses_it() {
+    let hub = machine(true, "app");
+    let (_laptop, space, id) = laptop_that_removed_notes(&hub);
+    let own = workspace(&hub, "own");
+    let issued = hub.request(serde_json::json!({"issue_scope": {"space": own}}));
+    let scoped = app(&hub).scope(issued["data"].as_str().unwrap().into());
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let refused = runtime.block_on(read(&scoped, SpaceSelector::id(&space.as_str().into()), id));
+    let error = format!("{:#}", refused.err().expect("a refusal"));
+    // Refused by the laptop, which keeps the files, as outside the scope.
+    assert!(error.contains("scope"), "{error}");
+}
+
 #[test]
 fn a_space_of_another_machine_reads_no_file_outside_its_scope() {
     let hub = machine(true, "app");

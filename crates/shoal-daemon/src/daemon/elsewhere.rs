@@ -1,7 +1,8 @@
 //! Answering a request for a space this machine has none of: one whose
 //! target the hub lists on another machine before it is handled here, and
 //! one refused here for naming such a space. The machine the hub lists that
-//! space on answers it instead, or the hub holds it for that machine, and
+//! space on answers it instead, or the hub holds it for that machine, as
+//! the machine that keeps a removed space's files answers for them, and
 //! only a space no machine has keeps the refusal; the answer of one that
 //! goes on, as a follow's, comes as that machine writes it, and a duplex
 //! one's connection, as a demo stream's, then carries bytes both ways. A
@@ -62,7 +63,7 @@ pub(super) struct Targeted {
 /// space's process acts in its own.
 fn target_space(target: Target<'_>, scope: Option<&ScopeToken>) -> Option<SpaceSelector> {
     match target {
-        Target::Space(space) => Some(space.clone()),
+        Target::Space(space) | Target::Files(space) => Some(space.clone()),
         Target::Item(number) => Some(SpaceSelector::Number(number.space)),
         Target::Acting(_) if scope.is_some() => None,
         Target::Acting(space) => Some(space.clone()),
@@ -70,11 +71,13 @@ fn target_space(target: Target<'_>, scope: Option<&ScopeToken>) -> Option<SpaceS
 }
 
 /// What a request for a space elsewhere goes on with: its method as its
-/// caller sent it, before its scope narrowed it, and its scope token.
+/// caller sent it, before its scope narrowed it, its scope token, and
+/// whether it acts on the space's attached files.
 pub(super) struct Routing<'a> {
     method: Option<serde_json::Value>,
     forwarding: Forwarding,
     scope: Option<&'a ScopeToken>,
+    files: bool,
 }
 
 impl<'a> Routing<'a> {
@@ -97,6 +100,7 @@ impl<'a> Routing<'a> {
             method,
             forwarding,
             scope,
+            files: matches!(operation.target(), Some(Target::Files(_))),
         }))
     }
 }
@@ -146,6 +150,7 @@ pub(super) async fn answer(
         method: routing.method,
         forwarding: routing.forwarding,
         caller: caller.as_ref(),
+        files: routing.files,
     };
     match server
         .manager

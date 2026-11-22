@@ -39,6 +39,9 @@ pub struct Unanswered<'a> {
     pub method: Option<serde_json::Value>,
     pub forwarding: Forwarding,
     pub caller: Option<&'a Caller>,
+    /// Whether it acts on the space's attached files, which the machine
+    /// that keeps a removed space's answers.
+    pub files: bool,
 }
 
 /// How another machine answered a forwarded request.
@@ -59,8 +62,9 @@ pub enum Elsewhere {
 
 impl Hub {
     /// The answer to `request`, which named `space` that this machine has
-    /// none of, from the other machine the hub lists that space on; none
-    /// when no other machine has it, so the request's own refusal stands.
+    /// none of, from the other machine the hub lists that space on, or for
+    /// a removed space's files, the one that keeps them; none when no other
+    /// machine has it, so the request's own refusal stands.
     pub async fn answer_elsewhere(
         &self,
         daemon: &dyn Daemon,
@@ -69,6 +73,7 @@ impl Hub {
     ) -> Option<Result<Elsewhere>> {
         let (machine, listed) = match self.machine_of(daemon, space).await {
             Ok(Some(found)) => found,
+            Ok(None) if request.files => return self.answer_kept(daemon, space, request).await,
             Ok(None) => return None,
             // A space several machines have is refused as such.
             Err(error) if Reason::of(&error).is_some() => return Some(Err(error)),
@@ -121,6 +126,49 @@ impl Hub {
         Ok(machine.map(|machine| (machine, listed.clone())))
     }
 
+    /// The answer to `request` for the files of the removed space `space`
+    /// names from the other machine that keeps them; none when no other
+    /// machine does.
+    async fn answer_kept(
+        &self,
+        daemon: &dyn Daemon,
+        space: &SpaceSelector,
+        request: Unanswered<'_>,
+    ) -> Option<Result<Elsewhere>> {
+        let machine = match self.keeper_of(daemon, space).await {
+            Ok(machine) => machine?,
+            Err(error) => {
+                log!(
+                    "hub: could not find the machine that keeps the files of space {space}: {error:#}"
+                );
+                return None;
+            }
+        };
+        let forwarded = async {
+            let method = without_caller_machine(forwardable(&request, space, &machine)?)?;
+            (self.send(daemon, &machine, space, method, &request, Delivery::Now)).await
+        };
+        Some(forwarded.await)
+    }
+
+    /// The other joined machine that keeps the files of the removed space
+    /// `selector` names by its ID, as the hub's directory lists it.
+    pub async fn keeper_of(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+    ) -> Result<Option<Member>> {
+        let Some(id) = selector.given_id() else {
+            return Ok(None);
+        };
+        let Some((own, directory)) = self.hub_directory(daemon).await? else {
+            return Ok(None);
+        };
+        let mut kept = directory.kept_files.iter();
+        let keeper = kept.find(|kept| &kept.space == id && kept.machine != own);
+        Ok(keeper.and_then(|kept| directory.machine(&kept.machine).cloned()))
+    }
+
     /// Forward `request` for the space `space` to `machine`, unless it
     /// stays on that machine.
     async fn forward(
@@ -131,16 +179,7 @@ impl Hub {
         listed: &Listed,
         request: Unanswered<'_>,
     ) -> Result<Elsewhere> {
-        let Some(method) = request
-            .method
-            .filter(|_| request.forwarding != Forwarding::Never)
-        else {
-            let message = format!(
-                "space {space} runs on machine {}, and this command acts only on the machine it runs on; run it there",
-                machine.name
-            );
-            return Err(Refusal::new(Reason::NotReady, message).into());
-        };
+        let method = forwardable(&request, space, machine)?;
         if request.forwarding == Forwarding::Reported && !machine.connected {
             return self
                 .reported(daemon, machine, space, listed, request.caller)
@@ -160,6 +199,21 @@ impl Hub {
         };
         // A number another space there may take while it waits, never an ID.
         bind_space(&mut method, space, &listed.space.id)?;
+        self.send(daemon, machine, space, method, &request, delivery)
+            .await
+    }
+
+    /// Send `method`, which `request` for the space `space` became, to
+    /// `machine` through the hub with `delivery`, vouching for its caller.
+    async fn send(
+        &self,
+        daemon: &dyn Daemon,
+        machine: &Member,
+        space: &SpaceSelector,
+        method: serde_json::Value,
+        request: &Unanswered<'_>,
+        delivery: Delivery,
+    ) -> Result<Elsewhere> {
         let name = shoal_protocol::protocol::name_of(Ok(method.clone()));
         refuse_attached(
             &method,
@@ -429,6 +483,25 @@ fn unanswered(machine: &Member, space: &SpaceSelector, error: anyhow::Error) -> 
     Refusal::new(Reason::MachineUnreachable, message).into()
 }
 
+/// The method of `request` for the space `space`, which goes to `machine`;
+/// refused for one that stays on the caller's machine.
+fn forwardable(
+    request: &Unanswered<'_>,
+    space: &SpaceSelector,
+    machine: &Member,
+) -> Result<serde_json::Value> {
+    match &request.method {
+        Some(method) if request.forwarding != Forwarding::Never => Ok(method.clone()),
+        _ => {
+            let message = format!(
+                "space {space} runs on machine {}, and this command acts only on the machine it runs on; run it there",
+                machine.name
+            );
+            Err(Refusal::new(Reason::NotReady, message).into())
+        }
+    }
+}
+
 /// The call that asks for a stream, on its number.
 type StreamCall = Box<dyn FnOnce(u64) -> Call + Send>;
 
@@ -438,11 +511,22 @@ type StreamCall = Box<dyn FnOnce(u64) -> Call + Send>;
 /// it, where the caller named it by number alone; and whether it names
 /// every item it acts on so.
 fn prepared(method: serde_json::Value, listed: &Listed) -> Result<(serde_json::Value, bool)> {
-    let mut operation: shoal_protocol::protocol::Operation = serde_json::from_value(method)?;
-    operation.leave_caller_machine();
+    let mut operation = caller_machine_left(method)?;
     operation.pin_item(&listed.space.approvals);
     let pinned = !operation.names_unpinned_item();
     Ok((serde_json::to_value(operation)?, pinned))
+}
+
+/// The request `method` without what belongs to this machine.
+fn without_caller_machine(method: serde_json::Value) -> Result<serde_json::Value> {
+    Ok(serde_json::to_value(caller_machine_left(method)?)?)
+}
+
+/// The operation `method` names, without what belongs to this machine.
+fn caller_machine_left(method: serde_json::Value) -> Result<Operation> {
+    let mut operation: Operation = serde_json::from_value(method)?;
+    operation.leave_caller_machine();
+    Ok(operation)
 }
 
 /// Name the space `selector` names in `method` by its ID `id`, in the

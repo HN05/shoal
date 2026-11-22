@@ -7147,9 +7147,9 @@ directory's `.attachments`, or for a chat without a repository that of the
 `--path` lists only the paths of the copies this machine keeps.
 A space's files outlive it: they stay for `cleanup.restore.retention_days`
 after its removal, like a workspace's
-[checkpoints](#checkpoints-and-restore), and `shoal files <id>` on its
-machine still lists them, with when they go, and deletes them with `rm`;
-another machine neither lists nor reads them once the space is removed. `shoal restore` gives
+[checkpoints](#checkpoints-and-restore), and `shoal files <id>` still lists
+them, with when they go, and deletes them with `rm`, on another joined
+machine too, which the hub tells where they are kept. `shoal restore` gives
 them back to the space it reopens, where they were. Disk space cleanup
 deletes them sooner when nothing else frees enough space. A space is named by
 the workspace's or chat's number or ID, a removed one's by ID; run from a chat's agent outside any workspace, `shoal files`, `add`
