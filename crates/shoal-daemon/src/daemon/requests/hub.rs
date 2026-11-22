@@ -11,7 +11,7 @@ use shoal_protocol::space_names::SpaceSelector;
 use tokio::net::UnixStream;
 
 use super::super::{
-    answer::{Answer, OperationGuard},
+    answer::{self, Answer, OperationGuard},
     manager::Manager,
     scope::{Caller, Scoped},
     target_checks::{Checked, TargetCheck},
@@ -41,8 +41,9 @@ pub(super) async fn handle(
         }
         HubMethod::ServePlacement => {
             let registration = manager.hub.serve_placement(&**manager)?;
+            let manager = manager.clone();
             return Ok(Answer::connection(move |stream, request_id, guard| {
-                serve_placement(stream, request_id, registration, guard)
+                serve_placement(manager, stream, request_id, registration, guard)
             }));
         }
         HubMethod::AnswerPlacement { number, placement } => {
@@ -54,8 +55,10 @@ pub(super) async fn handle(
 
 /// Send the placer `registration` on `stream` each start the hub asks it to
 /// place, once it heard that it registered, until it hangs up or a later
-/// registration takes over.
+/// registration takes over; a daemon update that quiesces operations
+/// closes the connection, and the placer registers with its replacement.
 async fn serve_placement(
+    manager: Arc<Manager>,
     mut stream: UnixStream,
     request_id: u64,
     mut registration: shoal_hub::Registration,
@@ -64,19 +67,20 @@ async fn serve_placement(
     protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
     drop(startup);
     let (mut reader, mut writer) = stream.split();
-    let mut closed = [0u8; 1];
     loop {
         tokio::select! {
             asked = registration.asked.recv() => {
                 let Some(asked) = asked else {
                     return Ok(());
                 };
+                let Some(_operation) = manager.gates.try_operation() else {
+                    return Ok(());
+                };
                 let response = Response::new(request_id, Body::PlacementAsked(asked));
-                protocol::write(&mut writer, &response).await?;
+                answer::write_frames(&mut writer, response).await?;
             }
-            // The placer answers on connections of their own; a read
-            // completes only when it hangs up.
-            _ = tokio::io::AsyncReadExt::read(&mut reader, &mut closed) => return Ok(()),
+            // The placer answers on connections of their own.
+            () = answer::hangup(&mut reader) => return Ok(()),
         }
     }
 }
