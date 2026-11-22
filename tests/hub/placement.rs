@@ -19,6 +19,9 @@ use super::{
     },
 };
 
+/// The external policy, with a wait for the placer no runner outlasts.
+const EXTERNAL: &str = "placement = \"external\"\nplacer_wait_seconds = 300\n";
+
 /// An agent that runs until its space stops it.
 const AGENT: &str = "[agents.pi]\ncommand = ['sh', '-c', 'exec sleep 600']\n";
 
@@ -141,7 +144,7 @@ fn app(machines: &Machines) -> Connector {
 
 #[test]
 fn an_external_placer_places_a_start_and_balanced_does_without_one() {
-    let machines = machines_with("placement = \"external\"\n", "");
+    let machines = machines_with(EXTERNAL, "");
     let unplaced = placed(&machines, &["--branch", "first"]);
     assert_eq!(unplaced["policy"], "balanced", "{unplaced}");
     assert_eq!(unplaced["unanswered"], "no_placer", "{unplaced}");
@@ -175,7 +178,7 @@ fn an_external_placer_places_a_start_and_balanced_does_without_one() {
 
 #[test]
 fn a_placer_that_chooses_no_connected_machine_leaves_the_start_to_balanced() {
-    let machines = machines_with("placement = \"external\"\n", "");
+    let machines = machines_with(EXTERNAL, "");
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let app = app(&machines);
     let mut placing = runtime.block_on(Placing::serve(&app)).unwrap();

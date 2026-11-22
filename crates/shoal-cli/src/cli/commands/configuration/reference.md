@@ -319,6 +319,7 @@ auto_update = true                       # The default
 escalate_after_minutes = 30              # The default
 default_machine = "desk"                 # Where a device's start goes when it names none
 placement = "balanced"                   # The default; or "local" or "external"
+placer_wait_seconds = 2                  # The default
 
 [machine.hub.forward]
 "/quay/" = "127.0.0.1:8080"              # A path prefix and the local server it reaches
@@ -370,7 +371,7 @@ terminal stays on its machine, and `--machine` always picks the machine.
   machine the start stays on the machine it was made on. Placement never
   clones a repository; the start reports the machines it skipped and why.
 - `external` asks the app registered as the placer, and places by `balanced`
-  when none is registered or it does not answer within two seconds.
+  when none is registered or it does not answer within `placer_wait_seconds`.
 
 `forward` maps path prefixes, each starting and ending with `/`, to local
 addresses, such as an app's own server: the hub's listener forwards each

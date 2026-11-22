@@ -93,7 +93,8 @@ impl Hub {
     /// The registered placer's placement of `snapshot`, else the
     /// `balanced` one.
     async fn place_externally(&self, snapshot: &Snapshot) -> (Placement, Decided) {
-        let placed = self.placers.ask(snapshot).await;
+        let wait = self.config.current().machine.hub.placer_wait();
+        let placed = self.placers.ask(snapshot, wait).await;
         match placed.and_then(|placement| among(placement, snapshot)) {
             Ok(placement) => (placement, (Policy::External, None)),
             Err(unanswered) => balanced_instead(snapshot, unanswered),
