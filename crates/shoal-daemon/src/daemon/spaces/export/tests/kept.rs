@@ -27,7 +27,7 @@ async fn another_machine_continues_a_kept_package_under_its_id() {
         package: PackageSource::File(file.clone()),
         repository: None,
         sessions: None,
-        ticket: None,
+        claim: crate::transfer::Claim::Plain,
     };
     let input = PackageInput::File(file);
     let imported = importing

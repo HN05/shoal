@@ -12,6 +12,7 @@ use crate::{
     sessions::HostName,
 };
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::transfer::Claim;
 
 pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand) -> Result<i32> {
     match command {
@@ -130,8 +131,17 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
         }
         InternalCommand::QueueStart { entry } => crate::queued_starts::run(&ctx.paths, entry).await,
         InternalCommand::Operation => crate::operations::run(&ctx.paths).await,
-        InternalCommand::ImportMoved { ticket, no_resume } => {
-            shoal_workers::arrivals::import_moved(&ctx.paths, &ctx, ticket, !no_resume).await
+        InternalCommand::ImportMoved {
+            ticket,
+            takeover,
+            no_resume,
+        } => {
+            let claim = match (ticket, takeover) {
+                (Some(ticket), _) => Claim::Move(ticket),
+                (None, true) => Claim::Takeover,
+                (None, false) => Claim::Plain,
+            };
+            shoal_workers::arrivals::import_moved(&ctx.paths, &ctx, claim, !no_resume).await
         }
         InternalCommand::PlaceSessions { repository } => {
             shoal_workers::launch::place_forked_sessions(&ctx.paths, repository).await

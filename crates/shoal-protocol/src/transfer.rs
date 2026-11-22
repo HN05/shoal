@@ -147,11 +147,35 @@ pub struct PackageImport {
     /// machine that wrote the package or whose files it carries.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sessions: Option<bool>,
-    /// The ticket of the move through the hub that delivers the package,
-    /// which the claims of its spaces carry: the hub's claim of its own
-    /// space commits the move, so one the hub refuses records nothing.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ticket: Option<MoveTicket>,
+    /// How its spaces are claimed at the hub.
+    #[serde(default, skip_serializing_if = "Claim::is_plain")]
+    pub claim: Claim,
+}
+
+/// How an import claims at the hub the spaces it records here.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Claim {
+    /// As any import does, so this machine's report of a space takes its
+    /// ID over without a conflict; a hub that cannot be asked takes none,
+    /// and a copy, which takes IDs of its own, claims nothing it had.
+    #[default]
+    Plain,
+    /// For the move through the hub that delivers the package, by its
+    /// ticket: the hub's claim of its own space commits the move, so one
+    /// the hub refuses records nothing, as once the move's source settled
+    /// the move without it.
+    Move(MoveTicket),
+    /// For the takeover of a space whose machine is offline, from the
+    /// package the hub keeps of it, which the hub refuses once that machine
+    /// is connected again.
+    Takeover,
+}
+
+impl Claim {
+    fn is_plain(&self) -> bool {
+        *self == Self::Plain
+    }
 }
 
 /// Where the daemon reads a package from.

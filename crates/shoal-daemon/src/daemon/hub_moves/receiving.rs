@@ -9,7 +9,7 @@ use std::{process::Stdio, sync::Arc};
 use anyhow::{Context as _, Result, bail};
 use shoal_ids::move_tickets::MoveTicket;
 use shoal_protocol::protocol::{self, Body, Response};
-use tokio::net::UnixStream;
+use tokio::{io::AsyncRead, net::UnixStream};
 
 use crate::{
     daemon::{
@@ -21,7 +21,7 @@ use crate::{
     },
     model::Space,
     refusal::Reason,
-    transfer::ImportedMove,
+    transfer::{Claim, ImportedMove},
     workers::{Worker, detached_command, internal_command},
 };
 use shoal_ids::space_ids::SpaceId;
@@ -58,15 +58,18 @@ impl Manager {
                 .receive_removed(stream, request_id, receiving.ticket, guard)
                 .await;
         }
-        let ticket = receiving.ticket.as_ref();
+        let claim = match &receiving.ticket {
+            Some(ticket) => Claim::Move(ticket.clone()),
+            None => Claim::Plain,
+        };
         let body = match self
-            .import_moved(&mut stream, ticket, receiving.resume)
+            .import_moved(&mut stream, &claim, receiving.resume)
             .await
         {
             Ok(imported) => {
                 // A copy's agents start as copies, while the originals run on.
                 if let ImportedMove::Arrived { arrived, carried } = &imported
-                    && ticket.is_some()
+                    && receiving.ticket.is_some()
                 {
                     let arrived = std::iter::once(&arrived.space.id).chain(carried);
                     self.tell_arrived(arrived, &receiving.from).await;
@@ -128,16 +131,16 @@ impl Manager {
         }
     }
 
-    /// How `shoal internal import-moved` continued the package `stream`
-    /// carries until the caller ends its side, as the user, in this
-    /// daemon's environment.
-    async fn import_moved(
+    /// How `shoal internal import-moved` continued the package `input`
+    /// carries until it ends, its spaces claimed at the hub as `claim`
+    /// says, as the user, in this daemon's environment.
+    pub(super) async fn import_moved(
         &self,
-        stream: &mut UnixStream,
-        ticket: Option<&MoveTicket>,
+        input: &mut (impl AsyncRead + Unpin),
+        claim: &Claim,
         resume: bool,
     ) -> Result<ImportedMove> {
-        let argv = internal_command(&self.paths, true, Worker::ImportMoved { ticket, resume })?;
+        let argv = internal_command(&self.paths, true, Worker::ImportMoved { claim, resume })?;
         let mut command = detached_command(&argv);
         command
             .current_dir(&self.paths.home)
@@ -150,7 +153,7 @@ impl Manager {
         let mut stdin = child.stdin.take().context("the import takes no input")?;
         // An import that refuses the package stops reading it, and says why.
         let feeding = async move {
-            let _ = tokio::io::copy(stream, &mut stdin).await;
+            let _ = tokio::io::copy(input, &mut stdin).await;
         };
         let (_, output) = tokio::join!(feeding, child.wait_with_output());
         reported(&output.context("run the import")?)

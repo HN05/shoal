@@ -120,7 +120,7 @@ async fn a_move_through_the_hub_whose_claim_the_hub_cannot_take_records_nothing(
         package: crate::transfer::PackageSource::File(file.clone()),
         repository: None,
         sessions: None,
-        ticket: Some(shoal_ids::move_tickets::MoveTicket::generate()),
+        claim: crate::transfer::Claim::Move(shoal_ids::move_tickets::MoveTicket::generate()),
     };
 
     // A machine in no hub has none to claim the space at.

@@ -151,7 +151,7 @@ pub(super) fn workspace_import(
         session_files: session_files.to_vec(),
         copies: Default::default(),
         recorded: Default::default(),
-        claim: crate::daemon::restore::Claim::Plain,
+        claim: crate::transfer::Claim::Plain,
     }
 }
 

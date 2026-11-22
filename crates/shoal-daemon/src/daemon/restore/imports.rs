@@ -1,6 +1,5 @@
 //! Importing a space another Shoal exported: recording its removal record
 //! here as its kind needs, then restoring it as `shoal restore` does.
-use shoal_ids::move_tickets::MoveTicket;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::repository::Selector;
 use shoal_protocol::transcripts::CarriedSessionFile;
@@ -11,6 +10,7 @@ use anyhow::{Context, Result, bail, ensure};
 
 use crate::daemon::manager::Manager;
 use crate::refusal::{Reason, Refusal};
+use crate::transfer::Claim;
 use crate::{
     git,
     model::{
@@ -51,22 +51,6 @@ pub(crate) struct SpaceImport {
     pub(crate) recorded: BTreeSet<SpaceId>,
     /// How it claims its space at the hub.
     pub(crate) claim: Claim,
-}
-
-/// How an import claims at the hub the space it records here.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Claim {
-    /// As any import does, so this machine's report of the space takes its
-    /// ID over without a conflict; a hub that cannot be asked takes none,
-    /// and a copy, which takes an ID of its own, claims nothing it had.
-    Plain,
-    /// For the move through the hub that brings it, which the hub refuses
-    /// once the move's source settled the move without it.
-    Move(MoveTicket),
-    /// For the takeover of a space whose machine is offline, from the
-    /// package the hub keeps of it, which the hub refuses once that machine
-    /// is connected again.
-    Takeover,
 }
 
 impl Manager {

@@ -9,12 +9,12 @@ use shoal_protocol::{
     hub::packages::KeptPackage, protocol::RemovalMethod, space_names::SpaceSelector,
 };
 
-use super::{Claim, PackageInput};
+use super::PackageInput;
 use crate::{
     daemon::{log, manager::Manager, scope::Caller},
     model::{RemovedSpace, RestoredSpace},
     time::UnixTime,
-    transfer::{PackageImport, PackageSource},
+    transfer::{Claim, PackageImport, PackageSource},
 };
 
 /// A space of an offline machine that a restore takes over from the hub's
@@ -102,10 +102,10 @@ impl Manager {
             package: PackageSource::File(file.clone()),
             repository: None,
             sessions: None,
-            ticket: None,
+            claim: Claim::Takeover,
         };
         let input = PackageInput::File(file);
-        let imported = (self.import_claiming(&import, input, caller, Claim::Takeover)).await?;
+        let imported = self.import_package(&import, input, caller).await?;
         let mut restored = imported.restored;
         let lacks = lacking(&takeover.machine, takeover.unsent_since, UnixTime::now());
         restored.warnings_mut().extend(lacks);

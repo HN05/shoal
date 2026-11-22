@@ -444,7 +444,6 @@ mod chats;
 mod imports;
 mod packages;
 
-pub(crate) use imports::Claim;
 #[cfg(test)]
 pub(crate) use imports::SpaceImport;
 pub(crate) use packages::PackageInput;

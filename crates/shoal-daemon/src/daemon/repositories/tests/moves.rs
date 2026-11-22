@@ -1026,7 +1026,7 @@ async fn a_root_move_takes_the_session_files_kept_for_chats_without_a_repository
         session_files: vec![carried],
         copies: Default::default(),
         recorded: Default::default(),
-        claim: crate::daemon::restore::Claim::Plain,
+        claim: crate::transfer::Claim::Plain,
     };
     manager.import_space(import).await?;
 

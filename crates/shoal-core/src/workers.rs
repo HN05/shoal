@@ -1,11 +1,11 @@
 //! The command lines that start Shoal's workers: the hidden `internal`
 //! commands the daemon, the execution wrapper and the CLI run in their own
 //! processes.
-use shoal_ids::move_tickets::MoveTicket;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::transfer::Claim;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -113,11 +113,11 @@ pub enum Worker<'a> {
     /// Run the operation whose order the daemon writes to standard input.
     Operation,
     /// Continue the spaces of the package another joined machine moves
-    /// here, which the daemon writes to standard input, their claims at the
-    /// hub carrying `ticket`, which a copy lacks, with their agents'
-    /// restores queued when `resume`.
+    /// here, or hands over as it shuts down, which the daemon writes to
+    /// standard input, claimed at the hub as `claim` says, with their
+    /// agents' restores queued when `resume`.
     ImportMoved {
-        ticket: Option<&'a MoveTicket>,
+        claim: &'a Claim,
         resume: bool,
     },
     /// Put the session files whose list the daemon writes to standard
@@ -402,10 +402,12 @@ pub(crate) fn internal_command_for(
             args.extend_from_slice(command);
         }
         Worker::Operation => args.push(OPERATION.into()),
-        Worker::ImportMoved { ticket, resume } => {
+        Worker::ImportMoved { claim, resume } => {
             args.push(IMPORT_MOVED.into());
-            if let Some(ticket) = ticket {
-                args.extend(["--ticket".into(), ticket.into()]);
+            match claim {
+                Claim::Plain => {}
+                Claim::Move(ticket) => args.extend(["--ticket".into(), ticket.into()]),
+                Claim::Takeover => args.push("--takeover".into()),
             }
             if !resume {
                 args.push("--no-resume".into());

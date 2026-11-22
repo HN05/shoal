@@ -110,7 +110,7 @@ const REQUESTS: &[&str] = &[
     r#"{"read_held_package":{"space":"fix"}}"#,
     r#"{"release_held_move":{"space":"fix"}}"#,
     r#"{"receive_move":{"ticket":"t1","resume":false,"from":"laptop","removed":true}}"#,
-    r#"{"import_package":{"package":{"file":"/work/fix.shoal"},"repository":"app","sessions":true}}"#,
+    r#"{"import_package":{"package":{"file":"/work/fix.shoal"},"repository":"app","sessions":true,"claim":{"move":"t1"}}}"#,
     r#"{"checkpoint":{"workspace":"fix","name":"before rebase"}}"#,
     r#"{"checkpoints":{"workspace":"fix","after":null}}"#,
     r#"{"saved":{"space":"fix"}}"#,

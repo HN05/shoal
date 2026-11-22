@@ -21,7 +21,7 @@ use anyhow::{Context, Result, ensure};
 
 pub use carried::{CarriedSpaceExt, Placed, carried_spaces};
 pub use shoal_protocol::transfer::{
-    Arrived, CarriedRecord, CarriedSpace, Carrying, Consent, DeferredMove, ExportedSpace,
+    Arrived, CarriedRecord, CarriedSpace, Carrying, Claim, Consent, DeferredMove, ExportedSpace,
     ImportedMove, ImportedPackage, MachineDestination, Manifest, MoveDestination, MoveFailure,
     MoveOrder, MovePhase, MoveRecord, MoveReport, MoveSettled, PackageImport, PackageSource,
     PackagedSpace, RecordArrival, RemovedDelivery, Sessions, SpaceMoved, SshDestination,

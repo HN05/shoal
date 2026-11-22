@@ -23,7 +23,7 @@ use crate::{
     },
     model::RestoredSpace,
     refusal::{Reason, Refusal},
-    transfer::{ImportedPackage, PackageImport, PackageSource},
+    transfer::{Claim, ImportedPackage, PackageImport, PackageSource},
 };
 
 use super::reopen;
@@ -104,7 +104,7 @@ fn package_import(file: &Path, options: &ImportOptions) -> Result<PackageImport>
         package,
         repository: repository.transpose()?,
         sessions: options.sessions,
-        ticket: None,
+        claim: Claim::Plain,
     })
 }
 

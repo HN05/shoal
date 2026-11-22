@@ -1,5 +1,6 @@
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::transfer::Claim;
 use std::os::unix::ffi::OsStringExt;
 
 use clap::Parser;
@@ -411,17 +412,35 @@ fn operation_parses_without_arguments() {
 }
 
 #[test]
-fn import_moved_round_trips_its_ticket_and_resume() {
+fn import_moved_round_trips_its_claim_and_resume() {
     let ticket = shoal_ids::move_tickets::MoveTicket::generate();
-    for (ticket, resume) in [(Some(&ticket), true), (None, false)] {
+    let claims = [
+        (Claim::Move(ticket), true),
+        (Claim::Takeover, true),
+        (Claim::Plain, false),
+    ];
+    for (claim, resume) in claims {
         let InternalCommand::ImportMoved {
-            ticket: parsed,
+            ticket,
+            takeover,
             no_resume,
-        } = parse(Worker::ImportMoved { ticket, resume }, true)
+        } = parse(
+            Worker::ImportMoved {
+                claim: &claim,
+                resume,
+            },
+            true,
+        )
         else {
             panic!("expected import-moved worker");
         };
-        assert_eq!((parsed.as_ref(), no_resume), (ticket, !resume));
+        let parsed = match (ticket, takeover) {
+            (Some(ticket), false) => Claim::Move(ticket),
+            (None, true) => Claim::Takeover,
+            (None, false) => Claim::Plain,
+            (Some(_), true) => panic!("a ticket and a takeover together"),
+        };
+        assert_eq!((parsed, no_resume), (claim, !resume));
     }
 }
 

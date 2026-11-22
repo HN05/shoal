@@ -1,7 +1,7 @@
 //! `shoal internal import-moved`: the destination's side of a move between
 //! joined machines. The daemon there runs it with the package on standard
 //! input, and it continues the spaces as `shoal restore --from -` does,
-//! their claims at the hub carrying the move's ticket, then prints how it
+//! claimed at the hub as the daemon says, then prints how it
 //! went for the daemon to answer the machine the spaces move from, where
 //! they stay when nothing was recorded here.
 use anyhow::Result;
@@ -9,7 +9,7 @@ use anyhow::Result;
 use shoal_core::{
     refusal::Reason,
     transfer::{
-        Arrived, CarriedRecord, ImportedMove, ImportedPackage, PackageImport, PackageSource,
+        Arrived, CarriedRecord, Claim, ImportedMove, ImportedPackage, PackageImport, PackageSource,
     },
 };
 
@@ -18,18 +18,18 @@ use crate::{
     protocol::{ErrorCode, RemoteError},
     reopening::{self, Reopening},
 };
-use shoal_ids::{move_tickets::MoveTicket, space_ids::SpaceId};
+use shoal_ids::space_ids::SpaceId;
 
-/// Continue the package on standard input, claiming its spaces with
-/// `ticket`, which a copy lacks, queueing their agents' restores when
-/// `restore`, and print how it went as the last line of standard output.
+/// Continue the package on standard input, claiming its spaces as `claim`
+/// says, queueing their agents' restores when `restore`, and print how it
+/// went as the last line of standard output.
 pub async fn import_moved(
     paths: &CommandPaths,
     reopening: &impl Reopening,
-    ticket: Option<MoveTicket>,
+    claim: Claim,
     restore: bool,
 ) -> Result<i32> {
-    let imported = match receive(paths, ticket).await {
+    let imported = match receive(paths, claim).await {
         Ok(imported) => match open(paths, reopening, imported, restore).await {
             Ok((arrived, carried)) => ImportedMove::Arrived {
                 arrived: Box::new(arrived),
@@ -47,13 +47,13 @@ pub async fn import_moved(
 }
 
 /// Have the daemon import the package on standard input, claiming its
-/// spaces with `ticket`.
-async fn receive(paths: &CommandPaths, ticket: Option<MoveTicket>) -> Result<ImportedPackage> {
+/// spaces as `claim` says.
+async fn receive(paths: &CommandPaths, claim: Claim) -> Result<ImportedPackage> {
     let import = PackageImport {
         package: PackageSource::Stream,
         repository: None,
         sessions: None,
-        ticket,
+        claim,
     };
     let mut input = tokio::io::stdin();
     crate::client::transfer::import_streamed(paths, import, &mut input).await

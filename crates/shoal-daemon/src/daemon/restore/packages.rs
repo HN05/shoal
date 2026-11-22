@@ -9,13 +9,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, ensure};
 
-use super::imports::{Claim, SpaceImport};
+use super::imports::SpaceImport;
 use crate::daemon::{manager::Manager, scope::Caller};
 use crate::{
     model::RemovedSpace,
     refusal::{Reason, Refusal},
     transfer::{
-        CarriedRecord, ImportedPackage, Manifest, ManifestExt, PackageImport, PackageSource,
+        CarriedRecord, Claim, ImportedPackage, Manifest, ManifestExt, PackageImport, PackageSource,
         PackagedSpace, PackagedSpaceExt, Parts, Sessions,
     },
 };
@@ -54,23 +54,7 @@ impl Manager {
         input: PackageInput,
         caller: Option<&Caller>,
     ) -> Result<ImportedPackage> {
-        let claim = match &import.ticket {
-            Some(ticket) => Claim::Move(ticket.clone()),
-            None => Claim::Plain,
-        };
-        self.import_claiming(import, input, caller, claim).await
-    }
-
-    /// Import the package `input` holds as [`Self::import_package`] does,
-    /// its spaces claimed at the hub as `claim` says.
-    pub(crate) async fn import_claiming(
-        &self,
-        import: &PackageImport,
-        input: PackageInput,
-        caller: Option<&Caller>,
-        claim: Claim,
-    ) -> Result<ImportedPackage> {
-        let package = (self.read_package(import, input, caller, claim).await)
+        let package = (self.read_package(import, input, caller).await)
             .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
         let Package {
             own,
@@ -99,11 +83,9 @@ impl Manager {
             package: PackageSource::Stream,
             repository: None,
             sessions: None,
-            ticket: Some(ticket.clone()),
+            claim: Claim::Move(ticket),
         };
-        let package = (self
-            .read_package(&import, input, None, Claim::Move(ticket))
-            .await)
+        let package = (self.read_package(&import, input, None).await)
             .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
         let Package {
             own,
@@ -130,7 +112,6 @@ impl Manager {
         import: &PackageImport,
         input: PackageInput,
         caller: Option<&Caller>,
-        claim: Claim,
     ) -> Result<Package> {
         let (manifest, input) = input.read_manifest().await?;
         let warnings = copy_warnings(&manifest, import.sessions)?;
@@ -140,7 +121,7 @@ impl Manager {
         let directory = self.unpacking_directory(destinations.own()).await?;
         let parts = input.read_parts(&manifest, directory).await?;
         self.ensure_none_here(&manifest).await?;
-        let kept = (import.sessions, claim);
+        let kept = (import.sessions, import.claim.clone());
         let (own, carried) = space_imports(&manifest, kept, &destinations, &parts.parts);
         Ok(Package {
             own,
