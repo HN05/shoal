@@ -42,13 +42,15 @@ impl Manager {
         let Some(layout) = self.space_tmp_layout(space).await? else {
             return Ok(());
         };
-        remove(layout, vec![space.id.to_owned()]).await
+        remove(layout, vec![space.id.to_owned()])
+            .await?
+            .into_result()
     }
 
     /// Delete every temporary directory that belongs to no workspace or chat
     /// of its repository, or to no chat without one, such as one a process
-    /// created while its workspace was removed. A failure in one repository
-    /// does not skip the others.
+    /// created while its workspace was removed. A directory that cannot be
+    /// deleted keeps neither the others nor the other repositories'.
     pub(crate) async fn sweep_tmp_dirs(&self) -> Result<()> {
         let mut failed = Vec::new();
         for repo in self.repositories.list().await? {
@@ -88,13 +90,14 @@ impl Manager {
             .into_iter()
             .filter(|id| !recorded.contains(id))
             .collect();
-        if !orphans.is_empty() {
+        let removed = remove(layout, orphans).await?;
+        if !removed.deleted.is_empty() {
             log!(
-                "deleting orphaned temporary directories {}",
-                orphans.join(", ")
+                "deleted orphaned temporary directories {}",
+                removed.deleted.join(", ")
             );
         }
-        remove(layout, orphans).await
+        removed.into_result()
     }
 
     /// The IDs of the repository's workspaces and chats, or of the chats
@@ -110,7 +113,6 @@ impl Manager {
     }
 }
 
-/// The IDs whose temporary directories `layout` holds.
 /// The spaces with a temporary directory in `layout`, which names each by
 /// its space's ID.
 async fn list(layout: Layout) -> Result<Vec<SpaceId>> {
@@ -118,9 +120,37 @@ async fn list(layout: Layout) -> Result<Vec<SpaceId>> {
     Ok(names.into_iter().map(SpaceId::from).collect())
 }
 
-/// Delete the temporary directories of `ids` in `layout`.
-async fn remove(layout: Layout, ids: Vec<SpaceId>) -> Result<()> {
-    tokio::task::spawn_blocking(move || ids.iter().try_for_each(|id| layout.remove_one(id))).await?
+/// What deleting temporary directories did.
+#[derive(Debug, Default)]
+struct Removed {
+    /// The spaces whose temporary directories it deleted.
+    deleted: Vec<SpaceId>,
+    /// Why each of the others could not be deleted.
+    failed: Vec<String>,
+}
+
+impl Removed {
+    /// Fails naming each directory that could not be deleted.
+    fn into_result(self) -> Result<()> {
+        ensure!(self.failed.is_empty(), "{}", self.failed.join("; "));
+        Ok(())
+    }
+}
+
+/// Delete the temporary directories of `ids` in `layout`, each whether or
+/// not the others could be.
+async fn remove(layout: Layout, ids: Vec<SpaceId>) -> Result<Removed> {
+    let removed = tokio::task::spawn_blocking(move || {
+        let mut removed = Removed::default();
+        for id in ids {
+            match layout.remove_one(&id) {
+                Ok(()) => removed.deleted.push(id),
+                Err(error) => removed.failed.push(format!("{error:#}")),
+            }
+        }
+        removed
+    });
+    Ok(removed.await?)
 }
 
 /// The IDs of the repository's workspaces and chats, or of the chats

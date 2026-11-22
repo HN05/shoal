@@ -127,3 +127,19 @@ async fn the_sweep_deletes_temporary_directories_without_a_record() {
     assert!(kept.is_dir());
     assert!(chat.part.tmp_dir.unwrap().is_dir());
 }
+
+#[tokio::test]
+async fn a_directory_that_cannot_be_deleted_does_not_keep_the_others() {
+    let root = tempfile::tempdir().unwrap();
+    let layout = crate::tmp_dirs::Layout::new(root.path(), &"repo".into());
+    let orphan = layout.prepare(&SpaceId::from("orphan")).unwrap();
+    // A file where the first path needs a directory: it cannot be deleted.
+    std::fs::write(layout.root().join("file"), "").unwrap();
+    let ids = vec![SpaceId::from("file/stuck"), SpaceId::from("orphan")];
+
+    let removed = super::remove(layout, ids).await.unwrap();
+    assert!(!orphan.exists());
+    assert_eq!(removed.deleted, [SpaceId::from("orphan")]);
+    let error = removed.into_result().unwrap_err().to_string();
+    assert!(error.contains("file/stuck"), "{error}");
+}
