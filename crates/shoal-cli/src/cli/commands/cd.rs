@@ -1,7 +1,11 @@
 //! Moving the shell into a workspace.
 use anyhow::{Result, ensure};
 
-use crate::cli::{context::Context, recent, shell, ui};
+use crate::cli::{
+    context::Context,
+    recent, shell,
+    ui::{self, Acting},
+};
 use crate::client::output::workspaces::Directory;
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -12,7 +16,7 @@ pub(in crate::cli::commands) async fn cd(
     let workspace = match workspace {
         Some(workspace) => ui::explicit_workspace(ctx, workspace).await?,
         None => SpaceSelector::Id(
-            ui::workspace_picker(ctx, &crate::cli::ui::Acting::Unconverted).await?,
+            ui::workspace_picker(ctx, &Acting::request(crate::client::workspaces::inspect)).await?,
         ),
     };
     let inspection = crate::client::workspaces::inspect(workspace)

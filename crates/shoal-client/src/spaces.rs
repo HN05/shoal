@@ -73,17 +73,13 @@ pub async fn select(
 
 /// A new scope token that acts for `space` until [`revoke_scope`] revokes
 /// it or the space is removed.
-pub async fn issue_scope(daemon: &impl Daemon, space: SpaceSelector) -> Result<ScopeToken> {
-    request(daemon, SpaceMethod::IssueScope { space }).await
+pub fn issue_scope(space: SpaceSelector) -> Prepared<ScopeToken> {
+    Prepared::new(SpaceMethod::IssueScope { space })
 }
 
 /// Revoke `token`, which [`issue_scope`] issued for `space`.
-pub async fn revoke_scope(
-    daemon: &impl Daemon,
-    space: SpaceSelector,
-    token: ScopeToken,
-) -> Result<()> {
-    request(daemon, SpaceMethod::RevokeScope { space, token }).await
+pub fn revoke_scope(space: SpaceSelector, token: ScopeToken) -> Prepared<()> {
+    Prepared::new(SpaceMethod::RevokeScope { space, token })
 }
 
 /// The variables `space` gives its processes, without a scope token, as a

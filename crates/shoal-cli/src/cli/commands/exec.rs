@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use crate::cli::{
     context::Context,
-    ui::{self, Fallback},
+    ui::{self, Acting, Fallback},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -17,7 +17,7 @@ pub(in crate::cli::commands) async fn exec(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
+        Fallback::CurrentDirectory(&Acting::request(shoal_workers::execution::running_command)),
     )
     .await?;
     shoal_workers::execution::run_command(&ctx.paths, workspace, command).await

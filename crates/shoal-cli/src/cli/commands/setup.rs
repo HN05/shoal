@@ -8,7 +8,7 @@ use crate::{
         commands::operations,
         context::Context,
         output::{Palette, Style},
-        ui::{self, Fallback},
+        ui::{self, Acting, Fallback},
     },
     client::connection::CommandPaths,
     client::preparation::{self, Preparing, Unprepared},
@@ -28,7 +28,7 @@ pub(in crate::cli::commands) async fn setup(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
+        Fallback::CurrentDirectory(&Acting::request(crate::client::workspaces::inspect)),
     )
     .await?;
     let inspection = crate::client::workspaces::inspect(workspace.clone())
@@ -55,7 +55,7 @@ pub(in crate::cli::commands) async fn skip_setup(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
+        Fallback::CurrentDirectory(&Acting::request(crate::client::workspaces::inspect)),
     )
     .await?;
     let workspace = crate::client::workspaces::inspect(workspace.clone())

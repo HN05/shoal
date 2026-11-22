@@ -7,7 +7,7 @@ use crate::{
     cli::{
         commands::configured,
         context::Context,
-        ui::{self, Fallback},
+        ui::{self, Acting, Fallback},
     },
     protocol::ConfigTarget,
 };
@@ -24,7 +24,7 @@ pub(in crate::cli::commands) async fn edit(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
+        Fallback::CurrentDirectory(&Acting::request(shoal_workers::execution::running_command)),
     )
     .await?;
     let settings =

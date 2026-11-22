@@ -5,7 +5,7 @@ use anyhow::Result;
 use crate::cli::{
     context::Context,
     output::Style,
-    ui::{self, Fallback},
+    ui::{self, Acting, Fallback},
 };
 use crate::client::output::spaces::Revoked;
 use shoal_protocol::{scope_tokens::ScopeToken, space_names::SpaceSelector};
@@ -15,12 +15,13 @@ pub(super) async fn run(
     space: Option<SpaceSelector>,
     revoke: Option<ScopeToken>,
 ) -> Result<i32> {
-    let space = ui::select_space(
-        ctx,
-        space,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-    )
-    .await?;
+    let acting = match revoke.clone() {
+        Some(token) => {
+            Acting::request(move |space| crate::client::spaces::revoke_scope(space, token.clone()))
+        }
+        None => Acting::request(crate::client::spaces::issue_scope),
+    };
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&acting)).await?;
     match revoke {
         Some(token) => revoke_scope(ctx, space, token).await,
         None => export(ctx, space).await,
@@ -29,7 +30,9 @@ pub(super) async fn run(
 }
 
 async fn revoke_scope(ctx: &Context, space: SpaceSelector, token: ScopeToken) -> Result<()> {
-    crate::client::spaces::revoke_scope(&ctx.paths, space, token).await?;
+    crate::client::spaces::revoke_scope(space, token)
+        .send(&ctx.paths)
+        .await?;
     ctx.emit_styled(
         Style::Success,
         "Scope token revoked",
@@ -43,7 +46,9 @@ async fn export(ctx: &Context, space: SpaceSelector) -> Result<()> {
     let inherited = std::env::var_os("PATH");
     let mut values =
         crate::client::spaces::environment(&ctx.paths, space.clone(), inherited).await?;
-    let token = crate::client::spaces::issue_scope(&ctx.paths, space).await?;
+    let token = crate::client::spaces::issue_scope(space)
+        .send(&ctx.paths)
+        .await?;
     values.insert(crate::env::SCOPE_TOKEN.into(), token.expose().into());
     ctx.show(&values, |values| {
         for (name, value) in values {

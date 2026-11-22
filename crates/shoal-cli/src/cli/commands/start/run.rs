@@ -167,7 +167,9 @@ impl SpaceScope {
             return Ok(Self { held: None });
         }
         let space = SpaceSelector::id(space.home()?.id());
-        let token = crate::client::spaces::issue_scope(&ctx.paths, space.clone()).await?;
+        let token = crate::client::spaces::issue_scope(space.clone())
+            .send(&ctx.paths)
+            .await?;
         crate::env::act_in_space_scope(token.clone());
         Ok(Self {
             held: Some((space, token)),
@@ -178,7 +180,9 @@ impl SpaceScope {
     /// goes with the space, as when its removal ended its agent.
     async fn leave(self, ctx: &Context) {
         if let Some((space, token)) = self.held {
-            let _ = crate::client::spaces::revoke_scope(&ctx.paths, space, token).await;
+            let _ = crate::client::spaces::revoke_scope(space, token)
+                .send(&ctx.paths)
+                .await;
         }
     }
 }
