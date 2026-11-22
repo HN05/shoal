@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_support::{
+use shoal_core::test_support::{
     native_cloning,
     subvolumes::{Call, FakeSubvolumes},
 };
@@ -587,7 +587,8 @@ fn a_manifest_records_each_preset_s_toolchain() {
     let snapshot = Snapshot::open(&layout).unwrap().unwrap();
     assert!(snapshot.toolchains.is_empty());
 
-    let toolchains = Toolchains::from([(crate::presets::Preset::Cargo, "rustc 1.100\n".into())]);
+    let toolchains =
+        Toolchains::from([(shoal_core::presets::Preset::Cargo, "rustc 1.100\n".into())]);
     let recorded = Snapshot {
         toolchains,
         ..snapshot

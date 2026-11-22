@@ -6,7 +6,7 @@ use crate::{
     fsutil::{self, off_runtime},
     git,
     model::{Execution, MovedRepository, Repository, RepositoryMoves, Workspace},
-    process, seed,
+    process,
     state::{QueueKind, QueueState, WorkspaceState},
 };
 use anyhow::{Context, Result, ensure};
@@ -294,7 +294,7 @@ impl Manager {
     }
 
     async fn move_repository(&self, repo: &Repository, root: &Path) -> Result<MovedRepository> {
-        let _seed = self.stop_seed_build(&repo.id).await;
+        let _seed = self.repositories.stop_seed_build(&repo.id).await;
         let _fetch = self.gates.lock_fetch(&repo.id).await;
         let _git = self.gates.lock_git(&repo.id).await;
         let _files = self.gates.lock_message_files(&repo.id).await;
@@ -576,7 +576,7 @@ impl Manager {
             }
         }
         let mut paths: Vec<_> = present.iter().map(|w| w.path.clone()).collect();
-        let seed = seed::Layout::of(&repo).worktree();
+        let seed = shoal_repositories::seed::Layout::of(&repo).worktree();
         if off_runtime::exists(&seed).await? {
             paths.push(seed);
         }

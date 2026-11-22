@@ -34,10 +34,10 @@ use crate::{
         default_branch::{self, DefaultBranchLookup},
     },
     model::{Repository, Workspace},
-    seed::{
-        Layout, Snapshot, Staged,
-        build::{self, Build, Previous, Step, Toolchains},
-    },
+};
+use shoal_repositories::seed::{
+    Layout, Snapshot, Staged,
+    build::{self, Build, Previous, Step, Toolchains},
 };
 
 /// How often the daemon looks for a default branch that moved.
@@ -104,7 +104,7 @@ pub async fn run_spares(manager: Arc<Manager>) {
         manager.refill_spares().await;
         tokio::select! {
             _ = tokio::time::sleep(REFRESH_INTERVAL) => {}
-            _ = manager.seeds.spare_wanted() => {}
+            _ = manager.repositories.seeds().spare_wanted() => {}
         }
     }
 }
@@ -143,12 +143,13 @@ impl Manager {
             .is_some_and(|snapshot| (snapshot.commit, snapshot.settings) == build);
         // Checked first: seeing any other build, a current one included,
         // forgets the failed one.
-        let failed = self.seeds.repeats_failure(&repo.id, &build);
+        let failed = self.repositories.seeds().repeats_failure(&repo.id, &build);
         if failed || current || !self.seed_headroom(&layout) {
             return Ok(());
         }
         let result = self.build_seed(repo, &layout, &plan, &build).await;
-        self.seeds
+        self.repositories
+            .seeds()
             .record_result(&repo.id, result.is_err().then_some(build));
         self.report_soft_failures(repo, &result?).await;
         Ok(())
@@ -182,11 +183,11 @@ impl Manager {
         if !layout.root().exists() {
             return Ok(());
         }
-        let _seed = self.stop_seed_build(&repo.id).await;
+        let _seed = self.repositories.stop_seed_build(&repo.id).await;
         let _git = self.gates.lock_git(&repo.id).await;
         self.repositories.ensure_available(&repo.id).await?;
         self.remove_seed(repo).await?;
-        self.seeds.record_result(&repo.id, None);
+        self.repositories.seeds().record_result(&repo.id, None);
         Ok(())
     }
 
@@ -201,8 +202,8 @@ impl Manager {
         build: &(CommitId, String),
     ) -> Result<Vec<StepFailure>> {
         let tip = &build.0;
-        let slot = self.seeds.slot(&repo.id);
-        let _build = slot.gate.lock().await;
+        let slot = self.repositories.seeds().slot(&repo.id);
+        let _build = slot.gate().lock().await;
         if self.repositories.repository(&repo.id).await.is_err() {
             return Ok(Vec::new());
         }
@@ -220,13 +221,13 @@ impl Manager {
             previous.as_ref(),
             &layout.worktree(),
             &layout.log(),
-            slot.cancel.subscribe(),
+            slot.cancelled(),
         )
         .await?;
         self.freeze_seed(repo, layout, plan, build, built.toolchains)
             .await?;
         // The new snapshot needs its own spare.
-        self.seeds.want_spare();
+        self.repositories.seeds().want_spare();
         Ok(built.soft_failures)
     }
 
@@ -260,8 +261,8 @@ impl Manager {
         (tip, settings): &(CommitId, String),
         toolchains: Toolchains,
     ) -> Result<()> {
-        let slot = self.seeds.slot(&repo.id);
-        let _snapshot = slot.snapshot.write().await;
+        let slot = self.repositories.seeds().slot(&repo.id);
+        let _snapshot = slot.snapshot().write().await;
         let _git = self.gates.lock_git(&repo.id).await;
         self.repositories.ensure_available(&repo.id).await?;
         let worktree = layout.worktree();
@@ -298,8 +299,8 @@ impl Manager {
     /// settings still describe the snapshot and the host has headroom for it.
     /// Starts clone and take the spare meanwhile.
     async fn refill_spare(&self, id: &RepositoryId) -> Result<()> {
-        let slot = self.seeds.slot(id);
-        let _snapshot = slot.snapshot.read().await;
+        let slot = self.repositories.seeds().slot(id);
+        let _snapshot = slot.snapshot().read().await;
         // Read under the lock: a move or removal of the repository holds it.
         let Ok(repo) = self.repositories.repository(id).await else {
             return Ok(());
@@ -335,8 +336,8 @@ impl Manager {
             let Some(plan) = Plan::new(repo, &layout, settings).await? else {
                 return Ok(());
             };
-            let slot = self.seeds.slot(&repo.id);
-            let _snapshot = slot.snapshot.read().await;
+            let slot = self.repositories.seeds().slot(&repo.id);
+            let _snapshot = slot.snapshot().read().await;
             let Some(snapshot) = Snapshot::open(&layout)? else {
                 return Ok(());
             };
@@ -367,19 +368,19 @@ impl Manager {
     /// The caller reads the snapshot under `slot`.
     async fn start_from_snapshot(
         &self,
-        slot: &SeedSlot,
+        slot: &shoal_repositories::seed::state::SeedSlot,
         layout: &Layout,
         snapshot: &Snapshot,
         worktree: &Path,
         paths: &[String],
     ) -> Result<()> {
         let spare = {
-            let _taking = slot.spare.lock().await;
+            let _taking = slot.spare().lock().await;
             snapshot.take_spare(layout, worktree, paths)?
         };
         let outputs = match spare {
             Some(taken) => {
-                self.seeds.want_spare();
+                self.repositories.seeds().want_spare();
                 taken
             }
             None => snapshot.clone_outputs(layout, worktree, paths).await?,
@@ -392,41 +393,6 @@ impl Manager {
         let changed =
             git::seed::changed_between(worktree, snapshot.commit.as_str(), "HEAD").await?;
         snapshot.restore_times(worktree, &changed)
-    }
-
-    /// Stop the repository's seed build, if one runs, and keep new ones and
-    /// spare refills out until the returned guard drops. Take it before the
-    /// Git gate, which a build takes while holding its own.
-    pub(super) async fn stop_seed_build(&self, repository_id: &RepositoryId) -> SeedStop {
-        self.pause_seed_build(repository_id).await.stop().await
-    }
-
-    /// Stop the repository's seed build, if one runs, and keep new ones out
-    /// until the returned guard drops, while new worktrees still clone the
-    /// snapshot. Take it before the Git gate, which a build takes while
-    /// holding its own.
-    pub(super) async fn pause_seed_build(&self, repository_id: &RepositoryId) -> SeedPause {
-        let slot = self.seeds.slot(repository_id);
-        slot.cancel.send_replace(true);
-        let guard = slot.gate.clone().lock_owned().await;
-        SeedPause {
-            _guard: guard,
-            slot,
-        }
-    }
-
-    /// Keep the repository's seed builds from starting until the returned
-    /// guard drops, or `None` while one runs.
-    pub(super) fn pause_idle_seed(
-        &self,
-        repository_id: &RepositoryId,
-    ) -> Option<tokio::sync::OwnedMutexGuard<()>> {
-        self.seeds
-            .slot(repository_id)
-            .gate
-            .clone()
-            .try_lock_owned()
-            .ok()
     }
 
     /// Delete the repository's seed. The caller holds a [`SeedStop`] and the
@@ -553,61 +519,6 @@ pub(super) async fn is_seed_worktree(repo: &Repository, layout: &Layout) -> Resu
     }
     let owner = shoal_daemon_base::ownership::marked_owner(&dirs.git_dir)?;
     Ok(owner == Some(layout.worktree_owner()))
-}
-
-/// One repository's seed build: held while a build runs, and set to cancel it.
-pub(crate) struct SeedSlot {
-    gate: Arc<tokio::sync::Mutex<()>>,
-    cancel: watch::Sender<bool>,
-    /// Read while a clone of the snapshot's outputs runs, and written while
-    /// the snapshot is swapped, which a build does only once it has built,
-    /// or deleted.
-    snapshot: Arc<tokio::sync::RwLock<()>>,
-    /// Held while a new worktree takes the spare, which has one taker.
-    spare: tokio::sync::Mutex<()>,
-}
-
-impl Default for SeedSlot {
-    fn default() -> Self {
-        Self {
-            gate: Default::default(),
-            cancel: watch::channel(false).0,
-            snapshot: Default::default(),
-            spare: Default::default(),
-        }
-    }
-}
-
-/// Keeps seed builds out of a repository; dropping it allows them again.
-pub(super) struct SeedPause {
-    _guard: tokio::sync::OwnedMutexGuard<()>,
-    slot: Arc<SeedSlot>,
-}
-
-impl SeedPause {
-    /// Keep spare refills and clones of the snapshot out too, once those
-    /// under way end. Only clones hold the snapshot while builds are
-    /// paused, so the Git gate may be held already.
-    pub(super) async fn stop(self) -> SeedStop {
-        let snapshot = self.slot.snapshot.clone().write_owned().await;
-        SeedStop {
-            _pause: self,
-            _snapshot: snapshot,
-        }
-    }
-}
-
-impl Drop for SeedPause {
-    fn drop(&mut self) {
-        self.slot.cancel.send_replace(false);
-    }
-}
-
-/// Keeps seed builds, spare refills and clones of the snapshot out of a
-/// repository; dropping it allows them again.
-pub(super) struct SeedStop {
-    _pause: SeedPause,
-    _snapshot: tokio::sync::OwnedRwLockWriteGuard<()>,
 }
 
 /// What a seed build that went to its end built with, and how its soft
@@ -878,8 +789,5 @@ async fn exited(pid: i32) -> Result<()> {
     .await?
 }
 
-mod state;
 #[cfg(test)]
 mod tests;
-
-pub(crate) use state::Seeds;

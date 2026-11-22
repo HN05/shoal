@@ -61,7 +61,6 @@ pub struct Manager {
     /// The completed spaces whose completion a removal of a space below
     /// them goes by, which keep the workspaces below them meanwhile.
     pub(crate) completed_owners: crate::daemon::spaces::Removing,
-    pub(crate) seeds: super::seed::Seeds,
     /// The registered repositories.
     pub repositories: Arc<shoal_repositories::Repositories>,
     /// The issues, PRs and CI runs the spaces link.
@@ -184,7 +183,6 @@ impl Manager {
             agent_admissions: Default::default(),
             space_removals: Default::default(),
             completed_owners: Default::default(),
-            seeds: Default::default(),
             repositories,
             links,
             reviews,

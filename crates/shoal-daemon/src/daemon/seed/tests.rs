@@ -374,9 +374,12 @@ async fn new_workspaces_take_the_spare_which_is_then_refilled() {
         return assert_clone_refused(&manager, &layout).await;
     }
     // The new snapshot asked for its spare.
-    tokio::time::timeout(Duration::from_secs(60), manager.seeds.spare_wanted())
-        .await
-        .expect("the build wants a spare");
+    tokio::time::timeout(
+        Duration::from_secs(60),
+        manager.repositories.seeds().spare_wanted(),
+    )
+    .await
+    .expect("the build wants a spare");
     manager.refill_spares().await;
     assert!(layout.has_spare());
     let workspace = manager
@@ -388,9 +391,12 @@ async fn new_workspaces_take_the_spare_which_is_then_refilled() {
         "built\n"
     );
     assert!(!layout.has_spare());
-    tokio::time::timeout(Duration::from_secs(60), manager.seeds.spare_wanted())
-        .await
-        .expect("taking the spare wants another");
+    tokio::time::timeout(
+        Duration::from_secs(60),
+        manager.repositories.seeds().spare_wanted(),
+    )
+    .await
+    .expect("taking the spare wants another");
     manager.refill_spares().await;
     assert!(layout.has_spare());
 }
@@ -539,8 +545,8 @@ async fn a_start_releases_the_git_gate_before_its_seed_step() {
     configure(&manager, NO_PRESSURE).await;
     let (_, repo) = seeded(&manager, temp.path(), "#!/bin/sh\nmkdir -p out\n").await;
     // A swap holds the snapshot, so the start's seed step waits.
-    let slot = manager.seeds.slot(&repo.id);
-    let swap = slot.snapshot.clone().write_owned().await;
+    let slot = manager.repositories.seeds().slot(&repo.id);
+    let swap = slot.snapshot().clone().write_owned().await;
     let creating = tokio::spawn({
         let manager = manager.clone();
         let id = repo.id.clone();
@@ -585,8 +591,8 @@ async fn a_start_clones_while_a_refill_reads_the_snapshot() {
         return assert_clone_refused(&manager, &layout).await;
     }
     // A refill reads the snapshot for its whole clone.
-    let slot = manager.seeds.slot(&repo.id);
-    let _refill = slot.snapshot.clone().read_owned().await;
+    let slot = manager.repositories.seeds().slot(&repo.id);
+    let _refill = slot.snapshot().clone().read_owned().await;
     let creating = manager.create_workspace(&repo.id, "feature".into(), None, None, None);
     let workspace = tokio::time::timeout(Duration::from_secs(60), creating)
         .await

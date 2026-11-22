@@ -52,7 +52,7 @@ async fn caches_empty_only_while_nothing_uses_them() {
         .await
         .unwrap();
 
-    let seed = manager.pause_idle_seed(&repo.id).unwrap();
+    let seed = manager.repositories.pause_idle_seed(&repo.id).unwrap();
     assert_eq!(
         manager.empty_caches(&repo, false).await.unwrap(),
         Some(busy)

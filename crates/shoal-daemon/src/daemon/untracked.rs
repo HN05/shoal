@@ -17,7 +17,7 @@ use crate::{
 /// What Shoal owns under a repository's workspace directory.
 pub(super) struct OwnedWorktrees {
     pub(super) tracked: HashSet<PathBuf>,
-    pub(super) seed: crate::seed::Layout,
+    pub(super) seed: shoal_repositories::seed::Layout,
     pub(super) verified_seed: bool,
     /// The directory of the repository's review runs, whose checkouts are
     /// worktrees, when it is the one Shoal created.
@@ -90,7 +90,7 @@ impl Manager {
             .into_iter()
             .map(|w| w.part.path)
             .collect();
-        let seed = crate::seed::Layout::new(root, &repo.id);
+        let seed = shoal_repositories::seed::Layout::new(root, &repo.id);
         let verified_seed = crate::daemon::seed::is_seed_worktree(repo, &seed)
             .await
             .unwrap_or(false);

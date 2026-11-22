@@ -10,7 +10,7 @@ use std::{
 
 use serde::Serialize;
 
-use crate::{
+use shoal_core::{
     config::repo::Seed,
     presets::{Preset, SeedCommand},
 };

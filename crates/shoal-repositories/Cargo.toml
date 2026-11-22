@@ -11,12 +11,15 @@ license.workspace = true
 anyhow.workspace = true
 futures-util.workspace = true
 rusqlite = { workspace = true, features = ["bundled"] }
+serde.workspace = true
+serde_json.workspace = true
 shoal-core.workspace = true
 shoal-daemon-base.workspace = true
 shoal-forge.workspace = true
 shoal-forge-types.workspace = true
 shoal-ids = { workspace = true, features = ["rusqlite"] }
 shoal-protocol = { workspace = true, features = ["rusqlite"] }
+shoal-refs.workspace = true
 shoal-store.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 toml.workspace = true

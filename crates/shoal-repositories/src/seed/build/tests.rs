@@ -1,5 +1,5 @@
 use super::*;
-use crate::config::repo::{RepoConfig, parse};
+use shoal_core::config::repo::{RepoConfig, parse};
 
 fn config(text: &str) -> RepoConfig {
     parse(text).unwrap()

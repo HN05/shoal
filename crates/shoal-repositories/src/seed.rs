@@ -17,7 +17,7 @@ use std::{
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::{
+use shoal_core::{
     fsutil::{
         copy::clone_tree,
         subvolume::{self, Btrfs, Subvolumes},
@@ -26,6 +26,7 @@ use crate::{
 };
 
 pub mod build;
+pub mod state;
 
 use build::Toolchains;
 
@@ -49,7 +50,7 @@ impl Layout {
     }
 
     /// The repository's seed.
-    pub fn of(repo: &crate::model::Repository) -> Self {
+    pub fn of(repo: &shoal_protocol::model::Repository) -> Self {
         Self {
             dir: ShoalDir::of(repo, Contents::Seed),
         }

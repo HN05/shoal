@@ -4,7 +4,6 @@ use crate::{
     daemon::{
         leases::DaemonRecords,
         resources::{self, Scope},
-        seed::{SeedPause, SeedStop},
         store,
     },
     fsutil::off_runtime,
@@ -23,6 +22,7 @@ use shoal_daemon_base::ownership::{
     },
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_repositories::seed::state::{SeedPause, SeedStop};
 use std::{fs, path::Path};
 
 /// Persisted progress of an interrupted removal.
@@ -49,7 +49,7 @@ impl Manager {
             // gate also serializes with workspace creation, branch refresh, and reconciliation.
             let _registry = self.gates.lock_registry().await;
             let repo = self.repositories.repository(selector).await?;
-            let seed = self.pause_seed_build(&repo.id).await;
+            let seed = self.repositories.pause_seed_build(&repo.id).await;
             self.reviews.stop_in_repository(self, &repo.id).await;
             let _fetch = self.gates.lock_fetch(&repo.id).await;
             let _git = self.gates.lock_git(&repo.id).await;
@@ -71,7 +71,7 @@ impl Manager {
         let removal = async {
             let _registry = self.gates.lock_registry().await;
             let repo = self.repositories.repository(id).await?;
-            let seed = self.pause_seed_build(&repo.id).await;
+            let seed = self.repositories.pause_seed_build(&repo.id).await;
             self.reviews.stop_in_repository(self, &repo.id).await;
             let _fetch = self.gates.lock_fetch(&repo.id).await;
             let _git = self.gates.lock_git(&repo.id).await;
@@ -493,7 +493,7 @@ async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<(
                 break;
             }
         }
-        let seed = crate::seed::Layout::of(repo).is_worktree(&tree.path);
+        let seed = shoal_repositories::seed::Layout::of(repo).is_worktree(&tree.path);
         ensure!(
             tree.path == repo.path || owned || seed,
             "repository has a worktree outside Shoal: {}; remove it first",

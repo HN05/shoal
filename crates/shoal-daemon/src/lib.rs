@@ -1,8 +1,6 @@
-//! Shoal's daemon, which the `shoal` command runs as `shoal daemon run`, and
-//! the seed builds it keeps.
+//! Shoal's daemon, which the `shoal` command runs as `shoal daemon run`.
 
 mod daemon;
-mod seed;
 
 #[cfg(test)]
 use shoal_core::reviews;

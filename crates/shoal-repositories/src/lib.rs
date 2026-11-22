@@ -17,6 +17,7 @@ pub mod daemon;
 mod records;
 pub mod registration;
 pub mod root;
+pub mod seed;
 pub mod spotlight;
 #[cfg(test)]
 mod stand_in;
@@ -34,6 +35,7 @@ pub struct Repositories {
     /// The config files of worktrees the current format rejects, which the
     /// daemon ignores.
     rejected_configs: configuration::RejectedConfigs,
+    seeds: seed::state::Seeds,
 }
 
 impl Repositories {
@@ -56,6 +58,7 @@ impl Repositories {
             records,
             contribution_holds: Default::default(),
             rejected_configs: Default::default(),
+            seeds: Default::default(),
         }
     }
 

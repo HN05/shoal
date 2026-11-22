@@ -28,7 +28,7 @@ impl Manager {
         if caches.is_empty() {
             return Ok(None);
         }
-        let Some(_seed) = self.pause_idle_seed(&repo.id) else {
+        let Some(_seed) = self.repositories.pause_idle_seed(&repo.id) else {
             return Ok(Some(Emptying::Busy { caches }));
         };
         let (repository_id, moving) = (repo.id.clone(), layout.clone());
