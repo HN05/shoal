@@ -144,6 +144,7 @@ fn queued(workspace: Workspace, entry: crate::model::QueueEntry) -> Launched {
         warnings: Vec::new(),
         start: Started::Worker,
         machine: None,
+        placement: None,
     }
 }
 

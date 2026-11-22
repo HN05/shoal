@@ -19,6 +19,7 @@ mod check;
 mod create;
 mod elsewhere;
 mod labels;
+mod placement;
 mod setup;
 mod shape;
 mod space;
@@ -34,12 +35,17 @@ impl Manager {
         source: LaunchSource,
         caller: Option<&Caller>,
     ) -> Result<Launched> {
-        if let Some(launched) = self.launch_on_machine(&mut launch, caller).await? {
+        let placement = self.place_launch(&mut launch, caller).await?;
+        if let Some(mut launched) = self.launch_on_machine(&mut launch, caller).await? {
+            launched.placement = placement;
             return Ok(launched);
         }
         let forwarded = launch.forwarded.is_some();
         let held = carried_commits(&launch);
-        let launched = self.launch_here(launch, source, caller).await;
+        let launched = (self.launch_here(launch, source, caller).await).map(|mut launched| {
+            launched.placement = placement;
+            launched
+        });
         // A pending worktree that starts from them keeps them from here.
         if let Some((origin, commits)) = &held {
             for commit in commits {

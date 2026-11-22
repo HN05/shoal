@@ -182,6 +182,7 @@ fn report_session(
             delivery: delivered.fields,
         }),
         machine: None,
+        placement: None,
     };
     let message = format!(
         "Started {} {} session in {} (execution {}, pid {}); open it in {}\nOutput: {}{}",

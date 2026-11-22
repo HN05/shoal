@@ -83,6 +83,7 @@ impl StartedSpace {
             warnings: self.warnings,
             start: self.started,
             machine: None,
+            placement: None,
         }
     }
 

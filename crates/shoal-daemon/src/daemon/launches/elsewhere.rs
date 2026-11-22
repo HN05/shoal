@@ -446,7 +446,7 @@ impl Manager {
     /// none that this machine finds none for, as for a parent elsewhere in
     /// a repository it has not registered, which the other machine finds on
     /// its own.
-    async fn found_repository(
+    pub(super) async fn found_repository(
         &self,
         launch: &Launch,
         caller: Option<&Caller>,

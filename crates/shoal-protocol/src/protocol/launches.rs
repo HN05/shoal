@@ -102,6 +102,9 @@ pub struct Launched {
     /// the caller's did, whose daemon runs what follows its recording.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub machine: Option<String>,
+    /// Where the hub placed a start that named no machine, and why.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement: Option<crate::hub::placement::Decision>,
 }
 
 /// How a launch started its agent, with what only that kind of start
@@ -155,6 +158,7 @@ impl From<StartedWorkspace> for Launched {
             warnings,
             start: Started::Preparing { operation, reused },
             machine: None,
+            placement: None,
         }
     }
 }
