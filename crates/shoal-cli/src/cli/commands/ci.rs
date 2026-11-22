@@ -42,14 +42,15 @@ pub(super) async fn run(ctx: &Context, command: CiCommand) -> Result<i32> {
     }
 }
 
-/// The repository `ci run` starts a workflow in: as [`select_item_target`]
-/// finds it, except that a workflow named by its URL, `url`, names its
-/// repository and needs no context.
+/// The repository `ci run` starts a workflow in with `starting`: as
+/// [`select_item_target`] finds it, except that a workflow named by its
+/// URL, `url`, names its repository and needs no context.
 async fn workflow_target(
     ctx: &Context,
     space: Option<SpaceSelector>,
     repo: Option<String>,
     url: bool,
+    starting: &crate::cli::ui::Acting,
 ) -> Result<RepoTarget> {
     if space.is_none() && repo.is_none() && url && ui::current_chat(&space).is_none() {
         let context = current_context(ctx).await?;
@@ -58,16 +59,7 @@ async fn workflow_target(
             repository: None,
         });
     }
-    select_item_target(
-        ctx,
-        space,
-        repo,
-        None,
-        &crate::cli::commands::items::in_context(|target| {
-            crate::client::ci::run(target, crate::forge::items::reference::ItemInput::Number(1))
-        }),
-    )
-    .await
+    select_item_target(ctx, space, repo, None, starting).await
 }
 
 /// What `view` and `status` say of the `waiting` runs on the head of the PR

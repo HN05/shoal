@@ -33,66 +33,59 @@ pub fn run(target: RepoTarget, run: ItemInput) -> Prepared<Run> {
 }
 
 /// Start `workflow`, or the only one, on `branch` with `inputs`.
-pub async fn start(
-    daemon: &impl Daemon,
+pub fn start(
     target: RepoTarget,
     workflow: Option<String>,
     branch: Option<String>,
     inputs: BTreeMap<String, String>,
-) -> Result<StartedRun> {
-    let method = CiMethod::StartCiRun {
+) -> Prepared<StartedRun> {
+    Prepared::new(CiMethod::StartCiRun {
         target,
         workflow,
         branch,
         inputs,
-    };
-    request(daemon, method).await
+    })
 }
 
 /// Apply `action` to the run `run` names, only its failed jobs when `failed`.
-pub async fn act_on_run(
-    daemon: &impl Daemon,
+pub fn act_on_run(
     target: RepoTarget,
     run: ItemInput,
     action: CiAction,
     failed: bool,
-) -> Result<RunActed> {
-    let method = CiMethod::CiRunAction {
+) -> Prepared<RunActed> {
+    Prepared::new(CiMethod::CiRunAction {
         target,
         run,
         action,
         failed,
-    };
-    request(daemon, method).await
+    })
 }
 
 /// Apply `action` to the `checks` on the head of the PR `item`, by default
 /// the linked one, or to all of them.
-pub async fn act_on_checks(
-    daemon: &impl Daemon,
+pub fn act_on_checks(
     target: RepoTarget,
     item: Option<ItemInput>,
     action: CiAction,
     checks: Vec<String>,
-) -> Result<CiActed> {
-    let method = CiMethod::CiAction {
+) -> Prepared<CiActed> {
+    Prepared::new(CiMethod::CiAction {
         target,
         item,
         action,
         checks,
-    };
-    request(daemon, method).await
+    })
 }
 
 /// Approve the run `run` names, otherwise every waiting run on the head of
 /// the PR `pr`.
-pub async fn approve(
-    daemon: &impl Daemon,
+pub fn approve(
     target: RepoTarget,
     run: Option<ItemInput>,
     pr: Option<ItemInput>,
-) -> Result<RunsApproved> {
-    request(daemon, CiMethod::ApproveCiRuns { target, run, pr }).await
+) -> Prepared<RunsApproved> {
+    Prepared::new(CiMethod::ApproveCiRuns { target, run, pr })
 }
 
 /// The log of `check` on the item `selection` selects.
