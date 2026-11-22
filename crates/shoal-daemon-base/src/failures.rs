@@ -9,7 +9,7 @@ use std::{collections::BTreeMap, fmt};
 /// its error so that the pass records each failure for its space rather
 /// than for every space.
 #[derive(Debug, Default)]
-pub(crate) struct SpaceFailures(Vec<SpaceFailure>);
+pub struct SpaceFailures(Vec<SpaceFailure>);
 
 #[derive(Debug)]
 struct SpaceFailure {
@@ -20,7 +20,7 @@ struct SpaceFailure {
 
 impl SpaceFailures {
     /// Record that the step failed in the space `id`, named `name`.
-    pub(crate) fn push(&mut self, id: &SpaceId, name: &SpaceName, error: &anyhow::Error) {
+    pub fn push(&mut self, id: &SpaceId, name: &SpaceName, error: &anyhow::Error) {
         self.0.push(SpaceFailure {
             id: id.to_owned(),
             name: name.clone(),
@@ -29,7 +29,7 @@ impl SpaceFailures {
     }
 
     /// Fails with the recorded failures, if there are any.
-    pub(crate) fn into_result(self) -> Result<()> {
+    pub fn into_result(self) -> Result<()> {
         match self.0.is_empty() {
             true => Ok(()),
             false => Err(self.into()),
@@ -66,7 +66,7 @@ struct Failed {
 
 impl SweepFailures {
     /// Record the result of the step `step`.
-    pub(crate) fn step(&mut self, step: &str, result: Result<()>) {
+    pub fn step(&mut self, step: &str, result: Result<()>) {
         let Err(error) = result else {
             return;
         };
@@ -85,7 +85,7 @@ impl SweepFailures {
     }
 
     /// Fails with the recorded failures, if there are any.
-    pub(crate) fn into_result(self) -> Result<(), Self> {
+    pub fn into_result(self) -> Result<(), Self> {
         match self.general.is_empty() && self.spaces.is_empty() {
             true => Ok(()),
             false => Err(self),
@@ -93,18 +93,18 @@ impl SweepFailures {
     }
 
     /// The failures that concern no space.
-    pub(super) fn general(&self) -> Option<String> {
+    pub fn general(&self) -> Option<String> {
         (!self.general.is_empty()).then(|| self.general.join("; "))
     }
 
     /// The ID, name and failures of each space with failures.
-    pub(super) fn spaces(&self) -> impl Iterator<Item = (&SpaceId, &SpaceName, String)> {
+    pub fn spaces(&self) -> impl Iterator<Item = (&SpaceId, &SpaceName, String)> {
         (self.spaces.iter()).map(|(id, failed)| (id, &failed.name, failed.errors.join("; ")))
     }
 
     /// The failures of the space `id`.
-    #[cfg(test)]
-    pub(super) fn space(&self, id: &SpaceId) -> Option<String> {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn space(&self, id: &SpaceId) -> Option<String> {
         self.spaces.get(id).map(|failed| failed.errors.join("; "))
     }
 }
@@ -124,12 +124,12 @@ impl fmt::Display for SweepFailures {
 /// The failures of the pass before, which repeat on every pass until fixed,
 /// so that the log has each once.
 #[derive(Debug, Default)]
-pub(crate) struct LoggedFailures(Option<String>);
+pub struct LoggedFailures(Option<String>);
 
 impl LoggedFailures {
     /// The failures of a pass with `result` to log: none when they are
     /// those of the pass before.
-    pub(crate) fn new_failures(&mut self, result: &Result<(), SweepFailures>) -> Option<String> {
+    pub fn new_failures(&mut self, result: &Result<(), SweepFailures>) -> Option<String> {
         let failed = result.as_ref().err().map(ToString::to_string);
         let repeated = failed == self.0;
         self.0.clone_from(&failed);

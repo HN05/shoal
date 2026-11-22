@@ -155,11 +155,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   outside the store: one that needs a subsystem's logic takes a copy frozen at
   the shape it migrates. It depends on no Shoal crate but `shoal-core`,
   `shoal-ids`, `shoal-protocol` and `shoal-refs`.
-- `crates/shoal-daemon-base` holds what every subsystem of the daemon uses:
-  its log, a request's caller, the approval requests subsystems make, the
-  actions permissions govern, config state, gates, events, the signals that
-  wake waits, alerts, item numbers, file access, the proof of the directories Shoal owns and the
-  kept copies of attached files. What it needs of a subsystem is an interface it declares, a trait whose methods
+- `crates/shoal-daemon-base` holds what more than one subsystem of the
+  daemon uses. What it needs of a subsystem is an interface it declares, a trait whose methods
   return a `Send` `BoxFuture`, which the daemon implements; its code is no
   method of `Manager`. It depends on no Shoal crate but `shoal-core`,
   `shoal-forge-types`, `shoal-ids`, `shoal-protocol` and `shoal-store`.

@@ -34,16 +34,15 @@ pub(crate) use shoal_protocol::cleanup::{
 };
 use shoal_protocol::space_names::SpaceName;
 
-mod failures;
 mod grace;
 mod health;
 mod kept_branches;
 mod merged;
 mod runs;
 
-pub(crate) use failures::{LoggedFailures, SpaceFailures, SweepFailures};
 pub(crate) use health::CleanupHealth;
 pub(crate) use runs::Removed;
+pub(crate) use shoal_daemon_base::failures::{LoggedFailures, SpaceFailures, SweepFailures};
 
 const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 

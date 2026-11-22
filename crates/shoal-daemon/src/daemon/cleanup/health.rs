@@ -6,7 +6,6 @@ use shoal_protocol::space_names::SpaceName;
 use std::{collections::HashMap, sync::PoisonError, time::Duration};
 use tokio::time::Instant;
 
-use super::failures::SweepFailures;
 use crate::{
     daemon::{
         log,
@@ -15,6 +14,7 @@ use crate::{
     },
     time::UnixTime,
 };
+use shoal_daemon_base::failures::SweepFailures;
 
 /// A pass normally finishes within seconds; none for this long means the
 /// loop is stuck or has stopped.
