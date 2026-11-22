@@ -1,5 +1,6 @@
 //! The daemon's registered repositories: registering and looking them up,
-//! their configuration layers, their seeds and shared caches, moving their
+//! their configuration layers, keeping their checkouts' default branches
+//! in sync, their seeds and shared caches, moving their
 //! directories, removing them and the contribution clones Shoal removes on
 //! its own. [`Repositories`] holds
 //! what they keep in memory and offers their operations; what they need of
@@ -25,6 +26,9 @@ pub mod seed;
 pub mod spotlight;
 #[cfg(test)]
 mod stand_in;
+pub mod sync;
+#[cfg(feature = "test-support")]
+mod test_support;
 
 /// The repositories' service, which `Manager` holds.
 pub struct Repositories {
@@ -40,6 +44,8 @@ pub struct Repositories {
     /// daemon ignores.
     rejected_configs: configuration::RejectedConfigs,
     seeds: seed::state::Seeds,
+    /// What the syncs of each checkout's default branch found.
+    syncs: sync::Syncs,
 }
 
 impl Repositories {
@@ -63,6 +69,7 @@ impl Repositories {
             contribution_holds: Default::default(),
             rejected_configs: Default::default(),
             seeds: Default::default(),
+            syncs: Default::default(),
         }
     }
 

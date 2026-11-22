@@ -6,7 +6,7 @@ use std::time::Duration;
 use anyhow::Error;
 use tokio::time::Instant;
 
-use crate::{model::CheckoutSync, time::UnixTime};
+use shoal_protocol::{model::CheckoutSync, time::UnixTime};
 
 /// A sync failing this long needs the user. Measured on the monotonic clock,
 /// which excludes sleep, so a Mac that wakes before its network does is not

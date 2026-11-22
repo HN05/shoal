@@ -20,13 +20,22 @@ use tokio::{
 };
 
 use self::health::Health;
-use crate::{
-    daemon::{log, manager::Manager, notifications::AlertKind},
+use shoal_core::repository::Selector;
+use shoal_daemon_base::{
+    alerts::NewAlert,
+    log,
+    notifications::{About, AlertKind},
+};
+use shoal_protocol::{
     model::{CheckoutSync, SyncedRepository},
     time::UnixTime,
 };
 
+use crate::{Repositories, daemon::Daemon};
+
 mod health;
+#[cfg(test)]
+mod tests;
 
 const SYNC_INTERVAL: Duration = Duration::from_secs(60);
 /// A fetch at most this old still shows what the remote's default branch
@@ -84,7 +93,7 @@ impl Syncs {
     }
 
     /// Sync `repository_id` before the next scheduled pass.
-    pub(crate) fn request(&self, repository_id: &RepositoryId) {
+    fn request(&self, repository_id: &RepositoryId) {
         self.requested
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -119,15 +128,16 @@ impl Synced {
     }
 }
 
-impl Manager {
+impl Repositories {
     /// Fetch the repository's default branch and fast-forward the local one,
     /// as the background syncs do.
     pub async fn sync_repository(
         &self,
-        selector: &crate::repository::Selector,
+        daemon: &dyn Daemon,
+        selector: &Selector,
     ) -> Result<SyncedRepository> {
-        let repo = self.repositories.repository(selector).await?;
-        match self.sync(&repo.id).await {
+        let repo = self.repository(selector).await?;
+        match self.sync(daemon, &repo.id).await {
             Synced::Unfetched(error) => Err(error),
             Synced::Fetched(synced) => synced,
         }
@@ -136,8 +146,12 @@ impl Manager {
     /// Fetch the default branch's remotes now, for a decision that needs what
     /// they have; a local default branch that cannot follow them does not
     /// fail it.
-    pub(crate) async fn fetch_default_branch(&self, repository_id: &RepositoryId) -> Result<()> {
-        match self.sync(repository_id).await {
+    pub async fn fetch_default_branch(
+        &self,
+        daemon: &dyn Daemon,
+        repository_id: &RepositoryId,
+    ) -> Result<()> {
+        match self.sync(daemon, repository_id).await {
             Synced::Unfetched(error) => Err(error),
             Synced::Fetched(_) => Ok(()),
         }
@@ -147,12 +161,16 @@ impl Manager {
     /// them unless they were. Stale refs may show changes the default branch
     /// no longer has, so after a failed fetch nothing that depends on it is
     /// decided.
-    pub(crate) async fn default_branch_fresh(&self, repository_id: &RepositoryId) -> bool {
+    pub async fn default_branch_fresh(
+        &self,
+        daemon: &dyn Daemon,
+        repository_id: &RepositoryId,
+    ) -> bool {
         let since = Instant::now().checked_sub(FRESH_FOR);
         if since.is_some_and(|since| self.syncs.fetched_since(repository_id, since)) {
             return true;
         }
-        match self.fetch_default_branch(repository_id).await {
+        match self.fetch_default_branch(daemon, repository_id).await {
             Ok(()) => true,
             Err(error) => {
                 log!("could not fetch the default branch: {error:#}");
@@ -162,7 +180,7 @@ impl Manager {
     }
 
     /// How the background sync of the repository went, once it was tried.
-    pub(crate) fn checkout_sync(&self, repository_id: &RepositoryId) -> Option<CheckoutSync> {
+    pub fn checkout_sync(&self, repository_id: &RepositoryId) -> Option<CheckoutSync> {
         self.syncs
             .lock()
             .get(repository_id)
@@ -172,7 +190,7 @@ impl Manager {
     /// The registered repositories whose syncs have failed long enough to
     /// need the user.
     pub async fn failing_syncs(&self) -> Result<Vec<CheckoutSync>> {
-        let repositories = self.repositories.list().await?;
+        let repositories = self.list().await?;
         let now = Instant::now();
         let syncs = self.syncs.lock();
         Ok(repositories
@@ -184,9 +202,14 @@ impl Manager {
             .collect())
     }
 
+    /// Sync `repository_id` before the next scheduled pass.
+    pub fn request_sync(&self, repository_id: &RepositoryId) {
+        self.syncs.request(repository_id);
+    }
+
     /// One sync, recorded for status and later decisions.
-    async fn sync(&self, repository_id: &RepositoryId) -> Synced {
-        let synced = self.fetch_and_fast_forward(repository_id).await;
+    async fn sync(&self, daemon: &dyn Daemon, repository_id: &RepositoryId) -> Synced {
+        let synced = self.fetch_and_fast_forward(daemon, repository_id).await;
         self.syncs.record(repository_id, synced.error());
         synced
     }
@@ -194,11 +217,15 @@ impl Manager {
     /// Fetch under the repository's fetch gate, then fast-forward under its
     /// Git gate, so commands that take only the Git gate never wait on the
     /// remote.
-    async fn fetch_and_fast_forward(&self, repository_id: &RepositoryId) -> Synced {
+    async fn fetch_and_fast_forward(
+        &self,
+        daemon: &dyn Daemon,
+        repository_id: &RepositoryId,
+    ) -> Synced {
         let started = Instant::now();
         let fetched = {
             let _fetch = self.gates.lock_fetch(repository_id).await;
-            self.fetch_repository(repository_id).await
+            self.fetch_repository(daemon, repository_id).await
         };
         let default = match fetched {
             Ok(default) => default,
@@ -208,21 +235,25 @@ impl Manager {
         let _git = self.gates.lock_git(repository_id).await;
         let synced = async {
             // A move may have finished while the fetch ran.
-            let repo = self.repositories.repository(repository_id).await?;
-            self.fast_forward_default(&repo, &default).await
+            let repo = self.repository(repository_id).await?;
+            daemon.fast_forward_default(&repo, &default).await
         };
         Synced::Fetched(synced.await)
     }
 
     /// Fetch the repository's default-branch remotes; returns the default branch.
-    async fn fetch_repository(&self, repository_id: &RepositoryId) -> Result<BranchName> {
-        let repo = self.repositories.repository(repository_id).await?;
-        self.fetch_default_remotes(&repo).await
+    async fn fetch_repository(
+        &self,
+        daemon: &dyn Daemon,
+        repository_id: &RepositoryId,
+    ) -> Result<BranchName> {
+        let repo = self.repository(repository_id).await?;
+        daemon.fetch_default_remotes(&repo).await
     }
 
     /// Every registered repository, forgetting the syncs of those removed.
     async fn registered_repository_ids(&self) -> Vec<RepositoryId> {
-        match self.repositories.list().await {
+        match self.list().await {
             Ok(repositories) => {
                 let ids: Vec<RepositoryId> = repositories.into_iter().map(|repo| repo.id).collect();
                 self.syncs.retain(&ids);
@@ -237,26 +268,27 @@ impl Manager {
 
     /// A scheduled or requested sync: logged when it fails, and told to the
     /// user once it has failed long enough.
-    async fn sync_in_background(&self, repository_id: &RepositoryId) {
+    async fn sync_in_background(&self, daemon: &dyn Daemon, repository_id: &RepositoryId) {
         let _operation = self.gates.background_pass().await;
-        if let Some(error) = self.sync(repository_id).await.error() {
+        if let Some(error) = self.sync(daemon, repository_id).await.error() {
             log!("sync of repository {repository_id}: {error:#}");
         }
-        self.notify_failing_syncs().await;
+        self.notify_failing_syncs(daemon).await;
     }
 
     /// Tell the user about each sync that has failed long enough, once.
-    async fn notify_failing_syncs(&self) {
+    pub(crate) async fn notify_failing_syncs(&self, daemon: &dyn Daemon) {
         for (repository_id, error) in self.syncs.unnotified() {
             let (Some(sync), Ok(repo)) = (
                 self.checkout_sync(&repository_id),
-                self.repositories.repository(&repository_id).await,
+                self.repository(&repository_id).await,
             ) else {
                 continue;
             };
             let name = repo.name.unwrap_or_else(|| repo.path.display().to_string());
             let message = failure_message(&name, sync.failing_since, &error);
-            self.notify(None, AlertKind::SyncFailed, message).await;
+            let alert = NewAlert::shoal(AlertKind::SyncFailed, About::named(None), message);
+            self.notifications.notify(daemon, alert).await;
         }
     }
 }
@@ -273,23 +305,23 @@ fn failure_message(name: &str, failing_since: Option<UnixTime>, error: &str) -> 
 
 /// Sync every repository at once and then each [`SYNC_INTERVAL`], and a
 /// requested one as soon as it is asked for.
-pub async fn run(manager: Arc<Manager>) {
+pub async fn run(repositories: Arc<Repositories>, daemon: Arc<dyn Daemon>) {
     let mut next = Instant::now();
     let mut syncing = Syncing::default();
     loop {
         let due = if Instant::now() >= next {
             next = Instant::now() + SYNC_INTERVAL;
-            manager.syncs.take_requested();
-            manager.registered_repository_ids().await
+            repositories.syncs.take_requested();
+            repositories.registered_repository_ids().await
         } else {
-            manager.syncs.take_requested()
+            repositories.syncs.take_requested()
         };
-        syncing.start(&manager, due);
+        syncing.start(&repositories, &daemon, due);
         tokio::select! {
             _ = sleep_until(next) => {}
-            _ = manager.syncs.wake.notified() => {}
+            _ = repositories.syncs.wake.notified() => {}
             Some(finished) = syncing.tasks.join_next_with_id(), if !syncing.tasks.is_empty() => {
-                syncing.finished(&manager, finished);
+                syncing.finished(&repositories, &daemon, finished);
             }
         }
     }
@@ -306,7 +338,12 @@ struct Syncing {
 }
 
 impl Syncing {
-    fn start(&mut self, manager: &Arc<Manager>, repository_ids: Vec<RepositoryId>) {
+    fn start(
+        &mut self,
+        repositories: &Arc<Repositories>,
+        daemon: &Arc<dyn Daemon>,
+        repository_ids: Vec<RepositoryId>,
+    ) {
         for repository_id in repository_ids {
             if self
                 .running
@@ -316,16 +353,21 @@ impl Syncing {
                 self.again.insert(repository_id);
                 continue;
             }
-            let manager = manager.clone();
+            let (repositories, daemon) = (repositories.clone(), daemon.clone());
             let id = repository_id.clone();
             let handle = self
                 .tasks
-                .spawn(async move { manager.sync_in_background(&id).await });
+                .spawn(async move { repositories.sync_in_background(&*daemon, &id).await });
             self.running.insert(handle.id(), repository_id);
         }
     }
 
-    fn finished(&mut self, manager: &Arc<Manager>, finished: Result<(task::Id, ()), JoinError>) {
+    fn finished(
+        &mut self,
+        repositories: &Arc<Repositories>,
+        daemon: &Arc<dyn Daemon>,
+        finished: Result<(task::Id, ()), JoinError>,
+    ) {
         let id = match finished {
             Ok((id, ())) => id,
             Err(error) => {
@@ -337,10 +379,7 @@ impl Syncing {
             return;
         };
         if self.again.remove(&repository_id) {
-            self.start(manager, vec![repository_id]);
+            self.start(repositories, daemon, vec![repository_id]);
         }
     }
 }
-
-#[cfg(test)]
-mod tests;

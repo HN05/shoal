@@ -67,7 +67,7 @@ impl Repositories {
 
     /// Reserve every workspace of the repository and record the intent, unless
     /// something started using the repository since it was checked.
-    pub(super) async fn record_move(
+    pub(crate) async fn record_move(
         &self,
         id: &RepositoryId,
         source: &Path,
@@ -106,7 +106,7 @@ impl Repositories {
     }
 
     /// Point every record inside the moved directory at the destination.
-    pub(super) async fn switch_move(
+    pub(crate) async fn switch_move(
         &self,
         id: &RepositoryId,
         source: &Path,

@@ -98,7 +98,7 @@ impl Manager {
     /// local default branch as the checkout has it.
     async fn sync_default_branch(&self, workspace: &Workspace) {
         let repository = (workspace.repository()).into();
-        if let Err(error) = self.sync_repository(&repository).await {
+        if let Err(error) = self.repositories.sync_repository(self, &repository).await {
             log!(
                 "refresh of {} goes on with the local default branch: {error:#}",
                 workspace.name

@@ -194,7 +194,7 @@ impl Watches for Manager {
 
     // Other workspaces' conflict checks read the default branch.
     fn item_merged(&self, id: &RepositoryId) {
-        self.syncs.request(id);
+        self.repositories.request_sync(id);
     }
 
     // A PR's progress section follows its draft state.

@@ -69,7 +69,11 @@ pub async fn sweep(manager: &Manager, state: &mut State) -> Result<()> {
         // Squash and rebase merges show only on the fetched default branch;
         // any other evidence comes from what the remotes advertise now, never
         // from remote-tracking refs, which may be stale or unmapped.
-        if !manager.default_branch_fresh(&repository_id).await {
+        if !manager
+            .repositories
+            .default_branch_fresh(manager, &repository_id)
+            .await
+        {
             continue;
         }
         let Some(heads) = state.advertised(manager, &repository_id).await else {

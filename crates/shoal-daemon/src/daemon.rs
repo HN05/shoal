@@ -24,7 +24,6 @@ mod carried_sessions;
 pub(crate) mod changes;
 pub(crate) mod chat_marks;
 pub(crate) mod chats;
-pub(crate) mod checkout_sync;
 pub mod cleanup;
 pub(crate) mod completion_cleanup;
 mod connections;
@@ -222,12 +221,9 @@ pub async fn run(
         .await_resumes(resumes_until);
     let mut background = JoinSet::new();
     spawn_supervised(&mut background, &manager, "auto cleanup", cleanup::run);
-    spawn_supervised(
-        &mut background,
-        &manager,
-        "checkout sync",
-        checkout_sync::run,
-    );
+    spawn_supervised(&mut background, &manager, "checkout sync", |manager| {
+        shoal_repositories::sync::run(manager.repositories.clone(), manager)
+    });
     spawn_supervised(
         &mut background,
         &manager,

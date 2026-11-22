@@ -676,7 +676,10 @@ async fn requested_candidacy(
         Err(reason) => reason,
     };
     if let Some(repository) = space.worktree().and(space.repository_id.as_ref())
-        && !manager.default_branch_fresh(repository).await
+        && !manager
+            .repositories
+            .default_branch_fresh(manager, repository)
+            .await
     {
         return Ok(Err(reason));
     }

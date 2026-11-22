@@ -8,7 +8,8 @@ rust-version.workspace = true
 license.workspace = true
 
 [features]
-# What the daemon's tests of moves interrupt a move between.
+# What the daemon's tests drive of the service directly: the steps of a
+# move and the alerts about failing syncs.
 test-support = []
 
 [dependencies]

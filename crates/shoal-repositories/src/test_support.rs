@@ -1,10 +1,11 @@
-//! The steps of a move that the daemon's tests interrupt between.
+//! What the daemon's tests drive of the service directly: the steps of a
+//! move they interrupt between, and the alerts about failing syncs.
 use std::path::Path;
 
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 
-use crate::Repositories;
+use crate::{Repositories, daemon::Daemon};
 
 impl Repositories {
     /// Record the move of the repository `id` from `source` to
@@ -27,5 +28,11 @@ impl Repositories {
         destination: &Path,
     ) -> Result<()> {
         self.switch_move(id, source, destination).await
+    }
+
+    /// Tell the user about each sync that has failed long enough, as a
+    /// background sync does after its own.
+    pub async fn notify_failing_syncs_now(&self, daemon: &dyn Daemon) {
+        self.notify_failing_syncs(daemon).await;
     }
 }

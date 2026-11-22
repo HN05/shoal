@@ -52,7 +52,8 @@ impl Fixture {
 
     async fn sync(&self) -> anyhow::Result<crate::model::SyncedRepository> {
         self.manager
-            .sync_repository(&self.repo_id.clone().into())
+            .repositories
+            .sync_repository(&*self.manager, &self.repo_id.clone().into())
             .await
     }
 
@@ -1436,7 +1437,8 @@ async fn incomplete_removal_allows_refresh_recovery_and_diagnosis() {
         .unwrap();
     f.manager.repositories.lock(&f.repo_id).await.unwrap_err();
     f.manager
-        .sync_repository(&f.repo_id.clone().into())
+        .repositories
+        .sync_repository(&*f.manager, &f.repo_id.clone().into())
         .await
         .unwrap();
     let report = f

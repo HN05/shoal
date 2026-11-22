@@ -22,15 +22,16 @@ use shoal_forge::account::Account;
 use shoal_forge_types::ForgeRepo;
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    model::{Repository, RepositoryRemoval, Space, Workspace},
+    model::{Repository, RepositoryRemoval, Space, SyncedRepository, Workspace},
     paths::Paths,
     space_names::SpaceSelector,
     state::WorkspaceState,
 };
+use shoal_refs::BranchName;
 
 use crate::{
     Repositories,
-    daemon::{Activity, Agents, Followers, Forges, Occupants, Records, Spaces},
+    daemon::{Activity, Agents, Branches, Followers, Forges, Occupants, Records, Spaces},
     moves::{Running, chats::OutsideChat},
 };
 
@@ -190,6 +191,20 @@ impl Agents for StandIn {
 impl Coordinators for StandIn {
     fn tell(&self, _: NewAlert, _: bool, _: Source) -> BoxFuture<'_, Option<Sent>> {
         Box::pin(async { None })
+    }
+}
+
+impl Branches for StandIn {
+    fn fetch_default_remotes<'a>(&'a self, _: &'a Repository) -> BoxFuture<'a, Result<BranchName>> {
+        Box::pin(async { bail!("no remotes") })
+    }
+
+    fn fast_forward_default<'a>(
+        &'a self,
+        _: &'a Repository,
+        _: &'a BranchName,
+    ) -> BoxFuture<'a, Result<SyncedRepository>> {
+        Box::pin(async { bail!("no remotes") })
     }
 }
 

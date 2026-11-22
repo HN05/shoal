@@ -24,8 +24,6 @@ use crate::{
 
 pub mod chats;
 mod intent;
-#[cfg(feature = "test-support")]
-mod test_support;
 
 /// What checking a repository makes of the commands and agents running in
 /// its workspaces.

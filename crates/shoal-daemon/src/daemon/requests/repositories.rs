@@ -87,11 +87,14 @@ pub(super) async fn handle(
                 .move_all(&**manager, Layout::migration(regular_dir))
                 .await?,
         ),
-        RepositoryMethod::SyncRepository { repository } => {
-            Body::SyncedRepository(manager.sync_repository(&repository).await?)
-        }
+        RepositoryMethod::SyncRepository { repository } => Body::SyncedRepository(
+            manager
+                .repositories
+                .sync_repository(&**manager, &repository)
+                .await?,
+        ),
         RepositoryMethod::FailingSyncs => {
-            let failing = manager.failing_syncs().await;
+            let failing = manager.repositories.failing_syncs().await;
             return Ok(Answer::pages(failing, Body::FailingSyncs));
         }
         RepositoryMethod::ListBranches { repository } => {

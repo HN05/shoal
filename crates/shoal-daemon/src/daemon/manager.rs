@@ -19,7 +19,6 @@ pub struct Manager {
     pub(super) idle_sleep_health: super::cleanup::CleanupHealth,
     /// The spaces automatic cleanup removed since Shoal's log recorded it.
     pub(crate) cleanup_removals: super::cleanup::Removed,
-    pub(crate) syncs: super::checkout_sync::Syncs,
     /// The triggers and the CI jobs this machine runs.
     pub runner: Arc<shoal_runner::Runner>,
     /// The spaces whose PRs' progress sections wait for an update.
@@ -153,7 +152,6 @@ impl Manager {
             cleanup_health: Default::default(),
             idle_sleep_health: super::cleanup::CleanupHealth::of("Idle sleep"),
             cleanup_removals: Default::default(),
-            syncs: Default::default(),
             runner,
             publications: Default::default(),
             store,

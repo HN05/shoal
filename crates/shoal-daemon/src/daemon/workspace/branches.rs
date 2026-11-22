@@ -208,7 +208,9 @@ impl Manager {
     /// Whether the freshly fetched default branch already has the
     /// workspace's HEAD changes, whatever commits carry them.
     pub(crate) async fn default_branch_has_head(&self, workspace: &Workspace) -> Result<bool> {
-        self.fetch_default_branch(workspace.repository()).await?;
+        self.repositories
+            .fetch_default_branch(self, workspace.repository())
+            .await?;
         let repo = self.repositories.repository(workspace.repository()).await?;
         let default = git::default_branch::locate(&repo.path, DefaultBranchLookup::Cached).await?;
         git::status::default_branch_retains_head(&workspace.path, &default).await

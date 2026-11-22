@@ -2,7 +2,8 @@
 //! it: the spaces whose settings they read and that a removal takes, those
 //! who follow a repository's local config, the
 //! subsystems that work and keep files in a repository's directories, the
-//! agents that trust its paths, the coordinators alerts about a space
+//! agents that trust its paths, the refresh of a checkout's default
+//! branch, the coordinators alerts about a space
 //! reach, the forge a contribution forks on, and the records of other
 //! subsystems they read and write in their own transactions.
 use std::{
@@ -19,10 +20,11 @@ use shoal_forge::account::Account;
 use shoal_forge_types::ForgeRepo;
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    model::{Repository, RepositoryRemoval, Space, Workspace},
+    model::{Repository, RepositoryRemoval, Space, SyncedRepository, Workspace},
     space_names::SpaceSelector,
     state::WorkspaceState,
 };
+use shoal_refs::BranchName;
 
 use crate::moves::{Running, chats::OutsideChat};
 
@@ -146,6 +148,25 @@ pub trait Agents: Send + Sync {
     fn forget_agent_environments<'a>(&'a self, repo: &'a Repository) -> BoxFuture<'a, ()>;
 }
 
+/// The default branch of a checkout, which its syncs fetch and fast-forward
+/// as a refresh of a branch does.
+pub trait Branches: Send + Sync {
+    /// Fetch the remotes the default branch of `repo` follows; returns the
+    /// default branch. The caller holds the repository's fetch gate.
+    fn fetch_default_remotes<'a>(
+        &'a self,
+        repo: &'a Repository,
+    ) -> BoxFuture<'a, Result<BranchName>>;
+
+    /// Fast-forward the local `default` branch of `repo` to its upstream as
+    /// fetched. The caller holds the repository's Git gate.
+    fn fast_forward_default<'a>(
+        &'a self,
+        repo: &'a Repository,
+        default: &'a BranchName,
+    ) -> BoxFuture<'a, Result<SyncedRepository>>;
+}
+
 /// The forges registrations reach.
 pub trait Forges: Send + Sync {
     /// The repository `remote` names, on the forge its host serves.
@@ -156,9 +177,15 @@ pub trait Forges: Send + Sync {
 }
 
 /// Everything the repositories need of the daemon.
-pub trait Daemon: Spaces + Followers + Occupants + Agents + Forges + Coordinators {}
+pub trait Daemon:
+    Spaces + Followers + Occupants + Agents + Branches + Forges + Coordinators
+{
+}
 
-impl<T> Daemon for T where T: Spaces + Followers + Occupants + Agents + Forges + Coordinators {}
+impl<T> Daemon for T where
+    T: Spaces + Followers + Occupants + Agents + Branches + Forges + Coordinators
+{
+}
 
 /// The records of other subsystems the repositories read and write in
 /// their own transactions.

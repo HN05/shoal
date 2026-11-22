@@ -2,9 +2,10 @@
 //! settings it reads and that a removal takes, those who follow a local
 //! config, the subsystems that work and
 //! keep files in a repository's directories, the agents that trust its
-//! paths, the forges a contribution forks on, and the records of other
+//! paths, the refresh of a checkout's default branch, the forges a contribution forks on, and the records of other
 //! subsystems it reads and writes.
 mod agents;
+mod branches;
 mod followers;
 mod forges;
 mod occupants;

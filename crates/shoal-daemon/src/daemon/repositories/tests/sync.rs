@@ -6,8 +6,6 @@ use std::{
     time::Duration,
 };
 
-use futures_util::FutureExt as _;
-
 use crate::daemon::{
     manager::Manager,
     notifications::AlertKind,
@@ -86,14 +84,26 @@ async fn sync_fast_forwards_main_and_a_recent_fetch_stays_fresh() {
     let pushed = f.push("remote\n");
     let synced = f
         .manager
-        .sync_repository(&f.repo_id.clone().into())
+        .repositories
+        .sync_repository(&*f.manager, &f.repo_id.clone().into())
         .await
         .unwrap();
     assert!(synced.default_branch.updated);
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), pushed);
     f.break_remote();
-    assert!(f.manager.default_branch_fresh(&f.repo_id).await);
-    assert!(f.manager.fetch_default_branch(&f.repo_id).await.is_err());
+    assert!(
+        f.manager
+            .repositories
+            .default_branch_fresh(&*f.manager, &f.repo_id)
+            .await
+    );
+    assert!(
+        f.manager
+            .repositories
+            .fetch_default_branch(&*f.manager, &f.repo_id)
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
@@ -104,10 +114,15 @@ async fn main_that_cannot_follow_its_remote_still_counts_as_fetched() {
     commit(&f.repo, "tracked");
     let local = git(&f.repo, &["rev-parse", "main"]);
     f.manager
-        .sync_repository(&f.repo_id.clone().into())
+        .repositories
+        .sync_repository(&*f.manager, &f.repo_id.clone().into())
         .await
         .unwrap_err();
-    f.manager.fetch_default_branch(&f.repo_id).await.unwrap();
+    f.manager
+        .repositories
+        .fetch_default_branch(&*f.manager, &f.repo_id)
+        .await
+        .unwrap();
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), local);
     assert_eq!(git(&f.repo, &["rev-parse", "origin/main"]), pushed);
 }
@@ -116,45 +131,56 @@ async fn main_that_cannot_follow_its_remote_still_counts_as_fetched() {
 async fn an_unfetched_repository_is_not_fresh() {
     let f = Fixture::new().await;
     f.break_remote();
-    assert!(!f.manager.default_branch_fresh(&f.repo_id).await);
-}
-
-#[tokio::test]
-async fn a_request_wakes_the_loop_for_that_repository() {
-    let f = Fixture::new().await;
-    f.manager.syncs.request(&f.repo_id);
-    assert!(f.manager.syncs.wake.notified().now_or_never().is_some());
-    assert_eq!(f.manager.syncs.take_requested(), vec![f.repo_id.clone()]);
-    assert!(f.manager.syncs.take_requested().is_empty());
+    assert!(
+        !f.manager
+            .repositories
+            .default_branch_fresh(&*f.manager, &f.repo_id)
+            .await
+    );
 }
 
 #[tokio::test]
 async fn a_lasting_failure_shows_in_status_then_the_inbox_and_one_notification() {
     let f = Fixture::new().await;
-    assert_eq!(f.manager.checkout_sync(&f.repo_id), None);
+    assert_eq!(f.manager.repositories.checkout_sync(&f.repo_id), None);
     f.manager
-        .sync_repository(&f.repo_id.clone().into())
+        .repositories
+        .sync_repository(&*f.manager, &f.repo_id.clone().into())
         .await
         .unwrap();
     f.break_remote();
     f.manager
-        .sync_repository(&f.repo_id.clone().into())
+        .repositories
+        .sync_repository(&*f.manager, &f.repo_id.clone().into())
         .await
         .unwrap_err();
-    let sync = f.manager.checkout_sync(&f.repo_id).unwrap();
+    let sync = f.manager.repositories.checkout_sync(&f.repo_id).unwrap();
     assert!(sync.synced_at.is_some());
     assert!(sync.failing_since.is_some());
     assert!(sync.error.is_some());
-    assert!(f.manager.failing_syncs().await.unwrap().is_empty());
+    assert!(
+        f.manager
+            .repositories
+            .failing_syncs()
+            .await
+            .unwrap()
+            .is_empty()
+    );
 
     // Only the threshold is waited out; no Git runs while the clock is paused.
     tokio::time::pause();
     tokio::time::advance(Duration::from_secs(30 * 60)).await;
-    let failing = f.manager.failing_syncs().await.unwrap();
+    let failing = f.manager.repositories.failing_syncs().await.unwrap();
     assert_eq!(failing.len(), 1);
     assert_eq!(failing[0].repository_id, f.repo_id);
-    f.manager.notify_failing_syncs().await;
-    f.manager.notify_failing_syncs().await;
+    f.manager
+        .repositories
+        .notify_failing_syncs_now(&*f.manager)
+        .await;
+    f.manager
+        .repositories
+        .notify_failing_syncs_now(&*f.manager)
+        .await;
     let notifications = f.manager.notifications.list(false, 100).await.unwrap();
     let told: Vec<_> = notifications
         .iter()
@@ -169,19 +195,22 @@ async fn a_repository_syncs_while_another_ones_git_gate_is_held() {
     let (other, other_id, other_author) = checkout(f.root.path(), &f.manager, "other").await;
     let pushed = push(&other_author, "remote\n");
     let _held = f.manager.gates.lock_git(&f.repo_id).await;
-    let syncing = tokio::spawn(super::run(f.manager.clone()));
+    let syncing = tokio::spawn(shoal_repositories::sync::run(
+        f.manager.repositories.clone(),
+        f.manager.clone(),
+    ));
     // A hang guard only: the other repository's sync never needs the held gate.
     tokio::time::timeout(Duration::from_secs(120), async {
-        while f.manager.checkout_sync(&other_id).is_none() {
+        while f.manager.repositories.checkout_sync(&other_id).is_none() {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
     })
     .await
     .expect("the other repository never synced");
     syncing.abort();
-    let sync = f.manager.checkout_sync(&other_id);
+    let sync = f.manager.repositories.checkout_sync(&other_id);
     assert_eq!(git(&other, &["rev-parse", "main"]), pushed, "{sync:?}");
-    assert_eq!(f.manager.checkout_sync(&f.repo_id), None);
+    assert_eq!(f.manager.repositories.checkout_sync(&f.repo_id), None);
 }
 
 #[tokio::test]
@@ -191,7 +220,12 @@ async fn workspace_creation_never_waits_on_a_sync_fetching() {
     let fetching = f.manager.gates.lock_fetch(&f.repo_id).await;
     let manager = f.manager.clone();
     let repo_id = f.repo_id.clone();
-    let sync = tokio::spawn(async move { manager.sync_repository(&repo_id.into()).await });
+    let sync = tokio::spawn(async move {
+        manager
+            .repositories
+            .sync_repository(&*manager, &repo_id.into())
+            .await
+    });
     // A hang guard only: creation takes no gate the held fetch holds.
     let workspace = tokio::time::timeout(
         Duration::from_secs(120),

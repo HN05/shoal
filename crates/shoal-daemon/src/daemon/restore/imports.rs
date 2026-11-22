@@ -304,7 +304,8 @@ impl Manager {
         if git::has_commit(&repo.path, commit.as_str()).await? {
             return Ok(());
         }
-        self.fetch_default_branch(&repo.id)
+        self.repositories
+            .fetch_default_branch(self, &repo.id)
             .await
             .context("fetch the default branch the export builds on")
     }
