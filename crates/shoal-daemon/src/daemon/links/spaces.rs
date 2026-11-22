@@ -108,7 +108,7 @@ impl Spaces for Manager {
         &'a self,
         id: &'a RepositoryId,
     ) -> BoxFuture<'a, Result<Vec<Workspace>>> {
-        Box::pin(Manager::repository_workspaces(self, id))
+        Box::pin(self.repositories.repository_workspaces(id))
     }
 
     fn reached_workspaces<'a>(

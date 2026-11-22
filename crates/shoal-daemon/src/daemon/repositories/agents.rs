@@ -18,6 +18,17 @@ impl Agents for Manager {
         Box::pin(self.update_agent_trust(repo, TrustChange::Removed(paths)))
     }
 
+    fn trust_moved<'a>(
+        &'a self,
+        repo: &'a Repository,
+        moves: Vec<(PathBuf, PathBuf)>,
+    ) -> BoxFuture<'a, ()> {
+        Box::pin(async move {
+            self.update_agent_trust(repo, TrustChange::Moved(moves))
+                .await;
+        })
+    }
+
     fn forget_agent_environments<'a>(&'a self, repo: &'a Repository) -> BoxFuture<'a, ()> {
         Box::pin(self.forget_agent_environments_logged(repo))
     }

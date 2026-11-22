@@ -4,11 +4,15 @@
 //! agents that trust its paths, the coordinators alerts about a space
 //! reach, the forge a contribution forks on, and the records of other
 //! subsystems they read and write in their own transactions.
-use std::path::PathBuf;
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Result;
 use futures_util::future::BoxFuture;
 use rusqlite::{Connection, Transaction};
+use shoal_core::shoal_dirs::ShoalDir;
 use shoal_daemon_base::notifications::Coordinators;
 use shoal_forge::account::Account;
 use shoal_forge_types::ForgeRepo;
@@ -16,10 +20,14 @@ use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     model::{Repository, RepositoryRemoval, Space, Workspace},
     space_names::SpaceSelector,
+    state::WorkspaceState,
 };
 
-/// The spaces whose settings the repositories' layers resolve, and that a
-/// repository's removal takes.
+use crate::moves::{Running, chats::OutsideChat};
+
+/// The spaces whose settings the repositories' layers resolve, that a
+/// repository's removal takes, and that a move of its directory or of
+/// `root_dir` carries along.
 pub trait Spaces: Send + Sync {
     /// The workspace or chat `selector` names, by ID or name.
     fn space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>>;
@@ -32,6 +40,40 @@ pub trait Spaces: Send + Sync {
     fn ensure_removable_workspace<'a>(
         &'a self,
         workspace: &'a Workspace,
+    ) -> BoxFuture<'a, Result<()>>;
+
+    /// Refuse a workspace its repository's move cannot take: one whose
+    /// worktree is not verifiably its own, or was moved.
+    fn ensure_movable_workspace<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+    ) -> BoxFuture<'a, Result<()>>;
+
+    /// Verify that `workspace`, whose repository's directory moved, still
+    /// owns its worktree, and record its admin directory there.
+    fn record_moved_worktree<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<()>>;
+
+    /// The directories in `root` that keep the files of the chats without a
+    /// repository, which a move of `root_dir` takes from it.
+    fn outside_dirs(&self, root: &Path) -> Vec<PathBuf>;
+
+    /// The chats without a repository whose files or records a move to
+    /// `root_dir`, which names or links to `destination`, changes, refusing
+    /// one that runs unless `running` has the caller stop it first.
+    fn outside_chats_moving<'a>(
+        &'a self,
+        root_dir: &'a Path,
+        destination: &'a Path,
+        running: Running,
+    ) -> BoxFuture<'a, Result<Vec<OutsideChat>>>;
+
+    /// Move the files of `chats` into `destination`, which `root_dir` names
+    /// or links to once the move is done, and record that each runs there.
+    fn move_outside_chats<'a>(
+        &'a self,
+        chats: Vec<OutsideChat>,
+        root_dir: &'a Path,
+        destination: &'a Path,
     ) -> BoxFuture<'a, Result<()>>;
 
     /// Remove the space `id` as its repository's removal does.
@@ -52,6 +94,12 @@ pub trait Spaces: Send + Sync {
 /// The subsystems that work in a repository's directories or keep files
 /// there, which its removal stops or deletes.
 pub trait Occupants: Send + Sync {
+    /// Refuse while a review runs or waits in the repository `id`.
+    fn ensure_no_reviews_in<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<()>>;
+
+    /// Refuse while an import reads a package into `imports`.
+    fn ensure_no_import_in(&self, imports: ShoalDir) -> BoxFuture<'_, Result<()>>;
+
     /// Stop the reviews running or queued in the repository `id`.
     fn stop_reviews<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, ()>;
 
@@ -82,6 +130,14 @@ pub trait Agents: Send + Sync {
         repo: &'a Repository,
         paths: Vec<PathBuf>,
     ) -> BoxFuture<'a, bool>;
+
+    /// Carry the trust entries for `repo`'s paths that moved, each with the
+    /// path it has now.
+    fn trust_moved<'a>(
+        &'a self,
+        repo: &'a Repository,
+        moves: Vec<(PathBuf, PathBuf)>,
+    ) -> BoxFuture<'a, ()>;
 
     /// Forget the config locations `repo`'s agents ran with.
     fn forget_agent_environments<'a>(&'a self, repo: &'a Repository) -> BoxFuture<'a, ()>;
@@ -120,6 +176,47 @@ pub trait Records: Send + Sync {
     /// space's files, or a resource another repository's workspace borrows.
     fn repository_in_use(&self, db: &Connection, id: &RepositoryId) -> Result<bool>;
 
+    /// What other subsystems record of the use of the repository `id`,
+    /// which decides whether its directory may move.
+    fn repository_activity(&self, db: &Connection, id: &RepositoryId) -> Result<Activity>;
+
+    /// Mark the workspaces of the repository `id`, whose directory moves,
+    /// as reconciling.
+    fn reconcile_workspaces(&self, tx: &Transaction<'_>, id: &RepositoryId) -> Result<()>;
+
+    /// Return the workspace `id` to `state`, which it had before its
+    /// repository's directory moved, dropping an error a restart recorded
+    /// meanwhile once it is ready.
+    fn restore_workspace_state(
+        &self,
+        tx: &Transaction<'_>,
+        id: &SpaceId,
+        state: WorkspaceState,
+    ) -> Result<()>;
+
+    /// Point the records of the repository `id` other subsystems keep
+    /// inside `source`, its directory that moved, at `destination`.
+    fn rebase_paths(
+        &self,
+        tx: &Transaction<'_>,
+        id: &RepositoryId,
+        source: &Path,
+        destination: &Path,
+    ) -> Result<()>;
+
     /// Forget the resource pools of the repository `id`, which goes.
     fn forget_repository_pools(&self, tx: &Transaction<'_>, id: &RepositoryId) -> Result<()>;
+}
+
+/// What other subsystems record of a repository's use.
+pub struct Activity {
+    /// A lease handed its checkout to a caller.
+    pub checkout_leased: bool,
+    /// A chat runs in it.
+    pub chats: bool,
+    /// An agent launch, or a CI job other than one waiting for the runner,
+    /// is queued for it.
+    pub launches: bool,
+    /// The state of each of its workspaces.
+    pub workspace_states: BTreeMap<SpaceId, WorkspaceState>,
 }

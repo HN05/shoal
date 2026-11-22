@@ -8,65 +8,35 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, ensure};
 use rusqlite::params;
 
-use super::Running;
-use crate::{daemon::manager::Manager, fsutil, model::Execution, tmp_dirs};
+use crate::{daemon::manager::Manager, fsutil, tmp_dirs};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;
-
-/// A chat without a repository: its ID and name, the `root_dir` it runs
-/// in, its temporary directory, attached files and the session files an
-/// import kept for it, where it has them, as
-/// they resolve before the root changes, and the commands and agents
-/// running in it, which must stop before its files move.
-pub(super) struct OutsideChat {
-    pub(super) id: SpaceId,
-    pub(super) name: SpaceName,
-    root_dir: PathBuf,
-    tmp: Option<PathBuf>,
-    files: Option<PathBuf>,
-    sessions: Option<PathBuf>,
-    pub(super) running: Vec<Execution>,
-}
-
-impl OutsideChat {
-    /// Whether a move to `root_dir`, which names or links to
-    /// `destination`, changes where it runs or keeps its files.
-    fn moves(&self, root_dir: &Path, destination: &Path) -> bool {
-        self.root_dir != root_dir
-            || elsewhere(&self.tmp, destination).is_some()
-            || elsewhere(&self.files, destination).is_some()
-            || elsewhere(&self.sessions, destination).is_some()
-    }
-
-    /// The `root_dir` its files are in now, resolved.
-    fn source_root(&self) -> Option<PathBuf> {
-        let directory = (self.tmp.as_ref())
-            .or(self.files.as_ref())
-            .or(self.sessions.as_ref())?;
-        Some(directory.parent()?.parent()?.to_owned())
-    }
-}
-
-/// The roots a move of `chats` to `root_dir`, which names or links to
-/// `destination`, leaves: those their files are in, and `root_dir` itself
-/// while it is not `destination` yet.
-fn roots_left(chats: &[OutsideChat], root_dir: &Path, destination: &Path) -> Vec<PathBuf> {
-    let mut left: Vec<PathBuf> = (chats.iter())
-        .filter_map(OutsideChat::source_root)
-        .chain(std::fs::canonicalize(root_dir))
-        .filter(|left| left != destination)
-        .collect();
-    left.sort();
-    left.dedup();
-    left
-}
+use shoal_repositories::moves::{Running, chats::OutsideChat};
 
 impl Manager {
+    /// The directories in `root` that keep the temporary directories,
+    /// attached files and kept session files of the chats without a
+    /// repository, which move with the chats, and the packages imported
+    /// for them, where they are this Shoal's; all leave the root.
+    pub(crate) fn outside_dirs(&self, root: &Path) -> Vec<PathBuf> {
+        let owner = self.root_dir_owner();
+        let tmp = tmp_dirs::Layout::outside_repositories(root, &owner);
+        let files = self.outside_files_layout(root);
+        let sessions = self.outside_sessions_layout(root);
+        let imports = self.outside_imports(root);
+        (tmp.own_root().into_iter())
+            .chain(files.own_root())
+            .chain(sessions.own_root())
+            .chain(imports.is_own().then(|| imports.root()))
+            .map(Path::to_owned)
+            .collect()
+    }
+
     /// The chats without a repository, running, stopped or removed, whose
     /// files or records a move to `root_dir`, which names or links to
     /// `destination`, changes, refusing one that runs unless `running` has
     /// the caller stop it first.
-    pub(super) async fn outside_chats_moving(
+    pub(crate) async fn outside_chats_moving(
         &self,
         root_dir: &Path,
         destination: &Path,
@@ -74,7 +44,7 @@ impl Manager {
     ) -> Result<Vec<OutsideChat>> {
         let mut moving = Vec::new();
         for chat in self.outside_chats().await? {
-            if !chat.moves(root_dir, destination) {
+            if !moves(&chat, root_dir, destination) {
                 continue;
             }
             ensure!(
@@ -161,7 +131,7 @@ impl Manager {
     /// the roots they left, `root_dir` itself among them while it is not
     /// `destination` yet. Refused while an import reads a package into one
     /// of those roots; the caller holds the gate of those chats' files.
-    pub(super) async fn move_outside_chats(
+    pub(crate) async fn move_outside_chats(
         &self,
         chats: Vec<OutsideChat>,
         root_dir: &Path,
@@ -228,6 +198,37 @@ impl Manager {
     }
 }
 
+/// Whether a move to `root_dir`, which names or links to `destination`,
+/// changes where `chat` runs or keeps its files.
+fn moves(chat: &OutsideChat, root_dir: &Path, destination: &Path) -> bool {
+    chat.root_dir != root_dir
+        || elsewhere(&chat.tmp, destination).is_some()
+        || elsewhere(&chat.files, destination).is_some()
+        || elsewhere(&chat.sessions, destination).is_some()
+}
+
+/// The `root_dir` the files of `chat` are in now, resolved.
+fn source_root(chat: &OutsideChat) -> Option<PathBuf> {
+    let directory = (chat.tmp.as_ref())
+        .or(chat.files.as_ref())
+        .or(chat.sessions.as_ref())?;
+    Some(directory.parent()?.parent()?.to_owned())
+}
+
+/// The roots a move of `chats` to `root_dir`, which names or links to
+/// `destination`, leaves: those their files are in, and `root_dir` itself
+/// while it is not `destination` yet.
+fn roots_left(chats: &[OutsideChat], root_dir: &Path, destination: &Path) -> Vec<PathBuf> {
+    let mut left: Vec<PathBuf> = (chats.iter())
+        .filter_map(source_root)
+        .chain(std::fs::canonicalize(root_dir))
+        .filter(|left| left != destination)
+        .collect();
+    left.sort();
+    left.dedup();
+    left
+}
+
 /// `directory`, when it is not in `destination`.
 fn elsewhere<'a>(directory: &'a Option<PathBuf>, destination: &Path) -> Option<&'a Path> {
     (directory.as_deref()).filter(|directory| !directory.starts_with(destination))
@@ -266,7 +267,7 @@ fn rehome(tx: &rusqlite::Transaction<'_>, id: &SpaceId, root_dir: &Path) -> Resu
         "UPDATE chats SET root_dir=?2 WHERE id=?1",
         params![id, root_dir.to_string_lossy()],
     )?;
-    super::super::restore::rehome_removed_chat(tx, id, root_dir)?;
+    crate::daemon::restore::rehome_removed_chat(tx, id, root_dir)?;
     let recorded: Vec<(i64, Option<String>, String)> = tx
         .prepare(
             "SELECT id,root_dir,path FROM space_files

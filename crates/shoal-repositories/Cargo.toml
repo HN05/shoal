@@ -7,6 +7,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+# What the daemon's tests of moves interrupt a move between.
+test-support = []
+
 [dependencies]
 anyhow.workspace = true
 futures-util.workspace = true

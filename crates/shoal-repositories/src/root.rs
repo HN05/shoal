@@ -19,7 +19,7 @@ pub struct ConfiguredRoot {
 
 impl Repositories {
     /// The configured `root_dir`, taken as registration finds it.
-    pub fn configured_root(&self) -> Result<ConfiguredRoot> {
+    pub(crate) fn configured_root(&self) -> Result<ConfiguredRoot> {
         Ok(ConfiguredRoot {
             path: self.config().root_dir(&self.paths)?,
             layout: spotlight::Layout::AsFound,
@@ -69,7 +69,7 @@ pub async fn prepare_root(
 
 /// What [`prepare_root`] would change, refused as it would refuse, without
 /// changing anything.
-pub async fn plan_root(
+pub(crate) async fn plan_root(
     root: &ConfiguredRoot,
     state: &Path,
     recorded: &Recorded<'_>,
@@ -135,7 +135,7 @@ fn ensure_outside(
 /// by creating it, so concurrent daemons cannot share one directory. A
 /// candidate that is, holds or lies in a recorded checkout, repository
 /// directory or one of `workspaces` is taken, even when that is gone.
-pub fn reserve_directory(
+pub(crate) fn reserve_directory(
     root: &Path,
     name: &str,
     repositories: &[Repository],

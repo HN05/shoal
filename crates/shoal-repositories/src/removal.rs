@@ -351,13 +351,6 @@ impl Repositories {
             })
             .await
     }
-
-    /// The workspaces of the repository `id`.
-    pub(crate) async fn repository_workspaces(&self, id: &RepositoryId) -> Result<Vec<Workspace>> {
-        Ok((self.workspaces().await?.into_iter())
-            .filter(|workspace| workspace.repository() == id)
-            .collect())
-    }
 }
 
 impl Progress {

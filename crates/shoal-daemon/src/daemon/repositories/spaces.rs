@@ -1,13 +1,19 @@
-//! The spaces whose settings the repositories read, and that a
-//! repository's removal takes.
+//! The spaces whose settings the repositories read, that a repository's
+//! removal takes, and that a move of its directory or of `root_dir`
+//! carries along.
+use std::path::{Path, PathBuf};
+
 use anyhow::{Result, ensure};
 use futures_util::future::BoxFuture;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
-use shoal_repositories::daemon::Spaces;
+use shoal_repositories::{
+    daemon::Spaces,
+    moves::{Running, chats::OutsideChat},
+};
 
 use crate::{
-    daemon::manager::Manager,
+    daemon::{log, manager::Manager},
     fsutil::off_runtime,
     model::{RepositoryRemoval, Space, Workspace},
     state::WorkspaceState,
@@ -27,6 +33,58 @@ impl Spaces for Manager {
         workspace: &'a Workspace,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(ensure_removable(self, workspace))
+    }
+
+    fn ensure_movable_workspace<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(ensure_movable(self, workspace))
+    }
+
+    fn record_moved_worktree<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            let verified = self.verify_and_record_worktree(workspace, true).await?;
+            if let Err(error) = verified.identity {
+                log!(
+                    "worktree identity not recorded for {}: {error:#}",
+                    workspace.name
+                );
+            }
+            Ok(())
+        })
+    }
+
+    fn outside_dirs(&self, root: &Path) -> Vec<PathBuf> {
+        Manager::outside_dirs(self, root)
+    }
+
+    fn outside_chats_moving<'a>(
+        &'a self,
+        root_dir: &'a Path,
+        destination: &'a Path,
+        running: Running,
+    ) -> BoxFuture<'a, Result<Vec<OutsideChat>>> {
+        Box::pin(Manager::outside_chats_moving(
+            self,
+            root_dir,
+            destination,
+            running,
+        ))
+    }
+
+    fn move_outside_chats<'a>(
+        &'a self,
+        chats: Vec<OutsideChat>,
+        root_dir: &'a Path,
+        destination: &'a Path,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(Manager::move_outside_chats(
+            self,
+            chats,
+            root_dir,
+            destination,
+        ))
     }
 
     fn remove_for_repository<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
@@ -77,5 +135,19 @@ async fn ensure_removable(manager: &Manager, workspace: &Workspace) -> Result<()
             workspace.name
         );
     }
+    Ok(())
+}
+
+/// Refuse a workspace its repository's move cannot take: one whose
+/// worktree is not verifiably its own, or was moved.
+async fn ensure_movable(manager: &Manager, workspace: &Workspace) -> Result<()> {
+    if off_runtime::exists(&workspace.path).await? {
+        return manager.verify_worktree(workspace).await;
+    }
+    ensure!(
+        manager.missing_worktree(workspace).await?.is_none(),
+        "workspace {} was moved; restore it before moving its repository",
+        workspace.name
+    );
     Ok(())
 }

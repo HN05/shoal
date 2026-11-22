@@ -77,12 +77,14 @@ pub(super) async fn handle(
         }
         RepositoryMethod::PlanRepositoryMoves { root, regular_dir } => Body::RepositoryMoves(
             manager
-                .plan_repository_moves(root.as_deref(), Layout::migration(regular_dir))
+                .repositories
+                .plan_moves(&**manager, root.as_deref(), Layout::migration(regular_dir))
                 .await?,
         ),
         RepositoryMethod::MoveRepositories { regular_dir } => Body::MovedRepositories(
             manager
-                .move_repositories(Layout::migration(regular_dir))
+                .repositories
+                .move_all(&**manager, Layout::migration(regular_dir))
                 .await?,
         ),
         RepositoryMethod::SyncRepository { repository } => {

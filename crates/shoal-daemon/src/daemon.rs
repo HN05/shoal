@@ -83,7 +83,7 @@ pub(crate) mod ready_marks;
 pub mod recovery;
 mod relayed;
 mod releases;
-mod repo_move;
+
 mod repositories;
 mod requests;
 mod restart_recovery;
@@ -410,7 +410,7 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
         )
         .await?;
     // Finishing a move restores the states quarantine failed.
-    let moves = manager.finish_repository_moves();
+    let moves = manager.repositories.finish_moves(&*manager);
     if let Err(error) = startup.step("finishing repository moves", moves).await {
         log!("{error:#}");
     }

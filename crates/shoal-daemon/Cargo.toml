@@ -70,6 +70,7 @@ shoal-hub = { workspace = true, features = ["test-support"] }
 shoal-ids = { workspace = true, features = ["test-support"] }
 shoal-protocol = { workspace = true, features = ["test-support"] }
 shoal-links = { workspace = true, features = ["test-support"] }
+shoal-repositories = { workspace = true, features = ["test-support"] }
 shoal-reviews = { workspace = true, features = ["test-support"] }
 shoal-runner = { workspace = true, features = ["test-support"] }
 shoal-store = { workspace = true, features = ["test-support"] }

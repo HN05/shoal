@@ -103,4 +103,11 @@ impl Repositories {
         let records = self.records.clone();
         self.store.run(move |db| records.workspaces(db)).await
     }
+
+    /// The workspaces of the repository `id`.
+    pub async fn repository_workspaces(&self, id: &RepositoryId) -> Result<Vec<Workspace>> {
+        Ok((self.workspaces().await?.into_iter())
+            .filter(|workspace| workspace.repository() == id)
+            .collect())
+    }
 }

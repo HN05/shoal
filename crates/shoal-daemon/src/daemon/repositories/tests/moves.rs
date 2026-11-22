@@ -1,13 +1,22 @@
-use super::*;
+use anyhow::{Context, Result};
+use rusqlite::params;
+use std::path::{Path, PathBuf};
+
+use crate::daemon::manager::Manager;
 use crate::daemon::{
     executions::ExecutionKind, links::proposals::tests as proposals, test_support,
     workspace_files::Attacher,
 };
+use crate::model::{Repository, Workspace};
 use crate::removal::{InspectionPolicy, UnsavedWork};
+use crate::state::{QueueKind, QueueState, WorkspaceState};
 use crate::time::UnixTime;
+use crate::{fsutil, git};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::assignments::Done;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_repositories::spotlight::Layout;
+use std::fs;
 use std::sync::Arc;
 
 /// A manager with a cloned repository and one workspace under the default
@@ -49,7 +58,10 @@ async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
     let tmp_dir = crate::tmp_dirs::directory(&repo, &workspace.id)?;
     fs::write(tmp_dir.join("scratch"), "garbage")?;
 
-    let moved = manager.move_repositories(Layout::Regular).await?;
+    let moved = manager
+        .repositories
+        .move_all(&*manager, Layout::Regular)
+        .await?;
     let [moved] = moved.as_slice() else {
         anyhow::bail!("expected one move: {moved:?}");
     };
@@ -94,7 +106,13 @@ async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
     }
 
     // Moving again finds nothing outside the root, and new workspaces go there.
-    assert!(manager.move_repositories(Layout::Regular).await?.is_empty());
+    assert!(
+        manager
+            .repositories
+            .move_all(&*manager, Layout::Regular)
+            .await?
+            .is_empty()
+    );
     let next = manager
         .create_workspace(&repo.id, "next".into(), None, None, None)
         .await?;
@@ -110,7 +128,10 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
     fs::create_dir_all(&destination)?;
 
     // A copy cut short leaves the source, so the move rolls back.
-    manager.record_move(&repo.id, &source, &destination).await?;
+    manager
+        .repositories
+        .record_move_intent(&repo.id, &source, &destination)
+        .await?;
     let reserved = manager
         .reserve_lifecycle(&workspace.id, WorkspaceState::Removing)
         .await;
@@ -143,7 +164,7 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
         .await;
     assert!(setup.is_err());
     fs::write(destination.join("partial"), "")?;
-    manager.finish_repository_moves().await?;
+    manager.repositories.finish_moves(&*manager).await?;
     assert!(!destination.exists());
     assert_eq!(
         manager.repositories.repository(&repo.id).await?.path,
@@ -157,12 +178,15 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
     // A completed rename finishes when the daemon starts again, leaving a
     // directory created at the old path since.
     fs::create_dir_all(&destination)?;
-    manager.record_move(&repo.id, &source, &destination).await?;
+    manager
+        .repositories
+        .record_move_intent(&repo.id, &source, &destination)
+        .await?;
     fs::rename(&source, &destination)?;
     fs::create_dir(&source)?;
     fs::write(source.join("unrelated"), "keep")?;
     crate::daemon::quarantine::interrupted_operations(&manager.store).await?;
-    manager.finish_repository_moves().await?;
+    manager.repositories.finish_moves(&*manager).await?;
     let workspace = manager.workspace_by_id(&workspace.id).await?;
     assert_eq!(workspace.path, destination.join("feature"));
     assert_eq!(workspace.state, WorkspaceState::Ready);
@@ -180,16 +204,22 @@ async fn a_copied_move_reconnects_worktrees_before_deleting_the_original() -> Re
     fs::create_dir_all(&destination)?;
 
     // What a move to another filesystem leaves before the original goes.
-    manager.record_move(&repo.id, &source, &destination).await?;
+    manager
+        .repositories
+        .record_move_intent(&repo.id, &source, &destination)
+        .await?;
     fsutil::copy::copy_directory(&source, &destination).await?;
-    manager.switch_move(&repo.id, &source, &destination).await?;
+    manager
+        .repositories
+        .switch_move_records(&repo.id, &source, &destination)
+        .await?;
     // An unavailable copy keeps the original.
     let away = root.join("unmounted");
     fs::rename(&destination, &away)?;
-    assert!(manager.finish_repository_moves().await.is_err());
+    assert!(manager.repositories.finish_moves(&*manager).await.is_err());
     assert!(source.join(".checkout").exists());
     fs::rename(&away, &destination)?;
-    manager.finish_repository_moves().await?;
+    manager.repositories.finish_moves(&*manager).await?;
 
     assert!(!source.exists());
     let workspace = manager.workspace_by_id(&workspace.id).await?;
@@ -232,11 +262,14 @@ async fn a_checkpoint_waits_for_the_move_and_refuses_while_it_is_pending() -> Re
             .await
     });
     test_support::assert_pending(&mut checkpoint).await;
-    manager.record_move(&repo.id, &source, &destination).await?;
+    manager
+        .repositories
+        .record_move_intent(&repo.id, &source, &destination)
+        .await?;
     drop(gate);
     assert!(checkpoint.await.is_err());
 
-    manager.finish_repository_moves().await?;
+    manager.repositories.finish_moves(&*manager).await?;
     manager
         .take_checkpoint(&SpaceSelector::id(&workspace.id), None)
         .await?;
@@ -253,40 +286,14 @@ async fn the_destination_avoids_a_deleted_workspace_recorded_there() -> Result<(
         .await?;
     fs::remove_dir_all(root.join("origin"))?;
 
-    let moved = manager.move_repositories(Layout::Regular).await?;
+    let moved = manager
+        .repositories
+        .move_all(&*manager, Layout::Regular)
+        .await?;
     let [moved] = moved.as_slice() else {
         anyhow::bail!("expected one move: {moved:?}");
     };
     assert_eq!(moved.repository.workspaces_dir, root.join("origin-2"));
-    Ok(())
-}
-
-#[test]
-fn the_destination_avoids_a_missing_checkout_recorded_inside_it() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let root = fs::canonicalize(temp.path())?;
-    let clone = Repository {
-        id: "clone".into(),
-        path: root.join("project/.checkout"),
-        source: "https://example.invalid/clone.git".into(),
-        last_used: 1,
-        name: None,
-        workspaces_dir: root.join("elsewhere"),
-        contribution: false,
-    };
-    let reserved = shoal_repositories::root::reserve_directory(
-        &root,
-        "project",
-        std::slice::from_ref(&clone),
-        &[],
-    )?;
-    assert_eq!(reserved, root.join("project-2"));
-
-    // A root inside a recorded directory has no free name at all.
-    let nested = root.join("elsewhere/nested");
-    assert!(
-        shoal_repositories::root::reserve_directory(&nested, "project", &[clone], &[]).is_err()
-    );
     Ok(())
 }
 
@@ -310,7 +317,8 @@ async fn a_move_destination_and_workspace_paths_exclude_each_other() -> Result<(
         .await?;
     assert!(
         manager
-            .record_move(&repo.id, &source, &taken)
+            .repositories
+            .record_move_intent(&repo.id, &source, &taken)
             .await
             .is_err()
     );
@@ -318,7 +326,10 @@ async fn a_move_destination_and_workspace_paths_exclude_each_other() -> Result<(
     // While a move is recorded, no repository places a workspace there.
     let destination = root.join("origin-2");
     fs::create_dir_all(&destination)?;
-    manager.record_move(&repo.id, &source, &destination).await?;
+    manager
+        .repositories
+        .record_move_intent(&repo.id, &source, &destination)
+        .await?;
     let other = test_support::repository(temp.path(), "other");
     let other = manager
         .repositories
@@ -336,7 +347,7 @@ async fn a_move_destination_and_workspace_paths_exclude_each_other() -> Result<(
         .await;
     assert!(placed.is_err());
     assert!(!intruder.exists());
-    manager.finish_repository_moves().await?;
+    manager.repositories.finish_moves(&*manager).await?;
     Ok(())
 }
 
@@ -346,12 +357,15 @@ async fn a_replaced_worktree_keeps_the_move_unfinished() -> Result<()> {
     let source = repo.workspaces_dir.clone();
     let destination = root.join("origin");
     fs::create_dir_all(&destination)?;
-    manager.record_move(&repo.id, &source, &destination).await?;
+    manager
+        .repositories
+        .record_move_intent(&repo.id, &source, &destination)
+        .await?;
     fs::rename(&source, &destination)?;
     let admin = destination.join(".checkout/.git/worktrees/feature");
     shoal_daemon_base::ownership::mark_owner(&admin, "another")?;
 
-    assert!(manager.finish_repository_moves().await.is_err());
+    assert!(manager.repositories.finish_moves(&*manager).await.is_err());
     assert!(
         manager
             .repositories
@@ -386,10 +400,19 @@ async fn a_checkout_placed_in_its_directory_moves_with_its_source() -> Result<()
         .repositories
         .register(other.to_str().context("path")?.into(), None, None)
         .await?;
-    assert!(manager.move_repositories(Layout::Regular).await.is_err());
+    assert!(
+        manager
+            .repositories
+            .move_all(&*manager, Layout::Regular)
+            .await
+            .is_err()
+    );
     manager.repositories.remove(&*manager, &other.id).await?;
 
-    manager.move_repositories(Layout::Regular).await?;
+    manager
+        .repositories
+        .move_all(&*manager, Layout::Regular)
+        .await?;
     let moved = manager.repositories.repository(&repo.id).await?;
     let expected = root.join("project/checkout");
     assert_eq!(moved.path, expected);
@@ -413,16 +436,26 @@ async fn an_excluded_move_empties_the_indexed_root_and_links_it() -> Result<()> 
     let excluded = root.with_file_name(".shoal.noindex");
 
     let plan = manager
-        .plan_repository_moves(None, Layout::Excluded)
+        .repositories
+        .plan_moves(&*manager, None, Layout::Excluded)
         .await?;
     assert_eq!(plan.directory, excluded);
     assert!(fs::symlink_metadata(&root)?.is_dir());
     fs::write(root.join("notes"), "")?;
-    assert!(manager.move_repositories(Layout::Excluded).await.is_err());
+    assert!(
+        manager
+            .repositories
+            .move_all(&*manager, Layout::Excluded)
+            .await
+            .is_err()
+    );
     assert!(old.exists());
 
     fs::remove_file(root.join("notes"))?;
-    let moved = manager.move_repositories(Layout::Excluded).await?;
+    let moved = manager
+        .repositories
+        .move_all(&*manager, Layout::Excluded)
+        .await?;
     let [moved] = moved.as_slice() else {
         anyhow::bail!("expected one move: {moved:?}");
     };
@@ -434,7 +467,10 @@ async fn an_excluded_move_empties_the_indexed_root_and_links_it() -> Result<()> 
     manager.verify_worktree(&workspace).await?;
 
     // A regular directory replaces the link and takes the repository back.
-    let moved = manager.move_repositories(Layout::Regular).await?;
+    let moved = manager
+        .repositories
+        .move_all(&*manager, Layout::Regular)
+        .await?;
     let [moved] = moved.as_slice() else {
         anyhow::bail!("expected one move: {moved:?}");
     };
@@ -457,7 +493,13 @@ async fn an_excluded_move_refuses_to_link_a_recorded_workspace_path() -> Result<
         .await?;
     fs::remove_dir_all(&placed)?;
     test_support::configure(&manager, &format!("[machine]\nroot_dir = {:?}\n", placed)).await;
-    assert!(manager.move_repositories(Layout::Excluded).await.is_err());
+    assert!(
+        manager
+            .repositories
+            .move_all(&*manager, Layout::Excluded)
+            .await
+            .is_err()
+    );
     assert!(fs::symlink_metadata(&placed).is_err());
     Ok(())
 }
@@ -486,7 +528,10 @@ async fn messages_and_files_follow_their_copies_to_the_new_root() -> Result<()> 
         )
         .await?;
 
-    manager.move_repositories(Layout::Regular).await?;
+    manager
+        .repositories
+        .move_all(&*manager, Layout::Regular)
+        .await?;
     let completion = manager
         .completion(&workspace.id)
         .await?
@@ -520,7 +565,10 @@ async fn pending_proposals_follow_their_copies_to_the_new_root() -> Result<()> {
     let (body, copy) = proposals::kept_copy(&manager, &workspace, &repo.id, "shot.png").await;
     let pull = proposals::store_pull_proposal(&manager, &workspace, body, vec![copy.clone()]).await;
 
-    manager.move_repositories(Layout::Regular).await?;
+    manager
+        .repositories
+        .move_all(&*manager, Layout::Regular)
+        .await?;
     let moved = manager
         .approval_request(pull.number)
         .await?
@@ -547,7 +595,12 @@ async fn a_move_waits_for_a_send_keeping_attached_files() -> Result<()> {
     let gate = manager.gates.message_files_gate(&repo.id);
     let moving = tokio::spawn({
         let manager = manager.clone();
-        async move { manager.move_repositories(Layout::Regular).await }
+        async move {
+            manager
+                .repositories
+                .move_all(&*manager, Layout::Regular)
+                .await
+        }
     });
     // The send, this test and the waiting move.
     tokio::time::timeout(std::time::Duration::from_secs(60), async {
@@ -599,14 +652,23 @@ async fn a_plan_lists_running_executions_that_the_move_refuses() -> Result<()> {
         .await?;
 
     // The wrapper stops with its execution, so it does not count.
-    let plan = manager.plan_repository_moves(None, Layout::Regular).await?;
+    let plan = manager
+        .repositories
+        .plan_moves(&*manager, None, Layout::Regular)
+        .await?;
     assert_eq!(plan.repositories.len(), 1);
     let [listed] = plan.executions.as_slice() else {
         anyhow::bail!("expected one execution: {:?}", plan.executions);
     };
     assert_eq!(listed.id, execution.plan.id);
 
-    assert!(manager.move_repositories(Layout::Regular).await.is_err());
+    assert!(
+        manager
+            .repositories
+            .move_all(&*manager, Layout::Regular)
+            .await
+            .is_err()
+    );
     assert!(repo.workspaces_dir.exists());
 
     // Another process in the directory keeps even the plan from passing.
@@ -615,7 +677,10 @@ async fn a_plan_lists_running_executions_that_the_move_refuses() -> Result<()> {
         .current_dir(&workspace.path)
         .kill_on_drop(true)
         .spawn()?;
-    let plan = manager.plan_repository_moves(None, Layout::Regular).await;
+    let plan = manager
+        .repositories
+        .plan_moves(&*manager, None, Layout::Regular)
+        .await;
     assert!(plan.is_err());
     other.kill().await?;
     wrapper.kill().await?;
@@ -642,7 +707,13 @@ async fn a_queued_or_running_review_holds_back_the_move() -> Result<()> {
             }
         })
         .await?;
-    assert!(manager.move_repositories(Layout::Regular).await.is_err());
+    assert!(
+        manager
+            .repositories
+            .move_all(&*manager, Layout::Regular)
+            .await
+            .is_err()
+    );
     assert!(repo.workspaces_dir.exists());
     Ok(())
 }
@@ -662,7 +733,13 @@ async fn a_waiting_ci_job_lets_the_move_go_and_a_starting_one_holds_it_back() ->
         })
     };
     queue(QueueState::Starting).await?;
-    assert!(manager.move_repositories(Layout::Regular).await.is_err());
+    assert!(
+        manager
+            .repositories
+            .move_all(&*manager, Layout::Regular)
+            .await
+            .is_err()
+    );
     assert!(repo.workspaces_dir.exists());
 
     manager
@@ -673,7 +750,10 @@ async fn a_waiting_ci_job_lets_the_move_go_and_a_starting_one_holds_it_back() ->
         })
         .await?;
     queue(QueueState::Queued).await?;
-    manager.move_repositories(Layout::Regular).await?;
+    manager
+        .repositories
+        .move_all(&*manager, Layout::Regular)
+        .await?;
     assert!(!repo.workspaces_dir.exists());
     Ok(())
 }
@@ -704,7 +784,12 @@ async fn deleting_files_behind_a_move_deletes_them_at_the_new_place() -> Result<
     };
     let moving = tokio::spawn({
         let manager = manager.clone();
-        async move { manager.move_repositories(Layout::Regular).await }
+        async move {
+            manager
+                .repositories
+                .move_all(&*manager, Layout::Regular)
+                .await
+        }
     });
     waiting(4).await.context("the move reaches the gate")?;
     let deleting = tokio::spawn({
@@ -777,7 +862,12 @@ async fn disk_cleanup_behind_a_move_checks_where_results_went() -> Result<()> {
     };
     let moving = tokio::spawn({
         let manager = manager.clone();
-        async move { manager.move_repositories(Layout::Regular).await }
+        async move {
+            manager
+                .repositories
+                .move_all(&*manager, Layout::Regular)
+                .await
+        }
     });
     waiting(4).await.context("the move reaches the gate")?;
     let cleaning = tokio::spawn({
@@ -837,7 +927,8 @@ async fn a_root_move_stops_the_chats_without_a_repository_and_takes_their_files(
         .prepare(&SpaceId::from("leftover"))?;
 
     let planned = manager
-        .plan_repository_moves(None, Layout::Excluded)
+        .repositories
+        .plan_moves(&*manager, None, Layout::Excluded)
         .await?;
     let stopping: Vec<_> = (planned.executions.iter())
         .map(|execution| &execution.space_id)
@@ -846,9 +937,18 @@ async fn a_root_move_stops_the_chats_without_a_repository_and_takes_their_files(
         (planned.chats, stopping),
         (vec!["master".into()], vec![&chat.id])
     );
-    assert!(manager.move_repositories(Layout::Excluded).await.is_err());
+    assert!(
+        manager
+            .repositories
+            .move_all(&*manager, Layout::Excluded)
+            .await
+            .is_err()
+    );
     manager.end_executions(&chat.id).await;
-    manager.move_repositories(Layout::Excluded).await?;
+    manager
+        .repositories
+        .move_all(&*manager, Layout::Excluded)
+        .await?;
 
     assert_eq!(fs::read_link(&root)?, Path::new(".shoal.noindex"));
     let moved = manager.chat_by_id(&chat.id).await?.context("no chat")?;
@@ -871,7 +971,10 @@ async fn a_root_move_takes_the_files_of_removed_chats_without_a_repository() -> 
         .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
         .await?;
 
-    manager.move_repositories(Layout::Excluded).await?;
+    manager
+        .repositories
+        .move_all(&*manager, Layout::Excluded)
+        .await?;
 
     assert_eq!(fs::read_link(&root)?, Path::new(".shoal.noindex"));
     let kept = manager.attached_files(&selector).await?;
@@ -913,7 +1016,10 @@ async fn a_root_move_takes_the_session_files_kept_for_chats_without_a_repository
     };
     manager.import_space(import).await?;
 
-    manager.move_repositories(Layout::Excluded).await?;
+    manager
+        .repositories
+        .move_all(&*manager, Layout::Excluded)
+        .await?;
 
     let kept = (manager.outside_sessions_layout(&root).existing(&chat.id))
         .context("no session files kept in the new root")?;
@@ -936,7 +1042,8 @@ async fn an_import_reading_a_package_holds_back_the_move() -> Result<()> {
     reading_import(&imports)?;
 
     let refused = manager
-        .move_repositories(Layout::Regular)
+        .repositories
+        .move_all(&*manager, Layout::Regular)
         .await
         .unwrap_err();
 
@@ -951,10 +1058,19 @@ async fn a_root_move_takes_what_imports_left_in_root_dir_unless_one_reads() -> R
     manager.end_executions(&chat.id).await;
     let imports = manager.outside_imports(&root);
     reading_import(&imports)?;
-    assert!(manager.move_repositories(Layout::Excluded).await.is_err());
+    assert!(
+        manager
+            .repositories
+            .move_all(&*manager, Layout::Excluded)
+            .await
+            .is_err()
+    );
     fs::remove_dir(imports.root().join("package-1"))?;
 
-    manager.move_repositories(Layout::Excluded).await?;
+    manager
+        .repositories
+        .move_all(&*manager, Layout::Excluded)
+        .await?;
 
     assert_eq!(fs::read_link(&root)?, Path::new(".shoal.noindex"));
     assert!(!root.join(".imports").exists());
@@ -972,7 +1088,8 @@ async fn a_root_move_keeps_a_package_an_import_reads_into_the_root_it_leaves() -
     test_support::configure(&manager, &config).await;
 
     let refused = manager
-        .move_repositories(Layout::Regular)
+        .repositories
+        .move_all(&*manager, Layout::Regular)
         .await
         .unwrap_err();
 

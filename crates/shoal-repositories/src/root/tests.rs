@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use super::{ConfiguredRoot, Recorded, prepare_root};
+use super::{ConfiguredRoot, Recorded, prepare_root, reserve_directory};
 use crate::spotlight::Layout;
 
 /// A canonical temporary directory whose path Spotlight does not skip, and
@@ -62,4 +62,26 @@ async fn an_excluded_root_refuses_a_recorded_repository_directory() {
     .await;
     assert!(prepared.is_err());
     assert!(std::fs::symlink_metadata(&root.path).unwrap().is_dir());
+}
+
+#[test]
+fn the_destination_avoids_a_missing_checkout_recorded_inside_it() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let root = std::fs::canonicalize(temp.path())?;
+    let clone = shoal_protocol::model::Repository {
+        id: "clone".into(),
+        path: root.join("project/.checkout"),
+        source: "https://example.invalid/clone.git".into(),
+        last_used: 1,
+        name: None,
+        workspaces_dir: root.join("elsewhere"),
+        contribution: false,
+    };
+    let reserved = reserve_directory(&root, "project", std::slice::from_ref(&clone), &[])?;
+    assert_eq!(reserved, root.join("project-2"));
+
+    // A root inside a recorded directory has no free name at all.
+    let nested = root.join("elsewhere/nested");
+    assert!(reserve_directory(&nested, "project", &[clone], &[]).is_err());
+    Ok(())
 }

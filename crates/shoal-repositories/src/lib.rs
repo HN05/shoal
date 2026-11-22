@@ -14,6 +14,7 @@ use shoal_store::Store;
 pub mod configuration;
 pub mod contributions;
 pub mod daemon;
+pub mod moves;
 mod records;
 pub mod registration;
 mod removal;

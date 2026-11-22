@@ -1,5 +1,6 @@
 mod configuration;
 mod contributions;
+mod moves;
 mod removal;
 
 use crate::daemon::test_support::repository;

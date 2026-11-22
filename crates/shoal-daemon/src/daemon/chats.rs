@@ -4,6 +4,8 @@
 //! repository. A chat's agent runs under the execution wrapper as an
 //! execution of the chat, which runs while its execution is recorded; the
 //! chat lasts until it is removed.
+mod root_moves;
+
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use std::path::{Path, PathBuf};

@@ -50,7 +50,7 @@ impl Layout {
 /// What preparing a root changes, worked out before anything changes so that
 /// every location can be checked first.
 #[derive(Debug, PartialEq, Eq)]
-pub struct Plan {
+pub(crate) struct Plan {
     /// Holds repository directories.
     directory: PathBuf,
     /// The root that becomes a link to `directory` once it is empty.
@@ -70,7 +70,7 @@ impl Plan {
 
     /// The canonical directory that holds repository directories once the
     /// plan is applied.
-    pub fn destination(&self) -> Result<PathBuf> {
+    pub(crate) fn destination(&self) -> Result<PathBuf> {
         if self.unlink {
             // Resolving the link would name the directory it replaces.
             return Ok(self.directory.clone());
@@ -91,7 +91,7 @@ impl Plan {
     /// Refuse a root that would still hold files once the directories
     /// `moving` leave it, since it could not become the link. `moving` may
     /// name the root through a link, as the configured `root_dir` does.
-    pub fn ensure_linkable(&self, moving: &[&Path]) -> Result<()> {
+    pub(crate) fn ensure_linkable(&self, moving: &[&Path]) -> Result<()> {
         let Some(root) = &self.link else {
             return Ok(());
         };
@@ -115,7 +115,7 @@ impl Plan {
 
     /// Make the changes, linking the root only once it is empty: what it holds
     /// moves with `shoal repo move`, which links it afterwards.
-    pub fn apply(&self) -> Result<()> {
+    pub(crate) fn apply(&self) -> Result<()> {
         if self.unlink {
             fs::remove_file(&self.directory)
                 .with_context(|| format!("remove the link {}", self.directory.display()))?;

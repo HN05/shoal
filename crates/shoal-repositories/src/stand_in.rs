@@ -3,11 +3,15 @@
 //! temporary directory, the default global config, no spaces, coordinators,
 //! reviews, runner or agents, no files other subsystems keep, and no forge a
 //! contribution could fork on.
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use anyhow::{Result, bail};
 use futures_util::future::BoxFuture;
 use rusqlite::{Connection, Transaction};
+use shoal_core::shoal_dirs::ShoalDir;
 use shoal_daemon_base::{
     alerts::{NewAlert, Sent},
     config_state::ConfigState,
@@ -21,11 +25,13 @@ use shoal_protocol::{
     model::{Repository, RepositoryRemoval, Space, Workspace},
     paths::Paths,
     space_names::SpaceSelector,
+    state::WorkspaceState,
 };
 
 use crate::{
     Repositories,
-    daemon::{Agents, Forges, Occupants, Records, Spaces},
+    daemon::{Activity, Agents, Forges, Occupants, Records, Spaces},
+    moves::{Running, chats::OutsideChat},
 };
 
 /// The service over a stand-in daemon.
@@ -83,6 +89,36 @@ impl Spaces for StandIn {
         Box::pin(async { Ok(()) })
     }
 
+    fn ensure_movable_workspace<'a>(&'a self, _: &'a Workspace) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn record_moved_worktree<'a>(&'a self, _: &'a Workspace) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn outside_dirs(&self, _: &Path) -> Vec<PathBuf> {
+        Vec::new()
+    }
+
+    fn outside_chats_moving<'a>(
+        &'a self,
+        _: &'a Path,
+        _: &'a Path,
+        _: Running,
+    ) -> BoxFuture<'a, Result<Vec<OutsideChat>>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn move_outside_chats<'a>(
+        &'a self,
+        _: Vec<OutsideChat>,
+        _: &'a Path,
+        _: &'a Path,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
     fn remove_for_repository<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move { bail!("no space {id}") })
     }
@@ -98,6 +134,14 @@ impl Spaces for StandIn {
 }
 
 impl Occupants for StandIn {
+    fn ensure_no_reviews_in<'a>(&'a self, _: &'a RepositoryId) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn ensure_no_import_in(&self, _: ShoalDir) -> BoxFuture<'_, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
     fn stop_reviews<'a>(&'a self, _: &'a RepositoryId) -> BoxFuture<'a, ()> {
         Box::pin(async {})
     }
@@ -126,6 +170,14 @@ impl Occupants for StandIn {
 impl Agents for StandIn {
     fn trust_removed<'a>(&'a self, _: &'a Repository, _: Vec<PathBuf>) -> BoxFuture<'a, bool> {
         Box::pin(async { false })
+    }
+
+    fn trust_moved<'a>(
+        &'a self,
+        _: &'a Repository,
+        _: Vec<(PathBuf, PathBuf)>,
+    ) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
     }
 
     fn forget_agent_environments<'a>(&'a self, _: &'a Repository) -> BoxFuture<'a, ()> {
@@ -164,6 +216,38 @@ impl Records for StandIn {
 
     fn repository_in_use(&self, _: &Connection, _: &RepositoryId) -> Result<bool> {
         Ok(false)
+    }
+
+    fn repository_activity(&self, _: &Connection, _: &RepositoryId) -> Result<Activity> {
+        Ok(Activity {
+            checkout_leased: false,
+            chats: false,
+            launches: false,
+            workspace_states: Default::default(),
+        })
+    }
+
+    fn reconcile_workspaces(&self, _: &Transaction<'_>, _: &RepositoryId) -> Result<()> {
+        Ok(())
+    }
+
+    fn restore_workspace_state(
+        &self,
+        _: &Transaction<'_>,
+        _: &SpaceId,
+        _: WorkspaceState,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    fn rebase_paths(
+        &self,
+        _: &Transaction<'_>,
+        _: &RepositoryId,
+        _: &Path,
+        _: &Path,
+    ) -> Result<()> {
+        Ok(())
     }
 
     fn forget_repository_pools(&self, _: &Transaction<'_>, _: &RepositoryId) -> Result<()> {
