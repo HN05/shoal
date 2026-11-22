@@ -5,10 +5,9 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result};
 use futures_util::{StreamExt, TryStreamExt};
 use serde_json::Value;
-use shoal_refs::CommitId;
 
 use crate::{
-    items::{Items, action::ActionRequests, item::ItemRequests, merging::commit_shas},
+    items::{Items, action::ActionRequests, item::ItemRequests},
     review::status::{StatusRecords, Verdict},
     transport::{
         account::Account,
@@ -172,24 +171,6 @@ async fn open_checks(
     Some(reads.checks(repo, account, pull).await)
 }
 
-/// The commits of the PR once it has merged, or `None` before.
-pub(crate) async fn merged_commits(
-    repo: &ForgeRepo,
-    account: &Account,
-    number: PullNumber,
-) -> Result<Option<Vec<CommitId>>> {
-    let pull = read_pull(repo, account, number).await?;
-    if pull.item.state != ItemState::Merged {
-        return Ok(None);
-    }
-    let endpoint = format!("{}/commits", repo.item_endpoint(ItemKind::Pr, number.get()));
-    let commits = repo
-        .pages(account, &endpoint)
-        .await
-        .hint_login(&repo.kind())?;
-    commit_shas(&commits, repo.kind().commit_field()).map(Some)
-}
-
 /// The PR, suggesting logging in when the request fails.
 pub(crate) async fn read_pull(
     repo: &ForgeRepo,
@@ -276,31 +257,6 @@ fn listed_number(repo: &ForgeRepo, value: &Value) -> Result<u64> {
         .as_u64()
         .filter(|number| *number > 0)
         .context("listed item has no number")
-}
-
-/// An issue's state, read from its REST item.
-pub(crate) async fn issue_state(
-    repo: &ForgeRepo,
-    account: &Account,
-    number: IssueNumber,
-) -> Result<ItemState> {
-    Ok(repo
-        .read(account, ItemKind::Issue, number.get())
-        .await
-        .hint_login(&repo.kind())?
-        .item
-        .state)
-}
-
-/// An issue, open or closed.
-pub(crate) async fn issue_details(
-    repo: &ForgeRepo,
-    account: &Account,
-    number: IssueNumber,
-) -> Result<Current> {
-    repo.read(account, ItemKind::Issue, number.get())
-        .await
-        .hint_login(&repo.kind())
 }
 
 /// Each item's ID with the fields of it that matter for activity and its

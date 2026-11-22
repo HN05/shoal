@@ -5,10 +5,13 @@ use shoal_refs::{BranchName, CommitId};
 
 use crate::{
     MERGED_HINT,
-    backends::rest,
     capability::{self, Supports},
-    items::revert::NewRevert,
-    transport::{account::Account, api::Request},
+    items::{Items, action::ActionRequests, item::ItemRequests, revert::NewRevert},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests},
+        backend::LoginHint,
+    },
 };
 use shoal_forge_types::{
     ForgeRepo,
@@ -16,7 +19,8 @@ use shoal_forge_types::{
     capability::Capability,
     items::{
         action::{MergeMethod, UpdateMethod},
-        item::Current,
+        item::{Current, ItemState},
+        link::ItemKind,
     },
     numbers::PullNumber,
 };
@@ -33,7 +37,7 @@ pub(crate) trait Merging: Supports {
         account: &Account,
         number: PullNumber,
     ) -> Result<Option<Vec<CommitId>>> {
-        rest::merged_commits(repo, account, number)
+        merged_pull_commits(repo, account, number)
             .await
             .context(MERGED_HINT.trim_start_matches("; ").to_owned())
     }
@@ -117,6 +121,21 @@ pub(crate) fn subject_and_body(message: &str) -> (&str, &str) {
     let message = message.trim();
     let (subject, body) = message.split_once('\n').unwrap_or((message, ""));
     (subject.trim_end(), body.trim())
+}
+
+/// The commits of the PR once it has merged, or `None` before.
+async fn merged_pull_commits(
+    repo: &ForgeRepo,
+    account: &Account,
+    number: PullNumber,
+) -> Result<Option<Vec<CommitId>>> {
+    let pull = (repo.read(account, ItemKind::Pr, number.get()).await).hint_login(&repo.kind())?;
+    if pull.item.state != ItemState::Merged {
+        return Ok(None);
+    }
+    let endpoint = format!("{}/commits", repo.item_endpoint(ItemKind::Pr, number.get()));
+    let commits = (repo.pages(account, &endpoint).await).hint_login(&repo.kind())?;
+    commit_shas(&commits, repo.kind().commit_field()).map(Some)
 }
 
 /// Full commit IDs, refusing anything else so cleanup never matches a prefix.

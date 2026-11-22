@@ -19,7 +19,6 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 
 use crate::{
-    backends::rest,
     items::{action::ActionRequests, comment::Found, create::Head, reaction::Subject},
     transport::{
         account::Account,
@@ -85,7 +84,7 @@ pub(crate) trait Items: Backend {
         account: &Account,
         number: IssueNumber,
     ) -> Result<ItemState> {
-        rest::issue_state(repo, account, number).await
+        Ok(self.issue_details(repo, account, number).await?.item.state)
     }
 
     /// An issue, open or closed.
@@ -95,7 +94,9 @@ pub(crate) trait Items: Backend {
         account: &Account,
         number: IssueNumber,
     ) -> Result<Current> {
-        rest::issue_details(repo, account, number).await
+        repo.read(account, ItemKind::Issue, number.get())
+            .await
+            .hint_login(self)
     }
 
     /// The URLs of the open issues the forge records as blocking an issue.
