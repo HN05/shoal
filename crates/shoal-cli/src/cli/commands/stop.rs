@@ -25,7 +25,7 @@ mod processes;
 mod targets;
 
 use batch::{stop_all, stop_each};
-pub(super) use processes::processes;
+pub(super) use processes::{processes, stopping_processes};
 use targets::check_each;
 pub(super) use targets::{ensure_below, resolve};
 
@@ -45,11 +45,7 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
     {
         return Ok(code);
     }
-    let stopping = Acting::request(|space| {
-        let processes = UntrackedProcesses::Stop { requester: None };
-        crate::client::stopping::stop_space(space, false, QueuedLaunches::Cancel, processes)
-    });
-    let selected = ui::select_spaces(ctx, targets.space, false, &stopping).await?;
+    let selected = ui::select_spaces(ctx, targets.space, false, &stopping()).await?;
     // A process of a space that cleared its token is still that space's.
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         targets::ensure_scoped()?;
@@ -247,4 +243,12 @@ pub(super) fn continue_hint(targets: &str) -> String {
     format!(
         "Continue with shoal resume {targets}. To restart agents without stopping them, use shoal restart"
     )
+}
+
+/// What stopping a space sends for each space a picker picks.
+pub(super) fn stopping() -> Acting {
+    Acting::request(|space| {
+        let processes = UntrackedProcesses::Stop { requester: None };
+        crate::client::stopping::stop_space(space, false, QueuedLaunches::Cancel, processes)
+    })
 }

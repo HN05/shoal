@@ -30,8 +30,7 @@ pub(in crate::cli::commands) async fn remove(ctx: &Context, args: RmArgs) -> Res
         return Ok(code);
     }
     // What a removal asks first of each space it takes.
-    let checking = Acting::request(|space| crate::client::removal::check(space, false));
-    let selected = ui::select_spaces(ctx, names, true, &checking).await?;
+    let selected = ui::select_spaces(ctx, names, true, &removing()).await?;
     let checks = check_removals(ctx, selected, yes).await?;
     if !yes {
         confirm_removals(ctx, &checks)?;
@@ -321,4 +320,10 @@ fn removal_message(name: &SpaceName, removed: &Removed) -> String {
         });
     }
     message
+}
+
+/// What removing a space first sends for each space a picker picks: the
+/// check of what its removal would lose.
+pub(in crate::cli::commands) fn removing() -> Acting {
+    Acting::request(|space| crate::client::removal::check(space, false))
 }

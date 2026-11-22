@@ -16,9 +16,7 @@ pub(in crate::cli::commands) async fn cd(
     let workspace = match workspace {
         Some(workspace) => ui::explicit_workspace(ctx, workspace).await?,
         // The shell goes on in the worktree on this machine.
-        None => SpaceSelector::Id(
-            ui::workspace_picker(ctx, &entering()).await?,
-        ),
+        None => SpaceSelector::Id(ui::workspace_picker(ctx, &entering()).await?),
     };
     let workspace = crate::client::spaces::enter(workspace)
         .send(&ctx.paths)

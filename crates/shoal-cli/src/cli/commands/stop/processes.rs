@@ -17,9 +17,8 @@ pub(in crate::cli::commands) async fn processes(
     selection: Selection,
 ) -> Result<i32> {
     // Unlike what ends a space, a stop of its processes may take the chat it
-    // runs in. The spaces it takes are checked among this machine's.
-    let stopping =
-        Acting::here(move |space| crate::client::stopping::stop_processes(space, selection, None));
+    // runs in.
+    let stopping = stopping_processes(selection);
     let selectors = match ui::current_chat(&None) {
         Some(_) if selectors.is_empty() => {
             let fallback = ui::Fallback::CurrentDirectory(&stopping);
@@ -89,4 +88,11 @@ fn stopped_message(stopped: &Stopped, selection: Selection) -> String {
         1 => format!("Stopped 1 {one} in {}", stopped.space),
         n => format!("Stopped {n} {many} in {}", stopped.space),
     }
+}
+
+/// What stopping a space's untracked processes of `selection` sends for
+/// each space a picker picks; the spaces it takes are checked among this
+/// machine's.
+pub(in crate::cli::commands) fn stopping_processes(selection: Selection) -> Acting {
+    Acting::here(move |space| crate::client::stopping::stop_processes(space, selection, None))
 }

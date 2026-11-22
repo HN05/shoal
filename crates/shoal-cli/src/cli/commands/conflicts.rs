@@ -12,10 +12,7 @@ pub(in crate::cli::commands) async fn conflicts(
     workspace: Option<SpaceSelector>,
     target: Option<String>,
 ) -> Result<i32> {
-    let checking = {
-        let target = target.clone();
-        Acting::request(move |space| crate::client::diffs::conflicts(space, target.clone()))
-    };
+    let checking = checking();
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&checking));
     let workspace = workspace.await?;
     let check = (crate::client::diffs::conflicts(workspace.clone(), target))
@@ -43,4 +40,11 @@ fn show_files(heading: &str, files: &[String]) {
     for file in files {
         outln!("  {file}");
     }
+}
+
+/// What checking a workspace's conflicts sends for the workspace a picker
+/// picks; the branch it checks against decides nothing of which
+/// workspaces it reaches.
+pub(super) fn checking() -> Acting {
+    Acting::request(|space| crate::client::diffs::conflicts(space, None))
 }

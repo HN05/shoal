@@ -18,9 +18,7 @@ pub(in crate::cli::commands) async fn diff(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
-    // The base it diffs against, which another machine's workspace's
-    // machine reads.
-    let reading = Acting::request(crate::client::diffs::diff_base);
+    let reading = reading();
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&reading));
     let base = (crate::client::diffs::diff_base(workspace.await?))
         .send(&ctx.paths)
@@ -53,4 +51,11 @@ fn diff_untracked(path: &Path, command: &[OsString]) -> Result<i32> {
         .status()
         .context("run git diff")?;
     Ok(execution::exit_code(status))
+}
+
+/// What diffing a workspace first sends for the workspace a picker picks:
+/// a read of the base it diffs against, which another machine's
+/// workspace's machine answers.
+pub(super) fn reading() -> Acting {
+    Acting::request(crate::client::diffs::diff_base)
 }

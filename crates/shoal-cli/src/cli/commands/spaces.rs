@@ -8,10 +8,10 @@ mod rename;
 mod status;
 mod watch;
 
-pub(super) use done::{done, undone};
+pub(super) use done::{done, marking, undoing, undone};
 pub(super) use list::list;
 pub(super) use open::{open, opening};
-pub(super) use remove::remove;
+pub(super) use remove::{remove, removing};
 pub(super) use rename::{asking, rename, rename_picked, renaming, request_name};
 pub(super) use status::status;
 pub(super) use watch::watch_items;

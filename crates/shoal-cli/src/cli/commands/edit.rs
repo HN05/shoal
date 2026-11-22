@@ -21,12 +21,8 @@ pub(in crate::cli::commands) async fn edit(
     workspace: Option<SpaceSelector>,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(
-        ctx,
-        workspace,
-        Fallback::CurrentDirectory(&editing()),
-    )
-    .await?;
+    let workspace =
+        ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&editing())).await?;
     let settings =
         shoal_workers::settings::of(&ctx.paths, ConfigTarget::Space(workspace.clone())).await?;
     if settings.commands.contains_key(EDIT) {

@@ -18,20 +18,11 @@ pub(super) async fn run(
     command: Option<BaseCommand>,
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
+    let acting = basing(command.as_ref());
     let (workspace, change) = match command {
         Some(BaseCommand::Set { base, workspace }) => (workspace, Some(Change::Set(base))),
         Some(BaseCommand::Clear { workspace }) => (workspace, Some(Change::Clear)),
         None => (workspace, None),
-    };
-    let acting = match &change {
-        Some(Change::Set(_)) => Acting::request(|space| {
-            let base = Some(String::new());
-            crate::client::workspaces::set_base(space, base)
-        }),
-        Some(Change::Clear) => {
-            Acting::request(|space| crate::client::workspaces::set_base(space, None))
-        }
-        None => Acting::request(crate::client::workspaces::inspect),
     };
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&acting));
     let workspace = workspace.await?;
@@ -147,5 +138,19 @@ pub(super) fn describe(workspace: &WorkspaceRef) -> String {
             format!("{} ({branch})", workspace.name)
         }
         _ => workspace.name.to_string(),
+    }
+}
+
+/// What `command` sends for the workspace a picker picks: a base to
+/// record or clear, or without one a read of it.
+pub(super) fn basing(command: Option<&BaseCommand>) -> Acting {
+    match command {
+        Some(BaseCommand::Set { .. }) => {
+            Acting::request(|space| crate::client::workspaces::set_base(space, Some(String::new())))
+        }
+        Some(BaseCommand::Clear { .. }) => {
+            Acting::request(|space| crate::client::workspaces::set_base(space, None))
+        }
+        None => Acting::request(crate::client::workspaces::inspect),
     }
 }

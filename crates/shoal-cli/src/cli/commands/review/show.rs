@@ -103,9 +103,7 @@ async fn selected(
             ui::select_workspace(
                 ctx,
                 workspace,
-                Fallback::CurrentDirectory(&Acting::request(|space| {
-                    crate::client::reviews::show(Some(space), None)
-                })),
+                Fallback::CurrentDirectory(&super::showing()),
             )
             .await?,
         ),

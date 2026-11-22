@@ -394,14 +394,7 @@ async fn run(
     model: ModelChoice,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    // An agent's review runs on the workspace's machine; the manual
-    // command, which a run without --agent may choose, runs here.
-    let reviewing = match &reviewer {
-        Reviewer::Agent(_) => {
-            Acting::request(|space| crate::client::reviews::show(Some(space), None))
-        }
-        Reviewer::Ask | Reviewer::Manual => Acting::here(crate::client::executions::command_run),
-    };
+    let reviewing = reviewing(&reviewer);
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&reviewing));
     let workspace = workspace.await?;
     let settings =
@@ -520,6 +513,18 @@ impl Subject {
                 post,
             },
         }
+    }
+}
+
+/// What a review by `reviewer` sends for the workspace a picker picks: an
+/// agent's review runs on the workspace's machine; the manual command,
+/// which a run without --agent may choose, runs here.
+pub(super) fn reviewing(reviewer: &Reviewer) -> Acting {
+    match reviewer {
+        Reviewer::Agent(_) => {
+            Acting::request(|space| crate::client::reviews::show(Some(space), None))
+        }
+        Reviewer::Ask | Reviewer::Manual => Acting::here(crate::client::executions::command_run),
     }
 }
 

@@ -62,20 +62,8 @@ fn names_no_space(error: &anyhow::Error) -> bool {
 
 /// The IDs of the current space or those the user picks.
 async fn picked(ctx: &Context) -> Result<Vec<SpaceId>> {
-    // Its destination, which may be asked for next, decides nothing of
-    // which spaces the move reaches.
-    let moving = Acting::request(|_| {
-        crate::client::operations::move_request(MoveOrder {
-            spaces: Vec::new(),
-            destination: MoveDestination::Held,
-            recursive: true,
-            keep: false,
-            checkpoint: None,
-            consent: None,
-        })
-    });
     let mut ids = Vec::new();
-    for selector in ui::select_spaces(ctx, Vec::new(), true, &moving).await? {
+    for selector in ui::select_spaces(ctx, Vec::new(), true, &moving()).await? {
         let located = crate::client::spaces::locate(&ctx.paths, selector).await?;
         ids.push(located.id().clone());
     }
@@ -99,4 +87,20 @@ async fn repository_spaces(ctx: &Context, repository: String) -> Result<Vec<Spac
     );
     spaces.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(spaces)
+}
+
+/// What moving spaces sends for each space a picker picks; its
+/// destination, which may be asked for next, decides nothing of which
+/// spaces the move reaches.
+pub(in crate::cli::commands) fn moving() -> Acting {
+    Acting::request(|_| {
+        crate::client::operations::move_request(MoveOrder {
+            spaces: Vec::new(),
+            destination: MoveDestination::Held,
+            recursive: true,
+            keep: false,
+            checkpoint: None,
+            consent: None,
+        })
+    })
 }

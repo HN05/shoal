@@ -42,6 +42,28 @@ pub(super) async fn run(ctx: &Context, command: ReviewCommand) -> Result<i32> {
     }
 }
 
+/// What the review `command` sends for the space a picker picks.
+pub(super) fn acting(command: &ReviewCommand) -> Acting {
+    match command {
+        ReviewCommand::Run {
+            manual,
+            agent,
+            model,
+            ..
+        } => start::reviewing(&start::Reviewer::new(
+            *manual,
+            agent.clone(),
+            &model.clone().into(),
+        )),
+        ReviewCommand::Ls { .. } | ReviewCommand::Cancel { .. } => showing(),
+    }
+}
+
+/// What showing a space's reviews sends for the space a picker picks.
+fn showing() -> Acting {
+    Acting::request(|space| crate::client::reviews::show(Some(space), None))
+}
+
 /// A space a review command acts on.
 enum Space {
     Chat(Box<Chat>),
@@ -51,14 +73,7 @@ enum Space {
 /// The space `space` names, else the current workspace or the chat this
 /// runs in, else one the user picks.
 async fn select(ctx: &Context, space: Option<SpaceSelector>) -> Result<Space> {
-    let selected = ui::select_space(
-        ctx,
-        space,
-        Fallback::CurrentDirectory(&Acting::request(|space| {
-            crate::client::reviews::show(Some(space), None)
-        })),
-    )
-    .await?;
+    let selected = ui::select_space(ctx, space, Fallback::CurrentDirectory(&showing())).await?;
     let found = crate::client::spaces::present_space(&ctx.paths, &selected).await?;
     Ok(match found.map(crate::model::Space::into_chat) {
         Some(Ok(chat)) => Space::Chat(Box::new(chat)),

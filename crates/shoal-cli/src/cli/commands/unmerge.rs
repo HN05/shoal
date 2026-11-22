@@ -18,15 +18,8 @@ pub(in crate::cli::commands) async fn unmerge(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(
-        ctx,
-        workspace,
-        Fallback::CurrentDirectory(&Acting::request(|workspace| {
-            let spec = OperationSpec::Unmerge { workspace };
-            crate::client::operations::start_request(spec, Default::default())
-        })),
-    )
-    .await?;
+    let workspace =
+        ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&unmerging())).await?;
     let spec = OperationSpec::Unmerge { workspace };
     let unmerged = operations::run(ctx, spec).await?;
     show_unmerged(ctx, &unmerged)?;
@@ -47,5 +40,13 @@ fn show_unmerged(ctx: &Context, unmerged: &Unmerged) -> Result<()> {
         if unmerged.branch_recreated {
             outln!("Recreated branch {branch} at {}", unmerged.source);
         }
+    })
+}
+
+/// What undoing a merge sends for the workspace a picker picks.
+pub(super) fn unmerging() -> Acting {
+    Acting::request(|workspace| {
+        let spec = OperationSpec::Unmerge { workspace };
+        crate::client::operations::start_request(spec, Default::default())
     })
 }

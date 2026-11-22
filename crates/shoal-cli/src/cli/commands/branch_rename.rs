@@ -12,12 +12,7 @@ pub(in crate::cli::commands) async fn rename_branch(
     workspace: Option<SpaceSelector>,
     branch: String,
 ) -> Result<i32> {
-    let renaming = {
-        let branch = branch.clone();
-        Acting::request(move |space| {
-            crate::client::workspaces::rename_branch(space, branch.clone())
-        })
-    };
+    let renaming = renaming();
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&renaming));
     let workspace = workspace.await?;
     let renamed = (crate::client::workspaces::rename_branch(workspace.clone(), branch))
@@ -31,4 +26,10 @@ pub(in crate::cli::commands) async fn rename_branch(
         )
     })?;
     Ok(0)
+}
+
+/// What renaming a workspace's branch sends for the workspace a picker
+/// picks; the new name decides nothing of which workspaces it reaches.
+pub(super) fn renaming() -> Acting {
+    Acting::request(|space| crate::client::workspaces::rename_branch(space, String::new()))
 }

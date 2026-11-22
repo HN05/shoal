@@ -18,12 +18,7 @@ pub(super) async fn named(
     workspace: Option<SpaceSelector>,
     name: &str,
 ) -> Result<Running> {
-    let id = ui::select_workspace(
-        ctx,
-        workspace,
-        Fallback::CurrentDirectory(&looking()),
-    )
-    .await?;
+    let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&looking())).await?;
     let workspace = crate::client::workspaces::inspect(id.clone())
         .send(&ctx.paths)
         .await?

@@ -8,6 +8,8 @@ mod leaving;
 mod stream;
 mod targets;
 
+pub(super) use targets::moving;
+
 use anyhow::{Result, ensure};
 
 use crate::cli::{args::transfer::MoveArgs, context::Context, ui};

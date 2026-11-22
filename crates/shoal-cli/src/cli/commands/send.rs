@@ -279,7 +279,12 @@ pub(in crate::cli) mod in_chat;
 /// and text decide nothing of which spaces it reaches.
 pub(super) fn alerting() -> Acting {
     Acting::request(|space| {
-        alerts::send(AlertTarget::Space { space }, None, String::new(), Vec::new())
+        alerts::send(
+            AlertTarget::Space { space },
+            None,
+            String::new(),
+            Vec::new(),
+        )
     })
 }
 
