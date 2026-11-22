@@ -2,7 +2,7 @@
 //! machine's daemon passes to it over its link.
 use serde::{Deserialize, Serialize};
 
-use super::{Forwarding, Target};
+use super::{Forwarding, Lifetime, Target};
 use crate::hub::pairing::PairingCode;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -30,6 +30,17 @@ pub enum HubMethod {
     /// Revoke the credential of the member `member` names by ID or name.
     /// Answers with [`super::Body::HubMember`].
     RevokeHubMember { member: String },
+    /// Long-lived, on the hub's machine: register the caller as the placer
+    /// an `external` placement policy asks, in place of the one before,
+    /// until it hangs up. Answers with [`super::Body::Ok`], then each
+    /// start to place as [`super::Body::PlacementAsked`].
+    ServePlacement,
+    /// The placer's placement of the snapshot `number`, which the hub
+    /// waits for briefly. Answers with [`super::Body::Ok`].
+    AnswerPlacement {
+        number: u64,
+        placement: shoal_schedule::placement::Placement,
+    },
 }
 
 /// How a joining machine reaches the hub.
@@ -44,7 +55,14 @@ pub enum JoinVia {
 }
 
 impl HubMethod {
-    /// Each is about the caller's machine's membership.
+    pub fn lifetime(&self) -> Lifetime {
+        match self {
+            Self::ServePlacement => Lifetime::Open,
+            _ => Lifetime::Reply,
+        }
+    }
+
+    /// Each is about the caller's machine's membership, or its hub role.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::PairHub
@@ -52,7 +70,9 @@ impl HubMethod {
             | Self::LeaveHub
             | Self::HubMembers
             | Self::UpdateHub
-            | Self::RevokeHubMember { .. } => Forwarding::Never,
+            | Self::RevokeHubMember { .. }
+            | Self::ServePlacement
+            | Self::AnswerPlacement { .. } => Forwarding::Never,
         }
     }
 
@@ -63,7 +83,9 @@ impl HubMethod {
             | Self::LeaveHub
             | Self::HubMembers
             | Self::UpdateHub
-            | Self::RevokeHubMember { .. } => None,
+            | Self::RevokeHubMember { .. }
+            | Self::ServePlacement
+            | Self::AnswerPlacement { .. } => None,
         }
     }
 }

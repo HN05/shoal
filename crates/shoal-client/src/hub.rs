@@ -1,15 +1,20 @@
 //! The hub: pairing codes, joining and leaving it, its machines and devices,
-//! and the relay that carries a member's link to this machine's daemon over
-//! a command's standard input and output.
+//! the placer an app registers as, and the relay that carries a member's
+//! link to this machine's daemon over a command's standard input and
+//! output.
 use anyhow::{Context as _, Result};
 use shoal_protocol::{
-    hub::{HubUpdate, Left, Member, Membership, Overview, pairing::Pairing},
+    hub::{HubUpdate, Left, Member, Membership, Overview, pairing::Pairing, placement::Asked},
     paths::Paths,
-    protocol::{HubMethod, JoinVia},
+    protocol::{self, HubMethod, JoinVia, Response},
 };
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt as _};
+use shoal_schedule::placement::Placement;
+use tokio::{
+    io::{AsyncRead, AsyncWrite, AsyncWriteExt as _, BufReader},
+    net::UnixStream,
+};
 
-use crate::connection::{Daemon, request};
+use crate::connection::{Daemon, open_buffered, request};
 
 /// A new pairing code from the hub.
 pub async fn pair(daemon: &impl Daemon) -> Result<Pairing> {
@@ -40,6 +45,41 @@ pub async fn members(daemon: &impl Daemon) -> Result<Overview> {
 /// name.
 pub async fn revoke(daemon: &impl Daemon, member: String) -> Result<Member> {
     request(daemon, HubMethod::RevokeHubMember { member }).await
+}
+
+/// A registration as the placer, which the hub asks to place each start
+/// that names no machine under an `external` placement policy, for as long
+/// as it stays open; a later registration takes over.
+pub struct Placing {
+    stream: BufReader<UnixStream>,
+}
+
+impl Placing {
+    /// Register as the placer with the daemon of the hub's machine.
+    pub async fn serve(daemon: &impl Daemon) -> Result<Self> {
+        let (stream, body) = open_buffered(daemon, HubMethod::ServePlacement).await?;
+        <()>::try_from(body)?;
+        Ok(Self { stream })
+    }
+
+    /// The next start to place, which [`answer_placement`] answers by its
+    /// number.
+    pub async fn next(&mut self) -> Result<Asked> {
+        let response: Response = protocol::read_buffered(&mut self.stream)
+            .await
+            .context("the daemon ended the placer's registration")?;
+        Asked::try_from(response.body)
+    }
+}
+
+/// Answer the start the hub asked to place as `number` with `placement`,
+/// its machines in order of preference.
+pub async fn answer_placement(
+    daemon: &impl Daemon,
+    number: u64,
+    placement: Placement,
+) -> Result<()> {
+    request(daemon, HubMethod::AnswerPlacement { number, placement }).await
 }
 
 /// Carry `input` to the socket of the daemon `paths` names and its replies

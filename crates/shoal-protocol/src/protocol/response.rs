@@ -237,6 +237,7 @@ response_bodies! {
     HubUpdate(crate::hub::HubUpdate),
     HubOverview(crate::hub::Overview),
     HubMember(crate::hub::Member),
+    PlacementAsked(crate::hub::placement::Asked),
     Queued(crate::hub::routing::Queued),
     AppConfig(Option<toml::Table>),
     AppEntryPieces(Vec<crate::apps::store::EntryPiece>),

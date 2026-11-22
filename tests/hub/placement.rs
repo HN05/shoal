@@ -2,6 +2,12 @@
 //! placement policy puts it, among the machines that have its repository
 //! and agent tool.
 use serde_json::Value;
+use shoal_client::{
+    connection::Connector,
+    hub::{Placing, answer_placement},
+};
+use shoal_protocol::paths::Paths;
+use shoal_schedule::placement::{Placed, Placement, Reason};
 
 use super::{
     directory::{give_origin, hub_machine, join, workspace},
@@ -29,10 +35,15 @@ struct Machines {
 /// The [`Machines`], with the `server` settings, which set the server's
 /// `machine` keys, once the hub has the server's capacity.
 fn machines(server: &str) -> Machines {
+    machines_with("", server)
+}
+
+/// The [`machines`], with `hub` added to the hub's `[machine.hub]` table.
+fn machines_with(hub: &str, server: &str) -> Machines {
     let hub = Base::start(
         home(),
         &format!(
-            "machine.availability = \"intermittent\"\n{AGENT}[machine.hub]\nenabled = true\nlisten = \"127.0.0.1:0\"\n"
+            "machine.availability = \"intermittent\"\n{AGENT}[machine.hub]\nenabled = true\nlisten = \"127.0.0.1:0\"\n{hub}"
         ),
         "app",
         &[],
@@ -113,4 +124,79 @@ fn a_light_start_goes_to_a_machine_without_heavy_agents_and_a_heavy_one_stays() 
     let light = placed(&machines, &["--mode", "chat", "--name", "notes"]);
     assert_eq!(light["machine"], machines.server_id.as_str(), "{light}");
     assert_eq!(light["reason"], "no_heavy_agents", "{light}");
+}
+
+/// The hub's daemon as an app on its machine reaches it, as the user.
+fn app(machines: &Machines) -> Connector {
+    let state = machines.hub.root.path().join("state");
+    Connector {
+        paths: Paths {
+            home: machines.hub.root.path().into(),
+            socket: state.join("daemon.sock"),
+            state,
+        },
+        scope: None,
+    }
+}
+
+#[test]
+fn an_external_placer_places_a_start_and_balanced_does_without_one() {
+    let machines = machines_with("placement = \"external\"\n", "");
+    let unplaced = placed(&machines, &["--branch", "first"]);
+    assert_eq!(unplaced["policy"], "balanced", "{unplaced}");
+    assert_eq!(unplaced["unanswered"], "no_placer", "{unplaced}");
+    // An app on the hub's machine registers and keeps the next start there.
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let app = app(&machines);
+    let mut placing = runtime.block_on(Placing::serve(&app)).unwrap();
+    let hub_id = hub_machine(&machines.hub);
+    let answered = runtime.spawn({
+        let hub_id = hub_id.clone();
+        async move {
+            let asked = placing.next().await?;
+            let placement = Placement {
+                ranked: vec![Placed {
+                    machine: hub_id.as_str().into(),
+                    reason: Reason::Local,
+                }],
+                skipped: Vec::new(),
+            };
+            answer_placement(&app, asked.number, placement).await?;
+            anyhow::Ok(asked.snapshot)
+        }
+    });
+    let placement = placed(&machines, &["--branch", "second"]);
+    assert_eq!(placement["policy"], "external", "{placement}");
+    assert_eq!(placement["machine"], hub_id.as_str(), "{placement}");
+    let snapshot = runtime.block_on(answered).unwrap().unwrap();
+    assert!(snapshot.request.heavy);
+    assert_eq!(snapshot.machines.len(), 2);
+}
+
+#[test]
+fn a_placer_that_chooses_no_connected_machine_leaves_the_start_to_balanced() {
+    let machines = machines_with("placement = \"external\"\n", "");
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let app = app(&machines);
+    let mut placing = runtime.block_on(Placing::serve(&app)).unwrap();
+    let answered = runtime.spawn(async move {
+        let asked = placing.next().await?;
+        let placement = Placement {
+            ranked: vec![Placed {
+                machine: "gone".into(),
+                reason: Reason::Local,
+            }],
+            skipped: Vec::new(),
+        };
+        answer_placement(&app, asked.number, placement).await
+    });
+    let placement = placed(&machines, &["--branch", "child"]);
+    runtime.block_on(answered).unwrap().unwrap();
+    assert_eq!(placement["policy"], "balanced", "{placement}");
+    assert_eq!(placement["unanswered"], "failed", "{placement}");
+    assert_eq!(
+        placement["machine"],
+        machines.server_id.as_str(),
+        "{placement}"
+    );
 }

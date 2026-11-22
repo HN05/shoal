@@ -1212,7 +1212,14 @@ meanwhile waits in its queue there; placement never moves a space once it
 is created. `shoal start` names the machine with the policy's reason, and
 each connected machine it skipped for lacking the repository or the agent
 tool; `--json` prints that first as its own document, and a hub that cannot
-be asked leaves the start on your machine.
+be asked leaves the start on your machine. Under `placement = "external"`, an
+unscoped client on the hub's machine, such as an app's server, registers as
+the placer with `shoal-client`'s `hub::Placing` and answers each snapshot the
+hub sends it, the start and every connected machine, with the machines in
+order of preference; the latest registration takes over from the one before.
+A start the placer does not answer within two seconds, or answers with no
+connected machine, and one without a placer, is placed by `balanced`, which
+the start names.
 
 The tree of spaces may span machines: a space that moves to another machine,
 or that `shoal start --machine` starts there, without the space above it stays below it there, once what the hub lists of

@@ -2417,6 +2417,7 @@ dependencies = [
  "shoal-daemon",
  "shoal-forge",
  "shoal-protocol",
+ "shoal-schedule",
  "socket2",
  "tempfile",
  "tokio",

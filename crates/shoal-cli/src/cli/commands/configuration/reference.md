@@ -369,7 +369,8 @@ terminal stays on its machine, and `--machine` always picks the machine.
   `max_heavy_agents = 0`, then to one where no heavy work waits. Without such a
   machine the start stays on the machine it was made on. Placement never
   clones a repository; the start reports the machines it skipped and why.
-- `external` places by `balanced`, saying so.
+- `external` asks the app registered as the placer, and places by `balanced`
+  when none is registered or it does not answer within two seconds.
 
 `forward` maps path prefixes, each starting and ending with `/`, to local
 addresses, such as an app's own server: the hub's listener forwards each

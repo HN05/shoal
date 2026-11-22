@@ -174,6 +174,7 @@ impl Operation {
             Self::Subscription(method) => method.lifetime(),
             Self::Demo(method) => method.lifetime(),
             Self::App(method) => method.lifetime(),
+            Self::Hub(method) => method.lifetime(),
             Self::Daemon(_)
             | Self::Workspace(_)
             | Self::Place(_)
@@ -196,8 +197,7 @@ impl Operation {
             | Self::Resource(_)
             | Self::Simulator(_)
             | Self::Container(_)
-            | Self::Trigger(_)
-            | Self::Hub(_) => Lifetime::Reply,
+            | Self::Trigger(_) => Lifetime::Reply,
         }
     }
 }
