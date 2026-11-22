@@ -366,7 +366,9 @@ impl<'d, D: Daemon> Preparing<'d, D> {
     /// The failure it ended with, with the workspace as the failure left it.
     async fn unprepared(&mut self) -> Result<Unprepared> {
         let selector = SpaceSelector::id(&self.workspace.id);
-        let workspace = crate::workspaces::inspect(self.daemon, selector).await?;
+        let workspace = crate::workspaces::inspect(selector)
+            .send(self.daemon)
+            .await?;
         let failure = self.failed.take().context("the preparation did not fail")?;
         Ok(Unprepared {
             workspace: Box::new(workspace.workspace),

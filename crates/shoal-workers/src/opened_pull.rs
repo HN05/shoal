@@ -17,7 +17,8 @@ pub async fn link(paths: &CommandPaths, workspace: Workspace, pr: LinkedItem) ->
         return Ok(workspace);
     }
     Ok(
-        crate::client::workspaces::inspect(paths, SpaceSelector::id(&workspace.id))
+        crate::client::workspaces::inspect(SpaceSelector::id(&workspace.id))
+            .send(paths)
             .await?
             .workspace,
     )

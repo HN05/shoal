@@ -34,7 +34,8 @@ pub(in crate::cli::commands) async fn edit(
     }
     let mut command = editor([std::env::var_os("VISUAL"), std::env::var_os("EDITOR")])?;
     command.push(
-        crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
+        crate::client::workspaces::inspect(workspace.clone())
+            .send(&ctx.paths)
             .await?
             .workspace
             .part

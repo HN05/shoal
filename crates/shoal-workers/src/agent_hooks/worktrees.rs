@@ -76,7 +76,8 @@ pub async fn remove(paths: &CommandPaths, json: bool) -> Result<i32> {
 
 /// Whether `child`'s assignment is already marked done at its current HEAD.
 async fn done_at_head(paths: &CommandPaths, child: &Workspace) -> Result<bool> {
-    let completion = crate::client::workspaces::inspect(paths, SpaceSelector::id(&child.id))
+    let completion = crate::client::workspaces::inspect(SpaceSelector::id(&child.id))
+        .send(paths)
         .await?
         .completion;
     let Some(completion) = completion else {

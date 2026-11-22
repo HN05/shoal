@@ -89,7 +89,9 @@ pub async fn queue(
 ) -> Result<QueueEntry> {
     if space.worktree().is_some() {
         let selector = SpaceSelector::id(&space.id);
-        let inspection = crate::client::workspaces::inspect(paths, selector).await?;
+        let inspection = crate::client::workspaces::inspect(selector)
+            .send(paths)
+            .await?;
         stale::reconcile(paths, &inspection, Some(execution)).await?;
     }
     let execution = execution.to_owned();

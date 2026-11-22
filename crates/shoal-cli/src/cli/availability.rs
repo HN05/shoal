@@ -287,13 +287,12 @@ async fn busy_workspaces(daemon: &impl Daemon, workspaces: &[Workspace]) -> Hash
     let mut busy = HashSet::new();
     for workspace in workspaces.iter().filter(|w| w.running) {
         let blocking = match &own {
-            Some(own) => {
-                crate::client::workspaces::inspect(daemon, SpaceSelector::id(&workspace.id))
-                    .await
-                    .map_or(true, |inspection| {
-                        inspection.executions.iter().any(|e| &e.id != own)
-                    })
-            }
+            Some(own) => crate::client::workspaces::inspect(SpaceSelector::id(&workspace.id))
+                .send(daemon)
+                .await
+                .map_or(true, |inspection| {
+                    inspection.executions.iter().any(|e| &e.id != own)
+                }),
             None => true,
         };
         if blocking {

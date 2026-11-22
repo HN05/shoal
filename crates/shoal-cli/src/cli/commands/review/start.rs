@@ -443,7 +443,8 @@ async fn run(
 /// the PR head it was opened at: the review command reads the checkout, so
 /// it would review commits the PR does not have.
 async fn ensure_at_pull_head(ctx: &Context, workspace: &SpaceSelector) -> Result<()> {
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
+    let workspace = crate::client::workspaces::inspect(workspace.clone())
+        .send(&ctx.paths)
         .await?
         .workspace;
     let Some(at) = workspace.at() else {

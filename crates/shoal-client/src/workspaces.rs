@@ -7,7 +7,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::Result;
 
-use crate::connection::{Daemon, call, pages, request};
+use crate::connection::{Daemon, Prepared, call, pages, request};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     config::hooks::HookKind,
@@ -17,8 +17,8 @@ use shoal_protocol::{
 };
 
 /// `workspace` with its links, completion, executions, places and leases.
-pub async fn inspect(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Inspection> {
-    request(daemon, WorkspaceMethod::InspectWorkspace { workspace }).await
+pub fn inspect(workspace: SpaceSelector) -> Prepared<Inspection> {
+    Prepared::new(WorkspaceMethod::InspectWorkspace { workspace })
 }
 
 /// Create a workspace of `repository` at a commit `start` names, in the chat

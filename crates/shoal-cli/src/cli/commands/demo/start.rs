@@ -81,7 +81,8 @@ pub(super) async fn start(
         Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, id.clone())
+    let workspace = crate::client::workspaces::inspect(id.clone())
+        .send(&ctx.paths)
         .await?
         .workspace;
     let settings = shoal_workers::settings::of(

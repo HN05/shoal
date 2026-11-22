@@ -65,7 +65,8 @@ async fn repository(paths: &CommandPaths, space: &Space) -> Result<Option<Reposi
 async fn ports(paths: &CommandPaths, space: &Space) -> Result<Vec<PortReservation>> {
     match space.worktree() {
         Some(_) => Ok(
-            crate::client::workspaces::inspect(paths, SpaceSelector::id(&space.id))
+            crate::client::workspaces::inspect(SpaceSelector::id(&space.id))
+                .send(paths)
                 .await?
                 .ports,
         ),

@@ -24,7 +24,8 @@ pub(super) async fn prepare(
     steps: Preparation,
     reporter: &Reporter<'_>,
 ) -> Result<Prepared> {
-    let mut workspace = crate::client::workspaces::inspect(paths, workspace)
+    let mut workspace = crate::client::workspaces::inspect(workspace)
+        .send(paths)
         .await?
         .workspace;
     let for_agent = steps.agent.is_some() || steps.waiting.is_some();
@@ -145,7 +146,8 @@ async fn run_setup(paths: &CommandPaths, workspace: &Workspace) -> Result<Worksp
     if let Some(message) = failure {
         return Err(Failed(Failure::SetupFailed { message }).into());
     }
-    let workspace = crate::client::workspaces::inspect(paths, SpaceSelector::id(&workspace.id))
+    let workspace = crate::client::workspaces::inspect(SpaceSelector::id(&workspace.id))
+        .send(paths)
         .await?
         .workspace;
     ensure!(
@@ -199,7 +201,8 @@ async fn link_pr(
     }
     reporter.reached(Step::PrLinked).await?;
     Ok(
-        crate::client::workspaces::inspect(paths, SpaceSelector::id(&workspace.id))
+        crate::client::workspaces::inspect(SpaceSelector::id(&workspace.id))
+            .send(paths)
             .await?
             .workspace,
     )

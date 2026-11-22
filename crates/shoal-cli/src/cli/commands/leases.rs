@@ -209,7 +209,9 @@ async fn select_held(
         Some(ReleaseKind::Containers) => return Ok(vec![Held::Containers]),
         _ => {}
     }
-    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.clone()).await?;
+    let inspection = crate::client::workspaces::inspect(workspace.clone())
+        .send(&ctx.paths)
+        .await?;
     let id = inspection.workspace.id.clone();
     let ports = inspection
         .ports

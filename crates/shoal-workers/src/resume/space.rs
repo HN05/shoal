@@ -110,8 +110,9 @@ pub async fn refuse_failed_setup(paths: &CommandPaths, space: &Space) -> Result<
     if !space.kind().has_worktree() {
         return Ok(());
     }
-    let inspection =
-        crate::client::workspaces::inspect(paths, SpaceSelector::id(&space.id)).await?;
+    let inspection = crate::client::workspaces::inspect(SpaceSelector::id(&space.id))
+        .send(paths)
+        .await?;
     ensure!(
         !awaits_setup(&inspection),
         "the setup of {} failed; retry it with `shoal setup {}`",
@@ -169,8 +170,12 @@ async fn active_executions(
         return Ok(Vec::new());
     }
     let selector = SpaceSelector::id(&space.id);
-    let inspection = crate::client::workspaces::inspect(paths, selector.clone()).await?;
+    let inspection = crate::client::workspaces::inspect(selector.clone())
+        .send(paths)
+        .await?;
     stale::reconcile(paths, &inspection, selected).await?;
-    let inspection = crate::client::workspaces::inspect(paths, selector).await?;
+    let inspection = crate::client::workspaces::inspect(selector)
+        .send(paths)
+        .await?;
     Ok(inspection.executions.into_iter().map(|e| e.id).collect())
 }

@@ -220,7 +220,9 @@ async fn run_defined(
     ui::record_workspace(ctx, &workspace).await;
     let settings =
         shoal_workers::settings::of(&ctx.paths, ConfigTarget::Space(workspace.clone())).await?;
-    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
+    let inspection = crate::client::workspaces::inspect(workspace)
+        .send(&ctx.paths)
+        .await?;
     let command = expand(
         &ctx.paths,
         &settings.commands,

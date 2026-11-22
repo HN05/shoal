@@ -84,8 +84,9 @@ fn spawn_detached(ctx: &Context, argv: &[std::ffi::OsString]) -> std::io::Result
 
 /// The HEAD of `workspace`'s kept completion, if it has one.
 async fn kept_completion(ctx: &Context, workspace: &SpaceId) -> Result<Option<String>> {
-    let inspection =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(workspace)).await?;
+    let inspection = crate::client::workspaces::inspect(SpaceSelector::id(workspace))
+        .send(&ctx.paths)
+        .await?;
     Ok((inspection
         .completion
         .filter(|completion| !completion.cleanup)
@@ -415,7 +416,10 @@ impl Lifecycle {
 }
 
 async fn workspace_lifecycle(ctx: &Context, workspace: &SpaceId) -> Result<Lifecycle> {
-    match crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(workspace)).await {
+    match crate::client::workspaces::inspect(SpaceSelector::id(workspace))
+        .send(&ctx.paths)
+        .await
+    {
         // Completion cleanup keeps the place until removal, after its grace period.
         Ok(Inspection {
             completion: Some(completion),

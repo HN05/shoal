@@ -24,7 +24,8 @@ pub(super) async fn stop(
         Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, id.clone())
+    let workspace = crate::client::workspaces::inspect(id.clone())
+        .send(&ctx.paths)
         .await?
         .workspace;
     stop_named(ctx, &workspace, name.clone()).await?;

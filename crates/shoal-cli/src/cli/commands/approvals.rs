@@ -104,7 +104,8 @@ async fn can_decide(ctx: &Context, request: &ApprovalRequest) -> Result<bool> {
         Some(own) => own,
         None => {
             let owner = ui::select_workspace(ctx, None, ui::Fallback::OwnSpace).await?;
-            crate::client::workspaces::inspect(&ctx.paths, owner.clone())
+            crate::client::workspaces::inspect(owner.clone())
+                .send(&ctx.paths)
                 .await?
                 .workspace
                 .id

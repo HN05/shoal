@@ -112,7 +112,8 @@ async fn reclaim(ctx: &Context, workspace: Workspace) -> Result<i32> {
             Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
             workspace.path.display()
         ),
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace.id))
+        crate::client::workspaces::inspect(SpaceSelector::id(&workspace.id))
+            .send(&ctx.paths)
             .await?
             .workspace,
     )?;

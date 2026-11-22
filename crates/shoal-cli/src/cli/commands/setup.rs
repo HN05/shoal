@@ -31,7 +31,9 @@ pub(in crate::cli::commands) async fn setup(
         Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
-    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.clone()).await?;
+    let inspection = crate::client::workspaces::inspect(workspace.clone())
+        .send(&ctx.paths)
+        .await?;
     let Some(set_up) = setup_workspace(ctx, &inspection.workspace, true).await? else {
         return Ok(1);
     };
@@ -56,7 +58,8 @@ pub(in crate::cli::commands) async fn skip_setup(
         Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
+    let workspace = crate::client::workspaces::inspect(workspace.clone())
+        .send(&ctx.paths)
         .await?
         .workspace;
     ensure!(
@@ -66,10 +69,10 @@ pub(in crate::cli::commands) async fn skip_setup(
         workspace.state
     );
     ignore_setup_failure(ctx, &workspace).await?;
-    let workspace =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace.id))
-            .await?
-            .workspace;
+    let workspace = crate::client::workspaces::inspect(SpaceSelector::id(&workspace.id))
+        .send(&ctx.paths)
+        .await?
+        .workspace;
     run_post_setup(ctx, &workspace).await?;
     ctx.emit_styled(
         Style::Success,
@@ -257,8 +260,9 @@ async fn handle_setup_failure(
         ui::SetupFailureChoice::Ignore => ignore_setup_failure(ctx, workspace).await?,
         ui::SetupFailureChoice::Cancel => return Ok(None),
     }
-    let inspection =
-        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
+    let inspection = crate::client::workspaces::inspect(SpaceSelector::id(&workspace.id))
+        .send(&ctx.paths)
+        .await?;
     ensure!(
         inspection.workspace.state == WorkspaceState::Ready,
         "workspace setup did not complete"

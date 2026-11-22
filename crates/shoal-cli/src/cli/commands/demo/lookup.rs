@@ -24,7 +24,8 @@ pub(super) async fn named(
         Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, id.clone())
+    let workspace = crate::client::workspaces::inspect(id.clone())
+        .send(&ctx.paths)
         .await?
         .workspace;
     find(
@@ -73,7 +74,8 @@ pub(super) async fn scope(
     };
     match id {
         Some(id) => Ok(Some(
-            crate::client::workspaces::inspect(&ctx.paths, id)
+            crate::client::workspaces::inspect(id)
+                .send(&ctx.paths)
                 .await?
                 .workspace,
         )),

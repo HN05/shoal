@@ -157,7 +157,9 @@ async fn workspace_repository(
     ctx: &Context,
     workspace: &shoal_protocol::space_names::SpaceSelector,
 ) -> Result<shoal_ids::repository_ids::RepositoryId> {
-    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.clone()).await?;
+    let inspection = crate::client::workspaces::inspect(workspace.clone())
+        .send(&ctx.paths)
+        .await?;
     Ok(inspection.workspace.repository().clone())
 }
 

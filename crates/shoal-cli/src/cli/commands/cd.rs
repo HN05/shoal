@@ -15,7 +15,9 @@ pub(in crate::cli::commands) async fn cd(
             ui::workspace_picker(ctx, &crate::cli::ui::Acting::Unconverted).await?,
         ),
     };
-    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
+    let inspection = crate::client::workspaces::inspect(workspace)
+        .send(&ctx.paths)
+        .await?;
     ensure!(
         inspection.workspace.path.is_dir(),
         "workspace directory is missing"
