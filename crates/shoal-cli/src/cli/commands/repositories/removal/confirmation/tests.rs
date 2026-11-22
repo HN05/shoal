@@ -34,3 +34,15 @@ fn each_space_shows_the_work_its_removal_loses_on_its_machine() {
     assert!(lines[5].contains("5 lost: work unknown"), "{block}");
     assert!(lines[6].trim_end().ends_with("6 notes"), "{block}");
 }
+
+#[test]
+fn a_target_whose_spaces_cannot_be_read_names_its_checkout_and_why() {
+    let local: crate::model::Repository = serde_json::from_value(json!({
+        "id": "r1", "path": "/shoal/app/.checkout", "source": "https://forge/app",
+        "last_used": 0, "name": "app", "workspaces_dir": "/shoal/app",
+    }))
+    .unwrap();
+    let block = unread(&Target::Here(local), &anyhow::anyhow!("admin is propose"));
+    assert!(block.contains("/shoal/app/.checkout"), "{block}");
+    assert!(block.ends_with("admin is propose"), "{block}");
+}

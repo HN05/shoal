@@ -8,16 +8,21 @@ use super::{Target, machine_name, request};
 use crate::cli::context::Context;
 
 /// The removal of `targets`, each machine's spaces and their work as the
-/// machine reads them now.
+/// machine reads them now, or, where it cannot read them for the caller,
+/// what this machine knows of the target and why.
 pub(super) async fn describe(ctx: &Context, targets: &[Target]) -> Result<String> {
     let mut blocks = Vec::new();
     for target in targets {
         let (selector, machine) = request(target);
         let preview = crate::client::repositories::preview_removal(&ctx.paths, selector, machine);
-        let preview = ctx
-            .progress("Reading what removal deletes", preview)
-            .await?;
-        blocks.push(block(&preview, machine_name(target).as_deref()));
+        // A caller that may remove it only with approval reads no preview,
+        // yet asks for the removal, which the daemon decides.
+        blocks.push(
+            match ctx.progress("Reading what removal deletes", preview).await {
+                Ok(preview) => block(&preview, machine_name(target).as_deref()),
+                Err(error) => unread(target, &error),
+            },
+        );
     }
     blocks.push(
         "Deletes: checkout, all Shoal workspaces and their resources\nWork:    uncommitted and unpushed changes are permanently lost"
@@ -36,6 +41,26 @@ pub(super) fn briefly(targets: &[Target]) -> String {
         })
         .collect();
     format!("Delete repository {}", named.join(", "))
+}
+
+/// What removing `target` deletes, as this machine knows it, with why its
+/// spaces could not be read, `error`.
+fn unread(target: &Target, error: &anyhow::Error) -> String {
+    let named = match target {
+        Target::Here(local) => format!(
+            "Delete repository: {}\nSource: {}\nCheckout: {}",
+            local.display_name(),
+            local.source,
+            local.path.display()
+        ),
+        Target::Elsewhere(other) => format!(
+            "Delete repository: {} on {}\nSource: {}",
+            other.name(),
+            other.machine,
+            other.source()
+        ),
+    };
+    format!("{named}\nSpaces: not listed: {error:#}")
 }
 
 /// What `preview` deletes on the machine `machine` names, none for this
