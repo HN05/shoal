@@ -54,7 +54,7 @@ pub struct RepositoryRemoval {
 }
 
 /// What removing a repository would remove on its machine: its spaces,
-/// each after those below it, with the work of their own it would lose.
+/// with the work of their own it would lose.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RepositoryRemovalPreview {
     pub repository: Repository,
